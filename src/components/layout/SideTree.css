@@ -74,17 +74,49 @@
 }
 
 /* The one number a shut branch is allowed to carry. */
+/*
+ * A CIRCLE, and it was a pill.
+ *
+ * `min-width: 20px` with `padding: 1px 6px` and `border-radius: 999px` gives a
+ * shape whose width is set by its content and whose height by the line box —
+ * about 20x15 on one digit and 26x15 on two. 999px rounds the ends of that,
+ * which makes a lozenge, not a circle. The map's cluster badge is a true
+ * circle, so the same number in two places on the same screen wore two
+ * different shapes.
+ *
+ * One knob, width and height both derived from it, and `aspect-ratio` as belt
+ * and braces because this sits in a flex row and a flex parent will happily
+ * stretch a fixed height. The idiom is lifted from .lf-cluster-badge, which
+ * solved this already: two implementations of "a round number badge" is how
+ * the two drift apart again.
+ *
+ * The size steps with the digit count rather than being one size for all. A
+ * circle big enough for "597" is a coin beside a one-digit label, and one
+ * sized for "4" clips three digits. `data-len` comes from SideTree.jsx.
+ */
 .side-tree__count {
+  --st-count: 20px;
   flex-shrink: 0;
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 999px;
+  width: var(--st-count);
+  height: var(--st-count);
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+  /* Grid rather than the old text-align plus a line box: centring a glyph in a
+     circle needs both axes, and a line box only gives one. */
+  display: grid;
+  place-items: center;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  line-height: 1;
 }
+.side-tree__count[data-len="3"] { --st-count: 24px; font-size: 10px; }
+/* "99+" and anything longer. Past this the circle would dominate the row it is
+   meant to annotate, so the type gives way instead of the shape. */
+.side-tree__count[data-len="4"],
+.side-tree__count[data-len="5"] { --st-count: 26px; font-size: 9px; letter-spacing: -0.03em; }
 .side-tree__count--plain { background: #f1f5f9; color: #475569; }
 .side-tree__count--on    { background: #dcfce7; color: #15803d; }
 /* Stranded units, and nothing else in this tree. It is the only count here
