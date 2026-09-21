@@ -1,0 +1,93 @@
+/* Mobile Home tab styles. */
+
+
+
+.mobile-home {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background-color: #0b0e14;
+  font-family: var(--font-body);
+}
+
+.mobile-home__heading {
+  position: sticky;
+  top: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 14px 16px 10px;
+  background-color: #0b0e14;
+  z-index: 1;
+}
+
+.mobile-home__loading {
+  padding: 24px 16px;
+  font-size: 13px;
+  color: var(--text-sec-adaptive, #7c8899);
+  text-align: center;
+}
+
+.mobile-home__list {
+  padding-bottom: 16px;
+}
+
+.mobile-home__item {
+  display: grid;
+  grid-template-columns: 42px 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: flex-start;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Date over clock, in the column the clock alone used to occupy — the feed
+   buffer spans days and "01:50" does not say which one. */
+.mobile-home__time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-sec-adaptive, #7c8899);
+  padding-top: 1px;
+  white-space: nowrap;
+}
+.mobile-home__date  { font-size: 9px; opacity: 0.62; letter-spacing: 0.2px; }
+.mobile-home__clock { font-size: 10.5px; }
+
+.mobile-home__icon-cell {
+  font-size: 12px;
+  padding-top: 1px;
+  text-align: center;
+}
+.fi-info     { color: #38bdf8; }
+.fi-warning  { color: #f59e0b; }
+.fi-critical { color: #ef4444; }
+.fi-success  { color: #22c55e; font-weight: 700; }
+
+.mobile-home__text {
+  font-size: 12.5px;
+  color: #d1d5db;
+  line-height: 1.5;
+}
+
+.app--light .mobile-home {
+  background-color: #f8fafc;
+}
+.app--light .mobile-home__heading {
+  background-color: #f8fafc;
+  color: #64748b;
+}
+.app--light .mobile-home__item {
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+.app--light .mobile-home__time {
+  color: #94a3b8;
+}
+.app--light .mobile-home__text {
+  color: #334155;
+}

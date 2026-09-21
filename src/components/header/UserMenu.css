@@ -1,0 +1,140 @@
+/* The user menu.
+ *
+ * Anchoring copied from CompanySwitcherDropdown.css — same header, same kind
+ * of thing — but opening to the RIGHT edge: the switcher sits at the header's
+ * left and this sits at its right, so `right: 0` is what keeps the panel on
+ * screen. The .app--light block at the bottom is not optional; the panel's
+ * background is a hard-coded dark hex and without the override it is white on
+ * white in light mode. That is exactly why the switcher carries one.
+ */
+
+.user-menu {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+}
+
+.user-menu__trigger {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #2a2d35;
+  border-radius: 50%;
+  background: #14181d;
+  color: #f0f4f8;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.user-menu__trigger:hover { background: #1b2027; }
+.user-menu__trigger--open { border-color: rgba(255, 255, 255, 0.4); }
+.user-menu__trigger:focus-visible {
+  outline: 2px solid var(--accent-info, #38bdf8);
+  outline-offset: 2px;
+}
+
+.user-menu__initials {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-family: var(--font-body);
+}
+
+.user-menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  z-index: 2000;
+  padding: 6px;
+  background-color: #111317;
+  border: 1px solid #2a2d35;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: user-menu-in 0.14s ease-out;
+  font-family: var(--font-body);
+}
+
+@keyframes user-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Identity block — deliberately not a menuitem, so a keyboard user tabbing the
+   menu lands on the two things that DO something. */
+.user-menu__who {
+  padding: 8px 10px 9px;
+  border-bottom: 1px solid #2a2d35;
+  margin-bottom: 4px;
+}
+
+.user-menu__name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #f0f4f8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__email {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #7c8899;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-menu__item:hover { background: rgba(255, 255, 255, 0.07); }
+.user-menu__item:focus-visible {
+  outline: 2px solid rgba(148, 163, 184, 0.75);
+  outline-offset: -1px;
+}
+
+.user-menu__item--signout { color: #f87171; }
+
+@media (max-width: 480px) {
+  .user-menu__panel { width: calc(calc(var(--vw) * 100) - 32px); }
+}
+
+.app--light .user-menu__trigger {
+  background: #f1f5f9;
+  border-color: #dde1e7;
+  color: #0f172a;
+}
+.app--light .user-menu__trigger:hover { background: #e6ebf2; }
+.app--light .user-menu__panel {
+  background-color: #ffffff;
+  border-color: #dde1e7;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+.app--light .user-menu__who { border-bottom-color: #dde1e7; }
+.app--light .user-menu__name { color: #0f172a; }
+.app--light .user-menu__email { color: #64748b; }
+.app--light .user-menu__item { color: #0f172a; }
+.app--light .user-menu__item:hover { background-color: rgba(0, 0, 0, 0.04); }
+.app--light .user-menu__item--signout { color: #b91c1c; }
+
+@media (prefers-reduced-motion: reduce) {
+  .user-menu__panel { animation: none; }
+  .user-menu__trigger { transition: none; }
+}

@@ -1,0 +1,506 @@
+/* AppHeader — light top bar */
+
+.app-header {
+  height: 52px;
+  background: #fff;
+  border-bottom: 1px solid #edf0f4;
+  display: flex;
+  align-items: center;
+  /* Left padding matches the side panel's body padding (10px) so the logo's
+     left edge sits on the same line as the stat cards and nav below it. */
+  padding: 0 20px 0 10px;
+  gap: 14px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 200;
+}
+
+.app-header__logo {
+  height: 38px;
+  width: 38px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+.app-header__divider {
+  width: 1px;
+  height: 20px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
+/* Org switcher */
+.app-header__org-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.app-header__org-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 400;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.app-header__org-btn:hover {
+  background: #f8fafc;
+}
+
+.app-header__org-chevron {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.app-header__org-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 240px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  z-index: 500;
+}
+
+.app-header__org-menu-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 4px 8px 8px;
+}
+
+.app-header__org-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.app-header__org-item:hover {
+  background: #f8fafc;
+}
+
+.app-header__org-item--active {
+  background: #f0f7ff;
+}
+
+.app-header__org-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-header__org-name {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 400;
+  flex: 1;
+  text-align: left;
+}
+
+.app-header__org-item--active .app-header__org-name {
+  font-weight: 500;
+  color: #1d4ed8;
+}
+
+.app-header__org-check {
+  font-size: 12px;
+  color: #2563eb;
+}
+
+/* Search */
+.app-header__search-wrap {
+  /* centred in the header, independent of logo/org width */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 40vw);
+}
+
+.app-header__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e8edf2;
+  border-radius: 7px;
+  height: 32px;
+  padding: 0 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.app-header__search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  z-index: 500;
+  overflow: hidden;
+}
+
+.app-header__search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.app-header__search-result:last-child { border-bottom: none; }
+.app-header__search-result:hover { background: #f8fafc; }
+
+.app-header__search-result-plate {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  flex-shrink: 0;
+}
+
+.app-header__search-result-driver {
+  font-size: 11px;
+  color: #94a3b8;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-header__search-result-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-header__search-icon {
+  font-size: 13px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.app-header__search-input {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: #334155;
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+}
+
+.app-header__search-input::placeholder {
+  color: #94a3b8;
+}
+
+/* Bell */
+.app-header__bell {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  position: relative;
+  flex-shrink: 0;
+  font-size: 18px;
+  margin-left: auto; /* pushes bell + avatar to the right edge */
+}
+
+.app-header__bell:hover {
+  background: #f8fafc;
+}
+
+.app-header__bell--active {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.app-header__bell-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #fff;
+}
+
+/* Avatar + user menu */
+.app-header__user-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.app-header__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-header__user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  z-index: 500;
+}
+
+.app-header__user-info {
+  padding: 8px 10px 10px;
+}
+
+/* The menu is a fixed 220px box. Neither line had any wrap control, so a real
+   full name — "Christopher Wanjala Simiyu" is an ordinary one on this fleet —
+   pushed straight through the rounded corner and out over the page beneath.
+   One line, clipped with an ellipsis; the full string is on the title
+   attribute for anyone who needs it.
+
+   min-width: 0 on the wrapper because these are block children of a padded
+   box: without it the intrinsic width of an unbreakable string wins over the
+   container and the ellipsis never gets a chance to apply. */
+.app-header__user-info { min-width: 0; }
+
+.app-header__user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__user-email {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+  /* An address has no spaces to break on, so the same treatment: it is a
+     label here, not something anyone retypes from this menu. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__user-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 2px 0;
+}
+
+.app-header__user-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #475569;
+  border-radius: 6px;
+  font-family: inherit;
+  text-align: left;
+}
+
+.app-header__user-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.app-header__user-item i {
+  font-size: 15px;
+  color: #94a3b8;
+}
+
+/* Last-online time on each search result */
+.app-header__search-result-seen {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.app-header__search-result-seen--on { color: #15803d; }
+
+/* Company logos in the organisation switcher */
+
+.app-header__co-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.app-header__co-mark--md { width: 30px; height: 30px; padding: 2px; }
+.app-header__co-mark--sm { width: 26px; height: 26px; padding: 2px; }
+.app-header__co-mark img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.app-header__co-letter {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+/* Unread alert count on the bell (replaces the red dot) */
+.app-header__bell-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #dc2626;
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────
+
+   The header was built at one width. Its search box is absolutely centred on
+   the viewport, which is fine on a desktop and collides with the organisation
+   name on anything narrower — "MENENGAI SUGAR COMPANY LIMITED" runs straight
+   under a box that is painted over it, with no stacking rule deciding which
+   wins. Below 1100px the search rejoins the flow and the row simply shares
+   itself out. */
+@media (max-width: 1100px) {
+  .app-header__search-wrap {
+    position: static;
+    transform: none;
+    /* Takes the slack left by the fixed-width items either side of it. */
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    max-width: 420px;
+  }
+
+  /* The dropdown is positioned against this wrapper, which is no longer
+     absolute — so the wrapper has to become the containing block itself or
+     the results list jumps to the header's left edge. */
+  .app-header__org-wrap,
+  .app-header__search-wrap { position: relative; }
+
+  .app-header__org-btn {
+    max-width: 30vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Tablet — the organisation name goes, the logo and chevron stay. The name is
+   the longest item in the row and the logo already identifies the org. */
+@media (max-width: 1023px) {
+  .app-header {
+    padding-right: 12px;
+    gap: 10px;
+  }
+
+  .app-header__org-btn {
+    max-width: none;
+    /* Keeps the chevron: without it the logo looks decorative rather than
+       like the control that switches organisation. */
+    font-size: 0;
+    gap: 0;
+    padding: 8px 6px;
+  }
+  .app-header__org-chevron { font-size: 11px; }
+
+  .app-header__divider { display: none; }
+
+  /* Comfortable targets for a touchscreen. */
+  .app-header__bell,
+  .app-header__avatar {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* The org menu was sized against a desktop header; on a tablet it should
+     not run off the right edge. */
+  .app-header__org-menu { max-width: min(320px, 86vw); }
+}
+
+/* The search box is the first thing to give up space — below this it is an
+   icon that expands the mobile search tray instead. */
+@media (max-width: 860px) {
+  .app-header__search-wrap { max-width: 240px; }
+}
+
+@media (pointer: coarse) {
+  .app-header__search { height: 38px; }
+  .app-header__search-input { font-size: 16px; }  /* stops iOS zooming on focus */
+}

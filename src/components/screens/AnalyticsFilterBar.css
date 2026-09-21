@@ -1,0 +1,579 @@
+/* Hallmark · component: filter bar (Analytics) · genre: utilitarian · theme: in-project
+ * pre-emit critique: P5 H4 E5 S5 R5 V4
+ *
+ * states, per control — an honest list, not a full one:
+ *   mode toggle     default · hover · focus · active · selected
+ *   month picker    default · hover · focus · active · open
+ *   unit filter     default · hover · focus · active · open · filtered
+ *   report button   default · hover · focus · active · disabled · loading
+ * disabled / loading / error / success do not exist on the first three: they
+ * are pickers with nothing to fail at. The report button HAS an error path
+ * (DownloadReportButton.jsx:44) that only reaches the console — it is the one
+ * real gap here, and it needs copy and a JSX change, not CSS.
+ *
+ * The phone layout is a 2x2 block, not a wrapped row. See the hand-held
+ * section at the foot of this file for why.
+ */
+/* The Analytics filter row. Styled off the same theme tokens as MonthPicker so
+   the three controls in this row read as one control group under the
+   light/dark switch rather than as three widgets that happen to be adjacent. */
+
+.an-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  /* Fills the header row rather than sitting in it as a right-aligned cluster.
+     The row used to hold one picker and a button, which read fine hugging the
+     right; it now holds three controls, and a reader looking for "which
+     vehicles am I seeing" should find it where reading starts. The action stays
+     right, pushed there by the tail's auto margin. */
+  flex: 1;
+}
+.an-filterbar__tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ── window: month | range ────────────────────────────────────────────────── */
+
+.an-window {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.an-window__modes {
+  display: inline-flex;
+  background: var(--color-card-inner, #10141c);
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 7px;
+  padding: 2px;
+}
+.an-window__mode {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--color-text-sec, #7c8899);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.an-window__mode:hover { color: var(--color-text-primary, #f0f4f8); }
+.an-window__mode--on {
+  color: var(--color-text-primary, #f0f4f8);
+  background: var(--color-card, #0a0a0b);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.an-window__mode:focus-visible {
+  outline: 2px solid var(--color-text-sec, #7c8899);
+  outline-offset: 2px;
+}
+
+.an-window__range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.an-window__date {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-text-primary, #f0f4f8);
+  background: var(--color-card, #0a0a0b);
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 7px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+/* The native calendar indicator takes its ink from `color-scheme`, so that has
+   to follow THIS APP'S theme and not the OS's.
+   
+   It was `light dark`, which means "use the OS preference" — and the two
+   disagree the moment somebody uses the header's DARK switch on a light
+   desktop. The indicator then renders as a near-black glyph on this card's
+   near-black surface, which is the icon going missing. The app already stamps
+   its choice on the root element (AppContext sets documentElement.dataset.theme),
+   so read it from there and the widget can never be in a different mode from
+   the page around it. */
+:root[data-theme="dark"]  .an-window__date { color-scheme: dark; }
+:root[data-theme="light"] .an-window__date { color-scheme: light; }
+/* Deliberately NOT also inverting ::-webkit-calendar-picker-indicator. Setting
+   color-scheme is what makes Blink paint that glyph light in the first place,
+   so a filter on top of it inverts a white icon back to black — reintroducing
+   the bug on the exact theme it was meant to fix. One mechanism, not two. */
+.an-window__date::-webkit-calendar-picker-indicator { cursor: pointer; }
+.an-window__date:focus-visible {
+  outline: 2px solid var(--color-text-sec, #7c8899);
+  outline-offset: 2px;
+}
+.an-window__arrow {
+  font-size: 11px;
+  color: var(--color-text-sec, #7c8899);
+}
+.an-window__span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--color-text-sec, #7c8899);
+  white-space: nowrap;
+}
+
+/* ── vehicle type ─────────────────────────────────────────────────────────── */
+
+.an-filter { position: relative; flex-shrink: 0; }
+
+.an-filter__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--color-text-sec, #7c8899);
+  background: var(--color-card, #0a0a0b);
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.an-filter__trigger:hover,
+.an-filter__trigger--open {
+  color: var(--color-text-primary, #f0f4f8);
+  border-color: var(--color-text-sec, #7c8899);
+  background: var(--color-card-inner, #10141c);
+}
+/* An ACTIVE filter is marked on the trigger itself. Every figure on the page
+   below is a subset while this is on, and a reader who has scrolled past the
+   row needs the state to be visible when they scroll back — not inferable only
+   from numbers being smaller than they remember. */
+.an-filter__trigger--on {
+  color: var(--color-text-primary, #f0f4f8);
+  border-color: var(--chart-1, #3987e5);
+}
+.an-filter__trigger:focus-visible {
+  outline: 2px solid var(--color-text-sec, #7c8899);
+  outline-offset: 2px;
+}
+.an-filter__value { line-height: 1; }
+.an-filter__count {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-text-primary, #f0f4f8);
+  background: var(--color-card-inner, #10141c);
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 999px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+.an-filter__trigger--on .an-filter__count {
+  color: #fff;
+  background: var(--chart-1, #3987e5);
+  border-color: transparent;
+}
+.an-filter__chevron { font-size: 9px; line-height: 1; transition: transform 0.15s; }
+.an-filter__chevron--open { transform: rotate(180deg); }
+
+.an-filter__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  width: 248px;
+  background: var(--color-card, #0a0a0b);
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+}
+
+.an-filter__panelhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--color-text-sec, #7c8899);
+  padding: 2px 4px 7px;
+}
+.an-filter__clear {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--chart-1, #3987e5);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.an-filter__clear:disabled { color: var(--color-border, #2a2d35); cursor: default; }
+
+/* Scrolls rather than growing: 25 machine families is a panel taller than the
+   viewport, and a filter that pushes its own footer off screen hides the count
+   that tells a reader how much they just selected. */
+.an-filter__list {
+  max-height: 264px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.an-filter__opt {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--color-text-sec, #7c8899);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 6px;
+  cursor: pointer;
+}
+.an-filter__opt:hover {
+  color: var(--color-text-primary, #f0f4f8);
+  background: var(--color-card-inner, #10141c);
+}
+.an-filter__opt--on { color: var(--color-text-primary, #f0f4f8); }
+.an-filter__opt:focus-visible {
+  outline: 2px solid var(--color-text-sec, #7c8899);
+  outline-offset: -2px;
+}
+.an-filter__box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #fff;
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 4px;
+}
+.an-filter__opt--on .an-filter__box {
+  background: var(--chart-1, #3987e5);
+  border-color: var(--chart-1, #3987e5);
+}
+.an-filter__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Tabular, because this is a column of counts that has to align. */
+.an-filter__n {
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-sec, #7c8899);
+}
+
+/* ── the unit panel's search ───────────────────────────────────────────────
+   The one thing the unit picker has that the type picker does not, and only
+   because it lists 218 rows where the other lists a dozen. It borrows the
+   panel's own surface rather than introducing an input style: this is the
+   first text field on the bar, and the first of anything is where a second
+   visual language gets in. */
+
+.an-filter__panel--units { width: 268px; }
+
+.an-filter__search {
+  width: 100%;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-primary, #f0f4f8);
+  background: var(--color-bg, #121317);
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 7px;
+  padding: 6px 8px;
+  margin: 0 0 7px;
+}
+.an-filter__search::placeholder { color: var(--color-text-sec, #7c8899); }
+.an-filter__search:hover { border-color: var(--color-text-sec, #7c8899); }
+.an-filter__search:focus-visible {
+  outline: 2px solid var(--chart-1, #3987e5);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+/* A search matching nothing says so. An empty list under a box you have just
+   typed into reads as a control that has broken. */
+.an-filter__none {
+  margin: 0;
+  padding: 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--color-text-sec, #7c8899);
+}
+
+/* The heading over the units that did nothing in this window. Quiet — it is a
+   boundary, not a warning: those units are perfectly fine, they simply have
+   nothing to show for the period being read. */
+.an-filter__group {
+  margin: 8px 0 3px;
+  padding: 6px 4px 0;
+  border-top: 1px solid var(--color-border, #2a2d35);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--color-text-sec, #7c8899);
+}
+
+/* Dimmed, not disabled. Still clickable, because "why is this machine showing
+   nothing" is a question worth being able to ask. */
+.an-filter__opt--silent .an-filter__name { opacity: 0.72; }
+
+.an-filter__footnote {
+  display: block;
+  margin-top: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  opacity: 0.85;
+}
+
+.an-filter__foot {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--color-text-sec, #7c8899);
+  border-top: 1px solid var(--color-border, #2a2d35);
+  margin-top: 7px;
+  padding: 7px 4px 1px;
+}
+
+/* ══ Hand-held ════════════════════════════════════════════════════════════
+ *
+ * Two separate decisions, at two separate widths:
+ *   768 and below  every control on this bar is 44px tall
+ *   600 and below  the bar stops being a wrapping row and becomes a 2x2 block
+ *
+ * They are split because a tablet does not need the second one. Laid end to
+ * end the four controls want 118 + 153 + 141 + 116 plus three gaps plus the
+ * 40px gutter = about 598px, so above 600 they sit on ONE row with nothing
+ * left over, and turning that into a 2x2 would only stretch a "PDF Report"
+ * button to 344px. The grid is for the widths where the row actually wraps.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* ── One height, every control, both modes ─────────────────────────────── */
+@media (max-width: 767px) {
+  .an-filterbar {
+    /* 44 because that is what index.css already gives the picker, the unit
+       filter and the report button. This makes the other two agree with them
+       rather than introducing a fourth opinion. */
+    --an-ctl-h: 44px;
+  }
+
+  /* The segmented control was the odd one out at 50px: 44px buttons inside a
+     2px inset track. The inset IS the control — it is what makes the selected
+     half read as a pill sitting in a groove — so the fix is to take the six
+     pixels out of the buttons, not the track. 38px still clears the 24px floor
+     WCAG 2.5.8 sets, and the control it belongs to now measures exactly 44. */
+  .an-window__modes { padding: 2px; }
+  .an-window__modes .an-window__mode {
+    min-height: calc(var(--an-ctl-h) - 6px);
+    flex: 1 1 0;
+    padding-inline: 4px;
+  }
+
+  /* Both triggers were sized to their text and pinned against shrinking. In a
+     track they are sized by the track, so the text has to be allowed to give:
+     `min-width: 0` lets the grid item shrink, and the label ellipses rather
+     than pushing the chevron out of the button. */
+  /* Scoped through .an-filterbar throughout: MonthPicker is a shared component
+     and the app header mounts one too. Nothing here may follow it there. */
+  .an-filterbar .month-picker,
+  .an-filterbar .an-filter { flex-shrink: 1; min-width: 0; }
+  .an-filterbar .month-picker__trigger,
+  .an-filterbar .an-filter__trigger {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    min-height: var(--an-ctl-h);
+  }
+  .an-filterbar .month-picker__value,
+  .an-filterbar .an-filter__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .an-filterbar__tail > * { min-height: var(--an-ctl-h); }
+
+  .an-window__date { min-height: var(--an-ctl-h); }
+}
+
+/* ── Below 600: the 2x2 block ─────────────────────────────────────────────
+ *
+ * Measured on a 375px phone before this existed:
+ *
+ *   Month|Range   50px tall        the calendar beside it   44
+ *   after the calendar             57px of nothing to the bar's right edge
+ *   between All units and Report   78px of nothing
+ *   in Range mode, the date fields 27px tall
+ *
+ * Two holes and three heights, and they are one fault: a WRAPPING FLEX ROW
+ * lets every control keep its desk width, so the leftover collects wherever
+ * the wrap happens to leave it. Flex can distribute slack within a line but it
+ * cannot line two lines up — which is why the tail's `margin-left: auto`
+ * closed the gap on row one by opening a bigger one on row two.
+ *
+ * A grid can. Two equal tracks, the window spanning both and borrowing them
+ * through `subgrid`, so all four controls sit on ONE shared column line and
+ * every one is stretched to its track. There is no leftover to place because
+ * nothing is at its natural width any more.
+ *
+ * Where subgrid is unsupported the declaration is dropped and .an-window falls
+ * back to one column: the modes and the picker stack, each full width. Taller,
+ * still no holes — the degradation costs a row, not the fix.
+ * ─────────────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .an-filterbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .an-window {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    gap: 8px;
+  }
+
+  /* `margin-left: auto` is the base rule that pushes this cluster to the right
+     of the desktop row, and it must stay there — but on a GRID item it does
+     something else entirely: it shrinks the item to its content and pins it to
+     the end of its track, which is the 78px hole in a different disguise. */
+  .an-filterbar__tail { margin-left: 0; }
+  .an-filterbar__tail > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  /* Two filters instead of one (an org with more than one vehicle category)
+     fills row two and would orphan the button in a half-width cell on row
+     three — the same hole this block exists to close. Given an even number of
+     filters above it, the button takes the whole row instead. */
+  .an-filterbar:has(.an-filter ~ .an-filter) .an-filterbar__tail {
+    grid-column: 1 / -1;
+  }
+
+  /* Range mode has no picker to sit beside the toggle, and a toggle alone in
+     track one leaves the other track empty — the row-one hole again. When the
+     range row is what follows, the toggle takes the whole row instead and the
+     window reads as two full-width bands. */
+  .an-window:has(.an-window__range) .an-window__modes { grid-column: 1 / -1; }
+
+  /* Range: one full-width row under the modes, the two dates splitting it.
+     They were 27px — the shortest controls on the page, and a date field is
+     the one control here somebody edits rather than picks from a menu. */
+  .an-window__range {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .an-window__date { flex: 1 1 0; min-width: 0; }
+  .an-window__arrow,
+  .an-window__span { flex: 0 0 auto; }
+
+  /* Last, and across both tracks. It is a status line that comes and goes, and
+     in the flow it would push the button onto a row of its own every time the
+     figures reloaded. */
+  .an-updating {
+    order: 1;
+    grid-column: 1 / -1;
+  }
+}
+
+/* ── Under 350px ──────────────────────────────────────────────────────────
+ *
+ * Two equal tracks at 320 are 136px each, and "September 2026" plus a calendar
+ * glyph plus a chevron plus padding wants 151. Something has to go, and the
+ * candidates are the word and the glyph: the word is the only thing in the
+ * control that says WHICH month, and the glyph says "this is about months" to
+ * a reader already looking at a month. So the glyph goes, at the one width
+ * where the two cannot both stay. Both controls come back to 132 and 120 —
+ * inside the track with room, and the labels stop ellipsing.
+ *
+ * 350 is where the arithmetic crosses, not a device: (W - 40 gutter - 8 gap)
+ * / 2 reaches 151 at exactly 350. The report button keeps its download glyph;
+ * it is an action, and the glyph is what marks it as one.
+ * ─────────────────────────────────────────────────────────────────────── */
+@media (max-width: 350px) {
+  .an-filterbar .month-picker__trigger > svg,
+  .an-filterbar .an-filter__trigger > svg { display: none; }
+}
+
+/* The press. Nothing else on this bar marked the moment of the tap — hover is
+   a mouse state and does not exist on a touch screen, so a thumb got no
+   acknowledgement at all between pressing and the panel opening. Transform
+   only: nothing here moves a neighbour. */
+.an-window__mode:active,
+.an-filterbar .month-picker__trigger:active,
+.an-filter__trigger:active,
+.an-filterbar__tail > button:not(:disabled):active { transform: translateY(1px); }
+@media (prefers-reduced-motion: reduce) {
+  .an-window__mode:active,
+  .an-filterbar .month-picker__trigger:active,
+  .an-filter__trigger:active,
+  .an-filterbar__tail > button:not(:disabled):active { transform: none; }
+}
+
+
+/* ── updating ─────────────────────────────────────────────────────────────── */
+
+.an-updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--color-text-sec, #7c8899);
+  white-space: nowrap;
+}
+.an-updating__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--chart-1, #3987e5);
+  animation: an-pulse 1s ease-in-out infinite;
+}
+@keyframes an-pulse {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+/* Respect a reader who has asked for less motion — the dot still marks the
+   state, it just stops blinking. */
+@media (prefers-reduced-motion: reduce) {
+  .an-updating__dot { animation: none; opacity: 0.9; }
+}
+
+/* The CONTENT dims while it catches up; the controls stay crisp and clickable,
+   because the whole point is that the next click should not have to wait. Kept
+   above 0.5 so the figures stay legible — this marks them as previous, it does
+   not hide them. */
+.an-body { transition: opacity 0.18s ease; }
+.an-body--updating { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) {
+  .an-body { transition: none; }
+}

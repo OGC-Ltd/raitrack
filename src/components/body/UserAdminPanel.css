@@ -1,0 +1,1580 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Index-First
+ * theme: in-project — SensorPanel's scale, adopted whole (no new palette, no
+ *   new fonts): four text tiers, five surfaces, the field-edge token, the
+ *   status hues and their light re-points
+ * enrichment: none · nav/footer: n/a (screen inside an existing shell)
+ *
+ * 2026-09-15 · scope: redesign — PARITY with the Maintenance tab, not just its
+ * grid. The previous pass took SensorPanel's table grammar and left everything
+ * around it on this page's own bridge, so the roster was the Maintenance grid
+ * inside a different product: pill-shaped controls over a data grid's square
+ * ones, a 999px outlined status tag against that panel's washed 4px one, a
+ * rounded floating card in a chrome made of flush hairline-closed bands, a
+ * page ground two steps light of #04050a and a control edge (#2a2d35) that is
+ * that panel's HOVER edge rather than its field edge.
+ *
+ * What changed, element for element:
+ *   · tokens — the --color-* bridge is gone; the sp4 scale is the scale, with
+ *     the legacy names (--ink/--text-2/--border/…) re-pointed onto it rather
+ *     than 200 rules rewritten
+ *   · chrome — flush bands, each closed by its own hairline: crumbs (on the
+ *     screen), KPI header, filter bar, invite band, grid. No gaps, no cards
+ *   · header — .sp4-header: org on the left, KPI tiles on the right, which is
+ *     the count line this page opened with said in that panel's voice
+ *   · filter bar — .sp4-filterbar: 8px search with an inset glyph and a 4%
+ *     fill, a divider, labelled groups, 20px chips with their tally in an
+ *     inner pill, the role picker as .sp4-date-input, and Invite in Export's
+ *     slot at the far end
+ *   · grid — heads on the panel surface (not the page ground), .sp4-pill
+ *     statuses, .sp4-ghost-btn actions, .sp4-kind-chip roles, mono tabular
+ *     dates at .sp4-num's size
+ *   · form — .sp4-field-line edges on raised fields, uppercase 11px captions,
+ *     a .sp4-state-btn-shaped submit
+ * grid: Sensor Monitor's (.sp4-table) grammar — full-bleed rows, gutter-inset
+ *   edge cells, sticky uppercase column heads over the roster's own scroller,
+ *   10/14 cell padding, cells one step under the name column
+ * pre-emit critique: P5 H5 E5 S5 R5 V4
+ * contrast: pass (40–41) — measured in both themes, composited through every
+ *   translucent wash: dark 7.8–17.1, light 4.6–17.9, floor on the light
+ *   ACTIVE pill at 4.61
+ * honest: pass (46) · chrome: pass (47) · tokens: pass (48)
+ * responsive: pass (49) · mobile: pass (34, 49–56 — 320/375/800/1280, no page
+ *   horizontal scroll, 36px touch targets, cards back on the gutter)
+ * icons: pass (30 — the magnifier and the select caret are drawn, not imported)
+ * spacing: hand-tuned px, per this project's preserved convention (gate 24 waived by pre-flight)
+ * deviation: the fill is this page's own on exactly one control — the invite
+ *   form's submit. Maintenance has no primary action to copy; the SHAPE is
+ *   .sp4-state-btn's and only the ground is not.
+ *
+ * User accounts panel.
+ *
+ * The gutter is --maint-gutter, NOT --app-gutter, and it stayed that way after
+ * the page moved out of Maintenance into UserAdminScreen: the screen declares
+ * the token on its root instead. One indirection, and the padding here did not
+ * have to be rewritten to follow the page to its new home.
+ */
+
+.ua-page {
+  /* ── Sensor Monitor's scale, not a second one ─────────────────────────────
+     This panel used to bridge the app's --color-* tokens into its own five
+     names. That is how it ended up a different colour temperature from the
+     Maintenance tab while claiming to share its grid: same hairline NAME,
+     different hairline VALUE (#2a2d35 here against #0f1118 there), a page
+     ground two steps lighter, and a secondary text tier (#7c8899) that
+     SensorPanel had already measured as too dim for a table cell.
+
+     These are SensorPanel.css's values, copied deliberately rather than
+     referenced: the two files ship independently and a var() into another
+     component's private scale resolves to nothing the moment this panel is
+     mounted anywhere that one is not. The light re-point at the foot of this
+     file mirrors its light re-point for the same reason. If the sp4 scale
+     moves, both blocks move together — they are one system in two files, and
+     the comment in each says so. */
+  --ua-text-1: #f0f4f8;   /* names, values, headings              ~17:1 */
+  --ua-text-2: #c7d1dd;   /* table cells, body copy               ~11:1 */
+  --ua-text-3: #9aa7b6;   /* column heads, labels, captions      ~7.5:1 */
+  --ua-text-4: #7d8b9c;   /* hints and least-important asides    ~5.2:1 */
+
+  --ua-bg:      #04050a;  /* the panel canvas                          */
+  --ua-surface: #06070d;  /* header, filter bar, sticky table head     */
+  --ua-raised:  #1e2330;  /* chips, fields, inset blocks               */
+  --ua-line:    #0f1118;  /* default hairline                          */
+  --ua-line-hi: #2e3440;  /* control edges, hover emphasis             */
+  /* The edge of a control someone has to find and click — 3.7:1 on the dark
+     panel, 4.7:1 on the light one, which a row hairline is not required to
+     reach and an input is. */
+  --ua-field-line: #64748b;
+
+  --ua-accent: #3b82f6;
+  --ua-ok:     #86efac;
+  --ua-crit:   #fca5a5;
+  --ua-info:   #93c5fd;
+  --ua-warn:   #f59e0b;
+
+  /* The names the rest of this file was written against, re-pointed rather
+     than rewritten in 200 places. --elevated is the SURFACE tier (fields, the
+     invite card, a mobile row card); the row hover fill is NOT this — it is
+     the same translucent wash Sensor Monitor uses, stated at .ua-row:hover,
+     because #1e2330 under a pointer reads as a selection, not a hover. */
+  --card: var(--ua-surface);
+  --border: var(--ua-line);
+  --elevated: var(--ua-surface);
+  --bg: var(--ua-bg);
+  --text-2: var(--ua-text-2);
+  --text-3: var(--ua-text-3);
+  --ink: var(--ua-text-1);
+
+  /* The gutter the CONTROLS are inset by, and the same one the grid's edge
+     cells carry — so the roster's first column starts exactly under the count
+     above it. Sensor Monitor's --sp4-gutter by another name, and deliberately
+     the same expression, because the two panels sit one click apart. */
+  --ua-gutter: var(--maint-gutter, 24px);
+
+  min-height: 100%;
+  background: var(--bg);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* No horizontal padding: it moved onto the individual blocks, because the
+   roster must reach both edges. Row rules and hover fills that stop 20px short
+   of the panel edge read as a table sitting ON a page; ones that run the full
+   width read as the page BEING the table, which is what a data grid should
+   look like and what Sensor Monitor does. */
+/* Flush bands, no gutter between them — the Maintenance tab's shape. Its
+   chrome is a stack of full-width strips, each closed by its own hairline
+   (crumbs, then the KPI header, then the filter bar, then the grid); nothing
+   floats on a gap. This used to be a 14px-gapped column of blocks, which is
+   why the two pages read as different products with the same table in them. */
+.ua-page__inner {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Everything that is not the grid keeps the inset the grid's edge cells
+   carry. The grid itself stays full-bleed and insets its own edge cells. */
+.ua-header,
+.ua-filters,
+.ua-invite,
+.ua-nomatch { padding-inline: var(--ua-gutter); }
+
+/* On a desk the panel is a fixed-height column and the ROSTER is the only
+   thing that scrolls — SensorPanel's shape, and the reason its column heads
+   can stay pinned over the rows they name. */
+@media (min-width: 768px) {
+  .ua-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .ua-page__inner {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* ── The header band ─────────────────────────────────────────────────────────
+ *
+ * Sensor Monitor's `.sp4-header`: a strip on the panel surface, closed by a
+ * hairline, with the figures the panel exists for as KPI tiles at the right
+ * end. What differs is the left end — that panel's title was removed because
+ * its sub-tab named it, and this one has the organisation to state, which is
+ * the only thing on the page that says WHOSE roster this is.
+ *
+ * The tiles are the count line this page used to open with ("4 of 12 people ·
+ * MENENGAI"), said in the Maintenance tab's voice. They are not a second copy
+ * of the state chips below: the chips count the five account STATES, these
+ * count the roster and — only while a filter is on — what is left of it.
+ */
+.ua-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-block: 12px;
+  background: var(--ua-surface);
+  border-bottom: 1px solid var(--ua-line);
+  flex-shrink: 0;
+}
+
+.ua-header__org {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ua-text-3);
+  white-space: nowrap;
+}
+
+/* ── The scope picker ────────────────────────────────────────────────────
+   Replaces the flat organisation name once the account administers more than
+   one tenant. It is styled as the label it replaces rather than as a form
+   control: this sits in a header band, not in a form, and a chrome-heavy
+   select would read as the page's primary action when it is only a filter. */
+.ua-header__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ua-header__scopelabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ua-text-3);
+  white-space: nowrap;
+}
+
+.ua-header__scopesel {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ua-text-1);
+  background: var(--ua-raised);
+  border: 1px solid var(--ua-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  max-width: 220px;
+  cursor: pointer;
+}
+
+.ua-header__scopesel:focus-visible {
+  outline: 2px solid var(--ua-accent, #38bdf8);
+  outline-offset: 1px;
+}
+
+/* ── The organisation a row was read from ────────────────────────────────
+   Only drawn when the roster spans more than one, so it never takes width
+   from a single-tenant view. */
+.ua-row__org {
+  display: block;
+  font-size: 12px;
+  color: var(--ua-text-2);
+}
+
+.ua-row__orghere {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ua-text-3);
+}
+
+/* A roster that is short because a tenant failed, saying so. Warning, not
+   error: everything else on screen is real. */
+.ua-partial {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ua-text-2);
+  background: rgba(234, 179, 8, 0.10);
+  border: 1px solid rgba(234, 179, 8, 0.30);
+  border-radius: 8px;
+}
+
+/* One hairline between tiles, drawn by the group's own background showing
+   through a 1px gap — SensorPanel's trick, and the reason the pair reads as
+   one instrument rather than two boxes. */
+.ua-kpis {
+  display: flex;
+  gap: 1px;
+  background: var(--ua-line);
+  border: 1px solid var(--ua-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ua-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 70px;
+  padding: 6px 16px;
+  background: var(--ua-surface);
+}
+.ua-kpi__n {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ua-text-1);
+}
+.ua-kpi__l {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ua-text-3);
+  white-space: nowrap;
+}
+/* The total is the headline — it is what the page is a roster of — so it
+   carries the brightest tier; the filtered figure is the one that moves, and
+   takes the accent the way Sensor Monitor's live count does. */
+.ua-kpi--shown .ua-kpi__n { color: var(--ua-info); }
+.ua-kpi__loading { font-size: 12.5px; color: var(--ua-text-3); }
+
+/* ── The filter bar ──────────────────────────────────────────────────────────
+ *
+ * `.sp4-filterbar`, element for element: search on the left, a divider, then
+ * labelled groups of chips, and the one button that acts on everything else
+ * pushed to the far end by `margin-left: auto` — Export's slot over there,
+ * Invite here.
+ *
+ * Not sticky, and it does not need to be: on a desk this band sits OUTSIDE
+ * the roster's scroller, so it cannot scroll away. The column heads own the
+ * sticky position.
+ */
+.ua-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-block: 10px;
+  background: var(--ua-surface);
+  border-bottom: 1px solid var(--ua-line);
+  flex-shrink: 0;
+}
+
+.ua-filters__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--ua-raised);
+  flex-shrink: 0;
+}
+
+.ua-filter-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ua-filter-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ua-text-3);
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+/* The search field, at Sensor Monitor's measurements: 8px radius, a 4%
+   translucent fill rather than a surface colour, the glyph inset on the left
+   and the clear control on the right, and a focus state that tints the field
+   as well as its edge.
+   The FLOOR is this panel's own: with `flex: 1 1 240px` and no minimum the
+   five state chips beside it squeezed the field to ~145px at 800px wide,
+   clipping its own placeholder. Below 200px the chips wrap first, which is
+   the correct thing to give up. */
+.ua-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+.ua-search__icon {
+  position: absolute;
+  left: 10px;
+  color: var(--ua-text-3);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.ua-search__input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 60px 7px 32px;
+  border: 1px solid var(--ua-raised);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-family: var(--font-body);
+  color: var(--ua-text-1);
+  transition: border-color .15s, background-color .15s;
+}
+.ua-search__input:focus {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.05);
+}
+/* The fourth tier, matching `.sp4-search::placeholder`. It is the only string
+   in the bar that is not yet a value, and it has to sit behind one. */
+.ua-search__input::placeholder { color: var(--ua-text-4); }
+/* The browser's own clear affordance is a tiny grey glyph that disappears on
+   a dark surface and cannot be reached by keyboard in every engine. */
+.ua-search__input::-webkit-search-cancel-button { appearance: none; }
+.ua-search__clear {
+  position: absolute;
+  right: 8px;
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  color: var(--ua-text-3);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s;
+}
+.ua-search__clear:hover { color: var(--ua-text-1); }
+.ua-search__clear:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: 1px; border-radius: 4px; }
+.ua-search__clear:active { color: var(--ua-text-4); }
+
+.ua-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+
+/* `.sp4-filter-chip`, to the pixel: a 20px lozenge, 4/10 padding, body size at
+   600, a 3% fill and the raised tier as its edge. The selected state is the
+   panel's blue wash rather than this page's old ink-outline — one grammar for
+   "this filter is on" across the two surfaces. */
+.ua-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--ua-raised);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ua-text-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.ua-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ua-text-1);
+  border-color: var(--ua-line-hi);
+}
+.ua-chip:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: 1px; }
+.ua-chip:active:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.ua-chip--on {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--ua-info);
+}
+/* The tally rides in the chip the way `.sp4-tab-n` rides in a tab — a pill
+   inside a pill, so the number is read as belonging to the label rather than
+   as part of it. */
+.ua-chip__n {
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ua-chip--on .ua-chip__n { background: rgba(59, 130, 246, 0.2); }
+/* Nothing to show, and nothing to click — but still on screen, because "no
+   suspended accounts" is a fact an administrator came here to learn. */
+.ua-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* The role picker is `.sp4-date-input` in its other use: the same raised fill,
+   the same field edge, the same 6px radius — a select rather than a date, so
+   it carries the drawn caret an `appearance: none` control loses. */
+.ua-rolepick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--ua-field-line);
+  border-radius: 6px;
+  background: var(--ua-raised);
+}
+.ua-rolepick:focus-within {
+  border-color: var(--ua-accent);
+  outline: 2px solid var(--ua-accent);
+  outline-offset: 1px;
+}
+/* Drawn, not imported: two borders on a rotated square. The page has no icon
+   set, and pulling one in for six pixels is the mismatched-icon tell in
+   miniature. */
+.ua-rolepick::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin: -3px 3px 0 0;
+  border-right: 1.5px solid var(--ua-text-3);
+  border-bottom: 1.5px solid var(--ua-text-3);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+.ua-rolepick:focus-within::after { border-color: var(--ua-text-1); }
+
+.ua-rolepick__select {
+  appearance: none;
+  border: 0;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-family: var(--font-body);
+  color: var(--ua-text-1);
+  cursor: pointer;
+  padding-right: 2px;
+}
+/* The options are painted by the OS, which does not inherit the page's ground
+   — without this they are black-on-black in the dark theme on Windows. */
+.ua-rolepick__select option { background: var(--ua-surface); color: var(--ua-text-1); }
+
+/* Invite sits at the far end of the filter bar, in Export's slot and Export's
+   shape. It does not filter anything — it is what you do having failed to find
+   the person — so it reads as the end of the bar's sentence rather than as
+   another control in the series. margin-left:auto survives the flex wrap. */
+.ua-invite-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--ua-line-hi);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ua-text-1);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.ua-invite-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--ua-accent);
+  color: var(--ua-accent);
+}
+.ua-invite-btn:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: 1px; transition: none; }
+.ua-invite-btn:active { transform: translateY(1px); }
+/* Open, it is the way OUT of the form rather than the way in — the same
+   `--on` treatment Sensor Monitor's export trigger takes while its menu is
+   showing. */
+.ua-invite-btn--open { border-color: var(--ua-accent); color: var(--ua-accent); }
+
+/* Filtered to nothing. A sentence and the way back, on the page ground — a
+   card here would dress up an absence. */
+/* Any author `display` beats the UA sheet's `[hidden] { display: none }`, so a
+   block that is sometimes hidden by the attribute has to say so itself. The
+   component conditionally renders these, but the preview harness toggles
+   `hidden`, and one of them should not be able to lie about the other. */
+.ua-nomatch[hidden],
+.ua-invite[hidden] { display: none; }
+
+/* Centred in the panel's remaining height, like `.sp4-empty-tab` — an empty
+   grid anchored to the top leaves the message floating above a field of
+   nothing. */
+.ua-nomatch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-block: 32px;
+  text-align: center;
+}
+.ua-nomatch__line { margin: 0; font-size: 12.5px; color: var(--ua-text-3); }
+.ua-nomatch__q { color: var(--ua-text-1); font-weight: 700; }
+
+/* The invite form is a BAND, not a card — it opens under the filter bar,
+   spans the panel, and closes with the same hairline every other strip above
+   it uses. A rounded, floating card was the one element on this page that had
+   no counterpart anywhere in Maintenance. */
+.ua-card {
+  background: var(--ua-surface);
+  border: 0;
+  border-bottom: 1px solid var(--ua-line);
+  border-radius: 0;
+  padding-block: 12px 14px;
+}
+
+.ua-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ua-card__title {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ua-text-3);
+}
+.ua-card__hint { font-size: 12.5px; color: var(--ua-text-4); }
+
+/* The form wraps rather than sitting in a fixed grid: it is five short fields
+   and a wide screen should not stretch them across a metre of desk. */
+.ua-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* The field edge is --ua-field-line, not the row hairline. A boundary someone
+   has to find and click needs 3:1 against its ground; a rule between two table
+   rows does not, and using one value for both is how a form ends up with
+   invisible inputs on a dark panel. SensorPanel added that token for exactly
+   this and the fields here now read it. */
+.ua-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 6px 10px 5px;
+  border: 1px solid var(--ua-field-line);
+  border-radius: 6px;
+  background: var(--ua-raised);
+  transition: border-color 120ms ease;
+}
+
+/* An outline, not a transitioned box-shadow: a ring that fades in leaves a
+   keyboard user with no indicator for the length of the transition. */
+.ua-field:focus-within {
+  border-color: var(--ua-accent);
+  outline: 2px solid var(--ua-accent);
+  outline-offset: 1px;
+}
+
+/* The uppercase micro-label the whole Maintenance tab uses for a caption —
+   11px at 600 with 0.06em tracking, on the third tier. It was 10.5px at
+   letter-spacing 0.3px in the muted tier, which is smaller and dimmer than
+   anything that panel prints. */
+.ua-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ua-text-3);
+}
+
+.ua-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+.ua-input:disabled { opacity: 0.6; }
+/* A native select paints its own arrow in the OS colour; this keeps the row
+   height matching the text inputs beside it. */
+select.ua-input { appearance: none; cursor: pointer; }
+
+.ua-hint { margin-top: 2px; font-size: 10.5px; color: var(--text-3); }
+
+/* Both slots are ALWAYS in the DOM. An aria-live region that only appears when
+   it has something to say is a region the screen reader was not watching. */
+.ua-msg {
+  flex-basis: 100%;
+  min-height: 15px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ua-msg--error { color: var(--accent-crit, #ef4444); }
+.ua-msg--ok { color: var(--accent-ok, #22c55e); }
+
+/* `.sp4-state-btn`'s measurements — 6/14 padding, 6px radius, body size at
+   600 — filled rather than ghosted, because this is the one primary action on
+   the page and Maintenance simply has no primary action to copy. The SHAPE is
+   that panel's; only the fill is this page's own. */
+.ua-submit {
+  flex: 0 0 auto;
+  padding: 7px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  color: var(--color-bg, #0b0d10);
+  background: var(--accent-ok, #22c55e);
+  border: 1px solid var(--accent-ok, #22c55e);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+.ua-submit:hover:not(:disabled) { filter: brightness(1.07); }
+.ua-submit:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 2px; }
+.ua-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── The roster ──────────────────────────────────────────────────────────────
+ *
+ * No card. The roster used to sit inside a bordered, filled .ua-card with its
+ * own "People" title — a box around the only thing on the page, holding a box
+ * per row on a phone. The list is the page here, so the rows sit on the page
+ * ground and the hairline between them is the only division they need.
+ *
+ * What the card was actually providing — the title — is gone too: the count in
+ * the bar above says how many people, which is the same statement with a fact
+ * in it.
+ */
+.ua-roster { margin-top: 2px; }
+
+.ua-table-scroll {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--elevated) transparent;
+}
+
+.ua-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-family: var(--font-body);
+  /* A floor, not a target. Below this the six columns stop being readable and
+     the scroller takes over — the honest trade a grid makes, and the one
+     Sensor Monitor makes at 500px. This table carries four action buttons in
+     its last column, so its floor sits higher. */
+  min-width: 660px;
+}
+
+/* Pinned, over the rows they name. This is the move that makes a long roster
+   navigable, and it works here because the scroller belongs to the roster
+   rather than to the page: `top: 0` is the top of the ROWS, not the top of the
+   screen, so there is nothing above for the heads to collide with.
+   The background is required, not decorative — a transparent sticky head lets
+   the rows slide through the words. */
+.ua-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ua-text-3);
+  background: var(--ua-surface);
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* The grid's edge inset.
+   Insetting the EDGE CELLS rather than padding the scroller is deliberate, and
+   the reasoning is SensorPanel's: padding-right on a horizontally scrolling
+   box is dropped by several engines once the content actually overflows —
+   which is exactly when the table is at its widest and the gap matters most.
+   Padding the cells travels with the scroll instead, and the rules and hover
+   fills stay full-bleed. */
+.ua-table thead th:first-child,
+.ua-table tbody td:first-child { padding-left: var(--ua-gutter); }
+.ua-table thead th:last-child,
+.ua-table tbody td:last-child  { padding-right: var(--ua-gutter); }
+
+@media (min-width: 768px) {
+  .ua-roster {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+  }
+  .ua-table-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Somewhere for the last row to end, rather than against the panel edge. */
+    padding-bottom: 16px;
+  }
+}
+
+/* The rule belongs to the ROW, not to its cells. On the cells it stopped at
+   each cell's padding box, so with the grid now running full-bleed there would
+   be a 20px break in every hairline at both edges. On the row it is one line
+   across the panel — which is also where Sensor Monitor puts it. */
+.ua-row { border-bottom: 1px solid var(--border); }
+
+.ua-row td {
+  padding: 10px 14px;
+  /* Dimmer than the name beside it. A roster where every cell is full ink has
+     no first column — the eye has to read the whole row to find the person.
+     Sensor Monitor's split: cells at the secondary step, the identifying
+     column back up at full ink. */
+  color: var(--text-2);
+  /* Middle, not the table default of baseline. The name cell is two lines
+     deep and every other cell is one, so baseline alignment pinned the status
+     pill and the dates to the NAME's baseline and left them riding high
+     against a cell twice their height. */
+  vertical-align: middle;
+}
+/* Sensor Monitor's own hover — a 2.5% white wash over whatever the row is
+   sitting on, rather than a surface colour. A filled row under the pointer
+   reads as selected; this reads as pointed at, which is what it is. */
+.ua-row:hover { background: rgba(255, 255, 255, 0.025); }
+.ua-row__email { color: var(--text-2); }
+
+/* Two columns hold prose and are allowed to wrap; everything else is a date,
+   a pill or a control, and wrapping those only makes them harder to scan. */
+.ua-row td:first-child { white-space: normal; min-width: 180px; }
+.ua-row__rolescell {
+  white-space: normal;
+  /* Wide enough that two chips share a line before wrapping — without the
+     floor the column collapses to one chip per line the moment the table is
+     under width pressure, and a three-role row grows to twice its neighbours. */
+  min-width: 200px;
+  max-width: 280px;
+}
+.ua-row__num,
+.ua-row__actionscell { white-space: nowrap; }
+
+/* THE BUG THIS FIXES: `display: flex` used to sit on the <td> itself. A table
+   cell with `display: flex` is no longer a table cell — the table wraps it in
+   an anonymous cell and it stops stretching to the row's height, so its
+   bottom border drew 5px above every other cell's. Across a full roster that
+   reads as rows bleeding into one another.
+   The cell stays a cell; the flex lives on a wrapper inside it. */
+.ua-row__actionscell { text-align: right; }
+.ua-row__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  /* Never wrap. A wrapped control stack makes that one row taller than the
+     rest, and an uneven row rhythm is the thing this table is being fixed
+     for. The table already scrolls sideways inside .ua-table-scroll when
+     there is not enough width, which is the honest trade: one scrollbar
+     instead of five different row heights. */
+  flex-wrap: nowrap;
+}
+
+/* `.sp4-pill`: a 4px tag rather than a 999px lozenge, uppercase at 11px/800,
+   and a tinted ground behind the outline rather than an outline alone. The
+   status column of the Maintenance grid is the nearest thing this page has to
+   a sibling, so it is drawn the same way — including the part that matters
+   most, that each state carries a WASH as well as a hue, so the column can be
+   scanned without reading it. */
+.ua-pill {
+  display: inline-flex;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: var(--font-body);
+  border: 1px solid currentColor;
+  /* Two-word labels ("Pending activation") were breaking inside the pill and
+     drawing a two-line lozenge twice the height of its neighbours. */
+  white-space: nowrap;
+}
+.ua-pill--active { color: var(--ua-ok); background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.2); }
+.ua-pill--suspended { color: var(--ua-warn); background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.22); }
+.ua-pill--terminated { color: var(--ua-crit); background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.25); }
+/* Invited and not yet in: informational rather than a warning. Nothing is
+   wrong with this account, it is simply waiting on a person. */
+.ua-pill--pending { color: var(--ua-info); background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.28); }
+/* An invitation that ran out or was replaced IS a problem — that person
+   cannot get in and nobody will be told. */
+.ua-pill--expired { color: var(--ua-crit); background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.25); }
+
+/* `.sp4-ghost-btn`: 3/9 padding, a 5px radius, label size at 600 on the third
+   tier, with the emphasis edge as its border. Four of these ride in a row of
+   this table, so they are the quietest control on the page — which is also
+   what they are in the Maintenance grid. */
+.ua-action {
+  padding: 3px 9px;
+  border: 1px solid var(--ua-line-hi);
+  border-radius: 5px;
+  background: none;
+  color: var(--ua-text-3);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ua-action:hover:not(:disabled) { color: var(--ua-text-1); border-color: var(--ua-text-4); }
+.ua-action:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: 1px; }
+/* Pressed. Nothing else in the row moves, so 1px is enough to feel it. */
+.ua-action:active:not(:disabled) { transform: translateY(1px); }
+.ua-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ua-action:active:not(:disabled),
+  .ua-invite-btn:active,
+  .ua-submit:active { transform: none; }
+}
+
+@media (max-width: 640px) {
+  .ua-field { flex-basis: 100%; }
+  .ua-submit { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ua-field, .ua-submit { transition: none; }
+}
+
+/* ── Access picker ──────────────────────────────────────────────────────────
+ *
+ * The organisation list is the spine of the form, so it gets a border and real
+ * padding while the four text fields above it stay flat. That asymmetry is the
+ * point: roles hang off an organisation, and the layout should say so before
+ * the labels do.
+ */
+.ua-form__row { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+
+.ua-access {
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--elevated);
+}
+
+.ua-access__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.ua-access__hint { font-size: 11px; font-weight: 500; color: var(--text-2); }
+.ua-access__empty { margin: 8px 0 0; font-size: 12px; color: var(--text-2); }
+
+/* A GRID, not a stack.
+ *
+ * Full-width rows meant one organisation name per line with three quarters of
+ * the row empty — and with four tenants that is four lines of mostly nothing.
+ * auto-fill with a min track means the picker uses whatever width it is given:
+ * four across on a desk, one on a phone, without a breakpoint per case.
+ *
+ * A selected organisation grows to hold its roles, so the rows are deliberately
+ * NOT equal height — `align-items: start` stops an unticked card stretching to
+ * match a ticked neighbour full of role chips. */
+.ua-orgs {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-items: start;
+  gap: 8px;
+}
+
+.ua-org {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  transition: border-color 120ms ease;
+}
+.ua-org--on { border-color: var(--accent-ok, #22c55e); }
+
+.ua-org__toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.ua-org__toggle:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 2px; border-radius: 6px; }
+.ua-org__toggle:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.ua-org__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.ua-org__here {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--text-3);
+  color: var(--text-2);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ua-box {
+  flex: 0 0 auto;
+  position: relative;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text-3);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.ua-org__toggle[aria-checked="true"] .ua-box {
+  background: var(--accent-ok, #22c55e);
+  border-color: var(--accent-ok, #22c55e);
+}
+/* Drawn rather than typed, so it keeps its weight at 15px. */
+.ua-box::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 140ms ease;
+}
+.ua-org__toggle[aria-checked="true"] .ua-box::after { transform: rotate(45deg) scale(1); }
+
+/* Roles are indented under their organisation — the indent is what says these
+   belong to the row above rather than to the form. */
+/* Capped and scrollable: the roles table can hold far more than the seeded
+   catalogue, and an organisation with forty of them would otherwise push every
+   card below it off the screen. */
+.ua-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  max-height: 132px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.ua-roles__empty { font-size: 11px; color: var(--text-2); }
+
+.ua-role {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.ua-role:hover:not(:disabled) { color: var(--ink); }
+.ua-role:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 1px; }
+.ua-role--on {
+  border-color: var(--accent-ok, #22c55e);
+  color: var(--ink);
+}
+
+/* Roster additions */
+/* `.sp4-reg`'s weight and tier — the identifying cell of a row leads it at
+   800 in full ink, and everything else in the row sits behind it. */
+.ua-row__name { display: block; font-weight: 800; color: var(--ua-text-1); }
+.ua-row__email { display: block; font-size: 11px; color: var(--text-2); }
+/* The same chip the editor uses for a role, at roster scale. One voice for
+   "a role" across the panel, and a wrapping list rather than a comma string
+   that used to stretch the column to fit three names on one line. */
+.ua-row__roles { display: flex; flex-wrap: wrap; gap: 4px; }
+/* `.sp4-kind-chip`: a 5px tag on the raised wash, mono at 700. It is read
+   beside the mono dates two columns over, which is the company it keeps. */
+.ua-rolechip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.16);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ua-text-1);
+  white-space: nowrap;
+}
+.ua-row__norole { font-size: 12.5px; color: var(--ua-warn); }
+/* Dates in the mono face, at label size, tabular — `.sp4-num`, which is how
+   every figure in the Maintenance grid is set. Same glyph width down the
+   column, so an outlier is found by shape rather than by reading. */
+.ua-row__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ua-row__count { display: block; font-size: 10px; color: var(--ua-text-4); }
+.ua-row__never { font-family: var(--font-mono); font-size: 11px; color: var(--ua-text-4); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ua-box, .ua-box::after, .ua-role { transition: none; }
+}
+
+/* ── Editing one person's access ─────────────────────────────────────────────
+   The editor is a second row spanning the whole table, so it reads as an
+   extension of the row it belongs to rather than a panel that happens to be
+   nearby. The open row is tinted to keep the pair visually joined once the
+   editor is tall enough to push its own header off the top of the viewport. */
+.ua-row--open { background: rgba(59, 130, 246, 0.06); }
+/* The row's rule, not its cells' — the hairline moved onto the <tr> when the
+   grid went full-bleed, and this is what stops it drawing BETWEEN a person and
+   the editor that belongs to them. */
+.ua-row--open { border-bottom: none; }
+
+/* …and the editor carries the closing rule instead, so the pair reads as one
+   block rather than as a row and a loose panel under it. */
+.ua-editrow { border-bottom: 1px solid var(--border); }
+
+.ua-editrow > td {
+  /* The gutter, not 14px. This cell is both the first and the last in its row,
+     so it picks up the grid's edge insets — restating a flat 14px here put the
+     editor's contents left of every column above it. */
+  padding: 0 var(--ua-gutter) 16px;
+  background: var(--elevated);
+}
+
+.ua-edit { display: flex; flex-direction: column; gap: 12px; }
+
+.ua-edit__head { display: flex; flex-direction: column; gap: 3px; }
+.ua-edit__title { font-weight: 700; color: var(--ink); }
+.ua-edit__hint { font-size: 11.5px; color: var(--text-2); max-width: 70ch; }
+.ua-edit__loading { padding: 14px 0; font-size: 12px; color: var(--text-2); }
+
+.ua-edit__foot { display: flex; align-items: center; gap: 10px; }
+
+/* Narrower than the create form's submit, which owns its own line. */
+.ua-submit--inline { width: auto; padding: 7px 16px; }
+
+/* What this click is about to take away.
+   Shares the shape of .ua-org__here (which marks "current" in the create form
+   and "adding" here) and differs only in colour, so the two read as one badge
+   slot saying two different things — never both at once for one organisation. */
+.ua-org__going {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: var(--accent-crit, #ef4444);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+
+/* A role that belongs to no organisation and therefore reaches all of them.
+   Only a System Administrator is ever offered one, and only from the picker
+   inside a single organisation — so the chip has to carry its own scope, in
+   words rather than in colour alone. */
+.ua-role--platform { border-style: dashed; }
+.ua-role__scope {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--elevated);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* ── Permanently deleting an account ─────────────────────────────────────────
+   The one action on this page with no undo, so it is the one place that steps
+   away from the shared row shape rather than reusing it.
+
+   Three differences, each doing work:
+
+     · The action pill is red-outlined from the start, not on hover. Every
+       other pill in the row is a change you can make twice; this one is
+       legible as different before the pointer reaches it.
+     · The panel carries a red left rule instead of the editor's flat tint, so
+       an administrator who opened the wrong one sees it in peripheral vision.
+     · The button that does it is filled red and stays disabled until the
+       address has been typed out — the arming step is what makes the filled
+       button safe to draw at all. */
+
+.ua-action--danger {
+  color: var(--accent-crit, #ef4444);
+  border-color: color-mix(in srgb, var(--accent-crit, #ef4444) 45%, transparent);
+}
+.ua-action--danger:hover:not(:disabled) {
+  color: var(--accent-crit, #ef4444);
+  border-color: var(--accent-crit, #ef4444);
+  background: color-mix(in srgb, var(--accent-crit, #ef4444) 12%, transparent);
+}
+
+.ua-editrow--danger > td {
+  /* The rule reads as a margin note on the row above, which is what it is. */
+  box-shadow: inset 3px 0 0 var(--accent-crit, #ef4444);
+}
+
+.ua-danger { display: flex; flex-direction: column; gap: 12px; padding-top: 2px; }
+
+.ua-danger__head { display: flex; flex-direction: column; gap: 3px; }
+
+.ua-danger__title {
+  font-weight: 700;
+  color: var(--accent-crit, #ef4444);
+}
+
+.ua-danger__hint {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 76ch;
+}
+
+/* The label is a real field — it carries `ua-field` too, which is what paints
+   the border and the inner background. `.ua-input` has neither of its own on
+   this page; it is chrome-less on purpose so that a field and a select can sit
+   in one row at the same height. Styling the INPUT's border here did nothing at
+   all, because `border: none` leaves no border for a colour to land on. */
+.ua-danger__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 380px;
+}
+
+.ua-danger__field { flex: 0 0 auto; }
+/* The address is long and monospaced; a field that has to hold it without
+   scrolling sideways is worth the extra few pixels. */
+.ua-danger__field .ua-input { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+
+/* The address, shown as the literal string it has to match. Monospace because
+   this is a thing to copy character for character, not a thing to read. */
+.ua-danger__phrase {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--ink);
+  /* An email is long and the label is narrow; it wraps rather than pushing the
+     panel wider than the table it sits in. */
+  overflow-wrap: anywhere;
+}
+
+.ua-submit--danger {
+  background: var(--accent-crit, #ef4444);
+  border-color: var(--accent-crit, #ef4444);
+  color: #fff;
+}
+.ua-submit--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-crit, #ef4444) 85%, #000);
+}
+/* Disabled until the phrase matches, and it must LOOK unusable — a red button
+   that is merely faded still reads as the next step. */
+.ua-submit--danger:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Whether the box says this account yet.
+   The border carries it because the border is what the eye is already on while
+   typing; the sentence beneath is for anyone who is not watching the border,
+   and for a screen reader, which gets it through aria-describedby. */
+.ua-danger__state {
+  font-size: 11px;
+  color: var(--text-2);
+}
+/* On the WRAPPER, which is the element that has a border. */
+.ua-danger__field--match { border-color: var(--accent-ok, #22c55e); }
+.ua-danger__confirm:has(.ua-danger__field--match) .ua-danger__state { color: var(--accent-ok, #22c55e); }
+/* Part way through is NOT an error state — no red, because nothing is wrong
+   with a half-typed address. */
+.ua-danger__field--partial { border-color: var(--text-2); }
+
+/* Said instead of the field, for somebody who does not have to fill one in.
+   Not styled as a warning: the paragraph above already carries the weight, and
+   two red blocks in one panel is a panel that has stopped emphasising
+   anything. */
+.ua-danger__armed {
+  margin: 0;
+  max-width: 76ch;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+/* ── Mobile ─────────────────────────────────────────────────────────────────
+ *
+ * Measured at 375px. This panel had two lines of mobile CSS, and everything
+ * else it shipped was a desk layout doing its best:
+ *
+ *   · the card head is a baseline-aligned row, so "Invite someone" broke to
+ *     two lines to make room for a hint that then ran the full width anyway
+ *   · the Access fieldset's <legend> carries a two-line hint. A legend is
+ *     painted ON the border, so the second line crossed it
+ *   · the role list is capped at 132px and scrolls — on a desk that stops a
+ *     forty-role org pushing its neighbours off screen; on a phone, where the
+ *     card is one column, it just clipped "Finance Manager" mid-chip
+ *   · the roster is six columns in a horizontal scroller, so Status, Created,
+ *     Password and every action button were off the right-hand edge with
+ *     nothing on screen to say so
+ *
+ * The roster becomes CARDS rather than a narrower table. A person is the unit
+ * an admin acts on — suspend them, re-invite them, delete them — and a card is
+ * that person whole, with the controls under the facts they act on. A table
+ * that scrolls sideways hides exactly the half you came for.
+ */
+@media (max-width: 767px) {
+  .ua-page__inner { gap: 12px; }
+
+  /* ── The controls ────────────────────────────────────────────────────── */
+  /* NOT sticky here. On a desk the filter band costs 40px of a tall window and
+     buys a control you can reach at any scroll depth. On a 375×667 phone the
+     same band is search + five chips + the role picker — three rows, a fifth
+     of the screen, permanently — to save a scroll back to the top. The roster
+     wins the height. */
+  /* padding-BLOCK only. A `padding: 0 0 10px` shorthand here zeroed the inline
+     gutter as well, and the STATE and ROLE labels went hard against the left
+     edge of the screen while the cards below them stayed inset — the same
+     class of bug as a two-value shorthand anywhere else that a token owns one
+     axis. */
+  .ua-filters {
+    position: static;
+    padding-block: 10px;
+  }
+
+  .ua-search { flex-basis: 100%; }
+  /* A vertical rule between two things that are no longer side by side. Once
+     the bar wraps to one control per line it took a line of its own — a 1px
+     tick floating under the search field. */
+  .ua-filters__divider { display: none; }
+  /* A 36px minimum on a phone: the chips and the picker are the two controls
+     here that a thumb has to hit, and 27px of lozenge is not a target. */
+  .ua-chip, .ua-rolepick, .ua-invite-btn { min-height: 36px; }
+  .ua-search__input { padding-block: 9px; }
+  /* Wraps to its own full-width line rather than sharing one with the role
+     picker, where it was a 120px button beside a 180px select. */
+  .ua-invite-btn { margin-left: 0; flex: 1 1 100%; justify-content: center; }
+  /* 16px stops iOS zooming the viewport when the field takes focus — a zoom
+     that does not zoom back out, leaving the roster off the right edge. */
+  .ua-search__input { font-size: 16px; }
+
+  .ua-chips { gap: 6px; }
+  .ua-chip { padding: 0 12px; align-items: center; }
+
+  .ua-nomatch { padding: 18px 0; }
+
+  /* Title over hint. Two unequal strings on one baseline is a desk shape. */
+  .ua-card__head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+  }
+
+  /* The outer box goes, and with it the overlap. A <legend> is painted INTO
+     the fieldset's border, which is fine for one word and wrong for a heading
+     plus a two-line hint — the second line crossed the rule. The usual repair
+     is `float: left; width: 100%` on the legend, and it is a trap here: the
+     org list is a GRID, grid boxes do not wrap around floats, and the list was
+     thrown a full container-width to the right and off the screen.
+
+     So: no border to be painted into. On one column the outer box was doing
+     nothing anyway — every organisation card inside already carries its own
+     rule, and a border around a stack of bordered cards is a box around a box.
+     The legend becomes a plain heading, which is what it reads as. */
+  .ua-access {
+    border: 0;
+    padding: 0;
+    background: none;
+    margin-top: 2px;
+  }
+  /* Still the flex column the base rule makes it — `display: block` here put
+     the hint back on the heading's own line, reading "AccessTick each
+     organisation". Only the width and the padding change. */
+  .ua-access__legend {
+    width: 100%;
+    padding: 0;
+    margin-bottom: 2px;
+  }
+  .ua-orgs { margin-top: 8px; }
+
+  /* The two aria-live slots stay in the DOM — a live region that appears only
+     when it has something to say is a region the screen reader was not
+     watching — but an empty one does not need to reserve a line. Between them
+     and the form's own gaps they were holding ~50px of nothing open above the
+     submit button. */
+  .ua-msg:empty { min-height: 0; }
+  .ua-form { gap: 8px; }
+
+  /* Uncapped. One column means a long role list pushes nothing aside — it just
+     makes its own card taller, which is the honest shape for "this org has a
+     lot of roles". */
+  .ua-roles { max-height: none; overflow-y: visible; }
+
+  /* ── Roster: table → cards ──────────────────────────────────────────── */
+  /* Sensor Monitor keeps its grid at every width and scrolls it sideways. This
+     roster does not, and the reason is in the block comment above: six columns
+     and four action buttons put Status, Created, Password and every control
+     off the right-hand edge, with nothing on screen to say so. A person is the
+     unit an admin acts on, so on a phone the person becomes a card.
+
+     What follows undoes the parts of the grid grammar that a card cannot use:
+     the min-width that would force a sideways scroll, the row rule the card's
+     own border replaces, and the edge insets the card's padding replaces. */
+  /* The gutter comes back onto the ROSTER here. On a desk the grid is
+     deliberately full-bleed and insets its own edge cells; a card cannot do
+     that — it has a border and a radius, and at full bleed both were clipped
+     against the screen edge, so every row read as a strip rather than a card. */
+  .ua-roster { margin-top: 0; padding-inline: var(--ua-gutter); }
+  .ua-table { min-width: 0; font-size: 12px; }
+  .ua-row { border-bottom: none; }
+  .ua-table thead th:first-child,
+  .ua-table tbody td:first-child,
+  .ua-table thead th:last-child,
+  .ua-table tbody td:last-child { padding-left: 0; padding-right: 0; }
+  /* Nothing scrolls sideways any more, so the scroller must not keep its own
+     shadow-casting overflow context. */
+  .ua-table-scroll { overflow-x: visible; }
+  .ua-table thead { display: none; }
+  .ua-table,
+  .ua-table tbody,
+  .ua-row,
+  .ua-row td { display: block; width: 100%; }
+
+  .ua-row {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--elevated);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .ua-row:hover { background: var(--elevated); }
+
+  /* Label left, value right, on one line each — a definition list in all but
+     name. The name cell is the card's heading and takes neither. */
+  .ua-row td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border-bottom: none;
+    text-align: left;
+  }
+  /* Back to full ink. In the GRID the cells sit a step down so the name column
+     can lead; in a CARD there is no column to lead — the label beside each
+     value is the quiet half, and a value drawn in the same grey as its own
+     caption is a card with no hierarchy at all. */
+  .ua-row td { color: var(--ink); }
+
+  .ua-row td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+
+  /* The heading: name over email, full width, ruled off from the facts. */
+  .ua-row td[data-label="Name"] {
+    display: block;
+    padding: 0 0 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    min-width: 0;
+  }
+  .ua-row td[data-label="Name"]::before { content: none; }
+  .ua-row__name { font-size: 13px; }
+  .ua-row__email { word-break: break-word; }
+
+  /* Values that are themselves a list of things stay left-packed under their
+     label rather than being pushed to a right edge one chip at a time. */
+  .ua-row__rolescell {
+    min-width: 0;
+    max-width: none;
+  }
+  .ua-row__roles { justify-content: flex-end; }
+  .ua-row__num { text-align: right; }
+  .ua-row__count { display: inline; margin-left: 6px; }
+
+  /* Actions get the width of the card and wrap onto as many lines as they
+     need. The desktop rule forbids wrapping because an uneven row height
+     wrecks a table's rhythm — there is no row rhythm here, and the cost of
+     obeying it would be the sideways scroll this whole block removes. */
+  /* `.ua-row td` on its own beats a single class, so the cell and its label
+     both have to be named through the td to win — without that the actions
+     stayed a label-left/value-right flex line and "Delete" wrapped underneath
+     the two buttons beside it. */
+  .ua-row td.ua-row__actionscell {
+    display: block;
+    padding: 10px 0 0;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+  /* No "ACTIONS" caption: these four buttons say what they do, and the rule
+     above them already separates them from the facts they act on. */
+  .ua-row td.ua-row__actionscell::before { content: none; }
+  .ua-row__actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .ua-action {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 14px;
+  }
+
+  /* The editor and the delete confirmation open INSIDE the card they belong
+     to, so they lose the cell padding that used to inset them from a table. */
+  /* Plain `.ua-editrow td` is enough — these rows do not carry `.ua-row`, so
+     nothing above is competing for them. */
+  .ua-editrow, .ua-editrow td { display: block; width: 100%; }
+  .ua-editrow td { padding: 10px 0 0; }
+  /* The closing rule is the card's own border here. */
+  .ua-editrow { border-bottom: none; }
+}
+
+/* ── Light mode ──────────────────────────────────────────────────────────────
+ *
+ * SensorPanel's re-point, not a second theory of the light theme. Five surface
+ * values and four text tiers move; every rule above that reads a token follows
+ * without being touched.
+ *
+ * The interactive fills are the part that cannot be re-pointed: the chips, the
+ * row hover and the invite button all wash with rgba(255,255,255,…), which is
+ * white on near-black and simply nothing on white paper — so every hover and
+ * pressed state silently stops existing. Same intent, opposite direction,
+ * stated below.
+ */
+.app--light .ua-page {
+  --ua-text-1: #0f172a;   /* ~16:1 */
+  --ua-text-2: #334155;   /* ~10:1 */
+  --ua-text-3: #52606f;   /*  ~6:1 */
+  --ua-text-4: #64748b;   /* ~4.8:1 */
+
+  /* Literals, necessarily: a custom property cannot reference itself, and
+     `--ua-line: var(--ua-line)` resolves to nothing at all — the hairline
+     disappears rather than inheriting the dark value. */
+  --ua-bg:      #f0f4f8;
+  --ua-surface: #ffffff;
+  --ua-raised:  #f5f7fa;
+  --ua-line:    #dde1e7;
+  --ua-line-hi: #cbd5e1;
+
+  /* The dark pastels invert: #86efac is ~1.7:1 on white and #93c5fd ~1.9:1,
+     both effectively invisible. App.css already computed the light-tuned
+     counterparts of the same hues — point at those rather than deriving a
+     second set that can drift from them. */
+  --ua-ok:     var(--accent-ok,   #15803d);
+  --ua-crit:   var(--accent-crit, #b91c1c);
+  --ua-info:   var(--accent-info, #0369a1);
+  --ua-warn:   var(--accent-warn, #b45309);
+  --ua-accent: var(--accent-info, #0369a1);
+}
+
+/* The sticky column heads take the raised tier on white, the way the
+   Maintenance grid's do — pure white heads over white rows leave the pinned
+   band invisible until a row slides under it. */
+.app--light .ua-table thead th { background: var(--ua-raised); }
+
+.app--light .ua-search__input { background: var(--ua-surface); }
+.app--light .ua-search__input:focus { background: rgba(3, 105, 161, 0.05); }
+.app--light .ua-chip { background: var(--ua-surface); }
+.app--light .ua-chip:hover:not(:disabled) { background: rgba(0, 0, 0, 0.04); }
+.app--light .ua-chip:active:not(:disabled) { background: rgba(0, 0, 0, 0.08); }
+.app--light .ua-chip__n { background: rgba(0, 0, 0, 0.06); }
+.app--light .ua-chip--on { background: rgba(3, 105, 161, 0.12); border-color: rgba(3, 105, 161, 0.35); }
+.app--light .ua-chip--on .ua-chip__n { background: rgba(3, 105, 161, 0.16); }
+.app--light .ua-invite-btn { background: var(--ua-raised); }
+.app--light .ua-invite-btn:hover { background: rgba(0, 0, 0, 0.05); }
+.app--light .ua-row:hover { background: rgba(0, 0, 0, 0.02); }
+.app--light .ua-row--open { background: rgba(3, 105, 161, 0.06); }
+.app--light .ua-header__scopesel { background: var(--ua-surface); }
+.app--light .ua-header__scopesel:hover { background: rgba(0, 0, 0, 0.04); }
+.app--light .ua-partial {
+  background: rgba(180, 83, 9, 0.10);
+  border-color: rgba(180, 83, 9, 0.28);
+}
+.app--light .ua-rolechip { background: var(--ua-raised); border-color: var(--ua-line); color: var(--ua-text-2); }

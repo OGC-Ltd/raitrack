@@ -1,0 +1,129 @@
+[
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Sheet severity line 3px to 1px; collapsed height raised to clear the NavFab, which rises 14px out of the footer nav and was the one thing still showing over the folded sheet"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Collapsed on a phone the sheet takes .footer-nav exact box (64px, 60 under 380) instead of covering its top 40px and leaving a strip of tab icons showing"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Phone title-bar controls 44 to MobileVehicleSheet 26px; shadow off a hard-coded 0 18px 60px onto the file --shadow token, none on the sheet; the 94dvh short-screen rule removed now its reason is gone"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Type scale dropped onto the Maintenance page 9.5/10.5/13.5; the phone sheet stops stepping it up; the stray 10px severity chip levelled inside the window only"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "The two confidence bars and their captions removed at both widths; label tracking unified on the Maintenance page 0.04em via --vt-ls-label, leaving the map hover card on its own defaults"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Phone: the incident is rendered BEFORE the vehicle card so it is whole above the fold, the rule between them travels with it, and short screens take 94dvh so the card still peeks. Desktop untouched."
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Both themes, every width: the window reads the app greys instead of this file second :root (2.05 dark / 2.56 light), the chips get a real colour-mix tint instead of the dropped var()22 string, one label voice replaces three, micro step 9.5 to 11px"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel incident modal (possible theft)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--accent-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Phone: the window becomes a bottom sheet - no drag, no pin, no stored position; 44px controls, 11px floor on micro labels, Delete armed rather than instant"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "fuel chart on a phone (Fuel Consumption & Cost)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-* / --chart-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Phone: secondary scales keep their tinted caption and lose their numbers, empty scales are dropped, the box turns landscape, and an isolated reading is drawn as a dot"
+  },
+  {
+    "date": "2026-09-15",
+    "scope": "component",
+    "component": "chart labels (Fuel Consumption & Cost)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-*/--chart-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Axis captions as mono unit-symbols, colour left to the ticks; key swatches take the shape of their mark; empty series disabled"
+  },
+  {
+    "date": "2026-09-14",
+    "scope": "component",
+    "component": "filter bar (Analytics)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (dash --color-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Analytics filter bar on a phone - one control height, 2x2 block, no dead space"
+  },
+  {
+    "date": "2026-09-14",
+    "macrostructure": "Split Studio",
+    "theme": "in-project (dash --color-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Drivers page - Mileage covered (smooth + interactive line), Summary, Driver receipt"
+  },
+  {
+    "date": "2026-08-21",
+    "macrostructure": "Bento Grid",
+    "theme": "in-project (an-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Today on the ground redesign — lead ledger, one tile voice, note relocated"
+  },
+  {
+    "date": "2026-08-21",
+    "macrostructure": "Workbench",
+    "theme": "in-project (an-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "Fleet state redesign — state rail replaces donut, sortable/filterable table"
+  },
+  {
+    "date": "2026-08-20",
+    "macrostructure": "Stat-Led",
+    "theme": "in-project (dash an-* tokens, preserved)",
+    "enrichment": "none",
+    "brief": "KASULU 'Today on the ground' — reorder, strip dead space"
+  }
+]

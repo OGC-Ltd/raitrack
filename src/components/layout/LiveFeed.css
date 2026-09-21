@@ -1,0 +1,105 @@
+/* Pinned to the viewport, NOT to the app body — it is rendered as a sibling of
+   <header> inside AppHeader, and no ancestor between here and the document is
+   positioned, so `absolute` resolved against the initial containing block
+   anyway. Saying `fixed` makes that explicit rather than accidental.
+
+   `top` clears the header. At `top: 0` the panel's first 52px — its title, its
+   "mark all read" and its close button — sat underneath a header painting at
+   z-index 200 over this panel's 150, so the feed opened with no visible way to
+   shut it. */
+.live-feed {
+  position: fixed;
+  top: var(--app-header-h, 52px);
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  background: #fff;
+  border-left: 1px solid #e2e8f0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.live-feed--open { transform: translateX(0); }
+
+.live-feed__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.live-feed__title { font-size: 14px; font-weight: 600; color: #0f172a; }
+.live-feed__sub   { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+.live-feed__top-actions { display: flex; align-items: center; gap: 12px; }
+
+.live-feed__mark-read {
+  font-size: 11px; color: #2563eb; background: none;
+  border: none; cursor: pointer; padding: 0; font-family: inherit;
+}
+
+.live-feed__close {
+  background: none; border: none; font-size: 20px;
+  color: #94a3b8; cursor: pointer; line-height: 1; padding: 0;
+}
+.live-feed__close:hover { color: #475569; }
+
+.live-feed__list  { flex: 1; overflow-y: auto; }
+.live-feed__empty { padding: 24px 16px; font-size: 13px; color: #94a3b8; text-align: center; }
+
+.live-feed__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid #f8fafc;
+  cursor: pointer;
+}
+.live-feed__item:hover          { background: #f8fafc; }
+.live-feed__item--unread        { background: #fafcff; }
+
+.live-feed__dot-indicator {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 4px;
+}
+
+.live-feed__body  { flex: 1; min-width: 0; }
+.live-feed__plate { font-size: 12px; font-weight: 600; color: #0f172a; }
+.live-feed__msg   { font-size: 11px; color: #64748b; margin-top: 2px; line-height: 1.4; }
+.live-feed__time  { font-size: 10px; color: #94a3b8; margin-top: 3px; }
+
+.live-feed__unread-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #2563eb; flex-shrink: 0; margin-top: 5px;
+}
+
+.live-feed__footer {
+  padding: 10px 16px; border-top: 1px solid #f1f5f9;
+  text-align: center; flex-shrink: 0;
+}
+.live-feed__footer span { font-size: 12px; color: #2563eb; cursor: pointer; }
+
+/* Hide desktop live feed on mobile — MobileLiveFeedSheet handles it */
+@media (max-width: 767px) {
+  .live-feed { display: none !important; }
+}
+
+/* Tablet — a 300px panel over a 768px viewport is 39% of the screen, and it
+   covers the vehicle panel's own edge. It narrows and casts a shadow so the
+   map underneath still reads as the thing being covered. */
+@media (max-width: 1023px) {
+  .live-feed {
+    width: min(300px, 78vw);
+    box-shadow: -8px 0 24px rgba(15, 23, 42, 0.14);
+  }
+  .live-feed__close { min-width: 40px; min-height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-feed { transition: none; }
+}

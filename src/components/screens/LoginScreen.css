@@ -1,0 +1,861 @@
+/* Sign-in gate.
+ *
+ * Every colour comes from the app's own tokens (App.css defines the set twice,
+ * under .app--dark and .app--light), so this follows the theme without knowing
+ * which one is active. The screen renders INSIDE the themed .app-root wrapper
+ * for exactly that reason.
+ *
+ * The two values this file adds for itself — the hero plate in each theme —
+ * are declared as named tokens below rather than inlined at their use site, so
+ * the whole palette of the screen is readable in one place.
+ *
+ * Note: the double-slash form is a parse error in plain CSS; this file uses
+ * block comments only. */
+
+/* The sign-in page renders at the browser's OWN scale.
+ *
+ * The rest of the application is drawn at --app-zoom (see src/lib/appZoom.js):
+ * more of the map, more rows per table, at a size that still reads. None of
+ * that argument applies here. This page is one panel and one photograph, it has
+ * no density to win, and it is the first thing anyone sees — including people
+ * who have set a browser or OS zoom of their own, whose preference should not
+ * be quietly multiplied by ours before they have even signed in.
+ *
+ * Nested zoom multiplies, so 0.9 x (1/0.9) is 1: this subtree is back at the
+ * scale the browser was asked for, while everything behind the sign-in stays at
+ * 90%.
+ *
+ * --vh and --vw go back to the plain units for the same reason. They exist to
+ * cancel the root zoom, and inside a subtree that has already cancelled it they
+ * would over-correct — 100 of them would come to 111% of the window and hang
+ * the panel off the bottom of it.
+ */
+.login {
+  zoom: var(--app-unzoom);
+  --vh: 1vh;
+  --vw: 1vw;
+
+  /* Light theme: the plate sits a step DARKER than the page ground, so it
+     reads as an inset well rather than a second sheet of paper. */
+  --login-plate: #e7edf5;
+  /* The sheet the form sits on. Opaque, always — it is over a photograph now,
+     and a translucent card would put tarmac behind an email field. */
+  --login-sheet: #ffffff;
+  --login-sheet-border: rgba(15, 23, 42, 0.08);
+  --login-sheet-shadow: 0 30px 80px rgba(8, 12, 18, 0.34);
+  /* The corner card sits a shade off the sheet so the two surfaces are
+     distinguishable where they touch. Off-white on light; on dark the same
+     idea inverted, a step LIGHTER than the sheet, because that is how this
+     codebase already signals elevation on dark grounds. */
+  --login-stat: #f5f7fa;
+  --login-stat-shadow: 0 10px 22px rgba(8, 12, 18, 0.20);
+
+  position: relative;
+  isolation: isolate;
+  /* Its OWN scroll container, and it has to be.
+     `#root` and `.app-root` are both `height: 100%`, so the shell this renders
+     inside is pinned to the viewport and anything taller is clipped rather
+     than scrolled — the document never grows, so there is nothing for the page
+     to scroll. On a short window that silently cut the bottom off the sheet,
+     Sign in included. Fixing the height here and letting this element scroll
+     is what gives the overflow somewhere to go.
+     `dvh`, not `vh`: on a phone `vh` is the address-bar-collapsed height, so
+     the sheet is measured against a window taller than the one it is in. */
+  height: 100dvh;
+  min-height: calc(var(--vh) * 100);
+  min-height: 100dvh;
+  overflow-y: auto;
+  display: flex;
+  /* NOT `align-items: center`.
+     A centred flex item taller than its container overflows equally in both
+     directions, and the half that goes off the TOP cannot be scrolled back to
+     — the scroll range only ever covers the bottom. On a laptop with the
+     browser's chrome taking a third of a 720px screen that is the difference
+     between a cramped sign-in and one whose email field is above the window.
+     `flex-start` plus `margin: auto` on the sheet centres it whenever there is
+     room and lets it sit at the top, scrollable, when there is not. */
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+
+  /* The photograph is the page now, not a panel on it.
+     `fixed` so the picture does not slide out from under the sheet when a
+     short window scrolls the form — the road is a backdrop, and a backdrop
+     that moves with the content reads as a second scrolling layer. */
+  background-color: var(--color-bg, #f0f4f8);
+  background-image: url("/banner.jpeg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* The scrim, and the reason the same photograph can appear twice.
+ *
+ * The hero panel inside the sheet shows this picture at full strength. Behind
+ * the sheet it is darkened and pushed slightly out of focus, so the two read
+ * as a backdrop and a window onto it rather than as one image accidentally
+ * duplicated. Without the treatment they compete and the repeat looks like a
+ * mistake.
+ *
+ * `backdrop-filter` blurs what is already painted behind this layer, so the
+ * blur costs no second copy of the image; where it is unsupported the gradient
+ * alone still carries the contrast the sheet needs.
+ *
+ * The gradient is kept as light as it can be while the sheet still separates.
+ * Its job is to make the sheet read, not to hide the photograph — darkened far
+ * enough to be safe and the road turns to flat black at the bottom of the
+ * window, which is a backdrop nobody chose. It deepens downward because that
+ * is where the sheet's shadow falls and where the eye leaves the page. */
+.login::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 10, 16, 0.34) 0%,
+    rgba(6, 10, 16, 0.44) 45%,
+    rgba(6, 10, 16, 0.58) 100%
+  );
+  backdrop-filter: blur(3px) saturate(1.06);
+  -webkit-backdrop-filter: blur(3px) saturate(1.06);
+  pointer-events: none;
+}
+
+/* Dark theme: a step LIGHTER than the ground instead. Elevation by lightness
+   is what this codebase already does on dark (App.css), and it keeps the hero
+   from becoming the one floodlit surface in the app. The truck shot is a
+   transparent PNG, so it composites onto either plate without a seam. */
+.app--dark .login {
+  --login-plate: #12171f;
+  --login-sheet: #0d1219;
+  --login-sheet-border: rgba(255, 255, 255, 0.09);
+  --login-sheet-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --login-stat: #161d27;
+  --login-stat-shadow: 0 10px 22px rgba(0, 0, 0, 0.42);
+}
+
+/* Darker over the same photograph, because the sheet it has to separate from
+   is dark too. On light the sheet does that work by being white. */
+.app--dark .login::before {
+  background: linear-gradient(
+    180deg,
+    rgba(4, 7, 11, 0.48) 0%,
+    rgba(4, 7, 11, 0.58) 45%,
+    rgba(4, 7, 11, 0.70) 100%
+  );
+}
+
+/* The sheet.
+ *
+ * This file used to argue against exactly this element: when the form sat on
+ * the page's own ground, wrapping it and the hero together would have nested a
+ * card inside a card for no semantic reason. The ground is a photograph now,
+ * and the argument inverts — the form needs a surface to be legible on, and
+ * that surface is the one containment layer. The hero inside it stops being a
+ * card and becomes a window cut in this one. */
+.login__shell {
+  position: relative;
+  display: flex;
+  gap: 26px;
+  width: 100%;
+  /* Narrower, and the picture is what gives up the width.
+     The form column is fixed at 360px, so every pixel taken off the sheet comes
+     out of the photograph beside it — 1060 gave it 624px, which was wide enough
+     that the vehicles sat small in the middle of a lot of sky. */
+  max-width: 900px;
+  margin: auto;
+  padding: 24px;
+  box-sizing: border-box;
+  border-radius: 30px;
+  background: var(--login-sheet);
+  border: 1px solid var(--login-sheet-border);
+  box-shadow: var(--login-sheet-shadow);
+}
+
+.login__panel {
+  /* Narrower, and no longer allowed to grow.
+     `1 1 400px` let the form take half of a wide sheet, which is more width
+     than a two-field form has any use for — the heading ran to one short line
+     and the fields stretched past a comfortable target. `0 1 360px` fixes the
+     column at the width the content actually wants and gives the rest to the
+     photograph. */
+  flex: 0 1 360px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* The sheet supplies the outer padding now; this only keeps the column off
+     the hero beside it. */
+  padding: 8px 4px 8px 10px;
+}
+
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* The mark is fine black line art on transparency — a fingerprint drawn as a
+   tree. Two consequences: it needs real size to resolve (at the 22px the old
+   CSS square used, the ridges collapse into a blob), and on dark it has to be
+   inverted or it disappears into the near-black ground. Inverting is safe here
+   because the artwork is monochrome. */
+.login__mark {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.app--dark .login__mark {
+  filter: invert(1);
+}
+
+.login__wordmark {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--color-text-primary, #f0f4f8);
+}
+
+.login__title {
+  font-family: var(--font-display);
+  margin: 26px 0 0;
+  max-width: 15ch;
+  font-size: 30px;
+  line-height: 1.16;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--color-text-primary, #f0f4f8);
+}
+
+.login__sub {
+  margin: 12px 0 0;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-sec, #a3b1c2);
+}
+
+.login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+/* Label floats above the value inside the same bordered box, as in the mockup. */
+.login__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px 7px;
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 10px;
+  background: var(--color-card-inner, #10141c);
+  transition: border-color 120ms ease;
+}
+
+/* An outline, not a transitioned box-shadow: a focus ring that fades in leaves
+   keyboard users with no indicator for the length of the transition. This also
+   matches how the eye toggle and the submit button take focus. */
+.login__field:focus-within {
+  border-color: var(--accent-info, #38bdf8);
+  outline: 2px solid var(--accent-info, #38bdf8);
+  outline-offset: 1px;
+}
+
+.login__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--color-text-muted, #7d8a9c);
+}
+
+.login__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text-primary, #f0f4f8);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.login__input:disabled { opacity: 0.6; }
+
+.login__pwwrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login__input--pw { flex: 1 1 auto; min-width: 0; }
+
+.login__eye {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--color-text-muted, #7d8a9c);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.login__eye:hover:not(:disabled) { color: var(--color-text-primary, #f0f4f8); }
+.login__eye:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 1px; }
+.login__eye:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Reserves its own line whether or not there is a message, so the button does
+   not jump down the card the moment a sign-in fails. */
+.login__error {
+  min-height: 17px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--accent-crit, #ef4444);
+}
+
+.login__submit {
+  margin-top: 2px;
+  padding: 13px 14px;
+  font-size: 14px;
+  font-weight: 650;
+  font-family: inherit;
+  color: var(--color-bg, #0b0d10);
+  background: var(--accent-ok, #22c55e);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.login__submit:hover:not(:disabled) { filter: brightness(1.07); }
+.login__submit:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 2px; }
+.login__submit:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* A text button that reads as a link. Not an <a>: there is nowhere to
+   navigate to — it swaps the panel in place — and an anchor with no href is a
+   thing screen readers skip. */
+.login__link {
+  align-self: center;
+  margin-top: 2px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--color-text-sec, #a3b1c2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.login__link:hover { color: var(--color-text-primary, #f0f4f8); }
+.login__link:focus-visible {
+  outline: 2px solid var(--accent-info, #38bdf8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.login__foot {
+  margin: 18px 0 0;
+  font-size: 12px;
+  text-align: center;
+  color: var(--color-text-muted, #7d8a9c);
+}
+
+/* The fleet photograph, with its own branding taken off.
+   The file shipped with a fingerprint mark and "RAI GROUP KENYA" burnt across
+   the top — measured at rows 17-147 of 925, so the top 160px was cropped away
+   and the whole lockup went with it. The band removed was plain sky, which is
+   why this costs the composition nothing, and the screen's own wordmark beside
+   the form is now the only place the brand is said. Cropping also halved the
+   file, 284 KB to 151 KB.
+
+   Opaque, so unlike the cutout it replaces it COVERS the plate rather than
+   compositing onto it. The plate survives only as the ground shown if the file
+   ever goes missing. */
+.login__hero {
+  position: relative;
+  /* Basis chosen to FIT: 360 (form) + 26 (gap) + 440 is under the 826px of
+     content width a 900px sheet has, so nothing is forced to shrink and the
+     form column keeps the 360px it was given. The picture takes the slack. */
+  flex: 1 1 440px;
+  display: flex;
+  flex-direction: column;
+  /* Bottom-anchored: the copy sits over the tarmac, the emptiest part of the
+     picture and the only band where a line of text does not land on a
+     vehicle. */
+  justify-content: flex-end;
+  gap: 12px;
+  /* Shaped by ratio and centred against the form.
+     The ratio is the height/crop trade in one number: `cover` fills the card,
+     so the taller the card the more of the picture's WIDTH is cut. 1.7 was
+     tall enough to read as a strip beside a 515px form and showed 85% of the
+     lineup; 1.25 shows 63% and matches the form far better, at the cost of the
+     tractor at one end and the bus at the other. The five vehicles that carry
+     the picture — the ambulance, both MAN units and the pickups — are all
+     still in frame.
+
+     It stays SHORTER than the form on purpose. The form is what sets the
+     page's height, and a hero taller than it would start driving the layout on
+     a short window (a 1280x720 laptop, a tablet in landscape) where the whole
+     card has to fit between 24px of padding. */
+  /* Stretched, not ratio-shaped.
+     The old comment worried that a hero taller than the form would start
+     driving the page's height on a short window. Inside the sheet it cannot:
+     the form column sets the height and this fills whatever that is, so the
+     picture is a window in the sheet rather than a second object sitting
+     beside the form and negotiating with it. `cover` keeps the crop centred
+     at every height the form produces. */
+  align-self: stretch;
+  min-height: 420px;
+  padding: 26px;
+  box-sizing: border-box;
+  /* No radius on the TOP-LEFT: the scoop below is that corner.
+     Rounding it as well left an 8px crescent of sheet colour trapped between
+     the panel's convex 22px corner and the scoop's concave 30px arc — a sliver
+     that tapered to nothing at each end, and those two tapering tips were the
+     points. A concave corner and a convex one cannot both describe the same
+     corner; one of them has to go. */
+  border-radius: 0 22px 22px 22px;
+  overflow: hidden;
+  background-color: var(--login-plate);
+  background-image: url("/banner.jpeg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Scrim, bottom-anchored, fading out above the vehicles. The copy below lands
+   on pale tarmac, where light text on its own would not hold. */
+.login__hero::before {
+  content: "";
+  position: absolute;
+  inset: 38% 0 0;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 12, 18, 0) 0%,
+    rgba(8, 12, 18, 0.58) 55%,
+    rgba(8, 12, 18, 0.88) 100%
+  );
+  pointer-events: none;
+}
+
+/* Stacked above the scrim, and coloured for the photograph rather than from
+   the theme: the picture is identical in both themes, so text that followed
+   the theme would turn near-black on it in light mode. */
+.login__hero-copy,
+.login__tags {
+  position: relative;
+  z-index: 1;
+}
+
+/* Centred on the picture's own axis, not on the sheet's.
+   Left-aligned, the strapline started at the hero's padding edge and read as a
+   caption hanging off the form beside it. Centred, it belongs to the
+   photograph — and the badges under it centre with it, so the three lines
+   share one axis instead of stacking against an edge. */
+.login__hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  /* Wider than the plate version used: the strapline now sits over the
+     vehicles, and a narrow column turned it into three lines with a one-word
+     orphan in the middle of the photograph. */
+  max-width: 40ch;
+  margin: 0 auto;
+}
+
+.login__hero-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: #f4f7fb;
+}
+
+.login__hero-sub {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(240, 244, 248, 0.82);
+}
+
+.login__tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Outlined, not filled: a fill would need its own surface colour on top of the
+   plate, which is a containment layer these don't need. */
+.login__tag {
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  color: #f4f7fb;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+}
+
+.login__tag--ok { border-color: var(--accent-ok, #22c55e); }
+.login__tag--info { border-color: var(--accent-info, #38bdf8); }
+.login__tag--warn { border-color: var(--accent-warn, #f59e0b); }
+
+@media (max-width: 900px) {
+  .login__shell { flex-direction: column; max-width: 460px; padding: 20px; }
+  .login__hero { display: none; }
+  .login__panel { padding: 4px; }
+  .login__title { font-size: 25px; max-width: none; }
+}
+
+@media (max-width: 420px) {
+  .login { padding: 14px; }
+  .login__shell { padding: 16px; border-radius: 20px; }
+  /* `fixed` on a phone is the one place it misbehaves: iOS paints the picture
+     against the viewport rather than the document, so the road jumps as the
+     address bar collapses. Scrolling with the page is the lesser artefact. */
+  .login { background-attachment: scroll; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login__field, .login__submit, .login__eye { transition: none; }
+}
+
+
+
+/* ── The corner card ─────────────────────────────────────────────────────────
+ *
+ * Flush into the top-right of the photograph, and cut OUT of it rather than
+ * placed on it. The trick is a ring of the sheet's own colour: `overflow:
+ * hidden` on the hero clips that ring on the two outer sides, so the only part
+ * that survives is the inner L — which is exactly the gap that makes a shape
+ * read as a hole. A drop shadow instead would have made it a sticker, and a
+ * sticker on a photograph is the oldest tell in this kind of layout.
+ *
+ * The top-right radius matches the hero's so the two corners agree; the
+ * bottom-left is rounder, because that is the corner facing into the picture
+ * and the one whose curve is actually visible.
+ *
+ * It carries no percentage. This screen renders before there is a session, so
+ * nothing here can fetch a figure, and a number invented to fill the shape
+ * would be the single dishonest element on the page that asks for a password.
+ * If there is a real one worth showing, it goes in `.login__stat-figure` and
+ * the shape is already built for it. */
+.login__stat {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 200px;
+  padding: 13px 16px 14px;
+  box-sizing: border-box;
+  border-radius: 0 22px 0 22px;
+  /* The CARD is its own surface; the RING around it stays the sheet's colour.
+     That split is what keeps both readings alive at once — the ring is the gap
+     cut in the photograph, and the card is a thing sitting in that gap rather
+     than a hole the same colour as everything else. */
+  background: var(--login-stat);
+  /* Order matters: the ring is listed first so it paints ON TOP of the drop
+     shadow. The shadow is offset and blurred far enough to clear the ring's
+     9px, so what shows is a soft edge on the two sides facing into the picture
+     — the hero's `overflow: hidden` takes care of the other two. */
+  box-shadow:
+    0 0 0 9px var(--login-sheet),
+    var(--login-stat-shadow);
+}
+
+.login__stat-figure {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--color-text-primary, #f0f4f8);
+}
+
+.login__stat-label {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--color-text-sec, #a3b1c2);
+}
+
+/* The ring eats into the corner, so the strapline needs to clear it on a
+   narrow sheet where the two would otherwise meet. */
+@media (max-width: 1080px) {
+  .login__stat { max-width: 168px; padding: 11px 13px 12px; }
+  .login__stat-figure { font-size: 17px; }
+}
+
+
+/* ── The notch, top-left of the picture ──────────────────────────────────────
+ *
+ * The mirror of the corner card's cut, and made the same way: a block of the
+ * sheet's own colour sitting in the corner, curved on the one edge that faces
+ * into the photograph. Because it is the sheet's colour and the sheet is
+ * immediately above and to the left of it, it does not read as a shape ON the
+ * picture — it reads as the sheet flowing into the corner and the picture
+ * curving away from it.
+ *
+ * The radius is on `border-bottom-right` alone, which is what makes the curve
+ * CONCAVE. A rounded corner bulges out of a shape; this one bites into it, and
+ * that is the whole difference between the two top corners of this panel
+ * having the same treatment and having opposite ones.
+ *
+ * The hero's own `overflow: hidden` and 22px radius clip the block's outer
+ * corner, so the panel's outside edge stays exactly as round as it was and
+ * only the inside changes. Nothing here needs a second element or a mask.
+ *
+ * It sits above the scrim (`::before`, which starts 38% down and never reaches
+ * this corner) and beside the corner card, so the two top corners are a pair:
+ * one bitten by the sheet, one bitten by the card.
+ *
+ * Kept SMALL on purpose. The first cut was 78x58 and took a visible bite out of
+ * the sky, which turned a corner detail into a missing piece of the picture —
+ * the eye read it as damage rather than as shaping. At this size it is a
+ * chamfer: enough to soften the corner and rhyme with the card opposite, not
+ * enough to be an object in its own right. */
+.login__hero::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  /* SQUARE, and the arc is drawn rather than cornered.
+   *
+   * A rectangle with one rounded corner is what this was, and it is why the
+   * curve did not read as smooth: the block met the panel's top edge and its
+   * left edge at two hard right angles, so the eye saw a rounded rectangle
+   * pushed into the corner instead of one continuous edge.
+   *
+   * A quarter-disc has no such junctions. The circle is centred on the far
+   * corner of a square of its own radius, so the arc starts on the left edge
+   * travelling straight down and ends on the top edge travelling straight
+   * across — TANGENT to both. There is no angle anywhere for the eye to catch,
+   * which is the whole of what "smooth" means here. */
+  --notch: 30px;
+  width: var(--notch);
+  height: var(--notch);
+  background: radial-gradient(
+    circle at 100% 100%,
+    transparent 0,
+    transparent var(--notch),
+    /* The half-pixel overlap is not a fudge: a gradient stop shared exactly by
+       two colours renders as a hard edge the browser antialiases badly, and
+       against a photograph that shows up as a fringe along the arc. */
+    var(--login-sheet) calc(var(--notch) + 0.5px)
+  );
+  pointer-events: none;
+}
+
+/* Smaller where the panel itself is smaller, so the curve stays a detail rather
+   than becoming a corner missing from a small picture. */
+@media (max-width: 1080px) {
+  .login__hero::after { --notch: 24px; }
+}
+
+
+/* ── Laptops, and anything else short ────────────────────────────────────────
+ *
+ * Height, not width, is what actually runs out on the machines this is used
+ * on. A 1366x768 panel has roughly 640px left once the browser's own chrome is
+ * taken out, and a 1280x720 has under 600 — both plenty wide for the two
+ * columns and neither with room for a 587px sheet plus its margins.
+ *
+ * So this trades vertical air rather than dropping to the stacked layout: the
+ * picture is worth keeping on a laptop, and a one-column sign-in on a wide
+ * screen looks like a page that failed to load its other half.
+ *
+ * `min-width: 901px` keeps it away from the stacked layout below, where the
+ * picture is gone and these numbers would only squeeze the form for no reason. */
+@media (max-height: 820px) and (min-width: 901px) {
+  .login { padding: 16px; }
+  .login__shell { padding: 18px; gap: 20px; border-radius: 24px; }
+  /* The floor was there to stop the picture collapsing when it was a
+     ratio-shaped plate. It stretches to the form now, so the form is the floor
+     and this one only fights it. */
+  .login__hero { min-height: 0; }
+  .login__title { margin-top: 18px; font-size: 26px; }
+  .login__sub { margin-top: 9px; }
+  .login__form { margin-top: 18px; gap: 10px; }
+}
+
+/* Shorter still — a 1280x720 with a bookmarks bar, or a tablet in landscape. */
+@media (max-height: 700px) and (min-width: 901px) {
+  .login__shell { padding: 14px; gap: 16px; }
+  .login__title { margin-top: 12px; font-size: 23px; }
+  .login__form { margin-top: 14px; }
+  .login__hero { padding: 18px; }
+
+  /* The corner card used to be dropped here, and this is the band most
+     laptops actually sit in: a 1366x768 has around 640px of viewport once the
+     browser's chrome is taken out, a 1280x720 under 600. So the one live
+     figure on the page was missing on the machines it is most often opened on.
+     The rule was written when the card was decorative — static copy, nothing
+     fetched, "no information anybody needs to sign in" — and that stopped
+     being true when it started carrying the platform's in-transit count.
+     Hiding it also bought nothing: the card is absolutely positioned in the
+     hero's corner, so it occupies no height in the flow and removing it
+     recovered not one pixel of the space this whole block exists to find.
+     It is made SMALLER instead, because the picture behind it is smaller. */
+  .login__stat {
+    max-width: 158px;
+    padding: 9px 12px 10px;
+    /* The ring is what reads as the cut in the photograph. It thins with the
+       card rather than staying 9px, which at this size would be a border
+       around a label instead of a gap in a picture. */
+    box-shadow:
+      0 0 0 7px var(--login-sheet),
+      var(--login-stat-shadow);
+    border-radius: 0 22px 0 18px;
+  }
+  .login__stat-figure { font-size: 16px; }
+  .login__stat-label  { font-size: 10.5px; line-height: 1.3; }
+  /* Kept in proportion with the card opposite it — the two top corners are a
+     pair, and shrinking one alone breaks the rhyme. */
+  .login__hero::after { --notch: 20px; }
+}
+
+/* Shorter again — a netbook, or a laptop with the window not maximised. The
+   picture is now short enough that a three-line card would be most of it, so
+   the BUSY flag goes: it is the one line here that repeats something the
+   figure and its share already say. The count itself stays. */
+@media (max-height: 600px) and (min-width: 901px) {
+  .login__stat { max-width: 146px; padding: 8px 10px 9px; }
+  .login__stat-figure { font-size: 15px; }
+  .login__stat-label  { font-size: 10px; }
+  .login__stat-flag   { display: none; }
+}
+
+/* ── The live pulse, and the badge marks ─────────────────────────────────────
+
+   MOTION POLICY for everything below: transform and opacity only, no layout
+   properties, and every animation stops under `prefers-reduced-motion` (the
+   block at the end of this section). Each one survives being stopped — the dot
+   is still a green dot, the tank is still full, the road is still a road — so
+   the reduced-motion version is the same design without the movement rather
+   than a different, poorer one. */
+
+/* The dot, and the ring going out from it. Two elements' worth of meaning in
+   one: the dot says connected, the ring says it is still saying so. */
+.login__pulse {
+  position: relative;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-ok, #22c55e);
+}
+
+.login__pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent-ok, #22c55e);
+  animation: login-pulse 2.2s cubic-bezier(0.2, 0.7, 0.35, 1) infinite;
+}
+
+@keyframes login-pulse {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  70%  { transform: scale(3.1); opacity: 0; }
+  100% { transform: scale(3.1); opacity: 0; }
+}
+
+.login__stat-figure {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* The count changes under the reader. Tabular figures keep it from shifting
+     width as it does, which is what makes a live number feel steady rather
+     than twitchy. */
+  font-variant-numeric: tabular-nums;
+}
+
+.login__stat-share { font-weight: 700; color: var(--color-text-primary, #f0f4f8); }
+
+/* At or past the threshold. The colour is the WARN accent, not the ok one:
+   most of the fleet moving at once is a fact worth noticing, and green would
+   file it under "everything normal". */
+.login__stat--busy .login__stat-share { color: var(--accent-warn, #f59e0b); }
+
+.login__stat-flag {
+  margin-top: 5px;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-warn, #f59e0b);
+  color: var(--accent-warn, #f59e0b);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Badge marks ──────────────────────────────────────────────────────────── */
+
+.login__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.login__ic { flex: 0 0 auto; overflow: visible; }
+
+/* GPS: the fix repeating. The ring expands from the dot and fades; the dot
+   never moves, because a position mark that drifts is the wrong idea. */
+.login__ic-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: login-gps 2s ease-out infinite;
+}
+
+@keyframes login-gps {
+  0%   { transform: scale(0.55); opacity: 0.95; }
+  75%  { transform: scale(1.7);  opacity: 0; }
+  100% { transform: scale(1.7);  opacity: 0; }
+}
+
+/* Fuel: the level rising inside a drop whose outline never moves. Translating
+   the rect rather than animating its `y` keeps this on the compositor. */
+.login__ic-level {
+  transform-box: fill-box;
+  animation: login-fuel 3.4s ease-in-out infinite;
+}
+
+@keyframes login-fuel {
+  0%, 100% { transform: translateY(62%); }
+  50%      { transform: translateY(8%); }
+}
+
+/* Haulage: the road running under the truck. The cab is still — at 13px a
+   bouncing truck stops being a truck, and it is the load moving that the badge
+   is about anyway. */
+.login__ic-road { animation: login-haul 1.1s linear infinite; }
+
+@keyframes login-haul {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login__pulse::after { animation: none; opacity: 0.35; transform: scale(2); }
+  .login__ic-ring { animation: none; opacity: 0.9; }
+  .login__ic-level { animation: none; transform: translateY(28%); }
+  .login__ic-road { animation: none; }
+}

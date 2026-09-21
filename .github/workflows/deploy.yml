@@ -1,0 +1,362 @@
+# Build the dashboard and publish it to the production box.
+#
+# THE BUILD HAPPENS HERE, NEVER ON THE BOX. `npm run build` in ~/prod/dash has
+# been destructive in practice: the served bundle had been produced from newer
+# source than the checkout, so rebuilding in place silently replaced it with one
+# missing the vehicle sprite atlases and the estate-plan layer. Building on a
+# clean runner from a known commit removes that whole class of failure — the box
+# only ever receives a finished, checked bundle.
+#
+# Three guards, in order of what they catch:
+#
+#   1. every file in public/ must appear in the built bundle — the exact loss
+#      that incident produced;
+#   2. the live bundle is copied aside before anything is written, so undoing a
+#      bad deploy is `cp -r` and no rebuild (nginx serves the directory);
+#   3. the site must answer 200 and reference the new asset hash afterwards.
+#
+# The commit is also fast-forwarded in the box's own checkout, so its git log
+# says what is being served. That repo does NOT have
+# `receive.denyCurrentBranch=updateInstead`, so it is pushed to a side branch and
+# merged, rather than pushed straight at main.
+#
+# FIRST RUN WILL BE LARGE. The box's checkout has historically run tens of
+# commits behind local, so the first automated deploy ships everything merged to
+# main since then — including visible map and layout work. Check
+# `git log <boxHEAD>..main` before enabling this, and land it deliberately.
+
+name: build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: dash-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24.18.0'
+
+jobs:
+  build:
+    name: build the bundle
+    runs-on: ubuntu-latest
+    # The deploy secrets live on this ENVIRONMENT, not on the repository, and a
+    # job only sees an environment's secrets if it declares the environment.
+    # Without this line the build read an empty VITE_GOOGLE_MAPS_API_KEY while
+    # the deploy job — which does declare it — read EC2_* perfectly, so the
+    # secret looked simultaneously present and missing.
+    environment: production
+    env:
+      # Baked into the bundle by vite at BUILD time, so it has to exist on the
+      # runner. It does not come from the repo: dash/.env is gitignored, so a
+      # clean checkout has no copy and the build silently produces a bundle
+      # whose map cannot initialise. That is not hypothetical — it shipped, and
+      # the dashboard came up with "[FleetMap] failed to load the map library:
+      # VITE_GOOGLE_MAPS_API_KEY is not set" while every API call behind it
+      # still returned 200, so nothing else looked wrong.
+      #
+      # Maps JS keys are necessarily public — they ship in the browser bundle
+      # and are readable by anyone — so this is a secret for tidiness, not
+      # confidentiality. What actually protects it is the HTTP referrer
+      # restriction in the Google Cloud console.
+      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Before the build, because a bundle that compiles is not the same as one
+      # that is correct. These pin what a probe row MEANS and what somebody is
+      # told to do about it — wording that was wrong on the live screen once and
+      # cannot be caught by a compiler, a linter or a passing build.
+      - run: npm test
+
+      # Before the build, so the failure names the missing secret rather than
+      # arriving later as a blank map in production.
+      - name: the map key must be set
+        run: |
+          set -euo pipefail
+          if [ -z "${VITE_GOOGLE_MAPS_API_KEY}" ]; then
+            echo "::error::VITE_GOOGLE_MAPS_API_KEY is not set — this build would ship a dashboard with a dead map"
+            exit 1
+          fi
+          echo "map key is present"
+
+      - run: npm run build
+
+      # And after it, because a present secret is not proof of a baked one: vite
+      # only exposes variables it sees at build time under the VITE_ prefix, so
+      # a rename or a misspelling passes the check above and still ships blank.
+      - name: the map key must be in the built bundle
+        run: |
+          set -euo pipefail
+          if ! grep -rqF "${VITE_GOOGLE_MAPS_API_KEY}" build/assets; then
+            echo "::error::the bundle does not contain the map key — check the variable is spelled VITE_GOOGLE_MAPS_API_KEY"
+            exit 1
+          fi
+          echo "map key is baked into the bundle"
+
+      - name: every public asset must be in the bundle
+        run: |
+          set -euo pipefail
+          missing=0
+          # vite copies publicDir into outDir wholesale; anything that did not
+          # arrive means the bundle is not servable, whatever the exit code said.
+          while IFS= read -r asset; do
+            if [ ! -e "build/${asset}" ]; then
+              echo "::error::public/${asset} is missing from the build"
+              missing=1
+            fi
+          done < <(cd public && find . -type f -printf '%P\n')
+          [ -f build/index.html ] || { echo "::error::build/index.html is missing"; missing=1; }
+          [ "$missing" -eq 0 ] || exit 1
+          echo "bundle carries every file in public/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dash-build
+          path: build/
+          retention-days: 14
+          include-hidden-files: true
+
+  deploy:
+    name: publish to the box
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      # How many bundle backups the box keeps, including the one this run makes.
+      #
+      # Three. Each is the whole served bundle — about 9 MB — and the useful
+      # rollback is almost always the immediately previous one; two spare is
+      # room for a bad deploy nobody noticed until the one after it.
+      #
+      # This exists because there was no retention at all, and it showed: by
+      # 2026-08-28 the box held 91 of them going back to 8 August — 822 MB on a
+      # 13 GB disk that also runs the API. Nothing was ever going to remove
+      # them, because the deploy only ever added one.
+      BUNDLE_BACKUPS_KEEP: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dash-build
+          path: build
+
+      # An unset secret is an empty string, not an error. Without this the run
+      # writes an empty key file, reports "open an ssh channel to the box" as a
+      # SUCCESS, and fails several steps later on
+      # "ssh: Could not resolve hostname : Name or service not known" — which
+      # names nothing you can act on. Fail here, listing what is missing.
+      - name: check the deploy secrets are set
+        env:
+          SSH_KEY:  ${{ secrets.EC2_SSH_KEY }}
+          HOST:     ${{ secrets.EC2_HOST }}
+          HOST_KEY: ${{ secrets.EC2_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "${SSH_KEY}" ]  || missing="${missing} EC2_SSH_KEY"
+          [ -n "${HOST}" ]     || missing="${missing} EC2_HOST"
+          [ -n "${HOST_KEY}" ] || missing="${missing} EC2_HOST_KEY"
+          if [ -n "${missing}" ]; then
+            echo "::error::missing repository secrets:${missing} — see fleet-server/docs/ci-deploy.md"
+            exit 1
+          fi
+          echo "all three deploy secrets are present"
+
+      - name: open an ssh channel to the box
+        env:
+          SSH_KEY:  ${{ secrets.EC2_SSH_KEY }}
+          HOST:     ${{ secrets.EC2_HOST }}
+          HOST_KEY: ${{ secrets.EC2_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # The KEY is the security property. The hostname at the start of each
+          # line is only the label ssh matches on — and the two have to agree,
+          # which is not obvious and fails opaquely: a secret pasted from
+          # `ssh-keyscan <dns-name>` gives "Host key verification failed" the
+          # moment EC2_HOST holds the IP instead, or the public DNS rerolls.
+          # So the pinned keys are re-labelled to whatever EC2_HOST is; nothing
+          # about what is trusted changes, only the label.
+          #
+          # Every shape the key is plausibly pasted in is accepted: ssh-keyscan
+          # output, CRLF from a Windows paste, hashed (-H) entries which cannot
+          # be re-labelled and pass through, and the bare "ssh-rsa AAAA..."
+          # lines of /etc/ssh/ssh_host_*_key.pub, which carry no hostname at
+          # all. That last one is not hypothetical: rewriting field 1 blindly
+          # overwrote the KEY TYPE on such a paste and surfaced as
+          # "is not a public key file".
+          printf '%s\n' "$HOST_KEY" | tr -d '\r' | awk -v h="$HOST" '
+            /^[[:space:]]*$/ { next }
+            /^#/             { next }
+            /^\|/            { print; next }
+            $1 ~ /^(ssh-|ecdsa-|sk-ssh-|sk-ecdsa-)/ { print h, $0; next }
+            { $1 = h; print }
+          ' > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          # Validated HERE, where the cause is still visible. ssh's own verdict
+          # is "Host key verification failed", which cannot tell a malformed
+          # paste from a missing secret from a genuinely wrong key. The dump
+          # reports field counts only — never key material.
+          if ! ssh-keygen -lf ~/.ssh/known_hosts > /tmp/host-fingerprints 2>/dev/null; then
+            echo "::error::EC2_HOST_KEY is not usable known_hosts content — paste the full output of: ssh-keyscan <host>"
+            awk '{ t  = ($1 ~ /^\|/) ? "hashed" : $2
+                   ok = (t ~ /^(ssh-|ecdsa-|sk-)/ || t == "hashed") ? "ok" : "UNRECOGNISED"
+                   printf "  line %d: %d fields, key type %s\n", NR, NF, ok }' ~/.ssh/known_hosts
+            exit 1
+          fi
+          echo "pinned $(grep -c . ~/.ssh/known_hosts) host key(s):"
+          sed 's/^/  /' /tmp/host-fingerprints
+
+      # Three distinct failures all reach git as the same "exit code 128", with
+      # a message about access rights and the repository existing that is true
+      # of none of them:
+      #
+      #   1. the box is not there — EC2_HOST holds an address that has since
+      #      rerolled, or the security group no longer admits the runner. This
+      #      is what happens after an instance stop/start without an Elastic
+      #      IP, and it reads as "ssh: connect to host *** port 22: Connection
+      #      timed out";
+      #   2. the box is there but is a DIFFERENT box — EC2_HOST_KEY pins the
+      #      keys of the machine that used to answer at that address. The
+      #      re-labelling above makes the hostname agree, so the label is right
+      #      and only the key material is wrong;
+      #   3. the box is there and pinned correctly, but EC2_SSH_KEY's public
+      #      half is not in ubuntu's authorized_keys.
+      #
+      # Migrating regions produces 1, then 2, then 3, in that order, one failed
+      # run at a time. Each is separated here and reported by name.
+      - name: check the box is reachable and is the box we pinned
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+
+          if ! timeout 20 bash -c "</dev/tcp/${HOST}/22" 2>/dev/null; then
+            echo "::error::${HOST} is not answering on port 22."
+            echo "Either EC2_HOST is stale — an instance stop/start rerolls the public IP unless an Elastic IP is attached — or the security group no longer admits GitHub's runners."
+            echo "Fix: confirm the current address with 'aws ec2 describe-instances', update the EC2_HOST secret, and update EC2_HOST_KEY with 'ssh-keyscan <new-host>' at the same time (see the next check)."
+            exit 1
+          fi
+          echo "${HOST} answers on port 22"
+
+          # Compared as SORTED FINGERPRINTS, never key material, so a mismatch
+          # is legible in a public log without publishing anything.
+          ssh-keyscan -T 20 "${HOST}" 2>/dev/null > /tmp/live-hostkeys || true
+          if ! ssh-keygen -lf /tmp/live-hostkeys 2>/dev/null | awk '{print $2}' | sort > /tmp/live-fp; then
+            echo "::warning::could not read host keys from ${HOST}; leaving the verdict to ssh"
+            exit 0
+          fi
+          awk '{print $2}' /tmp/host-fingerprints | sort > /tmp/pinned-fp
+
+          if ! comm -12 /tmp/live-fp /tmp/pinned-fp | grep -q .; then
+            echo "::error::${HOST} is reachable, but NONE of its host keys match EC2_HOST_KEY."
+            echo "The address now belongs to a different machine — a rebuilt or migrated box reuses the address, not the keys."
+            echo "Fix: EC2_HOST_KEY must be refreshed alongside EC2_HOST. Paste the full output of: ssh-keyscan ${HOST}"
+            echo "  pinned : $(paste -sd' ' /tmp/pinned-fp)"
+            echo "  live   : $(paste -sd' ' /tmp/live-fp)"
+            exit 1
+          fi
+          echo "host key matches what is pinned"
+
+          if ! timeout 30 ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 "ubuntu@${HOST}" true 2>/tmp/ssh-err; then
+            echo "::error::${HOST} is the right box, but EC2_SSH_KEY was refused."
+            echo "Fix: add the public half of EC2_SSH_KEY to /home/ubuntu/.ssh/authorized_keys on the box."
+            sed 's/^/  /' /tmp/ssh-err
+            exit 1
+          fi
+          echo "deploy key accepted"
+
+      - name: record the commit in the box's checkout
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          export GIT_SSH_COMMAND='ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes'
+          branch="deploy/${GITHUB_SHA::12}"
+          git push "ssh://ubuntu@${HOST}/home/ubuntu/prod/dash" "HEAD:refs/heads/${branch}"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "ubuntu@${HOST}" bash -s "$branch" <<'REMOTE'
+          set -euo pipefail
+          branch="$1"
+          cd /home/ubuntu/prod/dash
+          # --ff-only, so a box that has drifted stops the deploy instead of
+          # being merged into some third state nobody has seen.
+          git merge --ff-only "$branch"
+          git branch -D "$branch"
+          echo "checkout now at $(git log --oneline -1)"
+          REMOTE
+
+      - name: back up the live bundle, then publish
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+          KEEP: ${{ env.BUNDLE_BACKUPS_KEEP }}
+        run: |
+          set -euo pipefail
+          stamp=$(date -u +%Y%m%d-%H%M%S)
+          # Prune BEFORE the copy, not after, and to KEEP-1 so the new backup
+          # lands on exactly KEEP. Ordered this way because the failure it
+          # guards against is a full disk: pruning afterwards would still let a
+          # box with no room fail at `cp -r`, having deleted nothing, which is
+          # the one moment the cleanup was needed.
+          #
+          # The `case` is not decoration. This runs `rm -rf` inside a directory
+          # that also holds the LIVE bundle, and a glob that came back empty or
+          # a name that arrived unexpectedly must delete nothing at all rather
+          # than something else. Sorted by name, which for these stamps is
+          # chronological.
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "ubuntu@${HOST}" bash -s "$stamp" "$KEEP" <<'REMOTE'
+          set -euo pipefail
+          stamp="$1"; keep="$2"
+          cd /home/ubuntu/prod/dash
+          mapfile -t all < <(ls -d build.bak-*/ 2>/dev/null | sed 's#/$##' | sort)
+          drop=$(( ${#all[@]} - (keep - 1) ))
+          if [ "$drop" -gt 0 ]; then
+            for d in "${all[@]:0:$drop}"; do
+              case "$d" in
+                build.bak-*) rm -rf -- "$d" ;;
+                *) echo "refusing to remove unexpected path: $d"; exit 1 ;;
+              esac
+            done
+            echo "pruned $drop old backup(s), keeping $((keep - 1)) plus the one about to be made"
+          fi
+          cp -r build "build.bak-${stamp}"
+          echo "backed up to build.bak-${stamp}"
+          REMOTE
+          # --delete so old hashed assets do not accumulate; the backup above is
+          # what makes that safe.
+          rsync -az --delete -e 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes' \
+            build/ "ubuntu@${HOST}:/home/ubuntu/prod/dash/build/"
+          echo "DASH_BACKUP=build.bak-${stamp}" >> "$GITHUB_ENV"
+
+      - name: confirm the site serves the new bundle
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          # The entry script's hashed name changes with its contents, so finding
+          # it in what nginx returns proves the new bundle is the one being
+          # served — not merely that the site is up.
+          entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' build/index.html | head -1)
+          echo "expecting ${entry}"
+          served=$(curl -fsS --max-time 20 "http://${HOST}/")
+          if ! printf '%s' "$served" | grep -q "$entry"; then
+            echo "::error::the served index.html does not reference ${entry} — restore with: cp -r ${DASH_BACKUP}/. build/"
+            exit 1
+          fi
+          curl -fsS --max-time 20 -o /dev/null "http://${HOST}/${entry}"
+          echo "the box is serving this bundle"

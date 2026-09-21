@@ -1,0 +1,63 @@
+// ════════════════════════════════════════════════════════════
+// src/api/vehicles.js
+//
+// CONNECTED TO REAL BACKEND — see api/db.php, api/vehicles.php,
+// api/vehicle.php, api/search.php on the cPanel server.
+// Full explanation of how this works: see PDF documentation.
+// ════════════════════════════════════════════════════════════
+
+const API_BASE = "/api";
+
+export async function getVehicles({ companyId } = {}) {
+  const response = await fetch(`${API_BASE}/vehicles.php`);
+  return await response.json();
+}
+
+export async function getVehicleById(id) {
+  const response = await fetch(`${API_BASE}/vehicle.php?id=${encodeURIComponent(id)}`);
+  return await response.json();
+}
+
+export async function searchVehicles(query) {
+  const response = await fetch(`${API_BASE}/search.php?q=${encodeURIComponent(query)}`);
+  return await response.json();
+}
+
+export async function getFleetStatusCounts() {
+  // TODO (backend): build status-counts.php later. For now, derive
+  // counts client-side from the full vehicle list so this doesn't
+  // silently keep using fake numbers.
+  const vehicles = await getVehicles();
+  const counts = { ok: 0, warning: 0, critical: 0, offline: 0 };
+  vehicles.forEach((v) => {
+    if (v.status === "ok") counts.ok += 1;
+    else if (v.status === "speeding") counts.warning += 1;
+    else if (v.status === "theft") counts.critical += 1;
+    else if (v.status === "parked") counts.offline += 1;
+  });
+  return counts;
+}
+
+export async function getCargoGroups() {
+  // TODO (backend): build cargo-groups.php later. For now, derive
+  // groups client-side from the full vehicle list.
+  const vehicles = await getVehicles();
+  const groups = {};
+  vehicles.forEach((v) => {
+    const key = v.cargo === "Raw Sugar Cane" ? "sugar-cane" : "processed-sugar";
+    if (!groups[key]) {
+      groups[key] = {
+        id: key,
+        label: v.cargo === "Raw Sugar Cane" ? "Sugar Cane Moving" : "Processed Sugar Moving",
+        cargoName: v.cargo,
+        vehicles: [],
+      };
+    }
+    groups[key].vehicles.push({
+      plate: v.id,
+      driver: v.driver,
+      tonnage: v.weight,
+    });
+  });
+  return Object.values(groups);
+}

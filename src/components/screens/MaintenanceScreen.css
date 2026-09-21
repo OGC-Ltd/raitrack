@@ -1,0 +1,282 @@
+/* Desktop Maintenance tab styles. */
+
+.maintenance-screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px calc(64px + 24px);
+  background-color: var(--color-bg, #050505);
+}
+
+.maintenance-screen__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.maintenance-screen__spacer {
+  flex: 1;
+}
+
+.maintenance-screen__title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-text-primary, #f0f4f8);
+  margin: 0;
+}
+
+.maintenance-screen__summary {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.maintenance-summary-card {
+  flex: 1;
+  max-width: 160px;
+  background-color: var(--color-card, var(--color-card, rgba(10, 10, 11, 0.97)));
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.maintenance-summary-card__value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent, #22c55e);
+  line-height: 1;
+}
+
+.maintenance-summary-card__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+}
+
+.maintenance-screen__loading,
+.maintenance-screen__empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  font-size: 13px;
+}
+
+.maintenance-screen__table {
+  border: 1px solid var(--color-border, #2a2d35);
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--color-card, var(--color-card, rgba(10, 10, 11, 0.97)));
+}
+
+.maintenance-screen__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border, #2a2d35);
+  color: var(--color-text-primary, #f0f4f8);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.maintenance-screen__row:last-child { border-bottom: none; }
+.maintenance-screen__row:hover { background-color: rgba(255, 255, 255, 0.03); }
+
+.maintenance-screen__row--head {
+  cursor: default;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  background: rgba(255, 255, 255, 0.02);
+}
+.maintenance-screen__row--head:hover { background: rgba(255, 255, 255, 0.02); }
+
+.maintenance-screen__mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.maintenance-screen__task {
+  display: block;
+  font-size: 10.5px;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  margin-top: 1px;
+}
+
+.maintenance-screen__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.maintenance-screen__issue-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .maintenance-screen__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+  }
+  .maintenance-screen__row > span:nth-child(3),
+  .maintenance-screen__row > span:nth-child(4) {
+    display: none;
+  }
+}
+
+/* Clips on purpose: the sub-tab bar stays pinned and whatever is below it
+   scrolls. SensorPanel manages its own scrolling, so it mounts straight in
+   here; MaintenancePage does not, so it gets .maint-screen-panel below. Note
+   MaintenancePage.css ALSO defines .maint-screen-scroll (for its token shim)
+   and this file is imported after it — keep the two in agreement, or one
+   silently overrides the other's overflow and the page gets cut off. */
+.maint-screen-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* ── Shared gutter for the whole Maintenance tab ──────────────────────────
+     Both sub-tabs hang off this element, so declaring the gutter here is what
+     makes Service Status and Sensor Monitor line up on the same left and right
+     edge instead of each keeping its own number — Service Status was on 24px,
+     Sensor Monitor on 20px with a stray 16px on its filter bar, and the step
+     was visible when switching between them.
+
+     It scales with the viewport so the content reads as a centred column with
+     air either side on a wide monitor, and collapses back to a tight 20px on a
+     phone where the data needs the width. SensorPanel's --sp4-gutter inherits
+     this value and only falls back to its own copy when mounted standalone. */
+  --maint-gutter: var(--app-gutter, clamp(20px, calc(var(--vw) * 4), 64px));
+}
+
+/* The scroll viewport for Service Status. min-height:0 is what actually lets a
+   flex child shrink below its content and scroll — without it the child keeps
+   its full intrinsic height, overflows the clipped parent, and the bottom of
+   the data grid is unreachable. */
+.maint-screen-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────────────────────────────
+   Sits where the sub-tab bar used to, and borrows that bar's exact surface and
+   hairline so the chrome above the panel still reads as one continuous band
+   rather than two stacked strips.
+
+   Horizontal inset is --maint-gutter, the same token the sub-tabs and the
+   panel's own grid use — the crumb is the topmost thing on the left edge, so
+   if it were off the gutter it would be the most visible misalignment on the
+   screen. */
+.maint-crumbs {
+  flex-shrink: 0;
+  padding: 10px var(--maint-gutter, 24px) 9px;
+  border-bottom: 1px solid #2a2d35;
+  background: #080809;
+}
+
+.maint-crumbs__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maint-crumbs__item {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-ui, system-ui);
+  letter-spacing: 0.01em;
+  color: #7c8899;
+}
+
+/* The separator is punctuation between items, not content — so it is drawn
+   here rather than sitting in the markup where a screen reader would announce
+   it between every crumb. */
+.maint-crumbs__item + .maint-crumbs__item::before {
+  content: "/";
+  margin-right: 6px;
+  color: #4a5563;
+  font-weight: 500;
+}
+
+.maint-crumbs__item--current { color: #f0f4f8; }
+
+/* Light mode. The block above predates the theme tokens and hard-codes a dark
+   palette, so without this the breadcrumb stayed a dark bar across the top of
+   a light page. Drive-by fix, not caused by the sub-view work. */
+.app--light .maint-crumbs {
+  background: var(--color-bg, #f0f4f8);
+  border-bottom-color: var(--color-border, #dde1e7);
+}
+.app--light .maint-crumbs__item { color: var(--color-text-sec, #475569); }
+.app--light .maint-crumbs__item + .maint-crumbs__item::before { color: var(--color-text-muted, #94a3b8); }
+.app--light .maint-crumbs__item--current { color: var(--color-text-primary, #0f172a); }
+
+.maint-subtabs {
+  flex-shrink: 0;
+  display: flex;
+  /* The tabs define the bar's baseline via their own bottom border, so the row
+     aligns to that edge rather than stretching its children. */
+  align-items: end;
+  gap: 2px;
+  /* Minus the sub-tab's own 20px so the first LABEL sits on the gutter, not its
+     hit area — the label is what the eye lines up against the content below.
+     Bottoms out at 0 because the gutter floor is 20px. */
+  padding: 12px calc(var(--maint-gutter, 24px) - 20px) 0;
+  border-bottom: 1px solid #2a2d35;
+  background: #080809;
+}
+
+/* Narrow: the bar wraps rather than compressing the tab labels to two lines.
+   The inset is left to the gutter — a separate 10px here put the tab labels
+   inboard of the content they label. */
+@media (max-width: 560px) {
+  .maint-subtabs { flex-wrap: wrap; }
+}
+.maint-subtab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 20px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #a3b1c2;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-ui, system-ui);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.maint-subtab:hover { color: #f0f4f8; }
+.maint-subtab--active { color: #f0f4f8; border-bottom-color: #3b82f6; }

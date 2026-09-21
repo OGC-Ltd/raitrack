@@ -1,0 +1,196 @@
+/* Mobile vehicle detail sheet styles. */
+
+
+
+.mvs-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.35);
+  z-index: 900;
+  display: flex;
+  align-items: flex-end;
+  animation: mvs-fade-in 0.15s ease;
+}
+
+@keyframes mvs-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.mvs {
+  width: 100%;
+  background-color: #111317;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 16px max(16px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  animation: mvs-slide-up 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: var(--font-body);
+  position: relative;
+}
+
+@keyframes mvs-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.mvs__handle {
+  width: 34px;
+  height: 4px;
+  border-radius: 99px;
+  background-color: #3a3d45;
+  margin: 0 auto 12px;
+}
+
+.mvs__loading {
+  padding: 20px 0 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-sec-adaptive, #7c8899);
+}
+
+.mvs__header {
+  position: relative;
+  padding-right: 30px;
+  margin-bottom: 14px;
+}
+
+.mvs__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.mvs__reg {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.mvs__badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.mvs__driver {
+  font-size: 12.5px;
+  color: #9ca3af;
+}
+
+.mvs__location {
+  font-size: 11.5px;
+  color: var(--text-sec-adaptive, #7c8899);
+  margin-top: 2px;
+}
+
+.mvs__close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #9ca3af;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mvs__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mvs__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background-color: #161b22;
+  border: 1px solid #2a2d35;
+  border-radius: 10px;
+  padding: 9px 6px;
+  text-align: center;
+}
+
+.mvs__stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-sec-adaptive, #7c8899);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mvs__stat-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.mvs__route {
+  background-color: #161b22;
+  border: 1px solid #2a2d35;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.mvs__route-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: #d1d5db;
+}
+
+.mvs__route-line {
+  display: block;
+  width: 1px;
+  height: 9px;
+  background-color: #2a3140;
+  margin-left: 3.5px;
+}
+
+.mvs__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mvs__dot--dep  { background-color: #22c55e; box-shadow: 0 0 4px #22c55e; }
+.mvs__dot--dest { background-color: #f59e0b; }
+
+.app--light .mvs {
+  background-color: #ffffff;
+}
+.app--light .mvs__handle {
+  background-color: #dde1e7;
+}
+.app--light .mvs__reg {
+  color: #0f172a;
+}
+.app--light .mvs__driver {
+  color: #475569;
+}
+.app--light .mvs__stat,
+.app--light .mvs__route {
+  background-color: #f1f5f9;
+  border-color: #dde1e7;
+}
+.app--light .mvs__stat-value {
+  color: #0f172a;
+}
+.app--light .mvs__route-row {
+  color: #334155;
+}

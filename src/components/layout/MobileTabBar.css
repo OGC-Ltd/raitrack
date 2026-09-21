@@ -1,0 +1,98 @@
+/* MobileTabBar — only visible on mobile */
+
+.mobile-tab-bar {
+  display: none; /* hidden on desktop */
+}
+
+@media (max-width: 767px) {
+  /* The `:root { --mobile-nav-h: 64px }` that used to sit here is the one thing
+     not restored with the rest of this file. The token is declared in App.css
+     now, where the map reads it to keep clear of this bar. The value here was a
+     flat 64px against a bar that measures 76px, so the map ran 12px into it.
+     Nothing about how this bar looks depends on that line. */
+
+  .mobile-tab-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 300;
+    background: rgba(255, 255, 255, 0.97);
+    border-top: 1px solid #e2e8f0;
+    padding: 8px 8px 20px; /* 20px for safe area / home indicator */
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .mobile-tab-bar__item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    font-family: inherit;
+  }
+
+  .mobile-tab-bar__icon {
+    font-size: 20px;
+    color: #94a3b8;
+  }
+
+  .mobile-tab-bar__item--active .mobile-tab-bar__icon {
+    color: #0f172a;
+  }
+
+  .mobile-tab-bar__label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  .mobile-tab-bar__item--active .mobile-tab-bar__label {
+    color: #0f172a;
+  }
+
+  /* Center FAB — green truck button */
+  .mobile-tab-bar__fab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    position: relative;
+  }
+
+  .mobile-tab-bar__fab > svg {
+    width: 52px;
+    height: 52px;
+    padding: 13px;
+    border-radius: 50%;
+    background: #10b981;
+    color: #fff;
+    border: 4px solid #fff;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+    margin-top: -20px; /* raises it above the bar */
+  }
+
+  .mobile-tab-bar__fab--active > svg {
+    background: #059669;
+  }
+
+  .mobile-tab-bar__fab-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #059669;
+  }
+}

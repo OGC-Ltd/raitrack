@@ -1,0 +1,579 @@
+/* Ported from fleetdash's MaintenancePage.css. Two fleettrack adaptations:
+   (1) a scoped token shim — fleettrack uses hardcoded colours, not the
+   --card/--border/--text-2/etc. custom properties this markup expects, so we
+   define them here mapped onto fleettrack's own --color-* tokens;
+   (2) layout — fleetdash absolutely-positions the page beside a 356px right
+   panel; fleettrack renders it inside a normal flex tab panel, so .maint-page
+   flows as a plain full-width block and an ancestor owns the scroll.
+
+   That ancestor is .maint-screen-panel, defined in MaintenanceScreen.css,
+   NOT the rule below. This rule carries the token shim only. It used to also
+   set `flex/min-height/overflow-y: auto` here, which collided with the
+   .maint-screen-scroll rule in MaintenanceScreen.css — same selector, same
+   specificity, and that file is imported last, so its `overflow: hidden` won
+   and clipped this page at the fold. Layout for that element lives in one
+   file; this one just supplies variables. */
+
+.maint-screen-scroll {
+  background: var(--color-bg, #050505);
+
+  /* fleetdash token shim → fleettrack values. --text-1 is the primary text
+     colour the ported markup hardcoded as #fff/#e5e7eb; routing it through a
+     token makes it flip with the light/dark theme. */
+  --bg: transparent;
+  --card: var(--color-card-inner, #10141c);
+  --elevated: #22272f;
+  --border: var(--color-border, #2a2d35);
+  --border-hi: #3a4150;
+  --text-1: var(--color-text-primary, #f0f4f8);
+  --text-2: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  --text-3: var(--color-text-muted, #3d4553);
+  --font: var(--font-body);
+}
+
+/* Light mode: the shim's dark surface/edge values would read as dark chips on a
+   white page, so override the few that aren't already theme-aware tokens. */
+.app--light .maint-screen-scroll {
+  --elevated: #eef2f6;
+  --border-hi: #cbd5e1;
+}
+
+.maint-screen-loading {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  font-size: 13px;
+}
+
+.maint-page {
+  position: relative;
+  width: 100%;
+  background: transparent;
+}
+.maint-page__inner {
+  /* Horizontal inset comes from the tab-wide gutter (MaintenanceScreen.css) so
+     this page lines up with Sensor Monitor and with the sub-tab bar above.
+     Vertical padding is untouched. */
+  padding: 16px var(--maint-gutter, 24px) 80px;
+}
+/* Mobile: the footer nav is position:fixed (App.css), so it floats over the
+   scroll area — add enough bottom padding to clear it and fully reveal the last
+   card. The 768px breakpoint matches where App.css fixes the footer. */
+@media (max-width: 767px) {
+  .maint-page__inner { padding-bottom: calc(64px + 40px); }
+}
+/* The 10px narrow override is gone: the gutter's clamp already floors at 20px,
+   and overriding it here reintroduced the mismatch with Sensor Monitor at
+   exactly the width where the step is most visible. */
+
+/* ── Historical charts ──────────────────────────────────────── */
+/* One row: the calendar tile, then the three charts. The calendar gets a
+   slightly narrower track than the charts — it needs a stable minimum (a
+   7-column month grid stops being clickable below ~190px) but not the width a
+   chart wants, so it is capped rather than given an equal share. */
+.maint-charts {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.85fr) repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 959px) {
+  .maint-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Full width at the top: at two columns the calendar would otherwise be
+     squeezed beside one chart and set the row's height for it. */
+  .maint-calendar-tile { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .maint-charts { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The calendar is intrinsically taller than a stat card, and grid stretches
+   every tile in the row to match it. Left as a block, each chart card would
+   render its contents at the top and hold ~100px of dead space below the
+   sparkline, which reads as a rendering fault rather than a layout.
+
+   The slack goes into the GAP above the plot, not into the plot itself. An
+   earlier pass grew the svg to fill instead, which stretched it to 2.7× its
+   viewBox height — and since the svg is preserveAspectRatio="none", everything
+   drawn inside was scaled by a different factor per axis. The day labels were
+   <text> in there and came out visibly distorted. Now the plot keeps a fixed
+   height, the labels are HTML, and the cards still bottom-align across the
+   row. */
+.maint-chart-card {
+  display: flex;
+  flex-direction: column;
+}
+.maint-chart-card__plot {
+  margin-top: auto;       /* pin the chart to the bottom; slack sits above it */
+  padding-top: 6px;
+}
+.maint-chart-card__plot > svg {
+  /* Fixed, and close to the viewBox's own 280×52 proportion — at a ~309px
+     card this is about 1.10× across and 1.38× down, mild enough that bars and
+     the trend line read true. It is the only element still scaled at all. */
+  height: 72px;
+}
+.maint-chart-card__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 9px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sits in the chart columns when there is nothing to plot, so the calendar
+   keeps its own track and the message doesn't reflow the row. */
+.maint-nohistory--inrow {
+  grid-column: span 3;
+  margin-bottom: 0;
+}
+@media (max-width: 959px) {
+  .maint-nohistory--inrow { grid-column: 1 / -1; }
+}
+.maint-chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.maint-chart-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.maint-chart-card__title {
+  font-size: 11px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.maint-chart-card__delta {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 1px 6px;
+}
+.maint-chart-card__delta.up   { color: #22c55e; background: rgba(34,197,94,0.12); }
+.maint-chart-card__delta.down { color: #ef4444; background: rgba(239,68,68,0.12); }
+.maint-chart-card__value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.maint-chart-card__unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.maint-chart-card__sub {
+  font-size: 10px;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+.maint-chart-card__empty {
+  font-size: 11px;
+  color: var(--text-2);
+  padding: 14px 0;
+  text-align: center;
+}
+
+/* ── Calendar tile ──────────────────────────────────────────── */
+.maint-calendar-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.maint-calendar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.maint-calendar__title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.maint-calendar__nav {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.maint-calendar__nav:hover { color: var(--text-1); border-color: var(--border-hi); }
+
+/* ── Period presets ─────────────────────────────────────────────
+   Today / Month / Year / All. Four in a row on the narrowest track the tile
+   is allowed (190px), so they share the width evenly and wrap as a unit
+   rather than orphaning "All" onto its own line. */
+.maint-calendar__presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.maint-calendar__preset {
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.maint-calendar__preset:hover { color: var(--text-1); border-color: var(--border-hi); }
+/* The active preset is filled, not merely outlined: it has to stay legible
+   against the selected day cells below it, which are themselves filled blue. */
+.maint-calendar__preset.is-active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.maint-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 4px;
+}
+.maint-calendar__weekdays span {
+  font-size: 8.5px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* Fixed 26px rows, not `grid-auto-rows: 1fr`. The tile no longer spans two
+   chart rows, so there is no leftover height for `1fr` to divide — and this
+   tile is now the tallest thing in the row, meaning it SETS the row height
+   rather than absorbing it. Sizing the cells explicitly is what keeps that
+   height predictable instead of circular. */
+.maint-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: 26px;
+  gap: 2px;
+}
+.maint-calendar__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-1);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  border: none;
+  background: transparent;
+  font-family: var(--font);
+  cursor: pointer;
+  padding: 0;
+}
+.maint-calendar__cell:hover:not(:disabled) { background: var(--elevated); }
+.maint-calendar__cell.empty { visibility: hidden; cursor: default; }
+.maint-calendar__cell.today {
+  color: #22c55e;
+  font-weight: 700;
+}
+.maint-calendar__cell.selected-single,
+.maint-calendar__cell.selected-start,
+.maint-calendar__cell.selected-end {
+  background: #3b82f6;
+  color: var(--text-1);
+  font-weight: 700;
+}
+.maint-calendar__cell.selected-range {
+  background: rgba(59,130,246,0.22);
+  color: var(--text-1);
+}
+.maint-calendar__clear {
+  /* auto, not a fixed gap: pins the readout to the bottom edge so the tile's
+     readout is pinned to the bottom edge. The tile keeps a constant height
+     because the element is rendered in both states (see MaintenanceCalendar) —
+     margin alone could not do that, since this tile sets the row height rather
+     than absorbing leftover space. */
+  margin-top: auto;
+  font-family: var(--font);
+  font-size: 9px;
+  color: var(--text-2);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 8px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.maint-calendar__clear:hover { color: var(--text-1); border-color: var(--border-hi); }
+/* The no-selection state: same box, so the height matches, but it is a label
+   rather than a control — nothing to clear when nothing is selected. */
+.maint-calendar__clear--static {
+  cursor: default;
+  opacity: 0.7;
+}
+.maint-calendar__clear--static:hover { color: var(--text-2); border-color: var(--border); }
+
+/* ── Filter chips ───────────────────────────────────────────── */
+.maint-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.maint-chip {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.maint-chip:hover { border-color: var(--border-hi); color: var(--text-1); }
+.maint-chip--active { color: var(--text-1); }
+
+/* ── Data grid + service report (master-detail row) ────────── */
+.maint-bottom-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.maint-bottom-row > .maint-grid-card { flex: 1 1 62%; min-width: 0; }
+.maint-bottom-row > .maint-detail-col { flex: 1 1 38%; min-width: 260px; display: flex; flex-direction: column; gap: 12px; }
+
+@media (max-width: 959px) {
+  .maint-bottom-row { flex-direction: column; }
+  .maint-bottom-row > .maint-grid-card,
+  .maint-bottom-row > .maint-detail-col { flex-basis: auto; width: 100%; }
+  .maint-bottom-row > .maint-grid-card   { order: 1; }
+  .maint-bottom-row > .maint-detail-col  { order: 2; }
+}
+
+.maint-grid-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.maint-grid-scroll { overflow-x: auto; }
+.maint-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  min-width: 640px;
+}
+.maint-grid thead th {
+  position: sticky; top: 0;
+  background: var(--elevated);
+  text-align: left;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.maint-grid thead th:hover { color: var(--text-1); }
+.maint-grid tbody tr {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.maint-grid tbody tr:hover { background: var(--elevated); }
+.maint-grid tbody tr.maint-row--selected { background: var(--elevated); }
+.maint-grid tbody td {
+  padding: 8px 12px;
+  font-size: 11.5px;
+  color: var(--text-1);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.maint-grid tbody tr:last-child td { border-bottom: none; }
+
+.maint-sort-arrow { font-size: 8px; margin-left: 3px; opacity: 0.7; }
+
+.maint-badge {
+  display: inline-flex; align-items: center;
+  font-size: 9.5px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px;
+}
+
+/* ── Section titles ─────────────────────────────────────────── */
+.maint-section-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+/* ── Service-history report ────────────────────────────────── */
+.maint-report-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.maint-report__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.maint-report__subject {
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.maint-invoice {
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.maint-invoice__title {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.maint-invoice__meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-2);
+  padding: 1px 0;
+}
+.maint-invoice__meta-row b { color: var(--text-1); font-weight: 700; }
+.maint-invoice__rule {
+  border-top: 1px dashed var(--border);
+  margin: 6px 0;
+}
+.maint-invoice__colheads {
+  display: flex;
+  align-items: center;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.maint-invoice__colheads span:first-child { flex: 1 1 auto; }
+.maint-invoice__colheads span:not(:first-child) {
+  flex: 0 0 auto;
+  width: 56px;
+  text-align: right;
+}
+.maint-invoice__colheads span:last-child { width: 62px; }
+.maint-invoice__lines {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.maint-invoice__line {
+  display: flex;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.maint-invoice__line:nth-child(even) { background: rgba(255,255,255,0.025); }
+.maint-invoice__name {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.maint-invoice__leader {
+  flex: 1 1 auto;
+  min-width: 10px;
+  height: 0;
+  margin: 0 6px;
+  border-bottom: 1px dotted var(--border);
+  transform: translateY(-3px);
+}
+.maint-invoice__col {
+  flex: 0 0 auto;
+  width: 56px;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 10.5px;
+}
+.maint-invoice__interval { color: var(--text-2); }
+.maint-invoice__status {
+  width: 62px;
+  font-weight: 700;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.maint-invoice__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-2);
+}
+.maint-invoice__entry {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.maint-invoice__entry:last-child { border-bottom: none; }
+.maint-invoice__type-tag {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.maint-invoice__note {
+  font-size: 10.5px;
+  color: var(--text-2);
+  margin-top: 3px;
+  padding-left: 2px;
+}
+.maint-invoice__note--replaced {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* Shown in place of the chart grid before any service history exists — one
+   honest line instead of six charts flat-lining at zero. */
+.maint-nohistory {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.maint-nohistory__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.maint-nohistory__hint {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
