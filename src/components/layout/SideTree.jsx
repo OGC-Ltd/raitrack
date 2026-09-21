@@ -71,8 +71,15 @@ export function TreeNode({ label, icon, count = null, tone = 'plain', defaultOpe
         <Chevron open={open} />
         {icon && <i className={`ti ti-${icon} side-tree__icon`} aria-hidden="true" />}
         <span className="side-tree__label">{label}</span>
+        {/* `data-len` is how many digits. CSS cannot count characters, and a
+            circle has to know: one size for every length either clips "597" or
+            leaves a huge empty ring around "4". Same knob the map's cluster
+            badge uses — see .lf-cluster-badge. */}
         {count != null && count !== 0 && (
-          <span className={`side-tree__count side-tree__count--${tone}`}>{count}</span>
+          <span
+            className={`side-tree__count side-tree__count--${tone}`}
+            data-len={String(count).length}
+          >{count}</span>
         )}
       </button>
       {/* Unmounted rather than hidden. These branches carry live lists — 597
