@@ -1,0 +1,74 @@
+/* Global resets and base styles for the new UI. */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --app-zoom: 1;
+  --app-unzoom: 1;
+  --vh: 1vh;
+  --vw: 1vw;
+
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  --font-display: 'Inter', system-ui, sans-serif;
+
+  /* Keep old aliases working for components that reference them */
+  --font: var(--font-body);
+  --font-ui: var(--font-body);
+  --mono: var(--font-mono);
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+  background: #f8fafc;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Colour tokens — light mode defaults (dark overrides per component) */
+:root {
+  --color-bg:          #f8fafc;
+  --color-surface:     #ffffff;
+  --color-border:      #e2e8f0;
+  --text-primary:      #0f172a;
+  --text-secondary:    #475569;
+  --text-muted:        #94a3b8;
+  --accent:            #2563eb;
+  --accent-light:      #eff6ff;
+
+  /* Full light theme token set. Defined on :root too (not only on
+     .app--light in App.css) so Drivers, Analytics, Weighbridges and any
+     overlay page are light no matter which wrapper they render inside —
+     without these they fall back to their built-in DARK defaults. */
+  --color-card:         rgba(255, 255, 255, 0.98);
+  --color-card-inner:   rgba(243, 246, 249, 1);
+  --color-text-primary: #0f172a;
+  --color-text-sec:     #475569;
+  --color-text-muted:   #64748b;
+  --accent-ok:     #15803d;
+  --accent-warn:   #b45309;
+  --accent-crit:   #b91c1c;
+  --accent-idle:   #64748b;
+  --accent-info:   #0369a1;
+  --accent-idling: #0e7490;
+  --accent-off:    #4b5563;
+  --color-header-bg: #ffffff;
+  --map-brightness:  1;
+
+  /* Keep the old CSS variable names so existing components don't break */
+  --text-sec-adaptive: #64748b;
+  --header-h:          52px;
+}

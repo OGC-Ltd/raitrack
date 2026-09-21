@@ -1,0 +1,2941 @@
+/* Delivery Analytics — ported from fleetdash's AnalyticsPage.css. Maps the dash
+   design tokens onto fleettrack's --color-* theme variables (up top) so the rest
+   of the ported rules read unchanged, and swaps hardcoded whites for
+   --color-text-primary so the page works in both the light and dark themes. */
+.analytics-page {
+  /* dash token → fleettrack theme token bridge */
+  --card: var(--color-card, #0a0a0b);
+  --border: var(--color-border, #2a2d35);
+  --border-hi: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  --elevated: var(--color-card-inner, #10141c);
+  --bg: var(--color-bg, #050505);
+  --text-2: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  --text-3: var(--color-text-muted, #3d4553);
+  --ink: var(--color-text-primary, #f0f4f8);
+  --font: var(--font-body);
+
+  /* ── Chart palette ────────────────────────────────────────────────────────
+     The data-viz reference palette's categorical slots, in its fixed order.
+     Assign by slot number, never by picking a hue that "looks right", and never
+     cycle past slot 8 — a 9th series folds into "Other" or becomes a facet.
+
+     Each THEME GETS ITS OWN STEP rather than one hex reused on both surfaces:
+     the values here are the light-surface steps and .app--dark overrides them
+     with the dark ones. Every pair that appears TOGETHER in a chart was run
+     through the palette validator against this card's real surface colour
+     (#fdfdfe light, #0a0a0b dark) — re-validate before changing any of them:
+
+       1 + 8  fuel in / drained          CVD ΔE 21.6 light · 19.2 dark   PASS
+       1 + 8  timely / interrupted       (same pair)                     PASS
+       1 + 4  weekday / busiest day      CVD ΔE 31.5 light · 27.4 dark   PASS
+
+     Slots 5 and 6 were added 2026-08-21 for the fleet-mix donut, which puts
+     EIGHT categories in one chart and so needs every pair to hold, not just the
+     pairs listed above. They were derived rather than chosen: the six occupied
+     hues are 0, 17, 41, 159, 213 and 249, which leaves exactly two bands more
+     than 35° from any of them — around 100 and around 310. Within those bands
+     the search maximised the worst-case ΔE across normal vision, deuteranopia
+     and protanopia (Viénot 1999), subject to ≥3:1 on the surface and a Lab L in
+     the band the other six occupy.
+
+       5      olive       worst-case CVD ΔE 21.7 light · 15.0 dark   PASS
+       6      plum        worst-case CVD ΔE 40.8 light · 30.5 dark   PASS
+
+     The eight-slot floor is 16.7 light and 2.0 dark — both UNCHANGED from the
+     six-slot floor, because both are set by the pre-existing 1 + 7 pair, not by
+     anything added here.
+
+     That 2.0 is worth naming: on the dark surface slots 1 (#3987e5) and 7
+     (#9085e9) are effectively the same colour to a dichromat, as are 2 and 4
+     (ΔE 9.1). Any chart drawing those together on dark is relying on something
+     other than hue to separate them. The fleet-mix donut labels every slice on
+     a leader line, which is the same "relief" the slot-4 note below describes.
+     A chart that does NOT label its marks should not put those pairs together.
+
+     Slot 4 measures 2.13:1 on the light surface, under the 3:1 bar. That is
+     permitted only because the weekday chart prints the count above every bar,
+     which is the "relief" the rule asks for — do not reuse slot 4 anywhere the
+     mark has no visible label. */
+  --chart-1: #2a78d6;  /* blue    */
+  --chart-2: #eb6834;  /* orange  */
+  --chart-3: #1baf7a;  /* aqua    */
+  --chart-4: #eda100;  /* yellow  */
+  --chart-5: #414c0b;  /* olive   */
+  --chart-6: #6b3361;  /* plum    */
+  --chart-7: #4a3aa7;  /* violet  */
+  --chart-8: #e34948;  /* red     */
+
+  /* Dawn: ONE hue in three steps, for Machines working early.
+     The three bands there are consecutive hours of one night — ordinal data —
+     and they were drawn in three slots of the categorical palette (blue, aqua,
+     yellow), which asks a reader to map colour to time on every glance instead
+     of reading "earlier" off the darkness. Deepest is earliest.
+     Measured on the white card: 11.56:1, 4.42:1 and 3.21:1, so every step
+     clears the 3:1 bar the palette note above sets. The last two are only
+     1.38:1 apart from EACH OTHER, which is as far as one hue stretches while
+     all three still clear 3:1 on white — so the component draws a hairline in
+     the card's colour between the bands rather than leaving the boundary to
+     the fills. */
+  --dawn-3: #12386e;  /* before 04:00 */
+  --dawn-2: #2a78d6;  /* 04:00-05:00  */
+  --dawn-1: #4d93de;  /* 05:00-06:00  */
+
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  background: var(--bg);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+.analytics-page::-webkit-scrollbar { display: none; }
+
+.analytics-page__inner {
+  /* Horizontal inset from the app-wide gutter (App.css) so Analytics lines up
+     with Maintenance and its Sensor Monitor grid. Vertical padding untouched —
+     the bottom value clears the fixed footer nav. */
+  padding: 12px var(--app-gutter, 16px) calc(64px + 16px);
+}
+
+/* The 639px 10px override is gone: the gutter already floors at 20px, and
+   overriding it here put Analytics inboard of every other tab on a phone. */
+
+/* ── Header ─────────────────────────────────────────────────── */
+.an-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+/* Titleless header: a single right-aligned row (window label + report button),
+   so it needs neither the height nor the gap a heading block did. */
+.an-head--bare { justify-content: flex-end; margin-bottom: 8px; }
+.an-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+.an-subtitle {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+/* Range selector — filter chips. */
+.an-range {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.an-range__btn {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.an-range__btn:hover { border-color: var(--border-hi); color: var(--ink); }
+.an-range__btn--active { background: var(--elevated); border-color: var(--border-hi); color: var(--ink); }
+
+.an-empty {
+  font-size: 12px;
+  color: var(--text-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+/* ── Top row: Summary + the KPI cards, ONE row, EQUAL widths ───────
+   Was a 220px summary beside a 2×2 KPI block, which on a 1,480px page made
+   each KPI 620px wide — a two-word label and a three-digit number floating in
+   half a metre of card — while the summary, the densest tile of the row, got
+   less than a sixth of it. Equal columns instead: every card is the same width,
+   and the sparklines get the height the 2×2 stack used to spend on a second
+   row. Four columns = the Summary plus three KPIs (see the note where "Distance
+   per trip" was removed); keep this count in step with what StatCards render. */
+.an-top {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;   /* every card matches the tallest — the summary */
+  margin-bottom: 10px;
+}
+/* Fewer columns as the page narrows, so a card never drops under ~200px. */
+@media (max-width: 980px) { .an-top { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .an-top { grid-template-columns: minmax(0, 1fr); } }
+
+/* The KPI wrapper is a grouping in the JSX only — `display: contents` drops its
+   box so the four cards become direct children of .an-top and take its columns
+   alongside the summary. Without this they'd share a single fifth of the row. */
+.an-kpis { display: contents; }
+
+/* Summary card: the tallest of the five, so it sets the row height. Keeping it
+   compact is what keeps the KPI sparklines beside it a sensible size — every
+   pixel added here is added to four other cards that have nothing to put in it. */
+.an-distance { display: flex; flex-direction: column; }
+/* Body fills the tall card and spreads the headline, tiles and footer evenly, so
+   there's no dead whitespace. Inner padding keeps the children off the edges. */
+.an-dist-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 10px;
+  padding: 8px 4px 2px;
+}
+.an-dist-total { text-align: center; }
+.an-dist-total__value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+.an-dist-total__value span { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.an-dist-total__label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+/* The two period tiles, side by side. They used to stack, which was right when
+   the card was 220px wide and had two KPI rows of height to fill; at an equal
+   fifth of the row it is wide enough for both and the saved ~60px of height
+   comes off all five cards. The double class outranks the base `.an-avgs`
+   3-column rule that appears later in this file. */
+.an-avgs.an-avgs--pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.an-avgs.an-avgs--pair .an-avg { text-align: center; padding: 8px 8px; }
+/* The card's provenance line — "Today and the 27 days before it, whether or not
+   a machine worked · 23,232 h and 41,905 km across 163 units reporting · …".
+   It is the sentence that says what the headline figure was measured OVER, so
+   it is the last thing that should be unreadable.
+
+   It was 10px at --text-3. On the dark card (#0a0a0b) that muted grey measures
+   about 5.6:1 — which passes AA for BODY text and is why it was never caught,
+   but AA's 4.5 floor assumes ~16px. At 10px the strokes are thin enough that
+   the line reads as a smudge, and on dark it effectively disappears; the same
+   10px on the light card is legible, which is why this only ever showed up in
+   dark mode.
+
+   Now --text-2 (~9.2:1) at 11.5px with the line-height a two-line sentence
+   needs. --text-3 stays in the file for genuinely tertiary marks; this line is
+   not one. */
+.an-dist-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.an-kpi {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  /* Column so the sparkline can take whatever height is left after the label,
+     value and caption. The cards are stretched to the summary's height, and a
+     fixed 56px plot would leave that surplus as dead space at the bottom. */
+  display: flex;
+  flex-direction: column;
+}
+.an-kpi__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.an-kpi__label { font-size: 11px; color: var(--text-2); font-weight: 600; }
+.an-kpi__delta { font-size: 10px; font-weight: 700; border-radius: 20px; padding: 1px 6px; }
+.an-kpi__delta.up   { color: #22c55e; background: rgba(34,197,94,0.12); }
+.an-kpi__delta.down { color: #ef4444; background: rgba(239,68,68,0.12); }
+.an-kpi__value { font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.an-kpi__unit  { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.an-kpi__sub   { font-size: 10px; color: var(--text-2); margin-top: 1px; }
+/* Grows into the leftover height; 56px is the floor it used to be pinned at. */
+.an-kpi__spark { flex: 1 1 auto; min-height: 56px; }
+
+/* Hallmark · macrostructure: Bento Grid · genre: modern-minimal
+ * theme: in-project an-* tokens (preserved — app consistency over rotation)
+ * enrichment: none · motion: none (project is motion-cut)
+ * scope: the "Today on the ground" card only
+ * pre-emit critique: P4 H5 E5 S5 R4 V4
+ *
+ * What changed, and why:
+ *
+ * A STATEMENT BEFORE THE EXHIBITS. The card carried six charts and not one
+ * plain number. Every fact was locked inside a plot and had to be decoded, so
+ * a reader wanting the state of the day had no way in — the card had exhibits
+ * and no headline. Three fetched figures now open it. Three, not four: the
+ * obvious fourth is distance covered today, which the Summary card already
+ * prints a few hundred pixels above, and printing the same 1,534 km twice in
+ * one viewport is furniture, not hierarchy.
+ *
+ * ONE TILE VOICE. Two of the four tiles named themselves and two did not — a
+ * reader met two unlabelled rings and had to work them out from their own
+ * leader labels. And three tiles carried an accent rail while the fourth was
+ * bare. All four are now titled at the same 11px/600 and railed in palette
+ * order, so the row reads as one instrument rather than four widgets that
+ * arrived separately.
+ *
+ * THE NOTE MOVED UP. It defines what a START is — without it the starts chart
+ * cannot be read at all — and it sat at the foot of the card underneath two
+ * fuel charts that have nothing to do with it. It now sits directly under the
+ * tiles it explains and lost the half that repeated what the tiles now say.
+ *
+ * WHAT DID NOT CHANGE, deliberately: the four tile tracks stay equal. Bento
+ * wants varying spans, but all four tiles need about 300px for content reasons
+ * — the mix pie's own comment records its labels colliding below that, and the
+ * gauge carries eleven tick labels. Forcing 4/4/2/2 would break two charts to
+ * satisfy a rule. The mixed spans live across cells instead: lead 4, tiles 1
+ * each, fuel pair 2 each. The fuel pair also stays equal width and height,
+ * which is a standing instruction, not an accident.
+ */
+
+/* ── Today on the ground ─────────────────────────────────────────
+   A DIFFERENT WINDOW from every other card on this page (the fleet day, not the
+   month), so it gets its own band above the month grid rather than a cell
+   inside it — a "4 trucks dispatched" sitting in the same row as a monthly
+   total is how two windows get read as one. `an-card--wide` is not used here:
+   this sits outside .an-grid entirely. */
+/* Hallmark · redesign: Today on the ground (KASULU) · 2026-08-20
+ * order: counters -> machine charts -> one closing note
+ * removed: 561px of dead grid columns, 310px of stretch inside the shorter
+ *          card, 24 repeated bar rows, a second mid-section note
+ * section height 793 -> 466px at 1280. Tokens unchanged — this is a rhythm
+ * fix inside the app's own system, not a re-theme.
+ */
+.an-today { margin-bottom: 10px; }
+
+/* The head wraps rather than overflowing its own box.
+   At 320px "20 Aug · since 00:00 Nairobi" ran past the card edge — the page
+   itself never scrolled, so it read as a clipped date rather than a layout
+   fault, which is the kind of thing nobody reports and everybody notices. */
+.an-today .an-card__head { flex-wrap: wrap; row-gap: 2px; }
+.an-today .an-card__hint { white-space: normal; }
+/* ── The lead ledger ──────────────────────────────────────────────────────
+ *
+ * The card's opening statement, above the exhibits.
+ *
+ * It is a ROW OF TYPE, not four more tiles. Giving these the tile treatment —
+ * surface, radius, accent rail — would have made an eight-tile card in which
+ * the headline and the evidence look like peers, which is the flatness this
+ * redesign exists to fix. A rule underneath separates statement from evidence
+ * and costs one pixel.
+ */
+/* Three tracks, and they are auto-width rather than equal quarters: three
+   figures stretched across 1300px of card put "run today" a third of a screen
+   from "working now" and stop reading as one statement. */
+.an-today__lead {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto)) 1fr;
+  gap: 4px 40px;
+  margin: 10px 0 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.an-lead { min-width: 0; }
+/* PROPORTIONAL, like .an-ops__value and for the same reason: tabular gives
+   every digit a zero's width, which at this size leaves "146" visibly gappy.
+   These four do not form a column, so they have nothing to align to. */
+.an-lead__v {
+  font-size: 25px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.an-lead__u { font-size: 12px; font-weight: 600; color: var(--text-2); margin-left: 3px; }
+.an-lead__k {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+/* Two-up before it wraps a label. Four 25px figures need about 90px each and
+   the labels need more; below 640 the row starts breaking "covered today"
+   across two lines, which reads as five figures rather than four. */
+@media (max-width: 640px) {
+  .an-today__lead { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+}
+@media (max-width: 340px) {
+  /* The floor. Three figures hold to 340 — the longest label is "STARTED
+     TODAY" at about 85px, so three plus gaps clear a 309px card — and below
+     that they go two up rather than the type shrinking. Three on one line is
+     what makes them read as one statement instead of three stats. */
+  .an-today__lead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.an-today__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* A floor on every tile in the row, not a height on the chart one.
+ *
+ * The tiles are all as tall as the tallest, so raising one raises all four and
+ * they stay level. The figure is measured twice over: it is what brings this
+ * card level with Daily activity (274px, the reference the operator gave), and
+ * it is what leaves the donut enough column to lay six leader labels out
+ * without two of them colliding — at 136px, which is where the text tiles
+ * settle on their own, KASULU's CTR and OTHER overlapped and clipped. */
+/* 178px was the figure that put this card level with Daily activity. 196 gives
+   the donut eighteen more pixels of column, which is what the spread pass works
+   with when it lays out KASULU's eight labels — at 178 the gaps came to exactly
+   one label height, resolved but with nothing in hand. The card is about 292px
+   at this floor rather than 274.
+
+   The ring does NOT grow with it — see outerRadius in FleetMixPie. Recharts
+   sizes a percentage radius off the smaller of width and height, so a taller
+   tile would push the ring sideways into the margin its labels need. */
+.an-today__grid > .an-ops { min-height: 196px; }
+
+
+/* One column below the counter row's own breakpoint: two lists of bars side by
+   side stop being readable long before four figures do. */
+@media (max-width: 900px) { .an-today__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 460px) { .an-today__grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tile. The accent is a 3px LEFT RAIL and nothing else — it identifies the
+   tile without the reader having to decode a hue to get at the number, and it
+   keeps the series colour off text that would fail contrast on the light
+   surface. `--ops-accent` is set per tile from the JSX. */
+.an-ops {
+  position: relative;
+  background: var(--elevated);
+  border-radius: 10px;
+  padding: 11px 12px 11px 15px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.an-ops::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--ops-accent, var(--border));
+}
+/* Sentence case, not uppercase. `text-transform: uppercase` was shouting the
+   label back at the operator — "TRUCKS DISPATCHED" over a figure — and it also
+   made the JSX string a lie about what the page says. The letter-spacing was
+   tuned for caps, where the extra tracking keeps glyphs from crowding; at 9.5px
+   in mixed case it reads as a gap, so it comes down with the transform. Bumped
+   a little in size because lowercase has less presence at the same px. */
+.an-ops__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-2);
+}
+/* PROPORTIONAL figures, deliberately. `tabular-nums` gives every digit the
+   width of a zero, which at 26px leaves a number like 597 visibly gappy. The
+   columns below keep tabular, because those have to align down the card. */
+.an-ops__value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-top: 2px;
+}
+.an-ops__unit { font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0; }
+.an-ops__sub  { font-size: 10px; font-weight: 600; color: var(--text-3); letter-spacing: 0; }
+.an-ops__lines {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.an-ops__line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.an-ops__line--em .an-ops__v { color: var(--ink); font-size: 12.5px; }
+.an-ops__line--em .an-ops__k { color: var(--text-2); font-weight: 600; }
+.an-ops__k { font-size: 11px; color: var(--text-2); }
+.an-ops__v {
+  font-size: 11.5px; color: var(--ink); font-weight: 700;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* Nested-share row: label · track · count. The three hour figures are
+   cumulative, so a track against the day's total shows the nesting that three
+   bare numbers would invite a reader to sum instead. */
+.an-ops__barrow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+/* The track carries an OUTLINE, not just a fill.
+   `--border` against `--elevated` measures 1.14:1 on the light theme and
+   1.34:1 on the dark one, so the track — which IS the denominator, the 100%
+   every bar on these tiles is a share of — could not be seen at either end. A
+   proportion whose whole is invisible is a bar of unknown length. The hairline
+   is `--text-3`: 4.39:1 light and 5.26:1 dark against the tile, past the 3:1
+   WCAG sets for a boundary that carries meaning. */
+.an-ops__track {
+  height: 5px;
+  border-radius: 20px;
+  background: var(--border);
+  box-shadow: inset 0 0 0 1px var(--text-3);
+  overflow: hidden;
+  min-width: 24px;
+}
+.an-ops__fill {
+  display: block;
+  height: 100%;
+  border-radius: 20px;
+  min-width: 2px;          /* a zero hour still draws, so it reads as measured */
+  transition: width 0.3s ease;
+}
+
+/* ── Early sign-outs: one nested bar, three disjoint bands ───────────────
+   See EarlyBands in AnalyticsScreen.jsx for why this replaced three separate
+   cumulative bars. */
+/* No rule and no margin of its own: OpsBlock already wraps every child in
+   `.an-ops__lines`, which carries the divider under the figure. Adding a
+   second here drew one line, then a gap, then the bar. */
+.an-ops__bands { margin-top: 1px; }
+
+/* Taller than the single-measure track above, because this one is read for the
+   WIDTH OF ITS PARTS and not merely for how far it reaches. Same outline and
+   the same reason. */
+.an-ops__stack {
+  display: flex;
+  height: 10px;
+  border-radius: 20px;
+  background: var(--border);
+  box-shadow: inset 0 0 0 1px var(--text-3);
+  overflow: hidden;
+}
+/* The hairline between bands, in the TILE's colour, so it reads as a gap in
+   the bar rather than as a fourth, thinner band. The light theme needs it:
+   the last two steps of the ramp are 1.38:1 apart, which is as far as one hue
+   goes while each step still clears 3:1, and two adjoining fills that close
+   would otherwise merge into one slice of indeterminate meaning. */
+.an-ops__seg + .an-ops__seg { border-left: 1px solid var(--elevated); }
+.an-ops__seg { transition: width 0.3s ease; }
+
+.an-ops__bandkey {
+  margin-top: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.an-ops__band { display: flex; align-items: center; gap: 7px; }
+.an-ops__sw {
+  width: 9px; height: 9px; border-radius: 2px; flex: none;
+  /* The swatch is small enough that its own edge matters — a 9px block of
+     --dawn-1 on the light tile is 2.96:1, just under, and the ring settles it
+     without touching a ramp two cards share. */
+  box-shadow: 0 0 0 1px var(--elevated), 0 0 0 2px var(--border);
+}
+.an-ops__bandk { font-size: 11px; color: var(--text-2); }
+/* Pushed right and tabular, so the three counts read as a column that can be
+   compared and, being disjoint, added. */
+.an-ops__bandv {
+  margin-left: auto;
+  font-size: 11.5px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What the rest of the track is. Muted: it names the remainder, it is not a
+   finding. */
+.an-ops__rest {
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* A day that was measured and had nothing in it. Not an error colour — an
+   empty morning is an ordinary morning. */
+.an-ops__none {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* A caveat about the figure above it, set apart from the reading rows so it is
+   not mistaken for one more of them. */
+.an-ops__caveat {
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+/* ── Today: the plate + crew lists ──────────────────────────────── */
+.an-today__lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+@media (max-width: 900px) { .an-today__lists { grid-template-columns: minmax(0, 1fr); } }
+
+.an-opslist {
+  background: var(--elevated);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.an-opslist__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+/* The identity mark for the list, matching its tile's rail. */
+.an-opslist__head::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--ops-accent, var(--border));
+  flex: 0 0 auto;
+}
+.an-opslist__title { font-size: 11.5px; font-weight: 700; color: var(--ink); }
+.an-opslist__count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.an-opslist__empty { font-size: 11px; color: var(--text-3); padding: 8px 0 4px; }
+
+/* Capped so a 60-truck day doesn't push the month cards off the fold; the list
+   scrolls inside the card instead. */
+.an-opslist__rows { display: flex; flex-direction: column; max-height: 168px; overflow-y: auto; }
+.an-opslist__rows::-webkit-scrollbar { width: 6px; }
+.an-opslist__rows::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.an-opslist__row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1.25fr) minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.an-opslist__row:last-child { border-bottom: none; }
+.an-opslist__row--head {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-top: 0;
+  position: sticky;
+  top: 0;
+  background: var(--elevated);
+  z-index: 1;
+}
+.an-opslist__row--head span:last-child { text-align: right; }
+
+/* The plate is the row's key — boxed and monospaced-by-figure so a column of
+   them scans as registrations rather than as a sentence. */
+.an-opslist__plate {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 5px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-opslist__crew,
+.an-opslist__dest {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-opslist__crew { color: var(--ink); }
+.an-opslist__dest { color: var(--text-2); }
+.an-opslist__at {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* "Telemetry watched this one leave" — a mark on the sign-out time, never a
+   figure of its own. Most rows will not carry it, so it has to read as extra
+   confirmation rather than as the absence of something. */
+.an-opslist__gate {
+  margin-left: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ops-accent, var(--text-3));
+}
+
+/* Closes the section. There used to be two of these, one wedged between the
+   counter row and the charts, which split the card into two half-finished
+   blocks — the top border is what lets one note sit under both rows and still
+   read as a footnote rather than a caption for whatever is directly above. */
+/* Sits between the tile row and the fuel pair, explaining the tiles above it.
+   No top rule any more: it is no longer the card's footer, and a rule there
+   would cut the band it belongs to away from it. The measure is capped because
+   a 1300px line of 10px text is unreadable however short the sentence. */
+.an-today__note {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 9px;
+  line-height: 1.5;
+  max-width: 88ch;
+}
+
+/* ── Card grid ───────────────────────────────────────────────── */
+.an-grid {
+  display: grid;
+  /* NOT two equal halves. Fuel on the LEFT in the elastic track, Daily activity
+     on the RIGHT sized to its own content.
+
+     Daily activity is a fixed-size thing — a heatmap of capped cells and four
+     short highlight tiles — so an equal half of a 1,480px page was ~200px wider
+     than it had anything to draw, and the surplus showed up as blank card down
+     its right side. The fuel chart is the opposite: one bar pair per day, so it
+     uses every pixel it is given. Hence content-width for the one and the
+     remainder for the other, at any viewport.
+
+     The asymmetry has a sharp edge, and it is worth naming: because this track
+     is content-sized, it does NOT shrink, so EVERY pixel the page loses comes
+     out of the fuel chart. Measured on production, 1,920px down to 1,280px cost
+     the chart 615px of its 1,142px and the heatmap none of its 641px. That is
+     why the heatmap's cell cap scales with the viewport below 1,600px (see
+     .an-heat__grid): the shrinking has to be shared, and this track is the only
+     one that can volunteer.
+
+     The 340px floor on the fuel track is load-bearing: a bare `1fr` beside a
+     max-content track lets the max-content one hold its full size and squeezes
+     the fr instead, which crushed the fuel chart to 203px at 760px wide. */
+  grid-template-columns: minmax(340px, 1fr) minmax(0, max-content);
+  gap: 10px;
+  /* Cards take their CONTENT's height and align at the top, rather than being
+     stretched to match the tallest in the row. Stretching looked tidier in the
+     abstract and cost ~150px of dead space inside the shorter card, which is
+     the white space this page kept accumulating: a 5-cell heatmap floating in
+     a box sized for a fuel chart. Aligned at the top, each card ends where its
+     content does. */
+  align-items: start;
+}
+/* Stacks earlier than the old 720px: side by side, the fuel chart needs its
+   340px floor and Daily activity needs whatever its cells add up to.
+
+   Re-derived after the cell cap started scaling. Below 1,118px the clamp is
+   pinned to its 38px floor, so the card is 63 + 7×38 + 146 = 475px; with the
+   chart's 340px floor and the 10px gap the row needs 825px of grid, and the
+   grid runs about 102px narrower than the viewport. Side by side therefore
+   survives to ~927px. 940 is kept rather than tightened to it: the margin is
+   only 13px, the 102px of chrome is measured rather than guaranteed, and
+   stacking a few pixels early costs nothing where being a few pixels late
+   crushes both cards at once. */
+@media (max-width: 940px) { .an-grid { grid-template-columns: minmax(0, 1fr); } }
+/* One card in the row (a window with fuel but no trips, or the reverse) — the
+   two-track definition would otherwise leave its partner's column standing
+   empty beside it. */
+.an-grid:has(> .an-card:only-child) { grid-template-columns: minmax(0, 1fr); }
+
+.an-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.an-card--wide { grid-column: 1 / -1; }
+
+.an-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.an-card__title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+/* The window label beside a card title — "28 days to today", "August 2026".
+   Numeric, so tabular figures keep it from shifting as the window changes; 600
+   because at 12px against a bold title it otherwise reads as a stray fragment
+   rather than the title's qualifier. */
+.an-card__hint  { font-size: 12px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-card__empty { font-size: 11px; color: var(--text-2); text-align: center; padding: 14px 0; }
+
+/* ── Ranked horizontal bars (products / depots) ──────────────── */
+.an-ranked { display: flex; flex-direction: column; gap: 7px; max-height: 260px; overflow-y: auto; }
+.an-ranked::-webkit-scrollbar { width: 6px; }
+.an-ranked::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.an-ranked__row {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.an-ranked__label {
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-ranked__barwrap {
+  height: 8px;
+  background: var(--elevated);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.an-ranked__bar { height: 100%; border-radius: 20px; min-width: 2px; transition: width 0.3s ease; }
+.an-ranked__value { font-size: 12px; color: var(--ink); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.an-ranked__unit { color: var(--text-2); font-weight: 500; }
+.an-ranked__sub  { color: var(--text-2); font-weight: 500; }
+
+/* ── Weekday bars (busy days) ─────────────────────────────────── */
+.an-weekbars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  /* Fills whatever height the row settles at rather than sitting at a fixed
+     150px inside it. Its neighbour (the heatmap) is the taller card and the
+     grid stretches both to match, so a fixed height here left 106px of dead
+     space under the bars — the bars now use it, and the two cards read as one
+     row instead of one chart floating in a tall box. */
+  flex: 1;
+  min-height: 150px;
+}
+.an-weekbar { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; gap: 4px; }
+.an-weekbar__track { width: 100%; flex: 1; display: flex; align-items: flex-end; }
+.an-weekbar__fill { width: 100%; border-radius: 4px 4px 0 0; min-height: 2px; transition: height 0.3s ease; }
+.an-weekbar__val { font-size: 11px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.an-weekbar__lbl { font-size: 10px; color: var(--text-2); }
+
+/* ── Timely vs interrupted split ─────────────────────────────── */
+.an-split__bar {
+  display: flex;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--elevated);
+}
+.an-split__seg { height: 100%; transition: width 0.3s ease; }
+.an-split__seg--timely { background: #22c55e; }
+.an-split__seg--interrupted { background: #ef4444; }
+.an-split__legend { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+.an-split__key { font-size: 12px; color: var(--text-2); display: inline-flex; align-items: center; gap: 5px; }
+.an-split__key b { color: var(--ink); }
+.an-split__dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.an-note { font-size: 10px; color: var(--text-3); margin-top: 10px; line-height: 1.4; }
+
+/* ── Chart hover tooltip (KPI sparklines + fuel chart) ───────────
+   Wrapper anchors the floating value pill above the hovered bar/point;
+   pointer events (not just mouse) so a tap shows values on touch too. */
+.an-spark { position: relative; touch-action: pan-y; }
+.an-spark__tip {
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%);
+  background: var(--card, #14161c);
+  border: 1px solid var(--border, #2a2d35);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink, #e6edf3);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+/* ── Legends ─────────────────────────────────────────────────── */
+.an-legend { display: flex; gap: 16px; margin-top: 6px; }
+.an-legend__key { font-size: 10px; color: var(--text-2); display: inline-flex; align-items: center; gap: 5px; }
+.an-legend__swatch { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* ── Daily activity — heatmap + highlights ───────────────────── */
+/* The two halves were the wrong way round: the heatmap was fixed at its natural
+   269px and the four highlights took `flex: 1`, so on a 735px card each
+   highlight was a 407px box holding about 90px of text — ~330px of nothing down
+   the right edge. Now the HIGHLIGHTS are content-width and the HEATMAP takes the
+   slack, spending it on bigger cells (capped below) instead of leaving it blank. */
+.an-daily {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+@media (max-width: 520px) { .an-daily { flex-direction: column; } }
+.an-daily__heat {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.an-daily__side {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+@media (max-width: 520px) {
+  .an-daily__side { border-left: none; border-top: 1px solid var(--border); padding-left: 0; padding-top: 14px; }
+}
+.an-hl__label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.an-hl__value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.an-hl__sub { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+
+/* Cells are square (aspect-ratio below), so the cell cap is also a cap on how
+   tall a week row gets — the grid may take the width the highlights gave back,
+   but it can't turn a five-day window into a wall of tiles.
+
+   The cap was 44px and was raised to 62px. Nothing downstream was updated with
+   it, and the cost landed somewhere non-obvious: this card sits in the
+   max-content track of .an-grid, so its width is whatever the cells add up to,
+   and the fuel chart beside it gets the remainder. Card width is
+
+       63px (row label + 7 gaps) + 7c + 146px (highlights, gap, padding)
+
+   so 44px made a 517px card — the ~515px .an-grid's own note is written around
+   — and 62px makes a 643px one. On a 1,920px page there was slack to absorb the
+   extra 126px. On a laptop there is not: measured on production at 1,280px the
+   heatmap held 641px against the fuel chart's 527px, so the SECONDARY card was
+   wider than the chart it supports. The two cross at about 1,410px.
+
+   Hence a cap that scales with the page below 1,600px instead of a constant.
+   3.4vw reaches 62px at 1,824px, so anything at or above that — every screen
+   this layout was tuned on — renders exactly as before; the floor of 38px is
+   what keeps a cell legible once .an-grid is close to stacking. */
+.an-heat__grid {
+  display: grid;
+  grid-template-columns: auto repeat(7, minmax(14px, 62px));
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+/* Rescaled for the 90% app scale. Authored as 1599 LAYOUT px; above the
+   1024px threshold the app lays out at viewport/0.9, so the viewport that
+   corresponds to it is 1439. 1599 x 0.9, floored so 1439 gives 1598.9 layout px and 1440 gives 1600.
+   See --app-zoom in src/index.css. */
+@media (max-width: 1439px) {
+  .an-heat__grid {
+    grid-template-columns: auto repeat(7, minmax(14px, clamp(38px, calc(var(--vw) * 3.4), 62px)));
+  }
+}
+.an-heat__wd {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-align: center;
+}
+.an-heat__rowlbl {
+  font-size: 9px;
+  color: var(--text-3);
+  text-align: right;
+  padding-right: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.an-heat__cell {
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  border: 1px solid rgba(128, 128, 128, 0.14);
+  transition: transform 0.1s ease;
+}
+.an-heat__cell:hover { transform: scale(1.15); }
+.an-heat__cell--void { border-color: transparent; }
+.an-heat__legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 9px;
+  color: var(--text-2);
+}
+.an-heat__swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid rgba(128, 128, 128, 0.14);
+}
+
+/* ── Fuel consumption & cost ─────────────────────────────────── */
+.an-fuel-rates { display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap; }
+.an-fuel-rate {
+  font-size: 12px;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+}
+.an-fuel-rate--active { border-color: var(--border); background: var(--elevated); }
+.an-fuel-rate b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.an-fuel-rate__dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+.an-calc {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.an-calc__row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.an-calc__k { font-size: 12px; color: var(--text-2); }
+.an-calc__k em { font-style: normal; color: var(--text-3); font-size: 10.5px; }
+.an-calc__v { font-size: 12.5px; color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.an-calc__row--em .an-calc__v { color: #22c55e; font-size: 15px; }
+/* Same lift, and the same reason, as `.an-dist-foot` above: 10px on --text-3
+   measures ~5.6:1 against the dark card, which passes AA for BODY text and is
+   unreadable at this size. A caveat nobody can read is worse than no caveat,
+   because the number above it still gets quoted. */
+.an-calc__note { font-size: 11.5px; color: var(--text-2); margin-top: 6px; line-height: 1.5; }
+
+/* ── Distance averages ───────────────────────────────────────── */
+.an-avgs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.an-avg {
+  background: var(--elevated);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.an-avg__label { font-size: 10px; color: var(--text-2); font-weight: 600; }
+.an-avg__value { font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.an-avg__unit { font-size: 10px; color: var(--text-2); font-weight: 600; }
+
+/* Dark-surface steps for the chart palette. Selected for the dark band
+   (OKLCH L 0.48–0.67, ≥ 3:1 on #0a0a0b), not derived by lightening the light
+   values — see the note beside the light slots at the top of this file. */
+.app--dark .analytics-page {
+  /* The dawn ramp inverts on the dark ground: the constraint there is the
+     floor, not the ceiling, so the deepest step is the one that has to be
+     lifted to clear it. 3.79:1, 6.53:1 and 10.51:1 against #0a0a0b, and 1.72
+     and 1.61 between the steps — a wider ramp than the light surface allows. */
+  --dawn-3: #2d6cc0;
+  --dawn-2: #4f97e8;
+  --dawn-1: #8ec2f2;
+
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #8ea446;
+  --chart-6: #c383b9;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+}
+
+/* The window control is components/header/MonthPicker, which brings its own
+   stylesheet — the static `.an-range__label` it replaced is gone. `.an-range`
+   keeps the row (picker + report button) and must not clip the picker's popover,
+   which is why it sets no overflow of its own. */
+.an-range { align-items: center; }
+
+/* ── Machine operations (KASULU plant) ────────────────────────────────────
+ *
+ * Two charts on the machines' own telemetry, below the sign-out blocks. They
+ * reuse .an-ops wholesale; only the two structures the existing blocks have no
+ * equivalent for are defined here.
+ */
+
+
+
+
+
+/* ── Fleet-state donut, in the tile row ──────────────────────────────────
+ *
+ * Restored verbatim from the Fleet-state card it used to head — same 62/92
+ * radii, same centre overlay, same legend rows. Only the container changed:
+ * it now sits in a quarter of the tile row rather than a 900px band, which is
+ * the shape it was drawn for and the reason it left the card it was in.
+ */
+/* Ring above, labels BELOW it — not in a column beside it.
+ *
+ * The legend column was 96px of the tile's 317, taken off the ring's width for
+ * four rows of text that are two words and a number each. Underneath, the same
+ * four sit on one or two lines and the ring gets the whole width back: it is
+ * sized off the smaller of width and height, so the width it gains is width it
+ * can actually use. */
+.an-fleet__top {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The centre label is absolutely placed over the hole, so the chart and the
+   figure cannot disagree about where the middle is. */
+.an-fleet__donut { position: relative; min-width: 0; height: 100%; }
+.an-fleet__chart { width: 100%; height: 100%; aspect-ratio: auto; }
+.an-fleet__centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;   /* the slices underneath stay hoverable */
+}
+.an-fleet__centre-v {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.an-fleet__centre-l {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* A row that wraps, centred under the ring. Centred rather than left-aligned
+   because the thing it labels is centred, and a legend hanging off one edge of
+   a circle reads as belonging to something else. */
+.an-fleet__legend {
+  display: flex;
+  flex-flow: row wrap;
+  justify-content: center;
+  gap: 2px 12px;
+  min-width: 0;
+}
+.an-fleet__leg { display: flex; align-items: center; gap: 5px; font-size: 10.5px; }
+.an-fleet__dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+.an-fleet__leg-k {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* A fixed gap, not `margin-left: auto`. Auto was right in a column, where it
+   pushed every figure to a shared right edge; in a row it would stretch each
+   item to fill the line and scatter the pairs. */
+.an-fleet__leg-v {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.an-fleet__empty { font-size: 10.5px; color: var(--text-3); }
+
+@media (max-width: 460px) {
+  /* Full-width tile. The ring has more room than it needs, so the labels get a
+     little more air rather than the ring getting larger — four states on one
+     line is what makes them readable as a set. */
+  .an-fleet__legend { gap: 3px 16px; }
+}
+
+/* ── Fleet state · Workbench ───────────────────────────────────────────────
+ *
+ * Redesigned 2026-08-21. The previous shape put a 190px donut beside a 90px
+ * legend in a row about 900px wide: roughly 200px of height spent publishing
+ * four numbers, most of it empty, above a table that could only be looked at.
+ *
+ * The four numbers are now a proportional rail — one bar, full width, each
+ * segment sized to its share — and the rail is the state filter. A chart you
+ * can only look at has to earn its space on looks alone; one you can click is
+ * the control and the picture at once.
+ *
+ * Every colour here is a token. The version this replaces hardcoded #22c55e,
+ * #f59e0b, #ef4444 and rgba(59,130,246,…) straight into the pills and chips,
+ * so the card ignored the page's own validated palette and could not follow it
+ * into the dark band.
+ */
+.an-fleet { margin-bottom: 10px; }
+
+/* ── State rail ──────────────────────────────────────────────────────────
+ * Segments grow by count, so the bar IS the distribution. */
+.an-rail {
+  display: flex;
+  gap: 3px;
+  margin: 2px 0 10px;
+}
+.an-rail__seg {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: opacity 140ms var(--ease-out, ease-out);
+}
+.an-rail__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--seg);
+  transition: height 140ms var(--ease-out, ease-out);
+}
+.an-rail__k {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-rail__v {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+/* Unselected segments recede rather than the selected one lighting up, so the
+   bar stays a true picture of the distribution either way. */
+.an-rail:has(.an-rail__seg--on) .an-rail__seg:not(.an-rail__seg--on) { opacity: 0.4; }
+.an-rail__seg:hover .an-rail__bar,
+.an-rail__seg--on .an-rail__bar { height: 9px; }
+.an-rail__seg:focus-visible {
+  outline: 2px solid var(--chart-1);
+  outline-offset: 2px;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+.an-fleet__bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 9px;
+}
+.an-fleet__search { flex: 0 0 auto; }
+.an-fleet__input {
+  width: 150px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+}
+.an-fleet__input::placeholder { color: var(--text-3); }
+.an-fleet__input:hover { border-color: var(--border-hi); }
+.an-fleet__input:focus-visible {
+  outline: 2px solid var(--chart-1);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.an-fleet__cats { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+
+.an-chip {
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 120ms var(--ease-out, ease-out),
+              border-color 120ms var(--ease-out, ease-out);
+}
+.an-chip span { opacity: 0.6; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.an-chip:hover { color: var(--ink); border-color: var(--border-hi); }
+.an-chip--on {
+  color: var(--ink);
+  border-color: var(--chart-1);
+  /* A left rail rather than a tinted fill: the fill version needed an alpha
+     blue that existed in neither theme's palette. */
+  box-shadow: inset 2px 0 0 var(--chart-1);
+}
+.an-chip--clear { margin-left: auto; color: var(--text-3); }
+.an-chip:focus-visible { outline: 2px solid var(--chart-1); outline-offset: 1px; }
+
+/* ── Table ───────────────────────────────────────────────────────────────
+ * Bounded, and the table keeps its natural width inside it: ten columns do
+ * not fit a phone, and squeezing them is worse than scrolling them. The page
+ * never scrolls sideways — the overflow belongs to this box. */
+.an-fleet__scroll {
+  max-height: min(calc(var(--vh) * 52), 420px);
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.an-tbl {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.an-tbl th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--elevated);
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.an-tbl__sort {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 120ms var(--ease-out, ease-out);
+}
+.an-tbl th.r .an-tbl__sort { justify-content: flex-end; }
+.an-tbl__sort:hover { color: var(--ink); }
+.an-tbl__sort:focus-visible { outline: 2px solid var(--chart-1); outline-offset: -2px; }
+
+/* A caret drawn in CSS, not a glyph: an arrow character sits on a different
+   baseline in every fallback font and drifts against the label. */
+.an-tbl__caret {
+  width: 0; height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out, ease-out);
+}
+.an-tbl__sort:hover .an-tbl__caret { opacity: 0.35; border-top: 4px solid currentColor; }
+.an-tbl__caret--asc  { opacity: 1; border-bottom: 4px solid var(--chart-1); border-top: 0; }
+.an-tbl__caret--desc { opacity: 1; border-top: 4px solid var(--chart-1); border-bottom: 0; }
+
+.an-tbl td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.an-tbl .r { text-align: right; }
+.an-tbl tbody tr { transition: background-color 100ms var(--ease-out, ease-out); }
+.an-tbl tbody tr:hover td { background: var(--hover, rgba(127, 127, 127, 0.07)); }
+/* Rows are focusable so the table can be read by keyboard, and the focused row
+   is marked on its leading edge rather than by an outline the scroll box would
+   clip. */
+.an-tbl tbody tr:focus-visible {
+  outline: none;
+  background: var(--hover, rgba(127, 127, 127, 0.1));
+  box-shadow: inset 2px 0 0 var(--chart-1);
+}
+.an-tbl__plate { font-weight: 600; }
+.an-tbl__cat { color: var(--text-3); font-size: 10px; margin-left: 6px; }
+.an-tbl__na { color: var(--text-3); opacity: 0.6; }
+.an-tbl__empty {
+  padding: 22px 10px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 11.5px;
+  white-space: normal;
+}
+
+/* ── Date range ───────────────────────────────────────────────
+   Sits in the same bar as the search box and pushes to the far end: the search
+   narrows WHICH units, this narrows WHEN, and keeping them apart stops the two
+   reading as one compound control.
+
+   `margin-left: auto` rather than `justify-content: space-between` on the bar,
+   because the bar wraps — at a narrow card the dates drop to their own line and
+   an auto margin simply stops applying, where space-between would have left a
+   gap the width of the card between two controls on one row. */
+.an-dates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.an-dates__f {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.an-dates__in {
+  padding: 4px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  /* The native picker indicator is drawn by the browser in its own colour and
+     goes near-invisible on the dark theme. `color-scheme` hands it the surface
+     it is actually sitting on, which is the only way to tint it without
+     replacing the control. */
+  color-scheme: light dark;
+}
+.an-dates__in:hover { border-color: var(--border-hi); }
+.an-dates__in:focus-visible {
+  outline: 2px solid var(--chart-1);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.an-dates__clear {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--chart-1);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.an-dates__clear:hover { background: var(--hover, rgba(127, 127, 127, 0.08)); }
+.an-dates__clear:focus-visible { outline: 2px solid var(--chart-1); outline-offset: 1px; }
+
+/* ── Per-run disclosure ───────────────────────────────────────
+   A unit row opens onto its own runs. The chevron gets a column of its own
+   rather than riding inside the plate cell: the plate is the row's identity and
+   a control glued to it invites a click meant for one to land on the other. */
+.an-tbl__disc { width: 26px; padding-left: 6px !important; padding-right: 0 !important; }
+.an-tbl__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.an-tbl__toggle:hover { background: var(--hover, rgba(127, 127, 127, 0.1)); color: var(--ink); }
+.an-tbl__toggle:focus-visible { outline: 2px solid var(--chart-1); outline-offset: 1px; }
+/* A triangle from borders, not a glyph: at 5px a character would be hinted to
+   whatever the font felt like and would not rotate cleanly. */
+.an-tbl__chev {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 120ms var(--ease-out, ease-out);
+}
+.an-tbl__toggle--on { color: var(--chart-1); }
+.an-tbl__toggle--on .an-tbl__chev { transform: rotate(90deg); }
+/* The open row and its run list read as one block, so the summary loses the
+   rule that would otherwise cut between them. */
+.an-tbl__row--open td { border-bottom-color: transparent; background: var(--hover, rgba(127, 127, 127, 0.05)); }
+
+/* ── Where Units Actually Stop ──────────────────────────────────────────────
+ *
+ * Hallmark · component: analysis card · genre: modern-minimal
+ * theme: in-project tokens · states: default · hover · focus-visible · loading
+ *        · empty · unavailable · one-place · two-places · axis-meaningless
+ * pre-emit critique: P5 H5 E4 S5 R5 V4 · contrast: pass, both themes
+ *
+ * Two panels of equal weight, because they answer two halves of one question
+ * and neither is the illustration of the other: the scatter is WHERE, the
+ * profile is WHETHER it is one place. Giving the picture the room and the
+ * histogram a footnote would have buried the only part of the card that makes
+ * a claim.
+ *
+ * The plot boxes are SQUARE-ISH and fixed, not aspect-free. The scatter draws
+ * metres on both axes against the same domain, so a box that stretched with
+ * the viewport would stretch the geometry — and the geometry is the finding.
+ */
+.an-stops__panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 10px;
+}
+.an-stops__panel { margin: 0; min-width: 0; }
+.an-stops__cap {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.an-stops__plot {
+  height: 260px;
+  min-width: 0;
+}
+.an-stops__note {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+.an-stops__coord {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+/* The verdict. It is a sentence rather than a badge because it is a reading of
+   the chart above it and it has to carry its own evidence — "two places, 19 m
+   apart" with the counts that justify it, not a green tick. */
+.an-stops__verdict {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.an-stops__verdict b { color: var(--ink); }
+.an-stops__verdict--split { border-left-color: var(--chart-2); }
+
+.an-stops__scroll {
+  margin-top: 14px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+/* `.an-tbl th` carries no padding of its own — the shared table puts it on the
+   sort BUTTON inside, and this table's headers do not sort. Without this the
+   labels sit hard against the rule and read as centred. */
+.an-stops__tbl { min-width: 420px; }
+.an-stops__tbl thead th {
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.an-stops__tbl thead th.r { text-align: right; }
+.an-stops__row--focus td { background: var(--hover, rgba(127, 127, 127, 0.06)); }
+/* Which row the two charts above are about. A label, not a colour: the row is
+   already shaded, and a second signal in hue would be the third thing on this
+   card competing to mean "look here". */
+.an-stops__drawn {
+  margin-left: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--chart-1);
+}
+.an-stops__empty {
+  padding: 26px 10px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+/* One column below the width where two plots stop being readable side by side.
+   The plots keep their height: a square that has to shrink to fit two-up is a
+   square nobody can find their own yard in. */
+@media (max-width: 860px) {
+  .an-stops__panels { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+}
+
+/* ── Units Ferrying Sugar ───────────────────────────────────────────────────
+ *
+ * Hallmark · component: data table (redesign) · genre: modern-minimal
+ * theme: in-project tokens · states: default · hover · focus-visible · sorted
+ *        · expanded · filtered · empty · unmeasurable
+ * pre-emit critique: P5 H5 E4 S5 R5 V4 · contrast: pass, both themes
+ *
+ * Scoped to `.an-tbl--runs` on purpose. `.an-tbl` is shared with the
+ * fleet-state table, which answers a different question and must not inherit a
+ * measure column's manners.
+ *
+ * Three changes, and each one is a thing the table could not do before.
+ *
+ * ONE — THE UNIT STAYS PUT. Eight columns need 780 px, so on anything short of
+ * a wide laptop the table scrolls sideways, and the first thing to leave the
+ * screen was the plate: the reader ended up looking at four numbers belonging
+ * to a truck they could no longer name. The plate column is sticky now, header
+ * and body, so identity is the one thing that never scrolls away.
+ *
+ * TWO — THE MEASURE READS AS A MEASURE. Forty rows of right-aligned numerals
+ * have no shape; finding the heaviest hauler meant reading every one. Each
+ * tonnage now draws a hairline rule under itself, `--u-share` long, scaled to
+ * the heaviest unit on screen. It ranks and it does nothing else — it is a
+ * ratio of two real figures, it appears only where there is a tonnage, and it
+ * is `aria-hidden`, because to a screen reader it is the number said twice.
+ *
+ * THREE — A CAVEAT STOPS LOOKING LIKE A NUMBER. "3/5" in grey directly after
+ * "29.4" is two numbers in a row in a numeric column, and it was read as part
+ * of the figure. It moves under the figure, in words: "3 of 5 weighed". Same
+ * fact, same DOM order, and it can no longer be mistaken for a quantity.
+ *
+ * What did NOT change: the columns, their order, the sort, the disclosure, the
+ * copy. The table's information architecture was right; its visual layer was
+ * doing none of the work. */
+
+/* One line per reading is no longer true of the measure columns — they carry a
+   figure, sometimes a caveat under it, and a rule under that. Give every row
+   the taller box rather than letting the measure rows alone grow, or the
+   table's rhythm breaks wherever a gate mixes weighed and unweighed runs. */
+.an-tbl--runs td { padding-top: 9px; padding-bottom: 9px; vertical-align: top; }
+
+.an-tbl--runs .an-tbl__measure { position: relative; }
+.an-tbl--runs .an-tbl__fig { display: block; }
+.an-tbl--runs .an-tbl__rests {
+  display: block;
+  margin-top: 2px;
+  font-size: 9.5px;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+  /* Prose, so it must not be tabular — figures that align in a caveat invite
+     the column-reading the caveat exists to interrupt. */
+  font-variant-numeric: normal;
+  white-space: nowrap;
+}
+
+/* The rule. In flow under whatever precedes it — the figure, or the caveat
+   when there is one — rather than pinned to the cell's bottom edge, where on a
+   two-line cell it ended up nearer the row below than the number it belongs
+   to. Right-aligned with the figures, because a rule growing leftwards from
+   the left margin would rank nothing the eye is already looking at. */
+.an-tbl--runs .an-tbl__rule {
+  display: block;
+  margin: 4px 0 0 auto;
+  height: 2px;
+  width: calc(var(--u-share, 0) * 62px);
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--chart-1);
+  opacity: 0.55;
+  transition: opacity 120ms var(--ease-out, ease-out);
+}
+.an-tbl--runs tbody tr:hover .an-tbl__rule { opacity: 0.9; }
+
+/* The unit, held against the horizontal scroll. The cell has to be OPAQUE or
+   the columns it is holding back show through it — and opaque in the table's
+   own colour, not the header's: `--elevated` on a white card reads as a
+   highlighted column, which is a claim about the unit rather than a
+   consequence of it being pinned. The header keeps `--elevated`, because the
+   header is already that colour across its whole width. */
+.an-tbl--runs .an-tbl__plate,
+.an-tbl--runs thead th:nth-child(2) {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+}
+.an-tbl--runs thead th:nth-child(2) { background: var(--elevated); }
+.an-tbl--runs thead th:nth-child(2) { z-index: 3; }
+/* The seam. A border would move the columns; a shadow marks the edge only when
+   there is something behind it to mark. */
+.an-tbl--runs .an-tbl__plate::after,
+.an-tbl--runs thead th:nth-child(2)::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+/* The disclosure column travels with it — a chevron stranded on the far side
+   of the seam opens a row the reader can no longer see. */
+.an-tbl--runs .an-tbl__disc {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+}
+.an-tbl--runs thead th.an-tbl__disc { background: var(--elevated); }
+.an-tbl--runs thead th.an-tbl__disc { z-index: 3; }
+.an-tbl--runs .an-tbl__plate,
+.an-tbl--runs thead th:nth-child(2) { left: 26px; }
+
+/* Hover and the open row have to repaint the sticky cells too, or the two
+   columns stay at rest colour while the rest of the row lights up. */
+.an-tbl--runs tbody tr:hover .an-tbl__plate,
+.an-tbl--runs tbody tr:hover .an-tbl__disc {
+  background: color-mix(in srgb, var(--card) 92%, var(--ink));
+}
+.an-tbl--runs .an-tbl__row--open .an-tbl__plate,
+.an-tbl--runs .an-tbl__row--open .an-tbl__disc {
+  background: color-mix(in srgb, var(--card) 95%, var(--ink));
+}
+
+/* Which column you sorted by, visible without hovering it. The caret already
+   says direction; this says WHICH, which is the half a reader loses as soon as
+   the pointer moves away. */
+.an-tbl--runs thead th.is-sorted .an-tbl__sort { color: var(--ink); }
+.an-tbl--runs thead th.is-sorted { box-shadow: inset 0 -2px 0 var(--chart-1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .an-tbl--runs .an-tbl__rule { transition: none; }
+}
+
+/* Narrow: the caveat is the first thing to go — it qualifies a figure that is
+   still fully legible without it, and at this width the two lines cost more
+   than the qualification is worth. The rule shortens with the column. */
+@media (max-width: 560px) {
+  .an-tbl--runs .an-tbl__rests { display: none; }
+  .an-tbl--runs .an-tbl__rule { width: calc(var(--u-share, 0) * 42px); }
+  .an-tbl--runs td { padding-top: 7px; padding-bottom: 7px; }
+}
+
+.an-tbl__runs > td {
+  padding: 0 10px 10px 32px !important;
+  white-space: normal;
+  background: var(--hover, rgba(127, 127, 127, 0.05));
+}
+/* ── A unit's runs, grouped by day ────────────────────────────────────────
+ *
+ * Opened from the summary table above, inside a cell that spans it. Five
+ * columns where there were seven: the two full timestamps became one span of
+ * clocks under a date said once per group, and the "raised by" column folded
+ * into the blank it was explaining. The card this sits in already scrolls
+ * horizontally on a laptop, so two columns back is not cosmetic.
+ */
+.an-runs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  border-left: 2px solid var(--chart-4, var(--border));
+}
+.an-runs th {
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 10px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.an-runs th.r, .an-runs td.r { text-align: right; }
+.an-runs td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.an-runs tbody:last-child tr:last-child td { border-bottom: 0; }
+
+/* The date, once per group.
+ *
+ * Set on the page's own ground rather than the row colour, so it reads as a
+ * break in the list rather than as a row of the list — the runs beneath it are
+ * what the table is, and a heading that looks like data is a row an operator
+ * has to read before discarding. */
+.an-runs__dayrow > th {
+  padding-top: 9px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-hi, var(--border));
+  color: var(--ink);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+}
+.an-runs__day:first-of-type .an-runs__dayrow > th { padding-top: 5px; }
+
+/* The run count sits beside the date, not under it: the date is the landmark
+   and this is its size, and stacking them would make a two-line heading out of
+   two short facts. */
+.an-runs__count {
+  margin-left: 8px;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The day's totals, in the columns they total — so the heading doubles as a
+   footer for the rows beneath it without labelling either figure twice. */
+.an-runs__daytot {
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Out and back, as one span rather than two stamps. */
+.an-runs__span { color: var(--text-2); }
+.an-runs__at { color: var(--ink); }
+
+/* The arrow is the only thing here carrying the direction, so it is dimmed
+   rather than removed: at full ink it competes with the two times it joins. */
+.an-runs__arrow {
+  margin: 0 5px;
+  color: var(--text-3);
+}
+
+/* A run that came back on a later date. Without it "23:40 → 02:15" under a
+   heading reading 09 Sep says a truck returned before it left. */
+.an-runs__next {
+  margin-left: 5px;
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+
+/* Still out. Not italic — the file's own rule is that emphasis is carried by
+   weight and colour, and an italic run of text in a tabular column shifts the
+   figures beside it off their baseline grid. */
+.an-runs__open { color: var(--chart-4); font-weight: 600; }
+
+.an-runs__dest {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The load, and the reason it is missing when it is.
+ *
+ * Stacked: the tag is a caveat about the figure above it, not a second figure
+ * beside it. Beside it, at this size, it read as part of the number. */
+.an-runs__load {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.an-runs__empty {
+  padding: 10px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* Which office raised the run — now shown ONLY where it explains a blank, so
+   it appears on transport runs and never on the sales runs that carry their
+   own weight. A badge rather than plain text because it has to survive a scan
+   down forty rows. */
+.an-runs__by {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid currentColor;
+}
+.an-runs__by--sales { color: var(--chart-2); }
+.an-runs__by--cane  { color: var(--chart-4); }
+
+@media (max-width: 560px) {
+  /* The destination is the first to go. It is the one column here that the
+     summary row above already carries, and at this width keeping it costs the
+     tonnage its own line. */
+  .an-runs__dest, .an-runs thead th:nth-child(3) { display: none; }
+}
+
+/* Pills carry state by TOKEN. The version this replaces hardcoded four hex
+   values, so the card ignored the page's own CVD-validated palette and kept
+   the same colours on both surfaces. */
+.an-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.an-pill--work { color: var(--chart-3); }
+/* Plant working from a fixed position. Its own tone, next to working rather
+   than next to idling, because that is what it is. */
+.an-pill--stat { color: var(--chart-7); }
+.an-pill--idle { color: var(--chart-4); }
+.an-pill--park { color: var(--text-2); }
+.an-pill--off  { color: var(--chart-8); }
+
+.an-fleet__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.an-fleet__foot b { color: var(--ink); }
+
+@media (max-width: 560px) {
+  /* The rail loses its words before its numbers: four counts still read as a
+     distribution, four truncated labels do not. */
+  .an-rail__k { display: none; }
+  .an-fleet__input { width: 100%; }
+  .an-fleet__search { flex: 1 1 100%; }
+  .an-chip--clear { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .an-rail__seg, .an-rail__bar, .an-chip, .an-tbl__sort,
+  .an-tbl__caret, .an-tbl tbody tr, .an-tbl__chev { transition: none; }
+}
+
+
+/* The two fuel charts share a row as EQUALS — same width, same height.
+ *
+ * They are a matched pair, not a chart and its sidebar: one asks whether the
+ * yard is getting cheaper per unit of work, the other asks which machines are
+ * unlike their own kind. Giving one the elastic track and the other a fixed
+ * 400px would rank them, and neither outranks the other.
+ *
+ * Equal HEIGHT is the harder half. The line carries a denominator toggle in its
+ * head and the histogram does not, so their heads are different heights and
+ * fixed chart boxes would leave the two plot areas on different baselines.
+ * Stretching both cards and letting the chart box absorb the difference puts
+ * the card edges level, which is what the eye actually checks.
+ */
+.an-fuelrow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  /* One plot height for the row, declared here so both cards read it. See the
+     rule below for why it is a constant rather than whatever is left over. */
+  --an-fuelrow-chart-h: 272px;
+}
+/* One chart left, and it takes the row.
+   A withheld section must not leave a hole: the same rule .an-grid already
+   follows when it is down to one card. */
+.an-fuelrow:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+
+.an-fuelrow > .an-rate,
+.an-fuelrow > .an-hist {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* Both plot boxes are the SAME height, and the slack falls to the feet.
+ *
+ * It used to be the other way round — the chart box was `flex: 1 1 auto` and
+ * took whatever the card had left, which works only while the two cards carry
+ * the same furniture. The weighbridge card does not: it adds a captured-span
+ * line above the chart and the four-bridge rail below it — Factory, Opapo,
+ * Oyani, Nyaondo, about 113px between them. The row equalises to the taller
+ * card, so that card sat at its own natural minimum and its chart collapsed to
+ * the 208px floor while the fuel-rate chart beside it drew at 272. The card
+ * with MORE to say about the bridges was the one whose chart got shrunk for
+ * saying it, which is backwards.
+ *
+ * So the height is declared once, for both, and the shorter card spends its
+ * surplus on the gap above its foot (`margin-top: auto`, below). The card
+ * edges still end level — that is what the eye checks across a row — and the
+ * two plot areas now sit on one baseline as well. */
+.an-fuelrow > .an-rate > .an-rate__chart,
+.an-fuelrow > .an-hist > .an-hist__chart {
+  flex: 0 0 auto;
+  height: var(--an-fuelrow-chart-h, 272px);
+  min-height: 0;
+}
+/* The feet sit at the bottom of their card, on one line with each other. */
+.an-fuelrow > .an-rate > .an-rate__foot,
+.an-fuelrow > .an-hist > .an-hist__foot { margin-top: auto; padding-top: 4px; }
+
+@media (max-width: 900px) {
+  .an-fuelrow { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Fuel per operating hour ─────────────────────────────────────────────
+ *
+ * Two populations overlaid, not stacked and not grouped. Stacking would add
+ * counts that have no sum — one excavator plus one lorry is not "two machines
+ * at 9 L/h" — and grouping halves the bar width and hides the overlap, which is
+ * the region the chart exists to show.
+ */
+.an-hist {
+  margin-top: var(--sp4-sm, 12px);
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.an-hist__chart { width: 100%; height: 208px; margin-top: 6px; }
+.an-hist__empty {
+  padding: 26px var(--sp4-gutter, 12px);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.an-hist__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.an-hist__foot b { color: var(--ink); }
+/* The uncounted machines are a caveat, not a third series — set apart from the
+   two medians so it cannot be misread as one of them. */
+/* Provenance. This was an amber warning while the figures were modelled; they
+   are measured now, so it states the evidence instead of apologising for its
+   absence. Still its own line — it qualifies both medians above it. */
+.an-hist__src {
+  flex: 1 1 100%;
+  color: var(--text-3);
+  font-size: 10px;
+}
+.an-hist__src b { color: var(--text-2); }
+
+.an-hist__gap { color: var(--text-3); opacity: 0.85; }
+.an-hist__gap b { color: var(--text-2); }
+.an-hist__tip {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--ink);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .an-hist__chart { height: 180px; }
+  /* The row is one column well before here, so this is only keeping the
+     stacked cards at the same plot height the standalone histogram takes. */
+  .an-fuelrow { --an-fuelrow-chart-h: 180px; }
+}
+
+/* ── Fuel per unit of work ───────────────────────────────────────────────
+ *
+ * An annotated line, below the tile row. The tiles answer what is happening
+ * now; this answers whether the yard is getting better or worse at it, which a
+ * row of current figures cannot.
+ *
+ * Every annotation on it is computed off the series — the band is its own mean
+ * plus and minus one standard deviation, the dashed rule is that mean, the ring
+ * is its worst day. Nothing is authored, because a chart with hand-placed notes
+ * starts lying the first time the data moves and this one redraws every fifteen
+ * minutes.
+ */
+.an-rate {
+  margin-top: var(--sp4-sm, 12px);
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.an-rate__head { align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Where a chart toolbar would sit. It changes the QUESTION rather than the
+   zoom — these are two denominators, not two renderings of one series. */
+.an-rate__views { display: flex; gap: 5px; margin-left: auto; }
+
+.an-rate__chart {
+  width: 100%;
+  height: 208px;
+  margin-top: 6px;
+}
+
+.an-rate__empty {
+  padding: 26px var(--sp4-gutter, 12px);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.an-rate__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.an-rate__foot b { color: var(--ink); }
+
+.an-rate__tip {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--ink);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  line-height: 1.45;
+}
+/* Label left, figure right. Without this the two run together — "Tonnes3,819.5
+   t" — because the span and the strong are inline siblings with nothing
+   between them. Shared by every chart tooltip on the page, all of which had
+   it. */
+.an-rate__tip-sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+.an-rate__tip-sub strong { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 560px) {
+  /* The toggle drops to its own line before it starts truncating a label —
+     "L / hectare" and "L / kilometre" are the whole point of the control. */
+  .an-rate__views { margin-left: 0; flex: 1 1 100%; }
+  .an-rate__chart { height: 180px; }
+}
+
+/* ── Machines started early ───────────────────────────────────────────────
+ *
+ * A vertical bar chart rather than the nested bar rows it replaced. Those drew
+ * a header plus three rows per category — 24 rows for six categories — and the
+ * buckets are cumulative, so most days all three read the same number and the
+ * card spent 500px repeating itself. A chart says the same thing in one glance
+ * and shows the SHAPE of the morning, which rows never did.
+ */
+.an-mstarts { margin-top: var(--sp4-sm, 12px); }
+.an-mstarts__chart {
+  width: 100%;
+  height: 210px;
+  margin-top: 6px;
+}
+.an-mstarts__empty {
+  padding: 24px var(--sp4-gutter, 12px);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* The key, under the chart.
+ *
+ * Under, because it is consulted AFTER the bars raise a question — the bars
+ * are the card, and a legend above them is a paragraph of preamble before the
+ * thing the reader came for. It replaces recharts' own legend, which took its
+ * order from the chart's payload and printed the first band last: three keys
+ * that are a clock cannot disagree with the stack about their own order. */
+.an-mstarts__key {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  padding: 0 2px;
+}
+
+/* One strip, left to right as the night runs. The swatches sit tight against
+   each other's spacing so the three read as steps of one thing rather than as
+   three separate marks that happen to be nearby. */
+.an-mstarts__ramp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.an-mstarts__keyitem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Square, not a dot. These are bands of a bar and the swatch is a sample of
+   one — a circle would be a different shape claiming to stand for a rectangle. */
+.an-mstarts__sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+/* The bars have been clickable since they were drawn and nothing on the card
+   said so. Quiet — it is an instruction, and an instruction that shouts
+   competes with the data it is about. */
+.an-mstarts__cue {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* How many machines, said beside the title. `an-card__hint` already places it
+   at the far end of the head row; this only keeps the figure from wrapping
+   away from its own words on a narrow card. */
+.an-mstarts__hint { white-space: nowrap; }
+
+@media (max-width: 560px) {
+  /* The cue goes first. It teaches an interaction that is available either
+     way, and at this width it costs the ramp its own line. */
+  .an-mstarts__cue { display: none; }
+}
+
+/* ── Fleet mix donut ─────────────────────────────────────────────────────
+ *
+ * Refactored to the reference the operator supplied: a ring with category names
+ * outside it on elbow leader lines, and no separate legend — the lines are the
+ * legend.
+ *
+ * The tile spans the whole row because of those lines. They run outward on both
+ * sides and need roughly a third of the width between them; inside one column
+ * of a four-up grid there is nowhere for them to go, and they would land on top
+ * of each other or be clipped at the tile edge. Giving the first tile the full
+ * row is also what "the first component" implies.
+ */
+/* No rule, no top gap. The border separated the chart from a headline that no
+   longer exists, and both it and the label above were costing the ring height
+   it needed to lay six labels out without collisions. */
+.an-mix {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+/* Sized by aspect rather than a fixed height, so the ring and its labels keep
+   the reference's proportion as the card width changes. Floored so the labels
+   still have vertical room to be pushed apart on a narrow screen. */
+.an-mix__chart {
+  width: 100%;
+  /* Fills whatever the row gives it. The tile shares a grid row with three
+     text tiles and the tallest sets the row height, so the chart takes the
+     height the TEXT tiles need rather than setting one of its own — which is
+     what keeps this card level with Daily activity instead of towering over
+     it and stretching its siblings. */
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+/* Chart-only tile: the ring is the content, so it gets the padding a headline
+   would have used. */
+.an-ops--chart { padding: 8px 8px 8px 11px; }
+
+/* A chart tile's title. Same 11px/600 as .an-kpi__label and the two chart
+   titles already in the row — four tiles, one voice. The head is tight to the
+   top of the tile because the chart underneath needs every remaining pixel. */
+.an-ops__charthead { margin-bottom: 1px; }
+.an-ops__charttitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* The total, in the hole. Centred on the RING, which sits in the middle of the
+   chart box, so it tracks the ring rather than the tile. */
+.an-mix__centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.an-mix__centre-v {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.an-mix__centre-l {
+  margin-top: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Label type. Names carry the weight; the share is quieter and sits beside the
+   name rather than inside the slice — three of the six palette slots cannot
+   hold white text (see the note in FleetMixPie). */
+.an-mix__lbl-name {
+  font-size: 9.5px;
+  font-weight: 600;
+  fill: var(--text-2);
+}
+.an-mix__lbl-pct {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.an-mix--empty {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-3);
+  padding-bottom: 2px;
+}
+
+.an-mix__tip {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--ink);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  max-width: 220px;
+}
+.an-mix__tip-sub {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: normal;
+}
+
+/* The keyboard and screen-reader route into a chart whose canvas is
+   aria-hidden. Visually hidden rather than display:none — the latter would take
+   it out of the tab order, which is the whole point of it. */
+.an-mix__srrow:focus-visible {
+  outline: 2px solid var(--chart-1);
+  outline-offset: 1px;
+}
+
+/* Narrow mode: no room for leader lines, so the ring shrinks and the list that
+   is otherwise the screen-reader copy becomes the visible legend. */
+.an-mix__sr { list-style: none; margin: 0; padding: 0; }
+/* Off-screen but focusable — display:none would take it out of the tab order,
+   which is the only reason it exists. */
+.an-mix__srrow {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+/* Revealed on focus, so a sighted keyboard user can see where they are. */
+.an-mix__srrow:focus-visible {
+  position: static;
+  width: auto; height: auto;
+  margin: 2px 0;
+  padding: 2px 6px;
+  clip-path: none;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--hover, rgba(127,127,127,0.12));
+}
+
+.an-mix__dot {
+  flex: 0 0 auto;
+  width: 7px; height: 7px;
+  border-radius: 2px;
+  transform: translateY(-1px);
+}
+.an-mix__k {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-mix__v {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.an-mix__p {
+  flex: 0 0 auto;
+  min-width: 42px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .an-mix__srrow { transition: none; }
+}
+
+/* The starts chart is a grid item on plant, filling the column the hidden
+   dispatch tiles would have used. ONE column now, not two: the sensor gauge
+   took the third, so the row is mix / state / health / starts. The chart holds
+   at this width because it only ever draws one or two categories — it is
+   filtered to excavators — so a narrower track costs it bar width, not bars. */
+.an-today__grid > .an-mstarts {
+  grid-column: span 1;
+  margin-top: 0;
+  min-width: 0;
+  background: var(--elevated);
+  border-radius: 10px;
+  /* Left padding matches .an-ops so the rail below has the same gutter the
+     other three tiles give theirs. */
+  padding: 11px 12px 11px 15px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+/* Slot 4 of the row's rail system. This was the one tile of four with no rail
+   at all — three tiles marked and a fourth bare reads as an oversight, and the
+   palette's fourth slot was sitting unused on plant since the dispatch tile
+   that held it is hidden there. */
+.an-today__grid > .an-mstarts::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--chart-4);
+}
+.an-today__grid > .an-mstarts .an-mstarts__chart {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+@media (max-width: 900px) {
+  /* Two columns of a two-column row: below 900 the row halves, and a bar chart
+     with a three-item legend is the tile that suffers first from sharing. */
+  .an-today__grid > .an-mstarts { grid-column: span 2; }
+}
+@media (max-width: 460px) {
+  .an-today__grid > .an-mstarts { grid-column: span 1; min-height: 200px; }
+}
+
+/* ── Machine-starts tooltip ───────────────────────────────────────────────
+ *
+ * Names the machines behind the bar. A count answers "how many" and the next
+ * question is always "which", and that question used to mean leaving the chart
+ * for the fleet table.
+ */
+.an-mstarts__tip {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--ink);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+  line-height: 1.5;
+  min-width: 150px;
+}
+.an-mstarts__tip-head { display: flex; align-items: center; gap: 6px; }
+.an-mstarts__tip-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.an-mstarts__tip-count { color: var(--text-2); font-size: 10.5px; }
+.an-mstarts__tip-list {
+  list-style: none;
+  margin: 5px 0 0;
+  padding: 5px 0 0;
+  border-top: 1px solid var(--border);
+}
+.an-mstarts__tip-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 10.5px;
+}
+/* The plates align down one edge and the times down the other, so the list can
+   be read as "who was out first" without tracking across it. */
+.an-mstarts__tip-plate { color: var(--ink); }
+.an-mstarts__tip-at { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.an-mstarts__tip-more { color: var(--text-3); font-style: italic; }
+.an-mstarts__tip-foot {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* ── Probes & sensors gauge ───────────────────────────────────────────────
+ *
+ * A semicircle drawn in plain SVG — see SensorGauge for why not recharts.
+ *
+ * The band colour is the page's slot 3, which is the one the hidden dispatch
+ * tile freed on plant, and it is already the green the operator's reference
+ * gauge used. The remainder is a NEUTRAL, never a red: the units behind it are
+ * unmeasured, not alarming, and half of them are trackers that have simply gone
+ * quiet.
+ */
+.an-gauge { display: flex; flex-direction: column; min-width: 0; height: 100%; }
+
+/* Matches .an-kpi__label — the same typography as "Blocks worked", which is the
+   other chart title on this page and the one the operator reads it against.
+   .an-card__title's 13.5px/700 ink made these two read as different ranks of
+   heading when they are the same rank. */
+.an-gauge__title,
+.an-mstarts__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.an-gauge__plot { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; }
+.an-gauge__svg { width: 100%; height: 100%; max-height: 168px; display: block; }
+
+.an-gauge__track { stroke: color-mix(in srgb, var(--text-3) 26%, transparent); }
+.an-gauge__value { stroke: var(--chart-3); }
+.an-gauge__tick  { font-size: 8.5px; fill: var(--text-3); font-weight: 600; }
+.an-gauge__needle { fill: var(--ink); }
+
+/* The reading sits inside the arc's mouth, which is the only place on a
+   semicircle with room for it and the one the eye already travels to. */
+.an-gauge__read {
+  font-size: 26px;
+  font-weight: 800;
+  fill: var(--ink);
+  letter-spacing: -0.02em;
+}
+.an-gauge__read-unit { font-size: 14px; font-weight: 700; fill: var(--text-2); }
+
+.an-gauge__faults {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 9.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.an-gauge__faults b { color: var(--text-2); font-weight: 700; }
+/* Not a fault — a machine with no probe on it. Set back so it cannot be read
+   as one of the four that are. */
+.an-gauge__fault--muted { opacity: 0.7; }
+
+.an-gauge__empty {
+  padding: 24px var(--sp4-gutter, 12px);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+/* The gauge fills its tile rather than centring in it — the arc IS the tile. */
+.an-today__grid > .an-ops--gauge { padding: 11px 10px 9px 13px; }
+
+
+/* Fuel consumption & cost — the plot's height.
+ *
+ * It was 200px against a plot ~610px wide, a 3:1 letterbox carrying a bar PAIR
+ * for every day in the window: at a full month that is 44 bars sharing 200px of
+ * vertical range, so the ordinary days flatten into a band near the axis and
+ * only the bowser deliveries have any height to read. The chart had room to be
+ * precise and was being asked to be small.
+ *
+ * 300px puts it at roughly 2:1, which is where a dense time series stops
+ * reading as a strip and starts showing its shape — the day-to-day differences
+ * that the 7-day average line is drawn over become legible instead of implied.
+ *
+ * Growing it costs nothing in layout: .an-grid deliberately does NOT stretch
+ * its cards to a common height (see the note there), so the card beside this
+ * one keeps its own size and simply top-aligns.
+ *
+ * Narrow viewports get less, because the plot is ~340px wide there and 300px
+ * would make it taller than it is wide — a bar chart squeezed into a portrait
+ * box, which is the opposite failure to the one this fixes.
+ */
+.an-fuelchart { height: 300px; }
+
+/* Hallmark · component: fuel chart on a phone (Fuel Consumption & Cost)
+ * genre: modern-minimal · theme: in-project (dash --color-* / --chart-* tokens)
+ * states: default · hover · focus-visible · active · disabled (the key)
+ * contrast: caption 5.6:1 · ticks 9.1:1 (unchanged — type shrinks, ink does not)
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ *
+ * On a phone the box stops being a 2:1 landscape and becomes a portrait: the
+ * plot is ~250px wide against 300px of height, and a bar six pixels across in
+ * a box taller than it is wide reads as a needle rather than a quantity. The
+ * height comes down until the plot is wider than it is tall again — the same
+ * argument the 300px above is making, pointed the other way because the width
+ * is a quarter of what it is on a desktop.
+ *
+ * 210px is where it lands: the plot inside it is about 150px, so a full month
+ * of days is still a shape and not a strip, and the card gets back 90px of a
+ * screen that has ten cards below this one. */
+@media (max-width: 640px) {
+  .an-fuelchart { height: 210px; }
+}
+
+/* Hallmark · component: chart labels (Fuel Consumption & Cost) · genre: modern-minimal
+ * theme: in-project (dash --color-* / --chart-* tokens, preserved)
+ * states: default · hover · focus-visible · active · disabled
+ *         (loading / error / success do not exist for a view toggle — nothing
+ *          is submitted and nothing can fail; inventing them would be slop)
+ * contrast: caption 5.6:1 · key 9.1:1 · day ticks 9.1:1 · disabled 4.0:1
+ * pre-emit critique: P5 H5 E4 S5 R4 V4
+ */
+
+/* ── Chart labels: axis captions, ticks, and the key ──────────────────────
+   The instrument voice. Units and numbers are set in the mono face the tank
+   readings and the sensor table use; colour is spent on the ticks, which is
+   where it does work — with four axes in play the tint is how a reader knows
+   which scale a mark belongs to. A caption tinted the same way would repeat
+   that and compete with it, so captions are neutral.
+
+   Styled here rather than through props because a `font-family: var(--font-mono)`
+   set as an SVG presentation attribute is a coin toss across engines; a class
+   is not. */
+.an-axcap {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  fill: var(--text-3);
+}
+.an-axtick {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: -0.01em;
+}
+/* Recharts' own default fill for these is #666 — 3.5:1 on this card, under
+   the floor for 9.5px type. The y ticks keep the axis tint; only the days
+   are re-inked. */
+.an-axtick--day { fill: var(--text-2); }
+
+/* Phone. The band is 11px of lane instead of 14 (see CAP_LANE_SM) and the
+   caption is set to match it; the ticks lose half a pixel so a four-character
+   rate label still clears its neighbour on a 310px card. Neither goes below
+   the ink they already had — this is type, not contrast. */
+@media (max-width: 640px) {
+  .an-axcap { font-size: 8px; letter-spacing: 0.06em; }
+  .an-axtick { font-size: 9px; }
+}
+
+/* The key, which is also the switch. Every name is a button; nothing in the
+   row changes width when one is toggled, so the next click lands where the
+   reader is already aiming. */
+.an-chartkeys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 10px;
+  margin-top: 8px;
+}
+.an-chartkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 120ms var(--ease-out, ease-out),
+              border-color 120ms var(--ease-out, ease-out);
+}
+.an-chartkey:hover { border-color: var(--border); color: var(--ink); }
+.an-chartkey:focus-visible {
+  outline: 2px solid var(--chart-1);
+  outline-offset: 1px;
+}
+.an-chartkey:active { transform: translateY(0.5px); }
+.an-chartkey--off { color: var(--text-3); text-decoration: line-through; }
+.an-chartkey[disabled] {
+  color: var(--text-3);
+  cursor: default;
+  /* Subordinate, still readable: 0.55 put it under 3:1 on this card. */
+  opacity: 0.72;
+}
+.an-chartkey[disabled]:hover { border-color: transparent; color: var(--text-3); }
+
+/* ── The swatch is the mark ───────────────────────────────────────────────
+   A square for a bar, a drawn rule for a line, the same dash the plot uses
+   for the two rates, and a thinner rule for the trailing mean. On a chart
+   carrying three bars and four lines this is the difference between hunting
+   for a colour and knowing the shape you are hunting for. */
+.an-chartkey__mark {
+  flex: none;
+  background: var(--mark);
+}
+.an-chartkey__mark--bar {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.an-chartkey__mark--line {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+.an-chartkey__mark--trend {
+  width: 12px;
+  height: 0;
+  border-top: 2px solid var(--mark);
+  background: none;
+  opacity: 0.85;
+}
+.an-chartkey__mark--dash {
+  width: 12px;
+  height: 0;
+  background: none;
+  border-top: 2px dashed var(--mark);
+}
+.an-chartkey--off .an-chartkey__mark,
+.an-chartkey[disabled] .an-chartkey__mark { opacity: 0.35; }
+
+/* Short pages, which is what a laptop is. The rules above are about how WIDE
+   the plot is; this one is about whether the card fits on the screen at all.
+   Measured on production at 1,536×864 the fuel card starts 637px down the page,
+   so a 300px plot leaves roughly its top third visible on load and the rest
+   below the fold; at 1,366×768 the card is 623px tall inside a 712px scroller
+   and cannot share the view with anything.
+   Keyed on HEIGHT rather than width deliberately — it is vertical space that is
+   scarce here. A tall monitor is untouched whatever its width.
+
+   The min-width is not redundant. This block sits after the two above and would
+   otherwise win the cascade on anything matching both — a short PHONE would
+   read 250px from here instead of the 200px the width rule intends, i.e. this
+   rule would make small screens taller while claiming to make them shorter.
+   Above 900px neither width rule applies and there is nothing to fight. */
+@media (min-width: 901px) and (max-height: 820px) {
+  .an-fuelchart { height: 250px; }
+}
+/* ── Machines working early: the picked bar's machines ─────────────────────
+   A count says six excavators were out before four; only the names say which
+   yard to ask. Sits under the chart rather than in the tooltip because it is
+   read, not glanced at — a tooltip vanishes the moment you look away. */
+.an-mstarts__clear {
+  margin-left: auto; font-size: 10.5px; font-weight: 600;
+  color: var(--text-2); background: none; border: 1px solid var(--border);
+  border-radius: 20px; padding: 1px 8px; cursor: pointer;
+}
+.an-mstarts__clear:hover { color: var(--ink); border-color: var(--border-hi); }
+.an-mstarts__picked {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+}
+.an-mstarts__picked-head { font-size: 11.5px; color: var(--text-2); margin-bottom: 5px; }
+.an-mstarts__picked-empty { font-size: 11.5px; color: var(--text-2); }
+.an-mstarts__picked-list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 3px 12px;
+  max-height: 132px; overflow-y: auto;
+}
+.an-mstarts__picked-list li {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 11.5px; line-height: 1.5;
+}
+.an-mstarts__picked-plate { color: var(--ink); }
+.an-mstarts__picked-at { color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Why the fuel-rate line breaks. A gap with no explanation reads as a broken
+   chart; this one breaks because the server refuses to divide by a denominator
+   too small to divide by, which is a finding rather than a fault. */
+.an-rate__gapnote {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+  border-left: 2px solid var(--chart-8);
+  padding: 2px 0 2px 8px;
+  margin: 6px 0 0;
+}
+
+
+/* ── what the page is not showing ──────────────────────────────────────────
+   A section dropped for having no records leaves no hole and no apology — but
+   it must leave a TRACE, or a shorter page cannot be told from a broken one.
+   One line, at the foot, under everything it describes: quiet enough to read
+   past when you know why, specific enough to act on when you do not. */
+.an-withheld {
+  margin: 12px 2px 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-3, #7c8899);
+}
+
+/* ── Weighbridge analytics ─────────────────────────────────────────────────
+ *
+ * The card that took Sugar Delivered per Day's slot in the haulage row, so it
+ * inherits `.an-hist`'s box and chart height and adds only what the tonnage
+ * chart had no need for: a line stating the span actually drawn, and a rail
+ * ranking the four bridges.
+ */
+
+/* Said above the chart, not below it.
+ *
+ * The filter bar's window may be 30 or 90 days while this draws six — the
+ * provider's feed serves a rolling two days and cannot be backfilled — and a
+ * reader who takes the heading at face value reads the fall from 4,529 t to
+ * 232 t as a collapse in throughput rather than as the ingest window closing.
+ * A footnote arrives after the misreading; this arrives before it. */
+.an-wb__span {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.an-wb__span b { color: var(--text-2); }
+.an-wb__gap { opacity: 0.85; }
+
+/* The bridges, ranked.
+ *
+ * A rail and not a second chart: one number per bridge over the whole window
+ * is four data points, and four bars on their own axis is a chart drawn around
+ * almost nothing. Rows carry the ranking in a rule instead, which costs no
+ * vertical space the figures were not already taking. */
+.an-wb__rail {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  /* Two up where there is room, one up where there is not. `minmax(0, 1fr)`
+     and never a bare `1fr`: a long centre name in a bare track refuses to
+     shrink below its content and pushes the card into a horizontal scroll. */
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 8px 18px;
+}
+
+.an-wb__bridge {
+  display: grid;
+  /* The figure is the column that must never move, so it is sized to its
+     content and the name takes the slack. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+}
+
+.an-wb__name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  /* These are provider-typed site names and one of them could arrive long.
+     Clipped rather than wrapped: a two-line name would push the rule out of
+     alignment with its neighbour and break the ranking the rail is for. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.an-wb__fig {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.an-wb__sub {
+  grid-column: 1 / -1;
+  margin-top: 1px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tonnage said again as a length. Hidden from the reading order — it is
+   the figure above it, restated — and full width so the four rules share one
+   scale and can be compared down the rail. */
+.an-wb__rule {
+  grid-column: 1 / -1;
+  display: block;
+  margin-top: 4px;
+  height: 2px;
+  width: calc(var(--c-share, 0) * 100%);
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--chart-4);
+  opacity: 0.55;
+}
+
+@media (max-width: 560px) {
+  /* One bridge per row before the names start truncating — the name is what
+     makes the row a bridge rather than a number. */
+  .an-wb__rail { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+/* ══ Hand-held ═════════════════════════════════════════════════════════════
+ *
+ * What this page was still sizing for a mouse and a desk: a 24px tab strip,
+ * a floor of 8.5-9px type, and a tile height that only means something in a
+ * row. Nothing below touches the desktop layout, which is dense by design.
+ * ────────────────────────────────────────────────────────────────────────── */
+/* 768, not 640: the same line index.css draws between a control that is tapped
+   and one that is clicked. */
+@media (max-width: 767px) {
+  /* The Weighbridge Analytics tab strip measured 24px tall — the only control
+     on this page a thumb cannot reliably hit, and the one that switches what
+     the chart under it is about. 36px with padding to match is the same
+     proportional box the filter chips elsewhere in the app now use (see
+     index.css): comfortably over the 24px floor WCAG 2.5.8 sets, without the
+     squashed-oval shape a blanket 44 gives a six-letter label. */
+  .an-chip {
+    min-height: 36px;
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* A 9px label is a desk size. These six are the page's smallest running
+     type and all of them are a NAME for a figure beside them — the weekday
+     over a heat cell, the row's week, "BUSIEST DAY", the share on a donut
+     leader — so they are read, not skimmed past, and a phone is held at arm's
+     length in a cab. 10px is the bottom of the ladder the rest of the app
+     uses (.an-kpi__sub, .dr-statchart__sub); nothing here goes below it.
+
+     The donut's own geometry is unchanged: these are labels on leader lines
+     outside the ring, so a point of type moves text, not the drawing. */
+  .an-hl__label,
+  .an-heat__wd,
+  .an-heat__rowlbl,
+  .an-mix__lbl-name,
+  .an-mix__lbl-pct { font-size: 10px; }
+  /* "VEHICLES", under the 597 in the hole. Smaller than the rest because it
+     sits inside a 130px ring and has to stay under the figure it captions. */
+  .an-mix__centre-l { font-size: 9.5px; }
+}
+
+/* The 196px floor on a Today tile buys the donut the column its six leader
+   labels need, and it equalises the tiles that share a row with it. Below 460
+   the grid is ONE column (see the breakpoint above), so there is no row to
+   equalise and the floor is doing only the first job — on the two text tiles,
+   which settle at about 90px, it is 100px of nothing each, twice, in the
+   middle of the longest card on the page. The chart tiles keep it. */
+@media (max-width: 460px) {
+  .an-today__grid > .an-ops:not(.an-ops--chart) { min-height: 0; }
+}

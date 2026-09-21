@@ -1,0 +1,422 @@
+/* Weighbridges — the parts Sensor Monitor's stylesheet does not already own.
+ *
+ * Everything structural on this screen (root, header, KPIs, filter bar, tab
+ * strip, table shell, detail shell, empty and error states) is SensorPanel.css
+ * and is not re-declared here — including the GRID, which wears the probes
+ * table's own classes so the two read at one rhythm. What follows is only what
+ * a weighbridge ticket needs and a sensor row does not: three cell rules, and
+ * the breakdown card's legs.
+ *
+ * Every colour is a `--sp4-*` variable rather than a literal, so the light
+ * theme is handled by that file's re-points and there is no second palette
+ * here to drift from it.
+ */
+
+/* ── Table ────────────────────────────────────────────────────────────────
+   Almost nothing, on purpose. The grid wears
+   `.sp4-table .sp4-probe-table--comfortable`, so its padding, sticky head,
+   alignment rules, hover and edge inset all come from SensorPanel.css — the
+   same rhythm as the grid two tabs over. What used to be here (a `.wb-table`
+   with its own alignment overrides, a two-line weight cell, a bespoke badge)
+   was a second table voice on one screen, which is the thing this file's
+   neighbours are careful not to be.
+
+   Three rules survive, each for something the shared sheet cannot know. */
+
+/* Clocks and ticket numbers are read digit by digit and compared DOWN the
+   column, so they take the monospace face the plate column already uses.
+   `.sp4-num` does that for figures; these are neither figures nor prose. */
+.wb-mono { font-family: var(--font-mono); white-space: nowrap; }
+/* The number the whole ticket exists to state. */
+.wb-td-net { font-weight: 700; color: var(--sp4-text-1); }
+/* Drivers' names run long — three names is the norm on this fleet — and a full
+   name in every row would push the weights off the side of the screen. */
+.wb-td-driver {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The breakdown ────────────────────────────────────────────────────────
+   Opened by clicking a row, and it answers one question: what did each scale
+   read, and exactly when. */
+.wb-detail__strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--sp4-line);
+  border: 1px solid var(--sp4-line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: var(--sp4-md) var(--sp4-gutter) 0;
+}
+.wb-stat {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  background: var(--sp4-surface);
+}
+.wb-stat__n {
+  font-size: var(--sp4-strong);
+  font-weight: 800;
+  color: var(--sp4-text-1);
+  font-family: var(--font-mono);
+}
+.wb-stat__l {
+  font-size: var(--sp4-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sp4-text-4);
+}
+
+.wb-legs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp4-md);
+  padding: var(--sp4-md) var(--sp4-gutter);
+}
+.wb-legs__group {
+  flex: 1 1 320px;
+  min-width: 0;
+  border: 1px solid var(--sp4-line);
+  border-radius: 8px;
+  padding: var(--sp4-sm);
+  background: var(--sp4-surface);
+}
+.wb-legs__title {
+  margin: 0 0 var(--sp4-xs);
+  font-size: var(--sp4-label);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sp4-text-3);
+  font-weight: 700;
+}
+
+.wb-leg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--sp4-sm);
+  padding: var(--sp4-xs) 0;
+  border-top: 1px solid var(--sp4-line);
+}
+.wb-leg:first-of-type { border-top: 0; }
+.wb-leg--muted { opacity: 0.75; }
+.wb-leg__label {
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+  font-weight: 600;
+}
+.wb-leg__kg {
+  font-family: var(--font-mono);
+  font-size: var(--sp4-strong);
+  font-weight: 700;
+  color: var(--sp4-text-1);
+  text-align: right;
+}
+/* The three facts that make a weighing checkable: when, which scale, whose
+   hands. They sit under the weight as a definition list because that is what
+   they are — and because a dispute is read down this column. */
+.wb-leg__meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp4-md);
+  margin: 2px 0 0;
+}
+.wb-leg__meta div { display: flex; gap: 6px; align-items: baseline; }
+.wb-leg__meta dt {
+  font-size: var(--sp4-label);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sp4-text-4);
+}
+.wb-leg__meta dd {
+  margin: 0;
+  font-size: var(--sp4-body);
+  font-family: var(--font-mono);
+  color: var(--sp4-text-2);
+}
+
+/* Centre net against factory net. Weighing the same load twice is the whole
+   reason a transfer is its own flow, so the difference is stated rather than
+   left for the reader to subtract — and it is NOT coloured as a fault: a
+   couple of hundred kilos between two scales is normal, and calling it red
+   would make every transfer look like a theft. */
+.wb-drift {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp4-xs);
+  margin-top: var(--sp4-xs);
+  padding-top: var(--sp4-xs);
+  border-top: 1px solid var(--sp4-line);
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-3);
+}
+.wb-drift strong {
+  font-family: var(--font-mono);
+  font-size: var(--sp4-strong);
+  color: var(--sp4-text-1);
+}
+.wb-drift em { font-style: normal; font-family: var(--font-mono); }
+.wb-drift--down { color: var(--sp4-text-4); }
+.wb-drift--up   { color: var(--sp4-text-4); }
+
+/* ── Ticket detail header ───────────────────────────────────────
+   Back, then the plate and the line that says which ticket this is.
+
+   `.sp4-detail-head` is a shared flex row (SensorPanel.css) with no gap and no
+   shrink rules, and this screen is the only one that puts a BUTTON in it. The
+   title box beside it was a bare <div> — `min-width: auto`, so its intrinsic
+   width is the longest unbreakable run inside it — while the button is
+   shrinkable and breakable by default. A driver with three names therefore
+   took the width it wanted and paid for it out of the button: measured at
+   375px with BONFACE AINEA KASKON in the subtitle, the button went from 70x26
+   to 61x40, because the words had broken onto two lines. That row is the first
+   thing on the screen and it read as a fault.
+
+   Neither of these is a phone-only rule. The same collision happens on a
+   laptop with a long enough name; a phone just gets there first. */
+.wb-detail .sp4-detail-head { gap: 14px; }
+
+/* The control keeps its size. It is two words and it is the way out of this
+   view — it is never the thing that should be giving up room. */
+.wb-detail .sp4-back-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ...and the titles take whatever is left. `min-width: 0` is what lets a flex
+   item shrink below its own content; without it the rule above would only move
+   the overflow somewhere else. */
+.wb-detail .sp4-detail-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The plate and its type chip sit on one baseline rather than the chip riding
+   on the text’s line box. */
+.wb-detail .sp4-detail-reg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Above a phone this wrapper is not in the layout at all: `display: contents`
+   hands its two children straight to .sp4-filter-group, so the bar is the same
+   flex row it has always been and every sp4-* rule still applies to the label
+   and the field directly. It only becomes a real box inside the phone query
+   below, where it stops a wrap from separating "to" from the date it names. */
+.wb-range-leg { display: contents; }
+
+@media (max-width: 767px) {
+  /* ── The filter bar wraps; it does not ride on one line ──────────────────
+     This block used to force search and the day onto ONE row, on the stated
+     grounds that "the group is a single date field". It is not one any more.
+     The group now holds a two-ended range — From, a date, to, a date — plus
+     the three span chips and, on a long range, the clamp notice. Measured at
+     375px it is 453px wide on its own.
+
+     What the old rule then did with 453px in a 375px row:
+
+       .sp4-filterbar   nowrap        content 481px in a 375px box
+       .sp4-filter-group  flex 0 0 auto   refuses to shrink, keeps all 453px
+       .sp4-search-wrap   flex 1 1 auto   absorbs the whole deficit — crushed
+                                          to width 0, while .sp4-search inside
+                                          stays 66px and spills OVER the first
+                                          date field
+       .sp4-root        overflow-x: hidden   the tail chips are not scrolled
+                                             off, they are cut off — "Yester…"
+                                             and the chip after it cannot be
+                                             reached at all
+
+     So the row was reporting a date range whose second half was under the
+     search box and whose presets were past the edge of the screen.
+
+     A phone has room for one of these controls across, not three. The bar
+     wraps and each control gets the width it needs: search, then the range,
+     then the chips. Nothing overlaps and nothing is unreachable.
+
+     The group WRAPS rather than scrolling, which is where this still parts
+     company with SensorPanel's default. That default is tuned for groups that
+     are chips alone, where one scrolling line and a bled edge is the honest
+     trade. A date you are reading a shift's tonnage against is not a chip —
+     it has to be legible without being dragged into view first, and the two
+     ends have to be visible together or the range is not a range. Two short
+     rows cost about 36px and say the whole sentence. */
+  .wb-root .sp4-filterbar {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .wb-root .sp4-filter-group {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    /* `auto` here would reintroduce the crop: the ancestor clips, so anything
+       past the edge is gone rather than scrollable. */
+    overflow-x: visible;
+    margin-inline: 0;
+    padding-inline: 0;
+    gap: 6px 8px;
+  }
+  /* "From" and "to" stay. They were dropped when this row had one date field
+     and the label was the redundant word "DAY"; with two identical native
+     date widgets side by side, they are the only thing saying which end is
+     which. */
+  .wb-root .sp4-date-input { padding-inline: 6px; }
+
+  /* One end of the range, label and field together. Above this width the rule
+     below keeps it out of the layout entirely. */
+  .wb-root .wb-range-leg {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+  .wb-root .sp4-filter-chip { padding: 0 10px; }
+
+  /* On a phone, Back and a two-line title do not share 375px; they take a row
+     each. Back first and on its own line, at a size a thumb can hit — 26px
+     tall was built for a mouse — and the ticket’s identity underneath with the
+     full width to say itself in. */
+  .wb-detail .sp4-detail-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .wb-detail .sp4-back-btn {
+    min-height: 36px;
+    padding-inline: 14px;
+  }
+  .wb-detail .sp4-detail-titles { flex: 1 0 100%; }
+
+  /* The driver's name is the first thing to go: on a phone the weights and the
+     times are what somebody at a bridge is checking. Head and cell together,
+     or the columns shear. */
+  .wb-td-driver,
+  .sp4-probe-table thead th:nth-child(3) { display: none; }
+}
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────
+   The band above the KPI strip, carrying the two readings of these bridges:
+   the ticket grid and the analytics.
+
+   Modelled on `.maint-crumbs` — same 11.5px, same weight, same "/" drawn as
+   punctuation in `::before` rather than typed into the markup, so a screen
+   reader does not announce a slash between every crumb. It differs in two
+   ways, both because the trailing crumb here is a CONTROL:
+
+   · the colours come off the `--sp4-*` tokens this screen already sets on
+     `.sp4-root`, not off the hard-coded greys that file predates, so light
+     mode needs no second palette here;
+   · the open view is marked with an underline as well as ink, because ink
+     alone is the one cue a reader with low contrast vision or a dying screen
+     does not get.
+
+   The gutter is --sp4-gutter, the same inset the header, filter bar and table
+   below all use — the crumb is the topmost thing on the left edge, so any
+   other value would be the most visible misalignment on the screen. */
+.wb-crumbs {
+  flex-shrink: 0;
+  padding: 9px var(--sp4-gutter);
+  /* No border here — the rule below is a sibling element now, and a band with
+     its own bottom border under it would draw the line twice at two weights,
+     which at 1px each reads as a 2px smudge rather than as one rule. */
+  background: var(--sp4-surface);
+}
+
+/* The break between the crumb and the screen. Full-bleed, so it separates the
+   two bands rather than underlining the words in the left gutter. */
+.wb-rule {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--sp4-line-hi);
+}
+.wb-crumbs__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wb-crumbs__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sp4-text-3);
+}
+.wb-crumbs__item svg { opacity: 0.7; }
+.wb-crumbs__item + .wb-crumbs__item::before {
+  content: "/";
+  color: var(--sp4-text-4);
+  font-weight: 500;
+}
+/* The two views sit tight against each other so they read as one trailing
+   crumb with a choice in it, rather than as two more levels of hierarchy. */
+.wb-crumbs__item--views { gap: 2px; }
+
+.wb-crumb {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 2px 6px 3px;
+  margin: 0;
+  font: inherit;
+  color: var(--sp4-text-3);
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.wb-crumb:hover { color: var(--sp4-text-1); background: rgba(127, 127, 127, 0.1); }
+.wb-crumb:focus-visible {
+  outline: 2px solid var(--sp4-accent);
+  outline-offset: 1px;
+}
+.wb-crumb--on {
+  color: var(--sp4-text-1);
+  border-bottom-color: var(--sp4-accent);
+}
+
+/* ── The analytics view ───────────────────────────────────────────────────
+   `.analytics-page` is claimed on this wrapper for its TOKENS — the `an-*`
+   chart palette is declared on that class rather than on :root — and it
+   brings its own scroll container with it, which is what this view wants
+   anyway. The card inside is the Analytics page's, unmodified.
+
+   Only the inset is restated: the card ships with no gutter of its own
+   because on its home page `.analytics-page__inner` provides one, and that
+   inner wrapper is not used here. */
+.wb-analytics {
+  padding: 0 var(--sp4-gutter) calc(64px + 16px);
+}
+/* The card's own top rule would be a second hairline directly under the note
+   above it. */
+.wb-analytics > .an-hist { border-top: 0; margin-top: 0; }
+/* Taller than on the Analytics page, where this card shares a row with the
+   fuel-rate chart. Here it has the width of the screen to itself, and a
+   208px chart under a full-width axis reads as a strip. */
+.wb-analytics .an-hist__chart { height: min(46vh, 340px); }
+
+
+
+/* What a long range actually fetched, said beside the picker that asked for
+   it. Not a toast and not a panel: it qualifies the two inputs to its left,
+   so it sits with them. */
+.wb-clamp {
+  font-size: 10.5px;
+  color: var(--sp4-warn);
+  white-space: nowrap;
+}

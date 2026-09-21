@@ -1,0 +1,140 @@
+/* Mobile search screen styles. */
+
+
+
+.mobile-search {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background-color: #0b0e14;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+}
+
+.mobile-search__input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #161b22;
+  border: 1px solid #2a2d35;
+  border-radius: 12px;
+  padding: 11px 14px;
+}
+
+.mobile-search__icon {
+  font-size: 17px;
+  color: var(--text-sec-adaptive, #7c8899);
+  flex-shrink: 0;
+}
+
+.mobile-search__input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+}
+.mobile-search__input::placeholder {
+  color: var(--text-sec-adaptive, #7c8899);
+}
+
+.mobile-search__clear {
+  background: none;
+  border: none;
+  color: var(--text-sec-adaptive, #7c8899);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.mobile-search__hint,
+.mobile-search__empty {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-sec-adaptive, #7c8899);
+}
+.mobile-search__empty {
+  color: #ef4444;
+}
+
+.mobile-search__results {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-search__result {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  background-color: #161b22;
+  border: 1px solid #2a2d35;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-search__result:active {
+  background-color: #1d232c;
+}
+
+.mobile-search__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mobile-search__result-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mobile-search__result-reg {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.mobile-search__result-driver {
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+.mobile-search__result-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.app--light .mobile-search {
+  background-color: #f8fafc;
+}
+.app--light .mobile-search__input-wrap {
+  background-color: #ffffff;
+  border-color: #dde1e7;
+}
+.app--light .mobile-search__input {
+  color: #0f172a;
+}
+.app--light .mobile-search__result {
+  background-color: #ffffff;
+  border-color: #dde1e7;
+}
+.app--light .mobile-search__result-reg {
+  color: #0f172a;
+}

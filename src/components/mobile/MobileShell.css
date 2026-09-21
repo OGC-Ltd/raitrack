@@ -1,0 +1,44 @@
+/* Mobile app shell styles. */
+
+
+
+.mobile-shell {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: #0b0e14;
+  overflow: hidden;
+  font-family: var(--font-body);
+}
+
+.mobile-shell__content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.mobile-shell__content > * {
+  position: absolute;
+  inset: 0;
+}
+
+.mobile-shell__map-wrap {
+  position: absolute;
+  inset: 0;
+  --header-h: 0px;
+}
+
+.mobile-shell__map-wrap .fleet-map-body {
+  height: 100%;
+}
+
+.app--light .mobile-shell {
+  background-color: #f8fafc;
+}
+
+.mobile-shell__map-wrap .overlay-left,
+.mobile-shell__map-wrap .overlay-right {
+  display: none !important;
+}

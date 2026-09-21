@@ -1,0 +1,129 @@
+/* Mobile top bar styles. */
+
+
+
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 56px;
+  padding: 0 14px;
+  background-color: #050505e8;
+  border-bottom: 1px solid #2a2d35;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+}
+
+.mobile-topbar__company {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: none;
+  padding: 6px 8px 6px 4px;
+  margin-left: -4px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  transition: background-color 0.15s ease;
+}
+
+.mobile-topbar__company:active {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-topbar__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.mobile-topbar__company-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.mobile-topbar__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.mobile-topbar__units {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-sec-adaptive, #7c8899);
+}
+
+.mobile-topbar__chevron {
+  font-size: 10px;
+  color: var(--text-sec-adaptive, #7c8899);
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.mobile-topbar__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mobile-topbar__status-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobile-topbar__status-pill--online {
+  background-color: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.mobile-topbar__status-pill--offline {
+  background-color: rgba(107, 114, 128, 0.14);
+  color: #9ca3af;
+}
+
+.mobile-topbar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.app--light .mobile-topbar {
+  background-color: #ffffff;
+  border-bottom-color: #dde1e7;
+}
+.app--light .mobile-topbar__company:active {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+.app--light .mobile-topbar__name {
+  color: #0f172a;
+}
+.app--light .mobile-topbar__units,
+.app--light .mobile-topbar__chevron {
+  color: #94a3b8;
+}

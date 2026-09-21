@@ -1,0 +1,686 @@
+/* The cane control board.
+ *
+ * Every colour here is an `an-*` scope token — `--card`, `--border`, `--ink`,
+ * `--text-2/3`, `--chart-1/2/4` — because this panel only ever renders inside
+ * `.analytics-page`, which declares them and re-points them for light mode.
+ * There is deliberately no second palette in this file: the day the theme
+ * moves, this moves with it.
+ *
+ * Layout: a stat strip, then a two-column grid — the bridges on the left, the
+ * zone's rail on the right. Under 1100px the rail drops below the cards rather
+ * than narrowing, because a 40-row activity feed in a 200px column is a list
+ * nobody reads.
+ */
+
+.wbb {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+  /* The board measures itself. What the strip below can fit is a fact about
+     the board's width, and the board sits inside a page whose own side panel
+     comes and goes — at 1440 the board is 1004px, which no viewport
+     breakpoint could have told it. */
+  container-type: inline-size;
+}
+
+/* ── The strip ──────────────────────────────────────────────
+   Seven cells, label above figure, divided by hairlines and read left to
+   right as one sentence about the day.
+
+   Dividers are BORDERS on the cells, not a 1px gap showing a darker ground
+   through it. The gap technique is tidier until the row does not divide
+   evenly — seven figures in a four-column grid leaves a cell empty, and that
+   cell draws as a slab of divider colour in the middle of the strip, which
+   reads as a stat that failed to load.
+
+   The tone is on the FIGURE, not on a rule down the cell's edge: two of these
+   seven are a dash, and an accent bar beside a dash is a colour-coded nothing.
+   On a wide board all seven sit in one row, which is the layout this follows;
+   below that they wrap in fours and then twos, and the reading order survives
+   because every cell states its own label. */
+.wbb-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+/* All seven in one row once there is room for them — the strip is a sentence,
+   and a sentence that wraps mid-clause is read twice.
+
+   Measured on the BOARD, not the viewport. This was `@media (min-width:
+   1180px)`, which is about 250px short of what seven cells need once the
+   page's side panel has taken its share: at a 1180 viewport the rule fired
+   and handed each cell roughly 79px of label width, so every caption on the
+   strip arrived truncated. 990 is the board width at which seven cells clear
+   their longest label, measured. */
+@container (min-width: 990px) {
+  .wbb-strip { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
+.wbb-stat {
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 9px 13px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* The cell measures itself, so the label below can be sized against the
+     room it actually has. Seven in a row or four, that width changes by more
+     than any breakpoint here knows about. */
+  container-type: inline-size;
+}
+/* The label says the whole thing, or it is not a label.
+ *
+ * Seven cells across the strip leaves each one 116px. At 9.5px with 0.08em of
+ * tracking, five of the seven ran wider than that and were cut by the
+ * ellipsis below — "LORRIES AT THE SCALES" measured 132.4 and arrived as
+ * "LORRIES AT THE SCAL…". The figure under it is meaningless without the end
+ * of its own caption, and these captions are the whole reason the strip reads
+ * as a sentence.
+ *
+ * Tracking comes down to 0.03em — spacing out an all-caps label that has no
+ * room to be spaced is the wrong trade — and the size follows the cell, so a
+ * strip that wraps into four wide cells gets the 9.5px this was drawn at while
+ * a seven-across strip gets 8.5. The clip is kept as a backstop for a label
+ * longer than anything currently on the board. */
+.wbb-stat__l {
+  font-size: clamp(8px, 7.32cqi, 9.5px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wbb-stat__n {
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+/* Received and dispatched keep the two hues the flow chart draws them in, so
+   the strip and the chart under it are speaking the same colour. The estimate
+   and the in-transit count take the board's amber, which is its one "still
+   outstanding" hue. */
+.wbb-stat__n--in   { color: var(--chart-2); }
+.wbb-stat__n--out  { color: var(--chart-1); }
+.wbb-stat__n--est  { color: var(--chart-4); }
+.wbb-stat__n--road { color: var(--chart-4); }
+.wbb-stat__u { font-size: 12px; font-weight: 700; color: var(--text-2); margin-left: 3px; }
+.wbb-stat__s { font-size: 10px; color: var(--text-3); line-height: 1.35; }
+
+/* ── The two columns ───────────────────────────────────────────────────── */
+.wbb-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 12px;
+  align-items: start;
+}
+.wbb-sites {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 10px;
+}
+
+/* ── One bridge ────────────────────────────────────────────────────────────
+   The card is a fixed reading order, top to bottom: who and how fresh, the
+   three tonnages, the stock line, the four stations of a ticket, the plant and
+   the day's two totals, then one sentence saying what it all means. Four cards
+   side by side only work because every one of them puts the same fact in the
+   same place. */
+.wbb-site {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  /* The card measures itself so the figures inside can be sized against it.
+     The three tonnages share the card's width in equal thirds, so how much
+     room a number has is a fact about the CARD, not about the viewport — and
+     these cards go from roughly 326px wide at two-up on a desktop down to the
+     270px floor the grid sets, with no media query between the two. */
+  container-type: inline-size;
+}
+/* The mill is not one site among four — it is where every other card's cane is
+   going — so it carries the one accent edge on the grid. */
+.wbb-site--mill { border-top: 2px solid var(--chart-4); }
+
+.wbb-site__head { display: flex; align-items: center; gap: 7px; }
+.wbb-site__name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+/* MILL and YARD, in the two hues the KPI strip above already spends on this
+   screen: the mill takes the lime the fleet's "unique vehicles" figure is set
+   in, the yard the violet of "heaviest load".
+   
+   Borrowed rather than invented, so the board adds no ninth colour to a screen
+   that already has eight — and the two kinds of site are told apart by hue,
+   by the word in the badge and by the accent rule across the mill's top edge,
+   never by hue alone.
+   
+   `--sp4-*` with a literal fallback: those tokens are declared on `.sp4-root`,
+   which is the screen this board ships inside, and the fallback is what the
+   standalone harness (which mounts the board alone) renders. The tokens
+   re-point themselves for the light theme; the fallbacks are the dark
+   values. */
+.wbb-site__kind {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sp4-stat, #a78bfa);
+  border: 1px solid color-mix(in srgb, var(--sp4-stat, #a78bfa) 35%, transparent);
+  background: color-mix(in srgb, var(--sp4-stat, #a78bfa) 10%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.wbb-site--mill .wbb-site__kind {
+  color: var(--sp4-ok, #86efac);
+  border-color: color-mix(in srgb, var(--sp4-ok, #86efac) 35%, transparent);
+  background: color-mix(in srgb, var(--sp4-ok, #86efac) 10%, transparent);
+}
+.wbb-chip {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+/* Four states, and they are ordered: working, slowing, cold, nothing at all.
+   Colour carries the ranking and the WORD carries the meaning — the chip never
+   relies on hue alone to say which of the four it is. */
+.wbb-chip--live { color: var(--chart-3); border-color: color-mix(in srgb, var(--chart-3) 40%, transparent); background: color-mix(in srgb, var(--chart-3) 12%, transparent); }
+.wbb-chip--slow { color: var(--chart-4); border-color: color-mix(in srgb, var(--chart-4) 40%, transparent); background: color-mix(in srgb, var(--chart-4) 12%, transparent); }
+.wbb-chip--cold { color: var(--chart-8); border-color: color-mix(in srgb, var(--chart-8) 40%, transparent); background: color-mix(in srgb, var(--chart-8) 12%, transparent); }
+.wbb-chip--none { color: var(--text-3); border-color: var(--border); background: var(--elevated); }
+
+.wbb-site__meta {
+  font-size: 11px;
+  color: var(--text-3);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.wbb-site__meta b { color: var(--text-2); font-weight: 700; }
+
+/* ── The three tonnages ──────────────────────────────────────────────────
+   Label above the figure, not below: these three are read as a row of
+   headings with numbers under them, and a caption that arrives before its
+   number is what makes the row scannable across four cards at once. */
+.wbb-site__figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wbb-fig { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wbb-fig__l {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+/* The figure scales with the card rather than spilling out of its column.
+ *
+ * It used to be a flat 21px. A third of a 326px card is 93px of track, which
+ * holds about seven digits at that size — and the mill's book figure reached
+ * "15,337.8 t", overran, and printed itself across the "Expected in" heading
+ * to its right. Grid tracks do not clip, so the overflow was drawn, not
+ * hidden: two numbers on top of each other, both unreadable.
+ *
+ * `cqi` is one percent of the card's own inline size, so 6.4cqi holds the 21px
+ * this was designed at on a 326px card and steps down as the card narrows,
+ * which is the moment the crowding actually happens. The floor stops it
+ * dropping under the labels it is meant to dominate. `nowrap` is deliberate: a
+ * tonnage broken over two lines misaligns the row of three, and tabular
+ * figures make the width predictable instead of digit-dependent. */
+.wbb-fig__n {
+  font-size: clamp(15px, 6.4cqi, 21px);
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  min-width: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.wbb-fig__n i { font-size: 11px; font-style: normal; font-weight: 700; color: var(--text-2); margin-left: 3px; }
+/* A yard that sent out more than it took in is not an error, but it is the one
+   reading an operator acts on, so it is marked. */
+.wbb-fig__n--down { color: var(--chart-8); }
+.wbb-fig__s { font-size: 10px; color: var(--text-3); line-height: 1.35; }
+/* A column with no source behind it. Held back so it cannot be mistaken for a
+   measurement, and kept so the missing measurement cannot be mistaken for a
+   complete card. */
+.wbb-fig--absent .wbb-fig__n { color: var(--text-3); font-weight: 700; }
+
+/* ── The stock line ───────────────────────────────────────────────────── */
+.wbb-stock {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px 5px;
+  background: var(--elevated);
+}
+.wbb-stock__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.wbb-stock__hint { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--text-3); opacity: 0.8; }
+.wbb-stock__svg { width: 100%; height: 56px; display: block; margin-top: 4px; overflow: visible; }
+.wbb-stock__fill { fill: color-mix(in srgb, var(--chart-1) 18%, transparent); stroke: none; }
+.wbb-stock__path { fill: none; stroke: var(--chart-1); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+/* Only drawn when the line dips under it — see the component. */
+.wbb-stock__zero { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; vector-effect: non-scaling-stroke; }
+.wbb-stock__flat {
+  height: 56px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px dashed var(--border);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.wbb-stock__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--text-3);
+  padding-top: 3px;
+}
+
+/* ── The four stations ───────────────────────────────────────────────── */
+.wbb-site__counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.wbb-count {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* 4px of side padding, not 6: the label is the widest thing in the tile and
+     those two pixels each side are what "Dispatched" needs to stay on one
+     line. Vertical padding is unchanged. */
+  padding: 7px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+.wbb-count__n { font-size: 17px; font-weight: 800; color: var(--ink); line-height: 1.05; }
+
+/* One line per label, always.
+ *
+ * Four tiles across a 326px card leaves each label about 60px. At 9px with
+ * 0.05em of tracking, "Dispatched" measured 61.5 — so it printed past both
+ * edges of its own tile — while "Out empty", "Weighed in" and "On the road"
+ * broke over two lines. The row came out ragged: some tiles one line deep,
+ * one tile overflowing, and the labels no longer sat under their figures as a
+ * row of four.
+ *
+ * Three things buy the line back, none of them large: the tracking drops to
+ * 0.02em (it was spacing an all-caps label that had no room to be spaced),
+ * the tile gives up 2px of side padding, and the type scales with the card —
+ * 3.02cqi is the 9px this was drawn at on a 326px card, stepping down as the
+ * card narrows, with an 8px floor. Under that the row stops being four; see
+ * the container query below. */
+.wbb-count__l {
+  font-size: clamp(8px, 3.02cqi, 9px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Two by two once four across stops fitting.
+ *
+ * Below roughly 304px of card there is no legible size at which "Dispatched"
+ * and "Weighed in" both sit on one line in a quarter of it: the tile loses
+ * width faster than the type does, because 10px of padding and border comes
+ * off every tile whatever its size, and forcing it would put the label under
+ * its 8px floor. Two up gives
+ * each label about 110px, which every one of the six clears at full size.
+ *
+ * The reading order is unchanged — a lorry still passes the four stations
+ * left to right, then down — and the query is on the CARD rather than the
+ * viewport, because the card's width is what is actually short: the board's
+ * site grid reflows independently of any breakpoint. */
+@container (max-width: 276px) {
+  .wbb-site__counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Two stages can be "the one to look at", and they are different news: cane is
+   out in the fields (amber edge, our own machines), or cane is on the road and
+   the mill has not seen it (amber figure). Both are lit only when they hold
+   something — a station at zero is not a state anybody acts on. */
+.wbb-count--live { border-color: color-mix(in srgb, var(--chart-4) 55%, transparent); }
+.wbb-count--live .wbb-count__n { color: var(--chart-4); }
+.wbb-count--on .wbb-count__n { color: var(--chart-4); }
+
+/* ── Plant and the day's totals ───────────────────────────────────────── */
+.wbb-site__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.wbb-site__kit {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.wbb-site__kit b { color: var(--text-2); font-weight: 700; }
+.wbb-site__kit i { font-style: normal; opacity: 0.5; margin: 0 6px; }
+
+/* ── What it means ──────────────────────────────────────────
+   A rule down the left and a wash of the same hue behind it — not a box.
+
+   A full border draws a second card inside the card, which at the bottom of a
+   stack of framed blocks is one frame too many; the rule is the whole signal
+   and the tint only carries it across the width. Square on the left so the
+   rule reads as an edge, rounded on the right so it still reads as a block. */
+.wbb-say {
+  margin: 0;
+  border: 0;
+  border-left: 3px solid var(--border-hi);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  background: var(--elevated);
+}
+/* DRAWING DOWN. The state an operator acts on, and the only direction that
+   takes a hue — see `verdict`. */
+.wbb-say--down {
+  border-left-color: var(--chart-4);
+  color: var(--chart-4);
+  background: color-mix(in srgb, var(--chart-4) 9%, transparent);
+}
+/* Something has STOPPED: a bridge off the air, or a lorry the mill never
+   weighed. Outranks the direction, because it needs a telephone call rather
+   than a decision. */
+.wbb-say--alert {
+  border-left-color: var(--chart-8);
+  color: var(--chart-8);
+  background: color-mix(in srgb, var(--chart-8) 9%, transparent);
+}
+/* Building, or level: a direction with nothing outstanding behind it. */
+.wbb-say--flat { border-left-color: var(--border-hi); }
+/* Nothing weighed here at all. */
+.wbb-say--none { border-left-color: var(--border); color: var(--text-3); }
+
+/* A bridge that weighed nothing all day.
+   Held back rather than hidden: the card has to be there — an absent site is
+   the one failure this board cannot report — but it must not sit at the same
+   weight as a yard that worked. */
+.wbb-site--silent { opacity: 0.62; }
+.wbb-site--silent .wbb-fig__n,
+.wbb-site--silent .wbb-count__n { color: var(--text-2); }
+
+/* ── The rail ──────────────────────────────────────────────────────────── */
+.wbb-rail { display: flex; flex-direction: column; gap: 10px; }
+.wbb-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px 11px;
+}
+.wbb-panel__h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.wbb-panel__n {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.wbb-panel__empty { margin: 0; font-size: 11px; color: var(--text-3); line-height: 1.5; }
+.wbb-panel__note  { margin: 7px 0 0; font-size: 10px; color: var(--text-3); line-height: 1.45; }
+
+/* ── The zone's flow ──────────────────────────────────────────
+   First panel in the rail, and the tallest thing in it. It was 190px with a Y
+   axis down its left edge, which left the two lines about 230px of width to
+   diverge in — enough to see THAT they do and not by how much.
+
+   The axis is gone (the two figures worth reading are printed where the lines
+   end), the plot sits in its own inset frame with air on every side, and the
+   panel is 240px tall. The rail widened by 30px to carry it, which is the only
+   thing the siblings gave up: the block rows and the feed underneath got
+   slightly more room out of the same change. */
+.wbb-flow { padding: 12px 13px 11px; }
+
+.wbb-flow__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-bottom: 12px;
+}
+.wbb-flow__h {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+/* The key sits under the title on a narrow board and beside it on a wide one,
+   which is what the flex wrap does without a second breakpoint. */
+/* In a 330px column these two wrap under the title, which is the layout the
+   design they follow uses anyway: name, then key, then plot. */
+.wbb-flow__keys { display: flex; flex-wrap: wrap; gap: 3px 14px; }
+.wbb-flow__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.wbb-key { width: 16px; height: 2.5px; border-radius: 2px; display: inline-block; flex: none; }
+.wbb-key--in  { background: var(--chart-2); }
+.wbb-key--out { background: var(--chart-1); }
+
+/* The inset frame. It is what makes the plot read as a WINDOW on the day
+   rather than as ink on the card, and it is the one place on this board where
+   a second surface earns its keep: the labels at the right sit inside it, on
+   the same ground as the lines they belong to. */
+.wbb-flow__plot {
+  height: 240px;
+  padding: 6px 4px 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--elevated);
+}
+
+.wbb-flow__foot {
+  margin-top: 9px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.wbb-flow__foot b { color: var(--ink); font-weight: 700; }
+
+@media (max-width: 640px) {
+  /* A phone gets a shorter plot, not a squeezed one: 300px of chart on a
+     812px screen is the whole viewport spent on one panel. */
+  .wbb-flow__plot { height: 200px; }
+}
+
+.wbb-tip {
+  background: var(--card);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 11px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+.wbb-tip__h { font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+.wbb-tip__r { display: flex; justify-content: space-between; gap: 14px; color: var(--text-2); }
+.wbb-tip__r b { color: var(--ink); }
+
+/* ── Lorries as blocks ────────────────────────────────────────────────────
+   One block is one lorry. The panel answers "how many, and from where", and a
+   row of four blocks against a row of one answers it before anything is read —
+   which a list of plates, tonnages and clocks does not. The plate and the
+   elapsed time live on each block's title, so the detail is a hover away
+   rather than gone.
+
+   Blocks are sized to be COUNTABLE: 15px wide with a 3px gap holds its shape
+   down to about a dozen, which is where the row starts counting instead. */
+.wbb-road { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.wbb-road__row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 11px;
+}
+.wbb-road__site {
+  color: var(--text-2);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wbb-road__blocks { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; min-width: 0; }
+.wbb-block {
+  width: 15px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--chart-1);
+  display: inline-block;
+  flex: none;
+}
+/* A lorry out past the mark keeps its place in this row — it is still on the
+   road — but it is not the same news as one that left ten minutes ago, and the
+   panel below counts exactly these. */
+.wbb-block--late { background: var(--chart-8); }
+.wbb-block__more { font-style: normal; font-size: 10px; font-weight: 700; color: var(--text-3); margin-left: 2px; }
+/* A yard that sent nothing. Said in words, because an empty row reads as a
+   rendering fault and a zero reads as a measurement nobody asked for. */
+.wbb-road__none { color: var(--text-3); font-size: 10.5px; }
+.wbb-road__t { color: var(--text-2); font-weight: 700; font-size: 10.5px; margin-left: auto; white-space: nowrap; }
+.wbb-road__n { color: var(--chart-8); font-weight: 800; font-size: 12px; }
+
+/* The figure in a panel head — "≥ 4h 12m" — which is a reading rather than a
+   count, so it is set apart from `.wbb-panel__n`. */
+.wbb-panel__fig {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.wbb-panel__fig--late { color: var(--chart-8); }
+.wbb-panel__sub {
+  margin: -4px 0 8px;
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+/* ── Live activity ────────────────────────────────────────────────────────
+   Banded rows, not ruled ones. Every row here is the same KIND of thing — one
+   weighing — so a hairline between each is a separator doing no separating,
+   and at this row height it turns the panel into a grid of thin boxes. The
+   zebra does the same job with no ink: the eye keeps its place down a fast
+   list, and a row reads as one object rather than as three columns.
+
+   Each row is a sentence in one colour. The earlier version tinted the site by
+   what kind of weighing it was, which put four hues in a list that is read for
+   its ORDER — the newest at the top — and made the feed compete with the chart
+   above it for the same two meanings. The time carries the structure instead:
+   mono, muted, fixed width, so the left edge is a column you can scan. */
+.wbb-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 290px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wbb-feed__row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+/* Odd rows lifted, not even: the first row is the newest weighing and the one
+   most looked at, so it is the one that gets the ground. */
+.wbb-feed__row:nth-child(odd) { background: var(--elevated); }
+
+.wbb-feed__t {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.wbb-feed__txt { color: var(--ink); min-width: 0; }
+.wbb-feed__dot {
+  font-style: normal;
+  color: var(--text-3);
+  margin: 0 5px;
+}
+/* The tonnage is the one part of the sentence anybody reads twice. */
+.wbb-feed__kg { font-weight: 700; white-space: nowrap; }
+/* A lorry weighing in empty is bookkeeping, not cane: it belongs in the feed —
+   it is how a shift starts — but it should not read at the same weight as a
+   load arriving. */
+.wbb-feed__row--empty .wbb-feed__txt { color: var(--text-2); }
+
+.wbb-empty {
+  padding: 30px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ── Narrow ────────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .wbb-grid { grid-template-columns: minmax(0, 1fr); }
+  /* The rail's three panels sit side by side once they are no longer a
+     column, so the feed keeps a readable width instead of running the length
+     of a phone screen. */
+  .wbb-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+}
+@media (max-width: 640px) {
+  .wbb-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wbb-stat__n { font-size: 19px; }
+  .wbb-stat__l { white-space: normal; }
+  .wbb-site__counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

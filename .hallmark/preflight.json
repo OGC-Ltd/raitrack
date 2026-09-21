@@ -1,0 +1,14 @@
+{
+  "scanned": "2026-09-14",
+  "font_stack": "Geist via --font-body (src/index.css); no next/font, no Google Fonts link",
+  "palette": "--color-* theme tokens, bridged per page to local --card/--border/--ink",
+  "motion": "motion-cut - no framer-motion/gsap/motion in package.json; hand-written transitions + --ease-out",
+  "spacing": "no scale token; hand-tuned px",
+  "framework": "Vite 5 + React 18, plain CSS per component",
+  "preserve": [
+    "font stack",
+    "palette",
+    "spacing approach",
+    "motion stance"
+  ]
+}

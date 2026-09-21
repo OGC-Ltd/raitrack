@@ -1,0 +1,44 @@
+/* Legacy chart, unused. */
+
+.stacked-bar-chart {
+  width: 100%;
+}
+
+.stacked-bar-chart__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.stacked-bar-chart__gridline {
+  stroke: var(--color-border, #2a2d35);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.stacked-bar-chart__axis-label {
+  fill: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  font-size: 9.5px;
+  font-family: var(--font-body);
+}
+
+.stacked-bar-chart__legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.stacked-bar-chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+}
+
+.stacked-bar-chart__legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}

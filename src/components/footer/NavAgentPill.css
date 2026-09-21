@@ -1,0 +1,28 @@
+/* Legacy component, unused. */
+
+.nav-agent-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34,197,94,0.10);
+  border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 99px;
+  padding: 7px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+.nav-agent-pill:hover {
+  background: rgba(34,197,94,0.17);
+  border-color: rgba(34,197,94,0.4);
+  transform: translateY(-1px);
+}
+.nav-agent-pill__icon  { font-size: 13px; color: #22c55e; }
+.nav-agent-pill__label { font-size: 12px; font-weight: 700; color: #22c55e; letter-spacing: 0.2px; }
+
+@media (max-width: 380px) {
+  .nav-agent-pill__label { font-size: 11px; }
+  .nav-agent-pill        { padding: 6px 11px; }
+}

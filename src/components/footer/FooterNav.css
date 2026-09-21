@@ -1,0 +1,42 @@
+/* Desktop footer nav styles. */
+
+
+
+.footer-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: rgba(11, 14, 20, 0.97);
+  border-top: 1px solid #2a2d35;
+  z-index: 1000;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.footer-nav__items {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  width: 100%;
+}
+
+/* The two side groups share the leftover space equally, so the fixed-width
+   FAB between them sits at the exact horizontal centre of the bar. */
+.footer-nav__side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+@media (max-width: 380px) {
+  .footer-nav { height: 60px; }
+}
+
+.app--light .footer-nav {
+  background: rgba(255, 255, 255, 0.97);
+  border-top-color: #dde1e7;
+}

@@ -1,0 +1,330 @@
+/* SidePanel — Sample 2: weather card, bordered stat grid, bordered nav and layers */
+
+.side-panel {
+  /* Set per-breakpoint in App.css, which owns how the shell's three columns
+     share the row. Keeping the number here too meant the sidebar and the
+     vehicle panel were sized by two files that disagreed at 1024px. */
+  width: var(--side-panel-w, 320px);
+  flex-shrink: 0;
+  background: #ffffff;
+  border-right: 1px solid #edf0f4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 100%;
+  font-family: 'Inter', 'Roboto', sans-serif;
+}
+
+.side-panel--collapsed { width: 56px; }
+
+/* Re-opened over the map on a tablet. The width comes from App.css; this only
+   has to stop the collapsed rule from winning on specificity. */
+.side-panel--overlay { width: 288px; }
+
+/* ── Hamburger ── */
+.side-panel__hamburger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  flex-shrink: 0;
+  text-align: left;
+}
+.side-panel__hamburger:hover { background: #f8fafc; }
+
+.side-panel__hb-lines { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.side-panel__hb-lines span { display: block; width: 18px; height: 1.5px; background: #64748b; border-radius: 2px; }
+
+.side-panel__hb-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* ── Scrollable body ── */
+.side-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* ── Weather card ── */
+.sp-weather-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+/* Location strip — top */
+.sp-weather-location {
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sp-weather-pin {
+  font-size: 11px;
+  color: #f43f5e;
+  flex-shrink: 0;
+}
+
+.sp-weather-location span {
+  font-size: 11px;
+  color: #334155;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Current conditions */
+.sp-weather-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sp-weather-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.sp-weather-temp {
+  font-size: 22px;
+  font-weight: 300;
+  color: #0f172a;
+  line-height: 1;
+  margin-top: 3px;
+}
+
+.sp-weather-desc {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.sp-weather-right {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.sp-weather-detail {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.sp-weather-detail-icon { font-size: 12px; }
+
+
+
+/* ── Stats grid — 2x3 ── */
+.sp-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.sp-stat-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  padding: 12px 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  position: relative;
+  border-bottom: 3px solid transparent;
+}
+
+.sp-stat-box:hover {
+  border-color: #cbd5e1;
+  border-bottom-color: transparent;
+}
+
+.sp-stat-box--active {
+  border-bottom: 3px solid var(--stat-color);
+  background: #fafafa;
+}
+
+
+
+
+
+
+.sp-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.sp-stat-num--green { color: #16a34a; }
+.sp-stat-num--blue  { color: #2563eb; }
+.sp-stat-num--amber { color: #d97706; }
+.sp-stat-num--red   { color: #dc2626; }
+.sp-stat-num--grey  { color: #64748b; }
+
+.sp-stat-lbl {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 500;
+}
+
+/* ── Nav box ── */
+.sp-nav-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.sp-nav-item:last-child { border-bottom: none; }
+.sp-nav-item:hover { background: #f8fafc; }
+.sp-nav-item--active { background: #eff6ff; }
+.sp-nav-item--disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sp-nav-bar {
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  background: #2563eb;
+  border-radius: 0 2px 2px 0;
+}
+
+.sp-nav-icon {
+  font-size: 16px;
+  color: #94a3b8;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.sp-nav-item--active .sp-nav-icon { color: #2563eb; }
+
+.sp-nav-label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 400;
+}
+.sp-nav-item--active .sp-nav-label { color: #1d4ed8; font-weight: 500; font-size: 13px; }
+
+/* ── The map's controls, as trees ──────────────────────────────────
+   What stood here was `.sp-layers-box`: a bordered box, stretched to the foot
+   of the panel, holding a flat list of checkboxes. It is gone with its rules
+   — .sp-layers-header, .sp-layers-list, .sp-layer-row, .sp-layer-check,
+   .sp-layer-label, .sp-layers-empty — because nothing renders those class
+   names any more (SidePanel.jsx now mounts FleetsTree and MapLayersTree).
+
+   This wrapper does not stretch. The old box did, which is why a fleet with
+   one layer showed one checkbox and then 300px of empty bordered white: the
+   box was sized by the panel rather than by what was in it. The trees are as
+   tall as the branches somebody has opened, and the panel scrolls when the sum
+   of them is taller than it is. */
+.sp-trees {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+/* ── Collapsed — icon only nav ── */
+.side-panel__nav {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.side-panel__nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  border-bottom: 1px solid #f1f5f9;
+}
+.side-panel__nav-item:last-child { border-bottom: none; }
+.side-panel__nav-item:hover { background: #f8fafc; }
+.side-panel__nav-item--active { background: #eff6ff; }
+
+.side-panel__nav-icon { font-size: 17px; color: #94a3b8; }
+.side-panel__nav-item--active .side-panel__nav-icon { color: #2563eb; }
+
+/* ── Hide on mobile ── */
+@media (max-width: 767px) {
+  .side-panel { display: none !important; }
+}
+
+/* ── Tablet: the body scrolls inside an overlay that is only 288px wide ──── */
+@media (max-width: 1023px) {
+  /* Tap targets. At 32px these rows were under the 44px the platform guidance
+     asks for, and they are the app's primary navigation. */
+  .sp-nav-item { min-height: 44px; }
+  .side-panel__nav-item { min-height: 48px; }
+  .sp-layer-row { min-height: 40px; }
+}
+
+/* Coarse pointers get the larger targets whatever the viewport width is — a
+   1280px touchscreen laptop is still being used with a finger. */
+@media (pointer: coarse) {
+  .sp-nav-item,
+  .side-panel__nav-item { min-height: 44px; }
+  .sp-stat-box { min-height: 56px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel { transition: none; }
+}

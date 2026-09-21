@@ -1,0 +1,37 @@
+/* The shared incident report — Speed and Malfunction tabs.
+ *
+ * Almost nothing is left here, and that is the redesign.
+ *
+ * These two tabs used to carry their own table: `.ir-table` on App.css tokens,
+ * its own row hover, its own right-align rule, its own empty block, its own
+ * shimmering skeleton, its own "Load more" button, its own detail header. Sat
+ * beside Fuel FSL — same panel, one tab over — it read as a different product
+ * bolted on: different header weight, different row rhythm, different gutter,
+ * a chevron column FSL does not have, and a grey skeleton where the other tabs
+ * spin.
+ *
+ * So the tables now speak the panel's own vocabulary — `.sp4-table`,
+ * `.sp4-tr`, `.sp4-reg`, `.sp4-num`, `.sp4-table-sub`, `.sp4-loading`,
+ * `.sp4-empty-tab`, `.sp4-page-btn`, `.sp4-detail-head` — exactly as
+ * ProbeHealthPanel already does, and for the reason SensorPanel.css gives
+ * there: a second visual language on one screen reads as two products. Those
+ * live in SensorPanel.css, next to the fuel table they were written for.
+ *
+ * What stays below is the one thing with no counterpart there.
+ */
+
+/* Said out loud, not styled as an error: a window that predates capture is a
+   fact about the data, not a fault.
+   On the panel's tokens and the panel's gutter, so it lines up with the
+   caption directly above it rather than floating inboard of everything — it
+   sits inside the table scroller now, between the caption and the column
+   heads. The info rule down its left edge is the only colour it carries. */
+.ir-note {
+  padding: 7px var(--sp4-gutter);
+  border-bottom: 1px solid var(--sp4-line);
+  border-left: 3px solid var(--sp4-info);
+  background: rgba(59,130,246,0.05);
+  color: var(--sp4-text-2);
+  font-size: var(--sp4-body);
+}
+

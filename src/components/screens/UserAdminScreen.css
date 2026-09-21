@@ -1,0 +1,146 @@
+/* The user accounts page.
+ *
+ * Only the shell is here — every card, form and table style belongs to
+ * UserAdminPanel.css and is untouched by the move out of Maintenance.
+ *
+ * The bar holds the back control and nothing else, so it is a plain row — no
+ * centring grid, because there is no longer a title to hold on the page's
+ * centre line. It keeps AccountScreen's height and rule so the two pages the
+ * avatar menu opens still start at the same place.
+ */
+
+.uadm-page {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg, #050505);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+
+  /* Declared on the ROOT, not on the body below, because the crumb strip is
+     inset by it too — MaintenanceScreen declares it on the element that holds
+     both its crumbs and its panel, and this is that element. The expression is
+     that file's own, so the two surfaces inset identically at every width. */
+  --maint-gutter: var(--app-gutter, clamp(20px, calc(var(--vw) * 4), 64px));
+}
+
+/* ── The orientation strip ───────────────────────────────────────────────────
+ *
+ * MaintenanceScreen's `.maint-crumbs`, rule for rule: the same 10/9 padding on
+ * the same gutter, the same #080809 surface under the same #2a2d35 hairline,
+ * 11.5px at 600 with a drawn "/" between items. That band is the first thing
+ * on the Maintenance tab and this is now the first thing here, so the two
+ * pages start on the same line at the same height in the same voice.
+ *
+ * The classes are this file's own rather than borrowed: `.maint-crumbs` lives
+ * in MaintenanceScreen.css, which is loaded by MaintenanceScreen's module —
+ * reaching into it would make this page's chrome depend on whether the user
+ * had opened another tab first, and it would fail exactly once, silently, on a
+ * fresh load. Two copies of nine declarations beats that.
+ */
+.uadm-page__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  /* Matches AccountScreen's bar height, which its baseline-aligned title set
+     for it. Stated outright here because there is no title left to set it. */
+  min-height: 41px;
+  padding: 10px var(--maint-gutter, 24px) 9px;
+  background: #080809;
+  border-bottom: 1px solid #2a2d35;
+}
+
+.uadm-crumbs__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.uadm-crumbs__item {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-ui, system-ui);
+  letter-spacing: 0.01em;
+  color: #7c8899;
+}
+
+/* Punctuation between items, so it is drawn rather than sitting in the markup
+   where a screen reader would announce it between every crumb. */
+.uadm-crumbs__item + .uadm-crumbs__item::before {
+  content: "/";
+  margin-right: 6px;
+  color: #4a5563;
+  font-weight: 500;
+}
+
+.uadm-crumbs__item--current { color: #f0f4f8; }
+
+/* The one crumb that goes somewhere. It is a button because it closes an
+   overlay rather than following a URL, and it is drawn as the crumb it sits in
+   rather than as a control — the arrow is what marks it as the way out. */
+.uadm-page__back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.uadm-page__back:hover { color: #f0f4f8; }
+.uadm-page__back:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 3px; border-radius: 3px; }
+
+/* Light mode. The block above hard-codes the Maintenance bar's dark palette —
+   which is what parity means here — so the light theme re-points it the same
+   way MaintenanceScreen.css re-points its own. */
+.app--light .uadm-page__bar {
+  background: var(--color-bg, #f0f4f8);
+  border-bottom-color: var(--color-border, #dde1e7);
+}
+.app--light .uadm-crumbs__item { color: var(--color-text-sec, #475569); }
+.app--light .uadm-crumbs__item + .uadm-crumbs__item::before { color: var(--color-text-muted, #94a3b8); }
+.app--light .uadm-crumbs__item--current { color: var(--color-text-primary, #0f172a); }
+.app--light .uadm-page__back:hover { color: var(--color-text-primary, #0f172a); }
+
+/* SCROLL OWNERSHIP, and it is the same split MaintenanceScreen documents.
+ *
+ * On a desk this does NOT scroll. The panel inside is built the way
+ * SensorPanel is — a flex column whose roster is its own scroller — so the
+ * count, the filters and the invite form stay put while only the rows move,
+ * and the column heads can sit sticky at the top of the rows they name. A
+ * second scroller out here would fight that one.
+ *
+ * On a phone the roster is a stack of cards rather than a grid, there are no
+ * column heads to pin, and a fixed-height column would leave the invite form
+ * squeezing the roster to nothing on a short screen. So the page scrolls as a
+ * whole again below 769px, which is what it did before.
+ *
+ * --maint-gutter, which UserAdminPanel.css writes its padding against, is
+ * declared on .uadm-page above rather than here — the crumb strip needs it as
+ * well, and a token on the scroller alone left the bar on a different inset
+ * from the panel under it.
+ */
+.uadm-page__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 768px) {
+  .uadm-page__body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* No narrow override on the bar. It used to drop to a flat 14px; the gutter
+   already floors at 20px, and a 14px crumb over a 20px panel is exactly the
+   step this pass exists to remove. */

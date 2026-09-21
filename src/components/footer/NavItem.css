@@ -1,0 +1,77 @@
+/* Standard footer nav button styles. */
+
+.nav-item {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  /* Inactive nav was #3d4553 — barely legible on the dark bar. */
+  color: #b3bdcc;
+  transition: color 0.18s ease;
+  padding: 0;
+  font-family: var(--font-body);
+}
+.nav-item:hover          { color: #ffffff; }
+.nav-item--active        { color: #22c55e; }
+
+.nav-item__icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+/* Attention count pinned to the icon's corner — same pill the header bell
+   used before the maintenance counter moved down here. */
+.nav-item__badge {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 7px;
+  background-color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+}
+.nav-item__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+.nav-item__bar {
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2.5px;
+  background: #22c55e;
+  border-radius: 99px 99px 0 0;
+}
+
+.app--light .nav-item           { color: #475569; }
+.app--light .nav-item--active   { color: #22c55e; }
+
+/* A tab this account cannot open. Present so the product's shape is legible to
+   everybody, dimmed so it does not read as available, and `cursor: default`
+   rather than `not-allowed` — the pointer says "nothing here", the tooltip
+   says why. */
+.nav-item--disabled,
+.nav-item:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.nav-item:disabled:hover { background: none; }

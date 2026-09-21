@@ -1,0 +1,63 @@
+/* Mobile bottom nav styles. */
+
+
+
+.mobile-bottomnav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 58px;
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  align-items: stretch;
+  background-color: rgba(11, 14, 20, 0.97);
+  border-top: 1px solid #2a2d35;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 1000;
+}
+
+.mobile-bottomnav__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-sec-adaptive, #7c8899);
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.mobile-bottomnav__item--active {
+  color: #22c55e;
+}
+
+.mobile-bottomnav__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.mobile-bottomnav__label {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  letter-spacing: 0.01em;
+}
+
+.app--light .mobile-bottomnav {
+  background-color: rgba(255, 255, 255, 0.97);
+  border-top-color: #dde1e7;
+}
+.app--light .mobile-bottomnav__item {
+  color: #94a3b8;
+}
+.app--light .mobile-bottomnav__item--active {
+  color: #16a34a;
+}

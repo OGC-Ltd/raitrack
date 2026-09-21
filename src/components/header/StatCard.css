@@ -1,0 +1,134 @@
+/* Legacy component, unused. */
+
+
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #22272f;
+  border: 1px solid #2e3440;
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  position: relative;
+}
+
+.stat-card:hover {
+  border-color: #4b5563;
+}
+
+.stat-card--active {
+  border-color: var(--stat-card-accent, #22c55e);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.stat-card__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-card__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-card__label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-sec-adaptive, #7c8899);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stat-card__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.stat-card__value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-card__unit {
+  font-size: 10px;
+  color: var(--text-sec-adaptive, #7c8899);
+}
+
+/* The parenthetical count — same treatment as the live feed's message text
+   (primary toned down via opacity) so it reads instead of vanishing. */
+.stat-card__trucks {
+  font-size: 10px;
+  color: var(--text-primary, #f0f4f8);
+  opacity: 0.78;
+}
+
+.stat-card__close {
+  display: none;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #4b5563;
+  color: #d1d5db;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.stat-card--active .stat-card__close {
+  display: flex;
+}
+
+.stat-card__close:hover {
+  background-color: #6b7280;
+  color: #fff;
+}
+
+@media (min-width: 640px) and (max-width: 899px) {
+  .stat-card {
+    gap: 7px;
+    padding: 5px 10px;
+  }
+
+  .stat-card__icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .stat-card__value {
+    font-size: 16px;
+  }
+
+  .stat-card__trucks {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .stat-card {
+    flex: 1;
+    padding: 5px 10px;
+    gap: 7px;
+  }
+
+  .stat-card__trucks {
+    display: none;
+  }
+}

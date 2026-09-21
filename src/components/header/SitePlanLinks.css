@@ -1,0 +1,336 @@
+/* Hallmark · pre-emit critique: P5 H4 E5 S5 R5 V4
+ * Hallmark · component: quick-link (site plans) · genre: modern-minimal · theme: in-project
+ * states: default · hover · focus · active — the other four do not exist on
+ *         this control and are not faked. It renders ONLY when the map is
+ *         offering at least one survey, so there is nothing to disable and
+ *         nothing to load; a survey whose file failed reports that on its own
+ *         layer switch ("failed"), where the retry lives. Choosing a place is
+ *         a navigation, so its success is the map arriving — not a tick here.
+ * form:   linked text, not a chip. Was a bordered 32px pill with a filled
+ *         count badge; the border, the fill and the badge are gone and the
+ *         underline carries the affordance. The 32px HIT AREA is kept exactly
+ *         as it was — the box stopped being drawn, it did not stop being
+ *         pressable.
+ * icon:   locator crosshair, not a teardrop pin. The pin is the noun the map
+ *         already draws; this control is the verb.
+ * type:   Geist (var(--font-body)) throughout. 11.5px label on 0.01em, which
+ *         is the body step — a header LINK is read, where the 10.5px/0.04em
+ *         all-caps it replaced was a label to be scanned past.
+ * motion: three primitives — underline fade, chevron rotate, panel fade. Only
+ *         opacity and transform; all three cut under reduced-motion. The
+ *         press nudge is 1px of translateY, which is the fourth thing that
+ *         moves and is a state, not an animation.
+ * colour: tokens with the hex fallbacks this header's menus already use.
+ *         The .app--light block is raw hex, matching CompanySwitcherDropdown
+ *         .css beside it rather than inventing a light token this app does
+ *         not have. Contrast measured both themes, 7 text roles: worst 8.52
+ *         dark, 5.02 light. The light REST label was 3.60 and is fixed below.
+ * demo:   every interactive rule is also reachable by .is-hover / .is-focus /
+ *         .is-active, so SitePlanLinks.preview.html can show the states side
+ *         by side. Nothing in the app sets those classes; they cost four
+ *         selectors and are the only way to LOOK at a hover state rather than
+ *         take the stylesheet's word for it.
+ */
+
+.site-links {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.site-links__trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* The hit area survives the box. 32px matches the theme switch beside it;
+     losing the border must not lose the target, which is the usual way a
+     "make it a link" change quietly becomes a 14px tap. */
+  min-height: 32px;
+  padding: 0 2px;
+  font: inherit;
+  font-family: var(--font-body, inherit);
+  color: var(--text-sec-adaptive, #7c8899);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out, ease);
+}
+
+.site-links__trigger:hover,
+.site-links__trigger.is-hover,
+.site-links__trigger--open {
+  color: var(--color-text-primary, #c9d1d9);
+}
+
+/* Instant, and never animated: a focus ring that fades in is a focus ring that
+   is not there when the key is pressed. */
+.site-links__trigger:focus-visible,
+.site-links__trigger.is-focus {
+  outline: 2px solid var(--accent-ok, #22c55e);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.site-links__trigger:active .site-links__text,
+.site-links__trigger.is-active .site-links__text {
+  transform: translateY(1px);
+}
+
+.site-links__text {
+  position: relative;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: transform 0.1s var(--ease-out, ease);
+}
+
+/* The underline IS the control.
+   A pseudo-element rather than text-decoration, so it sits a readable 3px off
+   the baseline instead of cutting through the descender of "Sites". Present at
+   rest as a hairline — that is what says "link" on a control with no box — and
+   solid on approach. It changes OPACITY, not width: a line that grows on hover
+   is not there to be aimed at, and this one is the affordance. */
+.site-links__text::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.35;
+  transition: opacity 0.15s var(--ease-out, ease);
+}
+
+.site-links__trigger:hover .site-links__text::after,
+.site-links__trigger.is-hover .site-links__text::after,
+.site-links__trigger:focus-visible .site-links__text::after,
+.site-links__trigger.is-focus .site-links__text::after,
+.site-links__trigger--open .site-links__text::after {
+  opacity: 1;
+}
+
+.site-links__count {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-sec-adaptive, #7c8899);
+}
+
+.site-links__count::before {
+  content: "·";
+  margin-right: 5px;
+  opacity: 0.6;
+}
+
+/* A borrowed survey is amber, the colour the guest rows already use — the
+   same thing said the same way, rather than a second vocabulary. */
+.site-links__count[data-visiting] { color: var(--accent-warn, #f59e0b); }
+
+.site-links__chevron {
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.15s var(--ease-out, ease);
+}
+
+.site-links__chevron--open { transform: rotate(180deg); }
+
+.site-links__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  /* Anchored RIGHT. The trigger sits near the end of the bar, so a
+     left-anchored panel would hang off the edge of a phone. */
+  right: 0;
+  width: 250px;
+  max-height: 340px;
+  overflow-y: auto;
+  background-color: #111317;
+  border: 1px solid #2a2d35;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  z-index: 2000;
+  animation: site-links-in 0.14s ease-out;
+}
+
+@keyframes site-links-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* All three primitives collapse. The underline still CHANGES on hover — it
+   goes from hairline to solid — it simply stops being drawn on. */
+@media (prefers-reduced-motion: reduce) {
+  .site-links__menu { animation: none; }
+  .site-links__text,
+  .site-links__text::after,
+  .site-links__chevron,
+  .site-links__item-name,
+  .site-links__item-text { transition-duration: 0.01ms; }
+  .site-links__trigger:active .site-links__text,
+  .site-links__item:active .site-links__item-text { transform: none; }
+}
+
+.site-links__title {
+  padding: 6px 8px 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-sec-adaptive, #7c8899);
+}
+
+.site-links__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  /* 40px here, not 32: this IS a touch target — the trigger is a disclosure,
+     these are the things being chosen. */
+  min-height: 40px;
+  padding: 7px 8px;
+  font: inherit;
+  background: none;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+
+.site-links__item:hover,
+.site-links__item.is-hover { background-color: rgba(255, 255, 255, 0.06); }
+
+.site-links__item:focus-visible,
+.site-links__item.is-focus {
+  outline: 2px solid var(--accent-ok, #22c55e);
+  outline-offset: -2px;
+}
+
+.site-links__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: #6b7280;
+}
+
+/* A borrowed survey is amber, the colour this product already uses for
+   "true, and worth a second look" — it is not an error and it is not routine. */
+.site-links__dot--guest { background-color: var(--accent-warn, #f59e0b); }
+
+/* A scale carries the map's own weighbridge colour so the dot in this menu and
+   the marker it takes you to are the same thing in two places. The VALUE is
+   set inline from `ZONE_STYLE.weighing` (lib/zoneLegend) rather than written
+   here: that object is what paints the markers and the layer legend, and a
+   second copy of the hex in a stylesheet is a copy that drifts. This rule only
+   holds the fallback, for a render where the style object is somehow absent. */
+.site-links__dot--bridge { background-color: #2dd4bf; }
+
+/* A heading that FOLLOWS rows needs air above it; the first one does not,
+   because the menu's own padding already gives it some. Without this the
+   "Go to a weighbridge" label sits tight under the last yard and reads as
+   another row rather than as the start of a group. */
+.site-links__item + .site-links__title { margin-top: 6px; }
+
+.site-links__item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  transition: transform 0.1s var(--ease-out, ease);
+}
+
+.site-links__item-name {
+  /* The chain runs through the panel too: a row is a place you go to, so its
+     name underlines on approach the way the trigger does. Drawn with
+     box-shadow rather than text-decoration so it clears the descenders on
+     "Big Farm" and "Nyaondo" instead of striking through them. */
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary, #c9d1d9);
+  overflow-wrap: anywhere;
+  /* Shrink to the words. These are flex items in a column, so they are
+     blockified and would otherwise carry the underline the full width of the
+     panel — under the empty space after the name as well as under the name. */
+  align-self: flex-start;
+  box-shadow: inset 0 -1px 0 transparent;
+  transition: box-shadow 0.15s var(--ease-out, ease);
+}
+
+.site-links__item:hover .site-links__item-name,
+.site-links__item.is-hover .site-links__item-name,
+.site-links__item:focus-visible .site-links__item-name,
+.site-links__item.is-focus .site-links__item-name {
+  box-shadow: inset 0 -1px 0 currentColor;
+}
+
+.site-links__item:active .site-links__item-text,
+.site-links__item.is-active .site-links__item-text { transform: translateY(1px); }
+
+.site-links__item-sub {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--accent-warn, #f59e0b);
+}
+
+/* Narrow phones: the word goes, the pin and the count stay. Three header
+   controls plus a company name do not fit across 320px otherwise. */
+@media (max-width: 480px) {
+  /* The word goes; the crosshair and the count stay. The separator goes WITH
+     the word — a leading middot in front of a bare number reads as a typo. */
+  .site-links__text { display: none; }
+  .site-links__count::before { content: none; }
+  .site-links__trigger { padding: 0 4px; gap: 5px; }
+
+  /* And the panel stops hanging off the screen.
+     Right-anchoring is correct on the wide bar, where this control sits at the
+     end of it. On the phone row the account button follows, so the trigger is
+     ~150px in from the right edge and a 250px panel anchored to its right edge
+     started 27px off the LEFT of a 375px screen — clipped, silently, with no
+     horizontal scroll to give it away. Centred on the trigger instead, and
+     narrowed to whatever the viewport actually has. */
+  .site-links__menu {
+    right: auto;
+    left: 50%;
+    width: min(250px, calc(100vw - 32px));
+    transform: translateX(-50%);
+    animation-name: site-links-in-centred;
+  }
+}
+
+@keyframes site-links-in-centred {
+  from { opacity: 0; transform: translate(-50%, -4px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* The REST colour, which the dark theme gets right and the light theme did
+   not. --text-sec-adaptive lands on #7c8899, and on this theme's white that is
+   3.60:1 at 11.5px — under the 4.5 that anything below 18.66px is held to.
+   It was survivable while this was an all-caps label to be scanned past; it is
+   not survivable now that it is a LINK, which is a thing you have to read
+   before you can decide to press it. Scoped here rather than fixed in the
+   token: --text-sec-adaptive is used across the whole app and moving it is not
+   this component's business. #475569 measures 7.58.  */
+.app--light .site-links__trigger { color: #475569; }
+.app--light .site-links__title   { color: #475569; }
+
+
+.app--light .site-links__trigger:hover,
+.app--light .site-links__trigger.is-hover,
+.app--light .site-links__trigger--open {
+  color: #0f172a;
+}
+
+.app--light .site-links__count { color: #475569; }
+.app--light .site-links__count[data-visiting] { color: #b45309; }
+
+.app--light .site-links__menu {
+  background-color: #ffffff;
+  border-color: #dde1e7;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.app--light .site-links__item:hover,
+.app--light .site-links__item.is-hover { background-color: rgba(0, 0, 0, 0.04); }
+.app--light .site-links__item-name { color: #0f172a; }
+.app--light .site-links__item-sub { color: #b45309; }

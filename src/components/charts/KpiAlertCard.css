@@ -1,0 +1,66 @@
+/* Legacy chart, unused. */
+
+.kpi-alert-card {
+  flex: 1;
+  min-width: 190px;
+  background-color: var(--color-card, var(--color-card, rgba(10, 10, 11, 0.97)));
+  border: 1px solid var(--color-border, #2a2d35);
+  border-left: 3px solid;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.kpi-alert-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.kpi-alert-card__badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.kpi-alert-card__icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.kpi-alert-card__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.kpi-alert-card__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.kpi-alert-card__value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--color-text-primary, #f0f4f8);
+  line-height: 1;
+}
+
+.kpi-alert-card__unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+}
+
+.kpi-alert-card__subline {
+  font-size: 11px;
+  color: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  line-height: 1.5;
+}

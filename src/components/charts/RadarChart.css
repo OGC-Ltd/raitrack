@@ -1,0 +1,28 @@
+/* Legacy chart, unused. */
+
+.radar-chart {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.radar-chart__grid {
+  fill: none;
+  stroke: var(--color-border, #2a2d35);
+  stroke-width: 1;
+}
+
+.radar-chart__spoke {
+  stroke: var(--color-border, #2a2d35);
+  stroke-width: 1;
+}
+
+.radar-chart__label {
+  fill: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--font-body);
+}
