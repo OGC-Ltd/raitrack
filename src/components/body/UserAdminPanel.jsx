@@ -33,17 +33,25 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppContext } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
 import {
-  listUsersAcrossOrgs, listAssignableRoles, createOrgUser, resendInvite, setUserStatus,
+  listUsersAcrossOrgs, listAssignableRoles, createOrgUser, updateOrgUser, resendInvite, setUserStatus,
   listUserMemberships, setUserMembership, removeUserMembership,
   deleteOrgUserPermanently,
 } from "../../api/users";
 import { firstMessage, isMissingEndpoint } from "../../lib/formErrors";
+import {
+  sortRows, nextSort, paginate, pageWindow, PER_PAGE_CHOICES,
+  selectionState, toggleSelected, toggleAllVisible, pruneSelection,
+} from "../../lib/rosterView";
+import { toCsv, exportFilename, downloadCsv } from "../../lib/rosterExport";
 import { accountState } from "../../lib/accountState";
+import { companyMark } from "../../lib/companyLogos";
+import { maskEmail, maskPhone } from "../../lib/mask";
 import {
   confirmPhraseFor, confirmMatches, confirmState, skipsTypedConfirmation,
 } from "../../lib/deleteConfirmation";
@@ -53,6 +61,610 @@ import { DriversIcon } from "../footer/NavIcons";
 import "./UserAdminPanel.css";
 
 const EMPTY_FORM = { fullName: "", email: "", phone: "", employeeId: "" };
+
+/**
+ * The columns, as data.
+ *
+ * A list rather than hard-coded `<th>`s because three separate things now read
+ * it: the head, the cells, and the export. Keeping them in step by hand is how
+ * a CSV comes to have six headers over five columns of values.
+ *
+ * `always` marks the column the Columns menu may not hide. A roster with the
+ * name column switched off is a table of facts about nobody.
+ */
+const COLUMNS = [
+  { key: "name",     label: "Full name",  always: true },
+  /* Email and phone are COLUMNS now, not a second line under the name. They
+     were stacked there because the roster had one identity column and the
+     address had nowhere else to go — which made the name cell two facts deep
+     while every other cell was one, and made the address unsortable,
+     unhideable and impossible to read down. */
+  { key: "email",    label: "Email" },
+  { key: "phone",    label: "Phone" },
+  { key: "org",      label: "Organisation" },
+  /* Which group administers this person. On the roster because the roster is
+     NARROWED by it once USER_GROUP_ENFORCE is on: without the axis on screen,
+     a short list and a broken one look the same. */
+  { key: "group",    label: "Group" },
+  /* "Roles here" — the "here" was answering a question the Organisation
+     column beside it already answers. */
+  { key: "roles",    label: "Roles" },
+  { key: "status",   label: "Status" },
+  { key: "created",  label: "Created" },
+  { key: "password", label: "Password" },
+];
+
+const VIEWS = [
+  { key: "table", label: "Table" },
+  { key: "board", label: "Board" },
+  { key: "list",  label: "List" },
+];
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), '
+  + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A modal panel that arrives from the right, over the page.
+ *
+ * The live map's vehicle panel by another name, deliberately: that is the one
+ * shape this product already uses for "the detail of a single thing, with the
+ * list it came from still behind it", and a second shape for the same idea is
+ * a second thing to learn. The difference is that the map's panel is a COLUMN
+ * of the shell — it takes width from the map — while this one floats on a
+ * scrim, because a roster of 380 people has no width to give away.
+ *
+ * ## Why it is a component and not two copies
+ *
+ * Two panels on this page open this way, Add user and Edit. Everything below
+ * is the part that is easy to get wrong once and impossible to keep right
+ * twice: the unmount timer that lets the slide-out finish, the focus that has
+ * to land inside and then go back where it came from, the Tab that must not
+ * reach the roster under the scrim, and the Escape that must not ALSO leave
+ * the page.
+ */
+function Drawer({ open, onClose, id, title, hint, children }) {
+  /* Mounted-but-leaving. The panel has to stay in the DOM for the length of
+     its slide out, and it must NOT be in the tab order while it does. */
+  const [mounted, setMounted] = useState(open);
+  const panelRef = useRef(null);
+  const openerRef = useRef(null);
+
+  useEffect(() => {
+    if (open) { setMounted(true); return undefined; }
+    if (!mounted) return undefined;
+    const t = setTimeout(() => setMounted(false), 200);   // matches ua-drawer-out
+    return () => clearTimeout(t);
+  }, [open, mounted]);
+
+  /* Focus lands on the first control and goes back to whatever opened the
+     panel. Without the second half, dismissing it drops a keyboard user at the
+     top of the document and they tab through the whole toolbar to get back. */
+  useEffect(() => {
+    if (!open || !mounted) return undefined;
+    openerRef.current = document.activeElement;
+    const first = panelRef.current?.querySelector(FOCUSABLE);
+    if (first) first.focus();
+    return () => {
+      const back = openerRef.current;
+      if (back && document.contains(back)) back.focus();
+    };
+  }, [open, mounted]);
+
+  /**
+   * Escape closes this, and Tab stays inside it.
+   *
+   * CAPTURE phase and `preventDefault`, both deliberately: UserAdminScreen
+   * listens for Escape on the same document to leave the whole page, and it
+   * registered first. Without this, dismissing a panel would throw the user
+   * out of the roster entirely — the screen's handler reads defaultPrevented
+   * and stands down.
+   */
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = panelRef.current;
+      if (!root) return;
+      const stops = root.querySelectorAll(FOCUSABLE);
+      if (stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      // A modal covers the page behind it. Tabbing to something under the
+      // scrim would move focus somewhere the pointer cannot reach.
+      if (!root.contains(document.activeElement)) {
+        e.preventDefault(); first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open, onClose]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    /* Portalled to the body on purpose. A `position: fixed` panel is
+       re-anchored by any ancestor carrying a transform, filter or containment
+       — and this page's arrival animation puts a transform on exactly those
+       ancestors. Rendered in place it would work until the first render and
+       then start hanging off a scrolled container. */
+    <div className={"ua-drawer-layer" + (open ? "" : " ua-drawer-layer--out")}>
+      {/* The scrim closes it, which is the gesture people try first. It is
+          also what makes this a modal rather than a sidebar: the roster stays
+          legible behind it, and stays out of reach. */}
+      <div className="ua-drawer__scrim" onClick={onClose} aria-hidden="true" />
+
+      <aside
+        className="ua-drawer"
+        id={id}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`${id}-title`}
+      >
+        <header className="ua-drawer__head">
+          <span className="ua-drawer__heading">
+            <h2 className="ua-drawer__title" id={`${id}-title`}>{title}</h2>
+            {hint && <span className="ua-drawer__hint">{hint}</span>}
+          </span>
+          <button type="button" className="ua-drawer__close" aria-label="Close" onClick={onClose}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                 stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" strokeLinecap="round" />
+            </svg>
+          </button>
+        </header>
+
+        {children}
+      </aside>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * The organisation and role picker, shared by both panels.
+ *
+ * ## What it is sized for
+ *
+ * An administrator at a tenant with twenty organisations. The first version
+ * listed all of them, every one expanded to its full role list the moment it
+ * was ticked, which for twenty sites is roughly nine hundred pixels of picker
+ * in a panel four hundred and sixty wide — and every one of those rows was a
+ * site this person does not belong to, in front of the two that they do.
+ *
+ * So the list is split on the only distinction that matters here. The
+ * organisations somebody HOLDS are the answer to "what do they have", which is
+ * why the panel was opened; everything else answers "add them somewhere",
+ * which is a different job, done less often, and now folded behind one
+ * control. The section is then as long as their access is, not as long as the
+ * tenant is — four sites or forty.
+ *
+ * Roles open for ONE organisation at a time, for the same reason: they are the
+ * detail of a grant, not a property of the list.
+ */
+function OrgPicker({
+  orgs, draft, base, rolesByOrg, canAssignRoles, disabled,
+  currentOrgId, roleOrg, onRoleOrg, onToggleOrg, onToggleRole,
+}) {
+  const [adding, setAdding] = useState(false);
+  const [find, setFind] = useState("");
+
+  /* An organisation being REMOVED stays in the held list until the save. It
+     is still part of what you are deciding — dropping it back into the
+     eighteen would make un-doing a mistaken untick a search. */
+  const held = orgs.filter((o) => o.id in draft || (base != null && o.id in base));
+  const rest = orgs.filter((o) => !held.includes(o));
+  const needle = find.trim().toLowerCase();
+  const shown = needle ? rest.filter((o) => o.name.toLowerCase().includes(needle)) : rest;
+
+  /* Their name, not their slug. The roles for an organisation are fetched when
+     it is first expanded, so a chip drawn before that arrives has only the
+     slug to show — which is a real name in this product ("platform-admin"),
+     just not the one the rest of the page uses. */
+  const nameOf = (orgId, slug) =>
+    (rolesByOrg[orgId] ?? []).find((r) => r.slug === slug)?.name ?? slug;
+
+  if (orgs.length === 0) {
+    return <p className="ua-access__empty">No organisations are available to you.</p>;
+  }
+
+  return (
+    <>
+      {held.length === 0 ? (
+        <p className="ua-access__empty">
+          No organisation chosen yet. Somebody with no organisation has no way in.
+        </p>
+      ) : (
+        <ul className="ua-orgs">
+          {held.map((org) => {
+            const on = org.id in draft;
+            const chosen = draft[org.id] ?? [];
+            const available = rolesByOrg[org.id];
+            const wasIn = base != null && org.id in base;
+            const open = roleOrg === org.id;
+            return (
+              <li className={"ua-org" + (on ? " ua-org--on" : "")} key={org.id}>
+                <button type="button" className="ua-org__toggle"
+                        role="checkbox" aria-checked={on}
+                        onClick={() => onToggleOrg(org.id)} disabled={disabled}>
+                  <span className="ua-box" aria-hidden="true" />
+                  <OrgMark org={org} className="ua-org__mark" />
+                  <span className="ua-org__name">{org.name}</span>
+                  {org.id === currentOrgId && base == null && (
+                    <span className="ua-org__here">current</span>
+                  )}
+                  {wasIn && !on && <span className="ua-org__going">removing</span>}
+                  {!wasIn && on && base != null && <span className="ua-org__here">adding</span>}
+                </button>
+
+                {/* The summary IS the control. A row of chips beside a button
+                    labelled "Roles" is the same fact twice, and the chips are
+                    the half that says something. */}
+                {on && canAssignRoles && (
+                  <>
+                    <button type="button"
+                            className={"ua-org__roles" + (open ? " ua-org__roles--open" : "")}
+                            aria-expanded={open}
+                            onClick={() => onRoleOrg(open ? null : org.id)}
+                            disabled={disabled}>
+                      <span className="ua-org__held">
+                        {chosen.length === 0
+                          ? <span className="ua-roles__empty">No role here</span>
+                          : chosen.map((slug) => (
+                              <span className="ua-rolechip" key={slug}>{nameOf(org.id, slug)}</span>
+                            ))}
+                      </span>
+                      <span className="ua-org__caret" aria-hidden="true">
+                        <svg width="9" height="9" viewBox="0 0 12 12" fill="none"
+                             stroke="currentColor" strokeWidth="2">
+                          <path d="M3 4.5L6 7.5L9 4.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    </button>
+
+                    {open && (
+                      <div className="ua-roles">
+                        {available === undefined ? (
+                          <span className="ua-roles__empty">Loading roles…</span>
+                        ) : available.length === 0 ? (
+                          /* Distinguishes "this org genuinely has none" from
+                             "the request failed" — which, before the account
+                             API is deployed, is the case that actually fires. */
+                          <span className="ua-roles__empty">No roles available here yet.</span>
+                        ) : (
+                          available.map((r) => (
+                            <button key={r.slug} type="button"
+                                    className={"ua-role"
+                                      + (chosen.includes(r.slug) ? " ua-role--on" : "")
+                                      + (r.platform ? " ua-role--platform" : "")}
+                                    aria-pressed={chosen.includes(r.slug)}
+                                    onClick={() => onToggleRole(org.id, r.slug)}
+                                    disabled={disabled}
+                                    title={r.platform
+                                      ? "This role reaches every organisation, not only this one."
+                                      : undefined}>
+                              {r.name}
+                              {/* Said in words, not colour: a grant made inside
+                                  one organisation that takes effect in all of
+                                  them, and an admin choosing it needs to know
+                                  that before they click rather than after. */}
+                              {r.platform && <span className="ua-role__scope">all orgs</span>}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {rest.length > 0 && (adding ? (
+        <div className="ua-orgadd">
+          {/* Only past the point where a list stops being readable at a glance.
+              A search box over five organisations is furniture. */}
+          {rest.length > 8 && (
+            <label className="ua-field">
+              <span className="ua-label">Find an organisation</span>
+              <input className="ua-input" type="search" value={find}
+                     placeholder={`${rest.length} not yet granted`}
+                     onChange={(e) => setFind(e.target.value)} disabled={disabled} />
+            </label>
+          )}
+
+          {shown.length === 0 ? (
+            <p className="ua-roles__empty">Nothing matches {find.trim()}.</p>
+          ) : (
+            <ul className="ua-orgs ua-orgs--pick">
+              {shown.map((org) => (
+                <li className="ua-org" key={org.id}>
+                  <button type="button" className="ua-org__toggle"
+                          role="checkbox" aria-checked={false}
+                          onClick={() => {
+                            onToggleOrg(org.id);
+                            /* Straight into its roles. Granting access and
+                               deciding what it is are one decision, and this
+                               is the moment the person is thinking about it. */
+                            onRoleOrg(org.id);
+                            setAdding(false); setFind("");
+                          }}
+                          disabled={disabled}>
+                    <span className="ua-box" aria-hidden="true" />
+                    <OrgMark org={org} className="ua-org__mark" />
+                    <span className="ua-org__name">{org.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button type="button" className="ua-action"
+                  onClick={() => { setAdding(false); setFind(""); }}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="ua-tbtn ua-orgadd__open"
+                onClick={() => setAdding(true)} disabled={disabled}>
+          Add to another organisation
+          {rest.length > 1 && <span className="ua-orgadd__n">{rest.length}</span>}
+        </button>
+      ))}
+    </>
+  );
+}
+
+/** The view switcher's glyphs. Drawn, not imported — this app ships no icon
+ *  set, and the file already draws its own magnifier and select caret. */
+function ViewIcon({ kind }) {
+  const common = { width: 13, height: 13, viewBox: "0 0 16 16", fill: "none",
+                   stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true };
+  if (kind === "board") {
+    return (
+      <svg {...common}>
+        <rect x="1.5" y="2.5" width="4" height="11" rx="1" />
+        <rect x="6.75" y="2.5" width="4" height="7.5" rx="1" />
+        <rect x="12" y="2.5" width="2.5" height="9.5" rx="1" />
+      </svg>
+    );
+  }
+  if (kind === "list") {
+    return (
+      <svg {...common} strokeLinecap="round">
+        <path d="M2 4h12M2 8h12M2 12h12" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+      <path d="M1.5 6.5h13M6 6.5v7" />
+    </svg>
+  );
+}
+
+/** Initials on a hue derived from the name. See hueOf for why it is the name. */
+/**
+ * One contact detail, masked or not, and switchable either way.
+ *
+ * ## Two shapes, because the two states want different things
+ *
+ * MASKED, the value is the button: the thing you read and the thing you click
+ * are one object, and the column carries one control rather than a control
+ * beside a caption.
+ *
+ * REVEALED, the value has to go back to being a real mailto/tel link — that
+ * is the point of revealing it — and a link cannot also be the undo, because
+ * clicking it opens a mail client. So the undo is its own small control
+ * beside it, and it is drawn as the mask itself: clicking the dots puts the
+ * dots back. A person who has just seen what the dots mean does not need a
+ * second vocabulary for hiding.
+ *
+ * Email and phone switch INDEPENDENTLY. They are asked for by different jobs
+ * — you are writing to somebody, or you are ringing them — and unmasking a
+ * number to send an email is a reveal nobody asked for.
+ *
+ * The mask is dots, which a screen reader either skips or reads as
+ * punctuation, so the accessible name carries the whole meaning in both
+ * states.
+ */
+function Contact({ value, kind, shown, onToggle, who }) {
+  if (!value) return <span className="ua-row__none">{"\u2014"}</span>;
+
+  if (shown) {
+    return (
+      <span className="ua-contact">
+        <a className="ua-row__mail" href={`${kind === "email" ? "mailto" : "tel"}:${value}`}>
+          {value}
+        </a>
+        <button type="button" className="ua-contact__hide" onClick={onToggle}
+                aria-label={`Hide ${kind} for ${who}`}
+                title={`Hide this ${kind} again`}>
+          <svg width="12" height="4" viewBox="0 0 12 4" fill="currentColor" aria-hidden="true">
+            <circle cx="2" cy="2" r="1.35" />
+            <circle cx="6" cy="2" r="1.35" />
+            <circle cx="10" cy="2" r="1.35" />
+          </svg>
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button type="button" className="ua-row__masked" onClick={onToggle}
+            aria-label={`Show ${kind} for ${who}`}
+            title={`Show this ${kind}`}>
+      {kind === "email" ? maskEmail(value) : maskPhone(value)}
+    </button>
+  );
+}
+
+/**
+ * The toast's mark, one per kind of operation.
+ *
+ * Colour alone would fail two readers and one printer, and it would also fail
+ * a third case peculiar to this page: suspended and deleted are BOTH bad news
+ * about an account and neither is a failure, so amber-versus-red on its own
+ * is a distinction nobody can be expected to hold. The glyph says which:
+ * a pause, a cross, a tick, a plus, an exclamation.
+ */
+function ToastMark({ tone }) {
+  const paths = {
+    created:   <><path d="M8 4.4v7.2" /><path d="M4.4 8h7.2" /></>,
+    ok:        <path d="M4.6 8.3l2.4 2.4 4.4-5" />,
+    suspended: <><path d="M6.4 5.4v5.2" /><path d="M9.6 5.4v5.2" /></>,
+    deleted:   <><path d="M5.5 5.5l5 5" /><path d="M10.5 5.5l-5 5" /></>,
+    warn:      <><path d="M8 4.8v3.9" /><path d="M8 11.2h.01" /></>,
+  };
+  return (
+    <span className="ua-toast__mark" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"
+           stroke="currentColor" strokeWidth="1.8"
+           strokeLinecap="round" strokeLinejoin="round">
+        {/* The ring is common to all of them, so the marks read as one family
+            of badges rather than as five unrelated icons. */}
+        <circle cx="8" cy="8" r="6.6" />
+        {paths[tone] ?? paths.warn}
+      </svg>
+    </span>
+  );
+}
+
+/** The pager's step arrows. One path, mirrored, so the two are the same
+ *  weight — which two opposed text glyphs are not guaranteed to be. */
+function Chevron({ dir }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"
+         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+         style={dir === "left" ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M4.5 2.5L8 6l-3.5 3.5" />
+    </svg>
+  );
+}
+
+/**
+ * One organisation's mark, wherever an organisation is named.
+ *
+ * Split out of OrgBadge because the access panel lists the same tenants down
+ * the side of a drawer, and a list of names there has exactly the problem the
+ * table cell had: "MENENGAI SUGAR", "Mufindi Paper", "Ndhiwa Sukari" and
+ * "West Kenya Sugar Ltd" are four bolded strings a tick apart from each
+ * other, and the one being looked for is found by reading all of them. A mark
+ * is recognised instead of read, which is the whole job of that column of
+ * checkboxes.
+ *
+ * The letter fallback stays for tenants with no artwork on file: marks for
+ * some organisations and a gap for the rest would leave the list exactly as
+ * hard to scan for the rows that are hardest to tell apart.
+ */
+function OrgMark({ org, className = "" }) {
+  const name = org?.name ?? "\u2014";
+  const mark = org ? companyMark(org) : null;
+  if (mark) {
+    return <img className={"ua-orgbadge__mark " + className} src={mark} alt="" />;
+  }
+  return (
+    <span className={"ua-orgbadge__mark ua-orgbadge__mark--letter " + className}
+          style={{ "--ua-avatar-h": hueOf(name) }} aria-hidden="true">
+      {name.trim()[0]?.toUpperCase() ?? "?"}
+    </span>
+  );
+}
+
+/**
+ * An organisation, with its own mark.
+ *
+ * Only the all-organisations view draws these, and that is the view they are
+ * for: a list of company NAMES in a column is four words that all start the
+ * same way ("MENENGAI SUGAR", "Mufindi Paper", "Ndhiwa Sukari"), read at
+ * 12px, against a name and a status the eye is already doing work on. A mark
+ * is recognised rather than read, which is the whole job of that cell.
+ *
+ * The mark itself is OrgMark, which the access panel draws too.
+ *
+ * The name stays. A mark alone would be a logo quiz, and two of these tenants
+ * are sugar mills with a cane leaf in the artwork.
+ */
+function OrgBadge({ org, id, here }) {
+  const name = org?.name ?? id ?? "\u2014";
+  return (
+    /* The title is not decoration here: under 640px the list view hides the
+       name and leaves the mark, and this is what a pointer gets back. The
+       name itself stays in the DOM for a screen reader either way. */
+    <span className={"ua-orgbadge" + (here ? " ua-orgbadge--here" : "")} title={name}>
+      <OrgMark org={org} />
+      <span className="ua-orgbadge__name">{name}</span>
+    </span>
+  );
+}
+
+function Avatar({ name, email }) {
+  return (
+    <span className="ua-avatar" aria-hidden="true"
+          style={{ "--ua-avatar-h": hueOf(name || email) }}>
+      {initialsOf(name, email)}
+    </span>
+  );
+}
+
+/**
+ * Status as a badge: a coloured dot inside a tinted, bordered pill.
+ *
+ * The dot is kept INSIDE the badge rather than replaced by it. A filled
+ * lozenge alone carries its meaning in its fill, which is the thing a
+ * red-green reader cannot use and a 10% tint barely gives anybody; the dot is
+ * the part that survives being glanced at down a column of forty rows. The
+ * badge is what gives each state an edge, so "Suspended" and "Pending" read as
+ * two different things at arm's length rather than as two words.
+ *
+ * Text sits on the tint, never on the hue itself — hence the --ink tokens.
+ */
+function StatusBadge({ state }) {
+  return (
+    <span className={`ua-badge ua-badge--${state.key}`}>
+      <span className="ua-state__dot" aria-hidden="true" />
+      {state.label}
+    </span>
+  );
+}
+
+/** Up to two initials, falling back to the email, then to a dot. */
+function initialsOf(name, email) {
+  const source = String(name ?? "").trim() || String(email ?? "").trim();
+  if (!source) return "\u00b7";
+  const words = source.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
+}
+
+/**
+ * A stable hue for one person, 0-359.
+ *
+ * Derived from the name rather than from the row index, so the disc keeps its
+ * colour when the table is re-sorted, paged or filtered. An avatar that
+ * changed colour on every sort would be noise wearing the costume of
+ * information. Saturation and lightness are fixed in CSS, so whatever hue
+ * lands here still clears contrast on white.
+ */
+function hueOf(text) {
+  const source = String(text ?? "");
+  let h = 0;
+  for (let i = 0; i < source.length; i++) h = (h * 31 + source.charCodeAt(i)) % 360;
+  return h;
+}
 
 /**
  * The status filters, and why they are these five.
@@ -73,11 +685,59 @@ const STATUS_TABS = [
   { key: "suspended", label: "Suspended",      noun: "suspended account" },
 ];
 
-/** The role names this person holds IN the organisation being administered. */
+/**
+ * The role names this person holds IN the organisation being administered,
+ * each one said once.
+ *
+ * `userRoles` is a grant table, not a set of roles: the same role can be
+ * granted twice over — once when the account was provisioned and once when an
+ * admin re-saved the membership, or by two different admins — and every one of
+ * those rows comes back. Rendered straight, that is a row reading
+ * "System Administrator · System Administrator", which looks like the person
+ * holds something twice when there is no such thing as holding a role twice.
+ *
+ * Deduplicated on the NAME rather than the role id, because two role records
+ * in one organisation that print the same word are indistinguishable to
+ * somebody reading the column, and that is who this list is for. Order is the
+ * server's, first grant wins.
+ */
 function rolesIn(user, orgId) {
-  return (user.userRoles ?? [])
-    .filter((ur) => ur.role?.organisationId === orgId)
-    .map((ur) => ur.role.name);
+  const seen = new Set();
+  const names = [];
+  for (const ur of user.userRoles ?? []) {
+    if (ur.role?.organisationId !== orgId) continue;
+    const name = ur.role.name;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Every role a row's person holds, across every organisation the row covers.
+ *
+ * A row is one person now, not one membership, so "Roles" is the union: a
+ * dispatcher at Menengai who is also an auditor at Naitiri reads as both,
+ * because both are true of the person the row is about. Deduplicated on the
+ * name for the same reason `rolesIn` is — two organisations that each have a
+ * role called "Operator" are one word to the person reading the column.
+ *
+ * `scopeOrgIds` is absent on rows that never went through the cross-org read
+ * (an optimistic local update, a test fixture), hence the fallback.
+ */
+function rolesFor(user) {
+  const orgIds = user.scopeOrgIds ?? (user.scopeOrgId ? [user.scopeOrgId] : []);
+  const seen = new Set();
+  const names = [];
+  for (const orgId of orgIds) {
+    for (const name of rolesIn(user, orgId)) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      names.push(name);
+    }
+  }
+  return names;
 }
 
 /**
@@ -158,7 +818,6 @@ export default function UserAdminPanel() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [rowBusy, setRowBusy] = useState(null);
 
   /**
@@ -168,6 +827,12 @@ export default function UserAdminPanel() {
    */
   const [picked, setPicked] = useState({});
   const [rolesByOrg, setRolesByOrg] = useState({});
+  /* Whose roles are expanded, in whichever panel is open. One piece of state
+     for both, because only one panel can be open at a time — and it lives up
+     here rather than inside OrgPicker because the fetch below reads it: the
+     roles for an organisation are not worth asking for until somebody opens
+     it. */
+  const [roleOrg, setRoleOrg] = useState(null);
 
   /**
    * The row being edited, and its access.
@@ -181,6 +846,24 @@ export default function UserAdminPanel() {
   const [editBase, setEditBase] = useState(null);
   const [editDraft, setEditDraft] = useState({});
   const [editBusy, setEditBusy] = useState(false);
+  /* A SNAPSHOT of the person, not a lookup back into the roster. The panel
+     outlives its row — saving refreshes the list, and the object that row was
+     drawn from is replaced — so holding the key alone would leave the open
+     panel describing somebody who no longer exists at that index. */
+  const [editUser, setEditUser] = useState(null);
+  /* Their own details, which the panel can now change. `editIdentity` is the
+     same diff discipline as `editBase` above: what the server said when the
+     panel opened, so an untouched field is not written back. */
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editIdentity, setEditIdentity] = useState(EMPTY_FORM);
+
+  /* Whether the account is suspended, AS A DRAFT.
+     It used to apply on the click, on the argument that ending live sessions
+     is not something to leave sitting in a draft. That argument loses to a
+     simpler one: this panel has a Save button and a Cancel button, so every
+     control in it has to mean the same thing by being clicked. A panel where
+     two fields wait and one fires is a panel where Cancel is a lie. */
+  const [editStatus, setEditStatus] = useState(null);
 
   /**
    * The row whose permanent delete is being confirmed, and what has been typed
@@ -218,9 +901,158 @@ export default function UserAdminPanel() {
    * It used to be the first thing on the page, above the roster, expanded on
    * every visit — five fields and an organisation picker between you and the
    * thing you came to read. Inviting is occasional; reading the roster is why
-   * this screen is open. So the roster leads and the form opens in place.
+   * this screen is open. So the roster leads, and asking for the form opens a
+   * panel over it from the right — the shape the live map already uses for a
+   * vehicle, so the one gesture on this product for "here is the detail of a
+   * thing, the page behind it is still there" is the same gesture twice.
+   *
+   * It was a band that pushed the roster down the page. That band could not be
+   * both wide enough for an organisation picker and short enough to leave the
+   * roster visible, so on a laptop it shipped the roster off the bottom of the
+   * screen — the form hid the very list it was being filled in from.
    */
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  const openInvite = useCallback(() => {
+    setError("");
+    setRoleOrg(null);
+    setInviteOpen(true);
+  }, []);
+  const closeInvite = useCallback(() => setInviteOpen(false), []);
+
+  /* ── How the roster is being LOOKED at ──────────────────────────────────
+     Separate from what it contains. Everything above this point decides which
+     people are on the list; everything here decides the shape they are drawn
+     in, and none of it touches the data or the server. */
+  const [view, setView] = useState("table");
+  const [sort, setSort] = useState(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(PER_PAGE_CHOICES[0]);
+  const [selected, setSelected] = useState(() => new Set());
+
+  /**
+   * Masking is a switch, and it starts on.
+   *
+   * Two controls, because there are two different jobs. `masked` is the
+   * column-wide one in the toolbar: an admin who has the room to themselves
+   * turns it off once and works with real addresses all session, then turns
+   * it back on before the screen is shared. `revealed` is the per-person
+   * shortcut for the commoner case — you want ONE number, and unmasking
+   * thirty-nine others to get it is not a privacy control.
+   *
+   * Turning the switch back on clears the per-person reveals, because
+   * otherwise "masked" would be a state in which things are visible.
+   *
+   * Neither is persisted. A reveal lasts as long as the reason for it, and a
+   * masking preference that survived a reload would come back off on somebody
+   * else's screen. `revealed` is keyed by USER id, not by row key: the same
+   * person appears once per organisation in the all-orgs view, and their
+   * phone number is not a different fact in the second row.
+   */
+  const [masked, setMasked] = useState(true);
+
+  /* EXCEPTIONS to the switch, not a list of revealed things. Holding it this
+     way is what lets one control work in both directions: against a masked
+     column the flipped cells are the ones showing, against an unmasked one
+     they are the ones hiding, and the button in the cell is the same button
+     either way. Keyed `userId:kind`, because email and phone are asked for by
+     different jobs and revealing one is not consent to the other. */
+  const [flipped, setFlipped] = useState(() => new Set());
+
+  const toggleContact = useCallback((id, kind) => {
+    setFlipped((prev) => {
+      const next = new Set(prev);
+      const key = `${id}:${kind}`;
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
+
+  /* The switch clears the exceptions, because an exception to a rule that has
+     just been reversed is not an exception to anything — keeping them would
+     mean pressing "Hide contacts" and watching two addresses stay up. */
+  const toggleMasking = useCallback(() => {
+    setFlipped(new Set());
+    setMasked((on) => !on);
+  }, []);
+
+  /**
+   * Is this one field, for this one person, on screen in the clear?
+   *
+   * "Flipped equals masked" reads as a trick and is not one: against a MASKED
+   * column a flipped cell is a revealed one (true === true), and against an
+   * unmasked column an unflipped cell is still showing (false === false).
+   * One expression, both directions.
+   */
+  const inClear = useCallback(
+    (id, kind) => flipped.has(`${id}:${kind}`) === masked,
+    [masked, flipped],
+  );
+  const [hiddenCols, setHiddenCols] = useState(() => new Set());
+  const [openMenu, setOpenMenu] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  /* An undo offer, not a notification. It exists because the bulk actions
+     below are the only things on this page that change several accounts at
+     once without a typed confirmation — so the safety net is on the far side
+     of the action rather than in front of it. */
+  const [toast, setToast] = useState(null);
+
+  /**
+   * An account changed — say so, once, near where it happened.
+   *
+   * The division this draws, and the reason the message strip is not simply
+   * gone: a TOAST reports an event, and the page's message region reports a
+   * STATE. "Suspended and signed out" is an event — it is finished, it is
+   * already visible in the row behind the toast, and it should leave by
+   * itself. "Created, but this server cannot send invitations" is a state:
+   * somebody still cannot sign in, and a sentence that deletes itself after
+   * nine seconds is the wrong way to carry a thing that is still wrong.
+   *
+   * Errors stay on the page for the same reason. A message you have to act on
+   * must not be on a timer.
+   */
+  /**
+   * `tone` is the OPERATION, not the mood.
+   *
+   * "created", "ok", "suspended", "deleted" are all successes and they do not
+   * mean the same thing to somebody glancing at the corner: an account that
+   * now exists, one put back, one shut out, one destroyed. Colouring them all
+   * green would be reporting four different events in one voice.
+   *
+   * Everything in this group is still an OUTCOME, so all of it is on the
+   * clock. Only `fail` and `flag` below stay up.
+   */
+  const say = useCallback((text, undo = null, tone = "ok") => {
+    setError("");
+    setToast({ text, undo, tone });
+  }, []);
+
+  /**
+   * Something went wrong, or something is still wrong.
+   *
+   * Same object as `say`, different tone, and the tone decides ONE thing that
+   * matters: whether it is on a clock. An outcome may expire because it is
+   * finished and the roster behind it already shows the result. A failure may
+   * not — "could not be changed" that deletes itself after nine seconds is a
+   * page hiding its own bad news, and the reader is left with a roster that
+   * simply looks wrong.
+   *
+   * `fail` also keeps the message in `error`, because both drawers show it
+   * against their own submit button through aria-describedby. A form error
+   * belongs beside the form as well as in the corner.
+   */
+  const fail = useCallback((text) => {
+    setError(text);
+    setToast({ text, undo: null, tone: "error" });
+  }, []);
+
+  /** Done, but not well: the account exists and nobody can sign in to it.
+   *  Not an error — nothing failed to be written — and not an outcome to
+   *  celebrate either, so it gets the middle tone and the same no-clock rule. */
+  const flag = useCallback((text) => {
+    setError("");
+    setToast({ text, undo: null, tone: "warn" });
+  }, []);
 
   const canAssignRoles = can("user:assign_role");
   /* NOTE: the typed-confirmation shortcut and the per-row action gates used
@@ -280,20 +1112,35 @@ export default function UserAdminPanel() {
     [orgs],
   );
 
+  /* The whole organisation, not its name: the badge needs `code` to find the
+     artwork, and the name to fall back on. */
+  const orgById = useMemo(
+    () => new Map((orgs ?? []).map((o) => [o.id, o])),
+    [orgs],
+  );
+
   // The current organisation starts selected: it is the one being administered
   // and unticking it is a deliberate act, not a default.
   useEffect(() => {
     if (orgId) setPicked((p) => (orgId in p ? p : { ...p, [orgId]: [] }));
   }, [orgId]);
 
-  // Roles are fetched per organisation, because each has its own set — a role
-  // list borrowed from one org would offer slugs another does not have.
-  // The editor offers every organisation the admin can reach, so its roles are
-  // needed for all of them rather than only the ticked ones.
-  const wantedOrgIds = useMemo(
-    () => (editing ? orgs.map((o) => o.id) : Object.keys(picked)),
-    [editing, orgs, picked],
-  );
+  /**
+   * Roles are fetched per organisation, because each has its own set — a role
+   * list borrowed from one org would offer slugs another does not have.
+   *
+   * What is asked for is what is on screen: the organisations this person
+   * HOLDS, whose chips name their roles, plus the one whose list is expanded.
+   * The editor used to ask for every organisation the administrator could
+   * reach, on open — twenty requests before the panel had drawn, nineteen of
+   * them for lists nobody was going to look at.
+   */
+  const wantedOrgIds = useMemo(() => {
+    const ids = new Set(editing ? Object.keys(editDraft) : Object.keys(picked));
+    if (editing && editBase) for (const id of Object.keys(editBase)) ids.add(id);
+    if (roleOrg) ids.add(roleOrg);
+    return [...ids];
+  }, [editing, editDraft, editBase, picked, roleOrg]);
 
   useEffect(() => {
     if (!canAssignRoles) return undefined;
@@ -358,22 +1205,284 @@ export default function UserAdminPanel() {
     return tally;
   }, [searched]);
 
+  /**
+   * The roster's own shape, taken before ANY filter.
+   *
+   * Not `counts` above, which is tallied over the searched list because the
+   * chips it feeds are what the search has left to offer. This one is the
+   * masthead's, and a masthead that changed its totals as you typed would be
+   * reporting the search rather than the roster.
+   */
+  const roll = useMemo(() => {
+    const tally = { all: users.length, active: 0, suspended: 0 };
+    for (const u of users) {
+      const key = accountState(u).key;
+      tally[key] = (tally[key] ?? 0) + 1;
+    }
+    return tally;
+  }, [users]);
+
   /** Only roles somebody actually holds here. A picker offering every
    *  assignable role would list options that can only return nothing. */
   const roleOptions = useMemo(() => {
     const held = new Set();
-    for (const u of users) for (const name of rolesIn(u, u.scopeOrgId)) held.add(name);
+    for (const u of users) for (const name of rolesFor(u)) held.add(name);
     return [...held].sort((a, b) => a.localeCompare(b));
   }, [users]);
 
   const shown = useMemo(() => searched.filter((u) => {
     if (statusKey !== "all" && accountState(u).key !== statusKey) return false;
-    if (roleName === NO_ROLE) return rolesIn(u, u.scopeOrgId).length === 0;
-    if (roleName !== "any" && !rolesIn(u, u.scopeOrgId).includes(roleName)) return false;
+    if (roleName === NO_ROLE) return rolesFor(u).length === 0;
+    if (roleName !== "any" && !rolesFor(u).includes(roleName)) return false;
     return true;
   }), [searched, statusKey, roleName]);
 
   const filtering = needle !== "" || statusKey !== "all" || roleName !== "any";
+
+  /* ── From the filtered list to the page on screen ───────────────────────
+     Three steps, in this order and no other: sort the whole filtered list,
+     then cut a page out of it, then read the selection against that page.
+     Sorting after paging would sort fifteen rows and call it a sorted roster,
+     which is the classic version of this bug. */
+  const sortAccessors = useMemo(() => ({
+    name:     (u) => u.fullName,
+    // Null rather than "", so rosterView pins the people with no address to
+    // the end in both directions instead of sorting them under the As.
+    email:    (u) => u.email || null,
+    phone:    (u) => u.phone || null,
+    org:      (u) => orgNameById.get(u.scopeOrgId) ?? "",
+    roles:    (u) => rolesFor(u).join(", "),
+    status:   (u) => accountState(u).label,
+    created:  (u) => (u.createdAt ? new Date(u.createdAt).getTime() : null),
+    // Never-set sorts as empty, which rosterView pins to the end in both
+    // directions — "no password" is not "the oldest password".
+    password: (u) => ((u.passwordChangeCount ?? 0) === 0
+      ? null
+      : (u.passwordChangedAt ? new Date(u.passwordChangedAt).getTime() : null)),
+  }), [orgNameById]);
+
+  const sorted = useMemo(
+    () => sortRows(shown, sort, sortAccessors),
+    [shown, sort, sortAccessors],
+  );
+
+  /* The board and the list show the whole filtered roster; only the table
+     pages. Paging a board would hide a whole column's worth of "who is stuck",
+     which is the single question the board exists to answer. */
+  const paged = useMemo(
+    () => paginate(sorted, page, perPage),
+    [sorted, page, perPage],
+  );
+
+  const rowsOnScreen = view === "table" ? paged.slice : sorted;
+  const visibleIds = useMemo(() => rowsOnScreen.map(rowKey), [rowsOnScreen]);
+
+  /* Filtering to page 3 of a list that now has one page is not an edge case,
+     it is what happens every time somebody types in the search box. paginate
+     clamps the number it RETURNS; this puts the clamp back into state so the
+     pager's own buttons agree with what is drawn. */
+  useEffect(() => {
+    if (paged.page !== page) setPage(paged.page);
+  }, [paged.page, page]);
+
+  useEffect(() => { setPage(1); }, [needle, statusKey, roleName, scope, perPage]);
+
+  /* A selection must never outlive the evidence for it: narrowing the roster
+     and then hitting a bulk action would otherwise act on people the
+     administrator can no longer see. */
+  const shownIds = useMemo(() => shown.map(rowKey), [shown]);
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const next = pruneSelection(prev, shownIds);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [shownIds]);
+
+  const headState = selectionState(selected, visibleIds);
+
+  const selectedUsers = useMemo(
+    () => shown.filter((u) => selected.has(rowKey(u))),
+    [shown, selected],
+  );
+
+  /* Which columns are drawn. The organisation column is still governed by
+     whether there is more than one on screen — hiding it by hand is a
+     preference, but showing it when there is only one tenant would be a column
+     of the same word repeated. */
+  const columns = useMemo(
+    () => COLUMNS.filter((c) => {
+      if (c.key === "org" && !showOrgColumn) return false;
+      return c.always || !hiddenCols.has(c.key);
+    }),
+    [showOrgColumn, hiddenCols],
+  );
+
+  const toggleColumn = useCallback((key) => {
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const clickSort = useCallback((key) => {
+    setSort((prev) => nextSort(prev, key));
+  }, []);
+
+  /** Is this column currently drawn? Read by the cells, so head and body
+   *  cannot disagree about how many columns there are. */
+  const shows = useCallback(
+    (key) => columns.some((c) => c.key === key),
+    [columns],
+  );
+
+  /* Straight into the panel. This used to switch to the table view and
+     compute which page the person was on, because the editor was a row that
+     opened underneath them and could not be reached from anywhere else. A
+     panel has no page and no view, so the board and the list now open the same
+     editor without moving the reader somewhere they did not ask to go. */
+  const jumpTo = openEditor;
+
+  /* Close an open menu on Escape or on a click elsewhere. Both, because a
+     popover that only closes on its own button is a popover you have to
+     remember to put away. */
+  useEffect(() => {
+    if (!openMenu) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpenMenu(null); } };
+    const onDown = (e) => { if (!e.target.closest?.(".ua-menu")) setOpenMenu(null); };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [openMenu]);
+
+  /* ── Export ──────────────────────────────────────────────────────────────
+     What is on screen: the current filters, the current sort, the current
+     columns. A file that disagrees with the page it was taken from is worse
+     than no file. The whole SORTED list rather than the current page, because
+     nobody means "these fifteen" when they click Export. */
+  const handleExport = useCallback(() => {
+    const cols = columns.map((c) => ({
+      key: c.key,
+      label: c.key === "name" ? "Full name" : c.label,
+      value: (u) => {
+        switch (c.key) {
+          case "name":     return u.fullName;
+          case "email":    return u.email ?? "";
+          case "phone":    return u.phone ?? "";
+          case "org":      return orgNameById.get(u.scopeOrgId) ?? "";
+          case "group":    return u.group?.name ?? "";
+          case "roles":    return rolesFor(u).join("; ");
+          case "status":   return accountState(u).label;
+          case "created":  return fmtDate(u.createdAt);
+          case "password": return (u.passwordChangeCount ?? 0) === 0
+            ? "never set" : fmtDate(u.passwordChangedAt);
+          default:         return "";
+        }
+      },
+    }));
+    /* Email rides along even when its column is hidden: an export of a roster
+       with no way to contact anybody in it is a list of names. It is a real
+       column now, so this only adds it back when it has been switched off —
+       inserting it unconditionally would have printed it twice. */
+    if (!columns.some((c) => c.key === "email")) {
+      cols.splice(1, 0, { key: "email", label: "Email", value: (u) => u.email ?? "" });
+    }
+    const scopeName = scope === ALL_ORGS
+      ? "all organisations"
+      : (orgNameById.get(scope) ?? activeCompany?.name ?? "roster");
+    downloadCsv(toCsv(sorted, cols), exportFilename(scopeName));
+    setOpenMenu(null);
+  }, [columns, sorted, orgNameById, scope, activeCompany]);
+
+  /* ── Bulk actions ────────────────────────────────────────────────────────
+     Sequential, not Promise.all: these are writes against a shared roster and
+     firing fifty at once is how an admin API earns a rate limit. Each is
+     graded in the row's OWN organisation, the same rule the per-row buttons
+     follow, so a selection spanning two tenants does only what the server
+     would have allowed one at a time.
+
+     There is no bulk DELETE and there will not be one. Deleting an account
+     here requires typing a phrase per person, deliberately, and a checkbox
+     column is the exact opposite of that. */
+  const runBulk = useCallback(async (users, fn, describe, undo = null, tone = "ok") => {
+    if (users.length === 0 || bulkBusy) return;
+    setBulkBusy(true); setError("");
+    let done = 0;
+    const failed = [];
+    for (const u of users) {
+      try { await fn(u); done += 1; }
+      catch { failed.push(u.fullName); }
+    }
+    setBulkBusy(false);
+    setSelected(new Set());
+    retry();
+    if (failed.length > 0) {
+      /* A partial result is a STATE, not an event: it names people who are
+         still as they were, and it has to stay on screen until it is read.
+         No undo offered either -- half a set went through, and "undo" would
+         have to mean "put back the ones that moved", which is not what the
+         word promises. */
+      fail(`${describe(done)} ${failed.length} could not be changed: ${failed.join(", ")}.`);
+    } else {
+      say(describe(done), undo, tone);
+    }
+    return { done, failed };
+  }, [bulkBusy, retry, say, fail]);
+
+  const bulkSetStatus = useCallback(async (next) => {
+    const targets = selectedUsers.filter((u) => u.status !== next
+      && canIn(u.scopeOrgId, "user:update"));
+    if (targets.length === 0) return;
+    const before = targets.map((u) => ({ user: u, status: u.status }));
+    /* The undo is the reason this action needs no confirmation in front of it.
+       It replays the previous status per person rather than flipping the whole
+       set back, because the set was not uniform to begin with.
+
+       Handed to runBulk rather than raised beside it: the old code ran both,
+       so a bulk suspend reported itself twice -- once in the page strip and
+       once in a toast -- and the toast counted the TARGETS while the strip
+       counted what actually went through. One report, one number, the one
+       that is true. */
+    await runBulk(
+      targets,
+      (u) => setUserStatus(u.scopeOrgId, u.id, next),
+      (done) => `${done} ${done === 1 ? "account" : "accounts"} ${next === "SUSPENDED" ? "suspended" : "reactivated"}.`,
+      async () => {
+        setToast(null);
+        for (const { user, status } of before) {
+          try { await setUserStatus(user.scopeOrgId, user.id, status); } catch { /* reported by the reload */ }
+        }
+        retry();
+      },
+      next === "SUSPENDED" ? "suspended" : "ok",
+    );
+  }, [selectedUsers, runBulk, canIn, retry]);
+
+  const bulkResend = useCallback(async () => {
+    // Only where an invitation is still the thing in the way. The server
+    // refuses to re-invite an account that already has a password, so
+    // including those would be queueing calls that can only fail.
+    const targets = selectedUsers.filter((u) => accountState(u).key !== "active" && u.email);
+    await runBulk(
+      targets,
+      (u) => resendInvite(u.scopeOrgId, u.id),
+      (done) => `${done} ${done === 1 ? "invitation" : "invitations"} sent again.`,
+      null,
+      "created",
+    );
+  }, [selectedUsers, runBulk]);
+
+  /* The toast clears itself. Long enough to read and reach, short enough that
+     it is gone before it becomes furniture. */
+  useEffect(() => {
+    if (!toast || toast.tone !== "ok") return undefined;
+    const t = setTimeout(() => setToast(null), 9000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const clearFilters = useCallback(() => {
     setQuery(""); setStatusKey("all"); setRoleName("any");
@@ -382,11 +1491,9 @@ export default function UserAdminPanel() {
 
   const set = useCallback((key) => (e) => {
     setForm((f) => ({ ...f, [key]: e.target.value }));
-    setNotice("");
   }, []);
 
   function toggleOrg(id) {
-    setNotice("");
     setPicked((p) => {
       const next = { ...p };
       if (id in next) delete next[id];
@@ -396,7 +1503,6 @@ export default function UserAdminPanel() {
   }
 
   function toggleRole(id, slug) {
-    setNotice("");
     setPicked((p) => {
       const held = p[id] ?? [];
       return {
@@ -411,7 +1517,7 @@ export default function UserAdminPanel() {
   async function handleCreate(e) {
     e.preventDefault();
     if (busy || !form.fullName.trim() || !form.email.trim() || selectedOrgIds.length === 0) return;
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setError("");
     try {
       // The org being administered is the path organisation; anything else the
       // admin ticked rides along as an extra membership with its own roles.
@@ -433,9 +1539,9 @@ export default function UserAdminPanel() {
         : `${selectedOrgIds.length} organisations`;
 
       if (result?.created === false) {
-        setNotice(`That address already has an account. They have been added to ${where}.`);
+        say(`That address already has an account. They have been added to ${where}.`, null, "created");
       } else if (result?.invite?.sent) {
-        setNotice(`Invitation sent to ${form.email.trim()} · added to ${where}.`);
+        say(`Invitation sent to ${form.email.trim()} · added to ${where}.`, null, "created");
       } else if (result?.invite?.reason === "queued") {
         /* Queued is NOT the failure branch below, and putting it there would be
            the worst misreport on this screen: it tells an administrator the
@@ -443,13 +1549,13 @@ export default function UserAdminPanel() {
            behind it. It is not the success branch either — nothing has left
            the building yet, and "sent" is what someone reads before deciding
            whether to chase it. */
-        setNotice(`Account created and added to ${where}. The invitation to ${form.email.trim()} is queued for delivery.`);
+        say(`Account created and added to ${where}. The invitation to ${form.email.trim()} is queued for delivery.`, null, "created");
       } else if (result && result.invite === undefined) {
         // No `invite` key AT ALL means the API that answered predates
         // invitations — it created the account the old way and sent nothing.
         // Reporting that as reason "unknown" sent people looking for a mail
         // failure that never happened.
-        setNotice(
+        flag(
           `Account created, but this server cannot send invitations yet — it is running an older build. ` +
           `${form.email.trim()} has no way to sign in until it is updated and they receive a link.`,
         );
@@ -463,7 +1569,7 @@ export default function UserAdminPanel() {
           "account-already-active": "that account already has a password",
           "not-requested": "no invitation was requested",
         }[result?.invite?.reason] ?? result?.invite?.reason ?? "reason not reported";
-        setNotice(
+        flag(
           `Account created, but the invitation could not be sent — ${why}. ` +
           `They cannot sign in until they receive a link.`,
         );
@@ -479,8 +1585,12 @@ export default function UserAdminPanel() {
          surprise, and it only happens on success. */
       setQuery(""); setStatusKey("all"); setRoleName("any");
       retry();
+      /* Closed on success only. A failure keeps the panel up with the typing
+         still in it, because the one thing worse than a rejected form is a
+         rejected form that threw the answers away. */
+      closeInvite();
     } catch (err) {
-      setError(isMissingEndpoint(err)
+      fail(isMissingEndpoint(err)
         ? "Creating users is not available yet — this server does not have the account API."
         : firstMessage(err, "email", "Could not create that user."));
     } finally {
@@ -489,42 +1599,110 @@ export default function UserAdminPanel() {
   }
 
   async function handleResend(user) {
-    setRowBusy(rowKey(user)); setError(""); setNotice("");
+    setRowBusy(rowKey(user)); setError("");
     try {
       const invite = await resendInvite(user.scopeOrgId, user.id);
-      setNotice(invite?.sent
-        ? `New invitation sent to ${user.email}.`
-        : invite?.reason === "queued"
-          ? `New invitation to ${user.email} is queued for delivery.`
-          : `Could not send the invitation (${invite?.reason ?? "unknown"}).`);
+      if (invite?.sent) {
+        say(`New invitation sent to ${user.email}.`, null, "created");
+      } else if (invite?.reason === "queued") {
+        say(`New invitation to ${user.email} is queued for delivery.`, null, "created");
+      } else {
+        /* Not a toast: nothing was sent, so this is a thing that is still
+           wrong rather than a thing that happened. */
+        flag(`Could not send the invitation (${invite?.reason ?? "unknown"}).`);
+      }
     } catch (err) {
-      setError(firstMessage(err, null, "Could not resend that invitation."));
+      fail(firstMessage(err, null, "Could not resend that invitation."));
     } finally {
       setRowBusy(null);
     }
   }
 
-  async function handleStatus(user) {
-    const next = user.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
-    setRowBusy(rowKey(user)); setError(""); setNotice("");
+  /* `next` is a parameter rather than always a flip, because the board drops a
+     card ONTO a state: "make this suspended" is the gesture, and a toggle
+     would make the outcome depend on what the card was when the drag began
+     rather than on where it was let go. */
+  async function handleStatus(user, next = user.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE") {
+    if (user.status === next) return;
+    setRowBusy(rowKey(user)); setError("");
     try {
       await setUserStatus(user.scopeOrgId, user.id, next);
-      setNotice(next === "SUSPENDED"
-        ? `${user.fullName} has been suspended and signed out.`
-        : `${user.fullName} has been reactivated.`);
+      /* With its undo, for the same reason the bulk actions have one: this
+         is reachable by dropping a card on a column, which is a gesture you
+         can start by accident, and putting somebody back is one request. */
+      say(
+        next === "SUSPENDED"
+          ? `${user.fullName} has been suspended and signed out.`
+          : `${user.fullName} has been reactivated.`,
+        async () => {
+          setToast(null);
+          try {
+            await setUserStatus(user.scopeOrgId, user.id, user.status);
+            setEditUser((p) => (p && p.id === user.id ? { ...p, status: user.status } : p));
+          } catch { /* reported by the reload */ }
+          retry();
+        },
+        next === "SUSPENDED" ? "suspended" : "ok",
+      );
+      /* The open panel holds a SNAPSHOT, so the refresh below cannot reach it.
+         Without this the badge inside the panel still reads Active a second
+         after the button that suspended them said it worked. */
+      setEditUser((p) => (p && p.id === user.id ? { ...p, status: next } : p));
       retry();
     } catch (err) {
-      setError(firstMessage(err, null, "Could not change that account."));
+      fail(firstMessage(err, null, "Could not change that account."));
     } finally {
       setRowBusy(null);
     }
   }
+
+  /* ── Dragging a card between columns ──────────────────────────────────────
+   *
+   * The board already groups people by whether they can sign in, so the two
+   * columns an administrator moves somebody BETWEEN are on screen beside each
+   * other. Dropping a card into Suspended is the same request the panel's
+   * Suspend button makes, said in the place you are already looking.
+   *
+   * Only Active and Suspended take a drop. Pending and "No live invite" are
+   * DERIVED — they describe an invitation, not a field — and there is no
+   * request that puts somebody into them, so they must not look like targets.
+   *
+   * The dragged person is held in a ref as well as in state: the state is what
+   * the columns are styled from, and the ref is what the drop reads, because
+   * a drop handler that re-derived the person from dataTransfer would be
+   * parsing a string it wrote itself.
+   */
+  const dragRef = useRef(null);
+  const [dragKey, setDragKey] = useState(null);
+  const [dropCol, setDropCol] = useState(null);
+
+  /* Never yourself. The panel's Suspend button will still do it if that is
+     genuinely what you want, but a gesture this easy to start by accident
+     should not be able to sign you out of the screen you are standing on. */
+  const canDrag = useCallback(
+    (u) => canIn(u.scopeOrgId, "user:update") && u.id !== me?.id,
+    [canIn, me],
+  );
+
+  /** Would a drop on this column actually change anything? */
+  const dropTarget = useCallback((tabKey) => {
+    const u = dragRef.current;
+    if (!u) return false;
+    if (tabKey !== "active" && tabKey !== "suspended") return false;
+    return u.status !== (tabKey === "suspended" ? "SUSPENDED" : "ACTIVE");
+  }, []);
+
+  const endDrag = useCallback(() => {
+    dragRef.current = null;
+    setDragKey(null);
+    setDropCol(null);
+  }, []);
 
   // ── Destroying an account ────────────────────────────────────────────────
 
   function openDelete(user) {
     setConfirmText("");
-    setError(""); setNotice("");
+    setError("");
     setDeleting((key) => (key === rowKey(user) ? null : rowKey(user)));
     // Closing the access editor: the two panels are about the same row and
     // both are tall, so having them open together pushes the person they
@@ -543,7 +1721,7 @@ export default function UserAdminPanel() {
    */
   async function handleDelete(user) {
     if (deleteBusy) return;
-    setDeleteBusy(true); setError(""); setNotice("");
+    setDeleteBusy(true); setError("");
     try {
       const gone = await deleteOrgUserPermanently(user.scopeOrgId, user.id);
       const also = [
@@ -551,10 +1729,15 @@ export default function UserAdminPanel() {
         gone?.removed?.sessions ? `${gone.removed.sessions} session${gone.removed.sessions === 1 ? "" : "s"}` : null,
         gone?.removed?.invites  ? `${gone.removed.invites} invitation${gone.removed.invites === 1 ? "" : "s"}` : null,
       ].filter(Boolean);
-      setNotice(
+      /* No undo on this one, and the sentence says why. The toast is still
+         the right shape for it: the account is gone from the list behind it,
+         which is the reporting; this is the receipt. */
+      say(
         `${user.fullName} has been permanently deleted`
         + (also.length ? `, with ${also.join(", ")}.` : ".")
         + " This cannot be undone.",
+        null,
+        "deleted",
       );
       setDeleting(null);
       setConfirmText("");
@@ -581,7 +1764,7 @@ export default function UserAdminPanel() {
       } : prev));
       revalidate();
     } catch (err) {
-      setError(isMissingEndpoint(err)
+      fail(isMissingEndpoint(err)
         ? "Permanent deletion is not available yet — this server does not have the account API."
         : firstMessage(err, null, "Could not delete that account."));
     } finally {
@@ -591,12 +1774,34 @@ export default function UserAdminPanel() {
 
   // ── Editing one person's access ──────────────────────────────────────────
 
+  /**
+   * Open one person, whole.
+   *
+   * Their details come off the row, which already carries every field the
+   * update endpoint accepts; their access is read fresh, because the roster
+   * only ever knows about the organisations it was scoped to and this panel
+   * offers to change all of them.
+   *
+   * No toggle. It used to close if you clicked the row you already had open,
+   * which made sense when it was a strip in the table and makes none for a
+   * modal panel covering the row you would be clicking.
+   */
   async function openEditor(user) {
-    if (editing === rowKey(user)) { setEditing(null); return; }
+    const identity = {
+      fullName:   user.fullName ?? "",
+      email:      user.email ?? "",
+      phone:      user.phone ?? "",
+      employeeId: user.employeeId ?? "",
+    };
     setEditing(rowKey(user));
+    setEditUser(user);
+    setEditIdentity(identity);
+    setEditForm(identity);
+    setEditStatus(user.status ?? "ACTIVE");
     setEditBase(null);
     setEditDraft({});
-    setError(""); setNotice("");
+    setRoleOrg(null);
+    setError("");
     try {
       const memberships = await listUserMemberships(user.scopeOrgId, user.id);
       const asDraft = Object.fromEntries(
@@ -605,12 +1810,21 @@ export default function UserAdminPanel() {
       setEditBase(asDraft);
       setEditDraft(asDraft);
     } catch (err) {
-      setEditing(null);
-      setError(isMissingEndpoint(err)
+      closeEditor();
+      fail(isMissingEndpoint(err)
         ? "Editing access is not available yet — this server does not have the membership API."
         : firstMessage(err, null, "Could not read that person's access."));
     }
   }
+
+  /* Only the key is cleared. `editUser` is what the panel is DRAWN from, and
+     it has to survive the two hundred milliseconds the panel spends sliding
+     out — clearing it here emptied the panel first and animated the empty
+     box. The next open replaces it. */
+  const closeEditor = useCallback(() => setEditing(null), []);
+
+  const editField = (key) => (e) =>
+    setEditForm((f) => ({ ...f, [key]: e.target.value }));
 
   function toggleEditOrg(id) {
     setEditDraft((d) => {
@@ -642,6 +1856,23 @@ export default function UserAdminPanel() {
    * end with — that is how one call both adds a role and takes another away,
    * and it is why the unchanged organisations are skipped rather than resent.
    */
+  /**
+   * May this administrator change this person's own details?
+   *
+   * Two conditions, and the second is not a nicety. `PATCH .../users/:userId`
+   * matches on the HOME organisation column, so it can only be addressed to
+   * the organisation the person belongs to — and the administrator has to
+   * hold `user:update` THERE, not merely on the roster they are reading. An
+   * admin at one site looking at a visiting member from another cannot rename
+   * them, and the panel says so rather than offering a field that 403s.
+   */
+  function identityEditable(user) {
+    const home = user?.organisationId;
+    if (!home) return false;
+    if (!orgs.some((o) => o.id === home)) return false;
+    return canIn(home, "user:update");
+  }
+
   async function saveEditor(user) {
     if (!editBase) return;
     const before = editBase;
@@ -653,30 +1884,69 @@ export default function UserAdminPanel() {
     const toWrite = Object.keys(after).filter((id) => !(id in before) || !same(before[id], after[id]));
     const toRemove = Object.keys(before).filter((id) => !(id in after));
 
-    if (toWrite.length === 0 && toRemove.length === 0) { setEditing(null); return; }
+    /* What they typed about the person themselves, minus anything they did
+       not touch. Trimmed here rather than on the way out, so "  " does not
+       count as a change and does not arrive at a schema whose floor is two
+       characters. */
+    const identity = {};
+    for (const key of ["fullName", "phone", "employeeId"]) {
+      const now = editForm[key].trim();
+      if (now !== (editIdentity[key] ?? "").trim()) identity[key] = now;
+    }
+    const identityChanged = Object.keys(identity).length > 0;
+    const statusChanged = editStatus != null && editStatus !== user.status;
+
+    if (identityChanged && !identity.fullName && editForm.fullName.trim() === "") {
+      // Guarded here as well as by `required`: the panel can be saved from the
+      // foot without the field ever being focused.
+      setError("A name is required.");
+      return;
+    }
+
+    if (!identityChanged && !statusChanged && toWrite.length === 0 && toRemove.length === 0) {
+      closeEditor(); return;
+    }
 
     if (toRemove.length && Object.keys(after).length === 0) {
       setError("Somebody must belong to at least one organisation. Suspend the account instead.");
       return;
     }
 
-    setEditBusy(true); setError(""); setNotice("");
+    setEditBusy(true); setError("");
     try {
+      /* Their details first, access second. If the second half throws, the
+         person is renamed and their access is untouched — which is the harmless
+         order. The other way round leaves access changed under the old name,
+         and no way to tell from the roster that anything half-happened. */
+      if (identityChanged) await updateOrgUser(user.organisationId, user.id, identity);
+
       for (const id of toWrite) await setUserMembership(id, user.id, after[id] ?? []);
       for (const id of toRemove) await removeUserMembership(id, user.id);
+
+      /* Suspension LAST, and after the removals, because it is the one write
+         that can end the session being used to make the others. Suspending
+         somebody first and then failing to save their access leaves an
+         account locked out AND half-edited. */
+      if (statusChanged) await setUserStatus(user.scopeOrgId, user.id, editStatus);
 
       const named = (ids) => ids
         .map((id) => orgs.find((o) => o.id === id)?.name ?? "an organisation")
         .join(", ");
       const parts = [];
+      if (identityChanged) parts.push(`details updated`);
+      if (statusChanged) {
+        parts.push(editStatus === "SUSPENDED"
+          ? "suspended and signed out"
+          : "reactivated");
+      }
       if (toWrite.length) parts.push(`updated ${named(toWrite)}`);
       if (toRemove.length) parts.push(`removed from ${named(toRemove)}`);
-      setNotice(`${user.fullName}: ${parts.join("; ")}.`);
+      say(`${identity.fullName ?? user.fullName}: ${parts.join("; ")}.`);
 
-      setEditing(null);
+      closeEditor();
       retry();
     } catch (err) {
-      setError(firstMessage(err, null, "Could not save that change. Some of it may have been applied."));
+      fail(firstMessage(err, null, "Could not save that change. Some of it may have been applied."));
     } finally {
       setEditBusy(false);
     }
@@ -693,7 +1963,62 @@ export default function UserAdminPanel() {
 
             The second tile appears only while a filter is on, which is what
             makes a short roster explain itself: 4 showing, of 12. */}
-        <header className="ua-header">
+        {/* ── Masthead ──────────────────────────────────────────────────
+            The page gets a title. It opened on a bare organisation name for
+            several revisions on the reasoning that the crumb above already
+            names it — true, but a crumb is navigation read once on arrival,
+            not a heading, and the page had nothing at its top edge for the eye
+            to land on.
+
+            The count rides the title as a badge rather than sitting beside it
+            as a tile. It is an attribute OF the title, not a statistic next to
+            one, and the two KPI tiles it replaces were spending a whole band
+            on a number and its own synonym. */}
+        <header className="ua-masthead">
+          <div className="ua-masthead__head">
+            {/* The heading is read, not seen. The crumb strip directly above
+                this panel already says "User accounts" — printing it again
+                underneath was the page naming itself twice — but a screen
+                reader arriving here still needs one heading to land on, and a
+                page whose only title is a breadcrumb <li> has none. */}
+            <h1 className="ua-masthead__title">User accounts</h1>
+
+            {/* Two badges instead of a total and a paragraph.
+                The total said how many rows there are, which is a fact you can
+                also get by looking at them; the paragraph explained what a
+                roster is to somebody already reading one. What neither said is
+                the thing an administrator opens this page to find out — how
+                many of these people can actually get in, and how many are
+                shut out — and that is two numbers, not three hundred words.
+
+                Same badge as the Status column, deliberately: one voice for
+                "a state" across the page, so the summary and the row it
+                summarises are recognisably the same fact at two scales. */}
+            {!loading && (
+              <p className="ua-masthead__roll">
+                <span className="ua-badge ua-badge--active">
+                  <span className="ua-state__dot" aria-hidden="true" />
+                  {roll.active} active
+                </span>
+                {/* Drawn at zero too. "Nobody here is suspended" is something
+                    somebody came to learn, and a badge that vanishes when it
+                    reaches zero makes its own absence unreadable. */}
+                <span className="ua-badge ua-badge--suspended">
+                  <span className="ua-state__dot" aria-hidden="true" />
+                  {roll.suspended} suspended
+                </span>
+                {/* The one job the old count did that nothing else does: a
+                    short roster explaining that it is short because of a
+                    filter, rather than because the fleet is small. */}
+                {filtering && (
+                  <span className="ua-masthead__showing">
+                    {shown.length} of {roll.all} shown
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
+
           {/* The scope picker replaces the flat company name once there is
               more than one organisation to administer. With only one it stays
               a label, because a select with a single option is a control that
@@ -710,7 +2035,7 @@ export default function UserAdminPanel() {
                      different organisation's roster would write to the wrong
                      membership. */
                   setEditing(null); setDeleting(null); setConfirmText("");
-                  setError(""); setNotice("");
+                  setError("");
                   setScope(e.target.value);
                 }}
               >
@@ -728,63 +2053,165 @@ export default function UserAdminPanel() {
             </span>
           )}
 
-          {loading ? (
-            <span className="ua-kpi__loading">Loading…</span>
-          ) : (
-            <div className="ua-kpis">
-              <div className="ua-kpi">
-                <span className="ua-kpi__n">{users.length}</span>
-                <span className="ua-kpi__l">{users.length === 1 ? "Person" : "People"}</span>
-              </div>
-              {filtering && (
-                <div className="ua-kpi ua-kpi--shown">
-                  <span className="ua-kpi__n">{shown.length}</span>
-                  <span className="ua-kpi__l">Showing</span>
+          {loading && <span className="ua-kpi__loading">Loading…</span>}
+        </header>
+
+        {/* ── Toolbar ───────────────────────────────────────────────────────
+            Views on the left, everything that acts on the view on the right.
+            The split is not decoration: the left control changes what SHAPE
+            you are looking at, the right ones change what is in it or take it
+            away with you. Two kinds of verb, two sides. */}
+        <div className="ua-toolbar">
+          <div className="ua-views" role="group" aria-label="How to show the roster">
+            {VIEWS.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                className={"ua-views__opt" + (view === v.key ? " ua-views__opt--on" : "")}
+                aria-pressed={view === v.key}
+                onClick={() => setView(v.key)}
+              >
+                <ViewIcon kind={v.key} />
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="ua-toolbar__right">
+            <div className="ua-search">
+              {/* Drawn here rather than imported. The app ships no icon set,
+                  and the Maintenance filter bar draws its own magnifier the
+                  same way — two elements, so the pair cannot fall out of
+                  step. */}
+              <svg className="ua-search__icon" width="13" height="13" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+              </svg>
+              <input
+                ref={searchRef}
+                className="ua-search__input"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                // Escape clears rather than closing anything: this input is
+                // not a dialog, and a search box that throws away the screen
+                // on Escape is the behaviour nobody wants twice.
+                onKeyDown={(e) => { if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); } }}
+                placeholder="Search name, email or ID"
+                aria-label="Search people"
+                autoComplete="off"
+              />
+              {query && (
+                <button type="button" className="ua-search__clear"
+                        onClick={() => { setQuery(""); searchRef.current?.focus(); }}>
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* The masking switch.
+                Labelled with what clicking it DOES, not with the state it is
+                in — "Masked" on a button is a word you have to work out the
+                mood of. `aria-pressed` carries the state for anybody who
+                needs it stated rather than implied. */}
+            <button
+              type="button"
+              className={"ua-tbtn" + (masked ? "" : " ua-tbtn--on")}
+              aria-pressed={!masked}
+              onClick={toggleMasking}
+              title={masked
+                ? "Email and phone are hidden. Show them for every row."
+                : "Email and phone are in the clear. Hide them again."}
+            >
+              {masked ? "Show contacts" : "Hide contacts"}
+            </button>
+
+            {/* Columns. Named for what it holds rather than for what it does
+                to them — a menu called "Hide" reads as an action on the thing
+                you last clicked. */}
+            <div className="ua-menu">
+              <button
+                type="button"
+                className={"ua-tbtn" + (hiddenCols.size > 0 ? " ua-tbtn--on" : "")}
+                aria-expanded={openMenu === "cols"}
+                aria-haspopup="true"
+                disabled={view !== "table"}
+                title={view === "table" ? undefined : "Columns belong to the table view"}
+                onClick={() => setOpenMenu((m) => (m === "cols" ? null : "cols"))}
+              >
+                Columns{hiddenCols.size > 0 ? ` (${columns.length})` : ""}
+              </button>
+              {openMenu === "cols" && (
+                <div className="ua-menu__pop" role="group" aria-label="Columns">
+                  <span className="ua-menu__label">Show in the table</span>
+                  {COLUMNS.filter((c) => c.key !== "org" || showOrgColumn).map((c) => {
+                    const on = c.always || !hiddenCols.has(c.key);
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        className={"ua-menu__item" + (on ? " ua-menu__item--on" : "")}
+                        role="checkbox"
+                        aria-checked={on}
+                        // The name column is the one that cannot go: a roster
+                        // without it is a table of facts about nobody.
+                        aria-disabled={c.always || undefined}
+                        onClick={() => { if (!c.always) toggleColumn(c.key); }}
+                      >
+                        <span className="ua-menu__tick" aria-hidden="true">
+                          <svg width="9" height="9" viewBox="0 0 12 12" fill="none"
+                               stroke="currentColor" strokeWidth="2.4">
+                            <path d="M2 6.4l2.6 2.6L10 3.4" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                        {c.label}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          )}
-        </header>
+
+            <button
+              type="button"
+              className="ua-tbtn"
+              onClick={handleExport}
+              disabled={sorted.length === 0}
+              title={sorted.length === 0
+                ? "Nothing to export"
+                : "Downloads what is on screen: these filters, this sort, these columns"}
+            >
+              Export
+            </button>
+
+            {/* Not a toggle any more. What it opens is a modal panel with a
+                scrim over this toolbar, so the button cannot be clicked to
+                close what is covering it — the panel carries its own way out,
+                and Escape is the other one. */}
+            <button
+              type="button"
+              className={"ua-invite-btn" + (inviteOpen ? " ua-invite-btn--open" : "")}
+              aria-haspopup="dialog"
+              aria-expanded={inviteOpen}
+              aria-controls="ua-invite"
+              onClick={openInvite}
+            >
+              Add user
+            </button>
+          </div>
+        </div>
 
         {/* The controls, as one band under the count.
             Typed text first because it is the fastest way to one person;
             the state chips second because they are how you find a GROUP —
             everyone still waiting, everyone whose invitation lapsed — which
             is the other half of what this roster is read for. */}
+        {/* The filter row keeps the chips and loses the search box, which
+            moved into the toolbar above. Chips rather than dropdowns because
+            a chip carries its own count: it says how many are behind it before
+            you commit to opening it, which a select cannot. */}
         <div className="ua-filters">
-          <div className="ua-search">
-            {/* Drawn here rather than imported. The app ships no icon set, and
-                the Maintenance filter bar draws its own magnifier the same
-                way — two elements, so the pair cannot fall out of step. */}
-            <svg className="ua-search__icon" width="13" height="13" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-            </svg>
-            <input
-              ref={searchRef}
-              className="ua-search__input"
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              // Escape clears rather than closing anything: this input is not
-              // a dialog, and a search box that throws away the screen on
-              // Escape is the behaviour nobody wants twice.
-              onKeyDown={(e) => { if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); } }}
-              placeholder="Search name, email or ID"
-              aria-label="Search people"
-              autoComplete="off"
-            />
-            {query && (
-              <button type="button" className="ua-search__clear"
-                      onClick={() => { setQuery(""); searchRef.current?.focus(); }}>
-                Clear
-              </button>
-            )}
-          </div>
-
-          <span className="ua-filters__divider" aria-hidden="true" />
-
           <div className="ua-filter-group">
             <span className="ua-filter-label" id="ua-state-label">State</span>
             <div className="ua-chips" role="group" aria-labelledby="ua-state-label">
@@ -828,29 +2255,71 @@ export default function UserAdminPanel() {
             </div>
           )}
 
-          {/* The bar's last element, and the only one that does not filter:
-              Export's slot in the Maintenance bar, and Export's shape. */}
-          <button
-            type="button"
-            className={"ua-invite-btn" + (inviteOpen ? " ua-invite-btn--open" : "")}
-            aria-expanded={inviteOpen}
-            aria-controls="ua-invite"
-            onClick={() => { setInviteOpen((v) => !v); setError(""); setNotice(""); }}
-          >
-            {inviteOpen ? "Close" : "Invite someone"}
-          </button>
+          {/* Only when there is something to clear.
+              This slot held a dimmed sentence explaining that state and role
+              are the only facets — two faults in one element: it measured
+              2.42:1, and it explained an absence nobody had asked about. The
+              chips above already show what can be filtered. */}
+          {filtering && (
+            <button type="button" className="ua-addfilter" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
         </div>
 
-        {/* `hidden`, not a height transition: the fields must leave the tab
-            order when the form is shut, and a five-field form sliding open is
-            motion spent on nothing. */}
-        <section className="ua-card ua-invite" id="ua-invite" hidden={!inviteOpen}>
-          <div className="ua-card__head">
-            <span className="ua-card__title">New account</span>
-            <span className="ua-card__hint">They choose their own password from an emailed link.</span>
-          </div>
+        {/* ── Selection ─────────────────────────────────────────────────────
+            Inserted above the grid rather than swapped over the toolbar, so
+            the filters that produced this selection stay on screen and are
+            visibly still in force. A bar that covers its own filters is how
+            somebody acts on a set they can no longer see. */}
+        {selected.size > 0 && (
+          <div className="ua-selbar" role="region" aria-label="Selected people">
+            <span className="ua-selbar__n">
+              {selected.size} selected
+            </span>
 
-          <form className="ua-form" onSubmit={handleCreate} noValidate>
+            <button type="button" className="ua-tbtn" disabled={bulkBusy}
+                    onClick={() => bulkSetStatus("SUSPENDED")}>
+              {bulkBusy ? "Working…" : "Suspend"}
+            </button>
+            <button type="button" className="ua-tbtn" disabled={bulkBusy}
+                    onClick={() => bulkSetStatus("ACTIVE")}>
+              Reactivate
+            </button>
+            <button type="button" className="ua-tbtn" disabled={bulkBusy}
+                    onClick={bulkResend}>
+              Resend invite
+            </button>
+
+            <button type="button" className="ua-tbtn" onClick={() => setSelected(new Set())}>
+              Clear
+            </button>
+
+            {/* Stated, not hidden. Deleting an account here means typing a
+                phrase per person on purpose, and a checkbox column is the
+                exact opposite of that — so it is absent, and the reason is
+                on screen rather than left as a gap somebody has to infer. */}
+          </div>
+        )}
+
+        {/* The two message slots that used to sit here are gone. Everything
+            this page has to say now says it in the toast, which is one place
+            rather than two and is in the corner the eye returns to after an
+            action rather than at the top of a list somebody has scrolled away
+            from. The live region moved with them, onto the toast itself.
+
+            What has NOT moved: both drawers still show a failure against
+            their own submit button. A form error belongs beside the form. */}
+        {/* ── Add user ───────────────────────────────────────── */}
+        <Drawer
+          open={inviteOpen}
+          onClose={closeInvite}
+          id="ua-invite"
+          title="New account"
+          hint="They choose their own password from an emailed link."
+        >
+              <form className="ua-form" onSubmit={handleCreate} noValidate>
+                <div className="ua-drawer__body">
             <div className="ua-form__row">
               <label className="ua-field">
                 <span className="ua-label">Full name</span>
@@ -888,80 +2357,175 @@ export default function UserAdminPanel() {
                 </span>
               </legend>
 
-              {orgs.length === 0 ? (
-                <p className="ua-access__empty">No organisations are available to you.</p>
-              ) : (
-                <ul className="ua-orgs">
-                  {orgs.map((org) => {
-                    const on = org.id in picked;
-                    const available = rolesByOrg[org.id];
-                    const chosen = picked[org.id] ?? [];
-                    return (
-                      <li className={"ua-org" + (on ? " ua-org--on" : "")} key={org.id}>
-                        <button type="button" className="ua-org__toggle"
-                                role="checkbox" aria-checked={on}
-                                onClick={() => toggleOrg(org.id)} disabled={busy}>
-                          <span className="ua-box" aria-hidden="true" />
-                          <span className="ua-org__name">{org.name}</span>
-                          {org.id === orgId && <span className="ua-org__here">current</span>}
-                        </button>
-
-                        {/* Roles appear only once the organisation is ticked —
-                            a list of roles for an org nobody selected is noise. */}
-                        {on && canAssignRoles && (
-                          <div className="ua-roles">
-                            {available === undefined ? (
-                              <span className="ua-roles__empty">Loading roles…</span>
-                            ) : available.length === 0 ? (
-                              // Distinguishes "this org genuinely has none" from
-                              // "the request failed" — which, before the account
-                              // API is deployed, is the case that actually fires.
-                              <span className="ua-roles__empty">
-                                No roles available here yet.
-                              </span>
-                            ) : (
-                              available.map((r) => (
-                                <button
-                                  key={r.slug}
-                                  type="button"
-                                  className={"ua-role"
-                                    + (chosen.includes(r.slug) ? " ua-role--on" : "")
-                                    + (r.platform ? " ua-role--platform" : "")}
-                                  aria-pressed={chosen.includes(r.slug)}
-                                  onClick={() => toggleRole(org.id, r.slug)}
-                                  disabled={busy}
-                                  title={r.platform
-                                    ? "This role reaches every organisation, not only this one."
-                                    : undefined}
-                                >
-                                  {r.name}
-                                  {/* Said in words, not colour: this is a grant
-                                      made inside one organisation that takes
-                                      effect in all of them, and an admin
-                                      choosing it needs to know that before
-                                      they click, not after. */}
-                                  {r.platform && <span className="ua-role__scope">all orgs</span>}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <OrgPicker
+                orgs={orgs}
+                draft={picked}
+                base={null}
+                rolesByOrg={rolesByOrg}
+                canAssignRoles={canAssignRoles}
+                disabled={busy}
+                currentOrgId={orgId}
+                roleOrg={roleOrg}
+                onRoleOrg={setRoleOrg}
+                onToggleOrg={toggleOrg}
+                onToggleRole={toggleRole}
+              />
             </fieldset>
 
-            <div className="ua-msg ua-msg--error" role="alert" aria-live="polite">{error}</div>
-            <div className="ua-msg ua-msg--ok" role="status" aria-live="polite">{notice}</div>
+                </div>
 
-            <button className="ua-submit" type="submit"
-                    disabled={busy || !form.fullName.trim() || !form.email.trim() || selectedOrgIds.length === 0}>
-              {busy ? "Creating…" : "Create and invite"}
-            </button>
-          </form>
-        </section>
+                {/* The actions ride on the panel's foot rather than at the end
+                    of a long scroll, because the organisation list has no
+                    bounded height: with twenty sites, a submit button below it
+                    is a button nobody can see from where the last field is. */}
+                <footer className="ua-drawer__foot">
+                  {/* Not a second live region. The pair on the page behind this
+                      panel already announces it once; this is the same words
+                      put where the person who just pressed Create is looking,
+                      and tied to that button so it is read on the way back. */}
+                  {error && (
+                    <p className="ua-drawer__error" id="ua-invite-error">{error}</p>
+                  )}
+                  <div className="ua-drawer__acts">
+                    <button type="button" className="ua-tbtn" onClick={closeInvite} disabled={busy}>
+                      Cancel
+                    </button>
+                    <button className="ua-submit" type="submit"
+                            aria-describedby={error ? "ua-invite-error" : undefined}
+                            disabled={busy || !form.fullName.trim() || !form.email.trim() || selectedOrgIds.length === 0}>
+                      {busy ? "Creating…" : "Create and invite"}
+                    </button>
+                  </div>
+                </footer>
+              </form>
+        </Drawer>
+
+        {/* ── Edit one person ────────────────────────────────────────
+            Everything about one account in one place: who they are, whether
+            they can sign in, and what they can reach. It was three controls in
+            three places before — an access strip that opened inside the table,
+            a Suspend button on the row, and nowhere at all to correct a
+            misspelled name — so "edit this person" was not something this page
+            could do, only a set of things it could do to them. */}
+        <Drawer
+          open={editing !== null}
+          onClose={closeEditor}
+          id="ua-profile"
+          title={editUser?.fullName ?? "Account"}
+          hint={editUser ? (editUser.email ?? "No email address") : undefined}
+        >
+          {editBase === null || !editUser ? (
+            <div className="ua-drawer__body">
+              <p className="ua-edit__loading">Reading their access…</p>
+            </div>
+          ) : (
+            <form
+              className="ua-form"
+              noValidate
+              onSubmit={(e) => { e.preventDefault(); saveEditor(editUser); }}
+            >
+              <div className="ua-drawer__body">
+                {/* ─ Details ─ */}
+                <section className="ua-sect">
+                  <h3 className="ua-sect__title">Details</h3>
+                  {identityEditable(editUser) ? (
+                    <div className="ua-form__row">
+                      <label className="ua-field">
+                        <span className="ua-label">Full name</span>
+                        <input className="ua-input" type="text" value={editForm.fullName}
+                               onChange={editField("fullName")} disabled={editBusy} required />
+                      </label>
+                      <label className="ua-field">
+                        <span className="ua-label">Phone</span>
+                        <input className="ua-input" type="tel" value={editForm.phone}
+                               onChange={editField("phone")} disabled={editBusy} />
+                      </label>
+                      <label className="ua-field">
+                        <span className="ua-label">Employee ID</span>
+                        <input className="ua-input" type="text" value={editForm.employeeId}
+                               onChange={editField("employeeId")} disabled={editBusy} />
+                      </label>
+                    </div>
+                  ) : (
+                    /* Read-only, and told why. The alternative is three fields
+                       that look editable and answer 403, or three fields greyed
+                       out with nothing on screen to explain it. */
+                    <>
+                      <dl className="ua-facts">
+                        <dt>Full name</dt><dd>{editUser.fullName}</dd>
+                        <dt>Phone</dt><dd>{editUser.phone || "\u2014"}</dd>
+                        <dt>Employee ID</dt><dd>{editUser.employeeId || "\u2014"}</dd>
+                      </dl>
+                    </>
+                  )}
+                </section>
+
+                {/* ─ Account ─ */}
+                <section className="ua-sect">
+                  <h3 className="ua-sect__title">Account</h3>
+                  <div className="ua-acct">
+                    {/* The badge shows the DRAFT, not the stored account: the
+                        panel has to show what Save would produce, or the row
+                        you are about to change and the sentence under it would
+                        disagree. */}
+                    <StatusBadge state={accountState({ ...editUser, status: editStatus })} />
+                    {canIn(editUser.scopeOrgId, "user:update") && (
+                      <button type="button"
+                              className={"ua-action"
+                                + (editStatus !== editUser.status ? " ua-action--armed" : "")}
+                              onClick={() => setEditStatus((v) =>
+                                (v === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"))}
+                              title={editStatus === "ACTIVE"
+                                ? "Marks the account to be suspended. It happens when you save, and signs them out everywhere."
+                                : "Marks the account to be reactivated. It happens when you save; they sign in with the password they already had."}
+                              disabled={editBusy}>
+                        {editStatus === "ACTIVE" ? "Suspend" : "Reactivate"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Only while it differs from what is stored. A panel that
+                      permanently explained what Save does would be furniture;
+                      this appears exactly when there is something staged, and
+                      names the undo, because the undo for a staged change is
+                      the button that produced it. */}
+                </section>
+
+                {/* ─ Access ─ */}
+                <section className="ua-sect">
+                  <h3 className="ua-sect__title">Access</h3>
+                  <OrgPicker
+                    orgs={orgs}
+                    draft={editDraft}
+                    base={editBase}
+                    rolesByOrg={rolesByOrg}
+                    canAssignRoles={canAssignRoles}
+                    disabled={editBusy}
+                    currentOrgId={orgId}
+                    roleOrg={roleOrg}
+                    onRoleOrg={setRoleOrg}
+                    onToggleOrg={toggleEditOrg}
+                    onToggleRole={toggleEditRole}
+                  />
+                </section>
+              </div>
+
+              <footer className="ua-drawer__foot">
+                {error && <p className="ua-drawer__error" id="ua-profile-error">{error}</p>}
+                <div className="ua-drawer__acts">
+                  <button type="button" className="ua-tbtn" onClick={closeEditor} disabled={editBusy}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="ua-submit"
+                          aria-describedby={error ? "ua-profile-error" : undefined}
+                          disabled={editBusy}>
+                    {editBusy ? "Saving…" : "Save changes"}
+                  </button>
+                </div>
+              </footer>
+            </form>
+          )}
+        </Drawer>
 
         {/* A tenant that failed on its own.
             `listUsersAcrossOrgs` catches each roster separately, so one
@@ -999,23 +2563,55 @@ export default function UserAdminPanel() {
             </p>
             <button type="button" className="ua-action" onClick={clearFilters}>Clear filters</button>
           </div>
-        ) : (
+        ) : view !== "table" ? null : (
           <section className="ua-roster">
             <div className="ua-table-scroll">
               <table className="ua-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    {showOrgColumn && <th>Organisation</th>}
-                    <th>Roles here</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Password</th>
+                    {/* Select-all covers the PAGE, not the roster. Claiming to
+                        have selected 380 rows while fifteen are visible is how
+                        somebody suspends an organisation by accident. */}
+                    <th className="ua-selcell">
+                      <button
+                        type="button"
+                        className="ua-check"
+                        role="checkbox"
+                        aria-checked={headState === "all" ? "true" : headState === "some" ? "mixed" : "false"}
+                        aria-label={headState === "all" ? "Clear this page" : "Select this page"}
+                        onClick={() => setSelected((prev) => toggleAllVisible(prev, visibleIds))}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none"
+                             stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                          {headState === "some"
+                            ? <path d="M3 6h6" strokeLinecap="round" />
+                            : <path d="M2 6.4l2.6 2.6L10 3.4" strokeLinecap="round" strokeLinejoin="round" />}
+                        </svg>
+                      </button>
+                    </th>
+                    {columns.map((c) => {
+                      const on = sort?.key === c.key;
+                      return (
+                        <th key={c.key} aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                          <button type="button" className="ua-sort" onClick={() => clickSort(c.key)}>
+                            {c.label}
+                            {/* Drawn only on the sorted column. A permanent
+                                pair of grey chevrons on every head is six
+                                pieces of furniture saying nothing. */}
+                            {on && (
+                              <span className="ua-sort__dir" aria-hidden="true">
+                                {sort.dir === "asc" ? "\u25b2" : "\u25bc"}
+                              </span>
+                            )}
+                          </button>
+                        </th>
+                      );
+                    })}
                     <th aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((u) => {
+                  {paged.slice.map((u) => {
                     /* Everything about this row is graded in the row's OWN
                        organisation, not in the one the header is showing. An
                        administrator can hold user:delete in one company and
@@ -1023,9 +2619,10 @@ export default function UserAdminPanel() {
                        to say so — a Delete drawn over a row the server will
                        refuse is worse than no Delete at all. */
                     const rowOrg = u.scopeOrgId;
+                    const rowOrgIds = u.scopeOrgIds ?? [rowOrg];
                     const rowCan = (slug) => canIn(rowOrg, slug);
                     const key = rowKey(u);
-                    const roles = rolesIn(u, rowOrg);
+                    const roles = rolesFor(u);
                     const changes = u.passwordChangeCount ?? 0;
                     const state = accountState(u);
                     const open = editing === key;
@@ -1044,21 +2641,76 @@ export default function UserAdminPanel() {
                           carry the column name it came from. They are inert on
                           a desktop, where the head is still doing that job. */}
                       <tr className={"ua-row" + (open || confirming ? " ua-row--open" : "")}>
-                        <td data-label="Name">
-                          <span className="ua-row__name">{u.fullName}</span>
-                          <span className="ua-row__email">{u.email ?? "no email"}</span>
+                        <td className="ua-selcell">
+                          <button
+                            type="button"
+                            className="ua-check"
+                            role="checkbox"
+                            aria-checked={selected.has(key)}
+                            aria-label={`Select ${u.fullName}`}
+                            onClick={() => setSelected((prev) => toggleSelected(prev, key))}
+                          >
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"
+                                 stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                              <path d="M2 6.4l2.6 2.6L10 3.4" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
                         </td>
-                        {showOrgColumn && (
-                          <td data-label="Organisation">
-                            <span className="ua-row__org">
-                              {orgNameById.get(rowOrg) ?? "—"}
-                            </span>
-                            {rowOrg === orgId && (
-                              <span className="ua-row__orghere">current</span>
-                            )}
+                        <td className="ua-row__namecell" data-label="Full name">
+                          <span className="ua-who">
+                            <Avatar name={u.fullName} email={u.email} />
+                            <span className="ua-row__name">{u.fullName}</span>
+                          </span>
+                        </td>
+                        {shows("email") && (
+                          /* Masked, then a real mailto once revealed. The
+                             address was previously a grey sub-line that looked
+                             like a caption and could not be clicked; if it is
+                             worth a column it is worth being the thing you use
+                             it for -- but forty of them on a control-room
+                             display is a staff directory nobody asked to
+                             publish. One click, one person. */
+                          <td data-label="Email">
+                            <Contact value={u.email} kind="email" who={u.fullName}
+                                     shown={inClear(u.id, "email")}
+                                     onToggle={() => toggleContact(u.id, "email")} />
                           </td>
                         )}
-                        <td className="ua-row__rolescell" data-label="Roles here">
+                        {shows("phone") && (
+                          <td className="ua-row__num" data-label="Phone">
+                            <Contact value={u.phone} kind="phone" who={u.fullName}
+                                     shown={inClear(u.id, "phone")}
+                                     onToggle={() => toggleContact(u.id, "phone")} />
+                          </td>
+                        )}
+                        {shows("org") && (
+                          /* All of them, not the one the row was read from.
+                             The row is a person; "which organisations do they
+                             belong to" is a fact about them, and it used to be
+                             answered by counting how many times their name
+                             appeared in the list. */
+                          <td data-label="Organisation">
+                            <span className="ua-row__orgs">
+                              {rowOrgIds.map((id) => (
+                                <OrgBadge key={id} id={id} org={orgById.get(id)}
+                                          here={id === orgId} />
+                              ))}
+                            </span>
+                          </td>
+                        )}
+                        {shows("group") && (
+                          <td data-label="Group">
+                            {u.group
+                              ? <span className="ua-groupchip">{u.group.name}</span>
+                              /* Said, not left blank. An ungrouped account is
+                                 reachable by the platform administrator alone
+                                 once enforcement is on, and that is a fact
+                                 about the row rather than missing data. */
+                              : <span className="ua-row__norole">ungrouped</span>}
+                          </td>
+                        )}
+                        {shows("roles") && (
+                        <td className="ua-row__rolescell" data-label="Roles">
                           {roles.length === 0 ? (
                             <span className="ua-row__norole">none</span>
                           ) : (
@@ -1069,18 +2721,22 @@ export default function UserAdminPanel() {
                             </span>
                           )}
                         </td>
-                        <td data-label="Status">
-                          <span className={`ua-pill ua-pill--${state.key}`}>
-                            {state.label}
-                          </span>
-                        </td>
-                        <td className="ua-row__num" data-label="Created">{fmtDate(u.createdAt)}</td>
+                        )}
+                        {shows("status") && (
+                          <td data-label="Status"><StatusBadge state={state} /></td>
+                        )}
+                        {shows("created") && (
+                          <td className="ua-row__num" data-label="Created">{fmtDate(u.createdAt)}</td>
+                        )}
+                        {shows("password") && (
                         <td className="ua-row__num" data-label="Password">
                           {changes === 0 ? (
-                            // Distinct from "changed once, long ago": an account
-                            // that has never had a password cannot sign in, and
-                            // that is the thing an admin needs to spot.
-                            <span className="ua-row__never">never set</span>
+                            /* The one filled badge in the grid, and it is spent
+                               here on purpose: an account that has never had a
+                               password cannot sign in at all, which is the one
+                               row-level fact an administrator has to act on.
+                               Distinct from "changed once, long ago". */
+                            <span className="ua-never">never set</span>
                           ) : (
                             <>
                               {fmtDate(u.passwordChangedAt)}
@@ -1090,6 +2746,7 @@ export default function UserAdminPanel() {
                             </>
                           )}
                         </td>
+                        )}
                         <td className="ua-row__actionscell" data-label="Actions">
                           <div className="ua-row__actions">
                           {/* Only offered while an invitation is the thing
@@ -1105,26 +2762,37 @@ export default function UserAdminPanel() {
                               Resend invite
                             </button>
                           )}
+                          {/* "Edit access" was the honest name while that was
+                              all it did. It opens the whole person now — their
+                              details, their access, and whether the account is
+                              suspended — so it is Edit.
+
+                              Suspend/Reactivate went in there with it. It used
+                              to be its own row button, which made the row the
+                              place you change one fact about somebody and the
+                              panel the place you change another, with no rule
+                              telling you which was which. */}
                           {(rowCan("user:assign_role") || rowCan("user:update")) && (
                             <button type="button" className="ua-action"
                                     onClick={() => openEditor(u)}
+                                    aria-haspopup="dialog"
                                     aria-expanded={open}
                                     disabled={editBusy}>
-                              {open ? "Close" : "Edit access"}
-                            </button>
-                          )}
-                          {rowCan("user:update") && (
-                            <button type="button" className="ua-action"
-                                    onClick={() => handleStatus(u)}
-                                    disabled={rowBusy === key}>
-                              {u.status === "ACTIVE" ? "Suspend" : "Reactivate"}
+                              Edit
                             </button>
                           )}
                           {/* Never offered for the account doing the looking.
                               The server refuses it anyway, but a control whose
                               only outcome is an error message is a control
                               that should not be drawn. */}
-                          {rowCan("user:delete") && u.id !== me?.id && (
+                          {/* Not on a merged row. Delete is per organisation
+                              on the server — it removes the account row and
+                              its grants — and a button sitting on a person who
+                              belongs to three of them cannot say which one it
+                              means. Narrow the scope picker to one
+                              organisation and it comes back, addressed to
+                              something the operator chose. */}
+                          {rowCan("user:delete") && u.id !== me?.id && rowOrgIds.length === 1 && (
                             <button type="button" className="ua-action ua-action--danger"
                                     onClick={() => openDelete(u)}
                                     aria-expanded={confirming}
@@ -1136,90 +2804,6 @@ export default function UserAdminPanel() {
                         </td>
                       </tr>
 
-                      {/* The editor sits in the flow of the table rather than
-                          in a dialog: it is about the row above it, and
-                          nothing in this app implements a focus trap, so a
-                          modal here would be a worse version of the same
-                          thing. */}
-                      {open && (
-                        <tr className="ua-editrow">
-                          <td colSpan={showOrgColumn ? 7 : 6}>
-                            {editBase === null ? (
-                              <p className="ua-edit__loading">Reading their access…</p>
-                            ) : (
-                              <div className="ua-edit">
-                                <div className="ua-edit__head">
-                                  <span className="ua-edit__title">Access for {u.fullName}</span>
-                                  <span className="ua-edit__hint">
-                                    Tick an organisation to add it, untick to remove it. Roles
-                                    are per organisation — what you leave ticked is what they
-                                    will hold.
-                                  </span>
-                                </div>
-
-                                <ul className="ua-orgs">
-                                  {orgs.map((org) => {
-                                    const on = org.id in editDraft;
-                                    const chosen = editDraft[org.id] ?? [];
-                                    const available = rolesByOrg[org.id];
-                                    const wasIn = org.id in editBase;
-                                    return (
-                                      <li className={"ua-org" + (on ? " ua-org--on" : "")} key={org.id}>
-                                        <button type="button" className="ua-org__toggle"
-                                                role="checkbox" aria-checked={on}
-                                                onClick={() => toggleEditOrg(org.id)}
-                                                disabled={editBusy}>
-                                          <span className="ua-box" aria-hidden="true" />
-                                          <span className="ua-org__name">{org.name}</span>
-                                          {wasIn && !on && <span className="ua-org__going">removing</span>}
-                                          {!wasIn && on && <span className="ua-org__here">adding</span>}
-                                        </button>
-
-                                        {on && canAssignRoles && (
-                                          <div className="ua-roles">
-                                            {available === undefined ? (
-                                              <span className="ua-roles__empty">Loading roles…</span>
-                                            ) : available.length === 0 ? (
-                                              <span className="ua-roles__empty">No roles available here yet.</span>
-                                            ) : (
-                                              available.map((r) => (
-                                                <button key={r.slug} type="button"
-                                                        className={"ua-role"
-                                                          + (chosen.includes(r.slug) ? " ua-role--on" : "")
-                                                          + (r.platform ? " ua-role--platform" : "")}
-                                                        aria-pressed={chosen.includes(r.slug)}
-                                                        onClick={() => toggleEditRole(org.id, r.slug)}
-                                                        disabled={editBusy}
-                                                        title={r.platform
-                                                          ? "This role reaches every organisation, not only this one."
-                                                          : undefined}>
-                                                  {r.name}
-                                                  {r.platform && <span className="ua-role__scope">all orgs</span>}
-                                                </button>
-                                              ))
-                                            )}
-                                          </div>
-                                        )}
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-
-                                <div className="ua-edit__foot">
-                                  <button type="button" className="ua-submit ua-submit--inline"
-                                          onClick={() => saveEditor(u)} disabled={editBusy}>
-                                    {editBusy ? "Saving…" : "Save access"}
-                                  </button>
-                                  <button type="button" className="ua-action"
-                                          onClick={() => setEditing(null)} disabled={editBusy}>
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
                       {/* The confirmation, in the flow of the table like the
                           editor above it — and deliberately NOT sharing its
                           shape. This one is red-ruled, narrow, and has one
@@ -1228,7 +2812,7 @@ export default function UserAdminPanel() {
                           visible before anything is read. */}
                       {confirming && (
                         <tr className="ua-editrow ua-editrow--danger">
-                          <td colSpan={showOrgColumn ? 7 : 6}>
+                          <td colSpan={columns.length + 2}>
                             <div className="ua-danger">
                               <div className="ua-danger__head">
                                 <span className="ua-danger__title">
@@ -1322,9 +2906,267 @@ export default function UserAdminPanel() {
                 </tbody>
               </table>
             </div>
+
+            {/* ── Pager ────────────────────────────────────────────────────
+                Only drawn when there is more than one page. A pager over
+                twelve rows is chrome reporting that nothing needs paging. */}
+            {paged.pageCount > 1 && (
+              <nav className="ua-pager" aria-label="Roster pages">
+                <span className="ua-pager__size">
+                  <label className="ua-pager__label" htmlFor="ua-perpage">Rows per page</label>
+                  <select
+                    id="ua-perpage"
+                    className="ua-pager__sel"
+                    value={perPage}
+                    onChange={(e) => setPerPage(Number(e.target.value))}
+                  >
+                    {PER_PAGE_CHOICES.map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                </span>
+
+                <span className="ua-pager__range">
+                  {paged.from}{"\u2013"}{paged.to} of {paged.total}
+                </span>
+
+                <span className="ua-pager__nav">
+                  {/* Drawn, not typed. These two were a bare \u2039 and
+                      \u203a sitting in JSX TEXT, where a backslash escape is
+                      not an escape at all — the buttons were printing the
+                      six characters of their own source. A chevron is also
+                      the better mark: ‹ is a quotation glyph, hairline at
+                      12px in Inter, and it sat a pixel off centre. */}
+                  <button type="button" className="ua-pager__btn ua-pager__btn--step"
+                          aria-label="Previous page"
+                          disabled={paged.page <= 1}
+                          onClick={() => setPage((v) => Math.max(1, v - 1))}>
+                    <Chevron dir="left" />
+                  </button>
+                  {pageWindow(paged.page, paged.pageCount).map((slot, i) => (
+                    slot === null ? (
+                      // eslint-disable-next-line react/no-array-index-key
+                      <span className="ua-pager__gap" key={`gap-${i}`} aria-hidden="true">{"\u2026"}</span>
+                    ) : (
+                      <button
+                        key={slot}
+                        type="button"
+                        className={"ua-pager__btn" + (slot === paged.page ? " ua-pager__btn--on" : "")}
+                        aria-current={slot === paged.page ? "page" : undefined}
+                        aria-label={`Page ${slot}`}
+                        onClick={() => setPage(slot)}
+                      >
+                        {slot}
+                      </button>
+                    )
+                  ))}
+                  <button type="button" className="ua-pager__btn ua-pager__btn--step"
+                          aria-label="Next page"
+                          disabled={paged.page >= paged.pageCount}
+                          onClick={() => setPage((v) => Math.min(paged.pageCount, v + 1))}>
+                    <Chevron dir="right" />
+                  </button>
+                </span>
+              </nav>
+            )}
           </section>
         )}
+
+        {/* ── Board ──────────────────────────────────────────────────────────
+            Grouped by whether the person can actually sign in, which is the
+            one axis worth grouping a roster on. Role would make tidier columns
+            and answer nothing; "who is stuck" is the question this page exists
+            for, and the board is the only view that answers it at a glance.
+
+            Not paged, deliberately: paging a board would hide part of a column
+            and quietly understate exactly the group somebody came to find. */}
+        {!loadError && !loading && shown.length > 0 && view === "board" && (
+          <>
+            {/* Said out loud, because a drag affordance is invisible until
+                somebody tries it, and nobody tries it on a page of records.
+                The sentence also carries the keyboard route, which is not a
+                footnote: dragging is a pointer gesture and this has to be
+                doable without one.
+
+                Outside the board rather than inside it: .ua-board is a grid,
+                and a paragraph in it is a grid ITEM -- spanning it 1 / -1
+                collapsed every column to 14px. */}
+            <p className="ua-board__hint">
+              Drag a card between Active and Suspended to change an account.
+              {" "}Manage does the same from the keyboard.
+            </p>
+          <div className="ua-board">
+            {STATUS_TABS.filter((t) => t.key !== "all").map((tab) => {
+              const group = sorted.filter((u) => accountState(u).key === tab.key);
+              const takes = dropCol === tab.key;
+              return (
+                <section
+                  className={"ua-board__col"
+                    + (takes ? " ua-board__col--takes" : "")}
+                  key={tab.key}
+                  /* preventDefault is what MAKES a box a drop target in the
+                     HTML drag model — withholding it on the derived columns is
+                     how Pending refuses a card rather than accepting one and
+                     doing nothing with it. */
+                  onDragOver={(e) => {
+                    if (!dropTarget(tab.key)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropCol !== tab.key) setDropCol(tab.key);
+                  }}
+                  onDragLeave={(e) => {
+                    // Ignore the crossings between this column's own children.
+                    if (e.currentTarget.contains(e.relatedTarget)) return;
+                    setDropCol((c) => (c === tab.key ? null : c));
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const u = dragRef.current;
+                    const ok = dropTarget(tab.key);
+                    endDrag();
+                    if (u && ok) {
+                      handleStatus(u, tab.key === "suspended" ? "SUSPENDED" : "ACTIVE");
+                    }
+                  }}
+                >
+                  <header className="ua-board__head">
+                    <span className="ua-state__dot" aria-hidden="true"
+                          style={{ color: `var(--ua-${tab.key === "active" ? "ok"
+                            : tab.key === "pending" ? "info"
+                            : tab.key === "suspended" ? "warn" : "crit"})` }} />
+                    <span className="ua-board__title">{tab.label}</span>
+                    <span className="ua-board__n">{group.length}</span>
+                  </header>
+
+                  {group.length === 0 ? (
+                    <p className="ua-board__empty">Nobody</p>
+                  ) : group.map((u) => (
+                    <article
+                      className={"ua-bcard"
+                        + (canDrag(u) ? " ua-bcard--drag" : "")
+                        + (dragKey === rowKey(u) ? " ua-bcard--lifted" : "")}
+                      key={rowKey(u)}
+                      draggable={canDrag(u)}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        /* Firefox starts no drag at all without a payload.
+                           The name, because if a card is ever dropped outside
+                           this board the thing that receives it should get
+                           something a person wrote, not an internal key. */
+                        e.dataTransfer.setData("text/plain", u.fullName);
+                        dragRef.current = u;
+                        setDragKey(rowKey(u));
+                      }}
+                      onDragEnd={endDrag}>
+                      <span className="ua-who">
+                        <Avatar name={u.fullName} email={u.email} />
+                        <span className="ua-who__text">
+                          <span className="ua-row__name">{u.fullName}</span>
+                          <span className="ua-row__email">{(inClear(u.id, "email") ? u.email : maskEmail(u.email)) || "no email"}</span>
+                        </span>
+                      </span>
+                      {rolesFor(u).length > 0 && (
+                        <span className="ua-row__roles">
+                          {rolesFor(u).map((name) => (
+                            <span className="ua-rolechip" key={name}>{name}</span>
+                          ))}
+                        </span>
+                      )}
+                      {/* Organisations, always — not behind `showOrgColumn`,
+                          which is the TABLE's question ("is that column worth
+                          its width") asked on a view that has no columns. A
+                          card is one person, and which organisations they
+                          belong to is part of who they are here; on the board
+                          it is also the only place that fact appears, since
+                          there is no column chooser to turn back on.
+
+                          Above the foot rather than in it: the foot is the
+                          card's action strip, and a fact wrapped in beside a
+                          button reads as a label for the button. */}
+                      <span className="ua-row__orgs ua-bcard__orgs">
+                        {(u.scopeOrgIds ?? [u.scopeOrgId]).filter(Boolean).map((id) => (
+                          <OrgBadge key={id} id={id} org={orgById.get(id)} here={id === orgId} />
+                        ))}
+                      </span>
+
+                      <div className="ua-bcard__foot">
+                        {(canIn(u.scopeOrgId, "user:assign_role") || canIn(u.scopeOrgId, "user:update")) && (
+                          <button type="button" className="ua-action" onClick={() => jumpTo(u)}>
+                            Manage
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              );
+            })}
+          </div>
+          </>
+        )}
+
+        {/* ── List ───────────────────────────────────────────────────────────
+            One line per person, no columns. It is the view that survives a
+            phone and a narrow split pane, where the grid has to scroll
+            sideways and the board has to stack four times over. */}
+        {!loadError && !loading && shown.length > 0 && view === "list" && (
+          <div className="ua-list">
+            {sorted.map((u) => (
+              <div className="ua-litem" key={rowKey(u)}>
+                <Avatar name={u.fullName} email={u.email} />
+                <span className="ua-who__text">
+                  <span className="ua-row__name">{u.fullName}</span>
+                  <span className="ua-row__email">{(inClear(u.id, "email") ? u.email : maskEmail(u.email)) || "no email"}</span>
+                </span>
+                {/* Between the person and their state, which is the order the
+                    row already reads in: who, where, how they stand. Allowed
+                    to shrink and wrap rather than push the status badge off
+                    the end — this is the view that has to survive a phone. */}
+                <span className="ua-row__orgs ua-litem__orgs">
+                  {(u.scopeOrgIds ?? [u.scopeOrgId]).filter(Boolean).map((id) => (
+                    <OrgBadge key={id} id={id} org={orgById.get(id)} here={id === orgId} />
+                  ))}
+                </span>
+                <span className="ua-litem__meta">
+                  <StatusBadge state={accountState(u)} />
+                  {(canIn(u.scopeOrgId, "user:assign_role") || canIn(u.scopeOrgId, "user:update")) && (
+                    <button type="button" className="ua-action" onClick={() => jumpTo(u)}>
+                      Manage
+                    </button>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* ── Undo ────────────────────────────────────────────────────────────
+          The reason the bulk status actions need no confirmation in FRONT of
+          them. An optimistic change plus a way back beats a dialog asking
+          whether you meant the thing you just clicked — and this is the only
+          place on the page that changes several accounts at once without a
+          typed phrase. */}
+      {toast && (
+        /* alert for a failure, status for everything else: an error has to
+           interrupt a screen reader rather than wait its turn behind whatever
+           is being read, and an outcome must not. */
+        <div className={`ua-toast ua-toast--${toast.tone ?? "ok"}`}
+             role={toast.tone === "error" ? "alert" : "status"}
+             aria-live={toast.tone === "error" ? "assertive" : "polite"}>
+          <ToastMark tone={toast.tone ?? "ok"} />
+          <span className="ua-toast__text">{toast.text}</span>
+          {/* Only when there is one. A disabled or absent-action "Undo" on a
+              permanent deletion would be the cruellest button on the page. */}
+          {toast.undo && (
+            <button type="button" className="ua-toast__undo" onClick={toast.undo}>Undo</button>
+          )}
+          <button type="button" className="ua-toast__x" aria-label="Dismiss"
+                  onClick={() => setToast(null)}>
+            {"\u2715"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
