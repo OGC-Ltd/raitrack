@@ -408,26 +408,86 @@
   border-radius: 3px;
 }
 
-/* Unread alert count on the bell (replaces the red dot) */
+/*
+ * Unread alert count on the bell (replaces the red dot).
+ *
+ * A CIRCLE. `min-width: 17px` with `padding: 0 4px` was round on one digit by
+ * coincidence and an oval on every number past nine: the 8px of side padding
+ * plus two glyphs is wider than the fixed 17px height, and `border-radius: 9px`
+ * merely rounded the ends of the result.
+ *
+ * The centring was one-axis too — `text-align: center` across, and a
+ * `line-height: 13px` tuned to land inside `17px` minus the 2px border on each
+ * side. That arithmetic is correct only while all three numbers agree, so
+ * changing the ring width or the size silently pushed the digits off-centre.
+ * Grid centres both axes and needs no arithmetic to stay true.
+ *
+ * Same knob and the same digit steps as .side-tree__count and
+ * .lf-cluster-badge, which is the point: three round number badges, one shape.
+ */
+/*
+ * A TRUE CIRCLE, sized so the number fits inside it.
+ *
+ * It was a 17px circle whose type shrank to make room — 10px at two digits,
+ * then 8.5px, then 7.5px. That is the wrong knob. Take the 2px border off a
+ * 17px ring and 13px of width is left, while "84" at 10px bold measures
+ * 11.7px: the figure was pressed against the curve on both sides, which is
+ * what reads as blurry rather than merely small. At three digits the type was
+ * below the size at which a number is legible at all.
+ *
+ * So the DIAMETER grows and the type stays readable. Each step is measured
+ * against the glyphs it has to hold, at this face, weight and tabular
+ * figures:
+ *
+ *   1–2 digits   20px ring, 16px inside, "84" needs 11.7  → 4.3 spare
+ *   3 chars      24px ring, 20px inside, "284" needs 16.7 → 3.3 spare
+ *   4–5 chars    26px ring, 22px inside
+ *
+ * `aspect-ratio: 1` alongside the explicit width and height is belt and
+ * braces: this sits in a flex row, and a flex parent will stretch a fixed
+ * height given the chance — which would make an oval of it again. Same
+ * reasoning, and the same idiom, as `.side-tree__count`.
+ */
 .app-header__bell-count {
+  --bell-count: 20px;
   position: absolute;
-  top: 1px;
-  right: 0;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: #dc2626;
+  top: 0;
+  /* A larger ring needs somewhere to go. It hangs slightly off the bell's
+     corner, which is where a badge belongs and is what buys the diameter. */
+  right: -3px;
+  width: var(--bell-count);
+  height: var(--bell-count);
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+  /* Slate, not red. The badge counts everything the feed holds that this
+     operator has not opened yet, and a shift's worth of routine arrivals and
+     gate crossings is news rather than an alarm. Red is below, for the days
+     it is one. */
+  background: #475569;
   color: #fff;
   border: 2px solid #fff;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
-  line-height: 13px;
-  text-align: center;
+  line-height: 1;
+  display: grid;
+  place-items: center;
   box-sizing: border-box;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+/* "284", and "99+" once the count is capped. The ring takes the strain; the
+   type gives half a pixel rather than three. */
+.app-header__bell-count[data-len="3"] { --bell-count: 24px; font-size: 10px; }
+.app-header__bell-count[data-len="4"],
+.app-header__bell-count[data-len="5"] { --bell-count: 26px; font-size: 9.5px; letter-spacing: -0.02em; }
+
+/* At least one of the unseen items is a warning or a critical — a service
+   redirect, an overspeed, a suspected theft. Same red the stranded count and
+   the side tree's alert badge are drawn in, so one thing being wrong looks
+   the same wherever the app says it. AFTER the size steps, which set only
+   `--bell-count` and `font-size`, so neither rule fights the other. */
+.app-header__bell-count--alert { background: #dc2626; }
 
 /* ── Responsive ────────────────────────────────────────────────────────────
 

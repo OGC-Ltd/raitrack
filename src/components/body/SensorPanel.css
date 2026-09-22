@@ -2108,11 +2108,29 @@
     align-items: stretch;
   }
 
+  /* The tick box stays 15px — a checkbox that grows to thumb size is a
+     checkbox that dominates the row it belongs to, and these sit one per
+     unit down a table of hundreds. What grows is the CELL around it, which
+     is the part a thumb actually has to hit and which was the width of the
+     box itself. The box is the drawing; the cell is the target. */
+  .sp4-th--check,
+  .sp4-td--check {
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+  }
+
   /* Full width and its own row. A phone has room for one control across, and a
      search ending two thirds of the way over leaves a dead stub the reader
      keeps trying to type into. Weighbridges overrides this — see
      WeighbridgesScreen.css, where the day picker earns a place on this row. */
   .sp4-search-wrap { flex: 1 0 100%; min-width: 0; }
+  /* 31px on a phone, from desk padding. It is the control most likely to be
+     aimed at first and the one a mis-tap is most annoying on, because the
+     keyboard has already come up by the time you see you missed. */
+  .sp4-search { min-height: 40px; }
 
   /* A rule drawn between two STACKED rows is a rule between nothing. */
   .sp4-filter-divider { display: none; }
@@ -2149,6 +2167,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    /* The line this block was missing.
+       Everything around it was written for a 36px oval — `padding: 0 14px`
+       removes the vertical padding precisely BECAUSE a height was supposed to
+       supply it, and `line-height: 1` centres the label inside that height.
+       Without it, nothing set a height at all and the chip collapsed to its
+       own line box: MEASURED at 375px, 14.5px tall. A third of a thumb, and
+       the reason these read as unreachably small on a phone.
+       36px is this app's mobile control height — `.dr-chip` in
+       DriversScreen.css is this same rule with the line present, and the
+       back button in WeighbridgesScreen.css matches. */
+    min-height: 36px;
     padding: 0 14px;
     border-radius: 999px;
     line-height: 1;
@@ -2185,6 +2214,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    /* 17px measured, for the same reason as the chips: the padding was
+       zeroed for a height that never came. 40 rather than 36 — these three
+       are the bar's actions, they already take a full row as equal thirds,
+       and one of them exports a file. */
+    min-height: 40px;
     padding: 0 10px;
     border-radius: 8px;
     font-size: var(--sp4-body);

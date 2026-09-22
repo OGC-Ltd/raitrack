@@ -19,6 +19,45 @@ function readSeen(key) {
   return v || Date.now() - 24 * 3600_000;
 }
 
+/**
+ * How many feed items this operator has not seen, and whether any of them is
+ * a problem.
+ *
+ * EVERY unseen item counts, not just the warning/critical ones. The filter
+ * here used to admit those two severities and nothing else, and almost
+ * nothing this fleet produces is either: a dispatch, a gate crossing and both
+ * halves of a sale are published `info` or `success`
+ * (raifactorysuite-events.service), and the telemetry narration spends
+ * `warning` on a service redirect and `critical` on suspected theft. So the
+ * feed filled all day behind a badge that sat at zero — the counter was
+ * working, on a set that is empty on almost every fleet-day.
+ *
+ * The bell OPENS the feed, so its badge has to count what the feed holds.
+ * Bounded twice over: pruneFeed caps the panel at MAX_FEED_ITEMS across a
+ * 12-hour horizon, and the caller caps the glyph at "99+".
+ *
+ * `alarming` keeps the distinction the old filter was reaching for without
+ * letting it silence the count — red is for something being wrong, and a
+ * shift of routine arrivals is news but not an alarm.
+ *
+ * Exported because it is the whole of the rule and none of the rendering,
+ * the same reason groupLayers is exported from MapLayersTree.
+ */
+export function summariseUnread(feed, lastSeen) {
+  let unreadCount = 0;
+  let unreadAlarming = false;
+  for (const f of feed ?? []) {
+    const t = Date.parse(f?.ts);
+    // A malformed or missing timestamp cannot be placed against `lastSeen`,
+    // and counting it would make the badge tick up on every reconnect that
+    // replays it. Silently not-new is the safe reading.
+    if (!Number.isFinite(t) || t <= lastSeen) continue;
+    unreadCount += 1;
+    if (f.type === 'warning' || f.type === 'critical') unreadAlarming = true;
+  }
+  return { unreadCount, unreadAlarming };
+}
+
 // "Online" for a live unit, otherwise when it was last heard from.
 function lastSeenLabel(v) {
   if (v.online) return 'Online';
@@ -78,8 +117,8 @@ export default function AppHeader() {
   const orgRef  = useRef(null);
   const userRef = useRef(null);
 
-  // Unread = warning/critical feed items newer than the last time this
-  // operator opened the feed, remembered per organisation in this browser.
+  // Unread = feed items newer than the last time this operator opened the
+  // feed, remembered per organisation in this browser.
   const seenKey = `ft-feed-seen:${activeCompanyId}`;
   const [lastSeen, setLastSeen] = useState(() => readSeen(seenKey));
   useEffect(() => { setLastSeen(readSeen(seenKey)); }, [seenKey]);
@@ -88,11 +127,7 @@ export default function AppHeader() {
     setLastSeen(now);
     try { localStorage.setItem(seenKey, String(now)); } catch { /* storage off */ }
   };
-  const unreadCount = (feed ?? []).filter(f => {
-    if (f.type !== 'warning' && f.type !== 'critical') return false;
-    const t = Date.parse(f.ts);
-    return Number.isFinite(t) && t > lastSeen;
-  }).length;
+  const { unreadCount, unreadAlarming } = summariseUnread(feed, lastSeen);
   const badge = unreadCount > 99 ? '99+' : String(unreadCount);
 
   // The live feed and the vehicle detail panel share the right edge — only one
@@ -235,7 +270,11 @@ export default function AppHeader() {
         >
           <i className="ti ti-bell" aria-hidden="true" />
           {unreadCount > 0 && (
-            <span className="app-header__bell-count" aria-label={`${unreadCount} unread alerts`}>{badge}</span>
+            <span
+              className={`app-header__bell-count${unreadAlarming ? ' app-header__bell-count--alert' : ''}`}
+              data-len={String(badge).length}
+              aria-label={`${unreadCount} new event${unreadCount === 1 ? '' : 's'}`}
+            >{badge}</span>
           )}
         </button>
 
