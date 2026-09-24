@@ -162,7 +162,7 @@ function AppShell() {
 
           {show('system') && (
             <div className="app-tab-panel app-tab-panel--screen">
-              <ErrorBoundary label="Follow-ups" fullSection>
+              <ErrorBoundary label="Investigations" fullSection>
                 <SystemScreen />
               </ErrorBoundary>
             </div>
