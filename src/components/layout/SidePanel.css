@@ -312,10 +312,16 @@
 }
 .sp-nav-badge {
   margin-left: auto;
-  min-width: 18px;
-  padding: 1px 6px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   box-sizing: border-box;
-  border-radius: 999px;
+  border-radius: 50%;
+  line-height: 1;
   background: #d97706;
   color: #fff;
   font-size: 10.5px;
@@ -330,17 +336,20 @@
   position: absolute;
   top: 4px;
   right: 6px;
-  min-width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
   height: 16px;
-  padding: 0 4px;
+  padding: 0;
   box-sizing: border-box;
-  border-radius: 999px;
+  border-radius: 50%;
   background: #d97706;
   color: #fff;
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 16px;
-  text-align: center;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .side-panel__nav-item--active .side-panel__nav-icon { color: #2563eb; }
 
