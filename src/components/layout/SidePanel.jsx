@@ -23,7 +23,7 @@ export const NAV_ITEMS = [
   // System, pinned to the foot of the sidebar. Unlike the screens above it is
   // not drawn at all without its permission: it is a place for case work, not
   // a screen some roles are locked out of.
-  { key: 'system',       label: 'Case',         icon: 'script',    permission: 'fuel_theft:triage', section: 'system' },
+  { key: 'system',       label: 'Cases',        icon: 'script',    permission: 'fuel_theft:triage', section: 'system' },
 ];
 
 function weatherDesc(code) {
@@ -332,12 +332,12 @@ export default function SidePanel() {
         </div>
       )}
 
-      {/* ── Case: the account's fuel follow-ups ──
+      {/* ── Cases: the account's fuel follow-ups ──
           Outside the scrolling body, so it stays at the foot of the sidebar
           however long the trees above get. */}
       {!collapsed && systemItems.length > 0 && (
         <div className="sp-foot">
-          <nav className="sp-nav-box" aria-label="Case">
+          <nav className="sp-nav-box" aria-label="Cases">
             {systemItems.map(item => {
               const isActive = desktopActiveTab === item.key;
               return (
@@ -397,9 +397,9 @@ export default function SidePanel() {
         </nav>
       )}
 
-      {/* Collapsed Case, at the foot of the icon rail like the open one. */}
+      {/* Collapsed Cases, at the foot of the icon rail like the open one. */}
       {collapsed && systemItems.length > 0 && (
-        <nav className="side-panel__nav side-panel__nav--foot" aria-label="Case">
+        <nav className="side-panel__nav side-panel__nav--foot" aria-label="Cases">
           {systemItems.map(item => {
             const isActive = desktopActiveTab === item.key;
             return (
