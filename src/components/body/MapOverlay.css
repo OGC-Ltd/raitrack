@@ -1020,7 +1020,7 @@
      Sized off --safe-w rather than the viewport, so it tracks the rails
      instead of guessing at them. */
   width: min(680px, var(--safe-w, calc(calc(var(--vw) * 100) - 40px)));
-  max-height: min(760px, var(--safe-h, calc(calc(var(--vh) * 100) - 40px)));
+  max-height: min(600px, var(--safe-h, calc(calc(var(--vh) * 100) - 40px)));
 }
 /* Collapsed keeps its own narrow width — but still capped, for the screen
    where even 360px is more than the column has. The extra class is needed
@@ -1066,7 +1066,7 @@
 
   width: min(680px, calc(calc(var(--vw) * 100) - 40px));
   max-width: none;
-  max-height: min(760px, calc(calc(var(--vh) * 100) - 40px));
+  max-height: min(600px, calc(calc(var(--vh) * 100) - 40px));
 
   /* A window's padding belongs to its PARTS — the title bar, the body, the
      footer — not to the shell, which has to run its dividers edge to edge. */
@@ -1415,7 +1415,7 @@
     max-width: none;
     /* Not 100: the strip of backdrop left showing is what says "there is a
        map behind this, and tapping it puts you back". */
-    max-height: 88dvh;
+    max-height: 64dvh;
 
     /* The sheet radius the app's own sheets use (MobileVehicleSheet). */
     border-radius: 20px 20px 0 0; /* the Live Feed sheet's */
