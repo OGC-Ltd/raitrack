@@ -6619,8 +6619,12 @@ export default function FleetMap() {
                  releases the isolation. */
               <div className="focus-pill focus-pill--tracked tracked-pill">
                 <span className="focus-pill-dot" aria-hidden="true" />
+                {/* One unit is named: "Tracking 1 unit" left the reader to
+                    remember which one, and whether it was the one on screen. */}
                 <span>
-                  Tracking <strong>{trackedIds.length}</strong> {trackedIds.length === 1 ? "unit" : "units"}
+                  {trackedIds.length === 1
+                    ? <>Tracking <strong>{trackedIds[0]}</strong></>
+                    : <>Tracking <strong>{trackedIds.length}</strong> units</>}
                 </span>
                 <button
                   type="button"
@@ -6634,10 +6638,9 @@ export default function FleetMap() {
                   type="button"
                   className="tracked-pill__clear"
                   onClick={() => { setTrackedOnly(false); setTrackedIds([]); }}
-                  title="Clear the tracked list"
-                  aria-label="Clear the tracked list"
+                  title="Stop tracking and show the whole fleet"
                 >
-                  ×
+                  Stop <span aria-hidden="true">{"×"}</span>
                 </button>
               </div>
             )}
