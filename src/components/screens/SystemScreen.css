@@ -1,119 +1,30 @@
-/* System: the account's system notifications (fuel follow-ups). The status
-   chips are FuelFollowUp.css's .ffu-chip, so a follow-up reads the same here
-   as in its case window. */
+/* System — only what the Sensor Monitor's sheet (SensorPanel.css) does not
+   already own. The header, chips, toolbar, table and pills are its classes,
+   the same ones Repairs wears, so the two screens read at one rhythm. */
 
-.sys-screen {
-  height: 100%;
-  overflow-y: auto;
-  padding: 20px 24px 32px;
-  box-sizing: border-box;
-  color: #0f172a;
+/* "Waiting on you" is the one figure that asks something of the reader. */
+.sys-kpi--me .sp4-kpi-n { color: var(--sp4-accent); }
+
+/* Under review: in someone's hands, not yet a verdict. */
+.sp4-pill--info {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--sp4-accent);
+  border: 1px solid rgba(59, 130, 246, 0.22);
 }
 
-.sys-head { margin-bottom: 16px; }
-.sys-title { margin: 0; font-size: 20px; font-weight: 700; }
-.sys-sub { margin: 4px 0 0; max-width: 640px; font-size: 12.5px; color: #64748b; line-height: 1.5; }
-
-.sys-kpis {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  max-width: 640px;
-  margin-bottom: 16px;
-}
-.sys-kpi {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-}
-.sys-kpi-num { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.sys-kpi-lbl { font-size: 11px; color: #64748b; }
-.sys-kpi--me { border-color: #bfdbfe; background: #eff6ff; }
-.sys-kpi--me .sys-kpi-num { color: #1d4ed8; }
-
-.sys-tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
-.sys-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #64748b;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 8px 10px;
-  margin-bottom: -1px;
-  cursor: pointer;
-}
-.sys-tab:hover { color: #0f172a; }
-.sys-tab--on { color: #1d4ed8; border-bottom-color: #2563eb; }
-.sys-tab-count {
-  min-width: 18px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 10.5px;
-  text-align: center;
-  box-sizing: border-box;
-}
-.sys-tab--on .sys-tab-count { background: #dbeafe; color: #1d4ed8; }
-
-.sys-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-.sys-empty { margin: 0; padding: 28px 16px; text-align: center; font-size: 12.5px; color: #64748b; }
-.sys-empty--error { color: #b91c1c; }
-
-.sys-list { list-style: none; margin: 0; padding: 0; }
-.sys-list li + li { border-top: 1px solid #f1f5f9; }
-
-.sys-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 14px;
-  font: inherit;
-  text-align: left;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.sys-row:hover { background: #f8fafc; }
-.sys-row:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
-
-.sys-row-dot { flex-shrink: 0; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: #94a3b8; }
-.sys-row--open .sys-row-dot        { background: #d97706; }
-.sys-row--accepted .sys-row-dot    { background: #2563eb; }
-.sys-row--escalated .sys-row-dot   { background: #b91c1c; }
-.sys-row--deescalated .sys-row-dot { background: #15803d; }
-
-.sys-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.sys-row-title { font-size: 13px; color: #0f172a; }
-.sys-row-vol { margin-left: 8px; font-size: 12px; color: #475569; font-variant-numeric: tabular-nums; }
-.sys-row-who { font-size: 12px; color: #475569; }
-.sys-row-when { font-size: 11px; color: #94a3b8; }
-
-.sys-row-side { flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
-.sys-turn {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #1d4ed8;
-  color: #fff;
+/* A count inside a State chip, like the tab counts elsewhere in the panel. */
+.sys-chip-n {
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 
-@media (max-width: 767px) {
-  .sys-screen { padding: 16px 16px 24px; }
-  .sys-kpis { gap: 8px; }
-  .sys-kpi { padding: 8px 10px; }
-  .sys-kpi-num { font-size: 18px; }
-  .sys-row { flex-wrap: wrap; }
-  .sys-row-side { width: 100%; padding-left: 20px; }
+.sys-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Yard names run long; the case window has the full text. */
+.sys-where {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
