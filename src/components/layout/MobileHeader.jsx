@@ -146,7 +146,12 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               {canTriage && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('system'); setUserOpen(false); }}>
                   <i className="ti ti-bell" aria-hidden="true" /> System
-                  {systemCount > 0 && <span className="mobile-header__user-badge">{systemCount}</span>}
+                  {systemCount > 0 && (
+                    <>
+                      <span className="mobile-header__user-alertdot" aria-hidden="true" />
+                      <span className="mobile-header__user-badge">{systemCount}</span>
+                    </>
+                  )}
                 </button>
               )}
               {can('user:create') && (
