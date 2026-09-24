@@ -1,0 +1,117 @@
+/* The day breakdown in the fuel incident window. Labels in the window's one
+   label voice (`.vt-tile-lbl`: micro, 700, uppercase); figures right-aligned in
+   tabular numerals so a column of litres lines up on the decimal. */
+
+.fd { display: flex; flex-direction: column; gap: 6px; }
+
+.fd-hdr,
+.fd-events-hdr {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fd-events-hdr { margin-top: 6px; }
+.fd-title {
+  font-size: var(--vt-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--vt-ls-label, 0.7px);
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.fd-day { font-size: var(--vt-fs-label); color: var(--text-muted); }
+
+.fd-note {
+  margin: 0;
+  font-size: var(--vt-fs-micro);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ── The ledger ─────────────────────────────────────────────────────────── */
+.fd-ledger { display: flex; flex-direction: column; }
+.fd-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+}
+.fd-lbl {
+  font-size: var(--vt-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--vt-ls-label, 0.7px);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.fd-sub {
+  min-width: 0;
+  font-size: var(--vt-fs-micro);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-val {
+  font-size: var(--vt-fs-label);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.fd-unit { font-weight: 400; color: var(--text-muted); }
+.fd-row--strong .fd-lbl { color: var(--text-primary); }
+.fd-row--strong .fd-val { font-weight: 700; }
+.fd-val--ok { color: var(--accent-ok); }
+.fd-val--warn { color: var(--accent-warn); }
+.fd-val--muted { color: var(--text-muted); }
+
+/* The sum line: everything above it is the tank, everything below is what the
+   tank's fall is compared with. */
+.fd-rule { height: 1px; margin: 3px 0; background: var(--color-border, #e2e8f0); }
+
+/* ── The events ─────────────────────────────────────────────────────────── */
+.fd-events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.fd-ev {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: 6px;
+  font-size: var(--vt-fs-label);
+}
+.fd-ev--mine { background: color-mix(in srgb, var(--accent-warn) 10%, transparent); }
+.fd-ev-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.fd-ev-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.fd-ev-dot--ok { background: var(--accent-ok); }
+.fd-ev-dot--warn { background: var(--accent-warn); }
+.fd-ev-lbl {
+  min-width: 0;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-ev-this {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-warn) 45%, transparent);
+  border-radius: 4px;
+  font-size: var(--vt-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--vt-ls-label, 0.7px);
+  text-transform: uppercase;
+  color: var(--accent-warn);
+}
+.fd-ev-val {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
