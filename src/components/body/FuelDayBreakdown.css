@@ -1,34 +1,35 @@
-/* The day breakdown in the fuel incident window. Type is the window's own:
-   the ledger is `Tile`s (see the component) styled by the window's .vt-tile
-   rules, event figures use .vt-tile-val / .vt-tile-unit, and headings and
-   notes take the label and sub sizes the tiles use. Nothing here sets a font
-   family, and no size here is one the tiles do not already use. */
+/* The day breakdown in the fuel incident window, in the unit card's voice
+   (VehicleDetailPanel.css): block titles at 13px/500, meta at 11px, list rows
+   at the driver line's 14/12px. The ledger is `Tile`s, boxed by MapOverlay.css
+   like the card's KPI tiles. Nothing here sets a family: the window is Roboto. */
 
 .fd { display: flex; flex-direction: column; gap: 6px; }
 
 .fd-hdr,
 .fd-events-hdr {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-.fd-events-hdr { margin-top: 6px; }
-/* `.vt-tile-lbl`'s voice, in the primary colour because it heads a block. */
+.fd-events-hdr { margin-top: 4px; }
+/* `.vdp-block-title` */
 .fd-title {
-  font-size: var(--vt-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--vt-ls-label, 0.7px);
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
 }
-/* `.vt-tile-sub`'s size and colour, like `.fi-when` beside the title above. */
-.fd-day,
-.fd-note {
-  font-size: var(--vt-fs-label);
+/* `.vdp-meta` */
+.fd-day {
+  font-size: 11px;
   color: var(--text-muted);
 }
-.fd-note { margin: 0; line-height: 1.45; }
+/* `.vdp-ai-text` */
+.fd-note { margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-muted); }
+
+/* Opening, refuelled, closing read across as one line of the ledger. */
+.fi-body-detail .vt-tiles.fd-ledger { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fi-body-detail .vt-tiles.fd-ledger .vt-tile:last-child { grid-column: auto; }
 
 /* Tones for figures. Doubled up with `.fd` so they win over .vt-tile-val's own
    colour whatever order the two stylesheets load in. */
@@ -45,11 +46,12 @@
   gap: 8px;
   padding: 3px 6px;
   margin: 0 -6px;
-  border-radius: 6px;
-  font-size: var(--vt-fs-label);
+  border-radius: 4px;
+  font-size: 12.5px;
 }
 .fd-ev--mine { background: color-mix(in srgb, var(--accent-warn) 10%, transparent); }
 .fd-ev-time {
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
@@ -69,17 +71,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* `.fi-tag`'s treatment, the chips in the header above. */
+/* `.vdp-live`'s chip, in the warning tone. */
 .fd-ev-this {
   margin-left: 6px;
-  padding: 0 5px;
+  padding: 1px 6px;
   border: 1px solid color-mix(in srgb, var(--accent-warn) 45%, transparent);
-  border-radius: 4px;
-  font-size: var(--vt-fs-micro);
-  letter-spacing: var(--vt-ls-label, 0.7px);
-  text-transform: uppercase;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--accent-warn);
 }
-.fd-ev-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* The unit takes the figure's colour, as it does in the tiles. */
-.fd-ev-val .vt-tile-unit { color: inherit; }
+.fd-ev-val {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

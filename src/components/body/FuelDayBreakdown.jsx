@@ -1,8 +1,8 @@
 // The day, in the fuel incident window: a tank ledger and the day's events.
 //
-// The ledger is built from the SAME `Tile` as the incident figures above it
-// and the vehicle card beside it, so its labels, figures, units and notes are
-// the window's type by construction rather than a copy that can drift.
+// The ledger is built from the SAME `Tile` as the incident figures above it,
+// which the window draws as the unit card's boxed KPI tiles (see "The unit
+// card's type" in MapOverlay.css), so the two cannot drift apart.
 //
 // Replaces the "Record / Movement / Came back / Rule" rows, which said how the
 // verdict was reached and left the reader to reconstruct the day. The ledger
@@ -57,7 +57,7 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
 
       {tank && (
         <>
-          <div className="vt-tiles">
+          <div className="vt-tiles fd-ledger">
             <Tile label="Opening level" value={l1(b.opening)} unit={b.opening != null ? " L" : ""}
                   sub={`${WEEKDAY.format(prevDay(day))}'s close`} />
             <Tile label="Refuelled"
@@ -112,10 +112,8 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
                     {eventLabel(e)}
                     {mine && <span className="fd-ev-this">this one</span>}
                   </span>
-                  {/* The tiles' own figure classes, so an event's litres read
-                      exactly like the litres in the ledger above. */}
-                  <span className={`vt-tile-val fd-ev-val fd-val--${kind}`}>
-                    {e.type === "refuel" ? "+" : "−"}{l1(e.litres)}<span className="vt-tile-unit"> L</span>
+                  <span className={`fd-ev-val fd-val--${kind}`}>
+                    {e.type === "refuel" ? "+" : "−"}{l1(e.litres)} L
                   </span>
                 </li>
               );
