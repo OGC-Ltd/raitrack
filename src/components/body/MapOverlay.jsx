@@ -42,6 +42,7 @@ import { clampToSafeArea as sharedClamp } from "../../hooks/useFloatingWindow";
 import { useDismissedIncidents, dismissIncident } from "../../lib/fuelDismissals";
 import { apiFetch } from "../../services/api";
 import { usePermissions } from "../../hooks/usePermissions";
+import FuelDayBreakdown from "./FuelDayBreakdown";
 
 const FEED_CLS = { info: "fi-info", warning: "fi-warning", critical: "fi-critical", success: "fi-success" };
 const FEED_ICO = { info: "💬", warning: "⚠", critical: "🔴", success: "✓" };
@@ -172,8 +173,15 @@ function writeDismissed(set) {
  * questions in order, because that is the order an operator asks them:
  *
  *   WHAT happened   volume, window, rate, both ends of the gauge
- *   HOW we know     the record, the movement, what came back, and the rule
- *                   slug that settled it — as labelled rows, not prose
+ *   THE DAY         the unit's whole fleet day as a tank ledger (opening,
+ *                   refuelled, closing, used, what the engine should have
+ *                   used, what it does not explain) and the day's events in
+ *                   order — see FuelDayBreakdown
+ *
+ * The "Record / Movement / Came back / Rule" rows that stood where the day
+ * now is were removed by request: they described how the verdict was
+ * reached, and left the reader to reconstruct the day it belonged to. The
+ * rule slug survives as the title badge's tooltip, for whoever audits it.
  *
  * It used to answer a third — HOW SURE — as two percentage bars captioned
  * "FUEL LEFT THE TANK" and "AND THIS IS WHY". They are gone. The pair was
@@ -190,7 +198,7 @@ function ordinalLabel(n) {
   return `${n}${suffix}`;
 }
 
-function FuelIncidentBody({ incident }) {
+function FuelIncidentBody({ incident, vehicleId }) {
   if (!incident) return null;
 
   const theft  = incident.mayUseTheftWording === true;
@@ -215,14 +223,12 @@ function FuelIncidentBody({ incident }) {
   const litres = incident.volumeMl != null ? incident.volumeMl / 1000 : null;
   const before = incident.tankBeforeMl != null ? incident.tankBeforeMl / 1000 : null;
   const after  = incident.tankAfterMl  != null ? incident.tankAfterMl  / 1000 : null;
-  const back   = incident.recoveredMl != null ? incident.recoveredMl / 1000 : null;
 
   const spanMs = began && ended ? ended.getTime() - began.getTime() : null;
   const hours  = spanMs ? spanMs / 3600000 : null;
   const rate   = hours && hours > 0 && litres != null ? Math.round(litres / hours) : null;
 
   const title   = INCIDENT_TITLE[incident.reason] ?? (theft ? 'Possible theft' : 'Fuel incident');
-  const moving  = (incident.speedAtStart ?? 0) > 0 || (incident.speedAtEnd ?? 0) > 0;
   const num     = (n) => (n == null ? '—' : n % 1 === 0 ? String(n) : n.toFixed(1));
 
   // The unit's record over the last 30 days. `repeatCount` is 1 on a first
@@ -231,11 +237,8 @@ function FuelIncidentBody({ incident }) {
   const repeats    = incident.repeatCount ?? 1;
   const isRepeat   = repeats > 1;
   const repeatL    = incident.repeatMl != null ? incident.repeatMl / 1000 : null;
-  const allSiphons = (incident.repeatSiphons ?? 0) === repeats;
-  // Same rule as the notification text: "possible theft" only when EVERY
-  // counted event was a siphon. A mixed record is a record of flagged events.
-  const repeatWhat = allSiphons ? 'possible theft' : 'flagged event';
   const since      = incident.repeatSinceAt ? new Date(incident.repeatSinceAt) : null;
+  const rule       = `${incident.reason ?? ''}${incident.verdictReason ? ` \u00b7 ${incident.verdictReason}` : ''}`;
 
   // NOT `.vt-info`: that class carries `pointer-events: none; user-select:
   // none`, which is right for a card chasing the cursor and wrong for a dialog
@@ -245,14 +248,15 @@ function FuelIncidentBody({ incident }) {
   return (
     <div className="fi-section">
       <div className="fi-section-hdr">
-        <span className="vt-status-badge" style={{
+        <span className="vt-status-badge" title={rule ? `Rule: ${rule}` : undefined} style={{
           background: tint(13), color: accent, border: `1px solid ${tint(34)}`,
         }}>{title}</span>
         {incident.confirmed && <span className="fi-tag">CONFIRMED</span>}
         {isRepeat && (
           <span className="fi-tag" style={{
             background: tint(13), color: accent, borderColor: tint(34),
-          }}>{ordinalLabel(repeats)} IN 30 D</span>
+          }} title={`${repeats} flagged events in 30 days${repeatL != null ? `, ${num(repeatL)} L in total` : ''}${since ? `, since ${dayLabel(since)}` : ''}`}
+          >{ordinalLabel(repeats)} IN 30 D</span>
         )}
         {began && (
           <span className="fi-when">
@@ -278,38 +282,8 @@ function FuelIncidentBody({ incident }) {
 
       <div className="vt-divider" />
 
-      {/* The provenance an operator needs before acting on it. Facts only —
-          the two prose lines that used to head this block (the rule's
-          evidence sentence and the verdict's) were removed: they restated in
-          a paragraph what the rows below and the `Rule` slug already say
-          exactly, and a window read at a glance is worse for carrying the
-          same finding twice. */}
-      <dl className="fi-rows">
-        {isRepeat && (
-          <>
-            <dt>Record</dt>
-            <dd>
-              {repeats} {repeatWhat}s in 30 days
-              {repeatL != null ? `, ${num(repeatL)} L in total` : ''}
-              {since ? `, since ${dayLabel(since)}` : ''}
-            </dd>
-          </>
-        )}
-        <dt>Movement</dt>
-        <dd>{moving
-          ? `moving (${incident.speedAtStart ?? 0}\u2013${incident.speedAtEnd ?? 0} km/h)`
-          : 'stationary throughout'}</dd>
-        {back != null && (
-          <>
-            <dt>Came back</dt>
-            <dd>{back > 0 ? `${num(back)} L returned before we judged it` : 'none of it returned'}</dd>
-          </>
-        )}
-        <dt>Rule</dt>
-        <dd className="fi-slug">{incident.reason}{incident.verdictReason ? ` \u00b7 ${incident.verdictReason}` : ''}</dd>
-        {/* <dt>Reference</dt>
-        <dd className="fi-slug">{incident.id}</dd> */}
-      </dl>
+      {/* The day this happened on, as a ledger and a timeline. */}
+      <FuelDayBreakdown incident={incident} vehicleId={vehicleId} />
     </div>
   );
 }
@@ -577,7 +551,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
   ) : null;
   const detailCol = (
     <div className="fi-body-detail" key="detail">
-      <FuelIncidentBody incident={incident} />
+      <FuelIncidentBody incident={incident} vehicleId={vehicle?.vehicleId} />
     </div>
   );
 
