@@ -7,6 +7,7 @@ import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import LiveFeed from './LiveFeed';
+import { FuelFollowUpHost } from '../body/FuelFollowUp';
 import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
@@ -346,6 +347,9 @@ export default function AppHeader() {
 
       {/* Live feed panel — slides in from right */}
       <LiveFeed open={feedOpen} onClose={() => setFeedOpen(false)} />
+      {/* The fuel follow-up case window. Here rather than on the map because
+          it opens from the Live Feed too, and technicians have no map. */}
+      <FuelFollowUpHost />
     </>
   );
 }

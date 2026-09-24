@@ -26,8 +26,10 @@
  * is one deliberate click on a labelled button.
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import "./FuelAlertsMenu.css";
+import { useFleetLiveShared } from "../../context/FleetLiveContext";
+import { fleetPrefix, withoutPrefix } from "../../lib/plateLabel";
 
 /** A drop, which is what every one of these is about. */
 function DropIcon() {
@@ -42,14 +44,46 @@ function DropIcon() {
 
 const L = (ml) => (ml == null ? null : `${(ml / 1000).toFixed(1)} L`);
 
-/** HH:MM on the fleet clock — these are Kenyan/Tanzanian operations. */
+/** Date and time on the fleet clock — these are Kenyan/Tanzanian operations. */
+const DAY  = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Nairobi" });
 const HHMM = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Nairobi",
 });
-const at = (iso) => {
+const ms = (iso) => {
   const t = Date.parse(iso ?? "");
-  return Number.isFinite(t) ? HHMM.format(t) : null;
+  return Number.isFinite(t) ? t : null;
 };
+/** { day: "24 Sep", time: "19:28", full } or null. */
+const stamp = (iso) => {
+  const t = ms(iso);
+  if (t == null) return null;
+  return { day: DAY.format(t), time: HHMM.format(t), full: `${DAY.format(t)} ${HHMM.format(t)}` };
+};
+
+/**
+ * Newest drain first, by when it BEGAN. The list used to be ordered by volume,
+ * which put yesterday's big drain above one that started ten minutes ago; an
+ * alerts list is read top-down as "what happened most recently". Ties, and
+ * rows with no start time, fall back to when the drain was reported.
+ */
+export function byMostRecent(a, b) {
+  const ai = a.fuelIncident, bi = b.fuelIncident;
+  const at = ms(ai?.beganAt) ?? ms(ai?.detectedAt) ?? -Infinity;
+  const bt = ms(bi?.beganAt) ?? ms(bi?.detectedAt) ?? -Infinity;
+  if (bt !== at) return bt - at;
+  return (ms(bi?.detectedAt) ?? -Infinity) - (ms(ai?.detectedAt) ?? -Infinity);
+}
+
+/** One date/time cell, day and time on one line: "24 Sept 20:58". */
+function When({ value, label }) {
+  if (!value) return <span className="fuel-alerts__cell fuel-alerts__cell--none">—</span>;
+  return (
+    <span className="fuel-alerts__cell" title={`${label} ${value.full}`}>
+      <span className="fuel-alerts__day">{value.day}</span>{" "}
+      <span className="fuel-alerts__time">{value.time}</span>
+    </span>
+  );
+}
 
 export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSelect }) {
   const [open, setOpen] = useState(false);
@@ -77,6 +111,11 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
   }, [open]);
 
   const count = vehicles.length;
+  const sorted = useMemo(() => [...vehicles].sort(byMostRecent), [vehicles]);
+  // The organisation's name in front of every plate, read off the whole fleet
+  // (see lib/plateLabel). Dropped on a phone, where it is most of the column.
+  const { vehicles: fleet } = useFleetLiveShared();
+  const prefix = useMemo(() => fleetPrefix(fleet.map((x) => x.id)), [fleet]);
 
   /**
    * NOTHING AT ALL when the fleet is clean.
@@ -120,32 +159,50 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
             </button>
           </div>
 
+          <div className="fuel-alerts__cols" aria-hidden="true">
+            <span className="fuel-alerts__col-unit">Unit</span>
+            <span className="fuel-alerts__col-vol">Volume</span>
+            <span className="fuel-alerts__col-began">Happened</span>
+            <span className="fuel-alerts__col-reported">Reported</span>
+          </div>
+
           <div className="fuel-alerts__list">
-            {vehicles.map((v) => {
+            {sorted.map((v) => {
               const inc = v.fuelIncident;
               const theft = inc?.mayUseTheftWording === true;
-              const when = at(inc?.detectedAt ?? inc?.beganAt);
+              const began = stamp(inc?.beganAt);
+              const reported = stamp(inc?.detectedAt);
+              // CONFIRMED means our own telemetry watched the level stay down or
+              // come back, rather than the provider's claim being relayed
+              // because we could not check it. The row is one line now, so this
+              // lives in the tooltip and the accessible name; the dot still
+              // tells a possible theft (red) from any other drain (amber).
+              const status = (inc?.confirmed ? "confirmed" : theft ? "unconfirmed" : "fuel event")
+                + (inc?.repeatCount > 1 ? ` · ${inc.repeatCount}× in 30 days` : "");
               return (
                 <button
                   type="button"
                   className="fuel-alerts__row"
                   key={v.id}
                   onClick={() => { setOpen(false); onSelect?.(v.id); }}
-                  title="Show this unit and open its incident"
+                  title={`${v.id} · ${status}
+Show this unit and open its incident`}
+                  aria-label={[
+                    v.id,
+                    L(inc?.volumeMl),
+                    status,
+                    began && `happened ${began.full}`,
+                    reported && `reported ${reported.full}`,
+                  ].filter(Boolean).join(", ")}
                 >
                   <span className={`fuel-alerts__dot${theft ? " fuel-alerts__dot--theft" : ""}`} aria-hidden="true" />
-                  <span className="fuel-alerts__plate">{v.id}</span>
-                  <span className="fuel-alerts__vol">{L(inc?.volumeMl) ?? "—"}</span>
-                  <span className="fuel-alerts__meta">
-                    {/* CONFIRMED means our own telemetry watched the level stay
-                        down or come back, rather than the provider's claim being
-                        relayed because we could not check it. It is the single
-                        most useful thing on the row and the reason the word is
-                        never applied loosely. */}
-                    {inc?.confirmed ? "confirmed" : theft ? "unconfirmed" : "fuel event"}
-                    {inc?.repeatCount > 1 ? ` · ${inc.repeatCount}×` : ""}
+                  <span className="fuel-alerts__plate">
+                    <span className="fuel-alerts__plate-full">{v.id}</span>
+                    <span className="fuel-alerts__plate-short">{withoutPrefix(v.id, prefix)}</span>
                   </span>
-                  {when && <span className="fuel-alerts__when">{when}</span>}
+                  <span className="fuel-alerts__vol">{L(inc?.volumeMl) ?? "—"}</span>
+                  <span className="fuel-alerts__began"><When value={began} label="Happened" /></span>
+                  <span className="fuel-alerts__reported"><When value={reported} label="Reported" /></span>
                 </button>
               );
             })}
