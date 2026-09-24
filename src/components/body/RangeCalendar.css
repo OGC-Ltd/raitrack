@@ -45,6 +45,9 @@
   justify-content: space-between;
   margin-bottom: 6px;
 }
+/* Buttons do not inherit the font by default: the month arrows came out in
+   the browser's Arial beside Inter everywhere else. One family throughout. */
+.rcal button { font-family: inherit; }
 .rcal-month { font-weight: 600; }
 .rcal-head button {
   width: 26px;
