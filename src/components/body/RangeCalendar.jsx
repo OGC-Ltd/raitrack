@@ -64,15 +64,23 @@ export default function RangeCalendar({ from, to, max, maxDays, onChange }) {
 
   useEffect(() => { if (!open) setView(monthOf(to)); }, [to, open]);
 
-  // Placed from the button, measured once the popover has a height.
+  // Placed from the button, measured once the popover has a height, and again
+  // whenever the window changes size (a phone turning, a pane resized), or it
+  // is left hanging off the edge where the old width put it.
   useLayoutEffect(() => {
-    if (!open) return;
-    const r = btnRef.current.getBoundingClientRect();
-    const h = popRef.current?.offsetHeight ?? 320;
-    const below = window.innerHeight - r.bottom;
-    const top = below >= h + 8 || below >= r.top ? r.bottom + 6 : r.top - 6 - h;
-    const left = Math.min(Math.max(8, r.left + r.width / 2 - POP_W / 2), window.innerWidth - POP_W - 8);
-    setPos({ top: Math.max(8, top), left });
+    if (!open) return undefined;
+    const place = () => {
+      if (!btnRef.current) return;
+      const r = btnRef.current.getBoundingClientRect();
+      const h = popRef.current?.offsetHeight ?? 320;
+      const below = window.innerHeight - r.bottom;
+      const top = below >= h + 8 || below >= r.top ? r.bottom + 6 : r.top - 6 - h;
+      const left = Math.min(Math.max(8, r.left + r.width / 2 - POP_W / 2), window.innerWidth - POP_W - 8);
+      setPos({ top: Math.max(8, top), left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
   }, [open, view]);
 
   useEffect(() => {

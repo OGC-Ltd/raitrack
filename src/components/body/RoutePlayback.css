@@ -103,6 +103,9 @@
 .rp__day { flex: 0 0 auto; }
 /* The square arrow-button size below would otherwise catch the calendar too. */
 .rp__day .rcal-btn { width: auto; }
+/* The arrows beside the calendar were in the browser's Arial: buttons do
+   not inherit the font unless told to. */
+.rp__day button, .rp__close { font-family: inherit; }
 
 /* ── Buttons in the header ────────────────────────────────────────────────
    One shared treatment. `--color-card-inner` is the token for a surface
