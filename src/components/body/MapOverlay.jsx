@@ -398,7 +398,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
   // Lazy: useRef(readWindowState()) would re-read and re-parse localStorage on
   // every render and discard the result.
   const [saved] = useState(readWindowState);
-  const [collapsed, setCollapsed] = useState(!!saved.collapsed);
+  const [collapsedPref, setCollapsed] = useState(!!saved.collapsed);
   const [pos, setPos] = useState(
     saved.pinned && saved.x != null ? clampToViewport(saved.x, saved.y) : null,
   );
@@ -412,6 +412,9 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
      paint is already a sheet — see useMediaQuery. */
   const sheet = useMediaQuery(SHEET_Q);
   const asWindow = !sheet;
+  // Folding is a window's control too. A sheet has no collapse button, so a
+  // fold remembered from a desktop session must not arrive folded here.
+  const collapsed = collapsedPref && asWindow;
 
   /* Delete is irreversible and, on a sheet, sits in the bottom bar where a
      thumb rests. Two taps rather than one: the first arms it and says so, the
@@ -617,6 +620,28 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
         aria-modal={pinned && asWindow ? undefined : 'true'}
         aria-label="Fuel incident"
       >
+        {/* ON A PHONE: the Live Feed sheet's header, so the two sheets read as
+            one family — a handle, the unit in bold capitals with a status dot,
+            the kind of event as a chip, and a round close. The window's grey
+            drag bar, pin and fold are desktop chrome. */}
+        {sheet && (
+          <>
+            <div className="fi-handle" aria-hidden="true" />
+            <div className="fi-sheet-head">
+              <div className="fi-sheet-head-left">
+                <span className="fi-sheet-title">{plate ?? '—'}</span>
+                <span className={`fi-sheet-dot${theft ? '' : ' fi-sheet-dot--amber'}`} aria-hidden="true" />
+              </div>
+              <div className="fi-sheet-head-right">
+                <span className={`fi-sheet-chip${theft ? '' : ' fi-sheet-chip--amber'}`}>
+                  {theft ? 'Possible theft' : 'Fuel event'}
+                </span>
+                <button className="fi-sheet-close" onClick={onClose} aria-label="Close">×</button>
+              </div>
+            </div>
+          </>
+        )}
+        {asWindow && (
         <div
           className="fi-bar"
           onPointerDown={onPointerDown}
@@ -647,6 +672,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
           >{collapsed ? '▢' : '—'}</button>
           <button className="fi-icon" onClick={onClose} aria-label="Close" title="Close">✕</button>
         </div>
+        )}
 
         {!collapsed && (
           <>
