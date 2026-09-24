@@ -1,10 +1,15 @@
 // The day, in the fuel incident window: a tank ledger and the day's events.
 //
+// The ledger is built from the SAME `Tile` as the incident figures above it
+// and the vehicle card beside it, so its labels, figures, units and notes are
+// the window's type by construction rather than a copy that can drift.
+//
 // Replaces the "Record / Movement / Came back / Rule" rows, which said how the
 // verdict was reached and left the reader to reconstruct the day. The ledger
 // is lib/fuelDay's arithmetic; the event list is what happened, in order,
 // with the incident being looked at marked.
 
+import { Tile } from "../cards/VehicleStatsCard";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useFuelDay } from "../../hooks/useFuelDay";
 import { dayBreakdown, eventLabel, fleetDayOf, unexplainedMatters } from "../../lib/fuelDay";
@@ -17,24 +22,13 @@ const WEEKDAY = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "sh
 
 const at = (day) => new Date(`${day}T12:00:00Z`);
 const prevDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) - 86_400_000);
-const l1 = (v) => (v == null ? "—" : v.toFixed(1));
+// Rounded before the sign is read, so -0.04 prints "0.0", not "-0.0".
+const l1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10 || 0).toFixed(1));
 
 function hoursLabel(h) {
   if (h == null) return null;
   const m = Math.round(h * 60);
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
-}
-
-function Row({ label, sub, value, unit = "L", tone, strong }) {
-  return (
-    <div className={"fd-row" + (strong ? " fd-row--strong" : "")}>
-      <span className="fd-lbl">{label}</span>
-      <span className="fd-sub">{sub}</span>
-      <span className={"fd-val" + (tone ? ` fd-val--${tone}` : "")}>
-        {value}{value !== "—" && unit ? <span className="fd-unit"> {unit}</span> : null}
-      </span>
-    </div>
-  );
 }
 
 export default function FuelDayBreakdown({ incident, vehicleId }) {
@@ -46,6 +40,8 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
   const today = day >= fleetDayOf(new Date().toISOString());
   const b = dayBreakdown({ tank, fillings, drops });
   const gap = unexplainedMatters(b);
+  // Tenths are what is printed; a difference that rounds away is none.
+  const diff = b.unexplained == null ? null : Math.round(b.unexplained * 10) / 10 || 0;
 
   return (
     <section className="fd" aria-label="The day">
@@ -60,39 +56,40 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
       {error && <p className="fd-note">Could not load the day: {error}</p>}
 
       {tank && (
-        <div className="fd-ledger">
-          <Row label="Opening level" sub={`${WEEKDAY.format(prevDay(day))}'s close`} value={l1(b.opening)} />
-          <Row
-            label="Refuelled"
-            sub={b.refuelCount === 0 ? "none" : `${b.refuelCount} refuel${b.refuelCount === 1 ? "" : "s"}`}
-            value={b.refuelCount === 0 ? "0.0" : `+${l1(b.refuelled)}`}
-            tone={b.refuelCount ? "ok" : null}
-          />
-          <Row label={today ? "Level now" : "Closing level"} sub={today ? CLOCK.format(new Date()) : "end of day"} value={l1(b.closing)} />
+        <>
+          <div className="vt-tiles">
+            <Tile label="Opening level" value={l1(b.opening)} unit={b.opening != null ? " L" : ""}
+                  sub={`${WEEKDAY.format(prevDay(day))}'s close`} />
+            <Tile label="Refuelled"
+                  value={b.refuelCount === 0 ? "0.0" : `+${l1(b.refuelled)}`} unit=" L"
+                  sub={b.refuelCount === 0 ? "none" : `${b.refuelCount} refuel${b.refuelCount === 1 ? "" : "s"}`}
+                  valColor={b.refuelCount ? "var(--accent-ok)" : undefined} />
+            <Tile label={today ? "Level now" : "Closing level"} value={l1(b.closing)} unit={b.closing != null ? " L" : ""}
+                  sub={today ? CLOCK.format(new Date()) : "end of day"} />
+          </div>
 
-          <div className="fd-rule" />
+          <div className="vt-divider" />
 
-          <Row label="Fuel used" sub="opening + refuelled − closing" value={l1(b.used)} strong />
-          <Row
-            label="Engine should use"
-            sub={b.engineHours != null
-              ? `ran ${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at ${b.engineRate.toFixed(1)} L/h` : ""}`
-              : "no engine hours"}
-            value={l1(b.engine)}
-          />
-          <Row
-            label="Not explained"
-            sub={b.unexplained == null ? "" : gap
-              ? "more than the engine's running accounts for"
-              : b.unexplained < 0 ? "used less than its usual rate" : "within the normal range"}
-            value={b.unexplained == null ? "—" : `${b.unexplained > 0 ? "+" : ""}${l1(b.unexplained)}`}
-            tone={gap ? "warn" : "muted"}
-            strong={gap}
-          />
-          {b.distanceKm != null && (
-            <Row label="Distance" sub="" value={b.distanceKm.toFixed(1)} unit="km" />
-          )}
-        </div>
+          <div className="vt-tiles">
+            <Tile label="Fuel used" value={l1(b.used)} unit={b.used != null ? " L" : ""}
+                  sub={"opening + refuelled \u2212 closing"} />
+            <Tile label="Engine should use" value={l1(b.engine)} unit={b.engine != null ? " L" : ""}
+                  sub={b.engineHours != null
+                    ? `${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at ${b.engineRate.toFixed(1)} L/h` : ""}`
+                    : "no engine hours"} />
+            <Tile label="Not explained"
+                  value={diff == null ? "\u2014" : `${diff > 0 ? "+" : ""}${l1(diff)}`}
+                  unit={diff != null ? " L" : ""}
+                  sub={diff == null ? "" : gap
+                    ? "not covered by engine hours"
+                    : diff === 0 ? "matches the engine hours"
+                    : diff < 0 ? "below its usual rate" : "within normal"}
+                  valColor={gap ? "var(--accent-warn)" : "var(--text-muted)"} />
+            {b.distanceKm != null && (
+              <Tile label="Distance" value={b.distanceKm.toFixed(1)} unit=" km" />
+            )}
+          </div>
+        </>
       )}
 
       {b.events.length > 0 && (
@@ -115,8 +112,10 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
                     {eventLabel(e)}
                     {mine && <span className="fd-ev-this">this one</span>}
                   </span>
-                  <span className={`fd-ev-val fd-val--${kind}`}>
-                    {e.type === "refuel" ? "+" : "−"}{l1(e.litres)} L
+                  {/* The tiles' own figure classes, so an event's litres read
+                      exactly like the litres in the ledger above. */}
+                  <span className={`vt-tile-val fd-ev-val fd-val--${kind}`}>
+                    {e.type === "refuel" ? "+" : "−"}{l1(e.litres)}<span className="vt-tile-unit"> L</span>
                   </span>
                 </li>
               );

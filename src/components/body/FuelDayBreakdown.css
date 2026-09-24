@@ -1,6 +1,8 @@
-/* The day breakdown in the fuel incident window. Labels in the window's one
-   label voice (`.vt-tile-lbl`: micro, 700, uppercase); figures right-aligned in
-   tabular numerals so a column of litres lines up on the decimal. */
+/* The day breakdown in the fuel incident window. Type is the window's own:
+   the ledger is `Tile`s (see the component) styled by the window's .vt-tile
+   rules, event figures use .vt-tile-val / .vt-tile-unit, and headings and
+   notes take the label and sub sizes the tiles use. Nothing here sets a font
+   family, and no size here is one the tiles do not already use. */
 
 .fd { display: flex; flex-direction: column; gap: 6px; }
 
@@ -12,6 +14,7 @@
   gap: 8px;
 }
 .fd-events-hdr { margin-top: 6px; }
+/* `.vt-tile-lbl`'s voice, in the primary colour because it heads a block. */
 .fd-title {
   font-size: var(--vt-fs-micro);
   font-weight: 700;
@@ -19,67 +22,28 @@
   text-transform: uppercase;
   color: var(--text-primary);
 }
-.fd-day { font-size: var(--vt-fs-label); color: var(--text-muted); }
-
+/* `.vt-tile-sub`'s size and colour, like `.fi-when` beside the title above. */
+.fd-day,
 .fd-note {
-  margin: 0;
-  font-size: var(--vt-fs-micro);
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-
-/* ── The ledger ─────────────────────────────────────────────────────────── */
-.fd-ledger { display: flex; flex-direction: column; }
-.fd-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 10px;
-  padding: 4px 0;
-}
-.fd-lbl {
-  font-size: var(--vt-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--vt-ls-label, 0.7px);
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.fd-sub {
-  min-width: 0;
-  font-size: var(--vt-fs-micro);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fd-val {
   font-size: var(--vt-fs-label);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-align: right;
+  color: var(--text-muted);
 }
-.fd-unit { font-weight: 400; color: var(--text-muted); }
-.fd-row--strong .fd-lbl { color: var(--text-primary); }
-.fd-row--strong .fd-val { font-weight: 700; }
-.fd-val--ok { color: var(--accent-ok); }
-.fd-val--warn { color: var(--accent-warn); }
-.fd-val--muted { color: var(--text-muted); }
+.fd-note { margin: 0; line-height: 1.45; }
 
-/* The sum line: everything above it is the tank, everything below is what the
-   tank's fall is compared with. */
-.fd-rule { height: 1px; margin: 3px 0; background: var(--color-border, #e2e8f0); }
+/* Tones for figures. Doubled up with `.fd` so they win over .vt-tile-val's own
+   colour whatever order the two stylesheets load in. */
+.fd .fd-val--ok { color: var(--accent-ok); }
+.fd .fd-val--warn { color: var(--accent-warn); }
+.fd .fd-val--muted { color: var(--text-muted); }
 
 /* ── The events ─────────────────────────────────────────────────────────── */
 .fd-events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .fd-ev {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 3px 6px;
   margin: 0 -6px;
   border-radius: 6px;
   font-size: var(--vt-fs-label);
@@ -89,7 +53,13 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
-.fd-ev-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.fd-ev-dot {
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
 .fd-ev-dot--ok { background: var(--accent-ok); }
 .fd-ev-dot--warn { background: var(--accent-warn); }
 .fd-ev-lbl {
@@ -99,19 +69,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* `.fi-tag`'s treatment, the chips in the header above. */
 .fd-ev-this {
   margin-left: 6px;
   padding: 0 5px;
   border: 1px solid color-mix(in srgb, var(--accent-warn) 45%, transparent);
   border-radius: 4px;
   font-size: var(--vt-fs-micro);
-  font-weight: 700;
   letter-spacing: var(--vt-ls-label, 0.7px);
   text-transform: uppercase;
   color: var(--accent-warn);
 }
-.fd-ev-val {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
+.fd-ev-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The unit takes the figure's colour, as it does in the tiles. */
+.fd-ev-val .vt-tile-unit { color: inherit; }
