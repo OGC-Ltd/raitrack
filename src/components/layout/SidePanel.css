@@ -331,6 +331,14 @@
 }
 
 .side-panel__nav--foot { margin-top: auto; border-top: 1px solid #edf0f4; }
+
+/* Selected System keeps the nav's blue icon and label but not its blue fill or
+   side bar: the amber count is the thing that should catch the eye there. */
+.sp-foot .sp-nav-item--active,
+.side-panel__nav--foot .side-panel__nav-item--active { background: transparent; }
+.sp-foot .sp-nav-item--active:hover,
+.side-panel__nav--foot .side-panel__nav-item--active:hover { background: #f8fafc; }
+.sp-foot .sp-nav-bar { display: none; }
 .side-panel__nav-item { position: relative; }
 .side-panel__nav-badge {
   position: absolute;
