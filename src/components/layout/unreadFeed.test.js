@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { summariseUnread } from './AppHeader';
+import { summariseUnread, bellBadgeLabel } from './AppHeader';
 
 const SEEN = Date.parse('2026-09-22T03:00:00.000Z');
 const at = (iso, type = 'info') => ({ id: iso, ts: iso, type });
@@ -22,7 +22,7 @@ describe('summariseUnread', () => {
       at('2026-09-22T03:24:00.000Z', 'info'),
       at('2026-09-22T03:31:00.000Z', 'success'),
     ];
-    expect(summariseUnread(feed, SEEN)).toEqual({ unreadCount: 3, unreadAlarming: false });
+    expect(summariseUnread(feed, SEEN)).toEqual({ unreadCount: 3 });
   });
 
   it('ignores anything at or before the last time the feed was opened', () => {
@@ -34,15 +34,15 @@ describe('summariseUnread', () => {
     expect(summariseUnread(feed, SEEN).unreadCount).toBe(1);
   });
 
-  it('flags a warning or a critical among the routine traffic', () => {
+  it('counts a warning or a critical as one item like any other', () => {
+    // The badge is always red now, so severity buys the count nothing. It
+    // must still not be DOUBLE-counted or skipped on the way past.
     const feed = [
       at('2026-09-22T03:10:00.000Z', 'info'),
       at('2026-09-22T03:12:00.000Z', 'warning'),
+      at('2026-09-22T03:13:00.000Z', 'critical'),
     ];
-    expect(summariseUnread(feed, SEEN)).toEqual({ unreadCount: 2, unreadAlarming: true });
-
-    const theft = [at('2026-09-22T03:12:00.000Z', 'critical')];
-    expect(summariseUnread(theft, SEEN).unreadAlarming).toBe(true);
+    expect(summariseUnread(feed, SEEN)).toEqual({ unreadCount: 3 });
   });
 
   it('does not let an unparseable timestamp tick the badge up on every replay', () => {
@@ -51,7 +51,20 @@ describe('summariseUnread', () => {
   });
 
   it('reads an absent feed as nothing new rather than throwing', () => {
-    expect(summariseUnread(undefined, SEEN)).toEqual({ unreadCount: 0, unreadAlarming: false });
-    expect(summariseUnread([], SEEN)).toEqual({ unreadCount: 0, unreadAlarming: false });
+    expect(summariseUnread(undefined, SEEN)).toEqual({ unreadCount: 0 });
+    expect(summariseUnread([], SEEN)).toEqual({ unreadCount: 0 });
+  });
+});
+
+describe('bellBadgeLabel', () => {
+  it('shows the exact count below twenty', () => {
+    expect(bellBadgeLabel(1)).toBe('1');
+    expect(bellBadgeLabel(19)).toBe('19');
+  });
+
+  it('stops at "20" and never climbs past it', () => {
+    expect(bellBadgeLabel(20)).toBe('20');
+    expect(bellBadgeLabel(21)).toBe('20');
+    expect(bellBadgeLabel(150)).toBe('20');
   });
 });

@@ -15,6 +15,7 @@ import { fetchSnapshot } from '../services/snapshot'
 import { resolveOrgId } from '../api/org'
 import { mapSnapshotVehicle, applyLiveUpdate, applyConnectionRefresh } from '../lib/vehicleMap'
 import { readCache, writeCache } from '../services/cache'
+import { dismissIncident } from '../lib/fuelDismissals'
 
 const fleetCacheKey = (companyId) => `ft-fleet:${companyId}`
 const orgCacheKey   = (companyId) => `ft-org:${companyId}`
@@ -278,6 +279,16 @@ export function useFleetLive(companyId) {
                 scheduleFeedPersist(next)
                 return next
               })
+            } catch { /* ignore malformed frame */ }
+          })
+          /* Somebody in this organisation deleted a fuel incident (the
+             server keeps the record; see lib/fuelDismissals). Dropped here
+             the moment it happens, so no one is left looking at a red unit
+             their colleague has already dealt with. */
+          es.addEventListener('fuel_incident_dismissed', (e) => {
+            try {
+              const data = JSON.parse(e.data)
+              if (data?.incidentId) dismissIncident(data.incidentId)
             } catch { /* ignore malformed frame */ }
           })
           es.addEventListener('position', (e) => {

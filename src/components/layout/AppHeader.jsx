@@ -34,18 +34,18 @@ function readSeen(key) {
  *
  * The bell OPENS the feed, so its badge has to count what the feed holds.
  * Bounded twice over: pruneFeed caps the panel at MAX_FEED_ITEMS across a
- * 12-hour horizon, and the caller caps the glyph at "99+".
+ * 12-hour horizon, and bellBadgeLabel caps the glyph at "20".
  *
- * `alarming` keeps the distinction the old filter was reaching for without
- * letting it silence the count — red is for something being wrong, and a
- * shift of routine arrivals is news but not an alarm.
+ * It returns a COUNT and nothing else. There was an `alarming` flag beside it,
+ * colouring the badge red only when a warning or a critical was among the
+ * unseen; the badge is now always red, so the flag drove nothing and is gone
+ * rather than left computed on every render for a caller that ignores it.
  *
  * Exported because it is the whole of the rule and none of the rendering,
  * the same reason groupLayers is exported from MapLayersTree.
  */
 export function summariseUnread(feed, lastSeen) {
   let unreadCount = 0;
-  let unreadAlarming = false;
   for (const f of feed ?? []) {
     const t = Date.parse(f?.ts);
     // A malformed or missing timestamp cannot be placed against `lastSeen`,
@@ -53,9 +53,25 @@ export function summariseUnread(feed, lastSeen) {
     // replays it. Silently not-new is the safe reading.
     if (!Number.isFinite(t) || t <= lastSeen) continue;
     unreadCount += 1;
-    if (f.type === 'warning' || f.type === 'critical') unreadAlarming = true;
   }
-  return { unreadCount, unreadAlarming };
+  return { unreadCount };
+}
+
+/**
+ * What the bell's badge says: the exact count, stopping at 20.
+ *
+ * The badge answers "is there news, and roughly how much" — past twenty the
+ * operator is going to open the feed either way, and a number still climbing
+ * in the corner of the header is noise, not information.
+ *
+ * No "+" on the capped figure. "20+" was tried: it needs a third glyph in a
+ * ring sized for two, and every way of fitting it — a bigger ring, smaller
+ * type, a shrunken plus — made the badge worse to look at. The accessible
+ * label still says "20 or more", so the cap is not hidden from anyone.
+ */
+export const BELL_CAP = 20;
+export function bellBadgeLabel(count) {
+  return String(Math.min(count, BELL_CAP));
 }
 
 // "Online" for a live unit, otherwise when it was last heard from.
@@ -127,8 +143,8 @@ export default function AppHeader() {
     setLastSeen(now);
     try { localStorage.setItem(seenKey, String(now)); } catch { /* storage off */ }
   };
-  const { unreadCount, unreadAlarming } = summariseUnread(feed, lastSeen);
-  const badge = unreadCount > 99 ? '99+' : String(unreadCount);
+  const { unreadCount } = summariseUnread(feed, lastSeen);
+  const badge = bellBadgeLabel(unreadCount);
 
   // The live feed and the vehicle detail panel share the right edge — only one
   // may be open. Selecting a vehicle (map pin, search, feed row) closes the feed…
@@ -271,9 +287,10 @@ export default function AppHeader() {
           <i className="ti ti-bell" aria-hidden="true" />
           {unreadCount > 0 && (
             <span
-              className={`app-header__bell-count${unreadAlarming ? ' app-header__bell-count--alert' : ''}`}
-              data-len={String(badge).length}
-              aria-label={`${unreadCount} new event${unreadCount === 1 ? '' : 's'}`}
+              className="app-header__bell-count"
+              aria-label={unreadCount >= BELL_CAP
+                ? `${BELL_CAP} or more new events`
+                : `${unreadCount} new event${unreadCount === 1 ? '' : 's'}`}
             >{badge}</span>
           )}
         </button>
