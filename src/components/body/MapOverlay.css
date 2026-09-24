@@ -1418,7 +1418,7 @@
     max-height: 88dvh;
 
     /* The sheet radius the app's own sheets use (MobileVehicleSheet). */
-    border-radius: 16px 16px 0 0;
+    border-radius: 20px 20px 0 0; /* the Live Feed sheet's */
 
     /* Severity moves from the leading edge to the top one. A 3px left border
        is a legible cue on a window floating clear of everything; on a sheet
@@ -1432,7 +1432,9 @@
        sheet's 16px corner — where a thick stroke on a tight radius reads as a
        heavy painted curve rather than as an edge. */
     border-left: none;
-    border-top: 1px solid var(--red);
+    /* Severity is carried by the header's dot and chip now, as in the Live
+       Feed sheet; a coloured edge under a handle read as a rendering seam. */
+    border-top: none;
 
     animation: fi-sheet-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -1636,3 +1638,43 @@ html[data-theme="light"] .fi-icon:hover          { background: rgba(15,23,42,0.0
   cursor: pointer;
 }
 .feed-more-btn:hover { border-color: var(--accent-info, var(--blue)); color: var(--text-primary); }
+
+/* ── Phone sheet header — the Live Feed sheet's (MobileLiveFeedSheet.css) ──
+   Rendered only below 720px, so these need no media query of their own. */
+.fi-handle {
+  width: 40px; height: 4px; border-radius: 2px;
+  background: #e2e8f0;
+  align-self: center;
+  margin: 10px auto 4px;
+  flex: none;
+}
+.fi-sheet-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  flex: none;
+}
+.fi-sheet-head-left,
+.fi-sheet-head-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fi-sheet-head-right { gap: 10px; flex: none; }
+.fi-sheet-title {
+  font-size: 13px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #0f172a;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fi-sheet-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex: none; }
+.fi-sheet-dot--amber { background: #f59e0b; }
+.fi-sheet-chip {
+  font-size: 11px; font-weight: 700; line-height: 1.3; white-space: nowrap;
+  color: #b91c1c; background: #fef2f2;
+  border-radius: 999px; padding: 3px 9px;
+}
+.fi-sheet-chip--amber { color: #b45309; background: #fffbeb; }
+.fi-sheet-close {
+  flex: none;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: none; background: #f1f5f9; color: #64748b;
+  font-size: 18px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.fi-sheet-close:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
