@@ -690,7 +690,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
                   data-armed={armed ? 'true' : undefined}
                   onClick={onDelete}
                   disabled={deleting}
-                  title="Delete for everyone in this organisation. The record is kept."
+                  title="Delete for everyone in this organisation. The record is kept, and a follow-up opens for someone else to accept and decide."
                   // The label carries the arming, not a colour change alone —
                   // "it went red" is not an instruction.
                   aria-label={deleting ? 'Deleting' : armed ? 'Confirm delete' : 'Delete'}

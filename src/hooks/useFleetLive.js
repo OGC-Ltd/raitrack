@@ -16,6 +16,7 @@ import { resolveOrgId } from '../api/org'
 import { mapSnapshotVehicle, applyLiveUpdate, applyConnectionRefresh } from '../lib/vehicleMap'
 import { readCache, writeCache } from '../services/cache'
 import { dismissIncident } from '../lib/fuelDismissals'
+import { followUpsChanged } from '../lib/fuelFollowUps'
 
 const fleetCacheKey = (companyId) => `ft-fleet:${companyId}`
 const orgCacheKey   = (companyId) => `ft-org:${companyId}`
@@ -285,6 +286,10 @@ export function useFleetLive(companyId) {
              server keeps the record; see lib/fuelDismissals). Dropped here
              the moment it happens, so no one is left looking at a red unit
              their colleague has already dealt with. */
+          /* A follow-up on a deleted fuel alert opened, changed hands or was
+             decided (lib/fuelFollowUps). The frame only names it; the list
+             and any open case window read it again. */
+          es.addEventListener('fuel_followup', () => { followUpsChanged() })
           es.addEventListener('fuel_incident_dismissed', (e) => {
             try {
               const data = JSON.parse(e.data)

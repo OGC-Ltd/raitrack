@@ -4,6 +4,7 @@
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import FeedText from '../shared/FeedText';
 import { feedClock, feedDate } from '../../lib/feedTime';
+import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
 import './MobileLiveFeedSheet.css';
 
 const ALERT_TYPES = new Set(['warning', 'critical']);
@@ -40,8 +41,18 @@ export default function MobileLiveFeedSheet({ open, onClose }) {
           {feed.length === 0 && (
             <div className="mlf-empty">{loading ? 'Loading activity…' : 'No recent activity'}</div>
           )}
-          {feed.map((item, i) => (
-            <div key={item.id ?? i} className="mlf-row">
+          {feed.map((item, i) => {
+            // A follow-up item opens its case window (over this sheet).
+            const followUp = feedItemFollowUp(item);
+            const opens = typeof followUp === 'string';
+            return (
+            <div
+              key={item.id ?? i}
+              className={`mlf-row${opens ? ' mlf-row--action' : ''}`}
+              role={opens ? 'button' : undefined}
+              tabIndex={opens ? 0 : undefined}
+              onClick={opens ? () => { onClose?.(); openFollowUp(followUp); } : undefined}
+            >
               <div className="mlf-time-col">
                 <span className="mlf-date">{feedDate(item)}</span>
                 <span className="mlf-time">{feedClock(item)}</span>
@@ -52,7 +63,8 @@ export default function MobileLiveFeedSheet({ open, onClose }) {
                 <span className="mlf-msg"><FeedText text={item.text} type={item.type} plate={item.plate} /></span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </>

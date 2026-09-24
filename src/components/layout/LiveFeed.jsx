@@ -8,6 +8,7 @@ import { useMapLayers } from '../../context/MapLayersContext';
 import FeedText from '../shared/FeedText';
 import { feedClock, feedDate } from '../../lib/feedTime';
 import { driverIndex, driverFor } from '../../lib/feedDriver';
+import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
 import './LiveFeed.css';
 
 // Server feed types: info | success | warning | critical
@@ -47,7 +48,9 @@ export default function LiveFeed({ open, onClose }) {
         )}
         {feed.map((item, i) => {
           const isAlert = ALERT_TYPES.has(item.type);
-          const clickable = Boolean(item.vehicleId);
+          // A follow-up item opens its case; anything else with a unit shows it.
+          const followUp = feedItemFollowUp(item);
+          const clickable = typeof followUp === 'string' || Boolean(item.vehicleId);
           return (
             <div
               key={item.id ?? i}
@@ -55,7 +58,9 @@ export default function LiveFeed({ open, onClose }) {
               role={clickable ? 'button' : undefined}
               tabIndex={clickable ? 0 : undefined}
               style={clickable ? { cursor: 'pointer' } : undefined}
-              onClick={clickable ? () => focusVehicle?.(item.vehicleId) : undefined}
+              onClick={clickable
+                ? () => (typeof followUp === 'string' ? openFollowUp(followUp) : focusVehicle?.(item.vehicleId))
+                : undefined}
             >
               <span className="live-feed__dot-indicator" style={{ background: dotColor(item.type) }} />
               <div className="live-feed__body">
