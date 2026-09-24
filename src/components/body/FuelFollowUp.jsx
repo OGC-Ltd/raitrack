@@ -12,6 +12,12 @@
  * the count of what is missing beside Cancel and the one submit button. Those
  * classes read the `--sp4-*` tokens, which live on `.sp4-root`, so the host
  * wraps the dialog in one (`display: contents`, see FuelFollowUp.css).
+ *
+ * Three modes share that shape. The main one accepts or decides. "Decline"
+ * asks for the reason before saying no. "Assign" is the administrator's: pick
+ * a person from the organisation's case holders and hand it to them. Each mode
+ * owns the foot's one submit button, so the dialog never offers two primary
+ * actions at once.
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -20,8 +26,9 @@ import "./FuelFollowUp.css";
 import { usePermissions } from "../../hooks/usePermissions";
 import useFocusTrap from "../../hooks/useFocusTrap";
 import {
-  ACTION_LABEL, STATUS_LABEL, acceptFollowUp, closeFollowUp, deescalateFollowUp,
-  escalateFollowUp, fetchFollowUp, followUpAbilities, noteFollowUp, useOpenFollowUp,
+  ACTION_LABEL, STAGE_LABEL, acceptFollowUp, assignFollowUp, closeFollowUp, declineFollowUp,
+  deescalateFollowUp, escalateFollowUp, fetchAssignees, fetchFollowUp, followUpAbilities,
+  followUpStage, noteFollowUp, useOpenFollowUp,
 } from "../../lib/fuelFollowUps";
 
 const TZ = "Africa/Nairobi";
@@ -35,7 +42,10 @@ export const when = (v) => {
 export const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L`);
 
 // The System screen's pill tones, so a follow-up reads the same in both.
-const STATUS_PILL = { OPEN: "warn", ACCEPTED: "info", ESCALATED: "inc", DEESCALATED: "con" };
+export const STAGE_PILL = {
+  OPEN: "warn", ASSIGNED: "info", NEEDS_ASSIGNING: "inc",
+  ACCEPTED: "info", ESCALATED: "inc", DEESCALATED: "con",
+};
 
 /* The two decisions, as the repair dialog's outcome chips. The chip classes
    borrow the repair outcomes that share their colour: red for a theft, green
@@ -55,8 +65,15 @@ function errorText(err) {
 function whyNot(f, why) {
   if (why === "deleted-it") return "You deleted this alert, so someone else has to accept its follow-up.";
   if (why === "someone-else") return `${f.acceptedBy?.fullName ?? "Someone else"} accepted this follow-up; only they can decide it.`;
+  if (why === "assigned-elsewhere") return `Assigned to ${f.assignedTo?.fullName ?? "someone else"}; only they can accept or decline it.`;
   if (why === "no-rights") return "Your role cannot take on fuel follow-ups.";
   return null;
+}
+
+/** One line of the log, naming the person an assignment went to. */
+function logLine(a) {
+  if (a.kind === "ASSIGNED") return a.subject ? `assigned it to ${a.subject.fullName}` : "took the assignment back";
+  return ACTION_LABEL[a.kind] ?? a.kind;
 }
 
 // ── The case window ────────────────────────────────────────────────────────
@@ -64,8 +81,11 @@ function whyNot(f, why) {
 function FollowUpWindow({ id, orgId, canTriage }) {
   const [f, setF] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [mode, setMode] = useState("main"); // 'main' | 'decline' | 'assign'
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState(null); // 'escalate' | 'deescalate' | null
+  const [assignees, setAssignees] = useState(null); // null until loaded
+  const [assigneeId, setAssigneeId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const titleId = useId();
@@ -83,6 +103,16 @@ function FollowUpWindow({ id, orgId, canTriage }) {
     return () => { live = false; window.removeEventListener("ft-fuel-followup-changed", read); };
   }, [orgId, id]);
 
+  // The picker's people, fetched the first time an administrator opens it.
+  useEffect(() => {
+    if (mode !== "assign" || assignees) return undefined;
+    let live = true;
+    fetchAssignees(orgId, id)
+      .then((list) => { if (live) setAssignees(list); })
+      .catch((e) => { if (live) { setAssignees([]); setError(errorText(e)); } });
+    return () => { live = false; };
+  }, [mode, assignees, orgId, id]);
+
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape" && !busy) closeFollowUp(); };
     document.addEventListener("keydown", onKey);
@@ -91,13 +121,28 @@ function FollowUpWindow({ id, orgId, canTriage }) {
 
   const can = followUpAbilities(f, canTriage);
   const inc = f?.incident;
+  const stage = followUpStage(f);
   const noteOk = note.trim().length >= 3;
+
+  const switchMode = (next) => {
+    setMode(next);
+    setNote("");
+    setDecision(null);
+    setAssigneeId("");
+    setError(null);
+  };
 
   /* What the one submit button does, and what is still missing before it can.
      The repair dialog's rule: a dead button always has its reason beside it. */
   let submit = null;
   let missing = null;
-  if (can.accept) {
+  if (mode === "decline") {
+    submit = { label: "Decline follow-up", busyLabel: "Declining…", danger: true, run: () => declineFollowUp(orgId, id, note.trim()) };
+    if (!noteOk) missing = "Say why you are declining";
+  } else if (mode === "assign") {
+    submit = { label: "Assign", busyLabel: "Assigning…", run: () => assignFollowUp(orgId, id, assigneeId, note.trim()) };
+    if (!assigneeId) missing = "Choose who to assign it to";
+  } else if (can.accept) {
     submit = { label: "Accept follow-up", busyLabel: "Accepting…", run: () => acceptFollowUp(orgId, id) };
   } else if (can.act) {
     if (decision === "escalate") {
@@ -118,8 +163,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
     try {
       const next = await submit.run();
       if (next) setF(next);
-      setNote("");
-      setDecision(null);
+      switchMode("main");
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -137,7 +181,9 @@ function FollowUpWindow({ id, orgId, canTriage }) {
         <div className="sp4-modal sp4-modal--narrow ffu-modal" ref={dialogRef}
              role="dialog" aria-modal="true" aria-labelledby={titleId}>
           <div className="sp4-modal-head">
-            <span className="sp4-repair-title" id={titleId}>Fuel follow-up · 1 alert</span>
+            <span className="sp4-repair-title" id={titleId}>
+              {mode === "decline" ? "Decline follow-up" : mode === "assign" ? "Assign follow-up" : "Fuel follow-up · 1 alert"}
+            </span>
             <button type="button" className="sp4-modal-x" onClick={closeFollowUp} disabled={busy}
                     aria-label="Close" title="Close">×</button>
           </div>
@@ -153,19 +199,88 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                     <div className="sp4-repair-itemhead">
                       <span className="sp4-repair-reg">{inc.plate}</span>
                       <span className="sp4-repair-fault">{litres(inc.volumeMl)} lost · {when(inc.beganAt)}</span>
-                      <span className={"sp4-pill sp4-pill--" + (STATUS_PILL[f.status] ?? "none") + " ffu-pill"}>
-                        {STATUS_LABEL[f.status] ?? f.status}
+                      <span className={"sp4-pill sp4-pill--" + (STAGE_PILL[stage] ?? "none") + " ffu-pill"}>
+                        {STAGE_LABEL[stage] ?? f.status}
                       </span>
                     </div>
 
                     <dl className="ffu-facts">
                       <div><dt className="sp4-label">Deleted by</dt><dd>{f.dismissedBy?.fullName ?? "—"}</dd></div>
-                      <div><dt className="sp4-label">Accepted by</dt><dd>{f.acceptedBy?.fullName ?? "Nobody yet"}</dd></div>
+                      {f.status === "OPEN" && f.assignedTo ? (
+                        <div><dt className="sp4-label">Assigned to</dt><dd>{f.assignedTo.fullName}</dd></div>
+                      ) : (
+                        <div><dt className="sp4-label">Accepted by</dt><dd>{f.acceptedBy?.fullName ?? "Nobody yet"}</dd></div>
+                      )}
                       <div><dt className="sp4-label">Reported</dt><dd>{when(inc.detectedAt)}</dd></div>
                       {inc.location && <div><dt className="sp4-label">Where</dt><dd>{inc.location}</dd></div>}
                     </dl>
 
-                    {can.act && (
+                    {/* ── Decline: the reason, then the foot's red button ── */}
+                    {mode === "decline" && (
+                      <>
+                        <label className="sp4-field">
+                          <span className="sp4-label">Why you are declining</span>
+                          <textarea
+                            className="sp4-textarea"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="On leave, not your site, a conflict of interest…"
+                            maxLength={2000}
+                            disabled={busy}
+                            rows={2}
+                            autoFocus
+                          />
+                        </label>
+                        <span className="ffu-muted">
+                          {f.viewer?.assignedToMe
+                            ? "It goes back to the administrator to assign to someone else."
+                            : "An administrator will be asked to assign it to someone."}
+                        </span>
+                      </>
+                    )}
+
+                    {/* ── Assign: the administrator's picker ── */}
+                    {mode === "assign" && (
+                      <>
+                        <label className="sp4-field">
+                          <span className="sp4-label">Assign to</span>
+                          <select
+                            className="sp4-assignment-select ffu-assign-select"
+                            value={assigneeId}
+                            onChange={(e) => setAssigneeId(e.target.value)}
+                            disabled={busy || !assignees}
+                          >
+                            <option value="">{assignees ? "Choose a person…" : "Loading people…"}</option>
+                            {(assignees ?? []).map((p) => (
+                              <option key={p.id} value={p.id}>{p.fullName}{p.email ? ` · ${p.email}` : ""}</option>
+                            ))}
+                          </select>
+                        </label>
+                        {assignees && assignees.length === 0 && (
+                          <span className="sp4-repair-why">Nobody else in this organisation holds fuel case rights.</span>
+                        )}
+                        <label className="sp4-field">
+                          <span className="sp4-label">Note (optional)</span>
+                          <textarea
+                            className="sp4-textarea"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="Why this person, or what to look at first"
+                            maxLength={2000}
+                            disabled={busy}
+                            rows={2}
+                          />
+                        </label>
+                        {f.status === "ACCEPTED" && (
+                          <span className="ffu-muted">
+                            {f.acceptedBy?.fullName ?? "The reviewer"} will lose it; the new person has to accept it.
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                    {/* ── Main: decide it ── */}
+                    {mode === "main" && can.act && (
                       <>
                         <div className="sp4-repair-outcomes" role="group" aria-label={`Outcome for ${inc.plate}`}>
                           {DECISIONS.map((d) => (
@@ -203,10 +318,17 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                       </>
                     )}
 
-                    {can.accept && (
-                      <span className="ffu-muted">Accepting makes you responsible for deciding this one.</span>
+                    {mode === "main" && f.needsAssigning && can.assign && (
+                      <span className="sp4-repair-why">Declined, and nobody holds it: assign it to someone.</span>
                     )}
-                    {!can.accept && !can.act && whyNot(f, can.why) && (
+                    {mode === "main" && can.accept && (
+                      <span className="ffu-muted">
+                        {f.viewer?.assignedToMe
+                          ? `${f.assignedBy?.fullName ?? "An administrator"} assigned this to you. Accept it, or decline with a reason.`
+                          : "Accepting makes you responsible for deciding this one."}
+                      </span>
+                    )}
+                    {mode === "main" && !can.accept && !can.act && whyNot(f, can.why) && (
                       <span className="ffu-muted">{whyNot(f, can.why)}</span>
                     )}
                   </div>
@@ -217,7 +339,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                       {f.actions.map((a) => (
                         <li key={a.id} className={`ffu-log-item ffu-log-item--${a.kind.toLowerCase()}`}>
                           <div className="ffu-log-line">
-                            <strong>{a.actor?.fullName ?? "Someone"}</strong> {ACTION_LABEL[a.kind] ?? a.kind}
+                            <strong>{a.actor?.fullName ?? "Someone"}</strong> {logLine(a)}
                             <span className="ffu-log-when">{when(a.at)}</span>
                           </div>
                           {a.note && <p className="ffu-log-note">{a.note}</p>}
@@ -232,9 +354,31 @@ function FollowUpWindow({ id, orgId, canTriage }) {
             <div className="sp4-modal-foot">
               {error && <div className="sp4-banner sp4-banner--crit sp4-modal-err" role="alert">{error}</div>}
               {missing && <span className="sp4-repair-pending">{missing}</span>}
-              <button type="button" className="sp4-ghost-btn" onClick={closeFollowUp} disabled={busy}>
-                {submit ? "Cancel" : "Close"}
-              </button>
+              {mode === "main" ? (
+                <>
+                  {/* The side doors lead, the way the repair foot keeps its
+                      secondary buttons before Cancel and the submit. */}
+                  {can.assign && (
+                    <button type="button" className={"sp4-ghost-btn" + (can.decline ? "" : " ffu-foot-lead")}
+                            onClick={() => switchMode("assign")} disabled={busy}>
+                      {f?.assignedTo || f?.status === "ACCEPTED" ? "Reassign…" : "Assign…"}
+                    </button>
+                  )}
+                  {can.decline && (
+                    <button type="button" className="sp4-ghost-btn ffu-foot-lead"
+                            onClick={() => switchMode("decline")} disabled={busy}>
+                      Decline…
+                    </button>
+                  )}
+                  <button type="button" className="sp4-ghost-btn" onClick={closeFollowUp} disabled={busy}>
+                    {submit ? "Cancel" : "Close"}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="sp4-ghost-btn" onClick={() => switchMode("main")} disabled={busy}>
+                  Back
+                </button>
+              )}
               {submit && (
                 <button
                   type="submit"

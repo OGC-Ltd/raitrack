@@ -5,8 +5,10 @@
  * Deleting a fuel alert opens a follow-up for the organisation. Somebody with
  * case rights (`fuel_theft:triage`), other than the person who deleted it,
  * accepts it; from then on only they can add notes and escalate it (a
- * confirmed theft) or de-escalate it (not a theft). Every step is logged
- * server-side with who took it.
+ * confirmed theft) or de-escalate it (not a theft). Anyone who could accept it
+ * may decline it instead, with a reason; the organisation's administrator can
+ * then assign it to a named person, who alone may accept or decline it. Every
+ * step is logged server-side with who took it.
  *
  * One module-level store so the map button, the live feed and the case window
  * all read the same list, refetched when the server says one moved
@@ -40,6 +42,15 @@ const post = async (orgId, id, verb, body) => {
 };
 
 export const acceptFollowUp     = (orgId, id)       => post(orgId, id, 'accept');
+export const declineFollowUp    = (orgId, id, note) => post(orgId, id, 'decline', { note });
+export const assignFollowUp     = (orgId, id, assigneeId, note) =>
+  post(orgId, id, 'assign', { assigneeId, ...(note ? { note } : {}) });
+
+/** Who an administrator may hand this follow-up to (administrators only). */
+export async function fetchAssignees(orgId, id) {
+  const res = await apiFetch(`${base(orgId)}/${encodeURIComponent(id)}/assignees`);
+  return res?.data ?? [];
+}
 export const noteFollowUp       = (orgId, id, note) => post(orgId, id, 'notes', { note });
 export const escalateFollowUp   = (orgId, id, note) => post(orgId, id, 'escalate', { note });
 export const deescalateFollowUp = (orgId, id, note) => post(orgId, id, 'deescalate', { note });
@@ -59,34 +70,68 @@ export const ACTION_LABEL = {
   NOTE:        'added a note',
   ESCALATED:   'escalated it: confirmed theft',
   DEESCALATED: 'de-escalated it: not a theft',
+  ASSIGNED:    'assigned it',
+  DECLINED:    'declined it',
+};
+
+/**
+ * Where a follow-up stands, one step finer than its status: an OPEN one is
+ * waiting for anybody, waiting for the person it was assigned to, or declined
+ * and waiting for an administrator.
+ */
+export function followUpStage(f) {
+  if (f?.status !== 'OPEN') return f?.status ?? null;
+  if (f.assignedTo) return 'ASSIGNED';
+  if (f.needsAssigning) return 'NEEDS_ASSIGNING';
+  return 'OPEN';
+}
+
+export const STAGE_LABEL = {
+  ...STATUS_LABEL,
+  ASSIGNED:        'Assigned',
+  NEEDS_ASSIGNING: 'Needs assigning',
 };
 
 /**
  * What this viewer may do with a follow-up, from the server's per-viewer flags
  * and the viewer's own permission. The server enforces all of it; this only
  * decides which buttons to draw.
+ *
+ * `assign` is separate from the rest: an administrator may place a follow-up
+ * whatever they could do with it themselves.
  */
 export function followUpAbilities(f, canTriage) {
-  if (!f || !canTriage) return { accept: false, act: false, why: canTriage ? null : 'no-rights' };
+  const none = { accept: false, decline: false, act: false };
+  if (!f || !canTriage) return { ...none, assign: false, why: canTriage ? null : 'no-rights' };
+  const assign = Boolean(f.viewer?.canAssign) && (f.status === 'OPEN' || f.status === 'ACCEPTED');
   if (f.status === 'OPEN') {
-    return f.viewer?.deletedIt
-      ? { accept: false, act: false, why: 'deleted-it' }
-      : { accept: true, act: false, why: null };
+    if (f.viewer?.deletedIt) return { ...none, assign, why: 'deleted-it' };
+    if (f.assignedTo && !f.viewer?.assignedToMe) return { ...none, assign, why: 'assigned-elsewhere' };
+    // Somebody who declined may still change their mind and accept; they
+    // cannot decline twice.
+    return { ...none, assign, accept: true, decline: !f.viewer?.declinedIt, why: null };
   }
   if (f.status === 'ACCEPTED') {
     return f.viewer?.ownsIt
-      ? { accept: false, act: true, why: null }
-      : { accept: false, act: false, why: 'someone-else' };
+      ? { ...none, assign, act: true, why: null }
+      : { ...none, assign, why: 'someone-else' };
   }
-  return { accept: false, act: false, why: 'closed' };
+  return { ...none, assign: false, why: 'closed' };
 }
 
 /**
- * Whether this follow-up is waiting on THIS viewer: one they may accept, or one
- * they accepted and have not decided. What the System badge counts.
+ * Whether this follow-up is waiting on THIS viewer: one they may accept (and
+ * have not declined), one assigned to them, one they accepted and have not
+ * decided, or, for an administrator, one declined and held by nobody. What
+ * the System badge counts.
  */
 export function needsMe(f) {
-  if (f?.status === 'OPEN') return !f.viewer?.deletedIt;
+  if (f?.status === 'OPEN') {
+    if (f.needsAssigning && f.viewer?.canAssign) return true;
+    if (f.viewer?.deletedIt) return false;
+    if (f.assignedTo) return Boolean(f.viewer?.assignedToMe);
+    return !f.viewer?.declinedIt;
+  }
   if (f?.status === 'ACCEPTED') return Boolean(f.viewer?.ownsIt);
   return false;
 }
@@ -165,7 +210,8 @@ export function feedItemFollowUp(item) {
   if (item?.followUpId) return item.followUpId;
   // The feed id is minted as `fu-<followUpId>-<what>` (fuel-followup.service),
   // and it survives the round trip through history where extras do not.
-  const m = /^fu-(.+)-(opened|escalated|deescalated)$/.exec(item?.id ?? '');
+  // Assignments and declines repeat, so theirs end in a timestamp.
+  const m = /^fu-(.+?)-(opened|escalated|deescalated|assigned|declined)(?:-\d+)?$/.exec(item?.id ?? '');
   if (m) return m[1];
   return typeof item?.alertType === 'string' && item.alertType.startsWith('FUEL_FOLLOWUP_') ? true : null;
 }
