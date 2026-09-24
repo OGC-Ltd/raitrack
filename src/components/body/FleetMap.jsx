@@ -53,7 +53,6 @@ import VehicleCamera from "./VehicleCamera";
 import MapLayersMenu from "./MapLayersMenu";
 import FleetsMenu from "./FleetsMenu";
 import FuelAlertsMenu from "./FuelAlertsMenu";
-import FuelFollowUpsMenu from "./FuelFollowUp";
 import UnitsMenu from "./UnitsMenu";
 import { SITE_PLANS, NO_PLANS } from "../../lib/sitePlans";
 import { useGuestSitePlans } from "../../hooks/useGuestSitePlans";
@@ -6490,7 +6489,6 @@ export default function FleetMap() {
             onToggleMap={() => setShowFuelAlerts(v => { writeCache(FUEL_ALERTS_KEY, !v); return !v; })}
             onSelect={(id) => { handleShowIncidentUnit(id); requestIncident(id); }}
           />
-          <FuelFollowUpsMenu />
           <MapLayersMenu layers={mapLayers} />
           <FleetsMenu
             vehicles={vehicles}

@@ -1,10 +1,10 @@
 /**
- * Follow-ups on deleted fuel alerts: the case window and the map button that
- * lists them. See lib/fuelFollowUps for the rules and the store.
+ * Follow-ups on deleted fuel alerts: the case window. See lib/fuelFollowUps for
+ * the rules and the store, and screens/SystemScreen for the list.
  *
  * The case window is mounted once, in the header (FuelFollowUpHost), so it can
- * be opened from anywhere — the map button, the Live Feed, a phone's feed
- * sheet — including by a technician, whose screens have no map.
+ * be opened from anywhere — the System screen, the Live Feed, a phone's feed
+ * sheet.
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -12,19 +12,18 @@ import "./FuelFollowUp.css";
 import { usePermissions } from "../../hooks/usePermissions";
 import {
   ACTION_LABEL, STATUS_LABEL, acceptFollowUp, closeFollowUp, deescalateFollowUp,
-  escalateFollowUp, fetchFollowUp, followUpAbilities, noteFollowUp, openFollowUp,
-  useFollowUps, useOpenFollowUp,
+  escalateFollowUp, fetchFollowUp, followUpAbilities, noteFollowUp, useOpenFollowUp,
 } from "../../lib/fuelFollowUps";
 
 const TZ = "Africa/Nairobi";
 const WHEN = new Intl.DateTimeFormat("en-GB", {
   timeZone: TZ, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
 });
-const when = (v) => {
+export const when = (v) => {
   const t = v ? Date.parse(v) : NaN;
   return Number.isFinite(t) ? WHEN.format(t) : "—";
 };
-const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L`);
+export const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L`);
 
 const WHY_NOT = {
   "deleted-it":   "You deleted this alert, so someone else has to accept its follow-up.",
@@ -39,7 +38,7 @@ function errorText(err) {
   return err?.message || "That didn't go through. Try again.";
 }
 
-function StatusChip({ status }) {
+export function StatusChip({ status }) {
   return <span className={`ffu-chip ffu-chip--${status?.toLowerCase()}`}>{STATUS_LABEL[status] ?? status}</span>;
 }
 
@@ -208,83 +207,4 @@ export function FuelFollowUpHost() {
   const { orgId, can } = usePermissions();
   if (!id || !orgId) return null;
   return <FollowUpWindow key={id} id={id} orgId={orgId} canTriage={can("fuel_theft:triage")} />;
-}
-
-// ── The map button ─────────────────────────────────────────────────────────
-
-function CaseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none"
-         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="5" y="4" width="14" height="17" rx="2" />
-      <path d="M9 4.5h6V7H9zM8.5 12l2.2 2.2L15.5 9.5M8.5 17.5h7" />
-    </svg>
-  );
-}
-
-/**
- * The organisation's outstanding follow-ups, behind one button. Like the fuel
- * alerts button beside it, it is not there at all when there is nothing to do
- * or the viewer has no case rights.
- */
-export default function FuelFollowUpsMenu() {
-  const { orgId, can } = usePermissions();
-  const canTriage = can("fuel_theft:triage");
-  const { items } = useFollowUps(orgId, canTriage);
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const panelId = useId();
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  if (!canTriage || items.length === 0) return null;
-  const waiting = items.filter((f) => f.status === "OPEN").length;
-
-  return (
-    <div className="fuel-alerts ffu-menu" ref={wrapRef}>
-      <button type="button"
-              className={`map-cam-btn fuel-alerts__btn ffu-menu__btn${open ? " fuel-alerts__btn--open" : ""}`}
-              onClick={() => setOpen((v) => !v)}
-              aria-expanded={open} aria-controls={panelId}
-              aria-label={`Fuel follow-ups, ${items.length} outstanding, ${waiting} waiting to be accepted`}
-              title="Fuel follow-ups">
-        <CaseIcon />
-        <span className="fuel-alerts__count ffu-menu__count" data-digits={String(items.length).length}>{items.length}</span>
-      </button>
-
-      {open && (
-        <div className="fuel-alerts__panel ffu-menu__panel" id={panelId} role="group" aria-label="Fuel follow-ups">
-          <div className="fuel-alerts__head">
-            <span className="fuel-alerts__title">Fuel follow-ups</span>
-            <span className="ffu-muted">{waiting} waiting</span>
-          </div>
-          <div className="fuel-alerts__list">
-            {items.map((f) => (
-              <button type="button" key={f.id} className="ffu-menu__row"
-                      onClick={() => { setOpen(false); openFollowUp(f.id); }}>
-                <span className="ffu-menu__plate">{f.incident.plate}</span>
-                <span className="ffu-menu__vol">{litres(f.incident.volumeMl)}</span>
-                <StatusChip status={f.status} />
-                <span className="ffu-menu__who">
-                  {f.status === "OPEN"
-                    ? `Deleted by ${f.dismissedBy?.fullName ?? "—"} · ${when(f.openedAt)}`
-                    : `With ${f.acceptedBy?.fullName ?? "—"} · since ${when(f.acceptedAt)}`}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }

@@ -29,6 +29,7 @@ import DriversScreen     from './components/screens/DriversScreen';
 import MaintenanceScreen from './components/screens/MaintenanceScreen';
 import AnalyticsScreen   from './components/screens/AnalyticsScreen';
 import WeighbridgesScreen from './components/screens/WeighbridgesScreen';
+import SystemScreen      from './components/screens/SystemScreen';
 
 // Auth + account screens
 import LoginScreen       from './components/screens/LoginScreen';
@@ -155,6 +156,14 @@ function AppShell() {
             <div className="app-tab-panel app-tab-panel--screen">
               <ErrorBoundary label="Weighbridges" fullSection>
                 <WeighbridgesScreen />
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {show('system') && (
+            <div className="app-tab-panel app-tab-panel--screen">
+              <ErrorBoundary label="System" fullSection>
+                <SystemScreen />
               </ErrorBoundary>
             </div>
           )}

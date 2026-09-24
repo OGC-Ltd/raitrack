@@ -9,11 +9,15 @@ import { useMapLayers } from '../../context/MapLayersContext';
 import './MobileHeader.css';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { usePermissions } from '../../hooks/usePermissions';
+import { needsMe, useFollowUps } from '../../lib/fuelFollowUps';
 
 export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }) {
-  const { activeCompany, companies, setActiveCompanyId, activeCompanyId, setAccountOpen, setUserAdminOpen } = useAppContext();
+  const { activeCompany, companies, setActiveCompanyId, activeCompanyId, setAccountOpen, setUserAdminOpen, setDesktopActiveTab } = useAppContext();
   const { user, logout } = useAuth();
-  const { can } = usePermissions();
+  const { can, orgId } = usePermissions();
+  // The sidebar's System section, for a phone, which has no sidebar.
+  const canTriage = can('fuel_theft:triage');
+  const systemCount = useFollowUps(orgId, canTriage).items.filter(needsMe).length;
   const { vehicles = [] } = useFleetLiveShared();
   const { focusVehicle } = useMapLayers();
 
@@ -110,7 +114,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
             onClick={() => setUserOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={userOpen}
-            aria-label="Account menu"
+            aria-label={systemCount > 0 ? `Account menu, ${systemCount} system notifications waiting on you` : 'Account menu'}
           >
             {user ? (
               <span className="mobile-header__avatar-initials">{initials(displayName, user.email)}</span>
@@ -122,6 +126,8 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               </svg>
             )}
           </button>
+          {/* Outside the avatar, which clips to its circle. */}
+          {systemCount > 0 && <span className="mobile-header__avatar-dot" aria-hidden="true" />}
 
           {userOpen && (
             <div className="mobile-header__user-menu" role="menu">
@@ -137,6 +143,12 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               <button className="mobile-header__user-item" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
                 <i className="ti ti-user-circle" aria-hidden="true" /> Account
               </button>
+              {canTriage && (
+                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('system'); setUserOpen(false); }}>
+                  <i className="ti ti-bell" aria-hidden="true" /> System notifications
+                  {systemCount > 0 && <span className="mobile-header__user-badge">{systemCount}</span>}
+                </button>
+              )}
               {can('user:create') && (
                 <button className="mobile-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" /> User accounts
