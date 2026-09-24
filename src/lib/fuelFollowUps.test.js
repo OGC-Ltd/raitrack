@@ -21,6 +21,14 @@ describe('followUpAbilities', () => {
     expect(followUpAbilities(fu('OPEN', { declinedIt: true }), true)).toMatchObject({ accept: true, decline: false });
   });
 
+  it('lets an administrator recall one only while somebody holds it', () => {
+    expect(followUpAbilities(fu('OPEN', { canAssign: true }), true)).toMatchObject({ recall: false });
+    expect(followUpAbilities(fu('OPEN', { canAssign: true }, { assignedTo: { fullName: 'Tess' } }), true)).toMatchObject({ recall: true });
+    expect(followUpAbilities(fu('ACCEPTED', { canAssign: true }), true)).toMatchObject({ recall: true });
+    expect(followUpAbilities(fu('ACCEPTED'), true)).toMatchObject({ recall: false });
+    expect(followUpAbilities(fu('ESCALATED', { canAssign: true }), true)).toMatchObject({ recall: false });
+  });
+
   it('lets an administrator assign anything still open or under review', () => {
     expect(followUpAbilities(fu('OPEN', { canAssign: true, deletedIt: true }), true)).toMatchObject({ assign: true, accept: false });
     expect(followUpAbilities(fu('ACCEPTED', { canAssign: true }), true)).toMatchObject({ assign: true });
@@ -52,6 +60,7 @@ describe('feedItemFollowUp', () => {
     expect(feedItemFollowUp({ id: 'fu-cmf1x2-deescalated' })).toBe('cmf1x2');
     expect(feedItemFollowUp({ id: 'fu-cmf1x2-assigned-1790000000000' })).toBe('cmf1x2');
     expect(feedItemFollowUp({ id: 'fu-cmf1x2-declined-1790000000000' })).toBe('cmf1x2');
+    expect(feedItemFollowUp({ id: 'fu-cmf1x2-recalled-1790000000000' })).toBe('cmf1x2');
   });
 
   it('ignores every other feed item', () => {

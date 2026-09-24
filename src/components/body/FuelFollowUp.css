@@ -79,6 +79,7 @@
 .ffu-log-item--accepted::before    { background: var(--sp4-accent); }
 .ffu-log-item--assigned::before    { background: var(--sp4-accent); }
 .ffu-log-item--declined::before    { background: var(--sp4-warn); }
+.ffu-log-item--recalled::before    { background: var(--sp4-warn); }
 .ffu-log-line { font-size: var(--sp4-body); color: var(--sp4-text-2); line-height: 18px; }
 .ffu-log-line strong { color: var(--sp4-text-1); }
 .ffu-log-when { margin-left: 6px; font-size: var(--sp4-label); color: var(--sp4-text-4); white-space: nowrap; }
