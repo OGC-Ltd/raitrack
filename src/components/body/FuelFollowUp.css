@@ -39,23 +39,38 @@
 /* A theft is recorded with the panel's red, not its blue. */
 .sp4-submit-btn.ffu-submit--danger { background: var(--sp4-crit); border-color: var(--sp4-crit); color: #fff; }
 
-/* What was done: a timeline down the left edge. */
-.ffu-log { list-style: none; margin: 4px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--sp4-line-hi); }
-.ffu-log-item { position: relative; padding: 2px 0 8px 4px; }
+/* What was done: a timeline. Each step draws its own dot, centred on its
+   first line of text, and a connector down to the next step's dot, so the
+   line starts at the first dot and stops at the last instead of hanging
+   past it. */
+.ffu-log { list-style: none; margin: 6px 0 0; padding: 0; }
+.ffu-log-item { position: relative; padding: 0 0 12px 20px; }
+.ffu-log-item:last-child { padding-bottom: 0; }
 .ffu-log-item::before {
   content: "";
   position: absolute;
-  left: -18px;
-  top: 6px;
+  left: 0;
+  top: 5px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--sp4-text-4);
 }
+.ffu-log-item::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 16px;
+  bottom: -2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--sp4-line-hi);
+}
+.ffu-log-item:last-child::after { content: none; }
 .ffu-log-item--escalated::before   { background: var(--sp4-crit); }
 .ffu-log-item--deescalated::before { background: var(--sp4-ok); }
 .ffu-log-item--accepted::before    { background: var(--sp4-accent); }
-.ffu-log-line { font-size: var(--sp4-body); color: var(--sp4-text-2); line-height: 1.4; }
+.ffu-log-line { font-size: var(--sp4-body); color: var(--sp4-text-2); line-height: 18px; }
 .ffu-log-line strong { color: var(--sp4-text-1); }
 .ffu-log-when { margin-left: 6px; font-size: var(--sp4-label); color: var(--sp4-text-4); white-space: nowrap; }
 .ffu-log-note {
