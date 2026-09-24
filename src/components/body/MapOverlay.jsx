@@ -43,6 +43,7 @@ import { useDismissedIncidents, dismissIncident } from "../../lib/fuelDismissals
 import { apiFetch } from "../../services/api";
 import { usePermissions } from "../../hooks/usePermissions";
 import FuelDayBreakdown from "./FuelDayBreakdown";
+import FuelReview from "./FuelReview";
 
 const FEED_CLS = { info: "fi-info", warning: "fi-warning", critical: "fi-critical", success: "fi-success" };
 const FEED_ICO = { info: "💬", warning: "⚠", critical: "🔴", success: "✓" };
@@ -264,6 +265,9 @@ function FuelIncidentBody({ incident, vehicleId }) {
           </span>
         )}
       </div>
+
+      {/* Escalated / de-escalated, and for an administrator the way to decide. */}
+      <FuelReview incident={incident} />
 
       <div className="vt-tiles">
         {/* Not "Possible theft" unconditionally: only a SIPHON has earned that
