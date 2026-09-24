@@ -2602,6 +2602,10 @@ export default function FleetMap() {
   const [cardMinimized, setCardMinimized] = useState(false);
   /** Which unit's camera window is open, if any. */
   const [cameraId, setCameraId] = useState(null);
+  /** True when the camera window was opened from the Units list: then it is
+   *  a window of its own, not an extension of the unit's card, and the card
+   *  opening, moving on or closing leaves it alone. */
+  const cameraDetachedRef = useRef(false);
 
   /**
    * The pinned card is a WINDOW, on the same primitive as the playback
@@ -2627,7 +2631,10 @@ export default function FleetMap() {
   useEffect(() => { if (pinnedId) setCardMinimized(false); }, [pinnedId]);
   // A camera window outlives its card otherwise, leaving a feed on screen for a
   // unit that is no longer selected and cannot be closed from the card.
-  useEffect(() => { setCameraId(id => (id && id !== pinnedId ? null : id)); }, [pinnedId]);
+  useEffect(() => {
+    if (cameraDetachedRef.current) return;
+    setCameraId(id => (id && id !== pinnedId ? null : id));
+  }, [pinnedId]);
 
   const clearHover = useCallback(() => {
     hoveredIdRef.current = null;
@@ -6504,14 +6511,14 @@ export default function FleetMap() {
             routeId={routeId}
             onToggleRoute={toggleRoute}
             onOpenDetail={handleOpenUnit}
-            /* Pins the unit's card, which the camera window belongs to and
-               closes with. Not handleOpenUnit: that also opens the detail
-               panel, which on a phone is a sheet over the whole map layer
-               and hid the camera window under it. */
+            /* The camera window alone: no card, no detail panel. The panel
+               is a sheet over the whole map layer on a phone and hid the
+               window under it; the card is what a map click opens, and a
+               press on Video asked for video. */
             videoId={cameraId}
             onOpenVideo={(id) => {
               if (cameraId === id) { setCameraId(null); return; }
-              setPinnedId(id);
+              cameraDetachedRef.current = true;
               setCameraId(id);
             }}
             onSelectUnit={setSelectedVehicleId}
@@ -6719,7 +6726,10 @@ export default function FleetMap() {
             onZoomTo={zoomToPinned}
             onZoomBack={zoomBack}
             cameraOn={cameraId === pinnedId}
-            onToggleCamera={() => setCameraId(id => (id === pinnedId ? null : pinnedId))}
+            onToggleCamera={() => {
+              cameraDetachedRef.current = false;
+              setCameraId(id => (id === pinnedId ? null : pinnedId));
+            }}
             replaying={Boolean(pinnedId) && playbackId === pinnedId}
             onReplay={() => {
               // The static answers and the replay are answers to the same
