@@ -5,11 +5,20 @@
  * The case window is mounted once, in the header (FuelFollowUpHost), so it can
  * be opened from anywhere — the System screen, the Live Feed, a phone's feed
  * sheet.
+ *
+ * It is the Repair report dialog's shape, built from the same `sp4-modal`
+ * parts: a pinned head with the title and ×, the unit as a `sp4-repair-item`
+ * card with outcome chips and a "what you found" box, and a pinned foot with
+ * the count of what is missing beside Cancel and the one submit button. Those
+ * classes read the `--sp4-*` tokens, which live on `.sp4-root`, so the host
+ * wraps the dialog in one (`display: contents`, see FuelFollowUp.css).
  */
 
 import { useEffect, useId, useRef, useState } from "react";
+import "./SensorPanel.css";
 import "./FuelFollowUp.css";
 import { usePermissions } from "../../hooks/usePermissions";
+import useFocusTrap from "../../hooks/useFocusTrap";
 import {
   ACTION_LABEL, STATUS_LABEL, acceptFollowUp, closeFollowUp, deescalateFollowUp,
   escalateFollowUp, fetchFollowUp, followUpAbilities, noteFollowUp, useOpenFollowUp,
@@ -25,12 +34,16 @@ export const when = (v) => {
 };
 export const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L`);
 
-const WHY_NOT = {
-  "deleted-it":   "You deleted this alert, so someone else has to accept its follow-up.",
-  "someone-else": null, // filled with the owner's name below
-  "no-rights":    "Your role cannot take on fuel follow-ups.",
-  closed:         null,
-};
+// The System screen's pill tones, so a follow-up reads the same in both.
+const STATUS_PILL = { OPEN: "warn", ACCEPTED: "info", ESCALATED: "inc", DEESCALATED: "con" };
+
+/* The two decisions, as the repair dialog's outcome chips. The chip classes
+   borrow the repair outcomes that share their colour: red for a theft, green
+   for cleared. */
+const DECISIONS = [
+  { id: "escalate",   label: "Confirmed theft", chip: "cannot_fix" },
+  { id: "deescalate", label: "Not a theft",     chip: "fixed" },
+];
 
 /** A readable error from an ApiError, preferring the server's own sentence. */
 function errorText(err) {
@@ -38,8 +51,12 @@ function errorText(err) {
   return err?.message || "That didn't go through. Try again.";
 }
 
-export function StatusChip({ status }) {
-  return <span className={`ffu-chip ffu-chip--${status?.toLowerCase()}`}>{STATUS_LABEL[status] ?? status}</span>;
+/** Why this viewer has no buttons, in one line. */
+function whyNot(f, why) {
+  if (why === "deleted-it") return "You deleted this alert, so someone else has to accept its follow-up.";
+  if (why === "someone-else") return `${f.acceptedBy?.fullName ?? "Someone else"} accepted this follow-up; only they can decide it.`;
+  if (why === "no-rights") return "Your role cannot take on fuel follow-ups.";
+  return null;
 }
 
 // ── The case window ────────────────────────────────────────────────────────
@@ -48,11 +65,12 @@ function FollowUpWindow({ id, orgId, canTriage }) {
   const [f, setF] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(null);
+  const [decision, setDecision] = useState(null); // 'escalate' | 'deescalate' | null
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [confirming, setConfirming] = useState(null); // 'escalate' | 'deescalate'
   const titleId = useId();
   const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, true);
 
   // Load, and reload whenever anyone moves this follow-up (SSE → store event).
   useEffect(() => {
@@ -66,135 +84,168 @@ function FollowUpWindow({ id, orgId, canTriage }) {
   }, [orgId, id]);
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") closeFollowUp(); };
+    const onKey = (e) => { if (e.key === "Escape" && !busy) closeFollowUp(); };
     document.addEventListener("keydown", onKey);
-    dialogRef.current?.focus();
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [busy]);
 
   const can = followUpAbilities(f, canTriage);
+  const inc = f?.incident;
+  const noteOk = note.trim().length >= 3;
 
-  const run = async (kind, fn) => {
-    setBusy(kind);
+  /* What the one submit button does, and what is still missing before it can.
+     The repair dialog's rule: a dead button always has its reason beside it. */
+  let submit = null;
+  let missing = null;
+  if (can.accept) {
+    submit = { label: "Accept follow-up", busyLabel: "Accepting…", run: () => acceptFollowUp(orgId, id) };
+  } else if (can.act) {
+    if (decision === "escalate") {
+      submit = { label: "Record confirmed theft", busyLabel: "Saving…", danger: true, run: () => escalateFollowUp(orgId, id, note.trim()) };
+    } else if (decision === "deescalate") {
+      submit = { label: "Close as not a theft", busyLabel: "Saving…", run: () => deescalateFollowUp(orgId, id, note.trim()) };
+    } else {
+      submit = { label: "Add note", busyLabel: "Adding…", run: () => noteFollowUp(orgId, id, note.trim()) };
+    }
+    if (!noteOk) missing = decision ? "Say what you found" : "Write a note, or choose an outcome";
+  }
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!submit || missing || busy) return;
+    setBusy(true);
     setError(null);
     try {
-      const next = await fn();
+      const next = await submit.run();
       if (next) setF(next);
-      if (kind !== "accept") setNote("");
-      setConfirming(null);
-    } catch (e) {
-      setError(errorText(e));
+      setNote("");
+      setDecision(null);
+    } catch (err) {
+      setError(errorText(err));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
-  const noteOk = note.trim().length >= 3;
-  const inc = f?.incident;
-
   return (
-    <div className="ffu-overlay" role="presentation"
-         onMouseDown={(e) => { if (e.target === e.currentTarget) closeFollowUp(); }}>
-      <div className="ffu-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
-           tabIndex={-1} ref={dialogRef}>
-        <div className="ffu-bar">
-          <span className="ffu-title" id={titleId}>Follow-up · {inc?.plate ?? "…"}</span>
-          {f && <StatusChip status={f.status} />}
-          <button type="button" className="ffu-x" onClick={closeFollowUp} aria-label="Close">✕</button>
-        </div>
+    <div className="sp4-root ffu-scope">
+      <div
+        className="sp4-modal-overlay"
+        role="presentation"
+        onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) closeFollowUp(); }}
+      >
+        <div className="sp4-modal sp4-modal--narrow ffu-modal" ref={dialogRef}
+             role="dialog" aria-modal="true" aria-labelledby={titleId}>
+          <div className="sp4-modal-head">
+            <span className="sp4-repair-title" id={titleId}>Fuel follow-up · 1 alert</span>
+            <button type="button" className="sp4-modal-x" onClick={closeFollowUp} disabled={busy}
+                    aria-label="Close" title="Close">×</button>
+          </div>
 
-        <div className="ffu-body">
-          {!f && !loadError && <p className="ffu-muted">Loading…</p>}
-          {loadError && <p className="ffu-error" role="alert">{loadError}</p>}
+          <form className="sp4-repair-form" onSubmit={onSubmit} noValidate>
+            <div className="sp4-modal-body">
+              {!f && !loadError && <p className="ffu-muted">Loading…</p>}
+              {loadError && <div className="sp4-banner sp4-banner--crit" role="alert">{loadError}</div>}
 
-          {f && (
-            <>
-              <dl className="ffu-facts">
-                <div><dt>Volume</dt><dd>{litres(inc.volumeMl)}</dd></div>
-                <div><dt>Happened</dt><dd>{when(inc.beganAt)}</dd></div>
-                <div><dt>Reported</dt><dd>{when(inc.detectedAt)}</dd></div>
-                <div><dt>Deleted by</dt><dd>{f.dismissedBy?.fullName ?? "—"}</dd></div>
-                <div><dt>Accepted by</dt><dd>{f.acceptedBy?.fullName ?? "Nobody yet"}</dd></div>
-                {inc.location && <div className="ffu-wide"><dt>Where</dt><dd>{inc.location}</dd></div>}
-              </dl>
-
-              <h3 className="ffu-h">What was done</h3>
-              <ol className="ffu-log">
-                {f.actions.map((a) => (
-                  <li key={a.id} className={`ffu-log-item ffu-log-item--${a.kind.toLowerCase()}`}>
-                    <div className="ffu-log-line">
-                      <strong>{a.actor?.fullName ?? "Someone"}</strong> {ACTION_LABEL[a.kind] ?? a.kind}
-                      <span className="ffu-log-when">{when(a.at)}</span>
-                    </div>
-                    {a.note && <p className="ffu-log-note">{a.note}</p>}
-                  </li>
-                ))}
-              </ol>
-
-              {error && <p className="ffu-error" role="alert">{error}</p>}
-
-              {can.accept && (
-                <div className="ffu-actions">
-                  <p className="ffu-muted">Accepting makes you responsible for deciding this one.</p>
-                  <button type="button" className="ffu-btn ffu-btn--primary"
-                          disabled={busy != null}
-                          onClick={() => run("accept", () => acceptFollowUp(orgId, id))}>
-                    {busy === "accept" ? "Accepting…" : "Accept follow-up"}
-                  </button>
-                </div>
-              )}
-
-              {can.act && (
-                <div className="ffu-actions">
-                  <label className="ffu-label" htmlFor={`${titleId}-note`}>
-                    {confirming ? "Reason for the decision (required)" : "Note or reason"}
-                  </label>
-                  <textarea id={`${titleId}-note`} className="ffu-note" rows={3} maxLength={2000}
-                            value={note} onChange={(e) => setNote(e.target.value)}
-                            placeholder="What did you find? Who did you speak to?" />
-                  {confirming ? (
-                    <div className="ffu-row">
-                      <span className="ffu-confirm-text">
-                        {confirming === "escalate"
-                          ? "Record this as a CONFIRMED THEFT?"
-                          : "Close this as NOT a theft?"}
+              {f && (
+                <>
+                  <div className="sp4-repair-item">
+                    <div className="sp4-repair-itemhead">
+                      <span className="sp4-repair-reg">{inc.plate}</span>
+                      <span className="sp4-repair-fault">{litres(inc.volumeMl)} lost · {when(inc.beganAt)}</span>
+                      <span className={"sp4-pill sp4-pill--" + (STATUS_PILL[f.status] ?? "none") + " ffu-pill"}>
+                        {STATUS_LABEL[f.status] ?? f.status}
                       </span>
-                      <button type="button" className="ffu-btn" onClick={() => setConfirming(null)} disabled={busy != null}>Back</button>
-                      <button type="button"
-                              className={`ffu-btn ${confirming === "escalate" ? "ffu-btn--danger" : "ffu-btn--primary"}`}
-                              disabled={!noteOk || busy != null}
-                              onClick={() => run(confirming, () => (confirming === "escalate"
-                                ? escalateFollowUp(orgId, id, note.trim())
-                                : deescalateFollowUp(orgId, id, note.trim())))}>
-                        {busy === confirming ? "Saving…" : "Confirm"}
-                      </button>
                     </div>
-                  ) : (
-                    <div className="ffu-row">
-                      <button type="button" className="ffu-btn" disabled={!noteOk || busy != null}
-                              onClick={() => run("note", () => noteFollowUp(orgId, id, note.trim()))}>
-                        {busy === "note" ? "Adding…" : "Add note"}
-                      </button>
-                      <span className="ffu-spacer" />
-                      <button type="button" className="ffu-btn" disabled={busy != null}
-                              onClick={() => setConfirming("deescalate")}>De-escalate</button>
-                      <button type="button" className="ffu-btn ffu-btn--danger" disabled={busy != null}
-                              onClick={() => setConfirming("escalate")}>Escalate: confirmed theft</button>
-                    </div>
-                  )}
-                  {!noteOk && confirming && <p className="ffu-muted">A reason is required: give at least a few words.</p>}
-                </div>
-              )}
 
-              {!can.accept && !can.act && can.why && can.why !== "closed" && (
-                <p className="ffu-muted">
-                  {can.why === "someone-else"
-                    ? `${f.acceptedBy?.fullName ?? "Someone else"} accepted this follow-up; only they can decide it.`
-                    : WHY_NOT[can.why]}
-                </p>
+                    <dl className="ffu-facts">
+                      <div><dt className="sp4-label">Deleted by</dt><dd>{f.dismissedBy?.fullName ?? "—"}</dd></div>
+                      <div><dt className="sp4-label">Accepted by</dt><dd>{f.acceptedBy?.fullName ?? "Nobody yet"}</dd></div>
+                      <div><dt className="sp4-label">Reported</dt><dd>{when(inc.detectedAt)}</dd></div>
+                      {inc.location && <div><dt className="sp4-label">Where</dt><dd>{inc.location}</dd></div>}
+                    </dl>
+
+                    {can.act && (
+                      <>
+                        <div className="sp4-repair-outcomes" role="group" aria-label={`Outcome for ${inc.plate}`}>
+                          {DECISIONS.map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              className={"sp4-filter-chip sp4-out-chip sp4-out-chip--" + d.chip
+                                         + (decision === d.id ? " sp4-out-chip--on" : "")}
+                              aria-pressed={decision === d.id}
+                              onClick={() => setDecision(decision === d.id ? null : d.id)}
+                              disabled={busy}
+                            >{d.label}</button>
+                          ))}
+                        </div>
+
+                        <label className="sp4-field">
+                          <span className="sp4-label">
+                            {decision ? "What you found" : "Note"}
+                          </span>
+                          <textarea
+                            className="sp4-textarea"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder={decision === "escalate"
+                              ? "What confirms the theft: who, where, what was checked"
+                              : decision === "deescalate"
+                                ? "Why it is not a theft: a refuel, a sensor fault, a drain on record"
+                                : "What you checked, or who you spoke to"}
+                            maxLength={2000}
+                            disabled={busy}
+                            rows={2}
+                          />
+                        </label>
+                        {missing && decision && <span className="sp4-repair-why">{missing}</span>}
+                      </>
+                    )}
+
+                    {can.accept && (
+                      <span className="ffu-muted">Accepting makes you responsible for deciding this one.</span>
+                    )}
+                    {!can.accept && !can.act && whyNot(f, can.why) && (
+                      <span className="ffu-muted">{whyNot(f, can.why)}</span>
+                    )}
+                  </div>
+
+                  <div className="sp4-field">
+                    <span className="sp4-label">What was done</span>
+                    <ol className="ffu-log">
+                      {f.actions.map((a) => (
+                        <li key={a.id} className={`ffu-log-item ffu-log-item--${a.kind.toLowerCase()}`}>
+                          <div className="ffu-log-line">
+                            <strong>{a.actor?.fullName ?? "Someone"}</strong> {ACTION_LABEL[a.kind] ?? a.kind}
+                            <span className="ffu-log-when">{when(a.at)}</span>
+                          </div>
+                          {a.note && <p className="ffu-log-note">{a.note}</p>}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </>
               )}
-            </>
-          )}
+            </div>
+
+            <div className="sp4-modal-foot">
+              {error && <div className="sp4-banner sp4-banner--crit sp4-modal-err" role="alert">{error}</div>}
+              {missing && <span className="sp4-repair-pending">{missing}</span>}
+              <button type="button" className="sp4-ghost-btn" onClick={closeFollowUp} disabled={busy}>
+                {submit ? "Cancel" : "Close"}
+              </button>
+              {submit && (
+                <button
+                  type="submit"
+                  className={"sp4-submit-btn" + (submit.danger ? " ffu-submit--danger" : "")}
+                  disabled={busy || Boolean(missing)}
+                >
+                  {busy ? submit.busyLabel : submit.label}
+                </button>
+              )}
+            </div>
+          </form>
         </div>
       </div>
     </div>
