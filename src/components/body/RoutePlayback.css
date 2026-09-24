@@ -266,6 +266,15 @@
 }
 .rp__rate:hover { border-color: var(--accent-info); }
 
+/* `light dark` above lets the OPERATING SYSTEM choose, not the app: on a
+   computer in dark mode the browser painted the date picker's calendar glyph
+   white on the app's white panel, invisible. The app stamps its theme on
+   <html> (AppContext), so follow that, as .sp4-date-input does. */
+:root[data-theme="light"] .rp__day input,
+:root[data-theme="light"] .rp__rate { color-scheme: light; }
+:root[data-theme="dark"] .rp__day input,
+:root[data-theme="dark"] .rp__rate { color-scheme: dark; }
+
 /* The list items themselves. Chrome on Windows honours these; where a platform
    ignores them, `color-scheme` above still gets a popup matching the theme
    rather than the white one that caused this. */
