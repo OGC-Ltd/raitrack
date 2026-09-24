@@ -39,6 +39,9 @@ import { vehicleReadings, formatKm, formatHours, formatSince, NO_READING } from 
 import { driverDutyStatus, matchesFilter, matchesMapFilters, equipmentLabel } from "../../lib/vehicleMap";
 import LoadError from "../shared/LoadError";
 import { clampToSafeArea as sharedClamp } from "../../hooks/useFloatingWindow";
+import { useDismissedIncidents, dismissIncident } from "../../lib/fuelDismissals";
+import { apiFetch } from "../../services/api";
+import { usePermissions } from "../../hooks/usePermissions";
 
 const FEED_CLS = { info: "fi-info", warning: "fi-warning", critical: "fi-critical", success: "fi-success" };
 const FEED_ICO = { info: "💬", warning: "⚠", critical: "🔴", success: "✓" };
@@ -391,7 +394,7 @@ const SHEET_Q = '(max-width: 720px)';
  * The recoverable gestures are the easy ones to hit; the irreversible one is
  * a labelled button in the footer, never an icon.
  */
-function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, onClose, onDismiss }) {
+function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, onClose, onDismiss, canDelete = true }) {
   // Lazy: useRef(readWindowState()) would re-read and re-parse localStorage on
   // every render and discard the result.
   const [saved] = useState(readWindowState);
@@ -418,9 +421,27 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
   const armRef = useRef(null);
   useEffect(() => () => clearTimeout(armRef.current), []);
   useEffect(() => { if (asWindow) { clearTimeout(armRef.current); setArmed(false); } }, [asWindow]);
+  /* The delete goes to the server now, so it can take a moment and it can
+     fail. The window stays up until it has succeeded, and says so if it did
+     not, rather than closing on a delete that never happened. */
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const commitDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDismiss();
+    } catch (err) {
+      setDeleteError(err?.status === 403
+        ? "You don't have permission to delete fuel incidents."
+        : "Could not delete this incident. Try again.");
+      setDeleting(false);
+    }
+  };
   const onDelete = () => {
-    if (!sheet) { onDismiss(); return; }
-    if (armed) { clearTimeout(armRef.current); onDismiss(); return; }
+    if (deleting) return;
+    if (!sheet) { commitDelete(); return; }
+    if (armed) { clearTimeout(armRef.current); setArmed(false); commitDelete(); return; }
     setArmed(true);
     clearTimeout(armRef.current);
     armRef.current = setTimeout(() => setArmed(false), 4000);
@@ -658,17 +679,25 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
               {(sheet ? [detailCol, cardCol] : [cardCol, detailCol])}
             </div>
             <div className="fi-actions">
+              {deleteError && <span className="fi-delete-error" role="alert">{deleteError}</span>}
               <button className="fi-btn" onClick={onClose}>Close</button>
-              <button
-                className="fi-btn fi-btn--danger"
-                data-armed={armed ? 'true' : undefined}
-                onClick={onDelete}
-                // The label carries the arming, not a colour change alone —
-                // "it went red" is not an instruction.
-                aria-label={armed ? 'Confirm delete' : 'Delete'}
-              >
-                {armed ? 'Tap again' : 'Delete'}
-              </button>
+              {/* Deleting hides the incident for the whole organisation, so it
+                  needs the same grant the server checks (fuel_theft:create).
+                  Without it there is no button rather than one that fails. */}
+              {canDelete && (
+                <button
+                  className="fi-btn fi-btn--danger"
+                  data-armed={armed ? 'true' : undefined}
+                  onClick={onDelete}
+                  disabled={deleting}
+                  title="Delete for everyone in this organisation. The record is kept."
+                  // The label carries the arming, not a colour change alone —
+                  // "it went red" is not an instruction.
+                  aria-label={deleting ? 'Deleting' : armed ? 'Confirm delete' : 'Delete'}
+                >
+                  {deleting ? 'Deleting…' : armed ? 'Tap again' : 'Delete'}
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1517,6 +1546,101 @@ function RightPanel() {
         ? <VehicleDetailPanel selectedVehicleId={selectedVehicleId} />
         : <FleetOverviewPanel />}
     </>
+  );
+}
+
+/**
+ * The fuel incident window on its own, for the new layout.
+ *
+ * RightPanel above owned it in the old layout, but that panel is not rendered
+ * any more (see MapOverlay below), so asking for an incident from the
+ * fuel-alerts menu went nowhere. This is the same window with the same
+ * pin/dismiss rules. The difference is what it follows: the unit that was ASKED
+ * for, not the selected one. Opening an incident no longer selects the unit,
+ * so the vehicle side panel stays shut and only opens from a click on the
+ * unit's marker.
+ */
+export function FuelIncidentHost() {
+  const { setWindowOpen, incidentRequest } = useAppContext();
+  const { vehicles, orgId } = useFleetLiveShared();
+  const { can } = usePermissions();
+
+  const [subjectId, setSubjectId] = useState(null);
+  const dismissed = useDismissedIncidents();
+  const [incidentOpen, setIncidentOpen] = useState(false);
+  const [pinned, setPinned] = useState(() => !!readWindowState().pinned);
+  const [held, setHeld] = useState(null);
+
+  useEffect(() => {
+    setWindowOpen(Boolean(incidentOpen));
+    return () => setWindowOpen(false);
+  }, [incidentOpen, setWindowOpen]);
+
+  const v = subjectId != null
+    ? vehicles.find((x) => x.id === subjectId) ?? vehicles.find((x) => x.vehicleId === subjectId) ?? null
+    : null;
+  const liveIncident = v?.fuelIncident && !dismissed.has(v.fuelIncident.id) ? v.fuelIncident : null;
+  const incident = pinned ? (held?.incident ?? liveIncident) : liveIncident;
+  const incidentPlate = pinned ? (held?.plate ?? v?.id) : v?.id;
+  const incidentVehicle = pinned ? (held?.vehicle ?? v) : v;
+
+  // Counted, so asking twice for the same unit opens it twice. An explicit ask
+  // for another unit replaces what a pinned window was holding: pinning stops
+  // the window changing by itself, and this change was asked for.
+  const askedRef = useRef(0);
+  useEffect(() => {
+    if (!incidentRequest || incidentRequest.n === askedRef.current) return;
+    askedRef.current = incidentRequest.n;
+    setSubjectId(incidentRequest.id);
+    setHeld(null);
+    setIncidentOpen(true);
+  }, [incidentRequest]);
+
+  // Keep a pinned window's copy up to date while its unit still has the
+  // incident, so a live refresh isn't lost just because the window is pinned.
+  useEffect(() => {
+    if (pinned && liveIncident) setHeld({ incident: liveIncident, plate: v?.id, vehicle: v });
+  }, [pinned, liveIncident, v]);
+
+  useEffect(() => {
+    if (!liveIncident && !pinned) setIncidentOpen(false);
+  }, [liveIncident, pinned]);
+
+  const closeIncident = () => {
+    setIncidentOpen(false);
+    setPinned(false);
+    setHeld(null);
+    writeWindowState({ ...readWindowState(), pinned: false });
+  };
+
+  if (!incidentOpen || !incident) return null;
+  return (
+    <ErrorBoundary label="Fuel incident">
+      <FuelIncidentModal
+        incident={incident}
+        vehicle={incidentVehicle}
+        plate={incidentPlate}
+        pinned={pinned}
+        onPinnedChange={(next) => {
+          setPinned(next);
+          setHeld(next ? { incident, plate: incidentPlate, vehicle: incidentVehicle } : null);
+        }}
+        onClose={closeIncident}
+        canDelete={can('fuel_theft:create')}
+        onDismiss={async () => {
+          // Dismissed on the server for the whole organisation; the record is
+          // kept. Everyone else hears about it over SSE; this browser drops it
+          // straight away rather than waiting for its own echo. Throws on
+          // failure, which the window reports. See lib/fuelDismissals.
+          await apiFetch(
+            `/api/v1/organisations/${orgId}/fuel/thefts/${encodeURIComponent(incident.id)}/dismiss`,
+            { method: 'POST' },
+          );
+          dismissIncident(incident.id);
+          closeIncident();
+        }}
+      />
+    </ErrorBoundary>
   );
 }
 

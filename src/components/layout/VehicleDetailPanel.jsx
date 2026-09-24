@@ -90,6 +90,9 @@ function daysBetween(fromKey, toKey) {
 const DAY_LABEL = new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const fmtDay = (key) => DAY_LABEL.format(new Date(`${key}T00:00:00.000Z`));
 
+const DAY_PAGE_SIZE = 500;  // the server's maximum page
+const DAY_PAGE_CAP  = 12;   // 6,000 rows, about two days at the 30 s cadence
+
 function useDayTelemetry(orgId, vehicleId, dayKey) {
   const [state, setState] = useState({ pings: [], loading: false, error: null });
 
@@ -101,13 +104,26 @@ function useDayTelemetry(orgId, vehicleId, dayKey) {
     const end   = start + 86_400_000;
     const from  = new Date(start).toISOString();
     const to    = new Date(end).toISOString();
-    apiFetch(
-      `/api/v1/organisations/${orgId}/vehicles/${vehicleId}/telemetry?limit=5000&from=${from}&to=${to}`,
-      { signal: ctrl.signal },
-    )
-      .then(res => {
+    // The server caps a page at 500 rows (newest first) and pages with a
+    // cursor. Asking for 5000 in one go was refused with a 400, which left
+    // every chart in this panel empty. A day at the 30 s poll cadence is about
+    // 2,900 rows, so walk the pages, stopping at DAY_PAGE_CAP.
+    const base = `/api/v1/organisations/${orgId}/vehicles/${vehicleId}/telemetry?limit=${DAY_PAGE_SIZE}&from=${from}&to=${to}`;
+    const fetchAll = async () => {
+      const rows = [];
+      let cursor = null;
+      for (let page = 0; page < DAY_PAGE_CAP; page++) {
+        const res = await apiFetch(cursor ? `${base}&cursor=${cursor}` : base, { signal: ctrl.signal });
+        rows.push(...(res.data ?? []));
+        cursor = res.meta?.hasNextPage ? res.meta.cursor : null;
+        if (!cursor) break;
+      }
+      return rows;
+    };
+    fetchAll()
+      .then(data => {
         if (ctrl.signal.aborted) return;
-        const pings = (res.data ?? [])
+        const pings = data
           .map(p => ({ ...p, t: Date.parse(p.capturedAt) }))
           // filtered here too, in case the server ignores `to`
           .filter(p => Number.isFinite(p.t) && p.t >= start && p.t < end)
@@ -122,6 +138,55 @@ function useDayTelemetry(orgId, vehicleId, dayKey) {
   }, [orgId, vehicleId, dayKey]);
 
   return state;
+}
+
+/**
+ * Today's telemetry, kept live.
+ *
+ * The day's pings are fetched once when the panel opens. After that, every
+ * live frame the map receives for this unit (SSE `position`, merged onto the
+ * vehicle by lib/vehicleMap) is added as another ping. That way the fuel line
+ * and the overspeed marks keep growing while the panel is open, without
+ * re-fetching the day.
+ *
+ * A frame is added only if it is newer than the last ping held, so a fetch
+ * that already includes it doesn't draw it twice. The fetch replacing `pings`
+ * starts the live tail again. Live frames don't carry the consumption counter
+ * (`fuelUsedMl`), so "fuel used" still comes from the fetched pings only.
+ */
+export function appendLiveFrame(tail, fetched, vehicle) {
+  const t = vehicle?.capturedAtMs;
+  if (!Number.isFinite(t)) return tail;
+  const last = tail.length ? tail[tail.length - 1].t
+    : fetched.length ? fetched[fetched.length - 1].t : -Infinity;
+  if (t <= last) return tail;
+  return [...tail, {
+    t,
+    speedKmh:    Number.isFinite(vehicle.speed) ? vehicle.speed : null,
+    fuelLevelMl: Number.isFinite(vehicle.fuelLitres) ? vehicle.fuelLitres * 1000 : null,
+    engineOn:    vehicle.engine === 'on' ? true : vehicle.engine === 'off' ? false : null,
+  }];
+}
+
+function useLiveTelemetry(tele, vehicle) {
+  const [tail, setTail] = useState([]);
+  const unitId = vehicle?.id;
+
+  useEffect(() => { setTail([]); }, [tele.pings, unitId]);
+
+  const t = vehicle?.capturedAtMs;
+  useEffect(() => {
+    if (tele.loading || !Number.isFinite(t)) return;
+    // Only today's frames belong on today's chart
+    if (t < dayStart(fleetDayKey()).getTime()) return;
+    setTail(prev => appendLiveFrame(prev, tele.pings, vehicle));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, tele.loading, tele.pings]);
+
+  return useMemo(
+    () => (tail.length ? { ...tele, pings: [...tele.pings, ...tail] } : tele),
+    [tele, tail],
+  );
 }
 
 // Overspeed runs: consecutive pings above the limit, merged into one event
@@ -401,7 +466,10 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
   return (<>
     <section className="vdp-block">
       <div className="vdp-block-head">
-        <div className="vdp-block-title">Fuel &amp; overspeed</div>
+        <div className="vdp-block-title">
+          Fuel &amp; overspeed
+          {isToday && vehicle.online && <span className="vdp-live">live</span>}
+        </div>
         <input
           type="date"
           className="vdp-date"
@@ -563,7 +631,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
     Number.isFinite(vehicle?.lat) ? vehicle.lat : null,
     Number.isFinite(vehicle?.lng) ? vehicle.lng : null,
   );
-  const tele  = useDayTelemetry(orgId, vehicleId, fleetDayKey());
+  const dayTele = useDayTelemetry(orgId, vehicleId, fleetDayKey());
+  const tele  = useLiveTelemetry(dayTele, vehicle);
   const today = useMemo(
     () => summariseToday(tele.pings, vehicle?.tankCapacityL),
     [tele.pings, vehicle?.tankCapacityL],
@@ -741,16 +810,20 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
             </div>
           </section>
 
-          {/* Fuel chart */}
+          {/* Fuel & overspeed — today, growing with every live frame */}
           <section className="vdp-block">
             <div className="vdp-block-head">
               <div className="vdp-block-title">
-                Fuel level today
+                Fuel &amp; overspeed
                 {vehicle.online && <span className="vdp-live">live</span>}
               </div>
               <span className="vdp-meta">{updated ? `updated ${timeAgo(readings.lastReportedAt)}` : ''}</span>
             </div>
             <FuelChart series={today.series} loading={tele.loading} overspeeds={todayRuns} />
+            <div className="vdp-legend">
+              <span><i className="vdp-legend-line" /> Fuel level (%)</span>
+              <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {vehicle.speedLimit ?? 80})</span>
+            </div>
           </section>
 
           {/* Vehicle */}

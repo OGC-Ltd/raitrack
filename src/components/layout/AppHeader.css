@@ -426,48 +426,31 @@
  * .lf-cluster-badge, which is the point: three round number badges, one shape.
  */
 /*
- * A TRUE CIRCLE, sized so the number fits inside it.
- *
- * It was a 17px circle whose type shrank to make room — 10px at two digits,
- * then 8.5px, then 7.5px. That is the wrong knob. Take the 2px border off a
- * 17px ring and 13px of width is left, while "84" at 10px bold measures
- * 11.7px: the figure was pressed against the curve on both sides, which is
- * what reads as blurry rather than merely small. At three digits the type was
- * below the size at which a number is legible at all.
- *
- * So the DIAMETER grows and the type stays readable. Each step is measured
- * against the glyphs it has to hold, at this face, weight and tabular
- * figures:
- *
- *   1–2 digits   20px ring, 16px inside, "84" needs 11.7  → 4.3 spare
- *   3 chars      24px ring, 20px inside, "284" needs 16.7 → 3.3 spare
- *   4–5 chars    26px ring, 22px inside
+ * ONE ring size, because the badge never holds more than two digits —
+ * bellBadgeLabel stops the count at 20. 18px with a 1.5px border leaves 15px
+ * inside, and "20" at 10px bold needs ~11.7px. 10px is the floor for a figure
+ * read at a glance on red: 7px was tried and could not be read at 1x.
  *
  * `aspect-ratio: 1` alongside the explicit width and height is belt and
- * braces: this sits in a flex row, and a flex parent will stretch a fixed
- * height given the chance — which would make an oval of it again. Same
- * reasoning, and the same idiom, as `.side-tree__count`.
+ * braces: a flex parent will stretch a fixed height given the chance, which
+ * would make an oval of it. Same idiom as `.side-tree__count`.
  */
 .app-header__bell-count {
-  --bell-count: 20px;
   position: absolute;
-  top: 0;
-  /* A larger ring needs somewhere to go. It hangs slightly off the bell's
-     corner, which is where a badge belongs and is what buys the diameter. */
-  right: -3px;
-  width: var(--bell-count);
-  height: var(--bell-count);
+  top: 1px;
+  /* Hangs slightly off the bell's corner, which is where a badge belongs. */
+  right: -1px;
+  width: 18px;
+  height: 18px;
   aspect-ratio: 1;
   padding: 0;
   border-radius: 50%;
-  /* Slate, not red. The badge counts everything the feed holds that this
-     operator has not opened yet, and a shift's worth of routine arrivals and
-     gate crossings is news rather than an alarm. Red is below, for the days
-     it is one. */
-  background: #475569;
+  /* Always red: an unread count on a bell is a summons whatever it is made
+     of, and one colour is one less thing to decode at a glance. */
+  background: #dc2626;
   color: #fff;
-  border: 2px solid #fff;
-  font-size: 10.5px;
+  border: 1.5px solid #fff;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
   display: grid;
@@ -475,20 +458,11 @@
   box-sizing: border-box;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+  /* Centre on the figures' CAP height, not the line box. A line box carries
+     room for descenders that digits never use, so grid centring alone left
+     the number sitting visibly high in so small a ring. */
+  text-box: trim-both cap alphabetic;
 }
-/* "284", and "99+" once the count is capped. The ring takes the strain; the
-   type gives half a pixel rather than three. */
-.app-header__bell-count[data-len="3"] { --bell-count: 24px; font-size: 10px; }
-.app-header__bell-count[data-len="4"],
-.app-header__bell-count[data-len="5"] { --bell-count: 26px; font-size: 9.5px; letter-spacing: -0.02em; }
-
-/* At least one of the unseen items is a warning or a critical — a service
-   redirect, an overspeed, a suspected theft. Same red the stranded count and
-   the side tree's alert badge are drawn in, so one thing being wrong looks
-   the same wherever the app says it. AFTER the size steps, which set only
-   `--bell-count` and `font-size`, so neither rule fights the other. */
-.app-header__bell-count--alert { background: #dc2626; }
-
 /* ── Responsive ────────────────────────────────────────────────────────────
 
    The header was built at one width. Its search box is absolutely centred on
@@ -510,9 +484,22 @@
 
   /* The dropdown is positioned against this wrapper, which is no longer
      absolute — so the wrapper has to become the containing block itself or
-     the results list jumps to the header's left edge. */
+     the results list jumps to the header's left edge.
+
+     `top` and `left` MUST be cleared with it. The rule above drops `position`
+     and `transform` but left the 50%/50% offsets behind, and `relative` honours
+     them just as happily as `absolute` did — except that a relative offset
+     moves the paint and not the layout. Measured at 768px the search box was
+     shifted 373px right and 25.5px down from where the flex row had put it: it
+     hung 15px BELOW the 52px header, over the breadcrumbs, with its right end
+     under the notification bell, while the row it had left went on reserving
+     its empty seat. Every width from 768 to 1100 had this. */
   .app-header__org-wrap,
-  .app-header__search-wrap { position: relative; }
+  .app-header__search-wrap {
+    position: relative;
+    top: auto;
+    left: auto;
+  }
 
   .app-header__org-btn {
     max-width: 30vw;
@@ -552,6 +539,31 @@
   /* The org menu was sized against a desktop header; on a tablet it should
      not run off the right edge. */
   .app-header__org-menu { max-width: min(320px, 86vw); }
+}
+
+/* ── …and with the name gone, the search is centred again ──────────────────
+ *
+ * The 1100px rule above takes the search out of the flow's way because the
+ * absolutely-centred box was painted over a long organisation NAME. That name
+ * is `font-size: 0` from 1023px down — there is nothing left for the box to
+ * collide with, and sharing the row out instead left it visibly off centre: at
+ * 768px it sat 119px from the org chevron and 228px from the bell.
+ *
+ * So below the name, centred on the header again. The width caps keep it clear
+ * of both ends by construction: the right cluster (bell + avatar + padding) is
+ * about 102px, so a 240px box centred in a 375-to-860px header cannot reach it
+ * — measured at 768px it runs 264 to 504, with the bell starting at 666.
+ */
+@media (max-width: 1023px) {
+  .app-header__search-wrap {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    flex: none;
+    width: min(420px, 62vw);
+    max-width: none;
+  }
 }
 
 /* The search box is the first thing to give up space — below this it is an

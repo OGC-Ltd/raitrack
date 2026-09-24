@@ -23,7 +23,7 @@ import { pointerXY, layoutViewport } from "../../lib/appZoom";
 import { apiFetch } from "../../services/api";
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import "./FleetMap.css";
-import MapOverlay from "./MapOverlay";
+import MapOverlay, { FuelIncidentHost } from "./MapOverlay";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -6024,6 +6024,26 @@ export default function FleetMap() {
     return true;
   }, [activeCompanyId, setSelectedVehicleId, revealMap]);
 
+  /**
+   * Take the camera to a unit picked from the fuel-alerts list, and nothing
+   * more. Not handleFocusVehicle: that selects the unit, and selecting opens
+   * the vehicle side panel. From the alerts list the incident window is what
+   * was asked for; the side panel is for a click on the unit's marker.
+   */
+  const handleShowIncidentUnit = useCallback((vehicleId) => {
+    const map = mapRef.current;
+    const v = vehiclesRef.current.find(x => x.id === vehicleId)
+           ?? vehiclesRef.current.find(x => x.vehicleId === vehicleId);
+    if (!map || !v || !Number.isFinite(v.lat) || !Number.isFinite(v.lng)) return;
+    revealMap();
+    fittedCompanyRef.current = activeCompanyId;
+    pendingFitRef.current = false;
+    map.panTo({ lat: v.lat, lng: v.lng });
+    map.setZoom(FOCUS_ZOOM);
+    setSearchedId(v.id);
+    setTimeout(() => setSearchedId(null), 6000);
+  }, [activeCompanyId, revealMap]);
+
   // Register focus function with context so AppHeader search can trigger zoom
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { registerFocus(handleFocusVehicle); }, [handleFocusVehicle]);
@@ -6467,7 +6487,7 @@ export default function FleetMap() {
             vehicles={flaggedVehicles}
             showOnMap={showFuelAlerts}
             onToggleMap={() => setShowFuelAlerts(v => { writeCache(FUEL_ALERTS_KEY, !v); return !v; })}
-            onSelect={(id) => { handleFocusVehicle(id); requestIncident(id); }}
+            onSelect={(id) => { handleShowIncidentUnit(id); requestIncident(id); }}
           />
           <MapLayersMenu layers={mapLayers} />
           <FleetsMenu
@@ -6726,6 +6746,7 @@ export default function FleetMap() {
         onViewMap={showMobileMapOn}
         showMobileMap={showMobileMap}
       />
+      <FuelIncidentHost />
     </div>
   );
 }
