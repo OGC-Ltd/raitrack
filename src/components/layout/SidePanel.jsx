@@ -23,7 +23,7 @@ export const NAV_ITEMS = [
   // System, pinned to the foot of the sidebar. Unlike the screens above it is
   // not drawn at all without its permission: it is a place for case work, not
   // a screen some roles are locked out of.
-  { key: 'system',       label: 'System',       icon: 'bell',      permission: 'fuel_theft:triage', section: 'system' },
+  { key: 'system',       label: 'System',       icon: 'script',    permission: 'fuel_theft:triage', section: 'system' },
 ];
 
 function weatherDesc(code) {
