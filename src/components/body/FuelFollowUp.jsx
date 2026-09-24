@@ -13,9 +13,10 @@
  * classes read the `--sp4-*` tokens, which live on `.sp4-root`, so the host
  * wraps the dialog in one (`display: contents`, see FuelFollowUp.css).
  *
- * Three modes share that shape. The main one accepts or decides. "Decline"
+ * Four modes share that shape. The main one accepts or decides. "Decline"
  * asks for the reason before saying no. "Assign" is the administrator's: pick
- * a person from the organisation's case holders and hand it to them. Each mode
+ * a person from the organisation's case holders and hand it to them. "Recall"
+ * is the administrator's too: take it back from whoever holds it. Each mode
  * owns the foot's one submit button, so the dialog never offers two primary
  * actions at once.
  */
@@ -28,7 +29,7 @@ import useFocusTrap from "../../hooks/useFocusTrap";
 import {
   ACTION_LABEL, STAGE_LABEL, acceptFollowUp, assignFollowUp, closeFollowUp, declineFollowUp,
   deescalateFollowUp, escalateFollowUp, fetchAssignees, fetchFollowUp, followUpAbilities,
-  followUpStage, noteFollowUp, useOpenFollowUp,
+  followUpStage, noteFollowUp, recallFollowUp, useOpenFollowUp,
 } from "../../lib/fuelFollowUps";
 
 const TZ = "Africa/Nairobi";
@@ -72,7 +73,8 @@ function whyNot(f, why) {
 
 /** One line of the log, naming the person an assignment went to. */
 function logLine(a) {
-  if (a.kind === "ASSIGNED") return a.subject ? `assigned it to ${a.subject.fullName}` : "took the assignment back";
+  if (a.kind === "ASSIGNED") return a.subject ? `assigned it to ${a.subject.fullName}` : "assigned it";
+  if (a.kind === "RECALLED") return a.subject ? `recalled it from ${a.subject.fullName}` : "recalled it";
   return ACTION_LABEL[a.kind] ?? a.kind;
 }
 
@@ -81,7 +83,7 @@ function logLine(a) {
 function FollowUpWindow({ id, orgId, canTriage }) {
   const [f, setF] = useState(null);
   const [loadError, setLoadError] = useState(null);
-  const [mode, setMode] = useState("main"); // 'main' | 'decline' | 'assign'
+  const [mode, setMode] = useState("main"); // 'main' | 'decline' | 'assign' | 'recall'
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState(null); // 'escalate' | 'deescalate' | null
   const [assignees, setAssignees] = useState(null); // null until loaded
@@ -139,6 +141,8 @@ function FollowUpWindow({ id, orgId, canTriage }) {
   if (mode === "decline") {
     submit = { label: "Decline follow-up", busyLabel: "Declining…", danger: true, run: () => declineFollowUp(orgId, id, note.trim()) };
     if (!noteOk) missing = "Say why you are declining";
+  } else if (mode === "recall") {
+    submit = { label: "Recall follow-up", busyLabel: "Recalling…", danger: true, run: () => recallFollowUp(orgId, id, note.trim()) };
   } else if (mode === "assign") {
     submit = { label: "Assign", busyLabel: "Assigning…", run: () => assignFollowUp(orgId, id, assigneeId, note.trim()) };
     if (!assigneeId) missing = "Choose who to assign it to";
@@ -182,7 +186,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
              role="dialog" aria-modal="true" aria-labelledby={titleId}>
           <div className="sp4-modal-head">
             <span className="sp4-repair-title" id={titleId}>
-              {mode === "decline" ? "Decline follow-up" : mode === "assign" ? "Assign follow-up" : "Fuel follow-up · 1 alert"}
+              {{ decline: "Decline follow-up", assign: "Assign follow-up", recall: "Recall follow-up" }[mode] ?? "Fuel follow-up · 1 alert"}
             </span>
             <button type="button" className="sp4-modal-x" onClick={closeFollowUp} disabled={busy}
                     aria-label="Close" title="Close">×</button>
@@ -235,6 +239,31 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                           {f.viewer?.assignedToMe
                             ? "It goes back to the administrator to assign to someone else."
                             : "An administrator will be asked to assign it to someone."}
+                        </span>
+                      </>
+                    )}
+
+                    {/* ── Recall: take it back, with an optional reason ── */}
+                    {mode === "recall" && (
+                      <>
+                        <label className="sp4-field">
+                          <span className="sp4-label">Reason (optional)</span>
+                          <textarea
+                            className="sp4-textarea"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="Why it is being taken back: absence, workload, a conflict…"
+                            maxLength={2000}
+                            disabled={busy}
+                            rows={2}
+                            autoFocus
+                          />
+                        </label>
+                        <span className="ffu-muted">
+                          {f.status === "ACCEPTED"
+                            ? `${f.acceptedBy?.fullName ?? "The reviewer"} stops reviewing it. `
+                            : `${f.assignedTo?.fullName ?? "The assignee"} will no longer be able to accept it. `}
+                          It goes back to waiting, and you can assign it to someone else.
                         </span>
                       </>
                     )}
@@ -358,6 +387,12 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                 <>
                   {/* The side doors lead, the way the repair foot keeps its
                       secondary buttons before Cancel and the submit. */}
+                  {can.recall && (
+                    <button type="button" className={"sp4-ghost-btn" + (can.assign || can.decline ? "" : " ffu-foot-lead")}
+                            onClick={() => switchMode("recall")} disabled={busy}>
+                      Recall…
+                    </button>
+                  )}
                   {can.assign && (
                     <button type="button" className={"sp4-ghost-btn" + (can.decline ? "" : " ffu-foot-lead")}
                             onClick={() => switchMode("assign")} disabled={busy}>

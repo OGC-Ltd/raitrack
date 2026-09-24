@@ -45,6 +45,7 @@ export const acceptFollowUp     = (orgId, id)       => post(orgId, id, 'accept')
 export const declineFollowUp    = (orgId, id, note) => post(orgId, id, 'decline', { note });
 export const assignFollowUp     = (orgId, id, assigneeId, note) =>
   post(orgId, id, 'assign', { assigneeId, ...(note ? { note } : {}) });
+export const recallFollowUp     = (orgId, id, note) => post(orgId, id, 'recall', note ? { note } : {});
 
 /** Who an administrator may hand this follow-up to (administrators only). */
 export async function fetchAssignees(orgId, id) {
@@ -72,6 +73,7 @@ export const ACTION_LABEL = {
   DEESCALATED: 'de-escalated it: not a theft',
   ASSIGNED:    'assigned it',
   DECLINED:    'declined it',
+  RECALLED:    'recalled it',
 };
 
 /**
@@ -97,24 +99,27 @@ export const STAGE_LABEL = {
  * and the viewer's own permission. The server enforces all of it; this only
  * decides which buttons to draw.
  *
- * `assign` is separate from the rest: an administrator may place a follow-up
- * whatever they could do with it themselves.
+ * `assign` and `recall` are separate from the rest: an administrator may place
+ * a follow-up, or take it back from whoever holds it, whatever they could do
+ * with it themselves.
  */
 export function followUpAbilities(f, canTriage) {
-  const none = { accept: false, decline: false, act: false };
+  const none = { accept: false, decline: false, act: false, recall: false };
   if (!f || !canTriage) return { ...none, assign: false, why: canTriage ? null : 'no-rights' };
   const assign = Boolean(f.viewer?.canAssign) && (f.status === 'OPEN' || f.status === 'ACCEPTED');
+  // Something to take back: an assignee who has not accepted, or a reviewer.
+  const recall = assign && (f.status === 'ACCEPTED' || Boolean(f.assignedTo));
   if (f.status === 'OPEN') {
-    if (f.viewer?.deletedIt) return { ...none, assign, why: 'deleted-it' };
-    if (f.assignedTo && !f.viewer?.assignedToMe) return { ...none, assign, why: 'assigned-elsewhere' };
+    if (f.viewer?.deletedIt) return { ...none, assign, recall, why: 'deleted-it' };
+    if (f.assignedTo && !f.viewer?.assignedToMe) return { ...none, assign, recall, why: 'assigned-elsewhere' };
     // Somebody who declined may still change their mind and accept; they
     // cannot decline twice.
-    return { ...none, assign, accept: true, decline: !f.viewer?.declinedIt, why: null };
+    return { ...none, assign, recall, accept: true, decline: !f.viewer?.declinedIt, why: null };
   }
   if (f.status === 'ACCEPTED') {
     return f.viewer?.ownsIt
-      ? { ...none, assign, act: true, why: null }
-      : { ...none, assign, why: 'someone-else' };
+      ? { ...none, assign, recall, act: true, why: null }
+      : { ...none, assign, recall, why: 'someone-else' };
   }
   return { ...none, assign: false, why: 'closed' };
 }
@@ -210,8 +215,8 @@ export function feedItemFollowUp(item) {
   if (item?.followUpId) return item.followUpId;
   // The feed id is minted as `fu-<followUpId>-<what>` (fuel-followup.service),
   // and it survives the round trip through history where extras do not.
-  // Assignments and declines repeat, so theirs end in a timestamp.
-  const m = /^fu-(.+?)-(opened|escalated|deescalated|assigned|declined)(?:-\d+)?$/.exec(item?.id ?? '');
+  // Assignments, declines and recalls repeat, so theirs end in a timestamp.
+  const m = /^fu-(.+?)-(opened|escalated|deescalated|assigned|declined|recalled)(?:-\d+)?$/.exec(item?.id ?? '');
   if (m) return m[1];
   return typeof item?.alertType === 'string' && item.alertType.startsWith('FUEL_FOLLOWUP_') ? true : null;
 }
