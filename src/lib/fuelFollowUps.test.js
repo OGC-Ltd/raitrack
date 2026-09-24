@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { feedItemFollowUp, followUpAbilities } from './fuelFollowUps.js';
+import { feedItemFollowUp, followUpAbilities, needsMe } from './fuelFollowUps.js';
 
 const fu = (status, viewer = {}) => ({ status, viewer: { deletedIt: false, ownsIt: false, ...viewer } });
 
@@ -36,5 +36,18 @@ describe('feedItemFollowUp', () => {
   it('ignores every other feed item', () => {
     expect(feedItemFollowUp({ id: 'pa-123', alertType: 'fuelInconsistency' })).toBeNull();
     expect(feedItemFollowUp(null)).toBeNull();
+  });
+});
+
+describe('needsMe', () => {
+  it('counts what this viewer can accept or has to decide', () => {
+    expect(needsMe(fu('OPEN'))).toBe(true);
+    expect(needsMe(fu('ACCEPTED', { ownsIt: true }))).toBe(true);
+  });
+
+  it('does not count their own deletion, a case someone else holds, or a closed one', () => {
+    expect(needsMe(fu('OPEN', { deletedIt: true }))).toBe(false);
+    expect(needsMe(fu('ACCEPTED'))).toBe(false);
+    expect(needsMe(fu('ESCALATED', { ownsIt: true }))).toBe(false);
   });
 });

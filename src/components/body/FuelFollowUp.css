@@ -1,6 +1,4 @@
-/* Fuel follow-ups — the case window and the map button's list. The button
-   borrows .fuel-alerts' shell (same rail, same shape); these rules are only
-   what differs. */
+/* Fuel follow-ups — the case window. The list lives on the System screen. */
 
 /* ── Case window ─────────────────────────────────────────────────────────── */
 
@@ -171,31 +169,3 @@
   .ffu-row .ffu-btn { flex: 1 1 auto; }
   .ffu-spacer { display: none; }
 }
-
-/* ── Map button list ─────────────────────────────────────────────────────── */
-
-.ffu-menu__count { background: #1d4ed8; }
-
-.ffu-menu__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas:
-    "plate vol chip"
-    "who   who who";
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 2px;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  padding: 8px 12px;
-  border: none;
-  border-bottom: 1px solid #f1f5f9;
-  background: none;
-  cursor: pointer;
-}
-.ffu-menu__row:hover { background: #f8fafc; }
-.ffu-menu__row .ffu-chip { grid-area: chip; }
-.ffu-menu__plate { grid-area: plate; font-size: 12px; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ffu-menu__vol   { grid-area: vol; font-size: 11.5px; color: #475569; font-variant-numeric: tabular-nums; }
-.ffu-menu__who   { grid-area: who; font-size: 10.5px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

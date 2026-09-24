@@ -81,6 +81,16 @@ export function followUpAbilities(f, canTriage) {
   return { accept: false, act: false, why: 'closed' };
 }
 
+/**
+ * Whether this follow-up is waiting on THIS viewer: one they may accept, or one
+ * they accepted and have not decided. What the System badge counts.
+ */
+export function needsMe(f) {
+  if (f?.status === 'OPEN') return !f.viewer?.deletedIt;
+  if (f?.status === 'ACCEPTED') return Boolean(f.viewer?.ownsIt);
+  return false;
+}
+
 // ── Shared list store ──────────────────────────────────────────────────────
 
 const listeners = new Set();

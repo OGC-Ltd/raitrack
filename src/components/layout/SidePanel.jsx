@@ -9,6 +9,7 @@ import COMPANIES from '../../data/companyData';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
+import { needsMe, useFollowUps } from '../../lib/fuelFollowUps';
 import FleetsTree from './FleetsTree';
 import MapLayersTree from './MapLayersTree';
 import './SidePanel.css';
@@ -19,7 +20,14 @@ export const NAV_ITEMS = [
   { key: 'analytics',    label: 'Analytics',    icon: 'chart-bar', permission: 'analytics:read'   },
   { key: 'maintenance',  label: 'Maintenance',  icon: 'tool',      permission: 'sensor:read'      },
   { key: 'weighbridges', label: 'Weighbridges', icon: 'scale',     permission: 'weighbridge:read' },
+  // The System section. Unlike the screens above it is not drawn at all
+  // without its permission: it is a place for case work, not a screen some
+  // roles are locked out of.
+  { key: 'system',       label: 'Notifications', icon: 'bell',     permission: 'fuel_theft:triage', section: 'system' },
 ];
+
+/** A NAV_ITEMS entry this viewer should see drawn, locked or not. */
+const drawn = (item, can) => !item.section || can(item.permission);
 
 function weatherDesc(code) {
   if (code === 0)              return 'Sunny';
@@ -170,7 +178,11 @@ export default function SidePanel() {
   useEffect(() => { setUserCollapsed(null); }, [isTablet, isLaptop]);
 
   const { activeCompany, desktopActiveTab, setDesktopActiveTab } = useAppContext();
-  const { can } = usePermissions();
+  const { can, orgId } = usePermissions();
+  // Follow-ups waiting on this viewer: the System badge.
+  const canTriage = can('fuel_theft:triage');
+  const followUps = useFollowUps(orgId, canTriage);
+  const systemCount = followUps.items.filter(needsMe).length;
   // `activeFilter` comes from the map rather than from local state here.
   // The local copy could not see the map clearing the filter on its own — on a
   // company switch, or when focusing a single unit — so a card stayed lit over
@@ -280,7 +292,7 @@ export default function SidePanel() {
 
           {/* ── Navigation ── */}
           <nav className="sp-nav-box">
-            {NAV_ITEMS.map(item => {
+            {NAV_ITEMS.filter(item => !item.section).map(item => {
               const allowed  = can(item.permission);
               const isActive = desktopActiveTab === item.key;
               return (
@@ -301,6 +313,32 @@ export default function SidePanel() {
               );
             })}
           </nav>
+
+          {/* ── System: the account's own notifications (fuel follow-ups) ── */}
+          {NAV_ITEMS.some(item => item.section === 'system' && can(item.permission)) && (
+            <nav className="sp-nav-box" aria-label="System">
+              <div className="sp-section-label">System</div>
+              {NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission)).map(item => {
+                const isActive = desktopActiveTab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`sp-nav-item${isActive ? ' sp-nav-item--active' : ''}`}
+                    onClick={() => handleNav(item.key)}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {isActive && <span className="sp-nav-bar" />}
+                    <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
+                    <span className="sp-nav-label">{item.label}</span>
+                    {systemCount > 0 && (
+                      <span className="sp-nav-badge" aria-label={`${systemCount} waiting on you`}>{systemCount}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
 
           {/* ── The map's own controls, as trees ──────────────────────────
               Fleets, Units and Map layers used to be three buttons floating in
@@ -325,7 +363,7 @@ export default function SidePanel() {
       {/* Collapsed — icons only */}
       {collapsed && (
         <nav className="side-panel__nav" aria-label="Main">
-          {NAV_ITEMS.map(item => {
+          {NAV_ITEMS.filter(item => drawn(item, can)).map(item => {
             const isActive = desktopActiveTab === item.key;
             const allowed  = can(item.permission);
             return (
@@ -347,6 +385,9 @@ export default function SidePanel() {
                 title={allowed ? item.label : `${item.label} — no access here`}
               >
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
+                {item.section === 'system' && systemCount > 0 && (
+                  <span className="side-panel__nav-badge">{systemCount}</span>
+                )}
               </button>
             );
           })}
