@@ -98,7 +98,9 @@
   right: calc(100% + 8px);
   bottom: 0;
   z-index: 451;
-  width: 440px;
+  /* 440 until the video column; widened by that column and its gap so the
+     plate and location keep the room they had. */
+  width: 472px;
   /* The column between MapOverlay's rails, published by useFloatingWindow. */
   max-width: var(--safe-w, calc(calc(var(--vw) * 100) - 24px));
   /* Bounded by the room above the button — --rail-panel-max-h lives beside the
@@ -202,6 +204,7 @@
     32px            /* recency        */
     16px            /* connection     */
     28px            /* quick track    */
+    26px            /* video          */
     26px;           /* open           */
   align-items: center;
   gap: 0 6px;
@@ -224,6 +227,15 @@
   margin-bottom: 2px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   color: #94a3b8;
+  /* The list's scrollbar took ~10px out of every row but not out of this one,
+     so the flexible columns came out wider here and every glyph right of the
+     plate sat ~10px right of its values. The same thin gutter, reserved here
+     and on the list whether or not it scrolls, keeps the two grids the same
+     width. `overflow` has to be set for the gutter to exist; the sort caret
+     sits inside the 5px padding above, so nothing is clipped. */
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
 }
 .units-menu__h {
   position: relative;
@@ -277,6 +289,7 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
+  scrollbar-gutter: stable; /* see .units-menu__row--head */
   margin: 0 -4px;
   /* 597 rows is more DOM than a blurred panel wants to lay out and paint at
      once. This skips both for anything scrolled out of view. */
@@ -441,6 +454,7 @@
 .units-menu__act {
   display: grid;
   place-items: center;
+  justify-self: center; /* over its header glyph, not 2px left of it */
   width: 24px;
   height: 24px;
   padding: 0;
@@ -460,6 +474,11 @@
   background: rgba(56, 189, 248, 0.18);
   color: #38bdf8;
 }
+
+/* Lit for a unit that reports a camera; the rest stay muted but still open
+   the window, which says there is no camera. */
+.units-menu__act--video { color: #64748b; }
+.units-menu__act--has { color: #38bdf8; }
 
 .units-menu__empty {
   padding: 10px 6px;
@@ -556,6 +575,19 @@
     max-height: calc(calc(var(--vh) * 100) - var(--header-h, 57px) - var(--footer-h, 64px) - 24px - var(--map-bottom-band, 0px));
     max-height: calc(100dvh - var(--header-h, 57px) - var(--footer-h, 64px) - 24px - var(--map-bottom-band, 0px));
   }
+  /* A phone panel is ~300px, and the desktop grid needs ~360: the last
+     buttons were cut off the right edge. Tighter columns and gaps, and no
+     separate "open" column, since a tap on the plate or the location already
+     opens the unit. */
+  .units-menu__row {
+    grid-template-columns:
+      17px 22px minmax(56px, 1.35fr) minmax(48px, 1fr)
+      16px 30px 12px 24px 24px;
+    gap: 0 4px;
+    padding: 3px 4px;
+  }
+  .units-menu__h--open,
+  .units-menu__act--open { display: none; }
 }
 
 /* The rail shrinks its buttons to 28px below 560px tall, so the panel follows
@@ -761,6 +793,19 @@
   color: #38bdf8;
   border-color: rgba(56, 189, 248, 0.45);
   background: rgba(56, 189, 248, 0.12);
+}
+
+/* Folded to the title bar: no list, no rule under the head, and only as wide
+   as the bar needs. */
+.units-menu__panel--min {
+  width: 260px;
+  padding-top: var(--win-pad-y, 7px);
+  padding-bottom: var(--win-pad-y, 7px);
+}
+.units-menu__panel--min .units-menu__head {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
