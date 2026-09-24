@@ -6504,6 +6504,16 @@ export default function FleetMap() {
             routeId={routeId}
             onToggleRoute={toggleRoute}
             onOpenDetail={handleOpenUnit}
+            /* Pins the unit's card, which the camera window belongs to and
+               closes with. Not handleOpenUnit: that also opens the detail
+               panel, which on a phone is a sheet over the whole map layer
+               and hid the camera window under it. */
+            videoId={cameraId}
+            onOpenVideo={(id) => {
+              if (cameraId === id) { setCameraId(null); return; }
+              setPinnedId(id);
+              setCameraId(id);
+            }}
             onSelectUnit={setSelectedVehicleId}
             nowTick={nowTick}
             open={unitsOpen}

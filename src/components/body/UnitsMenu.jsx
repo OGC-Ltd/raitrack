@@ -35,6 +35,19 @@
  * belonging to anything. So the route toggle is exclusive: switching it on for
  * one unit takes it off whichever unit had it.
  *
+ * ## Video
+ *
+ * The camera column opens the unit's camera window (VehicleCamera) from the
+ * list, the same window the vehicle card's camera button opens. The glyph is lit
+ * only for a unit that reports a camera; on the others it still opens, and the
+ * window says plainly that there is no camera, which is the true answer.
+ *
+ * ## Minimized
+ *
+ * As a window it folds to its title bar, so it can stay on screen, ticks and
+ * route intact, without covering the map. A folded window is one being kept,
+ * so a press outside does not dismiss it either, exactly like a pinned one.
+ *
  * ## What a row must NOT do
  *
  * A row is not a marker click. Clicking a marker scopes the Live Feed to that
@@ -73,6 +86,7 @@ const IconClock  = () => svg(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.
 const IconSignal = () => svg(<><path d="M4 18v-3M9 18v-6M14 18v-9M19 18V6" /></>);
 const IconRoute  = () => svg(<><path d="M4 18c0-3 3-3 3-6s-3-3-3-6" /><circle cx="17" cy="8" r="2.4" /><path d="M17 13V19" /></>);
 const IconOpen   = () => svg(<path d="M9 5l7 7-7 7" />);
+const IconVideo  = () => svg(<><rect x="3" y="7" width="12" height="10" rx="2" /><path d="M15 11l6-3v8l-6-3" /></>);
 
 /**
  * Which atlas ROW a status draws from.
@@ -233,6 +247,16 @@ function IconPushPin({ on }) {
   );
 }
 
+function IconWinMin({ min }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+         fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      {min ? <path d="M6 15l6-6 6 6" /> : <path d="M6 12h12" />}
+    </svg>
+  );
+}
+
 function IconWinClose() {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
@@ -250,6 +274,8 @@ export default function UnitsMenu({
   routeId,
   onToggleRoute,
   onOpenDetail,
+  onOpenVideo,
+  videoId = null,
   onSelectUnit,
   nowTick,
   open: openProp,
@@ -294,6 +320,9 @@ export default function UnitsMenu({
    * unusable. Escape and the close button still work pinned; only the
    * accidental dismissal goes. */
   const [pinned, setPinned] = useState(false);
+  // Folded to the title bar. Only a window folds; see the note at the top.
+  const [minimized, setMinimized] = useState(false);
+  const folded = asWindow && minimized;
 
   /* Opened beside the sidebar, then draggable anywhere.
    *
@@ -331,7 +360,7 @@ export default function UnitsMenu({
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
-      if (pinned) return;
+      if (pinned || folded) return;
       if (!wrapRef.current?.contains(e.target)) setOpen(false);
     };
     const onKey = (e) => {
@@ -349,7 +378,7 @@ export default function UnitsMenu({
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, setOpen, pinned]);
+  }, [open, setOpen, pinned, folded]);
 
   const tracked = useMemo(() => new Set(trackedIds ?? []), [trackedIds]);
 
@@ -472,7 +501,7 @@ export default function UnitsMenu({
 
       {open && (
         <div
-          className={`units-menu__panel${asWindow ? " units-menu__panel--window" : ""}`}
+          className={`units-menu__panel${asWindow ? " units-menu__panel--window" : ""}${folded ? " units-menu__panel--min" : ""}`}
           id={panelId}
           role="group"
           aria-label="Units"
@@ -485,8 +514,10 @@ export default function UnitsMenu({
             className="units-menu__head"
             onPointerDown={asWindow ? onHeadPointerDown : undefined}
           >
-            <span className="units-menu__title">Units</span>
-            {trackedCount > 0 && (
+            <span className="units-menu__title">
+              Units{folded && trackedCount > 0 ? ` \u00b7 ${trackedCount} tracked` : ""}
+            </span>
+            {trackedCount > 0 && !folded && (
               <button
                 type="button"
                 className="units-menu__clear"
@@ -507,6 +538,16 @@ export default function UnitsMenu({
                 <button
                   type="button"
                   className="units-menu__winbtn"
+                  aria-expanded={!minimized}
+                  aria-label={minimized ? "Expand units" : "Minimize units"}
+                  onClick={() => setMinimized((v) => !v)}
+                  title={minimized ? "Expand" : "Minimize"}
+                >
+                  <IconWinMin min={minimized} />
+                </button>
+                <button
+                  type="button"
+                  className="units-menu__winbtn"
                   onClick={() => setOpen(false)}
                   title="Close"
                   aria-label="Close units"
@@ -517,6 +558,7 @@ export default function UnitsMenu({
             )}
           </div>
 
+          {!folded && (<>
           <input
             className="units-menu__search"
             type="search"
@@ -560,6 +602,7 @@ export default function UnitsMenu({
                 ><Icon /></button>
               ))}
               <span className="units-menu__h units-menu__h--route"  role="columnheader" title="Quick track — draw this unit's route" aria-label="Quick track"><IconRoute /></span>
+              <span className="units-menu__h units-menu__h--video"  role="columnheader" title={"Video \u2014 open the unit's camera"} aria-label="Video"><IconVideo /></span>
               <span className="units-menu__h units-menu__h--open"   role="columnheader" title="Open unit" aria-label="Open unit"><IconOpen /></span>
             </div>
 
@@ -651,6 +694,17 @@ export default function UnitsMenu({
 
                     <button
                       type="button"
+                      className={`units-menu__act units-menu__act--video${v.hasCamera ? " units-menu__act--has" : ""}${videoId === v.id ? " units-menu__act--on" : ""}`}
+                      aria-pressed={videoId === v.id}
+                      aria-label={`Video for ${v.id}${v.hasCamera ? "" : ", no camera fitted"}`}
+                      title={videoId === v.id ? "Hide video" : v.hasCamera ? "Show video" : "No camera fitted on this unit"}
+                      onClick={() => onOpenVideo?.(v.id)}
+                    >
+                      <IconVideo />
+                    </button>
+
+                    <button
+                      type="button"
                       className="units-menu__act units-menu__act--open"
                       aria-label={`Open ${v.id}`}
                       title="Open this unit"
@@ -707,6 +761,7 @@ export default function UnitsMenu({
               </div>
             )}
           </div>
+          </>)}
         </div>
       )}
     </div>
