@@ -5,12 +5,8 @@
 /* "Waiting on you" is the one figure that asks something of the reader. */
 .sys-kpi--me .sp4-kpi-n { color: var(--sp4-accent); }
 
-/* Under review: in someone's hands, not yet a verdict. */
-.sp4-pill--info {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--sp4-accent);
-  border: 1px solid rgba(59, 130, 246, 0.22);
-}
+/* `.sp4-pill--info` (under review) is declared with the case window, in
+   FuelFollowUp.css, which this screen loads through its imports. */
 
 /* A count inside a State chip, like the tab counts elsewhere in the panel. */
 .sys-chip-n {
