@@ -1,5 +1,5 @@
 /**
- * Casework: the account's case work. Today that means fuel
+ * Case: the account's case work. Today that means fuel
  * follow-ups: deleting a fuel alert opens one, and somebody with case rights
  * (`fuel_theft:triage`) has to accept it and decide it.
  *
