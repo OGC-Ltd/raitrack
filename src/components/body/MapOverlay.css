@@ -1681,3 +1681,59 @@ html[data-theme="light"] .fi-icon:hover          { background: rgba(15,23,42,0.0
   display: flex; align-items: center; justify-content: center;
 }
 .fi-sheet-close:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+/* ── The unit card's type ─────────────────────────────────────────────────
+   The incident window reads in the same voice as the unit card
+   (VehicleDetailPanel): Roboto, sentence-case labels, figures in boxed KPI
+   tiles — 11.5px label, 16px/600 figure, 10.5px note. Scoped to the incident
+   half; the hover card's `.vt-tile` rows elsewhere are untouched. Three
+   classes deep to outrank `.app--light .vt-tile` whatever the bundle order. */
+.vehicle-tooltip.fi-modal { font-family: 'Roboto', 'Inter', sans-serif; }
+.vehicle-tooltip.fi-modal button { font-family: inherit; }
+
+.fi-body-detail .vt-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+/* An odd tile out closes the grid at full width rather than leaving a hole. */
+.fi-body-detail .vt-tiles .vt-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.fi-body-detail .vt-tiles .vt-tile {
+  display: block;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+.fi-body-detail .vt-tiles .vt-tile-lbl {
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  white-space: normal;
+}
+.fi-body-detail .vt-tiles .vt-tile-fig {
+  display: flex;
+  /* Note beside the figure, not under it: a line less per tile. It wraps
+     under only where a narrow tile has no room. */
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  margin-top: 1px;
+  text-align: left;
+}
+.fi-body-detail .vt-tiles .vt-tile-val {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+/* "424 h" on the card: the unit is part of the figure, not a smaller aside. */
+.fi-body-detail .vt-tiles .vt-tile-unit { font-size: inherit; font-weight: inherit; opacity: 1; }
+.fi-body-detail .vt-tiles .vt-tile-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: normal;
+}
+.fi-body-detail .fi-when { font-size: 11px; }
