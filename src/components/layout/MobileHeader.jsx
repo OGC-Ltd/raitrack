@@ -145,7 +145,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               </button>
               {canTriage && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('system'); setUserOpen(false); }}>
-                  <i className="ti ti-bell" aria-hidden="true" /> System notifications
+                  <i className="ti ti-bell" aria-hidden="true" /> System
                   {systemCount > 0 && <span className="mobile-header__user-badge">{systemCount}</span>}
                 </button>
               )}
