@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PLAYBACK_RATES } from "../../hooks/useRoutePlayback";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
+import { cumulativeM, km, legProgress, legsOf } from "../../lib/playbackLegs";
 import "./RoutePlayback.css";
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -44,7 +45,7 @@ export const todayFleetDay = () =>
 
 export default function RoutePlayback({
   plate, day, onDay,
-  cursor, t0, t1, playing, rate, skipped, subscribe, events,
+  cursor, t0, t1, playing, rate, skipped, subscribe, events, points,
   onToggle, onSeek, onRate, onClose,
   loading, error, summary,
 }) {
@@ -157,6 +158,21 @@ export default function RoutePlayback({
       }));
   }, [seen, t0, t1]);
 
+  /**
+   * Distance: the leg being driven and the whole trip, each as covered so far
+   * of its total. A leg is the driving between two stops, cut where the unit
+   * stood still rather than at the timeline's stops, which trust a speed
+   * column that is dead on some units (see lib/playbackLegs). Follows `cursor`
+   * at 8 Hz, like the event list: a tenth of a second behind is invisible in
+   * a figure to one decimal of a km.
+   */
+  const cum = useMemo(() => cumulativeM(points ?? []), [points]);
+  const legs = useMemo(() => legsOf(points ?? []), [points]);
+  const dist = useMemo(
+    () => legProgress(points ?? [], cum, legs, cursor),
+    [points, cum, legs, cursor],
+  );
+
   const empty = !loading && !error && (!summary || summary.points === 0);
 
   return (
@@ -174,6 +190,11 @@ export default function RoutePlayback({
             nothing looks like it stopped. */}
         {minimized && !loading && !error && (
           <span ref={minClockRef} className="rp__clock rp__clock--min">{HHMMSS.format(cursor)}</span>
+        )}
+        {minimized && !loading && !error && dist.leg && (
+          <span className="rp__dist-min" title={`Leg ${dist.index + 1} of ${dist.count}; trip ${km(dist.doneM)} of ${km(dist.tripM)} km`}>
+            L{dist.index + 1} {km(dist.legDoneM)}/{km(dist.leg.distanceM)} km
+          </span>
         )}
 
         <div className="rp__day">
@@ -284,6 +305,26 @@ export default function RoutePlayback({
             </label>
           </div>
 
+          {/* Covered so far / total, for the leg and for the trip. */}
+          <div className="rp__dist" aria-live="off">
+            {dist.leg ? (
+              <span className="rp__dist-leg">
+                <span className="rp__dist-lbl">
+                  Leg {dist.index + 1} of {dist.count}{dist.stopped ? " \u00b7 stopped" : ""}
+                </span>
+                <b>{km(dist.legDoneM)}</b> / {km(dist.leg.distanceM)} km
+              </span>
+            ) : (
+              <span className="rp__dist-leg rp__dist-leg--none">
+                {legs.length ? "Not moving yet" : "No driving this day"}
+              </span>
+            )}
+            <span className="rp__dist-trip">
+              <span className="rp__dist-lbl">Trip</span>
+              <b>{km(dist.doneM)}</b> / {km(dist.tripM)} km
+            </span>
+          </div>
+
           {/* THE TIMELINE. The scrubber says when things happened; this says
               what they were, which is the question a replay is usually opened
               to answer. Every event, not the 60 the bar can hold — the list
@@ -322,7 +363,6 @@ export default function RoutePlayback({
 
           <div className="rp__foot">
             <span>{HHMM.format(t0)}–{HHMM.format(t1)}</span>
-            {summary?.distanceM != null && <span>{(summary.distanceM / 1000).toFixed(1)} km</span>}
             <span>{summary?.points} pts · {summary?.fixes} fixes</span>
             {summary?.truncated && (
               <span

@@ -6646,6 +6646,7 @@ export default function FleetMap() {
             cursor={pb.cursor}
             subscribe={pbSubscribe}
             events={pbEvents}
+            points={pbPoints}
             t0={pb.t0}
             t1={pb.t1}
             playing={pb.playing}
