@@ -163,7 +163,7 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
             <span className="fuel-alerts__col-unit">Unit</span>
             <span className="fuel-alerts__col-vol">Volume</span>
             <span className="fuel-alerts__col-began">Happened</span>
-            <span className="fuel-alerts__col-reported">Reported</span>
+            <span className="fuel-alerts__col-reported">Alert</span>
           </div>
 
           <div className="fuel-alerts__list">
@@ -202,7 +202,7 @@ Show this unit and open its incident`}
                   </span>
                   <span className="fuel-alerts__vol">{L(inc?.volumeMl) ?? "—"}</span>
                   <span className="fuel-alerts__began"><When value={began} label="Happened" /></span>
-                  <span className="fuel-alerts__reported"><When value={reported} label="Reported" /></span>
+                  <span className="fuel-alerts__reported"><When value={reported} label="Alert" /></span>
                 </button>
               );
             })}
