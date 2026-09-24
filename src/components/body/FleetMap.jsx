@@ -3838,6 +3838,19 @@ export default function FleetMap() {
    * answer to a question the operator asks once. */
   useEffect(() => { publishStranded(strandedVehicles); }, [strandedVehicles, publishStranded]);
 
+  /**
+   * A replay starts with the replay window alone on screen.
+   *
+   * The unit's map card is closed wherever Playback was pressed: it sat over
+   * the track being replayed and said the same things about the unit. The
+   * details panel closes too where it is a sheet over the map (below 1024);
+   * on a desktop it is a column beside the map, covers nothing, and stays.
+   */
+  const closeCardsForReplay = useCallback(() => {
+    setPinnedId(null);
+    if (isCompact) setSelectedVehicleId(null);
+  }, [isCompact, setSelectedVehicleId]);
+
   const closePlayback = useCallback(() => {
     setPlaybackId(null);
     setPlaybackDay(todayFleetDay());
@@ -6101,7 +6114,8 @@ export default function FleetMap() {
     clearTripPath();
     setPlaybackDay(todayFleetDay());
     setPlaybackId(plate);
-  }, [setActiveRoute, clearTripPath]);
+    closeCardsForReplay();
+  }, [setActiveRoute, clearTripPath, closeCardsForReplay]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { registerPlayback(startPlaybackFor); }, [startPlaybackFor]);
 
@@ -6749,6 +6763,7 @@ export default function FleetMap() {
               clearTripPath();
               setPlaybackDay(todayFleetDay());
               setPlaybackId(pinnedId);
+              closeCardsForReplay();
             }}
             onClose={() => {
               // Through the funnel, so the marker's highlight comes off with
