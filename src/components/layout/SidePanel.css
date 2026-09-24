@@ -303,8 +303,8 @@
 .side-panel__nav-icon { font-size: 17px; color: #94a3b8; }
 
 /* ── System, at the foot of the sidebar ──
-   Same box and item as the nav above; only the count is new, and it takes
-   the nav's own colours: slate at rest, the active blue when selected. */
+   Same box and item as the nav above; only the count is new. It is amber, the
+   app's colour for something waiting on a person, in every state. */
 .sp-foot {
   flex-shrink: 0;
   padding: 8px 10px 10px;
@@ -316,14 +316,13 @@
   padding: 1px 6px;
   box-sizing: border-box;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
+  background: #d97706;
+  color: #fff;
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 700;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.sp-nav-item--active .sp-nav-badge { background: #dbeafe; color: #1d4ed8; }
 
 .side-panel__nav--foot { margin-top: auto; border-top: 1px solid #edf0f4; }
 .side-panel__nav-item { position: relative; }
@@ -336,14 +335,13 @@
   padding: 0 4px;
   box-sizing: border-box;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
+  background: #d97706;
+  color: #fff;
   font-size: 9.5px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 16px;
   text-align: center;
 }
-.side-panel__nav-item--active .side-panel__nav-badge { background: #dbeafe; color: #1d4ed8; }
 .side-panel__nav-item--active .side-panel__nav-icon { color: #2563eb; }
 
 /* ── Hide on mobile ── */
