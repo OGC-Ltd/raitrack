@@ -310,24 +310,34 @@
   padding: 8px 10px 10px;
   border-top: 1px solid #edf0f4;
 }
-.sp-nav-badge {
+.sp-nav-alertdot {
   margin-left: auto;
+  /* The nav row's gap is 10px; Movement's dot sits 8px from its count. */
+  margin-right: -2px;
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d97706;
+  box-shadow: 0 0 0 2px #fff;
+}
+.sp-nav-badge {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
   width: 20px;
   height: 20px;
+  aspect-ratio: 1;
   padding: 0;
   box-sizing: border-box;
   border-radius: 50%;
-  line-height: 1;
-  background: #d97706;
-  color: #fff;
-  font-size: 10.5px;
+  background: #f1f5f9;
+  color: #475569;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
   font-weight: 700;
-  text-align: center;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .side-panel__nav--foot { margin-top: auto; border-top: 1px solid #edf0f4; }
@@ -340,24 +350,16 @@
 .side-panel__nav--foot .side-panel__nav-item--active:hover { background: #f8fafc; }
 .sp-foot .sp-nav-bar { display: none; }
 .side-panel__nav-item { position: relative; }
-.side-panel__nav-badge {
+.side-panel__nav-alertdot {
   position: absolute;
-  top: 4px;
-  right: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  box-sizing: border-box;
+  top: 9px;
+  right: 14px;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #d97706;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px #fff;
 }
 .side-panel__nav-item--active .side-panel__nav-icon { color: #2563eb; }
 

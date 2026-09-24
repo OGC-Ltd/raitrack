@@ -255,22 +255,31 @@
   background: #d97706;
   border: 2px solid #fff;
 }
-.mobile-header__user-badge {
+/* The sidebar's System pair, which is the Movement row's: amber dot, grey count. */
+.mobile-header__user-alertdot {
   margin-left: auto;
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d97706;
+  box-shadow: 0 0 0 2px #fff;
+}
+.mobile-header__user-badge {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
   width: 20px;
   height: 20px;
+  aspect-ratio: 1;
   padding: 0;
   box-sizing: border-box;
   border-radius: 50%;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  background: #d97706;
-  color: #fff;
-  font-size: 10.5px;
+  background: #f1f5f9;
+  color: #475569;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
   font-weight: 700;
-  text-align: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }

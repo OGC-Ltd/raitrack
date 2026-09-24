@@ -351,8 +351,13 @@ export default function SidePanel() {
                   {isActive && <span className="sp-nav-bar" />}
                   <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
                   <span className="sp-nav-label">{item.label}</span>
+                  {/* The Movement row's pair: the dot says something is
+                      waiting on you, the count says how much. */}
                   {systemCount > 0 && (
-                    <span className="sp-nav-badge" aria-label={`${systemCount} waiting on you`}>{systemCount}</span>
+                    <>
+                      <span className="sp-nav-alertdot" role="img" aria-label="Waiting on you" />
+                      <span className="sp-nav-badge" aria-label={`${systemCount} waiting on you`}>{systemCount}</span>
+                    </>
                   )}
                 </button>
               );
@@ -408,7 +413,9 @@ export default function SidePanel() {
                 title={item.label}
               >
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
-                {systemCount > 0 && <span className="side-panel__nav-badge">{systemCount}</span>}
+                {/* The icon rail has room for the dot only; the count is in
+                    the label and the open sidebar. */}
+                {systemCount > 0 && <span className="side-panel__nav-alertdot" aria-hidden="true" />}
               </button>
             );
           })}
