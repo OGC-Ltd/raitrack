@@ -16,8 +16,8 @@ import { useEffect, useRef, useState } from "react";
 import "../body/SensorPanel.css";
 import "./SystemScreen.css";
 import { usePermissions } from "../../hooks/usePermissions";
-import { STATUS_LABEL, fetchFollowUps, followUpsChanged, needsMe, openFollowUp, useFollowUps } from "../../lib/fuelFollowUps";
-import { litres, when } from "../body/FuelFollowUp";
+import { STAGE_LABEL, fetchFollowUps, followUpStage, followUpsChanged, needsMe, openFollowUp, useFollowUps } from "../../lib/fuelFollowUps";
+import { STAGE_PILL, litres, when } from "../body/FuelFollowUp";
 import TableToolbar from "../body/TableToolbar";
 import FilterBar from "../body/FilterBar";
 import { watchTableLabels } from "../../lib/tableLabels";
@@ -35,9 +35,28 @@ const EMPTY = {
 };
 
 // The panel's pill tones: amber waiting, blue in hand, red theft, green cleared.
-const STATUS_PILL = { OPEN: "warn", ACCEPTED: "info", ESCALATED: "inc", DEESCALATED: "con" };
-// Pill-length names; STATUS_LABEL's full sentences are the case window's.
-const PILL_LABEL = { OPEN: "To accept", ACCEPTED: "Under review", ESCALATED: "Confirmed theft", DEESCALATED: "Not a theft" };
+// Pill-length names; STAGE_LABEL's full sentences are the case window's.
+const PILL_LABEL = {
+  OPEN: "To accept", ASSIGNED: "Assigned", NEEDS_ASSIGNING: "Needs assigning",
+  ACCEPTED: "Under review", ESCALATED: "Confirmed theft", DEESCALATED: "Not a theft",
+};
+
+/** Who holds it now, if anybody: the reviewer, or the person it was sent to. */
+function holder(f) {
+  if (f.acceptedBy) return { name: f.acceptedBy.fullName, me: f.viewer?.ownsIt };
+  if (f.status === "OPEN" && f.assignedTo) {
+    return { name: f.viewer?.assignedToMe ? "You (assigned)" : `${f.assignedTo.fullName} (assigned)`, me: false };
+  }
+  return null;
+}
+
+/** The row's button: what this viewer is being asked to do with it. */
+function actionLabel(f) {
+  if (!needsMe(f)) return "View";
+  if (f.status === "ACCEPTED") return "Decide";
+  if (f.needsAssigning && f.viewer?.canAssign) return "Assign";
+  return "Accept";
+}
 
 /** Closed follow-ups are not in the shared store, which holds only open work. */
 function useClosed(orgId, enabled) {
@@ -67,6 +86,9 @@ export default function SystemScreen() {
   const mine = active.items.filter(needsMe);
   const waiting = active.items.filter((f) => f.status === "OPEN").length;
   const reviewing = active.items.length - waiting;
+  // Only an administrator sees this figure: it is theirs to act on.
+  const canAssign = active.items.some((f) => f.viewer?.canAssign);
+  const unplaced = active.items.filter((f) => f.needsAssigning).length;
 
   const rows = state === "mine" ? mine : state === "active" ? active.items : closed.items;
   const loading = state === "closed" ? closed.loading : active.loading;
@@ -81,7 +103,7 @@ export default function SystemScreen() {
     <div className="sp4-root sys-root" ref={rootRef}>
       <div className="sp4-header">
         <div className="sp4-header-kpis">
-          <div className="sp4-kpi sys-kpi--me" title="Follow-ups you can accept, or accepted and still have to decide.">
+          <div className="sp4-kpi sys-kpi--me" title="Follow-ups you can accept, were assigned, or accepted and still have to decide; for an administrator, declined ones to assign.">
             <span className="sp4-kpi-n">{mine.length}</span>
             <span className="sp4-kpi-l">For you</span>
           </div>
@@ -93,6 +115,12 @@ export default function SystemScreen() {
             <span className="sp4-kpi-n">{reviewing}</span>
             <span className="sp4-kpi-l">Under review</span>
           </div>
+          {canAssign && (
+            <div className="sp4-kpi sp4-kpi--speed" title="Declined, and held by nobody. Open one to assign it to a person.">
+              <span className="sp4-kpi-n">{unplaced}</span>
+              <span className="sp4-kpi-l">To assign</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -141,7 +169,7 @@ export default function SystemScreen() {
                   <th className="sp4-th--left">Happened</th>
                   <th className="sp4-th--left">Where</th>
                   <th className="sp4-th--left">Deleted by</th>
-                  <th className="sp4-th--left">Accepted by</th>
+                  <th className="sp4-th--left">With</th>
                   <th className="sp4-th--left">Status</th>
                   <th className="sp4-th--right">{state === "closed" ? "Decided" : "Opened"}</th>
                   <th className="sp4-th--right">Action</th>
@@ -149,7 +177,8 @@ export default function SystemScreen() {
               </thead>
               <tbody>
                 {rows.map((f) => {
-                  const turn = needsMe(f);
+                  const stage = followUpStage(f);
+                  const h = holder(f);
                   return (
                     <tr
                       key={f.id}
@@ -167,12 +196,12 @@ export default function SystemScreen() {
                         {f.viewer?.deletedIt && <span className="sp4-muted"> (you)</span>}
                       </td>
                       <td className="sp4-td--left">
-                        {f.acceptedBy ? f.acceptedBy.fullName : <span className="sp4-muted">Nobody yet</span>}
-                        {f.viewer?.ownsIt && <span className="sp4-muted"> (you)</span>}
+                        {h ? h.name : <span className="sp4-muted">Nobody yet</span>}
+                        {h?.me && <span className="sp4-muted"> (you)</span>}
                       </td>
                       <td className="sp4-td--left">
-                        <span className={"sp4-pill sp4-pill--" + (STATUS_PILL[f.status] ?? "none")}>
-                          {PILL_LABEL[f.status] ?? STATUS_LABEL[f.status] ?? f.status}
+                        <span className={"sp4-pill sp4-pill--" + (STAGE_PILL[stage] ?? "none")}>
+                          {PILL_LABEL[stage] ?? STAGE_LABEL[stage] ?? f.status}
                         </span>
                       </td>
                       <td className="sp4-td--right sys-num">{when(state === "closed" ? f.resolvedAt : f.openedAt)}</td>
@@ -182,7 +211,7 @@ export default function SystemScreen() {
                           className="sp4-ghost-btn"
                           onClick={(e) => { e.stopPropagation(); openFollowUp(f.id); }}
                         >
-                          {turn ? (f.status === "OPEN" ? "Accept" : "Decide") : "View"}
+                          {actionLabel(f)}
                         </button>
                       </td>
                     </tr>

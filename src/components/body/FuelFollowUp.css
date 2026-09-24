@@ -36,6 +36,13 @@
 
 .ffu-muted { margin: 0; font-size: var(--sp4-label); color: var(--sp4-text-3); }
 
+/* Assign and Decline sit at the left of the foot, apart from Cancel and the
+   submit, so the red and blue buttons on the right stay the only commitment. */
+.ffu-foot-lead { margin-right: auto; }
+
+/* The repair picker is 190px for a table cell; here it has the card's width. */
+.ffu-assign-select { width: 100%; }
+
 /* A theft is recorded with the panel's red, not its blue. */
 .sp4-submit-btn.ffu-submit--danger { background: var(--sp4-crit); border-color: var(--sp4-crit); color: #fff; }
 
@@ -70,6 +77,8 @@
 .ffu-log-item--escalated::before   { background: var(--sp4-crit); }
 .ffu-log-item--deescalated::before { background: var(--sp4-ok); }
 .ffu-log-item--accepted::before    { background: var(--sp4-accent); }
+.ffu-log-item--assigned::before    { background: var(--sp4-accent); }
+.ffu-log-item--declined::before    { background: var(--sp4-warn); }
 .ffu-log-line { font-size: var(--sp4-body); color: var(--sp4-text-2); line-height: 18px; }
 .ffu-log-line strong { color: var(--sp4-text-1); }
 .ffu-log-when { margin-left: 6px; font-size: var(--sp4-label); color: var(--sp4-text-4); white-space: nowrap; }
