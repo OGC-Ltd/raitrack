@@ -143,6 +143,36 @@
 .rp__day input:hover { border-color: var(--accent-info); }
 
 .rp__note { padding: 4px 2px 2px; color: var(--text-muted); }
+
+/* ── Distance: this leg, and the trip ─────────────────────────────────────
+   Covered so far in bold, total after it, both in tabular figures so the
+   numbers tick over in place instead of shuffling the line as they grow. */
+.rp__dist {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.rp__dist b { color: var(--text-primary); font-weight: 600; }
+.rp__dist-lbl {
+  margin-right: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rp__dist-leg--none { font-style: italic; }
+.rp__dist-min {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .rp__note--err { color: var(--accent-crit); }
 
 .rp__transport { display: flex; align-items: center; gap: 10px; }
@@ -256,6 +286,11 @@
 
 @media (max-width: 560px) {
   .rp { padding: 8px 10px; }
+  /* Folded on a phone, the bar ran ~40px past the screen and took the close
+     button with it. The day is changed from the open panel; folded, the bar
+     keeps what says the replay is running: the clock and the leg. */
+  .rp--min .rp__day { display: none; }
+  .rp--min .rp__dist-min { margin-left: auto; }
   .rp__foot { font-size: 10px; }
   .rp__clock { font-size: 11px; }
 }
