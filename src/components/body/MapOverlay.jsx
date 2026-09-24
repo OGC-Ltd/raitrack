@@ -650,7 +650,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
 
         {!collapsed && (
           <>
-            <div className={`fi-modal-body${vehicle ? '' : ' fi-modal-body--solo'}`}>
+            <div className={`fi-modal-body${vehicle && !sheet ? '' : ' fi-modal-body--solo'}`}>
               {/* TWO COLUMNS, not one long scroll. Stacked, this window was a
                   248px-wide column carrying a whole vehicle card AND a whole
                   incident report — four tiles two-up, a definition list and two
@@ -676,7 +676,11 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
                   down. This keeps DOM order, focus order and reading order the
                   same thing. `sheet` is the same 720px the body columns
                   collapse at — one breakpoint for the component. */}
-              {(sheet ? [detailCol, cardCol] : [cardCol, detailCol])}
+              {/* NO VEHICLE CARD ON A PHONE. Even second, it was the lower
+                  half of the sheet (status, engine, speed, mileage, fuel, load)
+                  repeating what the unit's own panel shows, under an incident
+                  the operator opened to decide. The sheet is the incident. */}
+              {sheet ? detailCol : [cardCol, detailCol]}
             </div>
             <div className="fi-actions">
               {deleteError && <span className="fi-delete-error" role="alert">{deleteError}</span>}
