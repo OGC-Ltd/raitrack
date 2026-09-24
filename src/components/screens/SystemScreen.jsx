@@ -1,5 +1,5 @@
 /**
- * Follow-ups: the account's own case work. Today that means fuel
+ * Investigations: the account's case work. Today that means fuel
  * follow-ups: deleting a fuel alert opens one, and somebody with case rights
  * (`fuel_theft:triage`) has to accept it and decide it.
  *
