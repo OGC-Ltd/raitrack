@@ -1502,7 +1502,10 @@ html[data-theme="light"] #root {
 /* Below 768px MapOverlay's panels go static and stop overlaying the map, so the
    centre band constraint no longer applies and the controls can use the width. */
 @media (max-width: 767px) {
-  .map-top-band { top: 10px; max-width: calc(100% - 20px); }
+  /* Under the map-type toggle and the status chips, not on them: at 10px the
+     tracking pill covered both, and its own × with them. */
+  .map-top-band { top: 58px; max-width: calc(100% - 20px); }
+  .tracked-pill__clear { min-height: 30px; padding: 0 12px; }
   /* The rail's own offsets are NOT set here. They are set in the
      `max-width: 767px` block further down this file, which wins on source
      order and carries the reasoning — see `.map-cam-controls` there.
@@ -3087,18 +3090,27 @@ html[data-theme="light"] #root {
 .tracked-pill__btn:hover { background: rgba(56, 189, 248, 0.18); }
 .tracked-pill__btn--on { background: #38bdf8; border-color: #38bdf8; color: #0f172a; }
 .tracked-pill__btn--on:hover { background: #7dd3fc; }
+/* The way out of tracking, so it is a word and a finger-sized target rather
+   than a 20px ×. Filled, unlike "Show tracked only", because it is the action
+   the pill exists for. */
 .tracked-pill__clear {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
   border: none;
-  background: transparent;
-  color: #bae6fd;
-  font-size: 15px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
 }
-.tracked-pill__clear:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.tracked-pill__clear span { font-size: 14px; font-weight: 400; }
+.tracked-pill__clear:hover { background: rgba(255, 255, 255, 0.24); }
 
 /* ── Map type toggle: icons on a phone, words on desktop ─────────────────── */
 .map-type-btn { display: inline-flex; align-items: center; gap: 6px; }

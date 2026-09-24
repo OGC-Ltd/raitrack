@@ -705,9 +705,10 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           <button
             className={`vdp-action${isTracked ? ' vdp-action--on' : ''}`}
             onClick={toggleTrack}
-            title={isTracked ? 'Remove from tracked vehicles' : 'Add to tracked vehicles'}
+            title={isTracked ? 'Stop tracking this vehicle' : 'Add to tracked vehicles'}
           >
-            {isTracked ? '✓ Tracking' : 'Track'}
+            {/* Says what pressing it again does: "✓ Tracking" read as a status. */}
+            {isTracked ? 'Stop tracking' : 'Track'}
           </button>
           <button
             className="vdp-action"
