@@ -272,11 +272,11 @@ function FuelIncidentBody({ incident, vehicleId }) {
             by the same rule the notification text uses. */}
         <Tile label={theft ? 'Possible theft' : 'Fuel down'} value={num(litres)} unit={litres != null ? ' L' : ''}
               sub={spanMs ? `over ${fmtDuration(spanMs)}` : ''} valColor={accent} />
-        <Tile label="Rate" value={rate != null ? rate : '—'} unit={rate != null ? ' L/h' : ''}
+        <Tile label="RATE" value={rate != null ? rate : '—'} unit={rate != null ? ' L/h' : ''}
               sub={fmtAgo(began) ?? ''} />
-        <Tile label="Tank before" value={num(before)} unit={before != null ? ' L' : ''}
+        <Tile label="TANK BEFORE" value={num(before)} unit={before != null ? ' L' : ''}
               sub={began ? clock(began) : ''} />
-        <Tile label="Tank after" value={num(after)} unit={after != null ? ' L' : ''}
+        <Tile label="TANK AFTER" value={num(after)} unit={after != null ? ' L' : ''}
               sub={ended ? clock(ended) : ''} />
       </div>
 
