@@ -1,4 +1,4 @@
-// The playback transport: day picker, scrubber, rate.
+// The playback transport: day or date-range picker, scrubber, rate.
 //
 // Rendered over the map when a vehicle's route is opened in playback mode. It
 // owns no map objects — it reports a cursor, and FleetMap moves the marker.
@@ -7,6 +7,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PLAYBACK_RATES } from "../../hooks/useRoutePlayback";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import { cumulativeM, km, legProgress, legsOf } from "../../lib/playbackLegs";
+import { MAX_RANGE_DAYS, addDays, daysBetween, daysOf, parseSpan, spanKey } from "../../lib/playbackRange";
+import RangeCalendar from "./RangeCalendar";
 import "./RoutePlayback.css";
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -24,6 +26,18 @@ const HHMM = new Intl.DateTimeFormat("en-GB", {
 });
 const HHMMSS = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+});
+/* Over a range, a time alone is ambiguous: 09:00 happened once a day. These
+   carry the date, "24 Sep 09:00:12". */
+const DAY_HHMM = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Africa/Nairobi", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+});
+const DAY_HHMMSS = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Africa/Nairobi", day: "2-digit", month: "short",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+});
+const DAY_NAME = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Africa/Nairobi", weekday: "short", day: "2-digit", month: "short",
 });
 
 const fmtDur = (ms) => {
@@ -43,15 +57,28 @@ export function shiftDay(day, delta) {
 export const todayFleetDay = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" }).format(new Date());
 
+/**
+ * `day` is a SPAN (lib/playbackRange): one fleet day, or `from..to` for a
+ * range of up to a month. `onDay` receives a span back.
+ */
 export default function RoutePlayback({
   plate, day, onDay,
   cursor, t0, t1, playing, rate, skipped, subscribe, events, points,
   onToggle, onSeek, onRate, onClose,
   loading, error, summary,
 }) {
-  const isToday = day >= todayFleetDay();
+  const today = todayFleetDay();
+  const span = parseSpan(day) ?? { from: day, to: day };
+  const multi = span.to !== span.from;
+  const nDays = daysBetween(span.from, span.to);
+  const isToday = span.to >= today;
+  const fmt = multi ? DAY_HHMMSS : HHMMSS;
 
   const [minimized, setMinimized] = useState(false);
+  const setSpan = (from, to) => onDay(spanKey(from, to, today));
+  /* The arrows move the whole span by its own length: a week back is the
+     previous week, not the same week less a day. */
+  const shift = (dir) => setSpan(addDays(span.from, dir * nDays), addDays(span.to, dir * nDays));
 
   /**
    * The clock and the scrubber are written DIRECTLY, not rendered.
@@ -73,7 +100,7 @@ export default function RoutePlayback({
   useEffect(() => {
     if (!subscribe) return undefined;
     return subscribe((t) => {
-      const text = HHMMSS.format(t);
+      const text = fmt.format(t);
       if (clockRef.current) clockRef.current.textContent = text;
       if (minClockRef.current) minClockRef.current.textContent = text;
       // Never fight the operator's own drag: while the thumb is held, the
@@ -81,7 +108,7 @@ export default function RoutePlayback({
       const bar = barRef.current;
       if (bar && document.activeElement !== bar) bar.value = String(t);
     });
-  }, [subscribe]);
+  }, [subscribe, fmt]);
 
   /**
    * Placement, dragging and persistence all come from the shared hook — the
@@ -154,9 +181,19 @@ export default function RoutePlayback({
         severity: e.severity,
         left: ((e.t - t0) / (t1 - t0)) * 100,
         width: Math.max(0.35, (((e.endT ?? e.t) - e.t) / (t1 - t0)) * 100),
-        title: `${HHMMSS.format(e.t)} · ${e.label}${e.detail ? ` — ${e.detail}` : ""}`,
+        title: `${fmt.format(e.t)} · ${e.label}${e.detail ? ` — ${e.detail}` : ""}`,
       }));
-  }, [seen, t0, t1]);
+  }, [seen, t0, t1, fmt]);
+
+  /* Midnights on the scrubber, for a range: where one day ends and the next
+     begins, so the bar reads as days rather than as one long blur. */
+  const midnights = useMemo(() => {
+    if (!multi || t1 <= t0) return [];
+    return daysOf(day).slice(1)
+      .map((d) => Date.parse(`${d}T00:00:00+03:00`))
+      .filter((t) => t > t0 && t < t1)
+      .map((t) => ({ t, left: ((t - t0) / (t1 - t0)) * 100, title: DAY_NAME.format(t) }));
+  }, [multi, day, t0, t1]);
 
   /**
    * Distance: the leg being driven and the whole trip, each as covered so far
@@ -189,7 +226,7 @@ export default function RoutePlayback({
             the replay is still running, and a collapsed control that shows
             nothing looks like it stopped. */}
         {minimized && !loading && !error && (
-          <span ref={minClockRef} className="rp__clock rp__clock--min">{HHMMSS.format(cursor)}</span>
+          <span ref={minClockRef} className="rp__clock rp__clock--min">{fmt.format(cursor)}</span>
         )}
         {minimized && !loading && !error && dist.leg && (
           <span className="rp__dist-min" title={`Leg ${dist.index + 1} of ${dist.count}; trip ${km(dist.doneM)} of ${km(dist.tripM)} km`}>
@@ -198,19 +235,26 @@ export default function RoutePlayback({
         )}
 
         <div className="rp__day">
-          <button type="button" onClick={() => onDay(shiftDay(day, -1))} aria-label="Previous day">‹</button>
-          <input
-            type="date"
-            value={day}
-            max={todayFleetDay()}
-            onChange={(e) => e.target.value && onDay(e.target.value)}
+          <button
+            type="button"
+            onClick={() => shift(-1)}
+            aria-label={multi ? `Previous ${nDays} days` : "Previous day"}
+            title={multi ? `Previous ${nDays} days` : "Previous day"}
+          >‹</button>
+          {/* One calendar for a day or a range: first click, last click. */}
+          <RangeCalendar
+            from={span.from}
+            to={span.to}
+            max={today}
+            maxDays={MAX_RANGE_DAYS}
+            onChange={setSpan}
           />
           <button
             type="button"
-            onClick={() => onDay(shiftDay(day, 1))}
+            onClick={() => shift(1)}
             disabled={isToday}
-            aria-label="Next day"
-            title={isToday ? "No later day to show" : "Next day"}
+            aria-label={multi ? `Next ${nDays} days` : "Next day"}
+            title={isToday ? "No later day to show" : multi ? `Next ${nDays} days` : "Next day"}
           >›</button>
         </div>
 
@@ -243,12 +287,20 @@ export default function RoutePlayback({
               aria-label={playing ? "Pause" : "Play"}
             >{playing ? "❚❚" : "▶"}</button>
 
-            <span ref={clockRef} className="rp__clock">{HHMMSS.format(cursor)}</span>
+            <span ref={clockRef} className="rp__clock">{fmt.format(cursor)}</span>
 
             <div className="rp__barwrap">
               {/* The silences, drawn UNDER the range input. A day here carries
                   7-64 of them and some are half an hour long; without this the
                   marker's jump looks like a bug rather than like missing data. */}
+              {midnights.map((m) => (
+                <span
+                  key={m.t}
+                  className="rp__midnight"
+                  style={{ left: `${m.left}%` }}
+                  title={`Midnight \u2014 ${m.title} begins`}
+                />
+              ))}
               {gapTicks.map((g, i) => (
                 <span
                   key={i}
@@ -316,7 +368,7 @@ export default function RoutePlayback({
               </span>
             ) : (
               <span className="rp__dist-leg rp__dist-leg--none">
-                {legs.length ? "Not moving yet" : "No driving this day"}
+                {legs.length ? "Not moving yet" : multi ? "No driving in these days" : "No driving this day"}
               </span>
             )}
             <span className="rp__dist-trip">
@@ -352,7 +404,7 @@ export default function RoutePlayback({
                     title="Jump the playback here"
                   >
                     <span className={`rp__event-dot rp__event-dot--${e.kind}`} aria-hidden="true" />
-                    <span className="rp__event-time">{HHMMSS.format(e.t)}</span>
+                    <span className="rp__event-time">{fmt.format(e.t)}</span>
                     <span className="rp__event-label">{e.label}</span>
                     {e.detail && <span className="rp__event-detail">{e.detail}</span>}
                   </button>
@@ -362,7 +414,7 @@ export default function RoutePlayback({
           )}
 
           <div className="rp__foot">
-            <span>{HHMM.format(t0)}–{HHMM.format(t1)}</span>
+            <span>{multi ? `${DAY_HHMM.format(t0)} – ${DAY_HHMM.format(t1)}` : `${HHMM.format(t0)}–${HHMM.format(t1)}`}</span>
             <span>{summary?.points} pts · {summary?.fixes} fixes</span>
             {summary?.truncated && (
               <span

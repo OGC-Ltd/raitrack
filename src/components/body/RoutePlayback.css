@@ -98,7 +98,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0; /* the flex item may shrink below its text, so the ellipsis can happen */
 }
+.rp__day { flex: 0 0 auto; }
+/* The square arrow-button size below would otherwise catch the calendar too. */
+.rp__day .rcal-btn { width: auto; }
 
 /* ── Buttons in the header ────────────────────────────────────────────────
    One shared treatment. `--color-card-inner` is the token for a surface
@@ -143,6 +147,18 @@
 .rp__day input:hover { border-color: var(--accent-info); }
 
 .rp__note { padding: 4px 2px 2px; color: var(--text-muted); }
+
+/* A midnight inside a range: a hairline across the bar, under the thumb. */
+.rp__midnight {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  transform: translate(-0.5px, -50%);
+  background: var(--text-muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
 
 /* ── Distance: this leg, and the trip ─────────────────────────────────────
    Covered so far in bold, total after it, both in tabular figures so the
