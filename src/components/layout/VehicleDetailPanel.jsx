@@ -241,6 +241,8 @@ function nearestByT(arr, t) {
 
 const MIN_ZOOM_MS    = 10 * 60_000;  // narrowest stretch a drag can zoom to
 const READING_NEAR_MS = 15 * 60_000; // a fuel reading further off than this is "none"
+const FUEL_COLOR  = '#f59e0b';  // amber
+const SPEED_COLOR = '#0ea5e9';  // sky blue
 
 // `unit` is '%' when the tank size is known, else 'L' (litres, scaled to the day).
 // `pings` supply speed and ignition for the readout under the cursor.
@@ -422,10 +424,10 @@ function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit }) {
         ))}
         <text x={W - 2} y={PT + 8} fontSize="7.5" fill="#94a3b8" textAnchor="end">{sTop} km/h</text>
         <g clipPath="url(#vdp-plot-clip)">
-          <path d={speedLine} fill="none" stroke="#94a3b8" strokeWidth="1" strokeLinejoin="round" opacity="0.7" />
-          {hasFuel && <path d={area} fill="rgba(15,37,66,0.06)" />}
+          <path d={speedLine} fill="none" stroke={SPEED_COLOR} strokeWidth="1.2" strokeLinejoin="round" opacity="0.85" />
+          {hasFuel && <path d={area} fill="rgba(245,158,11,0.10)" />}
           {pct && hasFuel && <line x1={PL} y1={reserveY} x2={W} y2={reserveY} stroke="#b91c1c" strokeWidth="1" strokeDasharray="4 3" />}
-          {hasFuel && <path d={line} fill="none" stroke="#0f2542" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
+          {hasFuel && <path d={line} fill="none" stroke={FUEL_COLOR} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
           {cross && <circle cx={x(cross.t)} cy={y(cross.v)} r="3.5" fill="#b91c1c" />}
           {runs.map((o, i, arr) => {
             // label only when there's room since the previous marker
@@ -450,9 +452,9 @@ function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit }) {
           {cx != null && (
             <g pointerEvents="none">
               <line x1={cx} y1={PT} x2={cx} y2={PT + cH} stroke="#334155" strokeWidth="0.8" />
-              {fuelNear && <circle cx={x(fuelNear.t)} cy={y(fuelNear.v)} r="3" fill="#fff" stroke="#0f2542" strokeWidth="1.5" />}
+              {fuelNear && <circle cx={x(fuelNear.t)} cy={y(fuelNear.v)} r="3" fill="#fff" stroke={FUEL_COLOR} strokeWidth="1.5" />}
               {pingAt && Number.isFinite(pingAt.speedKmh) && Math.abs(pingAt.t - cursor) <= READING_NEAR_MS && (
-                <circle cx={x(pingAt.t)} cy={ys(pingAt.speedKmh)} r="2.5" fill="#fff" stroke="#64748b" strokeWidth="1.2" />
+                <circle cx={x(pingAt.t)} cy={ys(pingAt.speedKmh)} r="2.5" fill="#fff" stroke={SPEED_COLOR} strokeWidth="1.2" />
               )}
             </g>
           )}
