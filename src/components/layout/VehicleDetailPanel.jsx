@@ -9,7 +9,7 @@
 //
 // Anything the server does not provide yet is shown as "Not available" — never invented.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../../services/api';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useAppContext } from '../../context/AppContext';
@@ -42,7 +42,7 @@ function statusTag(v) {
   if (v.status === 'theft')    return { text: 'Fuel theft', tone: 'danger' };
   if (v.status === 'speeding') return { text: 'Speeding',   tone: 'danger' };
   if (!v.online)               return { text: 'Offline',    tone: 'muted'  };
-  if (v.status === 'idling')   return { text: 'Idling',     tone: 'warn'   };
+  if (v.status === 'idling')   return { text: 'Idling',     tone: 'idle'   };  // cyan, as on the map and the status chips
   if ((v.speed ?? 0) > 0)      return { text: 'Moving',     tone: 'ok'     };
   return { text: 'Parked', tone: 'muted' };
 }
@@ -228,61 +228,244 @@ function AISummary({ vehicle, readings, place, usedL }) {
 
 // ── Fuel level chart (today, real readings) ─────────────────────────────────
 
-// `unit` is '%' when the tank size is known, else 'L' (litres, scaled to the day)
-function FuelChart({ series, unit = '%', loading, overspeeds = [], dayLabel = 'today' }) {
-  if (loading) return <div className="vdp-empty">Loading fuel readings…</div>;
-  if (series.length < 2 && overspeeds.length === 0) return <div className="vdp-empty">Fuel readings not available for this unit {dayLabel}.</div>;
-  if (series.length < 2) {
-    return <div className="vdp-empty">No fuel readings {dayLabel}. {overspeeds.length} overspeed event{overspeeds.length === 1 ? '' : 's'} recorded.</div>;
+// Nearest item to `t` in a time-ordered array (binary search)
+function nearestByT(arr, t) {
+  if (!arr.length) return null;
+  let lo = 0, hi = arr.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid].t < t) lo = mid; else hi = mid;
   }
+  return Math.abs(arr[lo].t - t) <= Math.abs(arr[hi].t - t) ? arr[lo] : arr[hi];
+}
+
+const MIN_ZOOM_MS    = 10 * 60_000;  // narrowest stretch a drag can zoom to
+const READING_NEAR_MS = 15 * 60_000; // a fuel reading further off than this is "none"
+
+// `unit` is '%' when the tank size is known, else 'L' (litres, scaled to the day).
+// `pings` supply speed and ignition for the readout under the cursor.
+function FuelChart({ series, unit = '%', loading, overspeeds = [], dayLabel = 'today', pings = [], limit = 80 }) {
+  const speeds = useMemo(() => pings.filter(p => Number.isFinite(p.speedKmh)).map(p => ({ t: p.t, v: p.speedKmh })), [pings]);
+  if (loading) return <div className="vdp-empty">Loading fuel readings…</div>;
+  // A unit with no fuel probe still gets the chart, drawn from its speed alone
+  if (series.length < 2 && speeds.length < 2) return <div className="vdp-empty">No readings for this unit {dayLabel}.</div>;
+  return <FuelChartPlot series={series} speeds={speeds} unit={unit} overspeeds={overspeeds} pings={pings} limit={limit} />;
+}
+
+/*
+ * Interactive: move over it (or drag a finger along it) to read the time, fuel,
+ * speed and engine state at that moment; drag with the mouse to zoom into a
+ * stretch; tap an overspeed mark to zoom to it. Arrow keys step the cursor,
+ * Escape clears it, double-click or "Whole day" zooms back out.
+ */
+function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit }) {
+  const svgRef = useRef(null);
+  const [cursor, setCursor] = useState(null);     // ms under the pointer, or null
+  const [pinnedRun, setPinnedRun] = useState(null);
+  const [zoom, setZoom] = useState(null);         // [from, to] ms, or null = whole day
+  const [drag, setDrag] = useState(null);         // { a, b } ms while mouse-dragging
+  const dragRef = useRef(null);                   // same, readable between renders
 
   const pct = unit === '%';
   const W = 320, H = 118, PL = 24, PT = 6, PB = 18;
   const cW = W - PL, cH = H - PT - PB;
-  const t0 = series[0].t, t1 = series[series.length - 1].t;
+  const hasFuel = series.length >= 2;
+  const ends = [series[0]?.t, series[series.length - 1]?.t, speeds[0]?.t, speeds[speeds.length - 1]?.t].filter(Number.isFinite);
+  const dayT0 = Math.min(...ends), dayT1 = Math.max(...ends);
+  const [t0, t1] = zoom ?? [dayT0, dayT1];
   const span = Math.max(1, t1 - t0);
+  const visible = useMemo(() => series.filter(p => p.t >= t0 && p.t <= t1), [series, t0, t1]);
   // Litres: the top of the axis is the day's highest reading, rounded up.
-  const top = pct ? 100 : Math.max(10, Math.ceil(Math.max(...series.map(p => p.v)) / 10) * 10);
+  const top = useMemo(
+    () => (pct ? 100 : Math.max(10, Math.ceil(series.reduce((m, p) => Math.max(m, p.v), 0) / 10) * 10)),
+    [pct, series],
+  );
+  // Speed shares the plot on its own scale (right-hand axis), up to the day's
+  // top speed or a little over the limit, whichever is higher.
+  const sTop = useMemo(
+    () => Math.max(20, Math.ceil(Math.max(limit * 1.25, speeds.reduce((m, p) => Math.max(m, p.v), 0)) / 20) * 20),
+    [limit, speeds],
+  );
   const x = (t) => PL + ((t - t0) / span) * cW;
   const y = (v) => PT + cH - (Math.min(top, Math.max(0, v)) / top) * cH;
+  const ys = (v) => PT + cH - (Math.min(sTop, Math.max(0, v)) / sTop) * cH;
 
-  // Thin to ~120 points so a busy day stays light to draw
-  const step = Math.max(1, Math.floor(series.length / 120));
-  const pts = series.filter((_, i) => i % step === 0 || i === series.length - 1);
-
+  // Thin to ~160 points so a busy day stays light to draw
+  const step = Math.max(1, Math.floor(visible.length / 160));
+  const pts = visible.filter((_, i) => i % step === 0 || i === visible.length - 1);
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
-  const area = `${line} L${x(t1)},${PT + cH} L${x(t0)},${PT + cH} Z`;
+  const area = pts.length ? `${line} L${x(pts[pts.length - 1].t)},${PT + cH} L${x(pts[0].t)},${PT + cH} Z` : '';
   const reserveY = y(RESERVE_PCT);
   const cross = pct && pts.find((p, i) => i > 0 && pts[i - 1].v >= RESERVE_PCT && p.v < RESERVE_PCT);
+  const runs = overspeeds.filter(o => o.end >= t0 && o.start <= t1);
+  const sVisible = speeds.filter(p => p.t >= t0 && p.t <= t1);
+  const sStep = Math.max(1, Math.floor(sVisible.length / 240));
+  const speedLine = sVisible
+    .filter((_, i) => i % sStep === 0 || i === sVisible.length - 1)
+    .map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${ys(p.v).toFixed(1)}`).join(' ');
 
+  // Pointer position -> time, clamped to the plotted window
+  const tAt = (clientX) => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r || !r.width) return null;
+    const vx = ((clientX - r.left) / r.width) * W;
+    return Math.round(t0 + ((Math.min(W, Math.max(PL, vx)) - PL) / cW) * span);
+  };
+
+  const onPointerDown = (e) => {
+    const t = tAt(e.clientX);
+    if (t == null) return;
+    setPinnedRun(null);
+    if (e.pointerType === 'mouse') {
+      if (e.button === 0) { dragRef.current = { a: t, b: t }; setDrag(dragRef.current); }
+    }
+    else setCursor(t);
+  };
+  const onPointerMove = (e) => {
+    const t = tAt(e.clientX);
+    if (t == null) return;
+    setCursor(t);
+    if (dragRef.current) { dragRef.current = { ...dragRef.current, b: t }; setDrag(dragRef.current); }
+  };
+  const onPointerUp = () => {
+    const d = dragRef.current;
+    if (!d) return;
+    const a = Math.min(d.a, d.b), b = Math.max(d.a, d.b);
+    dragRef.current = null;
+    setDrag(null);
+    // A click is not a zoom; a drag has to cover a real stretch of time
+    if (b - a >= Math.max(MIN_ZOOM_MS, span * 0.03)) setZoom([a, b]);
+  };
+  const onLeave = (e) => {
+    if (e.pointerType === 'mouse') { setCursor(null); dragRef.current = null; setDrag(null); }
+  };
+  const onKeyDown = (e) => {
+    const stepMs = Math.max(60_000, span / 60);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      e.stopPropagation();   // the panel uses ← → to step tracked units
+      const from = cursor ?? (e.key === 'ArrowRight' ? t0 : t1);
+      setCursor(Math.min(t1, Math.max(t0, from + (e.key === 'ArrowRight' ? stepMs : -stepMs))));
+    } else if (e.key === 'Escape' && (cursor != null || pinnedRun)) {
+      e.stopPropagation();   // clear the cursor first; the next Escape closes the panel
+      setCursor(null);
+      setPinnedRun(null);
+    }
+  };
+  const zoomOut = () => { setZoom(null); setPinnedRun(null); };
+  const zoomToRun = (o) => {
+    const pad = Math.max(5 * 60_000, (o.end - o.start) * 2);
+    setZoom([Math.max(dayT0, o.start - pad), Math.min(dayT1, o.end + pad)]);
+    setPinnedRun(o);
+    setCursor(null);
+  };
+
+  const fuelAt = cursor != null ? nearestByT(series, cursor) : null;
+  const fuelNear = fuelAt && Math.abs(fuelAt.t - cursor) <= READING_NEAR_MS ? fuelAt : null;
+  const pingAt = cursor != null ? nearestByT(pings, cursor) : null;
+  const runAt = pinnedRun ?? (cursor != null ? runs.find(o => cursor >= o.start - 60_000 && cursor <= o.end + 60_000) : null);
+  const fmtV = (v) => (pct ? `${Math.round(v)}%` : `${num(v, 0)} L`);
+
+  let readout;
+  if (runAt) {
+    const mins = Math.round((runAt.end - runAt.start) / 60_000);
+    // One reading over the limit has no duration to report
+    const when = fmtTime(runAt.start) === fmtTime(runAt.end)
+      ? `at ${fmtTime(runAt.start)}`
+      : `${fmtTime(runAt.start)}–${fmtTime(runAt.end)}`;
+    readout = (
+      <span className="vdp-readout-run">
+        Overspeed {when} · max {Math.round(runAt.max)} km/h{mins >= 1 ? ` · ${mins} min` : ''}
+      </span>
+    );
+  } else if (cursor != null) {
+    readout = (<>
+      <b>{fmtTime(cursor)}</b>
+      {hasFuel && <span>{fuelNear ? fmtV(fuelNear.v) : 'no fuel reading'}</span>}
+      {pingAt && Number.isFinite(pingAt.speedKmh) && <span>{Math.round(pingAt.speedKmh)} km/h</span>}
+      {pingAt && pingAt.engineOn != null && <span>engine {pingAt.engineOn ? 'on' : 'off'}</span>}
+    </>);
+  } else {
+    readout = (
+      <span className="vdp-readout-hint">
+        Hover or slide along the chart to read it{runs.length ? ' · tap a red mark for the overspeed' : ''}
+      </span>
+    );
+  }
+
+  const cx = cursor != null ? x(cursor) : null;
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="vdp-chart">
-      {[top, top / 2, 0].map(p => (
-        <g key={p}>
-          <line x1={PL} y1={y(p)} x2={W} y2={y(p)} stroke="#eef1f4" strokeWidth="1" />
-          <text x={0} y={y(p) + 3} fontSize="8" fill="#94a3b8">{Math.round(p)}</text>
+    <div className="vdp-chart-wrap">
+      <svg
+        ref={svgRef}
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        className={`vdp-chart vdp-chart--live${drag ? ' vdp-chart--dragging' : ''}`}
+        tabIndex={0}
+        role="img"
+        aria-label={`${hasFuel ? 'Fuel level and speed' : 'Speed'} from ${fmtTime(t0)} to ${fmtTime(t1)}. Use the arrow keys to read values.`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onLeave}
+        onDoubleClick={zoomOut}
+        onKeyDown={onKeyDown}
+      >
+        <defs>
+          <clipPath id="vdp-plot-clip"><rect x={PL} y={0} width={cW} height={H} /></clipPath>
+        </defs>
+        {[top, top / 2, 0].map(p => (
+          <g key={p}>
+            <line x1={PL} y1={y(p)} x2={W} y2={y(p)} stroke="#eef1f4" strokeWidth="1" />
+            {hasFuel && <text x={0} y={y(p) + 3} fontSize="8" fill="#94a3b8">{Math.round(p)}</text>}
+          </g>
+        ))}
+        <text x={W - 2} y={PT + 8} fontSize="7.5" fill="#94a3b8" textAnchor="end">{sTop} km/h</text>
+        <g clipPath="url(#vdp-plot-clip)">
+          <path d={speedLine} fill="none" stroke="#94a3b8" strokeWidth="1" strokeLinejoin="round" opacity="0.7" />
+          {hasFuel && <path d={area} fill="rgba(15,37,66,0.06)" />}
+          {pct && hasFuel && <line x1={PL} y1={reserveY} x2={W} y2={reserveY} stroke="#b91c1c" strokeWidth="1" strokeDasharray="4 3" />}
+          {hasFuel && <path d={line} fill="none" stroke="#0f2542" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
+          {cross && <circle cx={x(cross.t)} cy={y(cross.v)} r="3.5" fill="#b91c1c" />}
+          {runs.map((o, i, arr) => {
+            // label only when there's room since the previous marker
+            const showLabel = i === 0 || x(o.start) - x(arr[i - 1].start) > 26;
+            const active = runAt === o;
+            return (
+              <g key={o.start} className="vdp-run"
+                 onPointerDown={(e) => e.stopPropagation()}
+                 onClick={(e) => { e.stopPropagation(); zoomToRun(o); }}>
+                <rect x={x(o.start)} y={PT} width={Math.max(2, x(o.end) - x(o.start))} height={cH} fill="#b91c1c" opacity={active ? 0.18 : 0.08} />
+                <line x1={x(o.start)} y1={PT} x2={x(o.start)} y2={PT + cH} stroke="#b91c1c" strokeWidth="1" strokeDasharray="2 2" />
+                {/* a wider, invisible target so a finger can hit the mark */}
+                <rect x={x(o.start) - 8} y={PT - 2} width="16" height="16" fill="transparent" />
+                <circle cx={x(o.start)} cy={PT + 4} r={active ? 4 : 3} fill="#b91c1c" />
+                {showLabel && <text x={x(o.start) + 4} y={PT + 7} fontSize="7.5" fill="#b91c1c">{Math.round(o.max)}</text>}
+              </g>
+            );
+          })}
+          {drag && (
+            <rect x={x(Math.min(drag.a, drag.b))} y={PT} width={Math.abs(x(drag.b) - x(drag.a))} height={cH} fill="rgba(37,99,235,0.12)" />
+          )}
+          {cx != null && (
+            <g pointerEvents="none">
+              <line x1={cx} y1={PT} x2={cx} y2={PT + cH} stroke="#334155" strokeWidth="0.8" />
+              {fuelNear && <circle cx={x(fuelNear.t)} cy={y(fuelNear.v)} r="3" fill="#fff" stroke="#0f2542" strokeWidth="1.5" />}
+              {pingAt && Number.isFinite(pingAt.speedKmh) && Math.abs(pingAt.t - cursor) <= READING_NEAR_MS && (
+                <circle cx={x(pingAt.t)} cy={ys(pingAt.speedKmh)} r="2.5" fill="#fff" stroke="#64748b" strokeWidth="1.2" />
+              )}
+            </g>
+          )}
         </g>
-      ))}
-      <path d={area} fill="rgba(15,37,66,0.06)" />
-      {pct && <line x1={PL} y1={reserveY} x2={W} y2={reserveY} stroke="#b91c1c" strokeWidth="1" strokeDasharray="4 3" />}
-      {pct && <text x={PL + 4} y={reserveY - 4} fontSize="8" fill="#b91c1c">reserve {RESERVE_PCT}%</text>}
-      <path d={line} fill="none" stroke="#0f2542" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      {cross && <circle cx={x(cross.t)} cy={y(cross.v)} r="3.5" fill="#b91c1c" />}
-      {overspeeds.filter(o => o.start >= t0 && o.start <= t1).map((o, i, arr) => {
-        // label only when there's room since the previous marker
-        const showLabel = i === 0 || x(o.start) - x(arr[i - 1].start) > 26;
-        return (
-        <g key={i}>
-          <rect x={x(o.start)} y={PT} width={Math.max(2, x(o.end) - x(o.start))} height={cH} fill="#b91c1c" opacity="0.08" />
-          <line x1={x(o.start)} y1={PT} x2={x(o.start)} y2={PT + cH} stroke="#b91c1c" strokeWidth="1" strokeDasharray="2 2" />
-          <circle cx={x(o.start)} cy={PT + 4} r="3" fill="#b91c1c" />
-          {showLabel && <text x={x(o.start) + 4} y={PT + 7} fontSize="7.5" fill="#b91c1c">{Math.round(o.max)}</text>}
-        </g>
-        );
-      })}
-      <text x={PL} y={H - 3} fontSize="8" fill="#94a3b8">{fmtTime(t0)}</text>
-      <text x={W} y={H - 3} fontSize="8" fill="#94a3b8" textAnchor="end">{fmtTime(t1)}</text>
-    </svg>
+        {pct && hasFuel && <text x={PL + 4} y={reserveY - 4} fontSize="8" fill="#b91c1c" pointerEvents="none">reserve {RESERVE_PCT}%</text>}
+        <text x={PL} y={H - 3} fontSize="8" fill="#94a3b8">{fmtTime(t0)}</text>
+        <text x={W} y={H - 3} fontSize="8" fill="#94a3b8" textAnchor="end">{fmtTime(t1)}</text>
+      </svg>
+      <div className="vdp-readout" aria-live="polite">
+        <span className="vdp-readout-vals">{readout}</span>
+        {zoom && <button type="button" className="vdp-readout-reset" onClick={zoomOut}>Whole day</button>}
+      </div>
+    </div>
   );
 }
 
@@ -439,9 +622,10 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
           aria-label="Chart date"
         />
       </div>
-      <FuelChart series={sum.series} unit={sum.unit} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel} />
+      <FuelChart key={day} series={sum.series} unit={sum.unit} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel} pings={tele.pings} limit={limit} />
       <div className="vdp-legend">
         <span><i className="vdp-legend-line" /> Fuel level ({sum.unit === '%' ? '%' : 'litres'})</span>
+        <span><i className="vdp-legend-speed" /> Speed</span>
         <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {limit})</span>
       </div>
     </section>
@@ -794,9 +978,10 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               </div>
               <span className="vdp-meta">{updated ? `updated ${timeAgo(readings.lastReportedAt)}` : ''}</span>
             </div>
-            <FuelChart series={today.series} unit={today.unit} loading={tele.loading} overspeeds={todayRuns} />
+            <FuelChart key={vehicle.id} series={today.series} unit={today.unit} loading={tele.loading} overspeeds={todayRuns} pings={tele.pings} limit={vehicle.speedLimit ?? 80} />
             <div className="vdp-legend">
               <span><i className="vdp-legend-line" /> Fuel level ({today.unit === '%' ? '%' : 'litres'})</span>
+              <span><i className="vdp-legend-speed" /> Speed</span>
               <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {vehicle.speedLimit ?? 80})</span>
             </div>
           </section>
