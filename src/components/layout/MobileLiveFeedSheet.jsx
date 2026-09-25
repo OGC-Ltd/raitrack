@@ -1,10 +1,12 @@
 // MobileLiveFeedSheet — mirrors React Native LiveFeedSheet exactly.
-// Live server feed via FleetLiveContext — no mock data.
+// The whole fleet day, continuous, as in the desktop panel (hooks/useVehicleFeed).
 
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import FeedText from '../shared/FeedText';
 import { feedClock, feedDate } from '../../lib/feedTime';
 import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
+import { useVehicleFeed } from '../../hooks/useVehicleFeed';
+import FeedFooter, { nearBottom } from '../shared/FeedFooter';
 import './MobileLiveFeedSheet.css';
 
 const ALERT_TYPES = new Set(['warning', 'critical']);
@@ -17,7 +19,8 @@ function dotColor(type) {
 }
 
 export default function MobileLiveFeedSheet({ open, onClose }) {
-  const { feed = [], loading } = useFleetLiveShared();
+  const { feed: liveFeed = [], orgId } = useFleetLiveShared();
+  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed);
   const unread = feed.filter(f => ALERT_TYPES.has(f.type)).length;
 
   return (
@@ -37,7 +40,7 @@ export default function MobileLiveFeedSheet({ open, onClose }) {
           </div>
         </div>
 
-        <div className="mlf-list">
+        <div className="mlf-list" onScroll={nearBottom(loadMore)}>
           {feed.length === 0 && (
             <div className="mlf-empty">{loading ? 'Loading activity…' : 'No recent activity'}</div>
           )}
@@ -65,6 +68,7 @@ export default function MobileLiveFeedSheet({ open, onClose }) {
             </div>
             );
           })}
+          <FeedFooter count={feed.length} loadingMore={loadingMore} atEnd={atEnd} loadMore={loadMore} />
         </div>
       </div>
     </>
