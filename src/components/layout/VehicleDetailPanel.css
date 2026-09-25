@@ -581,8 +581,8 @@
   color: var(--vdp-mut);
 }
 .vdp-legend span { display: flex; align-items: center; gap: 5px; }
-.vdp-legend-line { width: 14px; height: 2px; background: var(--vdp-navy); display: inline-block; }
-.vdp-legend-speed { width: 14px; height: 1.5px; background: #94a3b8; display: inline-block; }
+.vdp-legend-line { width: 14px; height: 2px; background: #f59e0b; display: inline-block; }
+.vdp-legend-speed { width: 14px; height: 1.5px; background: #0ea5e9; display: inline-block; }
 .vdp-legend-dot  { width: 7px; height: 7px; border-radius: 50%; background: var(--vdp-red); display: inline-block; }
 
 /* ── Header: tracked-vehicle navigation + quick actions ── */
