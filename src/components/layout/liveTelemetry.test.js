@@ -6,7 +6,12 @@ const frame = (t, extra = {}) => ({ capturedAtMs: t, speed: 40, fuelLitres: 150,
 describe('appendLiveFrame', () => {
   it('adds a frame newer than the last fetched ping, in ping shape', () => {
     const out = appendLiveFrame([], [{ t: 1000 }], frame(2000, { speed: 95 }));
-    expect(out).toEqual([{ t: 2000, speedKmh: 95, fuelLevelMl: 150000, engineOn: true }]);
+    expect(out).toEqual([{ t: 2000, speedKmh: 95, fuelLevelMl: 150000, engineOn: true, limitKmh: null }]);
+  });
+
+  it('carries the limit where the unit is now', () => {
+    const [p] = appendLiveFrame([], [], frame(2000, { speedLimit: 60 }));
+    expect(p.limitKmh).toBe(60);
   });
 
   it('ignores a frame the fetch already covers', () => {

@@ -146,6 +146,8 @@ export function appendLiveFrame(tail, fetched, vehicle) {
     speedKmh:    Number.isFinite(vehicle.speed) ? vehicle.speed : null,
     fuelLevelMl: Number.isFinite(vehicle.fuelLitres) ? vehicle.fuelLitres * 1000 : null,
     engineOn:    vehicle.engine === 'on' ? true : vehicle.engine === 'off' ? false : null,
+    // The snapshot's limit is the one where the unit is now
+    limitKmh:    Number.isFinite(vehicle.speedLimit) ? vehicle.speedLimit : null,
   }];
 }
 
@@ -171,19 +173,31 @@ function useLiveTelemetry(tele, vehicle) {
 }
 
 // Overspeed runs: consecutive pings above the limit, merged into one event
+// Each ping is judged by its own limit where the server sent one (an org whose
+// limit depends on place), else by the unit's single `limit`.
 function overspeedRuns(pings, limit) {
   const runs = [];
   let cur = null;
   for (const p of pings) {
     const spd = p.speedKmh ?? 0;
-    if (spd > limit) {
-      if (cur && p.t - cur.end <= 2 * 60_000) { cur.end = p.t; cur.max = Math.max(cur.max, spd); }
-      else { cur = { start: p.t, end: p.t, max: spd }; runs.push(cur); }
+    const lim = Number.isFinite(p.limitKmh) ? p.limitKmh : limit;
+    if (spd > lim) {
+      if (cur && p.t - cur.end <= 2 * 60_000) {
+        cur.end = p.t;
+        if (spd > cur.max) { cur.max = spd; cur.limit = lim; }
+      } else { cur = { start: p.t, end: p.t, max: spd, limit: lim }; runs.push(cur); }
     } else if (cur && p.t - cur.end > 2 * 60_000) {
       cur = null;
     }
   }
   return runs;
+}
+
+// "80", or "60–100 by zone" where the day's readings carry more than one limit
+function limitLabel(pings, limit) {
+  const seen = new Set(pings.map(p => p.limitKmh).filter(Number.isFinite));
+  if (seen.size < 2) return String(seen.size ? [...seen][0] : limit);
+  return `${Math.min(...seen)}–${Math.max(...seen)} by zone`;
 }
 
 // Fuel used, with where the figure came from when it is not the device counter
@@ -377,7 +391,7 @@ function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit }) {
       : `${fmtTime(runAt.start)}–${fmtTime(runAt.end)}`;
     readout = (
       <span className="vdp-readout-run">
-        Overspeed {when} · max {Math.round(runAt.max)} km/h{mins >= 1 ? ` · ${mins} min` : ''}
+        Overspeed {when} · max {Math.round(runAt.max)} km/h{Number.isFinite(runAt.limit) ? ` (limit ${runAt.limit})` : ''}{mins >= 1 ? ` · ${mins} min` : ''}
       </span>
     );
   } else if (cursor != null) {
@@ -628,7 +642,7 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
       <div className="vdp-legend">
         <span><i className="vdp-legend-line" /> Fuel level ({sum.unit === '%' ? '%' : 'litres'})</span>
         <span><i className="vdp-legend-speed" /> Speed</span>
-        <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {limit})</span>
+        <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {limitLabel(tele.pings, limit)})</span>
       </div>
     </section>
     <section className="vdp-block vdp-block--last">
@@ -984,7 +998,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
             <div className="vdp-legend">
               <span><i className="vdp-legend-line" /> Fuel level ({today.unit === '%' ? '%' : 'litres'})</span>
               <span><i className="vdp-legend-speed" /> Speed</span>
-              <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {vehicle.speedLimit ?? 80})</span>
+              <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {limitLabel(tele.pings, vehicle.speedLimit ?? 80)})</span>
             </div>
           </section>
 
