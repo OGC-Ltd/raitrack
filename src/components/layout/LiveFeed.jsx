@@ -1,6 +1,7 @@
 // LiveFeed — slides in from the right edge.
-// Live server feed (SSE 'feed' events via FleetLiveContext). No mock data:
-// an empty feed shows an empty state.
+// The whole fleet day, continuous: the server's record of today paged as it is
+// scrolled, with the live stream on top and no gap between them (see
+// hooks/useVehicleFeed). Idle while closed.
 
 import { useMemo } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
@@ -9,6 +10,8 @@ import FeedText from '../shared/FeedText';
 import { feedClock, feedDate } from '../../lib/feedTime';
 import { driverIndex, driverFor } from '../../lib/feedDriver';
 import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
+import { useVehicleFeed } from '../../hooks/useVehicleFeed';
+import FeedFooter, { nearBottom } from '../shared/FeedFooter';
 import './LiveFeed.css';
 
 // Server feed types: info | success | warning | critical
@@ -22,7 +25,8 @@ function dotColor(type) {
 }
 
 export default function LiveFeed({ open, onClose }) {
-  const { feed = [], vehicles = [], loading } = useFleetLiveShared();
+  const { feed: liveFeed = [], vehicles = [], orgId } = useFleetLiveShared();
+  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed);
   const { focusVehicle } = useMapLayers();
   const drivers = useMemo(() => driverIndex(vehicles), [vehicles]);
   const alerts  = feed.filter(f => ALERT_TYPES.has(f.type)).length;
@@ -42,7 +46,7 @@ export default function LiveFeed({ open, onClose }) {
         </div>
       </div>
 
-      <div className="live-feed__list">
+      <div className="live-feed__list" onScroll={nearBottom(loadMore)}>
         {feed.length === 0 && (
           <div className="live-feed__empty">{loading ? 'Loading activity…' : 'No activity yet'}</div>
         )}
@@ -73,6 +77,7 @@ export default function LiveFeed({ open, onClose }) {
             </div>
           );
         })}
+        <FeedFooter count={feed.length} loadingMore={loadingMore} atEnd={atEnd} loadMore={loadMore} />
       </div>
     </div>
   );
