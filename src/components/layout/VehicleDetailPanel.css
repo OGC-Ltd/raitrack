@@ -81,6 +81,8 @@
 }
 .vdp-tag--danger { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
 .vdp-tag--warn   { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+/* Idling is cyan across the app (--accent-idling, lib/vehicleMap IDLING_COLOR). */
+.vdp-tag--idle   { color: #0e7490; background: #ecfeff; border-color: #a5f3fc; }
 .vdp-tag--ok     { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
 .vdp-tag--muted  { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
 
@@ -307,6 +309,41 @@
 
 /* ── Chart ── */
 .vdp-chart { display: block; }
+
+/* Interactive fuel & overspeed chart. `pan-y` keeps a vertical swipe
+   scrolling the panel while a horizontal one scrubs the chart. */
+.vdp-chart--live { cursor: crosshair; touch-action: pan-y; user-select: none; outline: none; border-radius: 4px; }
+.vdp-chart--live:focus-visible { box-shadow: 0 0 0 2px #93c5fd; }
+.vdp-chart--dragging { cursor: ew-resize; }
+.vdp-run { cursor: zoom-in; }
+
+.vdp-readout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--vdp-ink2, var(--vdp-ink));
+  font-variant-numeric: tabular-nums;
+}
+.vdp-readout-vals { display: flex; flex-wrap: wrap; gap: 4px 10px; flex: 1; min-width: 0; }
+.vdp-readout-vals b { color: var(--vdp-ink); font-weight: 600; }
+.vdp-readout-hint { color: var(--vdp-faint); }
+.vdp-readout-run { color: var(--vdp-red); font-weight: 500; }
+.vdp-readout-reset {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  min-height: 22px;
+  border: 1px solid var(--vdp-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vdp-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+@media (max-width: 720px) { .vdp-readout-reset { min-height: 30px; padding: 0 10px; } }
 
 /* ── Key / value list ── */
 .vdp-kv {
@@ -545,6 +582,7 @@
 }
 .vdp-legend span { display: flex; align-items: center; gap: 5px; }
 .vdp-legend-line { width: 14px; height: 2px; background: var(--vdp-navy); display: inline-block; }
+.vdp-legend-speed { width: 14px; height: 1.5px; background: #94a3b8; display: inline-block; }
 .vdp-legend-dot  { width: 7px; height: 7px; border-radius: 50%; background: var(--vdp-red); display: inline-block; }
 
 /* ── Header: tracked-vehicle navigation + quick actions ── */
