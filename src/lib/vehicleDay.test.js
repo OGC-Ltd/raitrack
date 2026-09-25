@@ -1,0 +1,162 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../services/api', () => ({ apiFetch: vi.fn() }));
+
+import { apiFetch } from '../services/api';
+import { _resetVehicleDay, cachedDay, decodeColumns, fuelFromLevel, loadDay, mergeNewer, summariseDay } from './vehicleDay';
+
+const DAY = '2026-09-20'; // a finished day
+const FROM = Date.parse('2026-09-19T21:00:00.000Z');
+
+const columns = (over = {}) => ({
+  from: FROM, complete: true,
+  t: [0, 30], lat: [-1, -1.001], lng: [36, 36], spd: [0, 40], eng: [1, null], fuelMl: [100000, null], hrs: [10, 10.01],
+  ...over,
+});
+
+beforeEach(() => {
+  _resetVehicleDay();
+  apiFetch.mockReset();
+});
+
+describe('decodeColumns', () => {
+  it('turns columns back into pings', () => {
+    const p = decodeColumns(columns());
+    expect(p).toHaveLength(2);
+    expect(p[0]).toMatchObject({ t: FROM, speedKmh: 0, engineOn: true, fuelLevelMl: 100000 });
+    expect(p[1]).toMatchObject({ t: FROM + 30_000, engineOn: null, fuelLevelMl: null });
+  });
+});
+
+describe('mergeNewer', () => {
+  it('keeps only rows after the last one held', () => {
+    const held = [{ t: 1 }, { t: 2 }];
+    expect(mergeNewer(held, [{ t: 2 }, { t: 3 }]).map((p) => p.t)).toEqual([1, 2, 3]);
+    expect(mergeNewer(held, [{ t: 1 }])).toBe(held);
+  });
+});
+
+describe('loadDay', () => {
+  it('reads the day in one request and keeps a finished day for good', async () => {
+    apiFetch.mockResolvedValue({ data: columns() });
+    const a = await loadDay('o', 'v', DAY);
+    expect(a.pings).toHaveLength(2);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(apiFetch.mock.calls[0][0]).toBe(`/api/v1/organisations/o/vehicles/v/telemetry/day?day=${DAY}`);
+    expect(cachedDay('o', 'v', DAY)).toBe(a);
+    await loadDay('o', 'v', DAY);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one request between two readers', async () => {
+    apiFetch.mockResolvedValue({ data: columns() });
+    await Promise.all([loadDay('o', 'v', DAY), loadDay('o', 'v', DAY)]);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks only for what came after the last row of an unfinished day', async () => {
+    apiFetch.mockResolvedValueOnce({ data: columns({ complete: false }) })
+      .mockResolvedValueOnce({ data: columns({ complete: false, t: [60], lat: [-1], lng: [36], spd: [5], eng: [1], fuelMl: [99000], hrs: [10.02] }) });
+    await loadDay('o', 'v', DAY);
+    const b = await loadDay('o', 'v', DAY);
+    expect(apiFetch.mock.calls[1][0]).toContain(`&since=${FROM + 30_000}`);
+    expect(b.pings.map((p) => p.t - FROM)).toEqual([0, 30_000, 60_000]);
+  });
+
+  it('falls back to the list, read in parallel windows, where the day route is missing', async () => {
+    apiFetch.mockImplementation(async (url) => {
+      if (url.includes('/telemetry/day')) throw Object.assign(new Error('Not found'), { status: 404 });
+      const from = Date.parse(new URL(url, 'http://x').searchParams.get('from'));
+      return { data: [{ capturedAt: new Date(from + 1000).toISOString(), speedKmh: 1 }], meta: { hasNextPage: false } };
+    });
+    const r = await loadDay('o', 'v', DAY);
+    const listCalls = apiFetch.mock.calls.filter(([u]) => !u.includes('/telemetry/day'));
+    expect(listCalls.length).toBe(12);   // 2 h windows over a finished day
+    expect(r.pings).toHaveLength(12);
+    expect(r.complete).toBe(true);
+
+    // It remembers: the next day goes straight to the list.
+    apiFetch.mockClear();
+    await loadDay('o', 'v2', DAY);
+    expect(apiFetch.mock.calls.some(([u]) => u.includes('/telemetry/day'))).toBe(false);
+  });
+
+  it('does not fall back on a real failure', async () => {
+    apiFetch.mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
+    await expect(loadDay('o', 'v', DAY)).rejects.toThrow('boom');
+  });
+});
+
+// ── summaries ──────────────────────────────────────────────────────────────
+
+const MIN = 60_000;
+function day(levelsL, { speed = 30, step = MIN, lat0 = -1 } = {}) {
+  return levelsL.map((l, i) => ({
+    t: FROM + i * step, fuelLevelMl: l * 1000, speedKmh: speed, engineOn: true,
+    lat: lat0 + i * 0.001, lng: 36, engineHoursMeter: 100 + i * (step / 3_600_000),
+  }));
+}
+
+describe('fuelFromLevel', () => {
+  it('reads use off the ends, so slosh does not add up', () => {
+    // Falls 200 -> 180 with ±3 L of noise on every reading
+    const lv = Array.from({ length: 60 }, (_, i) => 200 - i / 3 + (i % 2 ? 3 : -3));
+    const { usedL, refilledL } = fuelFromLevel(day(lv), 400);
+    expect(refilledL).toBe(0);
+    expect(usedL).toBeGreaterThan(12);   // true use ~19.7 L; the ends carry the ±3 L noise
+    expect(usedL).toBeLessThan(25);
+  });
+
+  it('adds a refill back in', () => {
+    const lv = [...Array(20).fill(100), ...Array(20).fill(300), ...Array(20).fill(290)];
+    const { usedL, refilledL } = fuelFromLevel(day(lv), 400);
+    expect(refilledL).toBeCloseTo(200, 0);
+    expect(usedL).toBeCloseTo(10, 0);
+  });
+
+  it('says nothing from too few readings', () => {
+    expect(fuelFromLevel(day([100, 90]), 400).usedL).toBeNull();
+  });
+});
+
+describe('summariseDay', () => {
+  it('charts litres when the tank size is unknown', () => {
+    const s = summariseDay(day(Array(12).fill(120)), null);
+    expect(s.unit).toBe('L');
+    expect(s.series[0].v).toBe(120);
+  });
+
+  it('charts percent when it is known', () => {
+    const s = summariseDay(day(Array(12).fill(100)), 400);
+    expect(s.unit).toBe('%');
+    expect(s.series[0].v).toBe(25);
+  });
+
+  it('fills distance, moving time, engine hours and the first move', () => {
+    const s = summariseDay(day(Array(11).fill(100)), 400);
+    expect(s.distanceKm).toBeCloseTo(1.11, 1);   // 10 hops of 0.001°
+    expect(s.movingMin).toBe(10);
+    expect(s.engineHoursToday).toBeCloseTo(10 / 60, 3);
+    expect(s.firstMove.t).toBe(FROM);
+    expect(s.usedSource).toBe('level');
+  });
+
+  it('prefers the consumption counter where there is one', () => {
+    const p = day(Array(12).fill(100)).map((x, i) => ({ ...x, fuelUsedMl: 5000 + i * 1000 }));
+    const s = summariseDay(p, 400);
+    expect(s.usedL).toBe(11);
+    expect(s.usedSource).toBe('counter');
+  });
+
+  it('drops a hop that would need more than 200 km/h', () => {
+    const p = day(Array(3).fill(100));
+    p[2] = { ...p[2], lat: 0 };   // ~110 km in a minute
+    expect(summariseDay(p, 400).distanceKm).toBeCloseTo(0.11, 1);
+  });
+
+  it('is empty, not zero, with no pings', () => {
+    const s = summariseDay([], 400);
+    expect(s.distanceKm).toBeNull();
+    expect(s.usedL).toBeNull();
+  });
+});

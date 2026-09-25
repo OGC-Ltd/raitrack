@@ -20,14 +20,14 @@ import { createReport, addSectionTitle, addSummaryCards, addTable, downloadRepor
 import { usePlaceName } from '../../hooks/usePlaceName';
 import { fleetDayKey } from '../../hooks/useFuelEvents';
 import { vehicleReadings } from '../../lib/vehicleReadings';
+import { cachedDay, dayBounds, loadDay, summariseDay } from '../../lib/vehicleDay';
 import './VehicleDetailPanel.css';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const FUEL_PRICE_KSH = 190;          // KSh per litre, for the cost estimate
 const RESERVE_PCT    = 25;           // fuel reserve threshold (%)
 const NA             = 'Not available';
-const IDLE_SPEED_KMH = 3;            // engine on and slower than this = idling
-const MAX_GAP_MS     = 10 * 60_000;  // ignore gaps longer than this when summing idle
+const TODAY_REFRESH_MS = 60_000;     // re-read today's tail while the panel is open
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -74,9 +74,7 @@ function timeAgo(ms) {
 // ── Today's telemetry (fuel series, fuel used, idle time) ───────────────────
 
 // Fleet days run on Nairobi time (UTC+3), same calendar as hooks/useFuelEvents
-function dayStart(dayKey) {
-  return new Date(new Date(`${dayKey}T00:00:00.000Z`).getTime() - 3 * 3600_000);
-}
+const dayStart = (dayKey) => new Date(dayBounds(dayKey).start);
 function addDays(dayKey, n) {
   const d = new Date(`${dayKey}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -90,51 +88,34 @@ function daysBetween(fromKey, toKey) {
 const DAY_LABEL = new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const fmtDay = (key) => DAY_LABEL.format(new Date(`${key}T00:00:00.000Z`));
 
-const DAY_PAGE_SIZE = 500;  // the server's maximum page
-const DAY_PAGE_CAP  = 12;   // 6,000 rows, about two days at the 30 s cadence
-
+// One day of this unit's readings, via lib/vehicleDay: one request, kept for
+// the session. What is already held draws at once; today's tail is re-read in
+// the background and every TODAY_REFRESH_MS while the panel is open.
 function useDayTelemetry(orgId, vehicleId, dayKey) {
-  const [state, setState] = useState({ pings: [], loading: false, error: null });
+  const initial = () => {
+    const held = orgId && vehicleId && dayKey ? cachedDay(orgId, vehicleId, dayKey) : null;
+    return { pings: held?.pings ?? [], loading: Boolean(orgId && vehicleId && dayKey && !held), error: null };
+  };
+  const [state, setState] = useState(initial);
 
   useEffect(() => {
     if (!orgId || !vehicleId || !dayKey) { setState({ pings: [], loading: false, error: null }); return undefined; }
-    const ctrl = new AbortController();
-    setState({ pings: [], loading: true, error: null });
-    const start = dayStart(dayKey).getTime();
-    const end   = start + 86_400_000;
-    const from  = new Date(start).toISOString();
-    const to    = new Date(end).toISOString();
-    // The server caps a page at 500 rows (newest first) and pages with a
-    // cursor. Asking for 5000 in one go was refused with a 400, which left
-    // every chart in this panel empty. A day at the 30 s poll cadence is about
-    // 2,900 rows, so walk the pages, stopping at DAY_PAGE_CAP.
-    const base = `/api/v1/organisations/${orgId}/vehicles/${vehicleId}/telemetry?limit=${DAY_PAGE_SIZE}&from=${from}&to=${to}`;
-    const fetchAll = async () => {
-      const rows = [];
-      let cursor = null;
-      for (let page = 0; page < DAY_PAGE_CAP; page++) {
-        const res = await apiFetch(cursor ? `${base}&cursor=${cursor}` : base, { signal: ctrl.signal });
-        rows.push(...(res.data ?? []));
-        cursor = res.meta?.hasNextPage ? res.meta.cursor : null;
-        if (!cursor) break;
-      }
-      return rows;
-    };
-    fetchAll()
-      .then(data => {
-        if (ctrl.signal.aborted) return;
-        const pings = data
-          .map(p => ({ ...p, t: Date.parse(p.capturedAt) }))
-          // filtered here too, in case the server ignores `to`
-          .filter(p => Number.isFinite(p.t) && p.t >= start && p.t < end)
-          .sort((a, b) => a.t - b.t);
-        setState({ pings, loading: false, error: null });
-      })
+    let live = true;
+    setState(initial());
+    const pull = () => loadDay(orgId, vehicleId, dayKey)
+      .then(r => { if (live) setState(s => (s.pings === r.pings && !s.loading ? s : { pings: r.pings, loading: false, error: null })); return r; })
       .catch(err => {
-        if (ctrl.signal.aborted || err?.name === 'AbortError') return;
-        setState({ pings: [], loading: false, error: err?.message ?? 'Could not load telemetry' });
+        if (!live) return null;
+        // Keep what is already drawn; only an empty chart reports the failure.
+        setState(s => (s.pings.length ? { ...s, loading: false } : { pings: [], loading: false, error: err?.message ?? 'Could not load telemetry' }));
+        return null;
       });
-    return () => ctrl.abort();
+    let timer = null;
+    pull().then(r => {
+      if (live && r && !r.complete) timer = setInterval(pull, TODAY_REFRESH_MS);
+    });
+    return () => { live = false; if (timer) clearInterval(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, vehicleId, dayKey]);
 
   return state;
@@ -205,35 +186,10 @@ function overspeedRuns(pings, limit) {
   return runs;
 }
 
-function summariseToday(pings, tankL) {
-  if (!pings.length) return { series: [], usedL: null, idleMin: null };
-
-  // Fuel level series (% of tank) from calibrated litres
-  const series = tankL
-    ? pings
-        .filter(p => Number.isFinite(p.fuelLevelMl))
-        .map(p => ({ t: p.t, pct: (p.fuelLevelMl / 1000 / tankL) * 100 }))
-        .filter(p => p.pct >= 0 && p.pct <= 110)
-    : [];
-
-  // Fuel used: the device's cumulative consumption counter, first -> last
-  const used = pings.filter(p => Number.isFinite(p.fuelUsedMl));
-  const usedL = used.length >= 2 && used[used.length - 1].fuelUsedMl >= used[0].fuelUsedMl
-    ? (used[used.length - 1].fuelUsedMl - used[0].fuelUsedMl) / 1000
-    : null;
-
-  // Idle time: engine on + not moving, summed across consecutive pings
-  let idleMs = 0;
-  let sawEngine = false;
-  for (let i = 1; i < pings.length; i++) {
-    const prev = pings[i - 1];
-    if (prev.engineOn != null) sawEngine = true;
-    const gap = pings[i].t - prev.t;
-    if (gap <= 0 || gap > MAX_GAP_MS) continue;
-    if (prev.engineOn && (prev.speedKmh ?? 0) < IDLE_SPEED_KMH) idleMs += gap;
-  }
-
-  return { series, usedL, idleMin: sawEngine ? idleMs / 60_000 : null };
+// Fuel used, with where the figure came from when it is not the device counter
+function usedText(sum) {
+  if (sum.usedL == null) return NA;
+  return `${num(sum.usedL, 1)} L${sum.usedSource === 'level' ? ' (from tank level)' : ''}`;
 }
 
 // ── AI summary (written locally from live fields) ───────────────────────────
@@ -272,42 +228,46 @@ function AISummary({ vehicle, readings, place, usedL }) {
 
 // ── Fuel level chart (today, real readings) ─────────────────────────────────
 
-function FuelChart({ series, loading, overspeeds = [], dayLabel = 'today' }) {
+// `unit` is '%' when the tank size is known, else 'L' (litres, scaled to the day)
+function FuelChart({ series, unit = '%', loading, overspeeds = [], dayLabel = 'today' }) {
   if (loading) return <div className="vdp-empty">Loading fuel readings…</div>;
   if (series.length < 2 && overspeeds.length === 0) return <div className="vdp-empty">Fuel readings not available for this unit {dayLabel}.</div>;
   if (series.length < 2) {
     return <div className="vdp-empty">No fuel readings {dayLabel}. {overspeeds.length} overspeed event{overspeeds.length === 1 ? '' : 's'} recorded.</div>;
   }
 
+  const pct = unit === '%';
   const W = 320, H = 118, PL = 24, PT = 6, PB = 18;
   const cW = W - PL, cH = H - PT - PB;
   const t0 = series[0].t, t1 = series[series.length - 1].t;
   const span = Math.max(1, t1 - t0);
+  // Litres: the top of the axis is the day's highest reading, rounded up.
+  const top = pct ? 100 : Math.max(10, Math.ceil(Math.max(...series.map(p => p.v)) / 10) * 10);
   const x = (t) => PL + ((t - t0) / span) * cW;
-  const y = (pct) => PT + cH - (Math.min(100, Math.max(0, pct)) / 100) * cH;
+  const y = (v) => PT + cH - (Math.min(top, Math.max(0, v)) / top) * cH;
 
   // Thin to ~120 points so a busy day stays light to draw
   const step = Math.max(1, Math.floor(series.length / 120));
   const pts = series.filter((_, i) => i % step === 0 || i === series.length - 1);
 
-  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.pct).toFixed(1)}`).join(' ');
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
   const area = `${line} L${x(t1)},${PT + cH} L${x(t0)},${PT + cH} Z`;
   const reserveY = y(RESERVE_PCT);
-  const cross = pts.find((p, i) => i > 0 && pts[i - 1].pct >= RESERVE_PCT && p.pct < RESERVE_PCT);
+  const cross = pct && pts.find((p, i) => i > 0 && pts[i - 1].v >= RESERVE_PCT && p.v < RESERVE_PCT);
 
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="vdp-chart">
-      {[100, 50, 0].map(p => (
+      {[top, top / 2, 0].map(p => (
         <g key={p}>
           <line x1={PL} y1={y(p)} x2={W} y2={y(p)} stroke="#eef1f4" strokeWidth="1" />
-          <text x={0} y={y(p) + 3} fontSize="8" fill="#94a3b8">{p}</text>
+          <text x={0} y={y(p) + 3} fontSize="8" fill="#94a3b8">{Math.round(p)}</text>
         </g>
       ))}
       <path d={area} fill="rgba(15,37,66,0.06)" />
-      <line x1={PL} y1={reserveY} x2={W} y2={reserveY} stroke="#b91c1c" strokeWidth="1" strokeDasharray="4 3" />
-      <text x={PL + 4} y={reserveY - 4} fontSize="8" fill="#b91c1c">reserve {RESERVE_PCT}%</text>
+      {pct && <line x1={PL} y1={reserveY} x2={W} y2={reserveY} stroke="#b91c1c" strokeWidth="1" strokeDasharray="4 3" />}
+      {pct && <text x={PL + 4} y={reserveY - 4} fontSize="8" fill="#b91c1c">reserve {RESERVE_PCT}%</text>}
       <path d={line} fill="none" stroke="#0f2542" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      {cross && <circle cx={x(cross.t)} cy={y(cross.pct)} r="3.5" fill="#b91c1c" />}
+      {cross && <circle cx={x(cross.t)} cy={y(cross.v)} r="3.5" fill="#b91c1c" />}
       {overspeeds.filter(o => o.start >= t0 && o.start <= t1).map((o, i, arr) => {
         // label only when there's room since the previous marker
         const showLabel = i === 0 || x(o.start) - x(arr[i - 1].start) > 26;
@@ -457,9 +417,9 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
   const tele  = isToday ? todayTele : other;
   const limit = vehicle.speedLimit ?? 80;
 
-  const sum   = useMemo(() => summariseToday(tele.pings, vehicle.tankCapacityL), [tele.pings, vehicle.tankCapacityL]);
+  const sum   = useMemo(() => summariseDay(tele.pings, vehicle.tankCapacityL), [tele.pings, vehicle.tankCapacityL]);
   const runs  = useMemo(() => overspeedRuns(tele.pings, limit), [tele.pings, limit]);
-  const topSpeed = tele.pings.reduce((m, p) => Math.max(m, p.speedKmh ?? 0), 0);
+  const topSpeed = sum.topSpeed ?? 0;
   const cost  = sum.usedL != null ? sum.usedL * FUEL_PRICE_KSH : null;
   const dayLabel = isToday ? 'today' : `on ${fmtDay(day)}`;
 
@@ -479,23 +439,27 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
           aria-label="Chart date"
         />
       </div>
-      <FuelChart series={sum.series} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel} />
+      <FuelChart series={sum.series} unit={sum.unit} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel} />
       <div className="vdp-legend">
-        <span><i className="vdp-legend-line" /> Fuel level (%)</span>
+        <span><i className="vdp-legend-line" /> Fuel level ({sum.unit === '%' ? '%' : 'litres'})</span>
         <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {limit})</span>
       </div>
     </section>
     <section className="vdp-block vdp-block--last">
       <div className="vdp-block-title">{isToday ? 'Today' : fmtDay(day)}</div>
       <dl className="vdp-kv">
-        <div><dt>Fuel used</dt><dd>{sum.usedL != null ? `${num(sum.usedL, 1)} L` : NA}</dd></div>
+        <div><dt>Fuel used</dt><dd>{usedText(sum)}</dd></div>
         <div><dt>Est. cost</dt><dd>{cost != null ? `KSh ${num(Math.round(cost))}` : NA}</dd></div>
+        <div><dt>Refuelled</dt><dd>{sum.refilledL != null ? `${num(sum.refilledL, 0)} L` : NA}</dd></div>
+        <div><dt>Distance</dt><dd>{sum.distanceKm != null ? `${num(sum.distanceKm, 1)} km` : NA}</dd></div>
+        <div><dt>Moving time</dt><dd>{sum.movingMin != null ? fmtMinutes(sum.movingMin) : NA}</dd></div>
         <div><dt>Idle time</dt><dd>{sum.idleMin != null ? fmtMinutes(sum.idleMin) : NA}</dd></div>
+        <div><dt>Engine hours</dt><dd>{sum.engineHoursToday != null ? `${num(sum.engineHoursToday, 1)} h` : NA}</dd></div>
         <div><dt>Overspeed events</dt><dd className={runs.length ? 'vdp-kv--danger' : ''}>{tele.pings.length ? runs.length : NA}</dd></div>
         <div><dt>Top speed</dt><dd className={topSpeed > limit ? 'vdp-kv--danger' : ''}>{tele.pings.length ? `${Math.round(topSpeed)} km/h` : NA}</dd></div>
-        <div><dt>Current level</dt><dd>{readings.fuelPct != null ? `${readings.fuelPct}%` : NA}</dd></div>
-        <div><dt>Tank capacity</dt><dd>{vehicle.tankCapacityL != null ? `${num(vehicle.tankCapacityL)} L` : NA}</dd></div>
-        <div><dt>Fuel probe</dt><dd className={readings.fuelProbeFault ? 'vdp-kv--danger' : ''}>{readings.fuelProbeFault ? 'Fault reported' : readings.fuelPct != null ? 'OK' : NA}</dd></div>
+        <div><dt>Current level</dt><dd>{readings.fuelPct != null ? `${readings.fuelPct}%` : readings.fuelLitres != null ? `${num(readings.fuelLitres)} L` : NA}</dd></div>
+        <div><dt>Tank capacity</dt><dd>{vehicle.tankCapacityL != null ? `${num(vehicle.tankCapacityL)} L` : 'Not recorded'}</dd></div>
+        <div><dt>Fuel probe</dt><dd className={readings.fuelProbeFault ? 'vdp-kv--danger' : ''}>{readings.fuelProbeFault ? 'Fault reported' : readings.fuelLitres != null ? 'Reporting' : 'No reading'}</dd></div>
       </dl>
     </section>
   </>);
@@ -534,6 +498,7 @@ async function buildVehicleReport({ orgId, vehicle, readings, today, runs, place
       ['Last report', readings.lastReportedAt ? new Date(readings.lastReportedAt).toLocaleString('en-KE') : '—'],
       ['Load', vehicle.cargo ?? '—'],
       ['Idle time today', today.idleMin != null ? fmtMinutes(today.idleMin) : '—'],
+      ['Distance today', today.distanceKm != null ? `${num(today.distanceKm, 1)} km` : '—'],
       ['Overspeed events today', String(runs.length)],
       ['Fuel probe', readings.fuelProbeFault ? 'Fault reported' : readings.fuelPct != null ? 'OK' : '—'],
     ],
@@ -634,8 +599,13 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
   const dayTele = useDayTelemetry(orgId, vehicleId, fleetDayKey());
   const tele  = useLiveTelemetry(dayTele, vehicle);
   const today = useMemo(
-    () => summariseToday(tele.pings, vehicle?.tankCapacityL),
+    () => summariseDay(tele.pings, vehicle?.tankCapacityL),
     [tele.pings, vehicle?.tankCapacityL],
+  );
+  // Where today's driving began, for the header when no trip is on record
+  const startPlace = usePlaceName(
+    vehicle?.departure ? null : today.firstMove?.lat ?? null,
+    vehicle?.departure ? null : today.firstMove?.lng ?? null,
   );
 
   const todayRuns = useMemo(() => overspeedRuns(tele.pings, vehicle?.speedLimit ?? 80), [tele.pings, vehicle?.speedLimit]);
@@ -661,7 +631,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
 
   const fuelSub = fuelPct != null
     ? (lowFuel ? `below ${RESERVE_PCT}% reserve` : readings.fuelLitres != null ? `${num(readings.fuelLitres)} L in tank` : 'above reserve')
-    : readings.fuelProbeFault ? 'fuel probe fault' : 'no calibrated probe';
+    : readings.fuelProbeFault ? 'fuel probe fault'
+      : readings.fuelLitres != null ? 'in tank · tank size not recorded' : 'no calibrated probe';
 
   return (
     <div className="vdp vdp--open">
@@ -692,11 +663,14 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
         <div className="vdp-trip">
           <div className="vdp-trip-row">
             <span className="vdp-trip-lbl">Departed</span>
-            <span className="vdp-trip-val" title={vehicle.departure ?? ''}>{vehicle.departure ?? '—'}</span>
+            <span className="vdp-trip-val" title={vehicle.departure ?? ''}>
+              {vehicle.departure
+                ?? (today.firstMove ? `${startPlace ?? 'Moved'} · ${fmtTime(today.firstMove.t)}` : tele.loading ? '…' : 'Not moved today')}
+            </span>
           </div>
           <div className="vdp-trip-row">
             <span className="vdp-trip-lbl">Destination</span>
-            <span className="vdp-trip-val" title={vehicle.destination ?? ''}>{vehicle.destination ?? '—'}</span>
+            <span className="vdp-trip-val" title={vehicle.destination ?? ''}>{vehicle.destination ?? 'No trip assigned'}</span>
           </div>
         </div>
 
@@ -790,7 +764,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
             <div className="vdp-kpis">
               <div className={`vdp-kpi${lowFuel ? ' vdp-kpi--alert' : ''}`}>
                 <div className="vdp-kpi-lbl">Fuel level</div>
-                <div className="vdp-kpi-val">{fuelPct != null ? `${fuelPct}%` : '—'}</div>
+                <div className="vdp-kpi-val">{fuelPct != null ? `${fuelPct}%` : readings.fuelLitres != null ? `${num(readings.fuelLitres)} L` : '—'}</div>
                 <div className="vdp-kpi-sub">{fuelSub}</div>
               </div>
               <div className={`vdp-kpi${gps.alert ? ' vdp-kpi--alert' : ''}`}>
@@ -820,9 +794,9 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               </div>
               <span className="vdp-meta">{updated ? `updated ${timeAgo(readings.lastReportedAt)}` : ''}</span>
             </div>
-            <FuelChart series={today.series} loading={tele.loading} overspeeds={todayRuns} />
+            <FuelChart series={today.series} unit={today.unit} loading={tele.loading} overspeeds={todayRuns} />
             <div className="vdp-legend">
-              <span><i className="vdp-legend-line" /> Fuel level (%)</span>
+              <span><i className="vdp-legend-line" /> Fuel level ({today.unit === '%' ? '%' : 'litres'})</span>
               <span><i className="vdp-legend-dot" /> Overspeed (km/h, limit {vehicle.speedLimit ?? 80})</span>
             </div>
           </section>
@@ -832,19 +806,22 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
             <div className="vdp-block-title">Vehicle</div>
             <dl className="vdp-kv">
               <div><dt>Type</dt><dd>{vehicle.vehicleType ? vehicle.vehicleType.charAt(0) + vehicle.vehicleType.slice(1).toLowerCase() : NA}</dd></div>
-              <div><dt>Fuel used today</dt><dd>{today.usedL != null ? `${num(today.usedL, 1)} L` : NA}</dd></div>
-              <div><dt>Load</dt><dd>{vehicle.cargo ? `${vehicle.cargo}${vehicle.weight ? ` · ${vehicle.weight} t` : ''}` : NA}</dd></div>
-              <div><dt>Seal</dt><dd>{NA}</dd></div>
+              <div><dt>Fuel used today</dt><dd>{usedText(today)}</dd></div>
+              <div><dt>Est. fuel cost today</dt><dd>{cost != null ? `KSh ${num(Math.round(cost))}` : NA}</dd></div>
+              <div><dt>Load</dt><dd>{vehicle.cargo ? `${vehicle.cargo}${vehicle.weight ? ` · ${vehicle.weight} t` : ''}` : 'No load recorded'}</dd></div>
+              <div><dt>Odometer</dt><dd>{readings.odometerKm != null ? `${num(readings.odometerKm)} km` : NA}</dd></div>
             </dl>
           </section>
 
-          {/* Route conditions — no server source yet */}
+          {/* Today, from the day's readings (lib/vehicleDay) */}
           <section className="vdp-block vdp-block--last">
-            <div className="vdp-block-title">Route conditions</div>
+            <div className="vdp-block-title">Today so far</div>
             <dl className="vdp-kv">
-              <div><dt>Weather</dt><dd>{NA}</dd></div>
-              <div><dt>Road surface</dt><dd>{NA}</dd></div>
-              <div><dt>Traffic &amp; incidents</dt><dd>{NA}</dd></div>
+              <div><dt>Distance</dt><dd>{today.distanceKm != null ? `${num(today.distanceKm, 1)} km` : NA}</dd></div>
+              <div><dt>Moving time</dt><dd>{today.movingMin != null ? fmtMinutes(today.movingMin) : NA}</dd></div>
+              <div><dt>Idle time</dt><dd>{today.idleMin != null ? fmtMinutes(today.idleMin) : NA}</dd></div>
+              <div><dt>Engine hours</dt><dd>{today.engineHoursToday != null ? `${num(today.engineHoursToday, 1)} h` : NA}</dd></div>
+              <div><dt>Refuelled</dt><dd>{today.refilledL != null ? `${num(today.refilledL, 0)} L` : NA}</dd></div>
             </dl>
           </section>
         </>)}
@@ -866,7 +843,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               <div><dt>Speed limit</dt><dd>{vehicle.speedLimit != null ? `${vehicle.speedLimit} km/h` : NA}</dd></div>
               <div><dt>Engine</dt><dd>{readings.engineOn == null ? NA : readings.engineOn ? 'On' : 'Off'}</dd></div>
               <div><dt>Driver rating</dt><dd>{rating ?? NA}</dd></div>
-              <div><dt>Harsh braking / cornering</dt><dd>{NA}</dd></div>
+              <div><dt>Top speed today</dt><dd className={(today.topSpeed ?? 0) > (vehicle.speedLimit ?? 80) ? 'vdp-kv--danger' : ''}>{today.topSpeed != null ? `${Math.round(today.topSpeed)} km/h` : NA}</dd></div>
+              <div><dt>Overspeed events today</dt><dd className={todayRuns.length ? 'vdp-kv--danger' : ''}>{tele.pings.length ? todayRuns.length : NA}</dd></div>
             </dl>
           </section>
         )}
@@ -878,7 +856,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
             <dl className="vdp-kv">
               <div><dt>Fuel probe</dt><dd className={readings.fuelProbeFault ? 'vdp-kv--danger' : ''}>{readings.fuelProbeFault ? 'Fault reported' : 'No fault reported'}</dd></div>
               <div><dt>Tracker</dt><dd>{!readings.hasTracker ? 'No tracker fitted' : readings.isReporting ? 'Reporting' : 'Not reporting'}</dd></div>
-              <div><dt>Engine fault codes</dt><dd>{NA}</dd></div>
+              <div><dt>Last report</dt><dd>{readings.lastReportedAt ? `${fmtTime(readings.lastReportedAt)} · ${timeAgo(readings.lastReportedAt)}` : NA}</dd></div>
+              <div><dt>Engine hours</dt><dd>{readings.engineHours != null ? `${num(readings.engineHours)} h` : NA}</dd></div>
             </dl>
           </section>
         )}
