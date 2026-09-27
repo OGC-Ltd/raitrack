@@ -20,16 +20,29 @@ const base = (orgId) => `/api/v1/organisations/${orgId}/fuel/thefts`;
 // ── Who may decide ──────────────────────────────────────────────────────────
 
 const rights = new Map(); // orgId -> Promise<boolean>
+const rightsKnown = new Map(); // orgId -> boolean, once the answer is in
 
 /** Whether this viewer may escalate or de-escalate here. Asked once per org. */
 export function fetchReviewRights(orgId) {
   if (!orgId) return Promise.resolve(false);
   if (!rights.has(orgId)) {
     rights.set(orgId, apiFetch(`${base(orgId)}/review-rights`)
-      .then((res) => Boolean(res?.data?.canReview))
+      .then((res) => {
+        const ok = Boolean(res?.data?.canReview);
+        rightsKnown.set(orgId, ok);
+        return ok;
+      })
       .catch(() => { rights.delete(orgId); return false; }));
   }
   return rights.get(orgId);
+}
+
+/**
+ * The answer, if it is already in — so a window opened after lib/fuelPrefetch
+ * asked shows its controls in its first frame instead of a moment later.
+ */
+export function reviewRightsNow(orgId) {
+  return rightsKnown.get(orgId);
 }
 
 // ── Decisions made in this session ──────────────────────────────────────────
@@ -67,6 +80,7 @@ export function useIncidentReview(incident) {
 export function _resetReviews() {
   decided = new Map();
   rights.clear();
+  rightsKnown.clear();
 }
 
 // ── Wording ─────────────────────────────────────────────────────────────────

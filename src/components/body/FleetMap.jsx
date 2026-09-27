@@ -20,6 +20,7 @@ import { useMapLayers } from '../../context/MapLayersContext';
 // equipment code via lib/vehicleMap's spriteKind.
 
 import { pointerXY, layoutViewport } from "../../lib/appZoom";
+import { panClearOfWindows } from "../../lib/clearView";
 import { apiFetch } from "../../services/api";
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import "./FleetMap.css";
@@ -6045,10 +6046,19 @@ export default function FleetMap() {
   }, [activeCompanyId, setSelectedVehicleId, revealMap]);
 
   /**
-   * Take the camera to a unit picked from the fuel-alerts list, and nothing
-   * more. Not handleFocusVehicle: that selects the unit, and selecting opens
-   * the vehicle side panel. From the alerts list the incident window is what
-   * was asked for; the side panel is for a click on the unit's marker.
+   * Take the camera to a unit picked from the fuel-alerts list, and open its
+   * side panel beside the incident window the list also asks for (operator,
+   * 2026-09-27: "when we click on an item on the fuel alerts it should render
+   * the modal and the right side panel of the unit"). Both open complete: what
+   * they show was read ahead for every open alert — see lib/fuelPrefetch.
+   *
+   * Still not handleFocusVehicle, which also isolates the unit and hides every
+   * other marker; the alert is about one unit, the map stays the fleet's.
+   *
+   * Centring alone put the unit under the incident window, which sits in the
+   * middle of the map (operator, 2026-09-28: "when the modal is opened then we
+   * also need to zoom into the vehicle"), so the map then glides it into the
+   * clear once the window and the panel have settled — see lib/clearView.
    */
   const handleShowIncidentUnit = useCallback((vehicleId) => {
     const map = mapRef.current;
@@ -6060,9 +6070,11 @@ export default function FleetMap() {
     pendingFitRef.current = false;
     map.panTo({ lat: v.lat, lng: v.lng });
     map.setZoom(FOCUS_ZOOM);
+    panClearOfWindows(map, { lat: v.lat, lng: v.lng });
     setSearchedId(v.id);
+    setSelectedVehicleId(v.id);
     setTimeout(() => setSearchedId(null), 6000);
-  }, [activeCompanyId, revealMap]);
+  }, [activeCompanyId, revealMap, setSelectedVehicleId]);
 
   // Register focus function with context so AppHeader search can trigger zoom
   // eslint-disable-next-line react-hooks/exhaustive-deps
