@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { OUTCOME, fetchReviewRights, reviewIncident, reviewState, useIncidentReview } from "../../lib/fuelReview";
+import { OUTCOME, fetchReviewRights, reviewIncident, reviewRightsNow, reviewState, useIncidentReview } from "../../lib/fuelReview";
 import "./FuelReview.css";
 
 const WHEN = new Intl.DateTimeFormat("en-GB", {
@@ -17,7 +17,8 @@ export default function FuelReview({ incident }) {
   const { orgId } = useFleetLiveShared();
   const review = useIncidentReview(incident);
   const state = reviewState(review);
-  const [canReview, setCanReview] = useState(false);
+  // Already known when lib/fuelPrefetch asked first, so the controls are in the first frame.
+  const [canReview, setCanReview] = useState(() => reviewRightsNow(orgId) ?? false);
   const [picking, setPicking] = useState(null); // 'ESCALATED' | 'DEESCALATED' | null
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);

@@ -41,6 +41,7 @@ import LoadError from "../shared/LoadError";
 import { clampToSafeArea as sharedClamp } from "../../hooks/useFloatingWindow";
 import { useDismissedIncidents, dismissIncident } from "../../lib/fuelDismissals";
 import { apiFetch } from "../../services/api";
+import { usePrefetchFuelAlerts } from "../../lib/fuelPrefetch";
 import { usePermissions } from "../../hooks/usePermissions";
 import FuelDayBreakdown from "./FuelDayBreakdown";
 import FuelReview from "./FuelReview";
@@ -1569,6 +1570,9 @@ export function FuelIncidentHost() {
   const { setWindowOpen, incidentRequest } = useAppContext();
   const { vehicles, orgId } = useFleetLiveShared();
   const { can } = usePermissions();
+  // Every open alert's window and side panel, read before they are opened, so
+  // both open complete — see lib/fuelPrefetch.
+  usePrefetchFuelAlerts(orgId, vehicles);
 
   const [subjectId, setSubjectId] = useState(null);
   const dismissed = useDismissedIncidents();
