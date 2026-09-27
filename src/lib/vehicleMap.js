@@ -4,6 +4,8 @@
 // rows) and applyLiveUpdate (each SSE 'position' event), which share deriveStatus
 // so a live update grades the vehicle the same way the snapshot did.
 
+import { isTheftIncident } from './fuelAlerts'
+
 /**
  * The limit to use when the server did not send one.
  *
@@ -1014,7 +1016,16 @@ export function mapSnapshotVehicle(v) {
   // not explain as this machine's own consumption, inside a 24-hour window.
   //
   // Everything else on flags still arrives via SSE.
-  const flags = { lowFuel: v.lowFuel, fuelInconsistency: v.fuelIncident != null }
+  //
+  // Only a THEFT case is carried (operator, 2026-09-27: the fuel alert is for
+  // theft only; FUEL RATE and FUEL DOWN go to the daily summary). A server
+  // from before that change still sends those as the open incident, and each
+  // one turned its unit red and into CRITICAL — seen 27 Sep evening: 14
+  // critical against 1 in the fuel alerts, and the unit's card said "Fuel
+  // Theft Alert" about a FUEL DOWN. Dropped here, the status bar, the markers,
+  // the card and the alerts list all read the same one.
+  const fuelIncident = isTheftIncident(v.fuelIncident) ? v.fuelIncident : null
+  const flags = { lowFuel: v.lowFuel, fuelInconsistency: fuelIncident != null }
   // Machine identity in the MAPPED field names. spriteKind/equipmentCode read
   // `id` and `name`, and the snapshot row calls the plate `plate` — handing the
   // raw row to carriesCargo resolved every Kasulu machine to the generic truck
@@ -1042,7 +1053,7 @@ export function mapSnapshotVehicle(v) {
     connectionOnline: v.connectionOnline ?? null,
     // The incident behind a red vehicle, so the card and the popup can say
     // WHAT happened without a second request. Null on the great majority.
-    fuelIncident:  v.fuelIncident ?? null,
+    fuelIncident,
     // Connection as its OWN field rather than something read back out of
     // `status`. It cannot be derived from status: the alert states (speeding,
     // theft) are decided BEFORE the connection check in deriveStatus, so an

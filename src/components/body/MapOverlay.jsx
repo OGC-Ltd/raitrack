@@ -44,6 +44,7 @@ import { apiFetch } from "../../services/api";
 import { usePermissions } from "../../hooks/usePermissions";
 import FuelDayBreakdown from "./FuelDayBreakdown";
 import FuelReview from "./FuelReview";
+import { isConfirmedTheft } from "../../lib/fuelAlerts";
 
 const FEED_CLS = { info: "fi-info", warning: "fi-warning", critical: "fi-critical", success: "fi-success" };
 const FEED_ICO = { info: "💬", warning: "⚠", critical: "🔴", success: "✓" };
@@ -192,12 +193,6 @@ function writeDismissed(set) {
  * already names the slug that settled it, which is the checkable version of
  * the same claim.
  */
-/** "4TH", for the repeat badge. The count never gets large enough to need more. */
-function ordinalLabel(n) {
-  const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'TH'
-    : n % 10 === 1 ? 'ST' : n % 10 === 2 ? 'ND' : n % 10 === 3 ? 'RD' : 'TH';
-  return `${n}${suffix}`;
-}
 
 function FuelIncidentBody({ incident, vehicleId }) {
   if (!incident) return null;
@@ -229,16 +224,18 @@ function FuelIncidentBody({ incident, vehicleId }) {
   const hours  = spanMs ? spanMs / 3600000 : null;
   const rate   = hours && hours > 0 && litres != null ? Math.round(litres / hours) : null;
 
-  const title   = INCIDENT_TITLE[incident.reason] ?? (theft ? 'Possible theft' : 'Fuel incident');
+  // The fuel alerts are theft cases only (operator, 2026-09-27), so the badge
+  // names the alert rather than the rule that raised it — the burn-rate badges
+  // ("Burn rate above the set ceiling") described findings that now go to the
+  // daily summary. The rule stays in the tooltip for whoever audits it.
+  const title   = theft ? 'Fuel theft alert' : (INCIDENT_TITLE[incident.reason] ?? 'Fuel alert');
   const num     = (n) => (n == null ? '—' : n % 1 === 0 ? String(n) : n.toFixed(1));
-
-  // The unit's record over the last 30 days. `repeatCount` is 1 on a first
-  // event, which is most of them, and the whole block stays hidden then — an
-  // operator told "1st flagged event" has learned nothing.
-  const repeats    = incident.repeatCount ?? 1;
-  const isRepeat   = repeats > 1;
-  const repeatL    = incident.repeatMl != null ? incident.repeatMl / 1000 : null;
-  const since      = incident.repeatSinceAt ? new Date(incident.repeatSinceAt) : null;
+  // CONFIRMED when the server is at least 80% sure it was a theft — the cause's
+  // own confidence, on a cause allowed to be called one (lib/fuelAlerts). Not
+  // "our telemetry watched it", which is what it used to mean and which a
+  // slosh can satisfy. The repeat badge ("5TH IN 30 D") that sat beside it was
+  // removed at the same request (operator, 2026-09-27).
+  const confirmed = isConfirmedTheft(incident);
   const rule       = `${incident.reason ?? ''}${incident.verdictReason ? ` \u00b7 ${incident.verdictReason}` : ''}`;
 
   // NOT `.vt-info`: that class carries `pointer-events: none; user-select:
@@ -252,12 +249,8 @@ function FuelIncidentBody({ incident, vehicleId }) {
         <span className="vt-status-badge" title={rule ? `Rule: ${rule}` : undefined} style={{
           background: tint(13), color: accent, border: `1px solid ${tint(34)}`,
         }}>{title}</span>
-        {incident.confirmed && <span className="fi-tag">CONFIRMED</span>}
-        {isRepeat && (
-          <span className="fi-tag" style={{
-            background: tint(13), color: accent, borderColor: tint(34),
-          }} title={`${repeats} flagged events in 30 days${repeatL != null ? `, ${num(repeatL)} L in total` : ''}${since ? `, since ${dayLabel(since)}` : ''}`}
-          >{ordinalLabel(repeats)} IN 30 D</span>
+        {confirmed && (
+          <span className="fi-tag" title={`${Math.round(incident.confidence * 100)}% sure this was a theft`}>CONFIRMED</span>
         )}
         {began && (
           <span className="fi-when">
@@ -549,8 +542,12 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
     <div className="fi-body-card" key="card">
       {/* THE hover card, not a copy of it. Same component, same wrapper
           classes — so the window a click opens and the card a hover shows
-          cannot look different from one another. */}
-      <VehicleStatsCard vehicle={vehicle} />
+          cannot look different from one another.
+          Less its "Fuel Theft Alert" badge (operator, 2026-09-27): the
+          window's own header says "Fuel theft alert" a column away. The card
+          reads `status` for that badge and nothing else, so it is handed the
+          vehicle without the alert state. */}
+      <VehicleStatsCard vehicle={vehicle.status === 'theft' ? { ...vehicle, status: 'ok' } : vehicle} />
     </div>
   ) : null;
   const detailCol = (
