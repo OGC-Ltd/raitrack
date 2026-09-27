@@ -8,7 +8,8 @@
 //   engine hours × the unit's own burn rate  = what the engine should use
 //   the difference                            = what the engine does not explain
 //
-// and lists the day's events in order, the one being looked at marked.
+// then says in words what that means for the case (dayAssessment), and lists
+// the day's events in order, the one being looked at marked.
 //
 // ## Why the events are listed and not added up
 //
@@ -39,7 +40,11 @@ export function fleetDayBounds(day) {
  */
 const realRefuel = (f) => f.verdict !== "REDISTRIBUTION";
 
-/** How an event reads in the timeline. Never "theft": the probe sees a level
+/** A drop the server called a possible theft — the only kind the window highlights. */
+export const isTheftEvent = (e) => e.type === "drop" && e.verdict === "DRAIN" && e.cause === "SIPHON";
+
+/** How an event reads in the timeline. "Theft" only for the one cause allowed
+ *  the word, and only as "Possible theft": elsewhere the probe sees a level
  *  fall, not where the fuel went. */
 export function eventLabel(e) {
   if (e.type === "refuel") return e.verdict === "REDISTRIBUTION" ? "Refuel reported, tank no fuller" : "Refuelled";
@@ -47,7 +52,7 @@ export function eventLabel(e) {
   if (e.verdict === "SENSOR_FAULT") return "Probe fault";
   if (e.verdict === "PENDING" || !e.verdict) return "Drop, still settling";
   return {
-    SIPHON: "Drop while parked",
+    SIPHON: "Possible theft",
     HIGH_BURN: "Burn above normal",
     UNEXPLAINED_BURN: "Burn far above normal",
   }[e.cause] ?? "Drop, stayed down";
@@ -109,4 +114,97 @@ export function dayBreakdown({ tank, fillings = [], drops = [] }) {
 export function unexplainedMatters(b) {
   if (b.unexplained == null) return false;
   return b.unexplained > Math.max(5, 0.1 * (b.engine ?? 0));
+}
+
+// ── what the day shows ──────────────────────────────────────────────────────
+//
+// The ledger used to end on "Not explained: +32.1 L", which left the reader to
+// do the case work the window has every figure for (operator, 2026-09-27: "why
+// should we render not explained and we have every data to evaluate the case").
+// `dayAssessment` does it: what the engine burned, what the theft took, and
+// where the rest of the fall happened — before the theft, after it, or with the
+// engine running — in sentences an operator can check against the tiles above.
+
+const CLOCK = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false });
+const litres = (v) => `${(Math.round(v * 10) / 10 || 0).toFixed(1)} L`;
+/** A litre either way is the probe, not fuel. */
+const SAME_LEVEL_L = 1;
+
+/** "12 h 59 min", "40 min". */
+export function hoursLabel(h) {
+  if (h == null) return null;
+  const m = Math.round(h * 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+}
+
+/**
+ * Sentences reading the day, first one the headline; [] without a tank ledger.
+ *
+ * `b` is `dayBreakdown`'s result, `incident` the case the window is open on
+ * (its tank before/after and start time place the rest of the fall), `today`
+ * whether the day is still running.
+ */
+export function dayAssessment(b, incident = null, today = false) {
+  if (b?.used == null) return [];
+  const dayWord = today ? "today" : "that day";
+  const lost = b.used;
+  const out = [];
+
+  // 1. What the engine burned.
+  const ran = b.engineHours != null && b.engineHours * 60 >= 1;
+  const engineL = b.engineHours != null && !ran ? 0 : b.engine;
+  if (b.engineHours != null && !ran) {
+    out.push(`The engine did not run ${dayWord}, so none of the ${litres(lost)} the tank lost was burned.`);
+  } else if (engineL != null) {
+    const rate = b.engineRate != null ? ` at its usual ${b.engineRate.toFixed(1)} L/h` : "";
+    out.push(engineL >= lost
+      ? `The engine ran ${hoursLabel(b.engineHours)}${rate}, which burns ${litres(engineL)} — all of the ${litres(lost)} the tank lost.`
+      : `The engine ran ${hoursLabel(b.engineHours)}${rate}, which burns ${litres(engineL)} of the ${litres(lost)} the tank lost.`);
+  } else {
+    out.push(`There is no engine-hour record for ${dayWord}, so the ${litres(lost)} the tank lost cannot be set against a burn.`);
+  }
+
+  // 2. What the theft took.
+  const thefts = b.events.filter(isTheftEvent);
+  const theftL = thefts.reduce((s, e) => s + (e.litres ?? 0), 0);
+  const L = (ml) => (ml == null ? null : ml / 1000);
+  const before = L(incident?.tankBeforeMl), after = L(incident?.tankAfterMl);
+  const began = incident?.beganAt ? Date.parse(incident.beganAt) : null;
+  if (thefts.length === 1) {
+    const mine = thefts[0].id === incident?.id;
+    const levels = mine && before != null && after != null ? ` (${litres(before)} → ${litres(after)})` : "";
+    out.push(`${litres(theftL)} of it is ${mine ? "this" : "the"} possible theft at ${CLOCK.format(new Date(thefts[0].at))}${levels}.`);
+  } else if (thefts.length > 1) {
+    out.push(`${litres(theftL)} of it is ${thefts.length} possible thefts, at ${thefts.map(e => CLOCK.format(new Date(e.at))).join(", ")}.`);
+  }
+
+  // 3. The rest, and where it happened.
+  if (engineL == null) return out;
+  const rest = lost - engineL - theftL;
+  const matters = Math.abs(rest) > Math.max(5, 0.1 * engineL);
+  if (!matters) {
+    out.push(thefts.length ? "Nothing else is missing." : "The rest matches the engine hours: nothing is missing.");
+    return out;
+  }
+  if (rest < 0) {
+    out.push(`That is ${litres(-rest)} under its usual rate for those hours, so nothing is missing.`);
+    return out;
+  }
+  // Placed against the case's own levels, where no refuel and no running
+  // engine muddies the tank between them and the day's two ends.
+  const refuelBefore = began != null && b.events.some(e => e.type === "refuel" && e.verdict !== "REDISTRIBUTION" && Date.parse(e.at) < began);
+  const refuelAfter  = began != null && b.events.some(e => e.type === "refuel" && e.verdict !== "REDISTRIBUTION" && Date.parse(e.at) >= began);
+  const pre  = !ran && !refuelBefore && b.opening != null && before != null ? b.opening - before : null;
+  const post = !ran && !refuelAfter && b.closing != null && after != null ? after - b.closing : null;
+  const at = began != null ? CLOCK.format(new Date(began)) : null;
+  const other = thefts.length ? "The other" : "Another";
+  if (pre != null && post != null && pre > SAME_LEVEL_L && post <= SAME_LEVEL_L) {
+    out.push(`${other} ${litres(rest)} went before ${at}, with no event of its own: the tank read ${litres(b.opening)} at the start of the day and ${litres(before)} when ${incident?.mayUseTheftWording ? "the theft" : "this drop"} began — a fall too gradual to be reported on its own.`);
+  } else if (pre != null && post != null && post > SAME_LEVEL_L && pre <= SAME_LEVEL_L) {
+    out.push(`${other} ${litres(rest)} went after ${at}, with no event of its own: ${litres(after)} then, ${litres(b.closing)} ${today ? "now" : "at the end of the day"}.`);
+  } else {
+    out.push(`${other} ${litres(rest)} is more than the engine hours account for, and no event of its own covers it.`);
+  }
+  if (post != null && post <= SAME_LEVEL_L && today) out.push("Nothing has gone since.");
+  return out;
 }

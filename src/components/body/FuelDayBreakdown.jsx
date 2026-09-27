@@ -12,7 +12,7 @@
 import { Tile } from "../cards/VehicleStatsCard";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useFuelDay } from "../../hooks/useFuelDay";
-import { dayBreakdown, eventLabel, fleetDayOf, unexplainedMatters } from "../../lib/fuelDay";
+import { dayAssessment, dayBreakdown, eventLabel, fleetDayOf, hoursLabel, isTheftEvent } from "../../lib/fuelDay";
 import "./FuelDayBreakdown.css";
 
 const TZ = "Africa/Nairobi";
@@ -25,12 +25,6 @@ const prevDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) - 86_400_000);
 // Rounded before the sign is read, so -0.04 prints "0.0", not "-0.0".
 const l1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10 || 0).toFixed(1));
 
-function hoursLabel(h) {
-  if (h == null) return null;
-  const m = Math.round(h * 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
-}
-
 export default function FuelDayBreakdown({ incident, vehicleId }) {
   const { orgId } = useFleetLiveShared();
   const day = incident?.beganAt ? fleetDayOf(incident.beganAt) : null;
@@ -39,9 +33,9 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
 
   const today = day >= fleetDayOf(new Date().toISOString());
   const b = dayBreakdown({ tank, fillings, drops });
-  const gap = unexplainedMatters(b);
-  // Tenths are what is printed; a difference that rounds away is none.
-  const diff = b.unexplained == null ? null : Math.round(b.unexplained * 10) / 10 || 0;
+  // The case read in words, in place of the "Not explained" figure that left
+  // the reader to do it (operator, 2026-09-27) — see lib/fuelDay.
+  const assessment = tank ? dayAssessment(b, incident, today) : [];
 
   return (
     <section className="fd" aria-label="The day">
@@ -77,18 +71,19 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
                   sub={b.engineHours != null
                     ? `${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at ${b.engineRate.toFixed(1)} L/h` : ""}`
                     : "no engine hours"} />
-            <Tile label="Not explained"
-                  value={diff == null ? "\u2014" : `${diff > 0 ? "+" : ""}${l1(diff)}`}
-                  unit={diff != null ? " L" : ""}
-                  sub={diff == null ? "" : gap
-                    ? "not covered by engine hours"
-                    : diff === 0 ? "matches the engine hours"
-                    : diff < 0 ? "below its usual rate" : "within normal"}
-                  valColor={gap ? "var(--accent-warn)" : "var(--text-muted)"} />
             {b.distanceKm != null && (
               <Tile label="Distance" value={b.distanceKm.toFixed(1)} unit=" km" />
             )}
           </div>
+
+          {assessment.length > 0 && (
+            <div className="fd-assess" aria-label="What the day shows">
+              <div className="fd-title">What the day shows</div>
+              {assessment.map((line, i) => (
+                <p key={i} className={"fd-assess-line" + (i === 0 ? " fd-assess-line--lead" : "")}>{line}</p>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -100,10 +95,14 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
           </div>
           <ol className="fd-events">
             {b.events.map((e) => {
-              const mine = e.id === incident.id;
+              // Only a theft case is highlighted (operator, 2026-09-27): a
+              // burn finding, a dip that came back or a probe fault is part of
+              // the day, not the case, and is drawn plain.
+              const theft = isTheftEvent(e);
+              const mine = e.id === incident.id && theft;
               const kind = e.type === "refuel"
                 ? (e.verdict === "REDISTRIBUTION" ? "muted" : "ok")
-                : e.verdict === "REDISTRIBUTION" ? "muted" : e.verdict === "DRAIN" ? "warn" : "muted";
+                : theft ? "theft" : "muted";
               return (
                 <li key={e.id} className={"fd-ev" + (mine ? " fd-ev--mine" : "")}>
                   <span className="fd-ev-time">{CLOCK.format(new Date(e.at))}</span>

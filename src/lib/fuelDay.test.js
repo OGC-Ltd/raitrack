@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fleetDayOf, fleetDayBounds, dayBreakdown, eventLabel, unexplainedMatters } from "./fuelDay";
+import { fleetDayOf, fleetDayBounds, dayBreakdown, dayAssessment, eventLabel, hoursLabel, isTheftEvent, unexplainedMatters } from "./fuelDay";
 
 describe("fleet days", () => {
   it("puts 01:23 EAT on its own Kenyan day, not the UTC one before", () => {
@@ -60,11 +60,21 @@ describe("dayBreakdown", () => {
 });
 
 describe("eventLabel", () => {
-  it("says what the level did, never theft", () => {
+  it("says what the level did, and theft only as a possible theft", () => {
     expect(eventLabel({ type: "drop", verdict: "REDISTRIBUTION" })).toBe("Level dipped and came back");
     expect(eventLabel({ type: "drop", verdict: "DRAIN", cause: "HIGH_BURN" })).toBe("Burn above normal");
-    expect(eventLabel({ type: "drop", verdict: "DRAIN", cause: "SIPHON" })).toBe("Drop while parked");
+    expect(eventLabel({ type: "drop", verdict: "DRAIN", cause: "UNEXPLAINED_BURN" })).not.toMatch(/theft/i);
+    expect(eventLabel({ type: "drop", verdict: "DRAIN", cause: "SIPHON" })).toBe("Possible theft");
     expect(eventLabel({ type: "refuel", verdict: "REFILL" })).toBe("Refuelled");
+  });
+});
+
+describe("isTheftEvent — the only event the window highlights", () => {
+  it("is a drop that stayed down and was called a possible theft", () => {
+    expect(isTheftEvent({ type: "drop", verdict: "DRAIN", cause: "SIPHON" })).toBe(true);
+    expect(isTheftEvent({ type: "drop", verdict: "DRAIN", cause: "UNEXPLAINED_BURN" })).toBe(false);
+    expect(isTheftEvent({ type: "drop", verdict: "REDISTRIBUTION", cause: "SIPHON" })).toBe(false);
+    expect(isTheftEvent({ type: "refuel", verdict: "REFILL" })).toBe(false);
   });
 });
 
@@ -73,5 +83,62 @@ describe("unexplainedMatters", () => {
     expect(unexplainedMatters({ unexplained: 3.2, engine: 55 })).toBe(false);
     expect(unexplainedMatters({ unexplained: 12, engine: 55 })).toBe(true);
     expect(unexplainedMatters({ unexplained: 8, engine: 120 })).toBe(false);
+  });
+});
+
+describe("dayAssessment — the day read for the case, not left as 'not explained'", () => {
+  // MUFINDI - CTR 07, 27 Sep 2026: parked all day, engine never on, 21.3 L
+  // drawn off at 08:11 (680.8 L → 659.6 L), the day opening at 691.7 L.
+  const THEFT = { id: "ctr07", type: "drop", at: "2026-09-27T05:11:00Z", litres: 21.3, verdict: "DRAIN", cause: "SIPHON" };
+  const ctr07 = {
+    opening: 691.7, refuelled: 0, refuelCount: 0, closing: 659.6, used: 32.1,
+    engine: 0, engineHours: 0, engineRate: 3.4, unexplained: 32.1, distanceKm: null, events: [THEFT],
+  };
+  const incident = {
+    id: "ctr07", beganAt: "2026-09-27T05:11:00Z", tankBeforeMl: 680_800, tankAfterMl: 659_600, mayUseTheftWording: true,
+  };
+
+  it("says nothing burned it, what the theft took, and where the rest went", () => {
+    expect(dayAssessment(ctr07, incident, true)).toEqual([
+      "The engine did not run today, so none of the 32.1 L the tank lost was burned.",
+      "21.3 L of it is this possible theft at 08:11 (680.8 L → 659.6 L).",
+      "The other 10.8 L went before 08:11, with no event of its own: the tank read 691.7 L at the start of the day and 680.8 L when the theft began — a fall too gradual to be reported on its own.",
+      "Nothing has gone since.",
+    ]);
+  });
+
+  it("says when the rest went after the case instead", () => {
+    const later = { ...ctr07, opening: 680.8, closing: 648.8, used: 32.0 };
+    expect(dayAssessment(later, incident, false)[2])
+      .toBe("The other 10.7 L went after 08:11, with no event of its own: 659.6 L then, 648.8 L at the end of the day.");
+  });
+
+  it("clears a working day the engine accounts for (EX 10, 27 Sep)", () => {
+    const ex10 = {
+      opening: 172.0, refuelled: 192.8, refuelCount: 1, closing: 265.7, used: 99.1,
+      engine: 145.1, engineHours: 12 + 59 / 60, engineRate: 11.2, events: [
+        { id: "r", type: "refuel", at: "2026-09-27T02:58:00Z", litres: 192.8, verdict: "REFILL" },
+        { id: "b", type: "drop", at: "2026-09-27T05:52:00Z", litres: 11.2, verdict: "DRAIN", cause: "UNEXPLAINED_BURN" },
+      ],
+    };
+    expect(dayAssessment(ex10, null, true)).toEqual([
+      "The engine ran 12 h 59 min at its usual 11.2 L/h, which burns 145.1 L — all of the 99.1 L the tank lost.",
+      "That is 46.0 L under its usual rate for those hours, so nothing is missing.",
+    ]);
+  });
+
+  it("says so when the tank's loss matches the engine hours", () => {
+    const fine = { opening: 200, refuelled: 0, closing: 150, used: 50, engine: 48, engineHours: 4, engineRate: 12, events: [] };
+    expect(dayAssessment(fine)).toEqual([
+      "The engine ran 4 h 00 min at its usual 12.0 L/h, which burns 48.0 L of the 50.0 L the tank lost.",
+      "The rest matches the engine hours: nothing is missing.",
+    ]);
+  });
+
+  it("says nothing without a tank ledger, and admits a day with no engine record", () => {
+    expect(dayAssessment({ used: null, events: [] })).toEqual([]);
+    expect(dayAssessment({ used: 20, engine: null, engineHours: null, events: [] })[0])
+      .toBe("There is no engine-hour record for that day, so the 20.0 L the tank lost cannot be set against a burn.");
+    expect(hoursLabel(0.5)).toBe("30 min");
   });
 });
