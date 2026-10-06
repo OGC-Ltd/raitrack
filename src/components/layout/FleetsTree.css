@@ -186,15 +186,7 @@
 }
 .fleets__count--orange { color: var(--fl-orange); }
 .fleets__count--alert { color: var(--fl-red); }
-.fleets__row-chev {
-  font-size: 14px;
-  color: var(--fl-muted);
-  opacity: 0.6;
-  flex-shrink: 0;
-  transition: transform 120ms var(--fl-ease), opacity 120ms var(--fl-ease);
-}
 .fleets__row:hover { background: var(--fl-hover); }
-.fleets__row:hover .fleets__row-chev { opacity: 1; transform: translateX(2px); }
 .fleets__row:active { background: var(--fl-press); }
 .fleets__row:focus-visible { outline: 2px solid var(--fl-accent); outline-offset: -2px; transition: none; }
 .fleets__row--current,
@@ -217,7 +209,5 @@
   .fleets__switch,
   .fleets__track,
   .fleets__thumb,
-  .fleets__row,
-  .fleets__row-chev { transition: none; }
-  .fleets__row:hover .fleets__row-chev { transform: none; }
+  .fleets__row { transition: none; }
 }
