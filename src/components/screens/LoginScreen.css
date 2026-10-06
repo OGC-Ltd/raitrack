@@ -50,6 +50,17 @@
   --login-stat: #f5f7fa;
   --login-stat-shadow: 0 10px 22px rgba(8, 12, 18, 0.20);
 
+  /* The banner photograph, shared by the page and the hero panel.
+     WebP is half the JPEG's weight (76 KB vs 151 KB) and is swapped in by the
+     @supports block below; browsers without image-set type() keep the JPEG.
+     (Not a second background-image line as a fallback: a var() that resolves
+     to something invalid does not fall back to the line before it.)
+     --login-photo-tone is its average colour and --login-photo-preview a
+     32x16 copy, both shown until it arrives. */
+  --login-photo: url("/banner.jpeg");
+  --login-photo-tone: #7888aa;
+  --login-photo-preview: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAgABfQF+AAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb//gAPTGF2YzYzLjEuMTAxAP/bAEMACAwMDgwOEBAQEBAQExITFBQUExMTExQUFBUVFRkZGRUVFRQUFRUYGBkZGxwbGhoZGhwcHh4eJCQiIioqKzMzPv/EAGkAAQEBAQAAAAAAAAAAAAAAAAMFBgQBAQEBAAAAAAAAAAAAAAAAAAEEBRAAAgIABQQBBQEAAAAAAAAAAQIRAwUxABIEYUETIhQGgXFRITIRAAMAAwEBAAAAAAAAAAAAAAEAFFGRYaFx/8AAEQgAEAAgAwEiAAIRAAMRAP/aAAwDAQACEQMRAD8A6EwDdpzgVNZAexELZBiAT+Jz0S8XGkO75CPmfGtrrJPYkpl9xHbUjk4Zi3KdWemuFG0E3hjEzmxnOf3rSs4PGWc5LeXA+OzlFtRnEyoZSwjORM/zSN9PqNZziYTifGvFuykezE7bY/1nB2nrGr9WHXLcLi/iIEwLXs9uohQRPbdPXTYcDST/AHb/AP/Z");
+
   position: relative;
   isolation: isolate;
   /* Its OWN scroll container, and it has to be.
@@ -83,12 +94,22 @@
      `fixed` so the picture does not slide out from under the sheet when a
      short window scrolls the form — the road is a backdrop, and a backdrop
      that moves with the content reads as a second scrolling layer. */
-  background-color: var(--color-bg, #f0f4f8);
-  background-image: url("/banner.jpeg");
+  /* Painted in three steps so the first frame is never an empty grey sheet:
+     the photograph's average colour at once, then the inline 32x16 preview
+     (blurred by being stretched), then the photograph over it. The preview is
+     ~1 KB inside this stylesheet, so it needs no request; the photograph is
+     preloaded from index.html so it is already downloading while the app
+     script loads, instead of starting only after the login has rendered. */
+  background-color: var(--login-photo-tone);
+  background-image: var(--login-photo), var(--login-photo-preview);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+@supports (background-image: image-set(url("/banner.webp") type("image/webp"))) {
+  .login { --login-photo: image-set(url("/banner.webp") type("image/webp"), url("/banner.jpeg") type("image/jpeg")); }
 }
 
 /* The scrim, and the reason the same photograph can appear twice.
@@ -436,8 +457,8 @@
   /* No radius on the TOP-LEFT: the scoop below (a mask) is that corner. */
   border-radius: 0 22px 22px 22px;
   overflow: hidden;
-  background-color: var(--login-plate);
-  background-image: url("/banner.jpeg");
+  background-color: var(--login-photo-tone);
+  background-image: var(--login-photo), var(--login-photo-preview);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
