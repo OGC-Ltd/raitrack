@@ -51,18 +51,18 @@ jobs:
     environment: production
     env:
       # Baked into the bundle by vite at BUILD time, so it has to exist on the
-      # runner. It does not come from the repo: dash/.env is gitignored, so a
-      # clean checkout has no copy and the build silently produces a bundle
-      # whose map cannot initialise. That is not hypothetical — it shipped, and
-      # the dashboard came up with "[FleetMap] failed to load the map library:
-      # VITE_GOOGLE_MAPS_API_KEY is not set" while every API call behind it
-      # still returned 200, so nothing else looked wrong.
+      # runner; .env is gitignored and a clean checkout has no copy.
       #
-      # Maps JS keys are necessarily public — they ship in the browser bundle
-      # and are readable by anyone — so this is a secret for tidiness, not
-      # confidentiality. What actually protects it is the HTTP referrer
-      # restriction in the Google Cloud console.
-      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+      # new-ui draws its base map from OpenStreetMap through Leaflet and needs
+      # no key for it — the Google Maps key dash checked here is gone. The one
+      # key the bundle needs is TomTom's, for the live traffic layer and the
+      # trip ETAs. Without it the build still succeeds and the map still works,
+      # but traffic silently disappears (TRAFFIC_AVAILABLE is false), so it is
+      # checked like the map key was.
+      #
+      # TomTom keys ship in the browser bundle and are public by nature; what
+      # protects this one is the domain allow-list in the TomTom dashboard.
+      VITE_MYTOMTOM_API_KEY: ${{ secrets.VITE_MYTOMTOM_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,28 +81,28 @@ jobs:
 
       # Before the build, so the failure names the missing secret rather than
       # arriving later as a blank map in production.
-      - name: the map key must be set
+      - name: the traffic key must be set
         run: |
           set -euo pipefail
-          if [ -z "${VITE_GOOGLE_MAPS_API_KEY}" ]; then
-            echo "::error::VITE_GOOGLE_MAPS_API_KEY is not set — this build would ship a dashboard with a dead map"
+          if [ -z "${VITE_MYTOMTOM_API_KEY}" ]; then
+            echo "::error::VITE_MYTOMTOM_API_KEY is not set — this build would ship a map with no live traffic"
             exit 1
           fi
-          echo "map key is present"
+          echo "traffic key is present"
 
       - run: npm run build
 
       # And after it, because a present secret is not proof of a baked one: vite
       # only exposes variables it sees at build time under the VITE_ prefix, so
       # a rename or a misspelling passes the check above and still ships blank.
-      - name: the map key must be in the built bundle
+      - name: the traffic key must be in the built bundle
         run: |
           set -euo pipefail
-          if ! grep -rqF "${VITE_GOOGLE_MAPS_API_KEY}" build/assets; then
-            echo "::error::the bundle does not contain the map key — check the variable is spelled VITE_GOOGLE_MAPS_API_KEY"
+          if ! grep -rqF "${VITE_MYTOMTOM_API_KEY}" build/assets; then
+            echo "::error::the bundle does not contain the traffic key — check the variable is spelled VITE_MYTOMTOM_API_KEY"
             exit 1
           fi
-          echo "map key is baked into the bundle"
+          echo "traffic key is baked into the bundle"
 
       - name: every public asset must be in the bundle
         run: |
@@ -122,7 +122,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dash-build
+          name: new-ui-build
           path: build/
           retention-days: 14
           include-hidden-files: true
@@ -151,7 +151,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: dash-build
+          name: new-ui-build
           path: build
 
       # An unset secret is an empty string, not an error. Without this the run
@@ -282,24 +282,17 @@ jobs:
           fi
           echo "deploy key accepted"
 
-      - name: record the commit in the box's checkout
-        env:
-          HOST: ${{ secrets.EC2_HOST }}
+      # dash recorded its commit by fast-forwarding the box's ~/prod/dash
+      # checkout. That checkout is the DASH repo, and new-ui shares no history
+      # with it, so `git merge --ff-only` would stop every deploy here. The
+      # commit is written into the bundle instead: GET /DEPLOYED_COMMIT on the
+      # site says what is being served. ~/prod/dash is still where nginx serves
+      # build/ from, so the backup and publish below are unchanged.
+      - name: stamp the bundle with the commit
         run: |
           set -euo pipefail
-          export GIT_SSH_COMMAND='ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes'
-          branch="deploy/${GITHUB_SHA::12}"
-          git push "ssh://ubuntu@${HOST}/home/ubuntu/prod/dash" "HEAD:refs/heads/${branch}"
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "ubuntu@${HOST}" bash -s "$branch" <<'REMOTE'
-          set -euo pipefail
-          branch="$1"
-          cd /home/ubuntu/prod/dash
-          # --ff-only, so a box that has drifted stops the deploy instead of
-          # being merged into some third state nobody has seen.
-          git merge --ff-only "$branch"
-          git branch -D "$branch"
-          echo "checkout now at $(git log --oneline -1)"
-          REMOTE
+          echo "${GITHUB_SHA} ${GITHUB_REPOSITORY}" > build/DEPLOYED_COMMIT
+          cat build/DEPLOYED_COMMIT
 
       - name: back up the live bundle, then publish
         env:
