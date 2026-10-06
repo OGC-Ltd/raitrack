@@ -333,7 +333,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  /* 8px, not 10: with the fleet rows, what keeps the sidebar inside a 900px
+     window without a scrollbar (2026-10-07). */
+  padding: 8px 14px;
   background: transparent;
   border: none;
   border-bottom: 1px solid #f1f5f9;
@@ -561,7 +563,7 @@
   align-items: flex-end;
   justify-content: flex-start;
   gap: 6px;
-  padding: 14px 16px 14px;
+  padding: 10px 16px;
   border-top: 1px solid var(--sp-rule);
   line-height: 1.2;
   white-space: nowrap;
@@ -607,9 +609,11 @@
 .side-panel__nav--foot + .side-panel__meta,
 .side-panel__body + .side-panel__meta,
 .sp-foot + .side-panel__meta { margin-top: 0; }
-/* Room between the last map layer and the foot's rule, so the two do not
-   read as one block (operator, 2026-10-02). */
-.side-panel__body { padding-bottom: 28px; }
+/* The 28px that used to sit here held the last map layer off the foot's rule
+   (operator, 2026-10-02). The map layers left the sidebar on 2026-10-07 and
+   Fuel report is the last row now; with them gone the extra room only pushed
+   the body past the window and drew a scrollbar, so it is the body's own
+   10px again (operator, 2026-10-07). */
 
 .side-panel--collapsed .side-panel__meta {
   --sp-mark: 30px;

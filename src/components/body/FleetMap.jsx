@@ -78,6 +78,9 @@ import {
   trackJourney, fetchExpectedTime, TRAFFIC_AVAILABLE as EXPECTED_AVAILABLE,
 } from "../../lib/tomtomTraffic";
 import RouteCoveredCard from "./RouteCoveredCard";
+import MapToolRail from "./MapToolRail";
+import { installGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
+import { pathLengthM, plainPoint, formatDistance } from "../../lib/measure";
 
 /* "Show the route covered" → expected-time card (RouteCoveredCard, TomTom
  * leg-by-leg timing). Switched OFF 2026-10-04 at the operator's request
@@ -779,6 +782,16 @@ function labelApplier(map, maps, entries, on, obstacles) {
  * how a preference stops being one.
  */
 const FUEL_ALERTS_KEY = "ft-fuel-alerts-on";
+// The left tool rail's two remembered choices: vehicle names on the markers,
+// and whether the rail shows its tools' names.
+const NAMES_KEY = "ft-map-names-on";
+const TOOLS_EXPANDED_KEY = "ft-map-tools-expanded";
+// The base map picked in the rail's Maps panel: "osm" or "google".
+const BASE_MAP_KEY = "ft-map-base";
+const BASE_MAPS = [
+  { id: "osm",    label: "OpenStreetMap" },
+  { id: "google", label: "Google Satellite" },
+];
 
 // Pan/zoom limits. Deliberately wider than Kenya alone: Kasulu (TZ) sits at
 // ~30.1°E, west of any Kenya-only bound, and would be unreachable.
@@ -1858,7 +1871,7 @@ const VehicleTooltip = memo(function VehicleTooltip({
 // findable at a glance on a map where most markers are parked and static. It is
 // deliberately a separate class from .lf-pulse: pulse means "something is
 // wrong", ripple means "this one is driving", and a speeding vehicle is both.
-function markerIconHtml(status, { highlighted = false, searched = false, moving = false, heading = 0, sprite = "truck", dark = false, darkAge = "" } = {}) {
+function markerIconHtml(status, { highlighted = false, searched = false, moving = false, heading = 0, sprite = "truck", dark = false, darkAge = "", name = "" } = {}) {
   const color = STATUS_COLORS[status];
   // Pulse is reserved for the two states that need chasing: speeding and
   // suspected theft. Idling used to ring too, but a fleet parked up with the
@@ -1872,6 +1885,9 @@ function markerIconHtml(status, { highlighted = false, searched = false, moving 
   // of those would assert it is on the move when we have not heard from it.
   const ripple = moving && status !== "parked" && status !== "stationary" && status !== "idling";
   const halo   = searched ? "lf-halo--searched" : highlighted ? "lf-halo--active" : "";
+  // Always in the markup and shown by a class on the map (the rail's eye), so
+  // turning names on or off is one class change, not 600 marker rebuilds.
+  const nameTag = name ? `<div class="lf-name">${esc(name)}</div>` : "";
   // A dark unit gets no halo and no animation at all. Both cues assert "this is
   // happening now", and the whole point is that it is not — the marker shows
   // where the vehicle WAS when its tracker last spoke. The age badge is the
@@ -1882,6 +1898,7 @@ function markerIconHtml(status, { highlighted = false, searched = false, moving 
       <div class="lf-truck lf-truck--${sprite}" style="background-position:${truckBackgroundPosition(status, heading)}"></div>
       <div class="lf-dot" style="background:${color}"></div>
       <div class="lf-dark-age" title="Last reported ${darkAge} ago">${darkAge}</div>
+      ${nameTag}
     </div>`;
   }
   return `
@@ -1889,6 +1906,7 @@ function markerIconHtml(status, { highlighted = false, searched = false, moving 
       <div class="lf-halo ${halo}" style="--lf-status:${color}"></div>
       <div class="lf-truck lf-truck--${sprite}" style="background-position:${truckBackgroundPosition(status, heading)}"></div>
       <div class="lf-dot" style="background:${color};box-shadow:0 0 5px ${color}"></div>
+      ${nameTag}
     </div>`;
 }
 
@@ -2340,6 +2358,19 @@ export default function FleetMap() {
   // control re-draw its own on/off state, and a second source of truth is only
   // safe because exactly one function writes both — see setActiveRoute.
   const [routeId, setRouteId] = useState(null);
+
+  // ── left tool rail (MapToolRail) ──────────────────────────────────────
+  const [namesOn, setNamesOn] = useState(() => readCache(NAMES_KEY) ?? false);
+  const [toolsExpanded, setToolsExpanded] = useState(() => readCache(TOOLS_EXPANDED_KEY) ?? false);
+  // The ruler: on/off, and the points clicked so far (plain {lat,lng}).
+  const [measuring, setMeasuring] = useState(false);
+  const [measurePts, setMeasurePts] = useState([]);
+  const measuringRef = useRef(false);
+  measuringRef.current = measuring;
+  // Base map. Google only where a key was built in; otherwise OSM, always.
+  const [baseMap, setBaseMap] = useState(() =>
+    GOOGLE_BASE_AVAILABLE && readCache(BASE_MAP_KEY) === "google" ? "google" : "osm");
+  const [baseNote, setBaseNote] = useState(null);
   const vehiclesRef    = useRef([]);   // latest fleet, for event handlers
   // The funnel's selection, for the same reason: handleFilter is handed to
   // MapOverlay, and putting fleetTypes in its dep list would rebuild the
@@ -3355,6 +3386,7 @@ export default function FleetMap() {
       moving:  Boolean(v.onRoad),
       heading: markerHeading(marker, v),
       sprite:  spriteKind(v),
+      name:    v.name || v.id,
       ...opts,
     }));
     marker._iconSig = null;   // force the next reconcile pass to re-evaluate
@@ -4061,6 +4093,8 @@ export default function FleetMap() {
       // click, so the deselect gesture has to take both away or the annotated
       // line is left behind describing a unit that is no longer selected.
       map.addListener("click", () => {
+        // The ruler owns clicks while it is on (see the measure effect).
+        if (measuringRef.current) return;
         clearHover();
         clearTripPath();
         const prevId = activeRouteRef.current;
@@ -4281,6 +4315,102 @@ export default function FleetMap() {
     map.setTilt?.(0);
     resetCamera(vehiclesRef.current.filter(v => Number.isFinite(v.lat) && Number.isFinite(v.lng)));
   }, [resetCamera]);
+
+  // ── the left tool rail: ruler, place search, names ───────────────────
+
+  const toggleNames = useCallback(() => {
+    setNamesOn(v => { writeCache(NAMES_KEY, !v); return !v; });
+  }, []);
+  const toggleToolsExpanded = useCallback(() => {
+    setToolsExpanded(v => { writeCache(TOOLS_EXPANDED_KEY, !v); return !v; });
+  }, []);
+  const toggleMeasure = useCallback(() => {
+    setMeasuring(v => !v);
+    setMeasurePts([]);
+  }, []);
+
+  // While the ruler is on, a click on the map adds a point. Backspace takes
+  // the last one back and Escape ends the measurement. The map's own click
+  // (deselect, close cards) stands aside — see measuringRef in its handler.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!measuring || !map || !mapReady) return undefined;
+    const h = map.addListener("click", (e) => {
+      if (e?.latLng) setMeasurePts(p => [...p, plainPoint(e.latLng)]);
+    });
+    const onKey = (e) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName ?? "") || e.target?.isContentEditable;
+      if (typing) return;
+      if (e.key === "Escape") { setMeasuring(false); setMeasurePts([]); }
+      else if (e.key === "Backspace") { e.preventDefault(); setMeasurePts(p => p.slice(0, -1)); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { h.remove(); document.removeEventListener("keydown", onKey); };
+  }, [measuring, mapReady]);
+
+  // The measured path: one line, a dot per point and the total at the end.
+  // Redrawn whole on every change; a ruler has a handful of points.
+  useEffect(() => {
+    const map = mapRef.current, maps = mapsLibRef.current, DomMarker = DomMarkerRef.current;
+    if (!map || !maps || !DomMarker || measurePts.length === 0) return undefined;
+    const line = new maps.Polyline({
+      path: measurePts, map, clickable: false, zIndex: 900,
+      strokeColor: "#1d4ed8", strokeOpacity: 0.95, strokeWeight: 3,
+    });
+    const dots = measurePts.map(p => {
+      const m = new DomMarker({ position: p, html: '<div class="mtr-dot"></div>', anchor: "center", zIndex: 900 });
+      m.setMap(map);
+      return m;
+    });
+    let total = null;
+    if (measurePts.length > 1) {
+      total = new DomMarker({
+        position: measurePts[measurePts.length - 1], anchor: "center", zIndex: 901,
+        html: `<div class="mtr-total">${formatDistance(pathLengthM(measurePts))}</div>`,
+      });
+      total.setMap(map);
+    }
+    return () => { line.setMap(null); for (const d of dots) d.setMap(null); total?.setMap(null); };
+  }, [measurePts]);
+
+  const measureText = measurePts.length > 1
+    ? `${formatDistance(pathLengthM(measurePts))} · ${measurePts.length - 1} leg${measurePts.length > 2 ? "s" : ""}`
+    : measurePts.length === 1 ? "Click the next point" : null;
+
+  // Apply the base map. Google is loaded on first use; if it cannot be (no
+  // key, a refused referrer, offline) the map stays on OpenStreetMap and the
+  // Maps panel says why, rather than going blank.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return undefined;
+    let dead = false;
+    if (baseMap === "google") {
+      installGoogleBase(map)
+        .then(() => { if (!dead) { map.setMapTypeId(GOOGLE_TYPE_ID); setBaseNote(null); } })
+        .catch((e) => {
+          if (dead) return;
+          setBaseNote(`Google Maps is unavailable: ${e.message}. Showing OpenStreetMap.`);
+          setBaseMap("osm");
+        });
+    } else {
+      map.setMapTypeId(OSM_TYPE_ID);
+    }
+    return () => { dead = true; };
+  }, [baseMap, mapReady]);
+
+  const chooseBase = useCallback((id) => {
+    writeCache(BASE_MAP_KEY, id);
+    setBaseNote(null);
+    setBaseMap(id);
+  }, []);
+
+  // Place search biases to what is on screen.
+  const getSearchBias = useCallback(() => {
+    const b = mapRef.current?.getBounds?.();
+    if (!b) return null;
+    const ne = b.getNorthEast(), sw = b.getSouthWest();
+    return { west: sw.lng(), south: sw.lat(), east: ne.lng(), north: ne.lat() };
+  }, []);
 
   // ── the estate's surveyed boundaries ───────────────────────────────────
   //
@@ -5093,7 +5223,7 @@ export default function FleetMap() {
         marker = new DomMarker({
           position: { lat: v.lat, lng: v.lng },
           html:     markerIconHtml(markerState(v, alertOpts), { moving: v.onRoad, heading: v.heading, sprite: spriteKind(v),
-                                                    dark: isDark(v), darkAge: isDark(v) ? darkAgeLabel(v) : "" }),
+                                                    dark: isDark(v), darkAge: isDark(v) ? darkAgeLabel(v) : "", name: v.name || v.id }),
           anchor:   "bottom",
           zIndex:   3,
           onClick: (e) => {
@@ -5207,7 +5337,7 @@ export default function FleetMap() {
         // Rebuilding during a glide resets CSS animations causing visible stutter.
         if (!marker._tween) {
           marker.setHtml(markerIconHtml(mstate, { highlighted, searched, moving, heading, sprite: spriteKind(v),
-                                                  dark, darkAge: dark ? darkAgeLabel(v) : "" }));
+                                                  dark, darkAge: dark ? darkAgeLabel(v) : "", name: v.name || v.id }));
           marker._iconSig = sig;
           marker._headingFrame = truckFrame(heading);
         }
@@ -6153,6 +6283,34 @@ export default function FleetMap() {
     setMobileActiveTab("map");
   }, [setDesktopActiveTab, setMobileActiveTab]);
 
+  // A picked place: frame it, and leave a pin on it until the next pick.
+  const placePinRef = useRef(null);
+  const handlePickPlace = useCallback((place) => {
+    const map = mapRef.current, maps = mapsLibRef.current, DomMarker = DomMarkerRef.current;
+    if (!map || !maps || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return;
+    revealMap();
+    const [south, north, west, east] = place.bbox ?? [];
+    if ([south, north, west, east].every(Number.isFinite) && (north - south > 1e-4 || east - west > 1e-4)) {
+      map.fitBounds(new maps.LatLngBounds({ lat: south, lng: west }, { lat: north, lng: east }), 40);
+      // A building-sized box would zoom past anything useful.
+      if (map.getZoom() > 17) map.setZoom(17);
+    } else {
+      map.panTo({ lat: place.lat, lng: place.lng });
+      map.setZoom(16);
+    }
+    placePinRef.current?.setMap(null);
+    if (DomMarker) {
+      const pin = new DomMarker({
+        position: { lat: place.lat, lng: place.lng }, anchor: "bottom", zIndex: 890,
+        html: `<div class="mtr-place-pin" title="${esc(place.detail ?? place.name)}"><i class="ti ti-map-pin-filled"></i></div>`,
+      });
+      pin.setMap(map);
+      placePinRef.current = pin;
+    }
+  }, [revealMap]);
+  useEffect(() => () => placePinRef.current?.setMap(null), []);
+
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { registerReveal(revealMap); }, [revealMap]);
 
@@ -6695,7 +6853,7 @@ export default function FleetMap() {
   }, [trackedSet, routeId, setActiveRoute]);
 
   return (
-    <div className="fleet-map-body">
+    <div className={`fleet-map-body${namesOn ? " fleet-map--names" : ""}${measuring ? " mtr-measuring" : ""}`}>
 
       <div className={`map-layer${showMobileMap ? " map-layer--visible" : ""}`}>
         <div ref={mapContainerRef} className="gmap-fill" />
@@ -6705,7 +6863,7 @@ export default function FleetMap() {
         <RouteCoveredCard covered={covered} onClose={() => setCovered(null)} />
         <MapStatusBar
           map={mapReady ? mapRef.current : null}
-          attribution={OSM_ATTRIBUTION}
+          attribution={baseMap === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION}
           className="map-status--live"
         />
 
@@ -6757,6 +6915,48 @@ export default function FleetMap() {
             only hides the other markers: it leaves the camera fitted to the
             whole estate, so picking CRITICAL out of 597 units read as "the map
             just emptied" rather than "here is the one you asked about". */}
+        {/* The tool rail, beside the sidebar — desktop only, where the sidebar
+            exists. Below 1024 the map keeps its own camera rail and no more. */}
+        {!isCompact && (
+          <MapToolRail
+            expanded={toolsExpanded}
+            onToggleExpanded={toggleToolsExpanded}
+            vehicles={vehicles}
+            getBias={getSearchBias}
+            onPickVehicle={handleFocusVehicle}
+            onPickPlace={handlePickPlace}
+            namesOn={namesOn}
+            onToggleNames={toggleNames}
+            /* Live traffic is a rail button of its own, so the Maps panel
+               lists every layer but that one. (The phone's layers menu in the
+               camera rail still carries it — there is no rail there.) */
+            layers={mapLayers.filter(l => l.id !== "traffic")}
+            traffic={mapLayers.find(l => l.id === "traffic") ?? null}
+            bases={GOOGLE_BASE_AVAILABLE ? BASE_MAPS : null}
+            base={baseMap}
+            onBase={chooseBase}
+            baseNote={baseNote}
+            onFitFleet={resetView}
+            measuring={measuring}
+            measureText={measureText}
+            onToggleMeasure={toggleMeasure}
+            route={(() => {
+              const target = selectedVehicleId ?? routeId;
+              const v = target ? vehicles.find(x => x.id === target) : null;
+              const on = Boolean(target && routeId === target && routeLayerRef.current[target]);
+              return {
+                available: Boolean(v),
+                on,
+                onToggle: () => v && toggleRoute(v.id),
+                title: v
+                  ? `${on ? "Hide" : "Show"} the route covered by ${v.name || v.id}`
+                  : "Select a vehicle to show the route it covered",
+              };
+            })()}
+            zones={mapLayers.find(l => l.id === "zones") ?? null}
+          />
+        )}
+
         <StatusRail
           vehicles={vehicles}
           loading={vehiclesLoading}

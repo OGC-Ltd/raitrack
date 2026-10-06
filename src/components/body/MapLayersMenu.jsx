@@ -49,7 +49,13 @@ function LayersIcon() {
   );
 }
 
-export default function MapLayersMenu({ layers }) {
+/**
+ * `rail`: drawn as a button of the map's left tool rail (MapToolRail) rather
+ * than of the camera stack — the same menu, a different trigger skin, and the
+ * panel opening to the RIGHT of the button instead of to its left. `label` is
+ * the rail's expanded-state caption.
+ */
+export default function MapLayersMenu({ layers, rail = false, label = null, bases = null, base = null, onBase = null, baseNote = null }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
@@ -102,7 +108,9 @@ export default function MapLayersMenu({ layers }) {
 
   // A control that opens an empty panel is worse than no control. Orgs with
   // neither zone geometry nor a planting plan get nothing.
-  if (!layers?.length) return null;
+  // `bases` — the base maps to choose between (rail only): [{ id, label, hint }].
+  const hasBases = rail && bases?.length > 1;
+  if (!layers?.length && !hasBases) return null;
 
   const activeCount = layers.filter((l) => l.on).length;
 
@@ -111,26 +119,67 @@ export default function MapLayersMenu({ layers }) {
   const shown = (layer) => keyOpen[layer.id] ?? false;
 
   return (
-    <div className="map-layers" ref={wrapRef}>
+    <div className={`map-layers${rail ? " map-layers--rail" : ""}`} ref={wrapRef}>
       <button
         ref={btnRef}
         type="button"
-        className={`map-cam-btn map-layers__btn${open ? " map-layers__btn--open" : ""}${activeCount ? " map-layers__btn--on" : ""}`}
+        className={rail
+          ? `mtr-btn${open ? " mtr-btn--on" : ""}`
+          : `map-cam-btn map-layers__btn${open ? " map-layers__btn--open" : ""}${activeCount ? " map-layers__btn--on" : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={`Map layers${activeCount ? `, ${activeCount} on` : ""}`}
-        title="Map layers"
+        aria-label={`${rail ? "Maps" : "Map layers"}${activeCount ? `, ${activeCount} on` : ""}`}
+        title={rail ? "Maps: base map and layers" : "Map layers"}
       >
-        <LayersIcon />
         {/* The count is the whole state of the menu while it is shut — without
             it, a layer left on is invisible until something is clicked. */}
-        {activeCount > 0 && <span className="map-layers__count" data-digits={String(activeCount).length}>{activeCount}</span>}
+        {rail ? (
+          <>
+            {/* On the rail the count rides the ICON's corner, not the button's:
+                the button is the rail's full width, and wider still with the
+                tool names shown, so the button's corner left it floating. */}
+            <span className="mtr-btn__icon">
+              <i className="ti ti-map" aria-hidden="true" />
+              {activeCount > 0 && <span className="map-layers__count" data-digits={String(activeCount).length}>{activeCount}</span>}
+            </span>
+            {label && <span className="mtr-btn__label">{label}</span>}
+          </>
+        ) : (
+          <>
+            <LayersIcon />
+            {activeCount > 0 && <span className="map-layers__count" data-digits={String(activeCount).length}>{activeCount}</span>}
+          </>
+        )}
       </button>
 
       {open && (
-        <div className="map-layers__panel" id={panelId} role="group" aria-label="Map layers">
-          <div className="map-layers__title">Map layers</div>
+        <div className="map-layers__panel" id={panelId} role="group" aria-label={rail ? "Maps" : "Map layers"}>
+          {hasBases && (
+            <>
+              <div className="map-layers__title">Base map</div>
+              <div className="map-layers__bases" role="radiogroup" aria-label="Base map">
+                {bases.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={base === b.id}
+                    className={`map-layers__base${base === b.id ? " map-layers__base--on" : ""}`}
+                    onClick={() => onBase?.(b.id)}
+                    title={b.hint ?? b.label}
+                  >
+                    <span className="map-layers__radio" aria-hidden="true" />
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              {baseNote && <div className="map-layers__hint map-layers__base-note">{baseNote}</div>}
+            </>
+          )}
+          {layers?.length > 0 && (
+            <div className={`map-layers__title${hasBases ? " map-layers__title--gap" : ""}`}>Map layers</div>
+          )}
 
           {layers.map((layer) => (
             <div className="map-layers__layer" key={layer.id}>

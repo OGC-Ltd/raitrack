@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { useAppFields, useAppActions, useCompanies } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
-import { useMapLayers } from '../../context/MapLayersContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import LiveFeed from './LiveFeed';
 import { FuelFollowUpHost } from '../body/FuelFollowUp';
@@ -76,21 +75,6 @@ export function bellBadgeLabel(count) {
   return String(Math.min(count, BELL_CAP));
 }
 
-// "Online" for a live unit, otherwise when it was last heard from.
-function lastSeenLabel(v) {
-  if (v.online) return 'Online';
-  const ms = v.capturedAtMs;
-  if (!Number.isFinite(ms)) return 'Never reported';
-  const mins = Math.floor((Date.now() - ms) / 60000);
-  if (mins < 1)    return 'Last seen just now';
-  if (mins < 60)   return `Last seen ${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)    return `Last seen ${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7)    return `Last seen ${days}d ago`;
-  return `Last seen ${new Date(ms).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-}
-
 // Company logo, or its coloured letter when there's no logo on file.
 function CompanyMark({ company, size = 'md' }) {
   if (!company) return null;
@@ -124,16 +108,12 @@ export default function AppHeader() {
    * can carry an empty string here, which `??` would happily render as a blank
    * line. */
   const displayName = user?.fullName?.trim() || user?.name?.trim() || '';
-  const { feed, vehicles = [] } = useFleetLiveShared();
-  const { focusVehicle } = useMapLayers();
+  const { feed } = useFleetLiveShared();
 
   const [orgOpen,        setOrgOpen]        = useState(false);
   const [feedOpen,       setFeedOpen]       = useState(false);
   const [feedUnreadSince, setFeedUnreadSince] = useState(() => Date.now());
   const [userOpen,       setUserOpen]       = useState(false);
-  const [searchQuery,    setSearchQuery]    = useState('');
-  const [searchResults,  setSearchResults]  = useState([]);
-  const [searchOpen,     setSearchOpen]     = useState(false);
 
   const orgRef  = useRef(null);
   const userRef = useRef(null);
@@ -201,26 +181,6 @@ export default function AppHeader() {
     setOrgOpen(false);
   };
 
-  const handleSearchInput = (e) => {
-    const q = e.target.value;
-    setSearchQuery(q);
-    if (!q.trim()) { setSearchResults([]); setSearchOpen(false); return; }
-    const matches = vehicles.filter(v =>
-      v.id?.toLowerCase().includes(q.toLowerCase()) ||
-      v.driver?.toLowerCase().includes(q.toLowerCase()) ||
-      v.name?.toLowerCase().includes(q.toLowerCase())
-    ).slice(0, 6);
-    setSearchResults(matches);
-    setSearchOpen(matches.length > 0);
-  };
-
-  const handleSelectVehicle = (v) => {
-    focusVehicle(v.id);
-    setSearchQuery(v.id);
-    setSearchOpen(false);
-    setSearchResults([]);
-  };
-
   return (
     <>
       <header className="app-header">
@@ -267,42 +227,8 @@ export default function AppHeader() {
           )}
         </div>
 
-        {/* Search */}
-        <div className="app-header__search-wrap">
-          <div className="app-header__search">
-            <i className="ti ti-search app-header__search-icon" aria-hidden="true" />
-            <input
-              type="text"
-              className="app-header__search-input"
-              placeholder="Search plate or driver..."
-              value={searchQuery}
-              onChange={handleSearchInput}
-              onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
-              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-            />
-          </div>
-          {searchOpen && searchResults.length > 0 && (
-            <div className="app-header__search-dropdown">
-              {searchResults.map(v => (
-                <button
-                  key={v.id}
-                  className="app-header__search-result"
-                  onMouseDown={() => handleSelectVehicle(v)}
-                >
-                  <span className="app-header__search-result-plate">{v.id}</span>
-                  <span className="app-header__search-result-driver">{v.driver}</span>
-                  <span className={`app-header__search-result-seen${v.online ? ' app-header__search-result-seen--on' : ''}`}>
-                    {lastSeenLabel(v)}
-                  </span>
-                  <span
-                    className="app-header__search-result-dot"
-                    style={{ background: v.online ? (v.status === 'speeding' || v.status === 'theft' ? '#ef4444' : '#22c55e') : '#9ca3af' }}
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* No search box here since 2026-10-07: vehicle, driver and place search
+            live in the map's tool rail (MapToolRail), beside the sidebar. */}
 
         {/* Notification bell — not rendered without rights to the fleet. */}
         {!limited && (

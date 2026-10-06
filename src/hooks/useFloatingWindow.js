@@ -116,7 +116,9 @@ export function safeArea() {
     base: liveRect(".fleet-map-body") ?? {
       left: 0, top: 0, right: layoutViewport().width, bottom: layoutViewport().height,
     },
-    leftRail:  liveRect(".overlay-left"),
+    // The map's tool rail (MapToolRail) stands in for a left rail where the
+    // overlay's own is not drawn, so a window opens beside it, not over it.
+    leftRail:  liveRect(".overlay-left") ?? liveRect(".mtr-card"),
     rightRail: liveRect(".overlay-right"),
     /* Same pair as in publishSafeAreaVars, for the same reason: `.footer-nav`
        is never mounted, so on a phone this read "no footer" and let a window

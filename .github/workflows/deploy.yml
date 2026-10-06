@@ -63,6 +63,10 @@ jobs:
       # TomTom keys ship in the browser bundle and are public by nature; what
       # protects this one is the domain allow-list in the TomTom dashboard.
       VITE_MYTOMTOM_API_KEY: ${{ secrets.VITE_MYTOMTOM_API_KEY }}
+      # Google Maps as the second base map (lib/googleBase), chosen in the map
+      # rail's Maps panel. Optional: without it the choice is simply not
+      # offered and the map is OpenStreetMap only, so it is not checked below.
+      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 

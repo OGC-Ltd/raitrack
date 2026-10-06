@@ -11,7 +11,6 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
 import { TreeCountsMasked } from './SideTree';
 import FleetsTree from './FleetsTree';
-import MapLayersTree from './MapLayersTree';
 import { versionLabel, buildDetail } from '../../lib/version';
 import './SidePanel.css';
 
@@ -407,7 +406,8 @@ export default function SidePanel() {
                 open:   () => handleNav('fuelReport'),
               } : null}
             />
-            <MapLayersTree />
+            {/* No Map layers here since 2026-10-07: base map and layers are in
+                the map rail's Maps panel, live traffic is its own rail button. */}
             </TreeCountsMasked.Provider>
           </div>
 
