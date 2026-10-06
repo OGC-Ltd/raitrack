@@ -613,7 +613,6 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             <Tile
               label="SEAL SERIAL"
               value={serial}
-              sub="from FactorySuite"
             />
           )}
         </div>
