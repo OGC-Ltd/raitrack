@@ -6,8 +6,13 @@ import {
 const NOW = Date.parse("2026-09-15T09:00:00Z");
 const MIN = 60_000;
 
-// Oyani's real ring, trimmed to a square around it — the numbers are the
-// magnitude the live files use, so a latitude sign error shows up here.
+// A square of the right SIZE in the right part of the world — a hectare or
+// so, at Migori's longitude and just below the equator — so that a latitude
+// sign error or a swapped lng/lat shows up here as a unit that is suddenly
+// nowhere near the fence. Not any one site's ring: it was traced off Oyani's
+// before that survey was re-cut, and nothing in these tests wants it to track
+// a real file. A fixture that follows a survey is a fixture that breaks every
+// time a surveyor walks the fence again.
 const RING = [
   [34.5938, -1.0408], [34.5951, -1.0408], [34.5951, -1.0400], [34.5938, -1.0400], [34.5938, -1.0408],
 ];

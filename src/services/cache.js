@@ -27,10 +27,43 @@ export function readCache(key) {
   }
 }
 
+/**
+ * Drop cached payloads to make room: every older-version entry, and every
+ * current one except `keep`, largest first until `need` characters are freed.
+ * Only this module's own entries (the `::` suffix) — never a preference.
+ */
+function evict(keep, need) {
+  const entries = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (!k || k === keep || !/::v\d+$/.test(k)) continue
+    entries.push([k, (localStorage.getItem(k) ?? '').length, !k.endsWith(`::${CACHE_VERSION}`)])
+  }
+  // Stale versions first, then the biggest: a company's fleet snapshot is
+  // hundreds of kB, and one of those is what fills the quota.
+  entries.sort((a, b) => (b[2] - a[2]) || (b[1] - a[1]))
+  let freed = 0
+  for (const [k, size, stale] of entries) {
+    if (!stale && freed >= need) break
+    localStorage.removeItem(k)
+    freed += size
+  }
+}
+
 export function writeCache(key, value) {
+  let raw
   try {
-    localStorage.setItem(versioned(key), JSON.stringify(value))
+    raw = JSON.stringify(value)
+    localStorage.setItem(versioned(key), raw)
   } catch {
-    /* private mode / quota exceeded — first paint just won't be cached */
+    // Full: make room from the other cached payloads and try once more. The
+    // caches for companies not on screen are the cheapest thing to lose — they
+    // only buy a faster first paint on a later visit.
+    try {
+      evict(versioned(key), raw?.length ?? 0)
+      localStorage.setItem(versioned(key), raw)
+    } catch {
+      /* private mode, or this one payload alone exceeds the quota */
+    }
   }
 }

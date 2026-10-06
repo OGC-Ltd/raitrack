@@ -12,7 +12,7 @@
 import { Tile } from "../cards/VehicleStatsCard";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useFuelDay } from "../../hooks/useFuelDay";
-import { dayAssessment, dayBreakdown, eventLabel, fleetDayOf, hoursLabel, isTheftEvent } from "../../lib/fuelDay";
+import { dayAssessment, dayBreakdown, engineBasisLabel, eventLabel, fleetDayOf, isTheftEvent } from "../../lib/fuelDay";
 import "./FuelDayBreakdown.css";
 
 const TZ = "Africa/Nairobi";
@@ -25,13 +25,20 @@ const prevDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) - 86_400_000);
 // Rounded before the sign is read, so -0.04 prints "0.0", not "-0.0".
 const l1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10 || 0).toFixed(1));
 
-export default function FuelDayBreakdown({ incident, vehicleId }) {
+/**
+ * `cardShowsLevel`: the vehicle card beside this already shows the tank now
+ * (FUEL LEVEL), so today's "Level now" would say the same figure twice and is
+ * left out (operator, 2026-09-30). A past day's closing level is not what the
+ * card shows, so it always stays.
+ */
+export default function FuelDayBreakdown({ incident, vehicleId, cardShowsLevel = false }) {
   const { orgId } = useFleetLiveShared();
   const day = incident?.beganAt ? fleetDayOf(incident.beganAt) : null;
   const { tank, fillings, drops, loading, error } = useFuelDay(orgId, vehicleId, day);
   if (!day) return null;
 
   const today = day >= fleetDayOf(new Date().toISOString());
+  const showClosing = !(today && cardShowsLevel);
   const b = dayBreakdown({ tank, fillings, drops });
   // The case read in words, in place of the "Not explained" figure that left
   // the reader to do it (operator, 2026-09-27) — see lib/fuelDay.
@@ -58,19 +65,19 @@ export default function FuelDayBreakdown({ incident, vehicleId }) {
                   value={b.refuelCount === 0 ? "0.0" : `+${l1(b.refuelled)}`} unit=" L"
                   sub={b.refuelCount === 0 ? "none" : `${b.refuelCount} refuel${b.refuelCount === 1 ? "" : "s"}`}
                   valColor={b.refuelCount ? "var(--accent-ok)" : undefined} />
-            <Tile label={today ? "Level now" : "Closing level"} value={l1(b.closing)} unit={b.closing != null ? " L" : ""}
-                  sub={today ? CLOCK.format(new Date()) : "end of day"} />
+            {showClosing && (
+              <Tile label={today ? "Level now" : "Closing level"} value={l1(b.closing)} unit={b.closing != null ? " L" : ""}
+                    sub={today ? CLOCK.format(new Date()) : "end of day"} />
+            )}
           </div>
 
           <div className="vt-divider" />
 
           <div className="vt-tiles">
             <Tile label="Fuel used" value={l1(b.used)} unit={b.used != null ? " L" : ""}
-                  sub={"opening + refuelled \u2212 closing"} />
+                  sub={showClosing ? "opening + refuelled \u2212 closing" : "opening + refuelled \u2212 fuel level"} />
             <Tile label="Engine should use" value={l1(b.engine)} unit={b.engine != null ? " L" : ""}
-                  sub={b.engineHours != null
-                    ? `${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at ${b.engineRate.toFixed(1)} L/h` : ""}`
-                    : "no engine hours"} />
+                  sub={`${engineBasisLabel(b)}${b.engineRateBasis === "register" ? " · std rate" : ""}`} />
             {b.distanceKm != null && (
               <Tile label="Distance" value={b.distanceKm.toFixed(1)} unit=" km" />
             )}

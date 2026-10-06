@@ -50,9 +50,13 @@
   border-radius: 8px;
   overflow: hidden;
   margin: var(--sp4-md) var(--sp4-gutter) 0;
+  /* The detail is a flex column: without this the strip is squeezed to fit
+     and its overflow:hidden crops the last stat off on a phone. */
+  flex-shrink: 0;
 }
 .wb-stat {
   flex: 1 1 140px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -290,16 +294,118 @@
     gap: 10px;
   }
   .wb-detail .sp4-back-btn {
-    min-height: 36px;
+    min-height: var(--m-ctl);
     padding-inline: 14px;
   }
   .wb-detail .sp4-detail-titles { flex: 1 0 100%; }
 
-  /* The driver's name is the first thing to go: on a phone the weights and the
-     times are what somebody at a bridge is checking. Head and cell together,
-     or the columns shear. */
-  .wb-td-driver,
-  .sp4-probe-table thead th:nth-child(3) { display: none; }
+}
+
+/* Tablet portrait: still a table, so the driver's name is the first thing to
+   go — the weights and the times are what somebody at a bridge is checking.
+   Head and cell together, or the columns shear. (On a phone the ticket is a
+   card and the name has room again.) */
+@media (min-width: 600px) and (max-width: 767px) {
+  .wb-grid .wb-td-driver,
+  .wb-grid .sp4-probe-table thead th:nth-child(3) { display: none; }
+}
+
+/* ── Phones: a five-column table ──────────────────────────────────────────
+   Fourteen columns were a 1300px grid behind a 375px window, with the net
+   weight four swipes away. On a phone the table keeps time, vehicle, type,
+   net and payload, which fit the width; driver, token, tare, gross, their
+   stamps, load time and ticket number are in the ticket a tap opens. */
+@media (max-width: 599px) {
+  /* Through .sp4-root and the keep-table class: SensorPanel's phone rule
+     that keeps these cells as table cells is that specific. */
+  .sp4-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th.wb-col-full,
+  .sp4-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td.wb-col-full { display: none; }
+
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table { width: 100%; min-width: 0; table-layout: auto; }
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th {
+    padding: 8px 4px;
+    font-size: 10px;
+  }
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td,
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:has(> .sp4-reg) {
+    padding: 10px 4px;
+    font-size: 12px;
+  }
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th:first-child,
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:first-child { padding-left: var(--sp4-gutter); }
+  /* Payload (11th) is the last column left showing. */
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th:nth-child(11),
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:nth-child(11) { padding-right: var(--sp4-gutter); }
+  /* Nothing scrolls sideways now, so the vehicle need not be pinned. */
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th.sp4-th--pin,
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin { position: static; box-shadow: none; }
+  .wb-root .wb-grid .sp4-reg { font-size: 12px; }
+  .wb-grid .sp4-table > tbody > tr { cursor: pointer; }
+  /* The type chip was the widest thing in the row; the time is a clock. */
+  .wb-grid .sp4-kind-chip { padding: 1px 5px; font-size: 10.5px; }
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:first-child { font-size: 11.5px; }
+  .wb-grid .sp4-table > tbody > tr > td.wb-td-net { font-weight: 700; color: var(--sp4-text-1); }
+
+  /* The ticket's five figures, three then two, rather than three rows. */
+  .wb-stat { flex-basis: 96px; padding: 8px 10px; }
+}
+
+/* Handsets: the two ends of the range share one row, half each, and the three
+   quick spans share the next, a third each. With the date fields at 16px (the
+   size that stops iOS zooming on focus, index.css) a free wrap put "From" on
+   one line, "to" plus two chips on the next and "Last 7d" alone on a third. */
+@media (max-width: 599px) {
+  /* Each end is ONE field, half the row: the box is the leg, with its label
+     inside on the left and the date filling the rest. A label row above two
+     dark-ruled native widgets read as a form, not as the search box's
+     sibling, and cost a line. */
+  .wb-root .wb-range-leg {
+    flex: 1 1 calc(50% - 4px);
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--m-field);
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--sp4-line-hi);
+    border-radius: 8px;
+    background: var(--sp4-surface);
+    box-sizing: border-box;
+  }
+  .wb-root .wb-range-leg:focus-within { border-color: var(--sp4-accent); }
+  .wb-root .wb-range-leg .sp4-filter-label { margin: 0; font-size: 10px; }
+  /* iOS Safari draws a date input at its own intrinsic width, centred, and
+     ignores flex sizing unless the native appearance is dropped; the value
+     is then left-aligned so both ends line up under the search text. */
+  .wb-root .wb-range-leg .sp4-date-input {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1 1 auto;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: calc(var(--m-field) - 2px);
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-weight: 500;
+    line-height: calc(var(--m-field) - 2px);
+    text-align: left;
+  }
+  .wb-root .wb-range-leg .sp4-date-input:hover { background: transparent; }
+  .wb-root .wb-range-leg .sp4-date-input:focus-visible { outline: none; }
+  .wb-root .wb-range-leg .sp4-date-input::-webkit-date-and-time-value { text-align: left; margin: 0; }
+  /* The glyph took the year's room at 375px ("10/01/202"); the whole field
+     opens the calendar on a tap instead (showPicker in the screen). */
+  .wb-root .wb-range-leg .sp4-date-input::-webkit-calendar-picker-indicator { display: none; }
+  .wb-root .wb-range-leg .sp4-date-input::-webkit-datetime-edit-text { padding: 0; }
+  .wb-root .wb-range-leg { cursor: pointer; }
+  .wb-root .sp4-filter-group > .sp4-filter-chip {
+    flex: 1 1 0;
+    min-height: var(--m-chip);
+    justify-content: center;
+  }
 }
 
 /* ── Breadcrumb ───────────────────────────────────────────────────────────
@@ -389,6 +495,11 @@
   color: var(--sp4-text-1);
   border-bottom-color: var(--sp4-accent);
 }
+/* Tickets / Analytics are the page's view switch, not just a trail — on a
+   phone they measured 21px tall. The breadcrumb row grows to hold them. */
+@media (max-width: 767px) {
+  .wb-crumb { min-height: var(--m-ctl); padding: 8px 10px 6px; }
+}
 
 /* ── The analytics view ───────────────────────────────────────────────────
    `.analytics-page` is claimed on this wrapper for its TOKENS — the `an-*`
@@ -419,4 +530,331 @@
   font-size: 10.5px;
   color: var(--sp4-warn);
   white-space: nowrap;
+}
+
+/* ── Tickets on a desktop: fourteen columns, scrolling sideways ────────────
+ *
+ * The grid is ~1,540px of columns; a 1280px screen gives it ~950. It always
+ * scrolled, but nothing said so: the thumb was near-white (fixed for every
+ * grid in SensorPanel.css) and a wheel only moves it up and down. So:
+ *
+ *  · a full-size scrollbar, not the thin one, since here it is a control;
+ *  · edge shadows while there is more grid in that direction — the same
+ *    `local`/`scroll` gradient pair the phone layout uses, which cancel at
+ *    each end of the travel, so they read out scroll position;
+ *  · the vehicle held at the left edge, so a row scrolled to its weights
+ *    still says whose they are.
+ */
+@media (min-width: 768px) {
+  .wb-root .wb-grid {
+    scrollbar-width: auto;
+    background:
+      linear-gradient(to right, var(--sp4-bg), transparent) 0 0 / 28px 100% no-repeat local,
+      linear-gradient(to left,  var(--sp4-bg), transparent) 100% 0 / 28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,    rgba(15,23,42,.18), transparent) 0 0 / 14px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.18), transparent) 100% 0 / 14px 100% no-repeat scroll;
+  }
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th.sp4-th--pin,
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    box-shadow: inset -1px 0 0 var(--sp4-line);
+  }
+  /* Above both the sticky head row and the pinned column. */
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > thead > tr > th.sp4-th--pin { top: 0; z-index: 3; }
+  /* The surface, not the ground: since 2026-10-03 the grid is a white box
+     on the gutter, and a ground-coloured pinned column read as a hole in it. */
+  .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin { background: var(--sp4-surface); }
+}
+
+/* ── The bridge names, scrolling sideways on a desktop ─────────────────────
+ * Seven yards do not fit beside each other in the ~950px a 1280px screen
+ * leaves, and `.sp4-tabs` hides its scrollbar, so the last few were simply
+ * cut off at the edge. On this screen the strip shows a thin scrollbar and
+ * the same edge shadows as the ticket grid, so the yards past the edge read
+ * as "more this way" rather than as absent.
+ */
+@media (min-width: 768px) {
+  .wb-root .sp4-tabs {
+    scrollbar-width: thin;
+    scrollbar-color: #a3aebd transparent;
+    background:
+      linear-gradient(to right, var(--sp4-surface), transparent) 0 0 / 28px 100% no-repeat local,
+      linear-gradient(to left,  var(--sp4-surface), transparent) 100% 0 / 28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,    rgba(15,23,42,.18), transparent) 0 0 / 14px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.18), transparent) 100% 0 / 14px 100% no-repeat scroll,
+      var(--sp4-surface);
+  }
+  .wb-root .sp4-tabs::-webkit-scrollbar { display: block; height: 6px; }
+  .wb-root .sp4-tabs::-webkit-scrollbar-thumb { background: #a3aebd; border-radius: 3px; }
+  .wb-root .sp4-tabs > .sp4-tab { flex-shrink: 0; }
+}
+
+
+/* ── The framed page ─────────────────────────────────────────────────────────
+ * Hallmark · redesign 2026-10-03 · scope: Weighbridges page chrome
+ * genre: modern-minimal · theme: the app's own sp4 tokens (preflight cached)
+ * pre-emit critique: P4 H5 E4 S4 R5 V4
+ *
+ * The page now wears `.sp4-root--framed` (SensorPanel.css), the treatment
+ * Sensor Monitor got today: header, filter bar and tabs on the panel ground
+ * with their hairlines drawn between the gutters, the KPI tiles at the Fuel
+ * report's measure, white search / date / chips, and the ticket grid boxed on
+ * the gutter. What follows is only where this page's own chrome would have
+ * fought that: the crumb band and its rule, the bridge strip's scroll fades,
+ * the grid's scroll shadows, its footer line, and the ticket view's footer.
+ * Phones keep their full-bleed layout, as on Sensor Monitor.
+ */
+@media (min-width: 768px) {
+  /* Crumb: no white slab; the rule under it stops at the gutters like every
+     other line on the page, a shade stronger so chrome still reads as chrome. */
+  .wb-crumbs { background: transparent; padding-top: 12px; }
+  .wb-rule { margin: 0 var(--sp4-gutter); }
+
+  /* Bridge strip: the scroll fades were drawn in the old white; on the ground
+     they fade to the ground. The gutter hairline is the top layer so a fade
+     never eats its ends. */
+  .sp4-root--framed.wb-root .sp4-tabs,
+  .app--light .sp4-root--framed.wb-root .sp4-tabs {
+    background:
+      linear-gradient(var(--sp4-line), var(--sp4-line)) center bottom / calc(100% - 2 * var(--sp4-gutter)) 1px no-repeat,
+      linear-gradient(to right, var(--sp4-bg), transparent) 0 0 / 28px 100% no-repeat local,
+      linear-gradient(to left,  var(--sp4-bg), transparent) 100% 0 / 28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,    rgba(15,23,42,.18), transparent) 0 0 / 14px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.18), transparent) 100% 0 / 14px 100% no-repeat scroll;
+    background-color: transparent;
+  }
+
+  /* Ticket grid: inside its white box the scroll-position fades are white
+     too. Same four layers as above this block, recoloured. */
+  .sp4-root--framed.wb-root .wb-grid {
+    background:
+      linear-gradient(to right, var(--sp4-surface), transparent) 0 0 / 28px 100% no-repeat local,
+      linear-gradient(to left,  var(--sp4-surface), transparent) 100% 0 / 28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,    rgba(15,23,42,.18), transparent) 0 0 / 14px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.18), transparent) 100% 0 / 14px 100% no-repeat scroll,
+      var(--sp4-surface);
+  }
+  /* The count line follows the box rather than the page clearing the footer
+     twice: the box closes on its own border, the line sits under it on the
+     gutter, and the line is what clears the fixed footer nav. */
+  .sp4-root--framed.wb-root .wb-grid.sp4-keep-table { margin-bottom: 0; }
+  .sp4-root--framed.wb-root .sp4-grid-footer {
+    border-top: 0;
+    padding: 10px var(--sp4-gutter) calc(var(--app-footer-h, 64px) + 10px);
+  }
+
+  /* One ticket: its footer band is the head's twin, so it is drawn the same
+     way — on the ground, with a gutter-to-gutter rule above. */
+  .sp4-root--framed.wb-root .sp4-detail-footer,
+  .app--light .sp4-root--framed.wb-root .sp4-detail-footer {
+    border-top: 0;
+    background-color: transparent;
+    background-image: linear-gradient(var(--sp4-line), var(--sp4-line));
+    background-repeat: no-repeat;
+    background-size: calc(100% - 2 * var(--sp4-gutter)) 1px;
+    background-position: center top;
+  }
+}
+
+/* ── The ticket grid as the Drivers roster ───────────────────────────────────
+ * Hallmark · redesign 2026-10-03 · scope: ticket table
+ * component: data grid + pager · states: row default · hover · focus-visible ·
+ *   active (opens the ticket); pager default · hover · focus-visible · active ·
+ *   disabled (first / last page) · (loading / error / success: the page's own
+ *   EmptyNote states, unchanged)
+ * pre-emit critique: P4 H5 E4 S4 R5 V4
+ *
+ * Operator: "let the table be like that from the driver page". So the
+ * roster's card, measure for measure (DriversScreen.css `.dr-grid*`):
+ *   · one frame at 12px corners holding the scroller AND the pager;
+ *   · a #f5f7fa head band, 11px/700/0.07em uppercase in the label tier;
+ *   · cells 12.5px at 10/14 in the cell tier, 16px at the card's edges,
+ *     #e6e9ee row lines, the last row open onto the pager's rule;
+ *   · every column left-aligned, figures included — the roster's rule, since
+ *     tabular figures already line up digit over digit;
+ *   · a 2.5% ink wash on hover and a 2px accent edge on keyboard focus;
+ *   · Prev · Page n of N · Next, fifteen to a page.
+ * The values are the roster's, named once here as --wbg-*. The phone layout
+ * keeps its own five-column table and loses the frame, as the roster does.
+ */
+.wb-grid-card {
+  --wbg-cell:  var(--sp4-text-2);
+  --wbg-label: var(--sp4-text-3);
+  --wbg-line:  var(--sp4-line);
+  --wbg-head:  var(--sp4-raised);
+  --wbg-edge:  16px;
+}
+.app--light .wb-grid-card {
+  --wbg-cell:  #334155;   /* ~10:1 on white — the roster's cell tier  */
+  --wbg-label: #52606f;   /* ~6:1 — column heads and the pager line    */
+  --wbg-line:  #e6e9ee;
+  --wbg-head:  #f5f7fa;
+}
+/* Phones: no frame; the pieces fall back into the panel's own column. */
+.wb-grid-card { display: contents; }
+
+@media (min-width: 768px) {
+  .wb-grid-card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+    margin: var(--sp4-md) var(--sp4-gutter) 0;
+    border: 1px solid var(--sp4-line);
+    border-radius: 12px;
+    background: var(--sp4-surface);
+    overflow: clip;
+  }
+  /* The scroller is no longer the frame: the card is. */
+  .sp4-root--framed.wb-root .wb-grid-card .wb-grid.sp4-keep-table {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > thead > tr > th {
+    background: var(--wbg-head);
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--wbg-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--wbg-label);
+    text-align: left;
+  }
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td {
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: var(--wbg-cell);
+    border-bottom: 1px solid var(--wbg-line);
+    text-align: left;
+    vertical-align: middle;
+  }
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > tbody > tr:last-child > td { border-bottom: 0; }
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > thead > tr > th:first-child,
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:first-child { padding-left: var(--wbg-edge); }
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > thead > tr > th:last-child,
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:last-child { padding-right: var(--wbg-edge); }
+  /* The figure the ticket exists for, and the plate, lead the row the way the
+     roster's driver name does. */
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td.wb-td-net { color: var(--sp4-text-1); font-weight: 700; }
+  /* The pinned plate column: the head band's fill in the head, the card's in
+     the body, so it stays opaque over what scrolls under it. */
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > thead > tr > th.sp4-th--pin { background: var(--wbg-head); }
+
+  /* Hover is a wash over the cells (not the row), so the pinned cell — which
+     has to be opaque — washes with them instead of staying a white notch. */
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr { cursor: pointer; }
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr:hover > td {
+    background-color: color-mix(in srgb, var(--sp4-text-1) 2.5%, var(--sp4-surface));
+    transition: background-color 120ms var(--ease-out, ease-out);
+  }
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr:active > td {
+    background-color: color-mix(in srgb, var(--sp4-text-1) 5%, var(--sp4-surface));
+  }
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr:focus-visible { outline: none; }
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr:focus-visible > td {
+    background-color: color-mix(in srgb, var(--sp4-accent) 7%, var(--sp4-surface));
+  }
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr:focus-visible > td:first-child { box-shadow: inset 2px 0 0 var(--sp4-accent); }
+}
+
+/* ── Pager: Prev · Page n of N · Next ── the roster's `.dr-pager`. */
+.wb-pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px var(--wbg-edge);
+  border-top: 1px solid var(--wbg-line);
+}
+.wb-pager__info {
+  font-size: 12.5px;
+  color: var(--wbg-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.wb-pager__btn {
+  min-width: 76px;
+  padding: 5px 12px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--sp4-text-1) 4%, transparent);
+  color: var(--wbg-cell);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out, ease-out), border-color 120ms var(--ease-out, ease-out), color 120ms var(--ease-out, ease-out);
+}
+.wb-pager__btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sp4-text-1) 9%, transparent);
+  border-color: var(--sp4-line-hi);
+  color: var(--sp4-text-1);
+}
+.wb-pager__btn:active:not(:disabled) { transform: translateY(1px); }
+.wb-pager__btn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; transition: none; }
+.wb-pager__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Phones: the roster's phone pager — no rule, thumb-sized buttons, and the
+   range dropped so "Page 1 of 4" fits between them at 320px. */
+@media (max-width: 767px) {
+  .wb-pager { padding: 10px var(--sp4-gutter) 0; border-top: 0; gap: 10px; }
+  .wb-pager__btn { min-width: 0; padding: 9px 14px; font-size: 13px; }
+  .wb-pager__range { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-pager__btn { transition: none; }
+  .wb-pager__btn:active:not(:disabled) { transform: none; }
+  .sp4-root.wb-root .wb-grid-card .wb-grid .sp4-table > tbody > tr:hover > td { transition: none; }
+}
+
+/* ── The header is white, as on Maintenance and the Fuel report ──────────────
+ * Hallmark · redesign 2026-10-03 · scope: Weighbridges header (crumb + KPI strip)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator: "do the same on the weighbridge" — the Maintenance header change.
+ * The crumb and the KPI strip become one white band edge to edge; the rule
+ * between them comes off, and one full-width hairline closes the header.
+ * Everything under it (filter bar, bridge strip, the boxed grid) keeps the
+ * clear framed bands. Placed after the framed block so it wins at ≥768. */
+.wb-root { --wb-band: #ffffff; --wb-band-line: #dde1e7; }
+.app--light .wb-root .wb-crumbs { background: var(--wb-band); padding-top: 9px; }
+.app--light .wb-root .wb-rule { display: none; }
+.app--light .sp4-root--framed.wb-root .sp4-header {
+  background: var(--wb-band);
+  background-image: none;
+  border-bottom: 1px solid var(--wb-band-line);
+}
+
+/* ── The ticket card runs down to the footer ─────────────────────────────────
+ * Hallmark · redesign 2026-10-03 · scope: ticket card height
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator: "the height area of the table should reach the footer where we
+ * have our version". The card grew only to its rows and stopped, leaving the
+ * page ground between its foot and the footer nav. Now it takes all the
+ * height under the bridge strip and ends one --sp4-md above the footer: the
+ * scroller fills it (white under the last row), the pager and the count line
+ * close it. The count line moved inside the card (WeighbridgesScreen.jsx) as
+ * its foot row, so nothing hangs between the card and the footer. Tablet and
+ * desk only; phones keep their own page-scrolled column. */
+@media (min-width: 768px) {
+  .wb-grid-card {
+    flex: 1 1 auto;
+    margin-bottom: calc(var(--app-footer-h, 64px) + var(--sp4-md));
+  }
+  .sp4-root--framed.wb-root .wb-grid-card .wb-grid.sp4-keep-table { flex: 1 1 auto; }
+  .sp4-root--framed.wb-root .wb-grid-card .sp4-grid-footer {
+    flex: none;
+    padding: 10px var(--wbg-edge);
+    border-top: 1px solid var(--wbg-line);
+    color: var(--wbg-label);
+  }
 }

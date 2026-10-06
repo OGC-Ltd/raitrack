@@ -149,10 +149,6 @@ export default function MapLayersMenu({ layers }) {
                 >
                   <span className="map-layers__switch" aria-hidden="true" />
                   <span className="map-layers__label">{layer.label}</span>
-                  {/* The layer's own progress, on the layer's own row. It used to
-                      live inside the button's label, where "Planting plan
-                      loading…" read as the name of a thing. */}
-                  {layer.note && <span className="map-layers__note">{layer.note}</span>}
                 </button>
 
                 {/* The colours, as colours. A sibling button rather than part of

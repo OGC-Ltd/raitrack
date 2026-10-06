@@ -144,3 +144,88 @@
 /* No narrow override on the bar. It used to drop to a flat 14px; the gutter
    already floors at 20px, and a 14px crumb over a 20px panel is exactly the
    step this pass exists to remove. */
+
+/* ── Arrival ────────────────────────────────────────────────────────────────
+ *
+ * AccountScreen's entrance, on the same terms and for the same reasons, so the
+ * two pages the avatar menu opens still behave as one pair. Only `opacity` and
+ * `transform` are animated: both run on the compositor, off the main thread,
+ * so the fleet map still repainting underneath this overlay cannot stutter the
+ * arrival and the arrival cannot stall the map.
+ *
+ * ## Why these rules live here and not in UserAdminPanel.css
+ *
+ * The entrance belongs to the PAGE, not to the panel. UserAdminPanel is a
+ * component that happens to have exactly one caller today; giving it an
+ * animation of its own would mean any future surface that mounted it inherited
+ * a full-page entrance it never asked for. Scoping every selector under
+ * `.uadm-page` keeps the behaviour where the behaviour is true.
+ *
+ * The keyframes are this file's own rather than AccountScreen's, for the
+ * reason the crumb strip above already gives about `.maint-crumbs`: reaching
+ * into another screen's stylesheet makes this page depend on whether the user
+ * happened to open that screen first, and it fails exactly once, silently, on
+ * a fresh load.
+ *
+ * ## What is deliberately NOT animated
+ *
+ * `.uadm-page`, `.uadm-page__body`, `.ua-page` and `.ua-page__inner` — the
+ * overlay root and the scrollers. A transform on a scrolling ancestor changes
+ * the containing block that `.ua-table thead th` resolves its `position:
+ * sticky` against, and pinned column heads that drift for 300ms on every open
+ * are a worse defect than having no entrance at all.
+ */
+
+@keyframes uadm-rise {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes uadm-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* `backwards`, never `both`: `both` holds the final keyframe forever, which
+   leaves an identity transform on every block and keeps each one promoted to
+   its own compositor layer for the life of the page — GPU memory held for an
+   animation that ended half a second after load. `backwards` covers the delay
+   and then hands the element back to its ordinary style. */
+.uadm-page__bar,
+.uadm-page .ua-header,
+.uadm-page .ua-filters,
+.uadm-page .ua-invite {
+  animation: uadm-rise 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The roster fades without travelling. It is the largest surface on the page
+   and it OWNS the sticky column heads — the same reasoning that keeps the
+   account page's cover on a fade, where a translate would have dragged the
+   fixed back link with it. */
+.uadm-page .ua-roster,
+.uadm-page .ua-nomatch {
+  animation: uadm-fade 300ms ease-out backwards;
+}
+
+/* 45ms steps, and the roster comes in with the last control rather than after
+   it — the point of the strip above is to be ready by the time the eye reaches
+   the rows, not to be read in sequence. */
+.uadm-page .ua-header  { animation-delay: 45ms; }
+.uadm-page .ua-filters { animation-delay: 90ms; }
+.uadm-page .ua-invite  { animation-delay: 135ms; }
+.uadm-page .ua-roster,
+.uadm-page .ua-nomatch { animation-delay: 135ms; }
+
+/* Motion is a preference, and "none" means none rather than a quicker version.
+   The panel's own reduced-motion blocks already cover its transitions; this
+   covers the arrival this file adds. */
+@media (prefers-reduced-motion: reduce) {
+  .uadm-page__bar,
+  .uadm-page .ua-header,
+  .uadm-page .ua-filters,
+  .uadm-page .ua-invite,
+  .uadm-page .ua-roster,
+  .uadm-page .ua-nomatch {
+    animation: none;
+  }
+}

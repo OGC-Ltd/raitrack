@@ -27,7 +27,7 @@
 // the whole set.
 
 import { useCallback, useEffect, useState } from "react";
-import { listRepairItems } from "../api/repairs";
+import { listRepairItems, REPAIRS_CHANGED } from "../api/repairs";
 
 export function useRepairJobs(orgId, status = "open", enabled = true) {
   const [rows,    setRows]    = useState([]);
@@ -50,6 +50,17 @@ export function useRepairJobs(orgId, status = "open", enabled = true) {
   }, [orgId, status, enabled]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Changed elsewhere (Fuel > Audit, another person, a fuel case raising a
+  // probe job): read again. See REPAIRS_CHANGED in api/repairs.
+  useEffect(() => {
+    window.addEventListener(REPAIRS_CHANGED, reload);
+    window.addEventListener("ft-fuel-followup-changed", reload);
+    return () => {
+      window.removeEventListener(REPAIRS_CHANGED, reload);
+      window.removeEventListener("ft-fuel-followup-changed", reload);
+    };
+  }, [reload]);
 
   return { rows, loading, error, reload };
 }

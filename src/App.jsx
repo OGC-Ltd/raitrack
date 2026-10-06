@@ -4,7 +4,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
-import { AppProvider, useAppContext } from './context/AppContext';
+import { AppProvider, useAppFields, useAppActions, useCompanies, useAppSelector } from './context/AppContext';
+import { useSelector } from 'react-redux';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FleetLiveProvider, useFleetLiveShared } from './context/FleetLiveContext';
 import { usePermissions, accessIn } from './hooks/usePermissions';
@@ -12,7 +13,6 @@ import { NAV_ITEMS } from './components/layout/SidePanel';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import TabEmptyState from './components/shared/TabEmptyState';
 
-import { MapLayersProvider } from './context/MapLayersContext';
 // New layout components
 import AppHeader          from './components/layout/AppHeader';
 import SidePanel          from './components/layout/SidePanel';
@@ -29,7 +29,8 @@ import DriversScreen     from './components/screens/DriversScreen';
 import MaintenanceScreen from './components/screens/MaintenanceScreen';
 import AnalyticsScreen   from './components/screens/AnalyticsScreen';
 import WeighbridgesScreen from './components/screens/WeighbridgesScreen';
-import SystemScreen      from './components/screens/SystemScreen';
+import AuditScreen       from './components/screens/AuditScreen';
+import FuelReportScreen  from './components/screens/FuelReportScreen';
 
 // Auth + account screens
 import LoginScreen       from './components/screens/LoginScreen';
@@ -39,17 +40,9 @@ import UserAdminScreen   from './components/screens/UserAdminScreen';
 import { readSetupToken } from './lib/setupLink';
 
 function AppShell() {
-  const {
-    activeCompany,
-    activeCompanyId,
-    previousCompanyId,
-    setActiveCompanyId,
-    companies,
-    desktopActiveTab,
-    setDesktopActiveTab,
-    selectedVehicleId,
-    setSelectedVehicleId,
-  } = useAppContext();
+  const { activeCompanyId, previousCompanyId, desktopActiveTab, selectedVehicleId } = useAppFields("activeCompanyId", "previousCompanyId", "desktopActiveTab", "selectedVehicleId");
+  const { setActiveCompanyId, setDesktopActiveTab, setSelectedVehicleId } = useAppActions();
+  const { activeCompany, companies } = useCompanies();
 
   const { can } = usePermissions();
   const { vehicles: _liveVehicles = [] } = useFleetLiveShared();
@@ -82,13 +75,24 @@ function AppShell() {
       ?? null;
   }, [orgs, companies, previousCompanyId, activeCompanyId]);
 
+  // The Account and User admin pages open OVER the app rather than as a tab
+  // (AccountGate / UserAdminGate below), so the map stayed "on" under them —
+  // and its floating windows are position: fixed at z-index up to 9999 (the
+  // unit card, its camera, the replay, the fuel incident window), above the
+  // pages' 2500. A unit card belongs over its unit on the map, so while one of
+  // those pages is open the map panel is hidden exactly as it is for another
+  // tab: still mounted, every card and window kept, back as it was on return.
+  const overlayPageOpen = useAppSelector((a) => a.accountOpen || a.userAdminOpen);
+  // The map's Fuel alerts list (store `map` slice) — the unit panel folds
+  // away while it is open; see the panel below.
+  const fuelAlertsOpen = useSelector((st) => st.map?.fuelAlertsOpen ?? false);
+
   const show = (key) => {
     const tab = NAV_ITEMS.find(t => t.key === key);
     return Boolean(tab) && desktopActiveTab === key && can(tab.permission);
   };
 
   return (
-    <MapLayersProvider>
     <div className="app-container app--light">
       {/* Top bar */}
       <ErrorBoundary label="Header" fullSection>
@@ -122,11 +126,24 @@ function AppShell() {
               the mobile `overflow: visible`, which stopped this wrapper
               clipping the map, and the margin that holds the map clear of the
               bottom tab bar, which was applied twice. */}
-          <div className={`app-map-panel${!show('fleet') ? ' app-tab-panel--hidden' : ''}`}>
-            <ErrorBoundary label="Map" fullSection>
-              <FleetMap />
-            </ErrorBoundary>
-          </div>
+          {/* Always mounted, hidden when not active — so switching back to the
+              map does not re-create it, re-fetch the fleet and re-fit the
+              viewport. That is worth doing for somebody who HAS the map.
+
+              It is not worth doing for somebody who does not. Without map:read
+              the Live Map is closed to them everywhere else — the sidebar item
+              is disabled, the tab bar item is disabled, `show('fleet')` is
+              false — and mounting it anyway kept a live fleet subscription, a
+              status count and a full set of markers running behind a hidden
+              div for an account that cannot open it. Not drawn is not the same
+              as not there. */}
+          {can('map:read') && (
+            <div className={`app-map-panel${!show('fleet') || overlayPageOpen ? ' app-tab-panel--hidden' : ''}`}>
+              <ErrorBoundary label="Map" fullSection>
+                <FleetMap />
+              </ErrorBoundary>
+            </div>
+          )}
 
           {show('drivers') && (
             <div className="app-tab-panel app-tab-panel--screen">
@@ -160,10 +177,18 @@ function AppShell() {
             </div>
           )}
 
-          {show('system') && (
+          {show('audit') && (
             <div className="app-tab-panel app-tab-panel--screen">
-              <ErrorBoundary label="Cases" fullSection>
-                <SystemScreen />
+              <ErrorBoundary label="Fuel Audit" fullSection>
+                <AuditScreen />
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {show('fuelReport') && (
+            <div className="app-tab-panel app-tab-panel--screen">
+              <ErrorBoundary label="Fuel Report" fullSection>
+                <FuelReportScreen />
               </ErrorBoundary>
             </div>
           )}
@@ -191,8 +216,26 @@ function AppShell() {
             shape is a CSS decision, and rendering it here rather than per
             breakpoint is what keeps a tap on a pin from losing its panel on
             the way down to mobile, which it used to (`display: none`). */}
+        {/* Not on Analytics, Maintenance, Weighbridges, Fuel Audit or Fuel Report (operator, 2026-10-03: "whenever I open the
+            analytics page and the side panel for the unit is open, let's not
+            shrink the analytics page"). The panel is a column, so a unit left
+            open on the map took its 320–360px out of the charts. On Analytics
+            it stays collapsed; the selection itself stays in the store, so the
+            panel is back, on the same unit, when the map is. */}
         {(() => {
-          const selectedVehicle = selectedVehicleId
+          // Maintenance, Weighbridges, Fuel Audit and Fuel Report too
+          // (operator, 2026-10-03: "the same as the maintenance page", "same
+          // as the weighbridge", "same for fuel audit", "same as fuel
+          // report"): their tables lose the same width to the column.
+          // And on the map while the Fuel alerts list is open (operator,
+          // 2026-10-03: "whenever we click fuel alerts then the right side
+          // card is open, do the same"): the list wants the map's width, and
+          // the unit comes back when the list closes.
+          // Drivers as well (operator, 2026-10-03: "do the same with the
+          // drivers page") — so the panel now takes width on the map only.
+          const panelAllowed = !['drivers', 'analytics', 'maintenance', 'weighbridges', 'audit', 'fuelReport'].includes(desktopActiveTab)
+            && !fuelAlertsOpen;
+          const selectedVehicle = selectedVehicleId && panelAllowed
             ? _liveVehicles.find(v => v.id === selectedVehicleId) ?? { id: selectedVehicleId }
             : null;
           return (
@@ -206,18 +249,17 @@ function AppShell() {
       {/* Mobile bottom tab bar */}
       <MobileTabBar />
       {/* Mobile live feed sheet */}
-      <MobileLiveFeedSheet open={mobileFeedOpen} onClose={() => setMobileFeedOpen(false)} />
+      {can('map:read') && <MobileLiveFeedSheet open={mobileFeedOpen} onClose={() => setMobileFeedOpen(false)} />}
       {/* Mobile company profile sheet */}
       <MobileCompanyProfile open={mobileProfileOpen} onClose={() => setMobileProfileOpen(false)} />
     </div>
-    </MapLayersProvider>
   );
 }
 
 // ── Overlay pages (render beside the app so the map + live stream survive) ──
 
 function AccountGate() {
-  const { accountOpen } = useAppContext();
+  const accountOpen = useAppSelector((a) => a.accountOpen);
   if (!accountOpen) return null;
   /* Light, whatever the theme preference says.
      This page is where the theme is CHOSEN, and the two dark options in it are
@@ -231,7 +273,8 @@ function AccountGate() {
 }
 
 function UserAdminGate() {
-  const { userAdminOpen, setUserAdminOpen } = useAppContext();
+  const userAdminOpen = useAppSelector((a) => a.userAdminOpen);
+  const { setUserAdminOpen } = useAppActions();
   const { can } = usePermissions();
   const allowed = can('user:create');
 

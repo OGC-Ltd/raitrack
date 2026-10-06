@@ -28,21 +28,44 @@
  * written against that token — it used to come from the Maintenance scroller.
  */
 
-import { useEffect } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useCallback, useEffect } from "react";
+import { useAppActions } from "../../context/AppContext";
+import { useWayBack } from "../../hooks/useWayBack";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import UserAdminPanel from "../body/UserAdminPanel";
 import "./UserAdminScreen.css";
 
 export default function UserAdminScreen() {
-  const { setUserAdminOpen } = useAppContext();
+  const { setUserAdminOpen } = useAppActions();
 
-  // Escape closes it, the same contract AccountScreen states.
+  /* The crumb used to read "← Fleet" and only close, which was wrong twice
+     over for an administrator without `map:read`: it named a screen they
+     cannot open, and closing dropped them on whichever tab was stored rather
+     than on the one it had just promised. Resolved by the same hook the
+     account page uses, so both ways out agree — and the crumb takes the NAME
+     form ("Fleet", "Maintenance") because it sits in a trail of ancestors
+     rather than being a sentence about what it does. */
+  const wayBack = useWayBack();
+
+  const goBack = useCallback(() => {
+    wayBack.go();
+    setUserAdminOpen(false);
+  }, [wayBack, setUserAdminOpen]);
+
+  // Escape leaves the same way the crumb does, the contract AccountScreen
+  // states — the key and the control must not land in different places.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") setUserAdminOpen(false); };
+    const onKey = (e) => {
+      /* A dialog over this page gets the key first. The Add-user panel listens
+         in the capture phase and calls preventDefault; without this check the
+         same Escape would dismiss the panel AND leave the roster, which is one
+         keystroke doing two things the person only asked for one of. */
+      if (e.defaultPrevented) return;
+      if (e.key === "Escape") goBack();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [setUserAdminOpen]);
+  }, [goBack]);
 
   return (
     <div className="uadm-page">
@@ -56,8 +79,8 @@ export default function UserAdminScreen() {
         <nav className="uadm-crumbs" aria-label="Breadcrumb">
           <ol className="uadm-crumbs__list">
             <li className="uadm-crumbs__item">
-              <button type="button" className="uadm-page__back" onClick={() => setUserAdminOpen(false)}>
-                ← Fleet
+              <button type="button" className="uadm-page__back" onClick={goBack}>
+                ← {wayBack.crumb}
               </button>
             </li>
             <li className="uadm-crumbs__item uadm-crumbs__item--current" aria-current="page">

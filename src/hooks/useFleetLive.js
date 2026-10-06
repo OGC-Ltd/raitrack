@@ -1,32 +1,32 @@
-// Live fleet for the active company, straight from the fleet-server DB — mirrors
-// fleetdash's useFleet: seed from GET /vehicles/snapshot, then keep positions
-// current from the org-wide SSE 'position' stream. Returns the same vehicle shape
-// FleetMap already renders (see lib/vehicleMap), so the map is a drop-in swap for
-// the old mock getVehicles().
+// Live fleet for the active company, straight from the fleet-server DB: seed
+// from GET /vehicles/snapshot, then keep positions current from the org-wide
+// SSE stream. Returns the vehicle shape FleetMap renders (see lib/vehicleMap).
 //
-// First paint is instant: the last snapshot for each company is cached in
-// localStorage and hydrated synchronously, so a reload/tab-revisit shows the
-// fleet immediately and then silently swaps in fresh data + the live stream
-// (the snapshot read itself is several seconds on the remote pooler).
+// The data lives in the TanStack Query cache (fleetKeys below) — the snapshot
+// and the org id are queries, and the stream writes its frames into the same
+// cache entries. Anything else that needs the fleet reads those entries
+// (useFleetCount does) instead of fetching again. Mount the stream ONCE:
+// context/FleetLiveContext does, for the active company.
+//
+// First paint is instant: the last snapshot for each company is kept in
+// localStorage and seeds the query, so a reload shows the fleet immediately
+// and then swaps in fresh data and the live stream.
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sseUrl } from '../services/api'
 import { fetchSnapshot } from '../services/snapshot'
 import { resolveOrgId } from '../api/org'
-import { mapSnapshotVehicle, applyLiveUpdate, applyConnectionRefresh } from '../lib/vehicleMap'
+import { mapSnapshotVehicle, applyLiveUpdate, applyDispatchUpdate, applyConnectionRefresh } from '../lib/vehicleMap'
 import { readCache, writeCache } from '../services/cache'
+import { repairsChanged } from '../api/repairs'
 import { dismissIncident } from '../lib/fuelDismissals'
 import { followUpsChanged } from '../lib/fuelFollowUps'
+import { createFrameStore } from '../lib/positionDelta'
 
 const fleetCacheKey = (companyId) => `ft-fleet:${companyId}`
 const orgCacheKey   = (companyId) => `ft-org:${companyId}`
 const feedCacheKey  = (companyId) => `ft-feed:${companyId}`
-
-function indexById(list) {
-  const byId = {}
-  for (const v of list) byId[v.vehicleId] = v
-  return byId
-}
 
 /**
  * How much activity the panel keeps.
@@ -145,59 +145,115 @@ function mergeFeedItem(prev, item) {
 // anything much faster just re-reads a 190 KB payload for no new information.
 const CONNECTION_REFRESH_MS = 60_000
 
+// ── The query cache entries ────────────────────────────────────────────────
+//
+// Three per company, all keyed by company so an org switch reads the new
+// company's entry on the very first render — the previous org's fleet, feed or
+// orgId is never painted, and never handed to a dependent hook:
+//
+//   orgId     resolved once and kept for the session.
+//   vehicles  the snapshot, then kept current by the stream, which WRITES into
+//             this entry (setQueryData) rather than into component state.
+//   feed      never fetched — only the stream fills it — so it survives a
+//             switch to another company and back within the session.
+//
+// Each is seeded from localStorage (services/cache) so a reload paints the
+// last-known fleet at once. The seed is stamped as old (updatedAt 0), so the
+// snapshot is still read straight away; until it lands the stream is not
+// opened, because frames for units the entry does not hold are dropped.
+
+export const fleetKeys = {
+  all:      ['fleet'],
+  orgId:    (companyId) => ['fleet', 'org-id', companyId],
+  vehicles: (companyId) => ['fleet', 'vehicles', companyId],
+  feed:     (companyId) => ['fleet', 'feed', companyId],
+}
+
+const NONE = []
+const cachedList = (key) => { const c = readCache(key); return Array.isArray(c) && c.length ? c : undefined }
+
+export const orgIdQuery = (companyId) => ({
+  queryKey: fleetKeys.orgId(companyId),
+  queryFn: async () => {
+    const orgId = (await resolveOrgId(companyId)) ?? null
+    if (orgId) writeCache(orgCacheKey(companyId), orgId)
+    return orgId
+  },
+  enabled: Boolean(companyId),
+  initialData: () => readCache(orgCacheKey(companyId)) ?? undefined,
+  initialDataUpdatedAt: 0,
+  staleTime: Infinity,
+})
+
+export const vehiclesQuery = (companyId, orgId) => ({
+  queryKey: fleetKeys.vehicles(companyId),
+  queryFn: async () => {
+    const res = await fetchSnapshot(orgId)
+    const mapped = (Array.isArray(res.data) ? res.data : []).map(mapSnapshotVehicle)
+    writeCache(fleetCacheKey(companyId), mapped)   // refresh the seed for next load
+    return mapped
+  },
+  enabled: Boolean(companyId && orgId),
+  initialData: () => cachedList(fleetCacheKey(companyId)),
+  initialDataUpdatedAt: 0,
+  // The stream keeps the entry current while it is open; re-read the snapshot
+  // when a company is revisited after longer than this, since nothing streamed
+  // for it in the meantime.
+  staleTime: 30_000,
+  // A whole fleet replaced every animation frame: deep-comparing 200+ vehicles
+  // to share structure would cost more than it saves. Unchanged units keep
+  // their identity anyway — applyFrames copies only the ones a frame touched.
+  structuralSharing: false,
+})
+
+const feedQuery = (companyId) => ({
+  queryKey: fleetKeys.feed(companyId),
+  queryFn: () => NONE,          // never runs: enabled is false
+  enabled: false,
+  initialData: () => pruneFeed(readCache(feedCacheKey(companyId)) || []),
+  staleTime: Infinity,
+  gcTime: Infinity,
+  structuralSharing: false,
+})
+
+/** Apply a frame's worth of updates to the cached fleet, touching only those units. */
+function applyFrames(list, updates) {
+  if (!list?.length || !updates.size) return list
+  let changed = false
+  const next = list.map((v) => {
+    const fn = updates.get(v.vehicleId)
+    if (!fn) return v
+    const nv = fn(v)
+    if (nv !== v) changed = true
+    return nv
+  })
+  return changed ? next : list
+}
+
 export function useFleetLive(companyId) {
-  // Hydrate the very first render synchronously from cache (no blank frame).
-  const [vehicles, setVehicles] = useState(() => (companyId && readCache(fleetCacheKey(companyId))) || [])
-  // Live activity feed — real fleet events (dispatch/arrival/offload/fuel/
-  // alerts) streamed as SSE 'feed' events, merged over what this browser has
-  // already seen.
-  //
-  // Persisted, and hydrated synchronously here, for the same reason the fleet
-  // is: a reload must not blank it. But the feed needs it more than the fleet
-  // does, because the server's replay is only the newest 40 events and a fleet
-  // with one dominant event type spends all 40 on it — SUKARI's newest 40 are
-  // 37 fuel items, KASULU's are 40 zone crossings. Without this, every refresh
-  // discarded the sparse TRACTOR_OVERDUE / driver-change / breach items the
-  // operator actually cares about and replaced them with more of the majority.
-  const [feed, setFeed] = useState(() => (companyId && pruneFeed(readCache(feedCacheKey(companyId)) || [])) || [])
-  const [orgId, setOrgId]       = useState(() => (companyId && readCache(orgCacheKey(companyId))) || null)
-  const [loading, setLoading]   = useState(() => !(companyId && readCache(fleetCacheKey(companyId))))
-  const [error, setError]       = useState(null)
+  const queryClient = useQueryClient()
   const [retryToken, setRetryToken] = useState(0)
-  const retry = useCallback(() => setRetryToken(t => t + 1), [])
 
-  // vehicleId (cuid) → mapped vehicle. Seeded from cache so live SSE events can
-  // merge onto the cached fleet before the fresh snapshot lands.
-  const byIdRef = useRef(indexById((companyId && readCache(fleetCacheKey(companyId))) || []))
+  const org = useQuery(orgIdQuery(companyId))
+  const orgId = org.data ?? null
+  const fleet = useQuery(vehiclesQuery(companyId, orgId))
+  const { data: feed = NONE } = useQuery(feedQuery(companyId))
 
-  // Which company the state above currently describes.
-  //
-  // Resetting on an org switch inside the effect is too late: effects run AFTER
-  // render, so the first paint of the new company showed the PREVIOUS
-  // company's fleet, and `orgId` still pointed at the old org — long enough for
-  // dependent hooks to fetch the wrong organisation's data. Adjusting state
-  // during render (React re-runs the component immediately, before painting)
-  // means the previous org's rows are never displayed at all.
-  const [stateCompanyId, setStateCompanyId] = useState(companyId)
-  if (stateCompanyId !== companyId) {
-    const cached = (companyId && readCache(fleetCacheKey(companyId))) || []
-    byIdRef.current = indexById(cached)
-    setStateCompanyId(companyId)
-    setVehicles(cached)                                                  // never inherit the old fleet
-    setOrgId((companyId && readCache(orgCacheKey(companyId))) || null)   // nor the old orgId
-    // Never inherit the old company's activity either — but load THIS one's,
-    // rather than blanking, so switching back and forth does not destroy it.
-    setFeed((companyId && pruneFeed(readCache(feedCacheKey(companyId)) || [])) || [])
-    setLoading(cached.length === 0)
-    setError(null)
-  }
+  // The snapshot has been READ (not only seeded from storage): the stream may
+  // open. Stays true across later refreshes, so they do not reconnect it.
+  const snapshotRead = fleet.dataUpdatedAt > 0
+
+  const retry = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: fleetKeys.orgId(companyId) })
+    queryClient.invalidateQueries({ queryKey: fleetKeys.vehicles(companyId) })
+    setRetryToken((t) => t + 1)
+  }, [queryClient, companyId])
 
   useEffect(() => {
-    if (!companyId) return
+    if (!companyId || !orgId || !snapshotRead) return undefined
+    const vehiclesKey = fleetKeys.vehicles(companyId)
+    const feedKey = fleetKeys.feed(companyId)
     let alive = true
-    let es = null
-    let pending = false
-    let connTimer = null
     let feedPersistTimer = null
     let feedToPersist = null
 
@@ -215,145 +271,121 @@ export function useFleetLive(companyId) {
       }, FEED_PERSIST_DEBOUNCE_MS)
     }
 
-    // Stale-while-revalidate: paint this company's cached fleet immediately (also
-    // covers org switches, where the initial useState no longer re-runs), then
-    // refresh from the network below.
-    //
-    // The feed is NOT cleared here. It used to be, on the theory that the
-    // server replays history on connect — but that replay is the newest 40
-    // events, and on a fleet dominated by one event type it is 40 of that type,
-    // so clearing threw away every sparse event the operator had accumulated.
-    // The replay is merged onto what is already here instead; mergeFeedItem
-    // dedupes by id, so anything the replay repeats is an update, not a copy.
-    setFeed(prev => pruneFeed(prev.length ? prev : (readCache(feedCacheKey(companyId)) || [])))
-
-    const cached = readCache(fleetCacheKey(companyId))
-    if (cached && cached.length) {
-      byIdRef.current = indexById(cached)
-      setVehicles(cached)
-      setLoading(false)
-    } else {
-      // Clear explicitly. Omitting setVehicles([]) here left the PREVIOUS
-      // company's fleet on screen for any org with no cached snapshot, right
-      // up until the network answered.
-      byIdRef.current = {}
-      setVehicles([])
-      setLoading(true)
+    // Coalesce a burst of position events (one per vehicle each poll cycle)
+    // into a single cache write per frame. Updates queue per vehicle and
+    // compose, so two frames for one unit inside one animation frame both land.
+    let pending = new Map()
+    let scheduled = false
+    const flush = () => {
+      scheduled = false
+      if (!alive) return
+      const updates = pending
+      pending = new Map()
+      queryClient.setQueryData(vehiclesKey, (list) => applyFrames(list, updates))
     }
-    setError(null)
+    const queue = (vehicleId, fn) => {
+      const prev = pending.get(vehicleId)
+      pending.set(vehicleId, prev ? (v) => fn(prev(v)) : fn)
+      if (!scheduled) { scheduled = true; requestAnimationFrame(flush) }
+    }
 
-    // Coalesce a burst of position events (one per vehicle each poll cycle) into
-    // a single state update per frame.
-    const flush = () => { pending = false; if (alive) setVehicles(Object.values(byIdRef.current)) }
-    const schedule = () => { if (!pending) { pending = true; requestAnimationFrame(flush) } }
+    // ?delta=1: after the full replay on connect, only changed vehicles and
+    // fields arrive (`position_delta`); `frames` rebuilds the full frame that
+    // applyLiveUpdate needs. See lib/positionDelta.
+    const frames = createFrameStore()
+    const es = new EventSource(sseUrl(`/api/v1/organisations/${orgId}/live?delta=1`))
+    es.addEventListener('feed', (e) => {
+      try {
+        const item = JSON.parse(e.data)
+        // The server scopes the feed per org; drop anything else that slips
+        // through (e.g. a replay raced by an org switch).
+        if (item.orgId && item.orgId !== orgId) return
+        // The server replays its newest 40 on every (re)connect; mergeFeedItem
+        // keys by id, so a replayed item is an update, never a copy.
+        const next = queryClient.setQueryData(feedKey, (prev) => mergeFeedItem(prev ?? NONE, item))
+        scheduleFeedPersist(next)
+      } catch { /* ignore malformed frame */ }
+    })
+    /* Somebody in this organisation deleted a fuel incident (the server keeps
+       the record; see lib/fuelDismissals). Dropped here the moment it happens,
+       so no one is left looking at a red unit their colleague has dealt with. */
+    es.addEventListener('fuel_incident_dismissed', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data?.incidentId) dismissIncident(data.incidentId)
+      } catch { /* ignore malformed frame */ }
+    })
+    /* A follow-up on a deleted fuel alert opened, changed hands or was decided
+       (lib/fuelFollowUps). The frame only names it; readers re-read. */
+    es.addEventListener('fuel_followup', () => { followUpsChanged() })
+    /* A repair job changed for anybody in this organisation: the Repairs tab
+       and the Fuel Audit read it again. */
+    es.addEventListener('repair_changed', () => { repairsChanged() })
+    /* What the unit is CARRYING, pushed when the gate signs it out — its own
+       event because a truck standing at the gate may not send a position for an
+       hour. Frames for units not in this org's snapshot fall through
+       applyFrames untouched. */
+    es.addEventListener('dispatch', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        queue(data.vehicleId, (v) => applyDispatchUpdate(v, data))
+      } catch { /* ignore malformed frame */ }
+    })
+    es.addEventListener('position', (e) => {
+      try {
+        const data = frames.full(JSON.parse(e.data))
+        queue(data.vehicleId, (v) => applyLiveUpdate(v, data))
+      } catch { /* ignore malformed frame */ }
+    })
+    es.addEventListener('position_delta', (e) => {
+      try {
+        for (const d of JSON.parse(e.data)) {
+          const data = frames.apply(d)
+          queue(data.vehicleId, (v) => applyLiveUpdate(v, data))
+        }
+      } catch { /* ignore malformed frame */ }
+    })
+    // EventSource reconnects on its own; nothing to do on error.
 
-    resolveOrgId(companyId)
-      .then(orgId => {
-        if (!alive) return
-        setOrgId(orgId)
-        if (!orgId) { byIdRef.current = {}; setVehicles([]); setLoading(false); return }
-        writeCache(orgCacheKey(companyId), orgId)
-
-        return fetchSnapshot(orgId).then(res => {
+    // Connection verdicts do NOT arrive on the stream for the units that
+    // matter most: a position frame is sent only when a fix time advances, so a
+    // parked unit's ONLINE/OFFLINE would freeze at page load. Re-read the
+    // snapshot on a slow timer and take the verdict from it, nothing else —
+    // never its positions, which the stream has since overtaken.
+    const connTimer = setInterval(() => {
+      fetchSnapshot(orgId)
+        .then((res) => {
           if (!alive) return
-          const list = Array.isArray(res.data) ? res.data : []
-          const byId = {}
-          for (const v of list) {
-            const mv = mapSnapshotVehicle(v)
-            byId[mv.vehicleId] = mv
-          }
-          byIdRef.current = byId
-          const mapped = Object.values(byId)
-          setVehicles(mapped)
-          setLoading(false)
-          writeCache(fleetCacheKey(companyId), mapped)   // refresh cache for next paint
-
-          es = new EventSource(sseUrl(`/api/v1/organisations/${orgId}/live`))
-          es.addEventListener('feed', (e) => {
-            try {
-              const item = JSON.parse(e.data)
-              // The server scopes the feed per org; drop anything else that
-              // slips through (e.g. a replay raced by an org switch).
-              if (item.orgId && item.orgId !== orgId) return
-              setFeed(prev => {
-                const next = mergeFeedItem(prev, item)
-                scheduleFeedPersist(next)
-                return next
-              })
-            } catch { /* ignore malformed frame */ }
-          })
-          /* Somebody in this organisation deleted a fuel incident (the
-             server keeps the record; see lib/fuelDismissals). Dropped here
-             the moment it happens, so no one is left looking at a red unit
-             their colleague has already dealt with. */
-          /* A follow-up on a deleted fuel alert opened, changed hands or was
-             decided (lib/fuelFollowUps). The frame only names it; the list
-             and any open case window read it again. */
-          es.addEventListener('fuel_followup', () => { followUpsChanged() })
-          es.addEventListener('fuel_incident_dismissed', (e) => {
-            try {
-              const data = JSON.parse(e.data)
-              if (data?.incidentId) dismissIncident(data.incidentId)
-            } catch { /* ignore malformed frame */ }
-          })
-          es.addEventListener('position', (e) => {
-            try {
-              const data = JSON.parse(e.data)
-              const existing = byIdRef.current[data.vehicleId]
-              if (!existing) return // vehicle not in this org's snapshot
-              byIdRef.current[data.vehicleId] = applyLiveUpdate(existing, data)
-              schedule()
-            } catch { /* ignore malformed frame */ }
-          })
-          // EventSource reconnects on its own; nothing to do on error.
-
-          // Connection verdicts do NOT arrive on the stream for the vehicles
-          // that matter most. A position frame is emitted only when a unit's
-          // fix time advances, so a parked unit stops emitting and its
-          // ONLINE/OFFLINE freezes at whatever it was when the page loaded —
-          // DZ 02 sat on a 03:50:16 position while its netconn flipped
-          // true/false for another ten minutes, reading OFFLINE against an API
-          // saying online until a reload. Re-read the snapshot on a slow timer
-          // and take the verdict from it, nothing else.
-          //
-          // The snapshot is ~1.2 s / 190 KB for 218 vehicles, so a minute is
-          // cheap; it is also the same request the first paint already makes,
-          // so there is no new endpoint to keep in step.
-          connTimer = setInterval(() => {
-            fetchSnapshot(orgId)
-              .then(res => {
-                if (!alive) return
-                const rows = Array.isArray(res.data) ? res.data : []
-                let changed = 0
-                for (const row of rows) {
-                  const existing = byIdRef.current[row.vehicleId]
-                  if (!existing) continue
-                  const next = applyConnectionRefresh(existing, row)
-                  if (next !== existing) { byIdRef.current[row.vehicleId] = next; changed++ }
-                }
-                if (changed) {
-                  schedule()
-                  writeCache(fleetCacheKey(companyId), Object.values(byIdRef.current))
-                }
-              })
-              .catch(() => { /* transient — the next tick retries */ })
-          }, CONNECTION_REFRESH_MS)
+          const rows = Array.isArray(res.data) ? res.data : []
+          const updates = new Map(rows.map((row) => [row.vehicleId, (v) => applyConnectionRefresh(v, row)]))
+          const before = queryClient.getQueryData(vehiclesKey)
+          const after = queryClient.setQueryData(vehiclesKey, (list) => applyFrames(list, updates))
+          if (after && after !== before) writeCache(fleetCacheKey(companyId), after)
         })
-      })
-      .catch(err => { if (alive) { setError(err); setLoading(false) } })
+        .catch(() => { /* transient — the next tick retries */ })
+    }, CONNECTION_REFRESH_MS)
 
     return () => {
       alive = false
-      if (es) es.close()
-      if (connTimer) clearInterval(connTimer)
-      // FLUSH rather than cancel. A pending write dropped here is exactly the
-      // case that matters — closing the tab or switching org is when the feed
-      // most needs to have been saved, and the debounce means there is almost
-      // always something in flight.
+      es.close()
+      clearInterval(connTimer)
+      // FLUSH rather than cancel: closing the tab or switching org is when
+      // the feed most needs to have been saved.
       if (feedPersistTimer) clearTimeout(feedPersistTimer)
       if (feedToPersist) writeCache(feedCacheKey(companyId), feedToPersist)
     }
-  }, [companyId, retryToken])
+  }, [companyId, orgId, snapshotRead, retryToken, queryClient])
 
-  return { vehicles, orgId, loading, error, retry, feed }
+  // A company with no backend organisation has no fleet — not a stale one.
+  const noOrg = org.isSuccess && !orgId
+  const vehicles = noOrg ? NONE : (fleet.data ?? NONE)
+  return {
+    vehicles,
+    orgId,
+    // Nothing to show yet and a read on its way.
+    loading: !noOrg && vehicles.length === 0 && (org.isFetching || fleet.isFetching || fleet.isPending),
+    error: org.error ?? fleet.error ?? null,
+    retry,
+    feed,
+  }
 }

@@ -15,6 +15,15 @@
  * no centre for a line to run down; a rule at 50% of THAT grid would fall
  * inside the main column's text. Sections carry their own hairline instead.
  *
+ * ## Organisations are marks, not abbreviations
+ *
+ * The chips and the access list opened with the organisation's initials on a
+ * dark disc: "WK" in front of "West Kenya Sugar Ltd". That is an abbreviation
+ * of the word beside it, which is the one thing a mark next to a name must
+ * not be — it costs 20px and says nothing the name has not already said.
+ * They carry the tenant's own artwork now, the same marks the user roster
+ * draws, with the initials kept only where there is no artwork on file.
+ *
  * ## Light only
  *
  * This page renders under `.app--light` unconditionally (App.jsx), so the
@@ -50,27 +59,30 @@
 }
 
 /* The only way out of this page — it is fixed at z-index 2500 and covers the
-   nav — so it is fixed too, rather than scrolling away with the cover. */
+   nav — so it is fixed too, rather than scrolling away with the cover.
+
+   Bare text, no chrome. The pill it used to wear made it read as an action
+   equal in weight to the ones in the identity row, which it is not: it is the
+   way back, and a way back is a label you follow, not a button you weigh. The
+   cover behind it is a flat pale band, so nothing is lost by dropping the
+   white fill it was sitting on. */
 .acct-cover__back {
   position: fixed;
   top: 16px;
   left: 16px;
   z-index: 2;
-  padding: 8px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(6px);
+  padding: 8px 0;
+  border: 0;
+  background: none;
   color: #475569;
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
-  transition: color 120ms ease, border-color 120ms ease;
+  transition: color 120ms ease;
 }
-.acct-cover__back:hover { color: #0f172a; border-color: #cbd5e1; }
-.acct-cover__back:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.acct-cover__back:hover { color: #0f172a; text-decoration: underline; }
+.acct-cover__back:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
 
 /* ── Identity ───────────────────────────────────────────────────────────── */
 
@@ -138,7 +150,7 @@
   margin: 8px 0 0;
   max-width: 62ch;
   font-size: 12.5px;
-  color: #94a3b8;
+  color: #64748b;
   overflow-wrap: anywhere;
 }
 
@@ -182,7 +194,7 @@
   color: #0f172a;
   transition: color 120ms ease;
 }
-.acct-stat__k { font-size: 11.5px; color: #94a3b8; }
+.acct-stat__k { font-size: 11.5px; color: #64748b; }
 
 .acct-cta {
   padding: 8px 20px;
@@ -225,6 +237,56 @@
 }
 .acct-tabs::-webkit-scrollbar { display: none; }
 
+/* Desktop and tablet keep the cover's link, which is fixed and always there. */
+.acct-tabs__back { display: none; }
+
+/* ── Phones: two things were pinned to the same corner ──────────────────────
+ *
+ * `.acct-cover__back` is `position: fixed; top: 16px; left: 16px`, so once the
+ * page scrolled past the cover it stayed in the viewport's top-left — which is
+ * exactly where this strip pins itself. Measured at 375 x 667 with the page
+ * scrolled 700px: the link sat at 12-56 and the strip at 0-45, the link on top
+ * of "Profile" and over the content below it, with neither reliably hittable.
+ *
+ * So on a phone the cover's link goes back to scrolling away with the cover it
+ * belongs to, and the strip — the only chrome that survives a scroll here —
+ * carries the way out instead.
+ */
+@media (max-width: 767px) {
+  .acct-cover__back {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    /* 44px of height for a thumb; the label is short and the cover is empty. */
+    padding: 12px 8px;
+  }
+
+  .acct-tabs {
+    /* The tabs were centred in a row of their own. With the back control on the
+       left they run from the left instead, so the two are not fighting over the
+       middle of a 375px strip. */
+    justify-content: flex-start;
+    padding-left: 4px;
+  }
+
+  .acct-tabs__back {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 44px;
+    align-self: stretch;
+    min-height: 44px;
+    border: 0;
+    background: none;
+    color: #475569;
+    font: inherit;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .acct-tabs__back:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+}
+
 .acct-tab {
   position: relative;
   flex: 0 0 auto;
@@ -234,7 +296,7 @@
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #64748b;
   white-space: nowrap;
   cursor: pointer;
   transition: color 120ms ease;
@@ -370,6 +432,44 @@
 .acct-stat-row--violet { background: #faf5ff; border-left-color: #e9d5ff; }
 .acct-stat-row--violet .acct-stat-row__n { color: #7e22ce; }
 
+/* ── Status ─────────────────────────────────────────────────────────────────
+   A pill, drawn the way the user roster draws the same three facts, so ACTIVE
+   means the same colour wherever somebody meets it.
+
+   Each tone carries a WASH as well as a hue — the rule the roster's pills
+   follow and the reason they can be scanned rather than read. Colour is never
+   the only carrier: the word itself is always present, so this survives being
+   printed, being read by somebody colourblind, and being read aloud.
+
+   The hues are this page's existing tint scale (see .acct-stat-row--*), not
+   the roster's `--ua-*` tokens: those are pale values chosen for a dark panel
+   and would not survive on white. Red is added here because the stat rows had
+   no use for one. */
+.acct-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* "Pending activation" wrapped inside the roster's pill and drew a lozenge
+     twice its neighbours' height; the same guard belongs here. */
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.acct-status--ok      { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
+.acct-status--warn    { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.acct-status--crit    { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.acct-status--unknown { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
+
+/* In the facts list the pill is the whole value, so it sits on the text
+   baseline of a `dd` that is otherwise plain text. */
+.acct-fact .acct-status { margin-top: 1px; }
+
 /* ── Chips ──────────────────────────────────────────────────────────────── */
 
 .acct-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -411,12 +511,32 @@
 .acct-chip--more:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .acct-chip--platform { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
 
-.acct-chip__mark {
+/* The mark that opens an organisation, in the chips and in the access list.
+   One box, two fillings: the tenant's own artwork where there is any, and the
+   initials disc it replaced where there is none. Same 20px either way, so a
+   list of four organisations does not step up and down its own left edge. */
+.acct-orgmark {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
   width: 20px;
   height: 20px;
+}
+
+.acct-orgmark--logo {
+  /* The hairline is INSIDE the 20px, so the logo and the letters it replaces
+     are the same square and a mixed list keeps one left edge. */
+  box-sizing: border-box;
+  border-radius: 5px;
+  /* contain, not cover — a wordmark cropped square is a different logo. White
+     behind it, and a hairline, because several of these are drawn for print
+     and would otherwise float on the chip with no edge of their own. */
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+.acct-orgmark--letter {
   border-radius: 50%;
   background: #1e293b;
   color: #fff;
@@ -715,7 +835,7 @@
 }
 .acct-org:last-child { border-bottom: none; }
 
-.acct-org__head { display: flex; align-items: baseline; gap: 8px; }
+.acct-org__head { display: flex; align-items: center; gap: 8px; }
 .acct-org__name { font-size: 13.5px; font-weight: 700; color: var(--color-text-primary, #f0f4f8); }
 .acct-org__code {
   font-size: 10.5px;
@@ -793,7 +913,7 @@
 
 @media (max-width: 560px) {
   .acct-cover { height: 104px; }
-  .acct-cover__back { top: 12px; left: 12px; padding: 8px 12px; }
+  .acct-cover__back { top: 12px; left: 16px; padding: 8px 0; }
 
   .acct-id { padding-left: 16px; padding-right: 16px; }
   .acct-id__avatar { width: 68px; height: 68px; margin-top: -34px; font-size: 23px; }
@@ -822,29 +942,151 @@
  * desktop's 32px controls under a width-based rule. `pointer: coarse` asks the
  * right question.
  *
- * 44px is the figure both Apple's and WCAG's guidance land on. Desktop density
- * is untouched: this block simply does not match a mouse. */
+ * The heights are the app's phone scale (index.css): fields and the primary
+ * action at --m-field/--m-action, the rest at --m-ctl. 44px everywhere made
+ * the page a stack of slabs. Desktop density is untouched: this block simply
+ * does not match a mouse. */
 @media (pointer: coarse) {
   .acct-btn,
   .acct-choice__opt,
-  .acct-cta,
   .acct-tab,
   .acct-cover__back {
-    min-height: 44px;
+    min-height: var(--m-ctl);
   }
-  .acct-field__input { min-height: 44px; }
+  .acct-cta { min-height: var(--m-action); }
+  .acct-field__input { min-height: var(--m-field); }
   /* The show/hide control is a word, not a box, so it gets the height without
      the padding that would push the field out of shape. */
   .acct-field__eye {
-    min-height: 44px;
+    min-height: var(--m-field);
     display: inline-flex;
     align-items: center;
   }
 }
 
+/* ── Arrival ────────────────────────────────────────────────────────────────
+ *
+ * The page opens over a live map that never stops repainting, so an entrance
+ * here is competing for the main thread with marker updates and an SSE feed.
+ * That is the whole design constraint: every rule below animates ONLY
+ * `opacity` and `transform`, which the compositor runs off the main thread, so
+ * a busy frame cannot stutter the animation and the animation cannot stall the
+ * map. Nothing here touches width, height, top, margin or filter — any one of
+ * those would put this back on the layout path and reintroduce the judder it
+ * exists to avoid.
+ *
+ * ## Why nothing animates the page root
+ *
+ * `.acct-page` is deliberately left alone. A transform on it would make it the
+ * containing block for `.acct-cover__back`, which is `position: fixed`, and
+ * for the sticky tab strip and rail — the back link would ride the animation
+ * down and the sticky offsets would resolve against the wrong box. The blocks
+ * are animated individually instead, which costs nothing and cannot break
+ * positioning.
+ *
+ * `translate3d` rather than `translateY` so the element is promoted for the
+ * duration, and `backwards` fill so it is already hidden during its delay —
+ * without a fill, every block paints once at full opacity and then jumps back
+ * to the start, which is precisely the flash this exists to remove.
+ *
+ * `backwards` and NOT `both`. `both` also holds the LAST keyframe forever,
+ * which leaves an identity transform sitting on every animated block once the
+ * arrival is over — measured, ten of them — and an element with a transform
+ * stays promoted to its own compositor layer for the life of the page. That is
+ * real GPU memory held for an animation that finished half a second after
+ * load. `backwards` reverts to the base style on completion, so the promotion
+ * is released and the elements go back to being ordinary boxes.
+ */
+
+@keyframes acct-rise {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes acct-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Expo-out. It covers most of the distance in the first third, which is what
+   reads as "snapped into place" rather than "slid in": the eye gets the final
+   position almost immediately and the tail just settles it. */
+.acct-cover,
+.acct-cover__back,
+.acct-id,
+.acct-tabs,
+.acct-main > .acct-sec,
+.acct-main > .acct-notice,
+.acct-rail > .acct-card {
+  animation: acct-rise 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Fade only, no travel. The cover is the fixed back link's parent and the
+   strip behind the avatar — sliding either one would drag the link with it and
+   put a moving seam under an avatar that is itself arriving. */
+.acct-cover,
+.acct-cover__back { animation-name: acct-fade; }
+
+.acct-cover       { animation-duration: 220ms; }
+.acct-cover__back { animation-delay: 120ms; }
+
+/* The stagger.
+ *
+ * 45ms, and it stops after the fourth step. A per-child delay that keeps
+ * climbing makes the last card land nearly a second late, which reads as the
+ * page still loading — the opposite of the point. Four steps is enough to give
+ * the eye an order to follow; everything past that arrives together.
+ */
+.acct-id   { animation-delay: 45ms; }
+.acct-tabs { animation-delay: 90ms; }
+
+.acct-main > .acct-sec:nth-child(1),
+.acct-main > .acct-notice { animation-delay: 135ms; }
+.acct-main > .acct-sec:nth-child(2) { animation-delay: 180ms; }
+.acct-main > .acct-sec:nth-child(3) { animation-delay: 225ms; }
+.acct-main > .acct-sec:nth-child(n+4) { animation-delay: 260ms; }
+
+/* The rail runs alongside the main column rather than after it, so the two
+   columns finish together instead of the page resolving left-to-right. */
+.acct-rail > .acct-card:nth-child(1) { animation-delay: 150ms; }
+.acct-rail > .acct-card:nth-child(2) { animation-delay: 195ms; }
+.acct-rail > .acct-card:nth-child(n+3) { animation-delay: 240ms; }
+
+/* The avatar is the one thing that earns a scale: it straddles the cover seam
+   and is the page's anchor, so it settles INTO the hole rather than sliding to
+   it. Transform-only, and it overrides the inherited rise via its own rule. */
+@keyframes acct-avatar-in {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: none; }
+}
+
+.acct-id__avatar {
+  animation: acct-avatar-in 340ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: 60ms;
+}
+
+/* Tab switches reuse the same arrival: the sections are conditionally
+   rendered, so they mount fresh and replay their stagger. The rail sits
+   OUTSIDE the tabs and does not remount, which is correct — it never changed,
+   so animating it again would claim it had. */
+
+/* Motion is a preference, and "none" here means none — not a faster version.
+   `animation: none` rather than a zero duration so the elements are simply
+   present at their final opacity and position from the first paint. */
 @media (prefers-reduced-motion: reduce) {
   .acct-field, .acct-btn, .acct-choice__opt, .acct-cta,
   .acct-tab, .acct-stat__n, .acct-cover__back { transition: none; }
+
+  .acct-cover,
+  .acct-cover__back,
+  .acct-id,
+  .acct-id__avatar,
+  .acct-tabs,
+  .acct-main > .acct-sec,
+  .acct-main > .acct-notice,
+  .acct-rail > .acct-card {
+    animation: none;
+  }
 }
 
 /* "The server does not have this yet" — deliberately NOT styled as an error.

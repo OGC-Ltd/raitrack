@@ -20,7 +20,7 @@
 // Four organisations have at least one; the table below is the whole list, and
 // it has outgrown the sentence that used to enumerate it here. They differ in
 // kind as much as in place — Kabras is 29 named places inside one fence, Oyani
-// is a hectare with a gate on it, Big Farm is 11.66 km2 of ground, and the
+// is three quarters of a hectare with a gate on it, Big Farm is 11.66 km2 of ground, and the
 // Molo outlines are a river with no fence at all — which is why each row
 // carries its own camera and its own zoom floor rather than inheriting one
 // number for "a site".
@@ -85,15 +85,15 @@ export const SITE_PLANS = {
   ],
   sukari: [
     { id: "sukari", prefKey: "site",       url: "/sukari-site.geojson", label: "Sukari site plan" },
-    // Two out-centres, not mills: Oyani is 1.01 ha and Nyaondo 0.98 ha, each
+    // Two out-centres, not mills: Oyani is 0.75 ha and Nyaondo 0.98 ha, each
     // surveyed as one ring and one gate. Neither needs a `fit` of its own —
     // they are a tenth of the ground the works-site camera was tuned for, so
     // it simply clamps at its tightest zoom, which is what they want.
     //
     // Three switches rather than one Sukari layer, for the reason the table
-    // above gives: the mill, Oyani 34 km south-east of it, and Nyaondo 15 km
-    // north of Oyani. A single fit framing that spread lands the camera at a
-    // zoom where none of the three is legible.
+    // above gives: the mill, Oyani 32 km south-east of it, and Nyaondo 13 km
+    // north-east of Oyani. A single fit framing that spread lands the camera
+    // at a zoom where none of the three is legible.
     //
     // `pointMinZoom` is lowered to 13 as it is for Naitiri and Raiply: one pin
     // apiece, the gate, so there is nothing for it to pile into — and the gate

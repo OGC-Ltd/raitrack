@@ -5,6 +5,7 @@
 import { jsPDF } from "jspdf";
 import autoTableModule from "jspdf-autotable";
 import html2canvas from "html2canvas";
+import { splitDrained } from "../lib/fuelTheftSplit";
 
 const autoTable =
   typeof autoTableModule === "function"
@@ -1629,10 +1630,10 @@ export async function downloadAnalyticsReport({
 
           {
             label:
-              "Fuel lost / drained",
+              "Fuel drained",
             value:
               fmt(
-                fuelTotals?.litresLost,
+                splitDrained(fuelTotals).lost,
               ),
             unit:
               "litres",
@@ -1678,7 +1679,7 @@ export async function downloadAnalyticsReport({
               "Drain events",
             value:
               fmt(
-                fuelTotals?.thefts,
+                splitDrained(fuelTotals).drains,
               ),
           },
 
@@ -1686,7 +1687,25 @@ export async function downloadAnalyticsReport({
             label:
               "Value of fuel drained",
             value: `${currency} ${fmt(
-              fuelTotals?.lossCost,
+              splitDrained(fuelTotals).lossCost,
+            )}`,
+          },
+
+          {
+            label:
+              "Suspected theft",
+            value: `${fmt(
+              splitDrained(fuelTotals).theft,
+            )} L  ·  ${fmt(
+              splitDrained(fuelTotals).thefts,
+            )} events`,
+          },
+
+          {
+            label:
+              "Value of suspected theft",
+            value: `${currency} ${fmt(
+              splitDrained(fuelTotals).theftCost,
             )}`,
           },
 
@@ -2333,10 +2352,10 @@ export async function downloadAnalyticsReport({
 
           {
             label:
-              "Fuel lost / drained",
+              "Fuel drained",
             value:
               fmt(
-                fuelTotals?.litresLost,
+                splitDrained(fuelTotals).lost,
               ),
             unit:
               "litres",
@@ -2382,7 +2401,7 @@ export async function downloadAnalyticsReport({
               "Drain events",
             value:
               fmt(
-                fuelTotals?.thefts,
+                splitDrained(fuelTotals).drains,
               ),
           },
 
@@ -2390,7 +2409,25 @@ export async function downloadAnalyticsReport({
             label:
               "Value of fuel drained",
             value: `${currency} ${fmt(
-              fuelTotals?.lossCost,
+              splitDrained(fuelTotals).lossCost,
+            )}`,
+          },
+
+          {
+            label:
+              "Suspected theft",
+            value: `${fmt(
+              splitDrained(fuelTotals).theft,
+            )} L  ·  ${fmt(
+              splitDrained(fuelTotals).thefts,
+            )} events`,
+          },
+
+          {
+            label:
+              "Value of suspected theft",
+            value: `${currency} ${fmt(
+              splitDrained(fuelTotals).theftCost,
             )}`,
           },
 

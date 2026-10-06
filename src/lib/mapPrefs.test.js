@@ -65,7 +65,10 @@ describe("defaults", () => {
   it("gives a company this build has never heard of a working map", () => {
     const p = defaultPrefs("somewhere-new");
     expect(p.filter).toBe(DEFAULT_FILTER);
-    expect(Object.values(p.layers).every(v => v === false)).toBe(true);
+    // Every org layer off; live traffic is roads, not org data, and opens on.
+    const { traffic, ...orgLayers } = p.layers;
+    expect(traffic).toBe(true);
+    expect(Object.values(orgLayers).every(v => v === false)).toBe(true);
   });
 });
 

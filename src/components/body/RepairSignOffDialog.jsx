@@ -32,9 +32,10 @@
  * here is SensorPanel's, and the rules live in SensorPanel.css.
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { resolveRepairItem, STAGE_LABEL } from "../../api/repairs";
 import useFocusTrap from "../../hooks/useFocusTrap";
+import PanelPortal from "./PanelPortal";
 
 /** The two ends of the ladder, and what each one asks for. */
 const VERDICTS = [
@@ -61,6 +62,8 @@ export default function RepairSignOffDialog({
   initialVerdict = "fixed",
   onClose,
   onDone,
+  /** Given, errors go here (a page's toast) instead of the banner in the dialog. */
+  onError,
 }) {
   const [verdict, setVerdict] = useState(initialVerdict);
   const [note,    setNote]    = useState("");
@@ -74,7 +77,11 @@ export default function RepairSignOffDialog({
   const dialogRef = useRef(null);
   const titleId = useId();
 
-  useFocusTrap(dialogRef, open);
+  // The dialog mounts a render late (PanelPortal finds its host first), so
+  // the trap waits for the node rather than arming on an empty ref.
+  const [mounted, setMounted] = useState(false);
+  const setDialog = useCallback((el) => { dialogRef.current = el; setMounted(Boolean(el)); }, []);
+  useFocusTrap(dialogRef, open && mounted);
 
   // Re-seed on every opening, so a cancelled sign-off does not carry its note
   // into the next unit.
@@ -138,7 +145,8 @@ export default function RepairSignOffDialog({
       // Stays open on failure, with the note intact. A 409 here means somebody
       // else closed it first, and throwing the sentence away would be the
       // second loss in a row.
-      setErr(e2?.message ?? "Could not close this job");
+      const msg = e2?.message ?? "Could not close this job";
+      if (onError) onError(msg); else setErr(msg);
     } finally {
       setBusy(false);
     }
@@ -150,6 +158,7 @@ export default function RepairSignOffDialog({
   const plate = item.vehicle?.registrationPlate ?? item.plate ?? "this unit";
 
   return (
+    <PanelPortal>
     <div
       className="sp4-modal-overlay"
       role="presentation"
@@ -159,7 +168,7 @@ export default function RepairSignOffDialog({
     >
       <div
         className="sp4-modal sp4-modal--narrow"
-        ref={dialogRef}
+        ref={setDialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -267,5 +276,6 @@ export default function RepairSignOffDialog({
         </form>
       </div>
     </div>
+    </PanelPortal>
   );
 }

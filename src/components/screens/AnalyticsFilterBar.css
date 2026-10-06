@@ -377,10 +377,9 @@
 /* ── One height, every control, both modes ─────────────────────────────── */
 @media (max-width: 767px) {
   .an-filterbar {
-    /* 44 because that is what index.css already gives the picker, the unit
-       filter and the report button. This makes the other two agree with them
-       rather than introducing a fourth opinion. */
-    --an-ctl-h: 44px;
+    /* The phone field height (index.css), shared by the picker, the unit
+       filter and the report button, so no control here has its own opinion. */
+    --an-ctl-h: var(--m-field);
   }
 
   /* The segmented control was the odd one out at 50px: 44px buttons inside a

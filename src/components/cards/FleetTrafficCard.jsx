@@ -66,9 +66,7 @@ export default function FleetTrafficCard() {
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="ftc-clear-note">No delays reported across active routes</div>
-          )}
+          ) : null}
         </>
       )}
     </div>

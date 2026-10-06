@@ -15,6 +15,8 @@ import { usePlaceName } from "../../hooks/usePlaceName";
 import { copyText, formatCoords } from "../../lib/copyText";
 import { vehicleActivity, isInTransit, isOnline, equipmentLabel, ACTIVITY_LABELS, ACTIVITY_COLORS, ONLINE_COLORS } from "../../lib/vehicleMap";
 import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
+import { useFleetLiveShared } from "../../context/FleetLiveContext";
+import { useJourneySoFar } from "../../hooks/useJourneySoFar";
 
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
@@ -279,7 +281,12 @@ function RunRow({ vehicle }) {
  * stranded-stop flag — which is the alarm that actually needed it.
  */
 
-export default function VehicleStatsCard({ vehicle }) {
+/**
+ * `withDay` is for a card somebody clicked (the pinned map card, the fuel
+ * incident window): it reads the unit's day for the start row. A hover card
+ * leaves it off and shows the start only where the day is already held.
+ */
+export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClick }) {
   const color = STATUS_COLORS[vehicle.status] ?? STATUS_COLORS.ok;
 
   // ── Derived colour values (same thresholds as fleetdash) ──────────────────
@@ -304,9 +311,15 @@ export default function VehicleStatsCard({ vehicle }) {
 
   const maxPay    = vehicle.maxPayload ?? 30;
   const loadPct   = maxPay > 0 ? Math.round((vehicle.weight / maxPay) * 100) : 0;
-  const loadColor = loadPct > 95 ? "var(--accent-crit)"
-                  : loadPct > 80 ? "var(--accent-warn)"
-                  : "var(--accent-ok)";
+  /* A FULL TRUCK IS THE GOAL, not an alarm.
+     This graded the load like the fuel bar above it — red past 95%, amber
+     past 80 — which reads the wrong way round: a unit signed out with 29 t on
+     a 30 t bed is doing exactly what it was sent to do, and the card said so
+     in the same red it uses for a dry tank. 580 bags of sugar is a good day.
+     The only number that is news here is one OVER the legal payload, which is
+     an offence rather than a full load, so that is the only one that shouts.
+     (maxPayloadTonnes is the legal figure per type — see lib/vehicleMap.) */
+  const loadColor = loadPct > 100 ? "var(--accent-crit)" : "var(--accent-ok)";
 
   // The open dispatch, as a round trip, recomputed from the live position —
   // the same source and the same helpers the Active Trip card uses, so hover
@@ -322,15 +335,36 @@ export default function VehicleStatsCard({ vehicle }) {
   const total   = roundTripKm(trip);
   const distPct = trip?.percent ?? 0;
   // Ground actually driven today — the server's figure, the same one the
-  // vehicle brief and the Active Trip card quote. NOT the bar's fill, which is
-  // a position along the round trip: a unit that arrived yesterday sits at 50%
-  // having driven nothing today, and showing that as "27.6 km covered" is what
-  // made the hover card and the brief disagree.
+  // vehicle brief and the Active Trip card quote. Only the fallback for
+  // OUTBOUND below, where the day's readings are not to hand.
   const drivenToday = trip?.distanceTodayKm ?? null;
+  // The FactorySuite serial for the unit's open dispatch, when one has come in
+  const serial = (trip?.serialNumber ?? vehicle.sealSerial ?? "").trim() || null;
 
   // A place name is what an operator can act on; "-6.8530, 39.2266" is not.
   // Resolves in the background and falls back to the coordinates until it lands.
   const placeName = usePlaceName(vehicle.lat, vehicle.lng);
+
+  /* START → NOW, on every unit (operator, 28 Sep: "all the cards when I click
+     on a unit should include the start and the current location, departed
+     will be the time they start, outbound will be the distance covered since
+     start, the serial should be removed").
+
+     This block used to show only on a unit with an open dispatch, and then as
+     the dispatch's yard ⇄ destination, its paperwork departure and a position
+     along the round trip. KCB 303Z on 28 Sep read DEPARTED 05:43 under "On
+     the road since 05:23", and "distance not measured" beside 0.2 km driven
+     today at 45 km/h. Now the start is where and when the unit actually set
+     off today, read off its own readings (lib/vehicleDay journeySoFar — the
+     same start the vehicle panel's "Departed" names), and OUTBOUND is the
+     ground covered since then. */
+  const { orgId } = useFleetLiveShared() ?? {};
+  const journey = useJourneySoFar(orgId, vehicle.vehicleId, withDay);
+  const start = journey?.start ?? null;
+  const startName = usePlaceName(start?.lat ?? null, start?.lng ?? null);
+  const dayPending = withDay && journey == null;
+  const outboundKm = journey ? journey.km : drivenToday;
+  const showJourney = withDay || journey != null || hasLeg;
 
   // ── Copy coordinates ──────────────────────────────────────────────────────
   //
@@ -411,8 +445,10 @@ export default function VehicleStatsCard({ vehicle }) {
         <div className="vt-header-left">
           <span className="vt-reg">{vehicle.id}</span>
           <span className="vt-driver-sub">{vehicle.driver}</span>
-          {/* What this machine actually is. Prefers the SPECIFIC equipment
-              name off the unit's code — an EX is an "Excavator", not the
+          {/* What this machine actually is. KASULU units take the name off
+              RaiFactorySuite's machine register ("CASE PUMA", "Bull Dozer");
+              otherwise the SPECIFIC equipment name off the unit's code — an
+              EX is an "Excavator", not the
               "Plant" its class says, which every dozer and grader also shows.
               Falls back to the class when the code is not one we can name. */}
           {typeLabel && <span className="vt-type-badge">{typeLabel}</span>}
@@ -430,14 +466,27 @@ export default function VehicleStatsCard({ vehicle }) {
 
           {/* ALERT — only when something is wrong. Activity lives on the chip
               below; a badge here repeating it stated the same fact twice. */}
-          {stateLabel && (
+          {/* The theft badge opens the unit's fuel theft window when the
+              card's owner offers a way to (a clicked map card does; a hover
+              card and the window's own copy do not). */}
+          {stateLabel && (onAlertClick && vehicle.status === "theft" ? (
+            <button
+              type="button"
+              className="vt-status-badge vt-status-badge--action"
+              style={{ background: color + "22", color, border: `1px solid ${color}55` }}
+              onClick={onAlertClick}
+              title="Open the fuel theft alert"
+            >
+              {stateLabel}
+            </button>
+          ) : (
             <span className="vt-status-badge" style={{
               background: color + "22", color,
               border: `1px solid ${color}55`,
             }}>
               {stateLabel}
             </span>
-          )}
+          ))}
         </div>
       </div>
 
@@ -553,11 +602,20 @@ export default function VehicleStatsCard({ vehicle }) {
             unit={vehicle.engineHours != null ? " h" : ""}
             sub="total run time"
           />
-          <Tile
-            label="SEAL SERIAL"
-            value={vehicle.sealSerial ?? "—"}
-            sub="container seal"
-          />
+          {/* Only once RaiFactorySuite has sent a serial for the unit
+              (operator, 28 Sep: "remove the seal serial, this is to be
+              dynamically populated when a webhook from FactorySuite sends us a
+              serial number for the unit"). The webhook's serial lands on the
+              unit's dispatch — the server's eventSerial reads five spellings
+              of it — and reaches the card as trip.serialNumber. Until one
+              arrives the row is not drawn; it was a permanent "—". */}
+          {serial && (
+            <Tile
+              label="SEAL SERIAL"
+              value={serial}
+              sub="from FactorySuite"
+            />
+          )}
         </div>
 
         {/* ── Fuel bar ── */}
@@ -591,51 +649,51 @@ export default function VehicleStatsCard({ vehicle }) {
           <span className="vt-bar-sub">{loadPct}% of payload capacity</span>
         </div>
 
-        {/* ── Journey (only when a leg is active) ── */}
-        {hasLeg && (
+        {/* ── Journey: where it set off today, and where it is now ── */}
+        {showJourney && (
           <>
             <div className="vt-divider" />
-            {/* Out and back — the trip is the round trip, so the yard is
-                named at both ends and the arrow points at the turn-around. */}
             <div className="vt-journey-row">
               <span className="vt-jdot dep" />
-              <span className="vt-jplace">{trip.yardName ?? "Yard"}</span>
-              <span className="vt-jarrow">⇄</span>
+              <span className="vt-jplace" title={start ? formatCoords(start.lat, start.lng) ?? undefined : undefined}>
+                {start ? startName ?? formatCoords(start.lat, start.lng) ?? "Start"
+                  : dayPending ? "…" : "Not moved today"}
+              </span>
+              <span className="vt-jarrow">→</span>
               <span className="vt-jdot dest" />
-              <span className="vt-jplace">{trip.destination ?? "—"}</span>
+              <span className="vt-jplace" title={locTitle}>{place || coords || "—"}</span>
             </div>
             <div className="vt-journey-times">
               <span className="vt-jtime">
-                <span className="vt-jtime-lbl">DEPARTED</span> {fmtClock(Date.parse(trip.departedAt)) ?? "—"}
-              </span>
-              <span className="vt-jtime vt-jtime--eta">
-                {/* DUE BACK, not ETA. There is no estimate of arrival at the
-                    destination — the provider gives none and nothing here can
-                    infer one — but the return IS known, from the dispatcher's
-                    commitment or this fleet's median for the same run. */}
-                <span className="vt-jtime-lbl">DUE BACK</span>{" "}
-                {fmtClock(Date.parse(trip.dueBackAt), trip.departedAt) ?? "—"}
+                <span className="vt-jtime-lbl">DEPARTED</span>{" "}
+                {start ? fmtClock(start.t) : dayPending ? "…" : "—"}
               </span>
             </div>
             <div className="vt-bar-section" style={{ marginBottom: 8 }}>
               <div className="vt-bar-hdr">
-                <span className="vt-bar-lbl">{LEG_LABEL[trip.leg]?.toUpperCase() ?? "PROGRESS"}</span>
+                <span className="vt-bar-lbl">OUTBOUND</span>
                 {/* Explicit bright colour — with no colour this span inherited
                     the muted secondary text and the km figure was barely
-                    legible. Matches the progress bar below. */}
+                    legible. */}
                 <span className="vt-bar-amt" style={{ color: "var(--accent-info)" }}>
-                  {trip.percent != null && total != null
-                    ? `${trip.percent}% of ${total} km`
-                    : "distance not measured"}
+                  {journey && !start ? "0 km"
+                    : outboundKm != null ? `${(+outboundKm).toFixed(1)} km since start`
+                    : dayPending ? "…" : "distance not measured"}
                 </span>
               </div>
-              {/* No bar without a measured destination: 58 of Sukari's 152
+              {/* An open dispatch keeps its round trip: the bar is a position
+                  along it, and the line under it says where the run is going.
+                  No bar without a measured destination: 58 of Sukari's 152
                   destination names have too few completed trips to place, and
                   an empty bar would read as "nowhere yet" rather than
                   "unmeasurable". */}
-              {trip.percent != null && <Bar pct={distPct} color="#38bdf8" />}
-              {drivenToday != null && (
-                <span className="vt-bar-sub">{drivenToday} km driven today</span>
+              {hasLeg && trip.percent != null && <Bar pct={distPct} color="#38bdf8" />}
+              {hasLeg && trip.destination && (
+                <span className="vt-bar-sub">
+                  {[LEG_LABEL[trip.leg],
+                    trip.percent != null && total != null ? `${trip.percent}% of the ${total} km round trip to ${trip.destination}` : `trip to ${trip.destination}`,
+                  ].filter(Boolean).join(" · ")}
+                </span>
               )}
             </div>
           </>

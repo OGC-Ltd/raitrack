@@ -47,7 +47,7 @@
 // whether this reader may follow it.
 
 import { useState, useRef, useEffect } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { ZONE_STYLE } from "../../lib/zoneLegend";
 import "./SitePlanLinks.css";
@@ -70,7 +70,8 @@ const LocatorIcon = ({ size = 14 }) => (
 );
 
 export default function SitePlanLinks() {
-  const { sitePlanLinks, requestSitePlan, desktopActiveTab, setDesktopActiveTab } = useAppContext();
+  const { sitePlanLinks, desktopActiveTab } = useAppFields("sitePlanLinks", "desktopActiveTab");
+  const { requestSitePlan, setDesktopActiveTab } = useAppActions();
   const { can } = usePermissions();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);

@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { whenLabel } from "../../api/incidents";
 import TableToolbar from "./TableToolbar";
+import TablePager, { usePager } from "./TablePager";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import "./IncidentReport.css";
 
@@ -68,11 +69,13 @@ const Empty  = ({ children }) => <div className="sp4-empty-tab">{children}</div>
    and what these do now that they carry eleven columns rather than seven.
    Handing the whole remainder to one column instead made every other column
    hug its content, which is the opposite of giving each of them room. */
+// The first column names the row, so on a phone it is the one held at the
+// left edge while the rest scroll (`.sp4-keep-table`, SensorPanel.css).
 const cellClass = (c, first) =>
-  first ? "sp4-reg" : c.numeric ? "sp4-num" : undefined;
+  first ? "sp4-reg sp4-td--pin" : c.numeric ? "sp4-num" : undefined;
 /* No right-aligned headers. `.sp4-num` left-aligns its cells to match the fuel
    table, so a right-aligned header would sit over a left-aligned column. */
-const headClass = () => undefined;
+const headClass = (c, first) => (first ? "sp4-th--pin" : undefined);
 
 /**
  * A column as an EXPORT column, or null if it does not belong in a file.
@@ -132,6 +135,8 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
   useEffect(() => { void load(undefined); }, [load]);
 
   const plate = unit.plate ?? unit.vehicleId;
+  const pager = usePager(rows, unit.vehicleId);
+  const lastPage = pager.page === pager.pageCount - 1;
 
   return (
     <>
@@ -184,16 +189,18 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
 
       {rows.length > 0 && (
         <div className="sp4-table-scroll">
+          {/* Its own sideways scroller on a phone, so the bar above stays put. */}
+          <div className="sp4-keep-table">
           <table className="sp4-table">
             <thead>
               <tr>
-                {columns.map((c) => (
-                  <th key={c.key} title={c.title} className={headClass(c)}>{c.label}</th>
+                {columns.map((c, i) => (
+                  <th key={c.key} title={c.title} className={headClass(c, i === 0)}>{c.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {pager.pageRows.map((r) => (
                 <tr key={r.id} className="sp4-tr sp4-tr--static">
                   {columns.map((c, i) => (
                     <td key={c.key} className={cellClass(c, i === 0)}>{c.render(r)}</td>
@@ -202,8 +209,10 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
               ))}
             </tbody>
           </table>
+          </div>
+          <TablePager pager={pager} label="Case pages" />
 
-          {more && (
+          {more && lastPage && (
             <div className="sp4-table-more">
               <button type="button" className="sp4-page-btn" disabled={loading} onClick={() => void load(cursor)}>
                 {loading ? "Loading…" : "Load more"}
@@ -271,6 +280,9 @@ export default function IncidentReport({
    * capture is not a month with no incidents, and the difference is a fleet
    * that looks clean versus one nobody was watching yet.
    */
+  const pager = usePager(rows, `${orgId}|${range.from}|${range.to}|${sort}`);
+  const lastPage = pager.page === pager.pageCount - 1;
+
   const startsBeforeCapture =
     captureStartedAt && Date.parse(range.from) < Date.parse(captureStartedAt);
 
@@ -322,25 +334,20 @@ export default function IncidentReport({
       {error && <Failed>Could not load the report.</Failed>}
       {!error && loading && rows.length === 0 && <Loading label={loadingLabel} />}
 
-      {!error && startsBeforeCapture && (
-        <div className="ir-note">
-          Recording began {whenLabel(captureStartedAt)} — anything before that is not
-          missing, it was never captured.
-        </div>
-      )}
-
       {error || (loading && rows.length === 0) ? null : rows.length === 0 ? <Empty>{emptyLabel}</Empty> : (
         <>
+          {/* Its own sideways scroller on a phone, so the bar above stays put. */}
+          <div className="sp4-keep-table">
           <table className="sp4-table">
             <thead>
               <tr>
-                {summaryColumns.map((c) => (
-                  <th key={c.key} title={c.title} className={headClass(c)}>{c.label}</th>
+                {summaryColumns.map((c, i) => (
+                  <th key={c.key} title={c.title} className={headClass(c, i === 0)}>{c.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {pager.pageRows.map((r) => (
                 <tr
                   key={r.vehicleId}
                   /* Clickable, like every fuel row — and reachable by keyboard,
@@ -362,8 +369,10 @@ export default function IncidentReport({
               ))}
             </tbody>
           </table>
+          </div>
+          <TablePager pager={pager} label="Unit pages" />
 
-          {more && (
+          {more && lastPage && (
             <div className="sp4-table-more">
               <button type="button" className="sp4-page-btn" disabled={loading} onClick={() => void load(cursor)}>
                 {loading ? "Loading…" : "Load more"}

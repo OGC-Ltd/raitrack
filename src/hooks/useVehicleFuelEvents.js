@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../services/api';
 import { dayBounds } from '../lib/vehicleDay';
 import { fuelEpisodes, levelsFromPings } from '../lib/fuelEpisodes';
+import { settleLimited } from '../lib/settleLimited';
 import { fleetDayKey } from './useFuelEvents';
 
 const TODAY_REFRESH_MS = 5 * 60_000;
@@ -103,6 +104,53 @@ export function useVehicleFuelEvents(orgId, vehicleId, dayKey) {
     const timer = dayKey === fleetDayKey() ? setInterval(() => load(true), TODAY_REFRESH_MS) : null;
     return () => { live = false; if (timer) clearInterval(timer); };
   }, [key, orgId, vehicleId, dayKey]);
+
+  return state;
+}
+
+/**
+ * The same for several days (the Fuel tab's range, lib/dayRange), each day
+ * read and held exactly as useVehicleFuelEvents holds it. A day that fails
+ * leaves a gap rather than emptying the range; today, when in it, is re-read
+ * on the same clock.
+ */
+export function useVehicleFuelEventsRange(orgId, vehicleId, dayKeys) {
+  const key = orgId && vehicleId && dayKeys.length ? `${orgId}|${vehicleId}|${dayKeys.join(',')}` : null;
+  const joined = (helds) => (helds.length === 1
+    ? shown(helds[0])
+    : { drains: helds.flatMap((h) => h.drains), fillings: helds.flatMap((h) => h.fillings), loading: false, error: null });
+  const heldAll = () => dayKeys.map((d) => cache.get(keyOf(orgId, vehicleId, d)));
+  const [state, setState] = useState(() => {
+    const helds = key ? heldAll() : [];
+    return key && helds.every(Boolean) ? joined(helds) : { ...EMPTY, loading: Boolean(key) };
+  });
+
+  useEffect(() => {
+    if (!key) { setState(EMPTY); return undefined; }
+    let live = true;
+    const helds = heldAll();
+    if (helds.every(Boolean)) setState(joined(helds));
+    else setState((s) => ({ ...s, loading: true, error: null }));
+
+    // A few days at a time: a pick can run to 90 days (lib/settleLimited)
+    const load = (force) => settleLimited(dayKeys, 4, (d) => loadVehicleFuelEvents(orgId, vehicleId, d, { force: force && d === fleetDayKey() }))
+      .then((rs) => {
+        if (!live) return;
+        const got = rs.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+        if (!got.length) {
+          const err = rs[0]?.reason;
+          setState((s) => ({ ...s, loading: false, error: err?.message ?? 'Could not load the fuel events' }));
+          return;
+        }
+        setState(joined(got));
+      });
+
+    load(false);
+    const timer = dayKeys.includes(fleetDayKey()) ? setInterval(() => load(true), TODAY_REFRESH_MS) : null;
+    return () => { live = false; if (timer) clearInterval(timer); };
+  // `key` carries the org, the unit and every day
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   return state;
 }

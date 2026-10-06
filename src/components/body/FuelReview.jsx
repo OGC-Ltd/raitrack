@@ -6,7 +6,12 @@
 
 import { useEffect, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { OUTCOME, fetchReviewRights, reviewIncident, reviewRightsNow, reviewState, useIncidentReview } from "../../lib/fuelReview";
+import {
+  ESCALATION_REASONS, OUTCOME, escalationReason, fetchReviewRights, reviewIncident, reviewRightsNow, reviewState,
+  useIncidentReview,
+} from "../../lib/fuelReview";
+import "./SensorPanel.css";
+import "./FuelFollowUp.css";
 import "./FuelReview.css";
 
 const WHEN = new Intl.DateTimeFormat("en-GB", {
@@ -20,6 +25,8 @@ export default function FuelReview({ incident }) {
   // Already known when lib/fuelPrefetch asked first, so the controls are in the first frame.
   const [canReview, setCanReview] = useState(() => reviewRightsNow(orgId) ?? false);
   const [picking, setPicking] = useState(null); // 'ESCALATED' | 'DEESCALATED' | null
+  // What an escalation is raised to handle (ESCALATION_REASONS); chosen, never assumed.
+  const [reason, setReason] = useState(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -31,24 +38,32 @@ export default function FuelReview({ incident }) {
   }, [orgId]);
 
   // A different incident in the same window starts clean.
-  useEffect(() => { setPicking(null); setNote(""); setError(null); }, [incident?.id]);
+  useEffect(() => { setPicking(null); setReason(null); setNote(""); setError(null); }, [incident?.id]);
 
   if (!incident || (!state.status && !canReview)) return null;
 
+  const chosen = picking === "ESCALATED" ? escalationReason(reason) : null;
+  const needsReason = picking === "ESCALATED" && !chosen;
+  const noteShort = note.trim().length < 3;
+  const confirmText = picking === "ESCALATED" ? (chosen?.confirm ?? OUTCOME.ESCALATED.confirm) : OUTCOME[picking]?.confirm;
+  const placeholder = picking === "ESCALATED" ? (chosen?.placeholder ?? OUTCOME.ESCALATED.placeholder) : OUTCOME[picking]?.placeholder;
+  const cancel = () => { setPicking(null); setReason(null); setError(null); };
+
   const submit = async () => {
-    if (busy || note.trim().length < 3) return;
+    if (busy || noteShort || needsReason) return;
     setBusy(true);
     setError(null);
     try {
-      await reviewIncident(orgId, incident.id, picking, note.trim());
+      await reviewIncident(orgId, incident.id, picking, note.trim(), chosen?.id);
       setPicking(null);
+      setReason(null);
       setNote("");
     } catch (err) {
       setError(err?.status === 403
         ? "Only an administrator can escalate or de-escalate a fuel alert."
         : err?.status === 409
-          ? "This alert was deleted, so it has a Case. Decide it there."
-          : "Could not save that. Try again.");
+          ? "This alert has already been decided and is off the map."
+          : err?.message || "Could not save that. Try again.");
     } finally {
       setBusy(false);
     }
@@ -82,27 +97,50 @@ export default function FuelReview({ incident }) {
 
       {picking && (
         <div className="frv-form">
+          {picking === "ESCALATED" && (
+            <div className="frv-reasons" role="radiogroup" aria-label="Escalate as">
+              <span className="frv-ask">Escalate as</span>
+              {ESCALATION_REASONS.map((r) => (
+                <button key={r.id} type="button" role="radio" aria-checked={reason === r.id}
+                        className={`frv-reason${reason === r.id ? " frv-reason--on" : ""}`}
+                        onClick={() => setReason(r.id)} disabled={busy}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {(picking === "ESCALATED" ? chosen?.hint : OUTCOME[picking]?.hint) && (
+            <p className="frv-hint">{picking === "ESCALATED" ? chosen.hint : OUTCOME[picking].hint}</p>
+          )}
           <textarea
             className="frv-input"
             rows={2}
             autoFocus
             value={note}
             maxLength={2000}
-            placeholder={OUTCOME[picking].placeholder}
+            placeholder={placeholder}
             onChange={(e) => setNote(e.target.value)}
             aria-label="Reason"
           />
-          {error && <p className="frv-error" role="alert">{error}</p>}
           <div className="frv-actions">
-            <button type="button" className="frv-btn" onClick={() => { setPicking(null); setError(null); }} disabled={busy}>
+            <button type="button" className="frv-btn" onClick={cancel} disabled={busy}>
               Cancel
             </button>
             <button type="button"
                     className={`frv-btn frv-btn--solid frv-btn--${picking === "ESCALATED" ? "up" : "down"}`}
-                    onClick={submit} disabled={busy || note.trim().length < 3}
-                    title={note.trim().length < 3 ? "Give a reason first" : undefined}>
-              {busy ? "Saving…" : OUTCOME[picking].confirm}
+                    onClick={submit} disabled={busy || noteShort || needsReason}
+                    title={needsReason ? "Choose what to escalate it as" : noteShort ? "Give a reason first" : undefined}>
+              {busy ? "Saving…" : confirmText}
             </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="sp4-root ffu-scope">
+          <div className="sp4-toast sp4-toast--crit" role="alert">
+            <span className="sp4-toast-text">{error}</span>
+            <button type="button" className="sp4-toast-x" aria-label="Dismiss notification" onClick={() => setError(null)}>×</button>
           </div>
         </div>
       )}

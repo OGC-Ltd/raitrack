@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFleetLiveShared } from "../context/FleetLiveContext";
-import { listRepairItems } from "../api/repairs";
+import { listRepairItems, REPAIRS_CHANGED } from "../api/repairs";
 
 export function useOpenRepairs(enabled = true) {
   const { orgId } = useFleetLiveShared();
@@ -35,6 +35,17 @@ export function useOpenRepairs(enabled = true) {
   }, [orgId, enabled]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Changed elsewhere (Fuel > Audit, another person, a fuel case raising a
+  // probe job): read again. See REPAIRS_CHANGED in api/repairs.
+  useEffect(() => {
+    window.addEventListener(REPAIRS_CHANGED, reload);
+    window.addEventListener("ft-fuel-followup-changed", reload);
+    return () => {
+      window.removeEventListener(REPAIRS_CHANGED, reload);
+      window.removeEventListener("ft-fuel-followup-changed", reload);
+    };
+  }, [reload]);
 
   /**
    * vehicleId -> the open item on it.

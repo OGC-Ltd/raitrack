@@ -19,7 +19,7 @@
 
 import { useMemo, useState } from "react";
 import "./MobileSearchScreen.css";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import ErrorBoundary from "../shared/ErrorBoundary";
@@ -50,10 +50,9 @@ const norm = (s) => String(s ?? "").toLowerCase();
 
 function SearchContent() {
   const [query, setQuery] = useState("");
-  const {
-    setSelectedVehicleId, setPendingFocusId, setMobileActiveTab,
-    activeCompany, activeCompanyId, setActiveCompanyId, companies,
-  } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { setSelectedVehicleId, setPendingFocusId, setMobileActiveTab, setActiveCompanyId } = useAppActions();
+  const { activeCompany, companies } = useCompanies();
   const { vehicles, loading, error, retry } = useFleetLiveShared();
 
   const q = norm(query).trim();

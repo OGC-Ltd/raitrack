@@ -62,8 +62,8 @@
   }
 
   .mcp-close {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background: #f1f5f9;
     border: none;
@@ -100,7 +100,7 @@
 
   .mcp-org-meta {
     font-size: 12px;
-    color: #94a3b8;
+    color: #64748b;
     margin-top: 3px;
     font-weight: 400;
   }
@@ -142,20 +142,20 @@
   .mcp-stat-num--green { color: #059669; }
   .mcp-stat-num--amber { color: #d97706; }
   .mcp-stat-num--red   { color: #dc2626; }
-  .mcp-stat-num--grey  { color: #94a3b8; }
+  .mcp-stat-num--grey  { color: #64748b; }
 
   .mcp-stat-lbl {
-    font-size: 10px;
-    color: #94a3b8;
+    font-size: 11px;
+    color: #64748b;
     margin-top: 4px;
     font-weight: 400;
   }
 
   /* Fleet composition */
   .mcp-section-lbl {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    color: #94a3b8;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     margin-bottom: 12px;

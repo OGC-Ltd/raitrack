@@ -4,6 +4,7 @@ vi.mock('../services/api', () => ({ apiFetch: vi.fn() }));
 
 import { apiFetch } from '../services/api';
 import { fetchReviewRights, reviewIncident, reviewState, _resetReviews } from './fuelReview';
+import { readDismissed } from './fuelDismissals';
 
 beforeEach(() => {
   _resetReviews();
@@ -42,5 +43,17 @@ describe('reviewIncident', () => {
     expect(apiFetch).toHaveBeenCalledWith('/api/v1/organisations/o1/fuel/thefts/t1/review', {
       method: 'POST', body: JSON.stringify({ outcome: 'DEESCALATED', note: 'Probe fault' }),
     });
+  });
+
+  it('takes the decided alert off the dashboard at once', async () => {
+    apiFetch.mockResolvedValue({ data: { id: 't9', review: { status: 'CONFIRMED_THEFT' } } });
+    await reviewIncident('o1', 't9', 'ESCALATED', 'Seen on camera', 'theft');
+    expect(readDismissed().has('t9')).toBe(true);
+  });
+
+  it('leaves the alert up when the decision fails', async () => {
+    apiFetch.mockRejectedValue(Object.assign(new Error('nope'), { status: 403 }));
+    await expect(reviewIncident('o1', 't8', 'DEESCALATED', 'Slosh')).rejects.toThrow();
+    expect(readDismissed().has('t8')).toBe(false);
   });
 });

@@ -206,7 +206,7 @@
 }
 .an-dist-total__value span { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .an-dist-total__label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -264,12 +264,14 @@
 }
 .an-kpi__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .an-kpi__label { font-size: 11px; color: var(--text-2); font-weight: 600; }
-.an-kpi__delta { font-size: 10px; font-weight: 700; border-radius: 20px; padding: 1px 6px; }
-.an-kpi__delta.up   { color: #22c55e; background: rgba(34,197,94,0.12); }
-.an-kpi__delta.down { color: #ef4444; background: rgba(239,68,68,0.12); }
+.an-kpi__delta { font-size: 11px; font-weight: 700; border-radius: 20px; padding: 1px 6px; }
+/* Text a shade deeper than the tint behind it: #22c55e / #ef4444 on their own
+   12% wash measured 2.3:1 and 3.2:1. */
+.an-kpi__delta.up   { color: #15803d; background: rgba(34,197,94,0.12); }
+.an-kpi__delta.down { color: #b91c1c; background: rgba(239,68,68,0.12); }
 .an-kpi__value { font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
 .an-kpi__unit  { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.an-kpi__sub   { font-size: 10px; color: var(--text-2); margin-top: 1px; }
+.an-kpi__sub   { font-size: 11px; color: var(--text-2); margin-top: 1px; }
 /* Grows into the leftover height; 56px is the floor it used to be pinned at. */
 .an-kpi__spark { flex: 1 1 auto; min-height: 56px; }
 
@@ -418,25 +420,16 @@
 @media (max-width: 900px) { .an-today__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 460px) { .an-today__grid { grid-template-columns: minmax(0, 1fr); } }
 
-/* Tile. The accent is a 3px LEFT RAIL and nothing else — it identifies the
-   tile without the reader having to decode a hue to get at the number, and it
-   keeps the series colour off text that would fail contrast on the light
-   surface. `--ops-accent` is set per tile from the JSX. */
+/* Tile. No coloured left rail (operator, 2026-10-01): the tiles are told
+   apart by their titles, and the series colours stay in the charts. */
 .an-ops {
   position: relative;
   background: var(--elevated);
   border-radius: 10px;
-  padding: 11px 12px 11px 15px;
+  padding: 11px 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-.an-ops::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--ops-accent, var(--border));
 }
 /* Sentence case, not uppercase. `text-transform: uppercase` was shouting the
    label back at the operator — "TRUCKS DISPATCHED" over a figure — and it also
@@ -445,7 +438,7 @@
    in mixed case it reads as a gap, so it comes down with the transform. Bumped
    a little in size because lowercase has less presence at the same px. */
 .an-ops__label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--text-2);
@@ -462,7 +455,7 @@
   margin-top: 2px;
 }
 .an-ops__unit { font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0; }
-.an-ops__sub  { font-size: 10px; font-weight: 600; color: var(--text-3); letter-spacing: 0; }
+.an-ops__sub  { font-size: 11px; font-weight: 600; color: var(--text-3); letter-spacing: 0; }
 .an-ops__lines {
   margin-top: 9px;
   padding-top: 8px;
@@ -1038,6 +1031,7 @@
 .an-calc__k em { font-style: normal; color: var(--text-3); font-size: 10.5px; }
 .an-calc__v { font-size: 12.5px; color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .an-calc__row--em .an-calc__v { color: #22c55e; font-size: 15px; }
+.an-calc__row--theft .an-calc__v { color: #dc2626; }
 /* Same lift, and the same reason, as `.an-dist-foot` above: 10px on --text-3
    measures ~5.6:1 against the dark card, which passes AA for BODY text and is
    unreadable at this size. A caveat nobody can read is worse than no caveat,
@@ -1051,9 +1045,9 @@
   border-radius: 10px;
   padding: 10px 12px;
 }
-.an-avg__label { font-size: 10px; color: var(--text-2); font-weight: 600; }
+.an-avg__label { font-size: 11px; color: var(--text-2); font-weight: 600; }
 .an-avg__value { font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 2px; }
-.an-avg__unit { font-size: 10px; color: var(--text-2); font-weight: 600; }
+.an-avg__unit { font-size: 11px; color: var(--text-2); font-weight: 600; }
 
 /* Dark-surface steps for the chart palette. Selected for the dark band
    (OKLCH L 0.48–0.67, ≥ 3:1 on #0a0a0b), not derived by lightening the light
@@ -2247,9 +2241,9 @@
   position: relative;
 }
 
-/* Chart-only tile: the ring is the content, so it gets the padding a headline
-   would have used. */
-.an-ops--chart { padding: 8px 8px 8px 11px; }
+/* Chart-only tile: the ring is the content. Same top and side padding as the
+   other tiles in the row, so all four titles sit on one line. */
+.an-ops--chart { padding: 11px 12px 8px; }
 
 /* A chart tile's title. Same 11px/600 as .an-kpi__label and the two chart
    titles already in the row — four tiles, one voice. The head is tight to the
@@ -2413,24 +2407,11 @@
   min-width: 0;
   background: var(--elevated);
   border-radius: 10px;
-  /* Left padding matches .an-ops so the rail below has the same gutter the
-     other three tiles give theirs. */
-  padding: 11px 12px 11px 15px;
+  padding: 11px 12px;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-}
-/* Slot 4 of the row's rail system. This was the one tile of four with no rail
-   at all — three tiles marked and a fourth bare reads as an oversight, and the
-   palette's fourth slot was sitting unused on plant since the dispatch tile
-   that held it is hidden there. */
-.an-today__grid > .an-mstarts::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--chart-4);
 }
 .an-today__grid > .an-mstarts .an-mstarts__chart {
   flex: 1 1 auto;
@@ -2536,7 +2517,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 2px 10px;
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--text-3);
   margin-top: 2px;
 }
@@ -2552,7 +2533,7 @@
 }
 
 /* The gauge fills its tile rather than centring in it — the arc IS the tile. */
-.an-today__grid > .an-ops--gauge { padding: 11px 10px 9px 13px; }
+.an-today__grid > .an-ops--gauge { padding: 11px 12px 9px; }
 
 
 /* Fuel consumption & cost — the plot's height.
@@ -2805,12 +2786,13 @@
  * A footnote arrives after the misreading; this arrives before it. */
 .an-wb__span {
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
 .an-wb__span b { color: var(--text-2); }
-.an-wb__gap { opacity: 0.85; }
+/* Set back by weight, not by fading: at 85% opacity it fell to 3.6:1. */
+.an-wb__gap { font-style: italic; }
 
 /* The bridges, ranked.
  *
@@ -2938,4 +2920,52 @@
    middle of the longest card on the page. The chart tiles keep it. */
 @media (max-width: 460px) {
   .an-today__grid > .an-ops:not(.an-ops--chart) { min-height: 0; }
+}
+
+/* ── Page rhythm: the Fuel report's ────────────────────────────────────────
+ * Hallmark · component: analytics page spacing · genre: modern-minimal
+ * theme: existing --color-* bridge (preflight 2026-09-21) · spacing only
+ * pre-emit critique: P4 H4 E4 S4 R5 V4
+ * states: spacing only; no control gains or loses a state.
+ * The operator asked for this page to breathe the way the Fuel report does
+ * (2026-10-02). That page uses three steps, and this one now uses the same:
+ *   between sections  22px  (.frv gap)
+ *   between cards     12px  (.frv-grid gap)
+ *   inside a card     14px 16px, head to body 12px (.frv-card)
+ * Analytics ran 10px for all three, so a row of cards, the gap under it and
+ * the padding inside each read as one value and the sections ran together.
+ * The section gap is a flex gap on .an-body, so every block the page renders
+ * (its own and the ones other files supply) lands on the same 22px, whatever
+ * margin it brought with it. */
+/* The side margin is the Fuel report's own gutter (--sp4-gutter): 4% of the
+   width, 20px at the least, 64px at the most. --app-gutter, which the rule
+   above reaches for first, is defined nowhere, so this page was sitting on its
+   16px fallback at every width: ~42px nearer the screen edge than the Fuel
+   report at 1440. */
+.analytics-page__inner {
+  padding-top: 16px;
+  padding-inline: var(--app-gutter, clamp(20px, calc(var(--vw, 1vw) * 4), 64px));
+}
+.an-head--bare { margin-bottom: 12px; }
+.an-body { display: flex; flex-direction: column; gap: 22px; }
+.an-body > * { margin-top: 0; margin-bottom: 0; min-width: 0; }
+
+.an-top,
+.an-grid,
+.an-today__grid,
+.an-fuelrow { gap: 12px; }
+
+.an-card,
+.an-kpi { padding: 14px 16px; }
+.an-card__head { margin-bottom: 12px; }
+
+@media (max-width: 767px) {
+  /* A phone keeps the steps, one notch tighter, as the Fuel report does. */
+  .an-body { gap: 16px; }
+  .an-top,
+  .an-grid,
+  .an-today__grid,
+  .an-fuelrow { gap: 10px; }
+  .an-card,
+  .an-kpi { padding: 12px; }
 }

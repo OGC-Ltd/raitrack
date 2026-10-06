@@ -30,8 +30,17 @@
  *              onto silence still reads as answered rather than broken.
  */
 
-import { useId, useState } from 'react';
+import { createContext, useContext, useId, useState } from 'react';
 import './SideTree.css';
+
+/**
+ * Counts masked (operator, 2026-10-01): an account with limited access (no
+ * map:read) sees every tree count as a dash, never the figure — the same "–"
+ * the status cards above show — and no alert dot, which is a count by another
+ * name. Provided by SidePanel around the trees.
+ */
+export const TreeCountsMasked = createContext(false);
+export const MASKED_COUNT = '–';
 
 function Chevron({ open }) {
   return (
@@ -55,9 +64,14 @@ function Chevron({ open }) {
  * total. A branch with nothing to report shows no badge at all rather than a 0,
  * because a zero here is furniture.
  */
-export function TreeNode({ label, icon, count = null, tone = 'plain', defaultOpen = false, children }) {
+export function TreeNode({ label, icon, count = null, tone = 'plain', alert = false, alertTitle, alertTone = 'alert', defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   const id = useId();
+  const masked = useContext(TreeCountsMasked);
+  if (masked) {
+    alert = false;
+    if (count != null) { count = MASKED_COUNT; tone = 'plain'; }
+  }
 
   return (
     <div className={`side-tree__node${open ? ' side-tree__node--open' : ''}`}>
@@ -71,6 +85,15 @@ export function TreeNode({ label, icon, count = null, tone = 'plain', defaultOpe
         <Chevron open={open} />
         {icon && <i className={`ti ti-${icon} side-tree__icon`} aria-hidden="true" />}
         <span className="side-tree__label">{label}</span>
+        {/* Something inside this branch is news.
+            A DOT rather than a second number: the branch already carries one
+            count, two circles in a 260px row is a row of badges, and the
+            question a shut branch has to answer is "is there anything in
+            here", not "how many". The figure is one click away. */}
+        {alert && (
+          <span className={`side-tree__alertdot side-tree__alertdot--${alertTone}`} title={alertTitle} role="img"
+                aria-label={alertTitle ?? 'Needs attention'} />
+        )}
         {/* `data-len` is how many digits. CSS cannot count characters, and a
             circle has to know: one size for every length either clips "597" or
             leaves a huge empty ring around "4". Same knob the map's cluster
@@ -93,6 +116,7 @@ export function TreeNode({ label, icon, count = null, tone = 'plain', defaultOpe
 
 /** A leaf that turns something on. */
 export function TreeSwitch({ label, on, onToggle, count = null, swatches = null, title }) {
+  if (useContext(TreeCountsMasked) && count != null) count = MASKED_COUNT;
   return (
     <button
       type="button"
@@ -119,8 +143,13 @@ export function TreeSwitch({ label, on, onToggle, count = null, swatches = null,
   );
 }
 
-/** A leaf that goes somewhere. */
-export function TreeLink({ label, meta, note, onClick, tone = 'plain', title }) {
+/** A leaf that goes somewhere.
+ *
+ *  `count` is for a leaf that OPENS something with a size to it — a list, a
+ *  panel — rather than one that names a single thing. `countTone: 'alert'`
+ *  colours it, for a figure that is news rather than a total. */
+export function TreeLink({ label, meta, count = null, countTone = 'plain', onClick, tone = 'plain', title }) {
+  if (useContext(TreeCountsMasked) && count != null) { count = MASKED_COUNT; countTone = 'plain'; }
   return (
     <button
       type="button"
@@ -130,15 +159,13 @@ export function TreeLink({ label, meta, note, onClick, tone = 'plain', title }) 
     >
       <span className="side-tree__rowlabel">{label}</span>
       {meta && <span className="side-tree__rowmeta">{meta}</span>}
-      {note && <span className="side-tree__rownote">{note}</span>}
+      {count != null && (
+        <span className={`side-tree__rowcount side-tree__rowcount--${countTone}`}>{count}</span>
+      )}
     </button>
   );
 }
 
 export function TreeEmpty({ children }) {
   return <div className="side-tree__empty">{children}</div>;
-}
-
-export function TreeNote({ children }) {
-  return <div className="side-tree__note">{children}</div>;
 }

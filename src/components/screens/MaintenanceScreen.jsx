@@ -14,7 +14,7 @@
 // simply clipped at the fold and the data grid loses most of its rows.
 
 import { useState, useEffect } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields, useAppActions } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import MaintenancePage from "../body/MaintenancePage";
 import SensorPanel from "../body/SensorPanel";
@@ -42,7 +42,8 @@ export default function MaintenanceScreen() {
   const { vehicles, orgId, loading, error, retry } = useFleetLiveShared();
   const [selectedId, setSelectedId] = useState(null);
   // Held in AppContext so it survives a refresh — see the restore helpers there.
-  const { maintenanceView: savedView, setMaintenanceView: setActiveTab } = useAppContext();
+  const { maintenanceView: savedView } = useAppFields("maintenanceView");
+  const { setMaintenanceView: setActiveTab } = useAppActions();
 
   /**
    * The sub-views, and which of them this person can actually open.

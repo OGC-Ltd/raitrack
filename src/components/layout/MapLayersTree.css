@@ -1,0 +1,213 @@
+/* Hallmark · redesign: sidebar Map layers block · genre: modern-minimal · theme: the app's own (preflight 2026-09-21)
+ * states: switch / site — default · hover · focus · active (pressed) · on · disabled (inert, locked trees)
+ *         loading: "Loading scales…" line · empty: "No layers on this organisation."
+ * contrast: label #0f172a on white 17:1; sub / muted #5f6e83 4.8:1; focus ring #2563eb 5.2:1
+ *
+ * Same voice as the Fleets block above it (FleetsTree.css): no tree. Every
+ * layer switch in one card divided by hairlines, then the weighbridge sites as
+ * a flat list of places to go. Bridge boxes keep their SideTree.css colours. */
+
+.layers {
+  --ly-ink: var(--text-primary, #0f172a);
+  --ly-ink-2: var(--text-secondary, #475569);
+  --ly-muted: var(--color-text-muted, #5f6e83);
+  --ly-rule: #edf0f4;
+  --ly-line: var(--color-border, #e2e8f0);
+  --ly-hover: #f1f5f9;
+  --ly-press: #e2e8f0;
+  --ly-accent: var(--accent, #2563eb);
+  --ly-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  gap: 10px;
+}
+
+.layers__empty {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--ly-muted);
+}
+
+/* ── The switches: one card ──────────────────────────────────────────────── */
+.layers__card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ly-line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.layers__switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: none;
+  border-top: 1px solid var(--ly-rule);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ly-ease);
+}
+.layers__switch:first-child { border-top: none; }
+.layers__switch-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.layers__switch-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ly-ink);
+}
+.layers__switch-sub { font-size: 11px; color: var(--ly-muted); font-variant-numeric: tabular-nums; }
+.layers__track {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background-color 150ms var(--ly-ease);
+}
+.layers__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 150ms var(--ly-ease);
+}
+.layers__switch:hover { background: var(--ly-hover); }
+.layers__switch:active { background: var(--ly-press); }
+.layers__switch:focus-visible { outline: 2px solid var(--ly-accent); outline-offset: -2px; transition: none; }
+.layers__switch--on .layers__switch-label { font-weight: 500; }
+.layers__switch--on .layers__track { background: var(--ly-accent); }
+.layers__switch--on .layers__thumb { transform: translateX(14px); }
+
+/* ── Weighbridge sites: places to go ─────────────────────────────────────── */
+.layers__sites { display: flex; flex-direction: column; }
+.layers__sites-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ly-muted);
+}
+.layers__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.layers__key .side-tree__bridgebox {
+  min-width: 0;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  margin-left: 4px;
+  border-width: 1px;
+  cursor: default;
+}
+.layers__key .side-tree__bridgebox:first-child { margin-left: 0; }
+.layers__key .side-tree__bridgebox:hover { transform: none; }
+
+.layers__site {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 6px 0 2px;
+  border-radius: 7px;
+  transition: background-color 120ms var(--ly-ease);
+}
+.layers__site:hover { background: var(--ly-hover); }
+.layers__site-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ly-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.layers__site-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layers__site-name i { font-size: 16px; color: var(--ly-muted); flex-shrink: 0; }
+.layers__site-name:active { background: var(--ly-press); }
+.layers__site-name:focus-visible { outline: 2px solid var(--ly-accent); outline-offset: -2px; }
+
+.layers button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (pointer: coarse) {
+  .layers__switch { min-height: 44px; }
+  .layers__site, .layers__site-name { min-height: 44px; height: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layers__switch,
+  .layers__track,
+  .layers__thumb,
+  .layers__site { transition: none; }
+}
+
+/* ── Folds: one level, a slim header over its content ────────────────────── */
+.layers__fold { display: flex; flex-direction: column; gap: 6px; }
+.layers__fold-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 6px 0 2px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ly-ease);
+}
+.layers__fold-chev {
+  font-size: 14px;
+  color: var(--ly-muted);
+  flex-shrink: 0;
+  transition: transform 150ms var(--ly-ease);
+}
+.layers__fold--open .layers__fold-chev { transform: rotate(90deg); }
+.layers__fold-label { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ly-ink-2); }
+.layers__fold-summary {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ly-muted);
+  white-space: nowrap;
+}
+.layers__fold-head:hover { background: var(--ly-hover); }
+.layers__fold-head:hover .layers__fold-label { color: var(--ly-ink); }
+.layers__fold-head:active { background: var(--ly-press); }
+.layers__fold-head:focus-visible { outline: 2px solid var(--ly-accent); outline-offset: -2px; transition: none; }
+.layers__fold-body { display: flex; flex-direction: column; gap: 8px; }
+
+@media (pointer: coarse) {
+  .layers__fold-head { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layers__fold-head, .layers__fold-chev { transition: none; }
+}

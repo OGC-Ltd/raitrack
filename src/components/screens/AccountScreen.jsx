@@ -38,12 +38,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields, useAppActions, useTheme } from "../../context/AppContext";
 import { accessIn } from "../../hooks/usePermissions";
+import { companyMark } from "../../lib/companyLogos";
+import { NAV_ITEMS } from "../layout/SidePanel";
+import { useWayBack, labelFor } from "../../hooks/useWayBack";
 import {
   updateDisplayName, changePassword, getAccountProfile, revokeAllSessions,
 } from "../../api/account";
 import { firstMessage, isMissingEndpoint } from "../../lib/formErrors";
+import { uniqueRoles as distinctRoles, roleNames } from "../../lib/accountRoles";
 import LoadError from "../shared/LoadError";
 import "./AccountScreen.css";
 
@@ -74,6 +78,33 @@ function fmtMonth(value) {
 }
 
 /** Up to two initials from a display name, falling back to the email. */
+/**
+ * One organisation, as a mark.
+ *
+ * The chips and the access list used to open with the organisation's INITIALS
+ * on a dark disc, which put "WK" in front of "West Kenya Sugar Ltd" and "MP"
+ * in front of "Mufindi Paper Mills Ltd" — an abbreviation of the word sitting
+ * next to it, which is the one thing a mark beside a name must not be. The
+ * tenants have real artwork and the roster already draws it; this is the same
+ * device in the place where somebody reads their own access.
+ *
+ * `companyMark` keys off the organisation `code` the profile carries, so it
+ * resolves for the tenants with artwork on file and returns null for the rest.
+ * The initials stay for those — a blank disc beside a name would say less
+ * than the abbreviation did.
+ */
+function OrgMark({ org, className = "" }) {
+  const mark = org ? companyMark(org) : null;
+  if (mark) {
+    return <img className={"acct-orgmark acct-orgmark--logo " + className} src={mark} alt="" />;
+  }
+  return (
+    <span className={"acct-orgmark acct-orgmark--letter " + className} aria-hidden="true">
+      {initialsOf(org?.name, org?.code)}
+    </span>
+  );
+}
+
 function initialsOf(name, email) {
   const source = String(name ?? "").trim() || String(email ?? "").trim();
   if (!source) return "·";
@@ -94,9 +125,37 @@ function prettySlug(slug) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/**
+ * The colour a user status is entitled to.
+ *
+ * The three values are the whole `UserStatus` enum (prisma/schema.prisma), and
+ * the tones are the ones the user roster already uses for the same three
+ * facts — active is good, suspended is a warning, terminated is critical. The
+ * vocabulary is shared deliberately: the same word must not be green on one
+ * screen and amber on another, or the colour stops carrying meaning and
+ * becomes decoration.
+ *
+ * The HUES are this page's own rather than the roster's `--ua-*` tokens.
+ * Those are pale (#86efac and friends) because they sit on a dark panel; on
+ * this white page they would be unreadable. Same meaning, legible contrast.
+ *
+ * An unrecognised value gets the neutral tone rather than a guess. A status
+ * this build has not heard of is exactly the case where inventing a colour
+ * would be worse than admitting none.
+ */
+const STATUS_TONE = { ACTIVE: "ok", SUSPENDED: "warn", TERMINATED: "crit" };
+
+function StatusPill({ status }) {
+  if (!status) return null;
+  const tone = STATUS_TONE[String(status).toUpperCase()] ?? "unknown";
+  return <span className={`acct-status acct-status--${tone}`}>{status}</span>;
+}
+
 export default function AccountScreen() {
   const { user, orgs, isPlatform, reload } = useAuth();
-  const { setAccountOpen, activeCompanyId, themePref, setThemePref } = useAppContext();
+  const { activeCompanyId, desktopActiveTab } = useAppFields("activeCompanyId", "desktopActiveTab");
+  const { setAccountOpen } = useAppActions();
+  const { themePref, setThemePref } = useTheme();
 
   const [tab, setTab] = useState("profile");
   /* The permission list runs to dozens of slugs and is the least-read thing on
@@ -140,14 +199,6 @@ export default function AccountScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // Escape closes the page — it is reached from a menu, so it behaves like the
-  // thing it replaced even though it now fills the screen.
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") setAccountOpen(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [setAccountOpen]);
 
   async function submitName(e) {
     e.preventDefault();
@@ -198,8 +249,6 @@ export default function AccountScreen() {
     }
   }
 
-  const hasPassword = Boolean(profile?.passwordChangedAt) || (profile?.passwordChangeCount ?? 0) > 0;
-
   const displayName = (user?.fullName ?? "").trim() || (user?.email ?? "");
   const email = profile?.email ?? user?.email ?? "";
   const homeOrg = profile?.organisation?.name ?? null;
@@ -216,6 +265,61 @@ export default function AccountScreen() {
     () => accessIn(orgs, activeCompanyId),
     [orgs, activeCompanyId],
   );
+  /* Where "back" goes, and what it is therefore called — shared with the
+     user-accounts page, which needs the same answer from a different shell.
+     hooks/useWayBack carries the reasoning; the short version is that the Live
+     Map is a permission like any other, so this names whichever screen the
+     account can actually open rather than promising one it cannot. */
+  const wayBack = useWayBack();
+
+  /* The page this one opened OVER, which is where the blue button goes.
+   *
+   * It needs no history of its own: this screen is an overlay and does not
+   * touch `desktopActiveTab`, so the tab still selected underneath IS the page
+   * they were on. Reading it live rather than snapshotting it on mount is
+   * deliberate — App corrects a stored tab the account cannot open, and a
+   * snapshot taken before that correction would name a screen that is not
+   * there any more.
+   *
+   * Graded anyway, for the moment before that correction lands: an unknown or
+   * forbidden tab is not a destination, and naming one would be the same lie
+   * the header button was fixed to stop telling. */
+  const resume = useMemo(() => {
+    const tab = NAV_ITEMS.find((t) => t.key === desktopActiveTab) ?? null;
+    if (!tab || !activeAccess.can(tab.permission)) return null;
+    return { tab: tab.key, label: labelFor(tab) };
+  }, [desktopActiveTab, activeAccess]);
+
+  /* ...but only when it is somewhere ELSE.
+   *
+   * Coming here from the Live Map, "back to the page you were on" and "back to
+   * the fleet" are the same journey, and drawing both was the duplication this
+   * replaced. When they coincide the header link is the one that survives: it
+   * is always present, on every tab, so the row loses a button rather than the
+   * page losing its way out. */
+  const showResume = resume !== null && resume.tab !== wayBack.tab;
+
+  /* Closing without moving. The tab underneath is already the destination, so
+     this resumes rather than navigates — setting the tab it is already on
+     would be a no-op dressed up as a decision. */
+  const goResume = useCallback(() => { setAccountOpen(false); }, [setAccountOpen]);
+
+  const goBack = useCallback(() => {
+    wayBack.go();
+    setAccountOpen(false);
+  }, [wayBack, setAccountOpen]);
+
+  // Escape leaves the page — it is reached from a menu, so it behaves like the
+  // thing it replaced even though it now fills the screen. It goes out through
+  // `goBack` rather than closing on its own, so the key and the button land in
+  // the same place; declared after it because a dependency array is read
+  // during render, and `goBack` above its own `const` is a TDZ crash.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") goBack(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [goBack]);
+
   const activePerms = useMemo(() => {
     const list = activeAccess.org?.permissions ?? [];
     return [...list].sort();
@@ -230,10 +334,26 @@ export default function AccountScreen() {
   const permsShown = allPerms ? activePerms : activePerms.slice(0, PERM_PREVIEW);
   const permsHidden = activePerms.length - permsShown.length;
 
-  const roleCount = useMemo(
-    () => access.organisations.reduce((n, o) => n + (o.roles?.length ?? 0), 0),
-    [access.organisations],
-  );
+  /* The distinct roles this account holds, not one per membership.
+   *
+   * These two are different questions and only one of them is "Roles". Somebody
+   * made system administrator in four organisations holds ONE role; summing the
+   * per-org lists called that four, which is the number of ASSIGNMENTS, and
+   * reporting it under "Roles held" beside a chip row showing the same name
+   * four times made the page look like it could not count.
+   *
+   * Keyed by slug, because the slug is what the server grants and two orgs can
+   * spell the same role's display name differently. `orgs` is carried along so
+   * a chip can still say where a role is held — the fact the per-membership
+   * count was standing in for, kept as the tooltip it should always have been.
+   * A platform role wins the key: it applies everywhere, which is a strictly
+   * bigger statement than holding it at one site. */
+  /* The DISTINCT roles held, not one per membership — see lib/accountRoles
+     for why the key is the displayed name rather than the slug, and
+     accountRoles.test.js for the four-organisation case that drove it. */
+  const uniqueRoles = useMemo(() => distinctRoles(access), [access]);
+
+  const roleCount = uniqueRoles.length;
 
   /* The bio line, written from facts rather than typed by anybody.
    *
@@ -242,12 +362,9 @@ export default function AccountScreen() {
    * server cannot store, so this says the true version of the same thing: what
    * you are, and where. */
   const roleSummary = useMemo(() => {
-    if (access.platformRoles.length > 0) {
-      return access.platformRoles.map((r) => r.name).join(", ");
-    }
+    if (access.platformRoles.length > 0) return roleNames(access.platformRoles);
     const here = access.organisations.find((o) => o.name === homeOrg) ?? access.organisations[0];
-    if (here?.roles?.length) return here.roles.map((r) => r.name).join(", ");
-    return null;
+    return here?.roles?.length ? roleNames(here.roles) : null;
   }, [access, homeOrg]);
 
   const notices = (
@@ -277,8 +394,8 @@ export default function AccountScreen() {
           decoration pretending to be content. What it is really doing is
           giving the avatar an edge to sit on. */}
       <div className="acct-cover">
-        <button type="button" className="acct-cover__back" onClick={() => setAccountOpen(false)}>
-          ← Back to the fleet
+        <button type="button" className="acct-cover__back" onClick={goBack}>
+          ← {wayBack.label}
         </button>
       </div>
 
@@ -301,7 +418,7 @@ export default function AccountScreen() {
         <p className="acct-id__meta">
           {email}
           {joined ? <> · Joined {joined}</> : null}
-          {profile?.status ? <> · {profile.status}</> : null}
+          {profile?.status ? <> · <StatusPill status={profile.status} /></> : null}
         </p>
 
         {/* Where the reference puts Followers and Following. These two are the
@@ -328,9 +445,11 @@ export default function AccountScreen() {
             <span className="acct-stat__k">{roleCount === 1 ? "Role" : "Roles"}</span>
           </button>
 
-          <button type="button" className="acct-cta" onClick={() => setAccountOpen(false)}>
-            Back to the fleet
-          </button>
+          {showResume && (
+            <button type="button" className="acct-cta" onClick={goResume}>
+              {resume.label}
+            </button>
+          )}
           <button
             type="button"
             className="acct-cta acct-cta--ghost"
@@ -343,6 +462,20 @@ export default function AccountScreen() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <nav className="acct-tabs" aria-label="Account sections">
+        {/* The way out, again — shown only on a phone, where the strip above is
+            the one piece of chrome that stays on screen. The cover's link is
+            the way out at the top of the page and scrolls away with the cover;
+            this takes over from it. Both say the same thing, and on a phone
+            only one of them is ever the nearest. */}
+        <button
+          type="button"
+          className="acct-tabs__back"
+          aria-label={wayBack.label}
+          title={wayBack.label}
+          onClick={goBack}
+        >
+          ←
+        </button>
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -365,9 +498,6 @@ export default function AccountScreen() {
               <section className="acct-sec">
                 <div className="acct-sec__head">
                   <h2 className="acct-sec__title">Identity</h2>
-                  <p className="acct-sec__note">
-                    Your email is how you sign in. Only an administrator can change it.
-                  </p>
                 </div>
 
                 <div className="acct-sec__body acct-sec__body--split">
@@ -403,7 +533,7 @@ export default function AccountScreen() {
                     </div>
                     <div className="acct-fact">
                       <dt>Status</dt>
-                      <dd>{profile?.status ?? "—"}</dd>
+                      <dd>{profile?.status ? <StatusPill status={profile.status} /> : "—"}</dd>
                     </div>
                   </dl>
                 </div>
@@ -416,7 +546,6 @@ export default function AccountScreen() {
               <section className="acct-sec">
                 <div className="acct-sec__head">
                   <h2 className="acct-sec__title">Organisations</h2>
-                  <p className="acct-sec__note">Every site you can open from the switcher.</p>
                 </div>
                 <div className="acct-sec__body">
                   {access.organisations.length === 0 ? (
@@ -425,9 +554,7 @@ export default function AccountScreen() {
                     <div className="acct-chips">
                       {access.organisations.map((o) => (
                         <span className="acct-chip acct-chip--org" key={o.id}>
-                          <span className="acct-chip__mark" aria-hidden="true">
-                            {initialsOf(o.name, o.code)}
-                          </span>
+                          <OrgMark org={o} />
                           {o.name}
                         </span>
                       ))}
@@ -446,10 +573,6 @@ export default function AccountScreen() {
                       <span className="acct-sec__n">{activePerms.length}</span>
                     )}
                   </h2>
-                  <p className="acct-sec__note">
-                    In {activeAccess.org?.name ?? "the organisation on screen"}. Permissions are
-                    granted per organisation, so this changes with the switcher.
-                  </p>
                 </div>
                 <div className="acct-sec__body">
                   {activePerms.length === 0 ? (
@@ -493,7 +616,6 @@ export default function AccountScreen() {
               <section className="acct-sec">
                 <div className="acct-sec__head">
                   <h2 className="acct-sec__title">Preferences</h2>
-                  <p className="acct-sec__note">Stored on this device.</p>
                 </div>
 
                 <div className="acct-sec__body">
@@ -542,11 +664,6 @@ export default function AccountScreen() {
               <section className="acct-sec">
                 <div className="acct-sec__head">
                   <h2 className="acct-sec__title">Password</h2>
-                  <p className="acct-sec__note">
-                    {hasPassword
-                      ? `Last changed ${fmtDate(profile?.passwordChangedAt)} · changed ${profile?.passwordChangeCount ?? 0} ${profile?.passwordChangeCount === 1 ? "time" : "times"}`
-                      : "No password change has been recorded on this account yet."}
-                  </p>
                 </div>
 
                 <div className="acct-sec__body">
@@ -590,9 +707,6 @@ export default function AccountScreen() {
               <section className="acct-sec acct-sec--muted">
                 <div className="acct-sec__head">
                   <h2 className="acct-sec__title">Two-step verification</h2>
-                  <p className="acct-sec__note">
-                    An authenticator app in addition to your password.
-                  </p>
                 </div>
                 <div className="acct-sec__body">
                   {/* Stated plainly rather than shown as a dead toggle. A switch that
@@ -607,10 +721,6 @@ export default function AccountScreen() {
               <section className="acct-sec">
                 <div className="acct-sec__head">
                   <h2 className="acct-sec__title">Sessions</h2>
-                  <p className="acct-sec__note">
-                    Signing out everywhere ends every session on every device,
-                    including this one, and takes effect immediately.
-                  </p>
                 </div>
 
                 <div className="acct-sec__body">
@@ -629,10 +739,6 @@ export default function AccountScreen() {
             <section className="acct-sec">
               <div className="acct-sec__head">
                 <h2 className="acct-sec__title">Your access</h2>
-                <p className="acct-sec__note">
-                  Which organisations you can open, and what you are in each. Only an
-                  administrator can change these.
-                </p>
               </div>
 
               <div className="acct-sec__body">
@@ -642,7 +748,6 @@ export default function AccountScreen() {
                     <span className="acct-platform__roles">
                       {access.platformRoles.map((r) => r.name).join(", ")}
                     </span>
-                    <span className="acct-platform__note">Applies in every organisation.</span>
                   </div>
                 )}
 
@@ -653,6 +758,7 @@ export default function AccountScreen() {
                     {access.organisations.map((o) => (
                       <li className="acct-org" key={o.id}>
                         <div className="acct-org__head">
+                          <OrgMark org={o} />
                           <span className="acct-org__name">{o.name}</span>
                           {o.code && <span className="acct-org__code">{o.code}</span>}
                         </div>
@@ -727,23 +833,21 @@ export default function AccountScreen() {
           <section className="acct-card">
             <h2 className="acct-card__title">Roles</h2>
             <div className="acct-card__body">
-              {access.platformRoles.length === 0 && roleCount === 0 ? (
+              {uniqueRoles.length === 0 ? (
                 <p className="acct-placeholder">No roles assigned.</p>
               ) : (
                 <div className="acct-chips">
-                  {access.platformRoles.map((r) => (
-                    <span className="acct-chip acct-chip--platform" key={`p-${r.slug ?? r.name}`}
-                          title="Applies in every organisation">
+                  {uniqueRoles.map((r) => (
+                    <span
+                      key={r.key}
+                      className={"acct-chip" + (r.platform ? " acct-chip--platform" : "")}
+                      title={r.platform
+                        ? "Applies in every organisation"
+                        : r.orgs.join(", ")}
+                    >
                       {r.name}
                     </span>
                   ))}
-                  {access.organisations.flatMap((o) =>
-                    (o.roles ?? []).map((r) => (
-                      <span className="acct-chip" key={`${o.id}-${r.slug}`} title={o.name}>
-                        {r.name}
-                      </span>
-                    )),
-                  )}
                 </div>
               )}
             </div>

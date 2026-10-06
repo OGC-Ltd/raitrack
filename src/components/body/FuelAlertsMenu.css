@@ -379,3 +379,79 @@
   color: #94a3b8 !important;
   background: #fff !important;
 }
+
+/* ── Desktop: the button goes, the list stays ────────────────────────────────
+   At 1024px and up the sidebar carries Fleets > Fuel > Alerts, with the count,
+   so the drop button on the map said the same thing twice (operator,
+   2026-09-27: "on desktop remove the fuel alerts icon on the map"). The list
+   is still this one — the sidebar row opens it through MapLayersContext — so,
+   like the units panel, it becomes a window beside the sidebar rather than a
+   popover anchored to a button that is no longer drawn. Below 1024 there is
+   no sidebar body, and the button stays the only way in. */
+@media (min-width: 1024px) {
+  .map-cam-controls .fuel-alerts__btn { display: none; }
+  .fuel-alerts__panel {
+    position: fixed;
+    left: calc(var(--side-panel-w, 320px) + 12px);
+    top: calc(var(--app-header-h, 52px) + 12px);
+    right: auto;
+    bottom: auto;
+    /* Over the app header and the vehicle panel, as the units window is. */
+    z-index: 1400;
+    max-height: min(78vh, 720px);
+    overflow-y: auto;
+  }
+}
+
+/* ── The desktop window: dragged by its head, folded to it ───────────────────
+   Opened from the sidebar at 1024px and up (see the rule above), where it is
+   a window rather than a popover (operator, 2026-09-27: "draggable and also
+   minimisable"). The units window's title bar, so the two read as one family:
+   the same 26px controls, the same fold to a 260px bar. Last in the file, so
+   the fold beats the light overrides' head rule by specificity AND order. */
+.fuel-alerts__panel--window .fuel-alerts__head {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.fuel-alerts__panel--window.is-dragging,
+.fuel-alerts__panel--window.is-dragging .fuel-alerts__head { cursor: grabbing; }
+
+.fuel-alerts__winbtns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.fuel-alerts__winbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: #64748b;
+  cursor: pointer;
+  transition: background .13s, color .13s;
+}
+.fuel-alerts__winbtn:hover { background: #f1f5f9; color: #0f172a; }
+.fuel-alerts__winbtn:focus-visible { outline: 2px solid #38bdf8; outline-offset: 1px; }
+
+.fuel-alerts__panel--min {
+  width: 260px;
+  padding-top: var(--win-pad-y, 7px);
+  padding-bottom: var(--win-pad-y, 7px);
+  overflow: visible;
+}
+.fuel-alerts__panel--min .fuel-alerts__head {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fuel-alerts__winbtn { transition: none; }
+}

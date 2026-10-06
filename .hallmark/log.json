@@ -1,5 +1,784 @@
 [
   {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/body/TablePager.jsx (new) + ProbeHealthPanel, SensorPanel (FuelTable), IncidentReport, RepairJobsPanel, SensorPanel.css",
+    "brief": "Shared pager (usePager + TablePager, 15/page) on Probes, Fuel FSL, Speed, Malfunction (unit list + unit cases) and Repairs: Prev · Page n of N · a-b of N · Next, centred under the boxed table, fixed-width buttons disabled at the ends, hidden on one page; resets on filter/search/day/state change, clamps on shrink; Incident 'Load more' shown only on the last page; exports unchanged (all rows); phones: bigger buttons, range hidden."
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/screens/WeighbridgesScreen.{jsx,css} (ticket card height)",
+    "brief": "Ticket card fills the height under the bridge strip and ends --sp4-md above the footer nav (flex 1, margin-bottom footer-h + md); scroller fills it; count line moved inside the card as its foot row (10px/16px, #e6e9ee rule). Desk/tablet only; phones unchanged."
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/screens/WeighbridgesScreen.css (header)",
+    "brief": "Same as Maintenance: crumb + KPI strip on one white band edge to edge, wb-rule hidden, one full-width #dde1e7 hairline under the header; filter bar, bridge strip and boxed grid keep the clear framed bands."
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/screens/MaintenanceScreen.css (header)",
+    "brief": "Maintenance header matches the Fuel report: breadcrumb + KPI strip on one white band (#fff) edge to edge, rule between them removed, one full-width #dde1e7 hairline under it; tabs/captions/tables keep the clear framed bands; scoped to .maint-screen-scroll so Weighbridges is untouched."
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/screens/WeighbridgesScreen.{jsx,css} (ticket grid)",
+    "brief": "Ticket grid takes the Drivers roster card: 12px frame holding scroller + Prev/Next pager (15 per page), #f5f7fa 11px/700 uppercase head, 12.5px cells at 10/14 with 16px edges, #e6e9ee lines, all columns left-aligned, 2.5% hover wash, accent focus edge; phones unframed.",
+    "critique": "P4 H5 E4 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "macrostructure": "n/a (redesign, scope: Weighbridges page chrome)",
+    "theme": "app sp4 tokens",
+    "enrichment": "none",
+    "target": "src/components/screens/WeighbridgesScreen.{jsx,css}; src/components/body/SensorPanel.{jsx,css}",
+    "brief": "Weighbridges joins the framed page: .sp4-root--monitor renamed .sp4-root--framed and shared; bands on the ground with gutter hairlines (crumb rule, tabs, detail head/footer too), KPI tiles at Fuel report measure, white search/date/chips, ticket grid boxed on the gutter with white scroll fades + pinned column, count line clears the footer.",
+    "critique": "P4 H5 E4 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "macrostructure": "n/a (redesign, scope: Sensor Monitor header bands)",
+    "theme": "app sp4 tokens",
+    "enrichment": "none",
+    "target": "src/components/body/SensorPanel.css",
+    "brief": "Sensor Monitor >=768px: header, filter bars, tabs and table captions lose their full-width white fill; closing hairlines drawn only between the gutters (background line); search + plain chips take the white surface on the grey ground.",
+    "critique": "P4 H5 E5 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/body/RepairJobsPanel.jsx + RepairJobDetail.css (Sensor Monitor › Repairs)",
+    "brief": "Removed the grey TableToolbar band (job count + Refresh) above the State row; count and Refresh moved to the right end of the State filter row (FilterBar peek, order:99), beside the Filters toggle on phones.",
+    "critique": "P4 H4 E5 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "macrostructure": "n/a (redesign, scope: Graph tab sizing)",
+    "theme": "app sp4 tokens",
+    "enrichment": "none",
+    "target": "src/components/screens/FuelReportScreen.css",
+    "brief": "Fuel Report Graph tab: map square-cornered; map/graph floors 360/460px (were 200/300), tab scrolls on short windows; phone map 320, chart 380.",
+    "critique": "P4 H4 E5 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/body/SensorPanel.css (Repairs opened job)",
+    "brief": "Removed the 3px blue inset box-shadow on the opened repair job detail row in Sensor Monitor; Audit keeps its edge.",
+    "critique": "P4 H4 E5 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "macrostructure": "n/a (redesign, scope: margins)",
+    "theme": "app sp4 tokens",
+    "enrichment": "none",
+    "target": "src/components/screens/FuelReportScreen.css",
+    "brief": "Fuel Report: Graph tab map + chart boxed inside --sp4-gutter (10px frames, 14px inner inset, footer clearance); fold buttons on the gutter; phone .frv and graph on --sp4-gutter (20px) instead of literal 16px.",
+    "critique": "P4 H4 E5 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "target": "src/components/body/SensorPanel.css (Sensor Monitor KPI strip)",
+    "summary": "Coverage tiles (Units monitored / Reporting now / Connected) take the Fuel report strip measure: 18px/800 tabular figures, 10px labels, 6x14 tiles; box-shadow none; scoped to .sp4-root--monitor.",
+    "critique": "P4 H5 E5 S4 R5 V4"
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "files": [
+      "src/components/body/SensorPanel.jsx",
+      "src/components/body/SensorPanel.css"
+    ],
+    "change": "Sensor Monitor on the Fuel report's margin rule (>=768px only; phone layouts untouched). Root gets sp4-root--monitor so the Fuel report, which shares sp4 classes, is unaffected. Every table's .sp4-keep-table becomes a box inside --sp4-gutter (hairline --sp4-line-hi / light --sp4-line, 10px radius = .frv-table), sized to its rows (flex 0 1 auto); where the box is the scroller it clears the footer nav by margin; where it sits inside the scroller (Fuel FSL, Malfunction) the outer becomes a flex column and the box scrolls so the sticky head survives. Edge cells inset 14px inside the frame; opened repair job (.aud-detail) on the frame's 14px; Repairs 'All jobs' bar given the gutter (it sat at x=0). Verified on a static mock built from the real stylesheets at 800/1024/1240/1440: box, back bar and KPI edge all on the gutter (32/41/49/57)."
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "files": [
+      "src/components/screens/DriversScreen.jsx",
+      "src/components/screens/DriversScreen.css"
+    ],
+    "change": "Drivers page takes the Fuel report's side margins: --dr-gutter = clamp(20px, 4vw, 64px), 16px under 768 (was --app-gutter, undefined, so always 16px). The table no longer breaks out full-bleed; it sits inside the gutter in a 12px-radius bordered box like the strip (unboxed again on phones, where rows are cards). Load more/less replaced by a Prev / Page n of N · a-b of total / Next pager (Sensor Monitor's), buttons disabled not removed at the ends, page reset on sort/search/rank, clamped when the list shrinks; rank numbers continue across pages. Verified in a stubbed harness at 375/768/1024/1400: margins 16/16/41/56 on strip, toolbar and table alike, no overflow."
+  },
+  {
+    "date": "2026-10-03",
+    "scope": "component",
+    "files": [
+      "src/components/screens/DriversScreen.jsx",
+      "src/components/screens/DriversScreen.css"
+    ],
+    "change": "Drivers page: the four stat cards became one strip of four cells split by 1px hairlines (grid gap over the line colour), sized by container queries (4 across >=1150px of strip, profile over 3 below, stacked <=600) because the sidebar makes viewport breakpoints wrong. Profile: ring gauges + radar replaced by five labelled live meters (speed/fuel/load/temp/oil, unit beside the label, threshold tones only on bars, crit figure in red), live state + unit id head; tier ring/pill via tone classes instead of inline hex. Table: Rank by segmented control replaces loose chips; rows numbered by the ranked measure (best = 1 either sort direction, hidden on text sorts); the ranked column (rating/trips/tonnes/mileage) draws a 3px accent bar against the whole roster's max, row height unchanged. Verified in a stubbed harness 320-1500px: no overflow; tablet table scroll pre-existed (139px at 760, now 165)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/screens/FuelReportSegments.jsx",
+      "src/components/screens/FuelReportScreen.jsx",
+      "src/components/screens/FuelReportScreen.css"
+    ],
+    "change": "Fuel report Trips + Parkings tabs redesigned (new FuelReportSegments.jsx). Trips: timeline lane of the period (blocks at their time, width = duration, Nairobi-aligned ticks, midnights heavier, hover tooltip, click scrolls to row), table with in-cell bars for duration and distance against the longest, fuel start->end with the drop, per-trip L/100 km (>=1 km and tank fell). Parkings: same timeline in --frv-s2, length bins (<30m, 30m-2h, 2-8h, 8h+) as count bars that filter the table, a Fuel fell while parked chip (>=5 L), While parked column (Fell/Rose x L with arrow + words, Steady below 5 L). Trip blue / parked orange = the time donut hues, so colour follows the activity. Nothing repeats the KPI strip. Also fixed .frv grid: grid-auto-rows max-content, since auto rows in the fixed-height grid were squeezed and long tables spilled out of their border (affected the stats tab too)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/OverviewParts.jsx",
+      "src/components/layout/OverviewParts.css"
+    ],
+    "change": "Empty-seat avatar keeps its dotted ring (operator): drawn in the SVG, r21, pathLength 28 + dasharray 0.01/0.99 + round caps = 28 evenly spaced dots, --ov-seat-ring #9aa4b0, stroke 1.6. Not a CSS dashed border, which bunches round a circle and leaves a short closing gap (the original 'broken' look). Hairline box-shadow ring dropped."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/OverviewParts.jsx",
+      "src/components/layout/OverviewParts.css"
+    ],
+    "change": "Driver row, no driver assigned: the dashed ring + Tabler ti-user-question glyph read as a broken image (dashes = broken-image language, glyph's '?' off-centre). Now a solid #eef1f5 disc with a 1px --ov-border ring and an inline-SVG head-and-shoulders silhouette clipped by the circle (shoulders run off the bottom), --ov-seat / --ov-seat-ink tokens. Class ov-av--none kept; overviewParts tests 7/7 pass."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/screens/FuelReportOverview.jsx",
+      "src/components/screens/FuelReportScreen.css"
+    ],
+    "change": "Fuel report events: litres-by-kind bar list removed (operator) for Analytics > Fleet state's rail: one track split strictly by litres per kind (3px gaps, min 4px) with label-over-figure keys under it in track order (kind + count, litres). Key or bar click filters the events table ('Showing n of m' + Show all), others recede to 0.4 on both halves; hovering a table row lifts its kind on the rail. Colour follows kind: filling aqua, possible theft crit, came back blue, other drains alternating greys - aqua/red/blue validated all-pairs light and dark (6-hue version failed dark blue/violet). First try put labels under each segment with a 108px floor; floors ate the width so the bar lost proportion, hence the split track/keys."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/screens/FuelReportOverview.jsx",
+      "src/components/screens/FuelReportScreen.jsx",
+      "src/components/screens/FuelReportScreen.css"
+    ],
+    "change": "Fuel report: Statistics + Fuel events merged into one 'Statistics & events' tab (saved 'events' tab maps to it; events CSV kept). New FuelReportOverview: four cards - 'Where the fuel went' donut (consumed / possible theft / left in tank of start+filled; warns when the ledger does not balance), 'Tank at the end' 240deg gauge vs tankCapacityL with a start tick (falls back to the period's peak reading, labelled), 'Engine running' gauge (engine h / period h), 'How the time was spent' donut (moving / parked / stopped or silent). Then litres-by-kind bars (theft in crit), the events table, and a figures list. Hand-built SVG, 2px segment gaps, hover links segment<->legend into the centre label. Palette validated light #2a78d6/#eb6834/#1baf7a and dark #3987e5/#d95926/#199e70 (light aqua 2.7:1, relief via visible labels). Container query stacks donut legends under 360px cards; phones pair the gauges. Old .frp-stats rules removed."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/screens/LoginScreen.css",
+      "src/components/screens/LoginScreen.jsx",
+      "src/components/layout/AppHeader.jsx"
+    ],
+    "change": "Login hero top-left corner: the 30px rounded corner becomes a scoop, a quarter circle (r44 of 56) centred on the corner cut out of the photo, with 12-unit fillets where it meets the edges; done as a CSS mask (SVG bite, exclude) offset 1px outside the box so no photo hairline bleeds on fractional pixels; 56/46/40px by breakpoint; mirrors the stat card cut top-right. Also fixed duplicate React keys on the bell icon and badge (both keyed by a bare number)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/AppHeader.jsx",
+      "src/components/layout/AppHeader.css",
+      "src/components/layout/MobileHeader.css"
+    ],
+    "change": "Header bell + badge: bell 34px with hover/active/focus states, darker icon with unread, ti-bell-filled blue while the feed is open (aria-expanded); one 600ms swing from the crown when the count rises (keyed icon), none under reduced motion. Badge: 18px disc hanging off the corner -> 16px red pill on the bell shoulder (left calc(50%+1px), min-width 16, 2px white ring, 10px/650 digits, pop 180ms on change), cap 20 kept. Count moved into the button aria-label (a label on the badge inside a labelled button was never announced). Mobile dot: 8px #dc2626 with ring matching the button. Dead .app-header__bell-dot removed."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/lib/avatar.js",
+      "src/lib/avatar.test.js",
+      "src/components/layout/AppHeader.jsx",
+      "src/components/layout/AppHeader.css",
+      "src/components/layout/MobileHeader.jsx",
+      "src/components/layout/MobileHeader.css",
+      "src/components/layout/OverviewParts.jsx"
+    ],
+    "change": "Header avatar: desktop 30px filled grey silhouette (outweighed the 18px outline bell) -> 34px target matching the bell (7px radius, hover/active/open/focus states) holding a 26px tinted face with 11px initials in the user own hue; signed out shows ti-user-circle. Mobile initials 13px bold slate -> 12px semibold in the user hue, same 36px circle as search/bell. initialsOf/avatarHue moved to lib/avatar (shared with the Overview driver card; email fallback uses the local part)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/FaultsParts.jsx",
+      "src/components/layout/FaultsParts.css",
+      "src/components/layout/faultsParts.test.jsx",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/VehicleDetailPanel.css"
+    ],
+    "change": "Faults tab: HealthSummary verdict card (worst state decides: N faults / N need attention / All parts reporting / Nothing reporting; tone icon tile; last report time; strip with one segment per part; counts per state) over CheckList (part icon in tone tile, name + detail, state pill; faults first, then attention, reporting, no reading; fault row tinted). Checks() and .vdp-check* CSS retired; checks carry an icon."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/OverviewParts.jsx",
+      "src/components/layout/OverviewParts.css",
+      "src/components/layout/overviewParts.test.jsx",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/VehicleDetailPanel.css"
+    ],
+    "change": "Overview Driver section: driver + summary as one ov-person card. DriverRow: 44px avatar with initials on a per-name hue (avatarHue), dashed outline + ti-user-question when unassigned (was a dash), star rating, Drove today chip, whole row a button to the Drivers page with chevron. AI summary refactored to SummaryCard: lead sentence + icon lines (flags first, alert red / warn amber tinted rows; fuel, used, load, destination), titled Summary with from live readings · time (the text is rule-written, not a model; AI label dropped as misleading). unitSummary() returns {lead, items}. Old .vdp-driver/.vdp-av/.vdp-ai CSS and initials() removed."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/FuelChart.jsx",
+      "src/components/layout/OverviewParts.jsx",
+      "src/components/layout/FuelParts.jsx",
+      "src/components/layout/FuelParts.css",
+      "src/components/layout/overviewParts.test.jsx",
+      "src/components/layout/fuelParts.test.jsx"
+    ],
+    "change": "Operator: Overview must not repeat the Fuel tab. Overview: Fuel level reading -> Idle today (summariseDay idleMin); chart -> Speed & overspeed (FuelChart speedOnly: no fuel line/events, km/h axis, dashed limit line + label, light speed area, speed re-stroked red above the limit via a per-chart useId clipPath) with OverspeedReadout (overspeeds, worst peak or top speed, time over the limit); Today so far keeps Driving + Engine & speed only (Fuel group and FUEL RATE/DOWN left to the Fuel tab). Fuel tab: Tank moved above the chart; chart readout removed, chart full width (fp-chart--bare) and taller (FuelChart tall: H 210). FuelReadout/netChange retired."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/OverviewParts.jsx",
+      "src/components/layout/OverviewParts.css",
+      "src/components/layout/overviewParts.test.jsx",
+      "src/components/layout/VehicleDetailPanel.jsx"
+    ],
+    "change": "Overview tab in the Fuel tab card language: four readings as one 2x2 ReadingsCard with icons (fuel level carries a short bar in the tank gauge bands via tankBand); Fuel & overspeed chart in the fp-chart card with FuelReadout (level now, net change since midnight, overspeeds); Today so far figures as DayGroups; Vehicle as a FactsCard. Figures() grid retired (no users left). AI summary copy: Running empty -> Carrying no load (read as an empty tank after the fuel sentence)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/FuelParts.jsx",
+      "src/components/layout/FuelParts.css",
+      "src/components/layout/fuelParts.test.jsx"
+    ],
+    "change": "Fuel tab Tank: bar replaced by a dashboard fuel gauge (operator reference: dark E/F dial with arrow) in the panel light palette: 220deg sweep E (bottom) round the right to F (top), 21 ticks every 5% coloured by band (red below the 25% reserve, amber to half, green above), lit up to the level; navy arrow needle rotating 500ms; hub ring + number + band label in the band colour; pump glyph; reading column (%, litres, band, probe chip); foot Capacity / Room to full / Reserve (% and litres). tankBand() exported and tested."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/FuelParts.jsx",
+      "src/components/layout/FuelParts.css",
+      "src/components/layout/fuelParts.test.jsx",
+      "src/components/layout/VehicleDetailPanel.jsx"
+    ],
+    "change": "Vehicle panel Fuel tab: Fuel & overspeed chart wrapped in a card with a three-figure readout above (level now / at the end, net change over the dates in litres, overspeeds with worst excess) and the legend as chips; Today nine figures as three labelled cards (Fuel, Driving, Engine & speed); Tank as a drawn gauge (amber fill, dashed reserve mark, Empty/Reserve/Full scale, red below reserve), probe status chip, and a Capacity / Room to full / Status foot. Overview untouched."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/SafetyParts.jsx",
+      "src/components/layout/SafetyParts.css",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/lib/vehicleDay.js",
+      "src/components/layout/safetyParts.test.jsx",
+      "src/lib/vehicleDay.test.js"
+    ],
+    "change": "Safety tab Today: Figures grid + bare strip replaced by one DaySummary card: Top speed / Overspeeds / Over the limit each with a context line (N over the limit, Worst +N km/h, of Xm moving), red when alerting, dash when no readings; DayStrip in the card foot now draws moving spans (new vehicleDay.movingSpans, same rule as movingMin) under the red runs, hatched hours to come, hour gridlines, legend."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/SafetyParts.jsx",
+      "src/components/layout/SafetyParts.css",
+      "src/components/layout/safetyParts.test.jsx"
+    ],
+    "change": "Safety tab Right now card: linear meter replaced by a half-circle SVG speedometer (pathLength-100 arcs: track, tinted zone above the limit, blue fill to the limit, red past it; limit tick + label; 0 and scale-top end labels; reading centred in the bowl) beside a Now / Limit / Engine fact column; over tints the card and reds the number; offline greys the fill; stacks under 340px."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/VehicleHeader.css",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/SafetyParts.jsx",
+      "src/components/layout/SafetyParts.css",
+      "src/components/layout/safetyParts.test.jsx"
+    ],
+    "change": "Vehicle panel header redesigned: name as h2 with icon-button tools (prev/next styled, close); status pill with tone dot leading a meta row (driver, last report) and the place on its own line; Departed/Destination as a two-stop route card (filled/ringed markers joined by a line, no-destination muted); Track/Playback/Report as icon+label buttons, Track aria-pressed navy when on, Report spinner while preparing. Safety overspeed events redesigned from Alerts-timeline entries to rows: start/end time column, Peak N km/h over a shared-scale bar with limit tick and red overage, excess pill (day worst filled), count in the section head."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/UnitFeed.jsx",
+      "src/components/layout/UnitFeed.css",
+      "src/hooks/useVehicleFeed.js",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/LiveFeed.jsx",
+      "src/components/layout/LiveFeed.css"
+    ],
+    "change": "Vehicle panel Alerts tab replaced by the unit's own feed (operator: as dash's scoped live feed): useVehicleFeed unit scope = live items + server history paged back on scroll (IntersectionObserver sentinel, the panel scrolls as a whole); optional range {from,to} read by paging back from the range end (server has no after=); rows in LiveFeed voice grouped under sticky Today/Yesterday/date headings; All history | Period switch + DateRangePicker up to 90 days. Old playback-based AlertsFeed list unused (file kept). Fixed a class clash in LiveFeed: tone \"arrive\" and the entry animation shared live-feed__item--arrive (renamed entry classes to --enter-top/--enter-page)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/SafetyParts.jsx",
+      "src/components/layout/SafetyParts.css",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/VehicleDetailPanel.css",
+      "src/components/layout/safetyParts.test.jsx"
+    ],
+    "change": "Vehicle panel Safety tab: Right now is one speed meter card (big tabular speed, blue fill to the limit, red excess past a limit tick, \"N km/h over/under\", limit + assumed flag, engine chip) instead of three KPI boxes; Today keeps its three figures plus a 24-hour day track with red marks per overspeed and a now line; overspeed events use the Alerts timeline voice (gauge disc, Peak N km/h, +excess chip, time). Old OverspeedList/runLength removed from VehicleDetailPanel (it relied on the pre-redesign Alerts grid)."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/AlertsFeed.jsx",
+      "src/components/layout/AlertsFeed.css",
+      "src/components/layout/VehicleDetailPanel.jsx",
+      "src/components/layout/alertsFeedFold.test.js"
+    ],
+    "change": "Vehicle panel Alerts tab redesigned as a timeline: severity-tinted 30px discs with a kind icon (gauge speeding, hand-stop restricted zone, map-pin zone, droplet-off loss, gas-station refill, player-pause stop) joined by a hairline rail; title + time on one line, sentence under; consecutive identical alerts fold into one entry with a xN badge and time chips (stops never fold); day heading summarises severity (\"3 critical · 1 warning\"); All activity checkbox became an Alerts | All activity segmented switch."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/LiveFeed.jsx",
+      "src/components/layout/LiveFeed.css",
+      "src/components/layout/AppHeader.jsx",
+      "src/components/layout/liveFeedKind.test.js"
+    ],
+    "change": "Live feed redesigned: real unread (AppHeader passes unreadSince captured before open marks seen) — tint + accent edge + dot, sticky \"New · N\" / \"Earlier today\" headings, Mark all read; rows get a kind icon in a soft disc (arrived/left/refuel/warning/critical via feedKind), plate + clock on one line, per-row date dropped (one fleet day); arrivals slide in at top with a flash, held behind a \"N new\" pill when scrolled down; paging shows skeleton rows then a 35ms-stagger fade-up; Live pulse chip; width 300->320; reduced-motion collapses to opacity."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/MapLayersTree.jsx",
+      "src/components/layout/MapLayersTree.css"
+    ],
+    "change": "Map layers made collapsible for tenants with many surveys/sites: two one-level folds, Site plans (summary \"N of M on\") and Quick links (\"N sites · M scales\"), chevron header, remembered per browser in localStorage ft-sidebar-fold:<id>, default shut above 8 rows."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/MapLayersTree.jsx",
+      "src/components/layout/MapLayersTree.css"
+    ],
+    "change": "Sidebar Map layers block redesigned to match Fleets: no tree. Every layer switch (site plans, Quick links with 'N scales', anything else) in one hairline-divided card with pill switches and the layer's swatches while on; weighbridge sites below as a flat 'Go to a weighbridge' list (pin + name, bridge boxes keep their activity colours, key inline in the heading). groupLayers/groupBridges/bridgeActivity unchanged."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/FleetsTree.jsx",
+      "src/components/layout/FleetsTree.css"
+    ],
+    "change": "Sidebar Fleets block redesigned: no tree. Machine types as wrapping chips (fold at 6 + 'N more', ticked never hidden), In transit only as one switch with 'N moving now', then one flat list of rows (Units, Stopped in transit, Fuel alerts/audit/report) with icon, count, chevron. 'Clear filters' on the heading. Map Layers still uses SideTree."
+  },
+  {
+    "date": "2026-10-02",
+    "scope": "component",
+    "files": [
+      "src/components/layout/SidePanel.jsx",
+      "src/components/layout/SidePanel.css"
+    ],
+    "change": "Sidebar toggle: hand-drawn hamburger replaced by Tabler layout-sidebar-left-collapse/expand; 'Menu' label row with toggle at the far end; collapsed rail is 40px rounded tiles on one centre line (27.5px) with tint + edge bar for the current page."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "files": [
+      "src/components/cards/VehicleStatsCard.jsx",
+      "src/components/body/FleetMap.css"
+    ],
+    "change": "Vehicle brief card: a full bed is green, not red (only an OVER-payload shouts now); the two ends of the run sit together instead of at opposite edges (.vt-jplace was flex:1, giving 'Naitiri' a 95px box for a 39px word); DUE BACK replaced by the gate-pass SERIAL; trip progress reads '0 of 99.7 km' rather than '0%'."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "feature",
+    "files": [
+      "src/lib/vehicleMap.js",
+      "src/lib/vehicleMapCargo.test.js",
+      "src/hooks/useFleetLive.js"
+    ],
+    "change": "A unit shows its delivery the moment the gate signs it out. New SSE 'dispatch' event carries the declared load; applyLiveUpdate stops letting a Wialon frame's null cargo_weight_kg clear it (the card read 'Empty · 29.0 t · 580 bags' seconds after opening). Server half in fleet-server/modules/dispatches/dispatch-refresh."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "files": [
+      "src/components/layout/SideTree.css",
+      "src/components/layout/FleetsTree.jsx"
+    ],
+    "change": "Sidebar tree rows share one left edge. A link row has no tick box, so its label started 23px (box 15 + gap 8) left of every switch row beside it; link rows inside a branch now carry that as padding. 'In transit only' loses its count — it repeated the Movement branch badge one row above."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "spokenName module",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "spokenSiteName moves out of lib/weighbridgeBoard into lib/spokenName with its tests, because it stopped being about weighbridges: the site hover card now uses it too. The Map layers ROWS for site plans needed nothing -- those labels are hardcoded mixed-case in lib/sitePlans. What actually shouts is the survey data: of the nine geojson files the map draws, only molo-site has ALL-CAPS feature names (\"MOLO RIVER\", \"MOLO RIVER 2\"), and one survey shouting while eight do not reads as the card being broken on that one site. Display only; the geojson keeps the surveyor spelling.",
+    "files": [
+      "src/lib/spokenName.js",
+      "src/lib/spokenName.test.js",
+      "src/lib/weighbridgeBoard.js",
+      "src/lib/weighbridgeBoard.test.js",
+      "src/components/body/FleetMap.jsx",
+      "src/components/layout/MapLayersTree.jsx"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "side-tree count column",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The leaf counts form a column instead of a row of right-flushed numbers. Measured in a 260px rail: every count ended at 246px and began somewhere between 227.8 and 239.9, because .side-tree__rowcount had no width and \"597\" is 18.2px against \"4\" at 6.1px. Reading down a list the eye takes the LEFT edge, and a ragged one says the rows are unrelated. min-width 20px plus text-align right puts all four -- switch, link, alert-toned, and one carrying a #meta -- at left 226 / right 246; a fourth digit widens the box to 24.2px rather than clipping. Also dropped flex-wrap from .side-tree__row--link: the second line it wrapped onto was .side-tree__rownote, deleted earlier today, so all it could still do was drop a count below a long label.",
+    "files": [
+      "src/components/layout/SideTree.css"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "scale names in the rail",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The scale names under Quick line read as far larger than the rows above them, and the font size was never the reason: they are the same .side-tree__row at 12.5px that Movement uses. The provider sends centre names in capitals -- OPAPO, NAITIRI, WESTERN MILL -- and capitals at a matched size do not read as a matched size. New spokenSiteName in lib/weighbridgeBoard lowers a word only when it is entirely capitals, so a name that already arrives in mixed case is left as somebody meant it, and digits are never inside a match so a code beside the name survives. Display only: buildBoard keeps the provider spelling, which is what a ticket and a CSV have to match, and its tests still assert WESTERN MILL. Four tests added, 746 -> 750.",
+    "files": [
+      "src/lib/weighbridgeBoard.js",
+      "src/lib/weighbridgeBoard.test.js",
+      "src/components/layout/MapLayersTree.jsx"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "map layers branch name",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The scales branch under Map layers is called \"Quick line\" instead of \"Weighbridges\". Two labels carry it: the TreeNode heading in the sidebar, and the layer object built in FleetMap, which is what the map's own layers popover prints and what the branch title \"Draw <label> on the map\" is built from. Label only -- the layer id, the hook, the API and the Weighbridges SCREEN in the footer nav are untouched, so nothing that reads prefs or routes by name has moved.",
+    "files": [
+      "src/components/layout/MapLayersTree.jsx",
+      "src/components/body/FleetMap.jsx"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "FOCUS_ZOOM",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "FOCUS_ZOOM goes 20 -> 17, which is every camera move to a single vehicle: marker clicks, the header search, live-feed notifications, the stranded window, the pinned-unit zoom, and the new Units-list tick. 20 framed the vehicle and nothing else, answering \"which pixel\" rather than \"what is this unit doing\". It was raised from 17 on 2026-08-05 to chase a new maxZoom of 21 -- and the raise was never carried into the comments: FIT_MAX_ZOOM's note still read \"that is what FOCUS_ZOOM 17 is for\", and FOCUS_EXIT_ZOOM still described 14 as \"three steps below FOCUS_ZOOM\", true at 17 and six steps out at 20. Both are accurate again. TRACK_FOCUS_ZOOM, added an hour earlier to give the tick 17 while the shared constant stayed 20, is deleted rather than left as a second name for the same number. BRIDGE_FOCUS_ZOOM now equals FOCUS_ZOOM and is kept separate anyway -- a scale is a place with a yard and a vehicle is a thing on a road, and they will not want retuning on the same day.",
+    "files": [
+      "src/components/body/FleetMap.jsx"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "units list untick",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "Unticking a box zooms back out. Every untick, not only the one that empties the set: unticking is the reader saying they are done with that unit, and the close-up the tick bought them is the first thing that stops being useful. Keyed on the tracked COUNT falling rather than on the tick handler, so all three ways out land here -- the row tick, the header select-all, and the Tracking-N chip clear. The destination is the view saved on the way IN, captured once so a second tick cannot overwrite it with the first unit close-up; it survives until the set is actually empty, so a second and third untick go back to the same place rather than to wherever the last one left off. Guards: the view is null until a tick has moved the camera, making this a no-op on mount, and it carries the org that made it -- switching organisation also empties the set, and Sukari and Mufindi are a border apart, so a mismatched view is dropped rather than flown to. Zoom level for the tick is TRACK_FOCUS_ZOOM at 17, its own constant beside BRIDGE_FOCUS_ZOOM rather than a change to FOCUS_ZOOM: 20 is for a focus that isolates one unit deliberately without context, and is still what marker clicks, header search, feed notifications and the stranded window use. Watching a lorry means seeing the road it is on.",
+    "files": [
+      "src/components/body/FleetMap.jsx"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "units list tick",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "Ticking a unit in the Units list now takes the camera to it. Ticking already narrowed the map and opened the unit's detail panel, but left the reader to find the thing they had just asked to watch among 596 others. New handleZoomUnit in FleetMap rather than the existing handleFocusVehicle: that one calls setFocusedId, and isolating the map to a single unit is the opposite of what a tick means -- the second tick would erase the first. It pans, sets FOCUS_ZOOM, and claims the pending fit so the fleet-wide fit cannot pull the camera back out. No feed narrowing and no search halo: those both say 'this is the subject', where a tick says only 'include this one'. On the way in only -- moving the camera on an UNtick would send the reader somewhere they did not ask to go, with nothing ticked to have gone there for. Select-all goes through toggleAllShown, which bypasses this, so ticking twenty units does not try to fly to one.",
+    "files": [
+      "src/components/body/FleetMap.jsx",
+      "src/components/body/UnitsMenu.jsx"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "every note element",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "Every element carrying a note class comes off, across 24 files -- 51 in all, including two built as HTML strings inside FleetMap rather than as JSX. This goes past the standing-rule prose removed earlier: it takes live figures with it (stop counts and coordinates, km-remaining on the maintenance card, warehouse tallies), loading and error lines in route playback, the layer-loading status in the map-layers menu, and the repair history's per-step comments. One survivor: the About-the-trip textarea in RepairReportForm, whose class is a field modifier rather than a note -- its value is submitted to the API and gates the form's dirty check, so removing it would silently drop data. Three locals (replaced, serviced, hasPassword) and two TreeLink/TableToolbar props lost their only readers and went with them. Dead CSS left in place: the rules are invisible and an automated sweep mangled comment blocks.",
+    "files": [
+      "24 files under src/components/ -- see git diff"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "side-tree notes",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The last two TreeNotes come off the sidebar, and TreeNote with them. One was the site-plans line naming which plan was still fetching; the other, under the fleet-type filter, read \"Nothing ticked means the whole fleet, not an empty map.\" The second is the same species as the stopped-in-transit footnote and the weighbridge instruction already removed: a rule in prose, parked under the controls it describes, read once and then read past forever. The first was a live status rather than a rule, which is why it was kept a turn ago -- but a status that costs a whole row in a rail short of vertical room, to say a word the row itself could carry, does not earn the space either. With no call sites left, the TreeNote component and its .side-tree__note rule are dead and go too.",
+    "files": [
+      "src/components/layout/MapLayersTree.jsx",
+      "src/components/layout/FleetsTree.jsx",
+      "src/components/layout/SideTree.jsx",
+      "src/components/layout/SideTree.css"
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "weighbridges branch note",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The standing instruction under the list of scales — \"Clicking a scale takes the map to it. Hover its marker for the last ticket; click to keep the card open.\" — comes off, the same call as the stopped-in-transit footnote and for the same reason: it is documentation parked inside a control, read once and then read past forever, in a rail whose rows are already short of vertical room. The first sentence was redundant on arrival — every scale row carries a title reading \"Take the map to <centre> bridge <n>\", which says it at the moment it is wanted instead of permanently. The site-plans TreeNote two branches up STAYS: it names which plan is still fetching, which is a live status rather than a rule, and it disappears by itself when the answer changes."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "stopped-in-transit location line",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "Every flagged row now says WHERE, on a line of its own under the plate — the one fact of the three that cannot be got by looking at the map, since a stranded unit is by definition outside every place the estate has a name for. Through usePlaceName, the hook the vehicle card and the map overlay already use, so the coordinate fallback and the per-cell cache are the same ones; the row became a component because a hook cannot be called per row from the parent. Paging paid for this: ten lookups a page instead of one per flagged unit. \"Location unverified\" is retired in both panels — printed under a place name it reads as doubt about the name, which it never meant; it is about zones, and now says so. The row was tightened rather than allowed to grow (55px, three lines set 1.25) and the ceiling raised to the measured 650 a full page needs; below a ~930px viewport a page of ten scrolls, which is the right trade."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "stopped-in-transit pager",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "Ten units a page, on the roster's own paginate/pageWindow rather than a slice written here — the hard part is not the slice, it is clamping a page against a list that shrinks while somebody is reading it, which on this panel is the ordinary case and is already solved and tested in lib/rosterView. The pager is the accounts table's, at a window's scale: range left, steps and numbers right, no rows-per-page because a 320px window has nothing to spend a choice on. It wraps where the table's does not need to, so a three-digit page count drops the nav to its own line instead of pushing the close button off the panel. Page resets when the window is REOPENED, never when the data changes — a pager that jumps home on every telemetry sweep cannot be read — and the list scrolls back to its top on a page change. Track all still means every flagged unit, not the visible ten, because the count it sits beside says so; the deliberate opposite of the roster's select-all, which means the page."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "stopped-in-transit footnote",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The rule-of-the-flag footnote — \"Moving, then stationary 10 min or more, outside every known zone\" — comes off both surfaces that carried it, the map window and the fleets menu's flagged list. It was documentation sitting permanently inside an operating panel: read once, then re-read past every time the list is opened, on a panel whose whole job is six plates and how long each has been standing. The rows already say the part that changes — the duration, engine running or off, and \"location unverified\" when the zone pass has not reached that unit. The definition does not change, so it does not belong on a panel that is opened to see what has. The empty state keeps its sentence, which is an answer rather than a definition."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "Oyani site plan",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "public/oyani-site.geojson re-cut from the operations team's fresh Google Earth export, through tools/kml-to-site.mjs rather than by hand, so the ring is the surveyor's and the categorisation is the same pass every other survey went through. The old outline was 1.7 km south-east of the real yard and 1.01 ha against its 0.75 — not a drift, a different piece of ground, which means every guest-occupancy answer this layer has ever given for Oyani was about somewhere else. The gate keeps the name the survey gives it, Main Gate, and lands inside the fence on the converter's own containment check. The figures the site-plan table states in prose — the hectares, and the 32 km / 13 km spread that justifies three switches instead of one Sukari layer — are re-measured from the new ring rather than left to describe the old one."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "sidebar section titles + stopped-in-transit window",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The tree's section titles (MAP LAYERS, FLEETS) take the stat captions' weight and tracking — 500/0.05em, not 700/0.07em — finishing the rail's alignment; size follows too, 11px to 10 — two uppercase labels a pixel apart read as an error rather than as a rank, and there is no rank to say between FLEETS and MOVING. The stranded window now dismisses on a press outside as well as Escape and its close button, on pointerdown in the capture phase, the same contract the Units panel and the map's menus use."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "stopped-in-transit window",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (the app's light surface, the Units window's geometry)",
+    "enrichment": "none",
+    "brief": "Stopped in transit moves inside the sidebar's Movement branch and stops being a list there: it is now a link that opens StrandedWindow over the map, the same arrangement Units already has, because every row in that list is an instruction to look at a place. Each row carries the Units panel's own tick, writing the same trackedIds, so the map can be narrowed to the stranded units; the branch keeps a red dot while it is shut so the alarm survives being folded away."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "sidebar tree labels",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (the rail's own nav ink)",
+    "enrichment": "none",
+    "brief": "The tree branch labels — Site plans, Weighbridges, Machine types, Movement — take the nav's ink (#475569) instead of #334155, and one weight step instead of two (500, not 600). They were the darkest and heaviest text in the rail, sitting directly under the page links at #475569/400: two lists in one panel with the less important one shouting."
+  },
+  {
+    "date": "2026-09-22",
+    "scope": "component",
+    "component": "stopped-in-transit window",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project",
+    "enrichment": "none",
+    "brief": "The window's list takes the Units panel's scrollbar — `scrollbar-width: thin`, and nothing else. It was on the platform default, measured at 15px against the Units list's 10 beside it; two windows that open from the same rail and scroll the same kind of list must not scroll differently."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "page",
+    "macrostructure": "Workbench",
+    "theme": "studied-DNA (image reference; in-project Inter + sp4 scale preserved, light only)",
+    "theme_axes": "light paper / grotesk-sans (Inter) / cool accent #0369a1",
+    "enrichment": "none",
+    "brief": "User accounts redesign toward a supplied admin-roster screenshot: titled masthead + count badge, split toolbar, Table/Board/List views, avatar identity column, status as a dot, bulk select, column chooser, CSV export, pagination, undo toast; dark token layer removed (app is light-only)"
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "Add user (user accounts)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "The invite band becomes a modal right-hand panel on the live map's vehicle-panel shape: portalled to body, scrim, scrolling body with the actions on a fixed foot, Escape in capture so it does not also leave the page, focus trapped and returned to the trigger. The error/notice pair moved out of the form onto the page, where the roster's own messages could finally be seen."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "page",
+    "macrostructure": "Workbench",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Roster: Email and Phone become their own columns and leave the name cell; Roles here -> Roles; status returns to a badge with the dot kept inside it; Edit access becomes Edit and opens the whole person in the same right-hand panel as Add user - details (PATCH against their home organisation), account state with Suspend/Reactivate, and access. Two latent bugs fixed on the way: a 180px min-width meant for the name cell that the new checkbox column had inherited, and a delete-confirmation colSpan still counting six fixed columns."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "organisation picker (Add user / Edit)",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Sized for a tenant with twenty organisations: held organisations listed, the rest behind one counted control with a filter past eight, roles expanded one at a time with their chips acting as the control. One component now serves both panels. Roles are fetched for what is on screen instead of for every organisation the admin can reach."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "roster masthead",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Title, count badge and strapline replaced by two state badges - N active, N suspended - in the Status column's own voice, plus an 'N of M shown' caveat while a filter is on. The <h1> is visually hidden rather than removed, because the page's only other name is a breadcrumb <li>."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "roster contact columns + role chips",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Email and Phone are masked in the roster (domain kept, last three digits kept, length never revealed) and revealed per person by clicking the masked value itself, which then becomes a real mailto/tel link. Search, CSV export and the profile panel still carry the full value. Role chips deduplicate on the role name, so a role granted twice is listed once."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "page",
+    "macrostructure": "Workbench",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "organisation marks (existing artwork, companyLogos)",
+    "brief": "One row per person rather than one per membership, with organisations shown as badges carrying each tenant's mark and roles unioned across them; Delete is withheld on a merged row. Contact masking becomes a toolbar switch over the per-person reveal. Pager arrows, the range dash, the page ellipsis and the toast close were printing their own \\\\uXXXX source in JSX text and are now drawn or escaped properly. The board and list views get the scroller only the table had, so their last rows are reachable."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "roster contact masking",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Masking is reversible and per field. Email and phone switch independently on each row; the masked value is the button that reveals it, and a revealed value keeps its mailto/tel link with a three-dot control beside it that puts the mask back. Per-cell state is held as exceptions to the toolbar switch, so one control reads correctly in both directions."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "board view",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Cards drag between Active and Suspended to change an account, with the derived columns (Pending, No live invite) refusing a drop rather than accepting one and doing nothing. The gesture is stated above the board together with its keyboard equivalent, a card cannot be dragged by its own owner, and handleStatus now takes a destination rather than flipping."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "board card",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "organisation marks",
+    "brief": "Kanban cards list every organisation the person holds, as badges with their marks, no longer gated on the table's column-visibility flag and no longer capped or scrolled the way the grid cell is."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "list view row",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "organisation marks",
+    "brief": "List rows carry the same organisation badges, between the person and their state, shrinkable to 42% of the row; under 768px the names are clipped to visually-hidden and the marks alone carry it, with title restoring the name to a pointer."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "Edit panel - Account",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Suspend/Reactivate inside the profile panel is now staged rather than immediate: it marks the account, the badge shows the draft, a note states what Save will do, and Cancel or closing the panel discards it. The status write runs last in the save, after the membership removals, because it is the one call that can end the session making the others. Row-level and board gestures stay immediate."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "page",
+    "macrostructure": "Workbench",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Account events - created, invited, re-invited, suspended, reactivated, profile saved, deleted - report through the undo toast instead of the page message strip, with an undo on single suspend/reactivate and none drawn where there is nothing to undo. The strip keeps errors and the two messages that describe a standing problem rather than an event."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "page",
+    "macrostructure": "Workbench",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Bulk suspend, reactivate and resend report through the toast, with the undo handed to runBulk rather than raised beside it - which also removes a double report whose two counts disagreed. Partial results stay on the page and carry no undo."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "page",
+    "macrostructure": "Workbench",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Errors and standing problems report in the toast too, and the page's message strip is removed. Three tones - outcome, standing problem, failure - where the tone decides whether the message is on a nine-second clock; only outcomes expire. Colour is backed by a left rule and a mark, and a failure is announced assertively. Drawers keep their inline error beside the submit button."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "toast",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "Toast moves to the bottom right, on the side the page's own actions are, and is colour-coded by operation rather than by mood: created, reactivated/saved, suspended, deleted, standing problem and failure each carry their own rule colour and their own mark, with the mark rather than the hue separating the pairs that share one."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "org picker",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--ua-* scale, preserved)",
+    "enrichment": "none",
+    "brief": "The Organisations list in the account panel names each tenant by its logo mark as well as its name, the same device the roster's Organisation column already uses; the mark is lifted into its own OrgMark component so both draw one thing, sized 18px for the panel's bolder row, with the hued letter fallback kept for tenants with no artwork."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "account page organisations",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (acct-* light hexes, preserved)",
+    "enrichment": "none",
+    "brief": "The account page names organisations by their logo marks in both places it lists them — the overview chips and the Access tab — replacing an initials disc that merely abbreviated the name sitting beside it; one 20px box carries either the artwork or, where there is none, the initials it replaced."
+  },
+  {
+    "date": "2026-09-21",
+    "scope": "component",
+    "component": "driver roster grid",
+    "macrostructure": "n/a (component scope)",
+    "theme": "in-project (--dg-* bridge, re-pointed at the User accounts scale)",
+    "enrichment": "none",
+    "brief": "The Driver Analytics roster takes the User accounts table's row: its hairline and tinted sticky head band, its 30px identity disc with the name stacked over the employee number and licence, and its dotted sentence-case status pill, with selection moved to an accent wash. The hued avatar and the pager are deliberately not taken — this row already spends four colours on meaning, and the ranked roster grows rather than pages."
+  },
+  {
     "date": "2026-09-15",
     "scope": "component",
     "component": "fuel incident modal (possible theft)",

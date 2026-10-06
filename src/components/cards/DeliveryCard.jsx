@@ -17,6 +17,52 @@
 import "./DeliveryCard.css";
 import { LEG_LABEL, fmtDuration } from "../../lib/tripProgress";
 import ShieldIcon from "../shared/ShieldIcon";
+import { useTrafficRoute, routeTarget } from "../../hooks/useTrafficRoute";
+import { delayCause, TRAFFIC_AVAILABLE } from "../../lib/tomtomTraffic";
+
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/**
+ * Road distance and arrival with live traffic, and why it is late if it is.
+ *
+ * Replaces the straight-line ETA where a TomTom key is configured: road
+ * distance instead of great-circle, travel time from the provider's live
+ * speeds instead of this second's km/h, and the traffic delay kept apart from
+ * a stop that traffic does not explain. See lib/tomtomTraffic delayCause.
+ */
+function TrafficEta({ traffic }) {
+  const target = routeTarget(traffic.trip);
+  const { data, isPending, isError } = useTrafficRoute({
+    vehicleId: traffic.vehicleId,
+    lat: traffic.lat,
+    lng: traffic.lng,
+    to: target?.to ?? null,
+    travelMode: traffic.travelMode,
+    enabled: target != null,
+  });
+  if (!target) return null;
+  const where = target.towards === "yard" ? "the yard" : "destination";
+  if (isPending) return <div className="dc-eta dc-eta--muted">Routing to {where} with live traffic…</div>;
+  if (isError || !data) return <div className="dc-eta dc-eta--muted">Live traffic unavailable</div>;
+
+  const minutes = Math.round(data.travelS / 60);
+  const cause = delayCause(data, traffic.speedKmh);
+  const ago = Math.round((Date.now() - data.fetchedAt) / 60_000);
+  return (
+    <div className="dc-traffic">
+      <div className="dc-eta">
+        <span className="dc-eta-val">{(data.lengthM / 1000).toFixed(1)} km</span> by road to {where}
+        {" · "}arrives <span className="dc-eta-val">{clock(data.arrivalMs)}</span>
+        {" "}<span className="dc-eta-in">({fmtDuration(minutes)})</span>
+      </div>
+      {cause && <div className={`dc-cause dc-cause--${cause.kind}`}>{cause.text}</div>}
+      <div className="dc-eta-src">
+        Free flow {fmtDuration(Math.round(data.noTrafficS / 60))}
+        {" · "}TomTom live traffic · {ago < 1 ? "just now" : `${ago} m ago`}
+      </div>
+    </div>
+  );
+}
 
 const LEG_CLASS = {
   "no-fix":         "dc-leg--silent",
@@ -51,7 +97,8 @@ export default function DeliveryCard({ delivery, pending }) {
 
   const { leg, legText, percent, from, to, departedAt, arrivedAt, arrived,
           serialNumber, eta, totalKm, distanceTodayKm, driver, status,
-          destinationPlaced, awaitingSignIn } = delivery;
+          destinationPlaced, awaitingSignIn, traffic } = delivery;
+  const routed = TRAFFIC_AVAILABLE && traffic && traffic.fresh && routeTarget(traffic.trip) != null;
 
   // Home, which is NOT the same as finished. A trip is completed by the
   // sign-in: once the guard signs the unit back in the run leaves the open set,
@@ -152,7 +199,8 @@ export default function DeliveryCard({ delivery, pending }) {
                 parked tracker reports a km/h or two, and dividing the distance
                 by that produces a confident-looking answer twenty times out.
                 See lib/tripProgress. */}
-            {eta && (
+            {routed && <TrafficEta traffic={traffic} />}
+            {!routed && eta && (
               <div className="dc-eta">
                 <span className="dc-eta-val">{eta.remainingKm} km</span>
                 {" "}to go
@@ -167,9 +215,6 @@ export default function DeliveryCard({ delivery, pending }) {
               </div>
             )}
           </>
-        )}
-        {percent != null && !destinationPlaced && (
-          <div className="dc-note">Destination position is approximate</div>
         )}
       </div>
     </div>

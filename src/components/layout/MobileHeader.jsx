@@ -2,22 +2,24 @@
 // Shown only on mobile (< 768px). The desktop AppHeader handles larger screens.
 
 import { useState, useRef, useEffect } from 'react';
-import { useAppContext } from '../../context/AppContext';
+import { useAppSelector, useAppActions, useCompanies } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useMapLayers } from '../../context/MapLayersContext';
 import './MobileHeader.css';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { usePermissions } from '../../hooks/usePermissions';
-import { needsMe, useFollowUps } from '../../lib/fuelFollowUps';
+import { initialsOf, avatarHue } from '../../lib/avatar';
 
 export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }) {
-  const { activeCompany, companies, setActiveCompanyId, activeCompanyId, setAccountOpen, setUserAdminOpen, setDesktopActiveTab } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setDesktopActiveTab } = useAppActions();
+  const { activeCompany, companies } = useCompanies();
   const { user, logout } = useAuth();
-  const { can, orgId } = usePermissions();
+  const { can } = usePermissions();
   // The sidebar's System section, for a phone, which has no sidebar.
-  const canTriage = can('fuel_theft:triage');
-  const systemCount = useFollowUps(orgId, canTriage).items.filter(needsMe).length;
+  // Fuel Audit readers: the roles the operator named (fuel_audit:read).
+  const canTriage = can('fuel_audit:read');
   const { vehicles = [] } = useFleetLiveShared();
   const { focusVehicle } = useMapLayers();
 
@@ -27,7 +29,8 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   const dropRef = useRef(null);
   const userRef = useRef(null);
 
-  const unreadCount = vehicles.filter(v =>
+  // Limited access (no map:read): the bell counts 0, as on the desktop header.
+  const unreadCount = !can('map:read') ? 0 : vehicles.filter(v =>
     v.status === 'speeding' || v.status === 'theft'
   ).length;
 
@@ -46,36 +49,47 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
    * got the same two letters. */
   const displayName = user?.fullName?.trim() || user?.name?.trim() || '';
 
-  const initials = (name = '', email = '') => {
-    const src = String(name).trim() || String(email).trim();
-    if (!src) return '?';
-    const words = src.split(/\s+/).filter(Boolean);
-    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-    return src.slice(0, 2).toUpperCase();
-  };
-
   return (
     <header className="mobile-header">
-      {/* Left — company logo + name */}
+      {/* Left — company logo + name. Two targets, no "View Profile" pill:
+          the logo and the chevron switch company, the name opens the profile
+          of the company now selected. */}
       <div className="mobile-header__company" ref={dropRef}>
-        <button
-          className="mobile-header__company-btn"
-          onClick={() => setDropdownOpen(o => !o)}
-        >
-          <div className={`mobile-header__company-logo${companyLogo(activeCompany) ? ' mobile-header__company-logo--img' : ''}`}>
-            {companyLogo(activeCompany)
-              ? <img src={companyLogo(activeCompany)} alt={activeCompany?.name ?? ''} />
-              : <span>RAI</span>}
-          </div>
-          <div className="mobile-header__company-info">
-            <div className="mobile-header__company-name">
-              {activeCompany?.name ?? 'Fleet Command'}
+        <div className="mobile-header__company-btn">
+          <button
+            type="button"
+            className="mobile-header__company-switch"
+            onClick={() => setDropdownOpen(o => !o)}
+            aria-haspopup="menu"
+            aria-expanded={dropdownOpen}
+            aria-label="Switch company"
+          >
+            <div className={`mobile-header__company-logo${companyLogo(activeCompany) ? ' mobile-header__company-logo--img' : ''}`}>
+              {companyLogo(activeCompany)
+                ? <img src={companyLogo(activeCompany)} alt="" />
+                : <span>RAI</span>}
             </div>
-            <div className="mobile-header__view-profile" onClick={(e) => { e.stopPropagation(); onProfileOpen?.(); }}>
-              View Profile ›
-            </div>
-          </div>
-        </button>
+          </button>
+          <button
+            type="button"
+            className="mobile-header__company-name"
+            onClick={() => { setDropdownOpen(false); onProfileOpen?.(); }}
+            title={`${activeCompany?.name ?? 'Company'} profile`}
+          >
+            {activeCompany?.name ?? 'Fleet Command'}
+          </button>
+          {companies.length > 1 && (
+            <button
+              type="button"
+              className="mobile-header__company-chevron"
+              onClick={() => setDropdownOpen(o => !o)}
+              aria-label="Switch company"
+              tabIndex={-1}
+            >
+              <i className={`ti ti-chevron-${dropdownOpen ? 'up' : 'down'}`} aria-hidden="true" />
+            </button>
+          )}
+        </div>
 
         {/* Company switcher dropdown */}
         {dropdownOpen && (
@@ -102,10 +116,15 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
         <button className="mobile-header__icon-btn" onClick={onSearchOpen} aria-label="Search">
           <i className="ti ti-search" aria-hidden="true" />
         </button>
-        <button className="mobile-header__icon-btn" onClick={onFeedOpen} aria-label="Alerts">
-          <i className="ti ti-bell" aria-hidden="true" />
-          {unreadCount > 0 && <span className="mobile-header__alert-dot" />}
-        </button>
+        {/* No bell without rights to the fleet (no map:read), as on the desktop. */}
+        {can('map:read') && (
+          <button className="mobile-header__icon-btn" onClick={onFeedOpen} aria-label="Alerts">
+            <i className="ti ti-bell" aria-hidden="true" />
+            {unreadCount > 0 && <span className="mobile-header__alert-dot" />}
+          </button>
+        )}
+        {/* Holds the bell's place so the avatar does not move. */}
+        {!can('map:read') && <span className="mobile-header__icon-btn" aria-hidden="true" style={{ visibility: 'hidden', pointerEvents: 'none' }} />}
         {/* Account menu — the avatar is a BUTTON: on mobile it was a plain
             div, so there was no way to reach Account or to sign out. */}
         <div className="mobile-header__user" ref={userRef}>
@@ -114,10 +133,12 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
             onClick={() => setUserOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={userOpen}
-            aria-label={systemCount > 0 ? `Account menu, ${systemCount} system notifications waiting on you` : 'Account menu'}
+            aria-label="Account menu"
           >
             {user ? (
-              <span className="mobile-header__avatar-initials">{initials(displayName, user.email)}</span>
+              <span className="mobile-header__avatar-initials" style={{ '--ua': avatarHue(displayName || user.email) }}>
+                {initialsOf(displayName, user.email)}
+              </span>
             ) : (
               <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
                 <circle cx="18" cy="18" r="18" fill="#e2e8f0"/>
@@ -126,8 +147,6 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               </svg>
             )}
           </button>
-          {/* Outside the avatar, which clips to its circle. */}
-          {systemCount > 0 && <span className="mobile-header__avatar-dot" aria-hidden="true" />}
 
           {userOpen && (
             <div className="mobile-header__user-menu" role="menu">
@@ -144,14 +163,13 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                 <i className="ti ti-user-circle" aria-hidden="true" /> Account
               </button>
               {canTriage && (
-                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('system'); setUserOpen(false); }}>
-                  <i className="ti ti-script" aria-hidden="true" /> Cases
-                  {systemCount > 0 && (
-                    <>
-                      <span className="mobile-header__user-alertdot" aria-hidden="true" />
-                      <span className="mobile-header__user-badge">{systemCount}</span>
-                    </>
-                  )}
+                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('audit'); setUserOpen(false); }}>
+                  <i className="ti ti-clipboard-check" aria-hidden="true" /> Fuel audit
+                </button>
+              )}
+              {can('fuel_filling:read') && (
+                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuelReport'); setUserOpen(false); }}>
+                  <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel report
                 </button>
               )}
               {can('user:create') && (

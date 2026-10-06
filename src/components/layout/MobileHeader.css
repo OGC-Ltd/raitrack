@@ -23,12 +23,30 @@
   .mobile-header__company-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .mobile-header__company-switch,
+  .mobile-header__company-name,
+  .mobile-header__company-chevron {
     background: none;
     border: none;
     cursor: pointer;
     padding: 0;
     font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-header__company-switch { margin-right: 4px; border-radius: 50%; }
+
+  .mobile-header__company-chevron {
+    display: grid;
+    place-items: center;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 36px;
+    color: #64748b;
+    font-size: 16px;
   }
 
   .mobile-header__company-logo {
@@ -49,24 +67,22 @@
     letter-spacing: 0.05em;
   }
 
+  /* The name is the way into the company profile. */
   .mobile-header__company-name {
-    font-size: 12px;
+    min-height: 36px;
+    max-width: 170px;
+    font-size: 13px;
     font-weight: 700;
     color: #0f172a;
     text-align: left;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
-
-  .mobile-header__view-profile {
-    font-size: 10px;
-    font-weight: 600;
-    color: #0f172a;
-    background: #f1f5f9;
-    border-radius: 4px;
-    padding: 2px 6px;
-    margin-top: 2px;
-    display: inline-block;
-    cursor: pointer;
-  }
+  .mobile-header__company-name:active { opacity: 0.6; }
 
   /* Company dropdown */
   .mobile-header__dropdown {
@@ -141,15 +157,16 @@
     position: relative;
   }
 
+  /* On the bell's shoulder, the header badge's red and white ring */
   .mobile-header__alert-dot {
     position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 9px;
-    height: 9px;
+    top: 8px;
+    right: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: #f43f5e;
-    border: 2px solid #fff;
+    background: #dc2626;
+    box-shadow: 0 0 0 2px #f1f5f9;
   }
 
   .mobile-header__avatar {
@@ -199,7 +216,10 @@
   font-size: 13px;
   font-weight: 700;
 }
-.mobile-header__avatar-initials { font-size: 13px; font-weight: 700; color: #334155; }
+/* The same weight as the search and bell icons beside it: 12px semibold in
+   the person's own colour (lib/avatar), not 13px bold slate. */
+.mobile-header__avatar-initials { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--ua, #334155); }
+.mobile-header__avatar:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .mobile-header__user-menu {
   position: absolute;
   top: calc(100% + 8px);

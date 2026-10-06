@@ -42,9 +42,6 @@ export default function MaintenanceCard({ maintenance }) {
               <div className="mc-track">
                 <div className="mc-fill" style={{ width: `${b.pctDone}%`, background: b.color }} />
               </div>
-              <span className="mc-brakes__note">
-                {b.kmRemaining.toLocaleString()} km remaining · every {b.intervalKm.toLocaleString()} km
-              </span>
             </div>
           ))}
         </div>

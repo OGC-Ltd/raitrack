@@ -17,11 +17,20 @@
   align-items: center;
   gap: 8px;
   padding: 0 4px 6px;
+  /* `.sp-stat-lbl` exactly — the rail's other uppercase micro-label, on the
+     stat boxes: 11px, 500, 0.05em, #64748b. These were 11/700/0.07em, the last
+     thing in this panel still set heavier than its neighbours.
+     Two labels a pixel apart is worse than either size on its own: the eye
+     reads the difference as an error rather than as a rank, and there is no
+     rank here to say — "FLEETS" and "MOVING" are the same kind of word doing
+     the same job one box apart.
+     11px and #64748b, both labels together: at 10px in #94a3b8 they measured
+     2.6:1 on the white rail, well under the 4.5:1 small text needs. */
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  font-weight: 500;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 /* ── Branch ───────────────────────────────────────────────────────────────── */
@@ -40,8 +49,16 @@
   background: none;
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  /* The NAV's ink, and the same ink the rows under this branch use.
+     It was #334155 at 600 — the darkest, heaviest text in the rail, sitting
+     directly under "Drivers Analytics" and "Weighbridges" at #475569/400. Two
+     lists in one panel, one of them shouting, and the branch labels are not
+     more important than the pages above them: they are a heading for four
+     rows, which is what the weight is for. So the colour matches the nav and
+     the branch keeps ONE step of emphasis — 500 against its children's 400 —
+     to say it is their parent. */
+  font-weight: 500;
+  color: #475569;
   cursor: pointer;
   text-align: left;
   transition: background .13s;
@@ -54,14 +71,23 @@
 
 .side-tree__chev {
   flex-shrink: 0;
-  color: #94a3b8;
+  color: #64748b;
   transition: transform .16s ease;
 }
 .side-tree__chev--open { transform: rotate(90deg); }
 
 .side-tree__icon {
   flex-shrink: 0;
+  /* 15px, the size this has always been. Briefly 13 — the label's own size,
+     on the argument that a glyph should not be the largest thing on its row —
+     and put back: on screen it read as shrunken rather than as quiet, and the
+     COLOUR is what was making these icons loud. That is changed and this is
+     not. */
   font-size: 15px;
+  /* The nav's icon ink, finishing what the label colour started: the glyph was
+     #64748b beside page links whose glyphs were a paler #94a3b8, so a branch
+     row still carried more weight than the pages above it after its text
+     stopped. Both are #64748b now, for contrast, so they match again. */
   color: #64748b;
 }
 
@@ -123,6 +149,24 @@
    that is news rather than a setting the reader just made. */
 .side-tree__count--alert { background: #fee2e2; color: #b91c1c; }
 
+/* The branch's own alarm: something inside needs looking at. Sits before the
+   count rather than replacing it — the count answers "how much is in here",
+   and this answers "is any of it a problem", which are different questions and
+   the branch is shut when both are asked. */
+.side-tree__alertdot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b91c1c;
+  /* A ring, so the dot survives landing on the count badge's own pale fill. */
+  box-shadow: 0 0 0 2px #fff;
+}
+/* The dot in the colour of the row it stands for — Fuel's is its cases. */
+.side-tree__alertdot--warn { background: var(--accent-warn, #b45309); }
+/* Movement's dot (operator, 2026-10-01): green, the colour of units moving. */
+.side-tree__alertdot--ok { background: #16a34a; }
+
 /* ── Children ─────────────────────────────────────────────────────────────── */
 
 .side-tree__children {
@@ -178,12 +222,50 @@
 
 .side-tree__rowcount {
   flex-shrink: 0;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
+  /* The panel's own face with PROPORTIONAL figures, not the mono one.
+     In a monospace font a lone "1" gets the same cell as any digit and its thin
+     stem sits in the middle of it, so under Fuel "1" read ~2px short of the
+     "27" below it while "24" and "218" under Movement ended flush (operator,
+     2026-09-27: "should align well just like stopped in transit and units").
+     Proportional figures give every count an ink edge at the column's edge. */
+  font-family: inherit;
+  font-size: 11.5px;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: #94a3b8;
+  font-variant-numeric: lining-nums proportional-nums;
+  color: #64748b;
+  /* A COLUMN, not a row of right-flushed numbers.
+     These were bare text, so every figure ended at the same pixel and began
+     at a different one: measured in the rail, "597" is 18.2px wide and "4" is
+     6.1px, which put three counts under Movement at three different left
+     edges. Right edges agreeing is not what the eye reads down a list — it
+     reads the left edge, and a ragged one says the rows are unrelated.
+
+     20px holds three digits at this size; a fourth widens the box rather than
+     being clipped, which on a fleet of 597 is a case that does not arise and
+     would be worth seeing if it did.
+
+     CENTRED, under the branch's own badge. The box is the badge's 20px and
+     sits exactly beneath it (both end at the row's 6px padding), but flushed
+     right the figures ended at the circle's outer edge, so under Fuel's "1"
+     the Alerts "1" and Cases "12" stood 4–7px further out than the number
+     they belong to (operator, 2026-09-27: "too far outside from the parent
+     counter … align them in the inside"). Centred, every count in a branch
+     shares the badge's centre line. */
+  min-width: 20px;
+  text-align: center;
 }
+
+/* A leaf's count that is news rather than a total — the same red the branch
+   badges use, so one thing being wrong looks the same wherever it is said.
+   AFTER the base rule, not before it: both are one class deep, so the file's
+   order is the only thing deciding which colour lands. */
+.side-tree__rowcount--alert { color: #b91c1c; font-weight: 800; }
+/* Waiting on someone rather than wrong: fuel cases, amber (operator,
+   2026-09-27). The app's own warning ink, as on the WARNING stat. */
+.side-tree__rowcount--warn { color: var(--accent-warn, #b45309); font-weight: 800; }
+/* Stopped in transit (operator, 2026-10-01): the orange of the Warning status
+   card (lib/fleetStatusStats), so the two read as the same kind of thing. */
+.side-tree__rowcount--orange { color: #d97706; font-weight: 800; }
 
 /* A switch row. The box is the whole state: filled and ticked when on. */
 .side-tree__box {
@@ -226,9 +308,23 @@
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.18);
 }
 
-/* A link row carries its own second line, so a stranded unit can say how long
-   it has been standing without the plate and the reason competing for one. */
-.side-tree__row--link { flex-wrap: wrap; row-gap: 0; }
+/* The second line this used to wrap onto was .side-tree__rownote, removed
+   2026-09-22 with the rest of the tree's notes. `flex-wrap: wrap` outlived it
+   and could only do harm from here: nothing is 100% wide any more, so the one
+   thing it can still produce is a count dropping below a long label. */
+.side-tree__row--link { row-gap: 0; }
+
+/* A link row has no tick box, so its label started 23px left of the label on
+   every switch row beside it — .side-tree__box is 15px and the row's gap is 8.
+   Under Movement that put "In transit only" on one left edge and "Stopped in
+   transit" and "Units" on another, which reads as two lists rather than three
+   rows of one. The box is a control, not an indent: the labels are peers and
+   belong in one column.
+
+   Scoped to rows INSIDE a branch, which is the only place a link sits beside a
+   switch. "Show the whole fleet" is a top-level row with nothing to line up
+   against and keeps the plain 6px. */
+.side-tree__children > .side-tree__row--link { padding-left: 29px; }
 .side-tree__rowmeta {
   flex-shrink: 0;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -240,7 +336,7 @@
 .side-tree__rownote {
   flex: 1 0 100%;
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -253,14 +349,12 @@
 }
 .side-tree__row--alert .side-tree__rowmeta { color: #b91c1c; }
 
-.side-tree__empty,
-.side-tree__note {
+.side-tree__empty {
   padding: 6px 8px;
   font-size: 11.5px;
-  color: #94a3b8;
+  color: #64748b;
   line-height: 1.45;
 }
-.side-tree__note { border-top: 1px solid #f1f5f9; margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   .side-tree__chev,
@@ -269,16 +363,53 @@
   .side-tree__box { transition: none; }
 }
 
-/* A link that heads its own group rather than sitting inside a branch — the
-   Units row, which opens the map's units panel instead of expanding. Aligned
-   with the branch rows above it, not indented like a child, because it is a
-   peer of them. */
-.side-tree__row--lead {
-  min-height: 34px;
-  padding: 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+
+/* Quick links: one row per weighing site, a coloured box per scale there. The
+   row is a div because it holds several buttons — the name and each box. */
+.side-tree__row--bridges { cursor: default; }
+.side-tree__bridgesite {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.side-tree__row--lead:hover { background: #f1f5f9; }
-.side-tree__row--lead .side-tree__rowcount { font-size: 11px; }
+.side-tree__bridgesite:hover { text-decoration: underline; }
+.side-tree__bridgeboxes {
+  flex-shrink: 0;
+  display: inline-flex;
+  gap: 4px;
+}
+.side-tree__bridgebox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1.5px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.side-tree__bridgebox:hover { transform: scale(1.15); }
+.side-tree__bridgebox:focus-visible { outline: 2px solid #0f172a; outline-offset: 1px; }
+.side-tree__bridgebox--live  { background: #22c55e; border-color: #16a34a; color: #fff; }
+.side-tree__bridgebox--today { background: #fbbf24; border-color: #d97706; color: #78350f; }
+.side-tree__bridgebox--idle  { background: #e2e8f0; border-color: #94a3b8; color: #475569; }
+.side-tree__bridgekey {
+  display: flex;
+  gap: 10px;
+  padding: 4px 6px 2px;
+  font-size: 10.5px;
+  color: #64748b;
+}
+.side-tree__bridgekey span { display: inline-flex; align-items: center; gap: 4px; }
+.side-tree__bridgekey .side-tree__bridgebox { min-width: 0; width: 9px; height: 9px; padding: 0; cursor: default; border-width: 1px; }
+.side-tree__bridgekey .side-tree__bridgebox:hover { transform: none; }

@@ -1,8 +1,8 @@
 // SensorPanel.jsx — Sensor Monitor
 // Updated 2026-08-07: search, time filter, engine filter, view on map
 
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useAppActions } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
 import IncidentReport, { SORTS as INCIDENT_SORTS } from "./IncidentReport";
 import { rangeFor } from "../../lib/analyticsFilter";
@@ -25,16 +25,19 @@ import { useWindowTelemetry } from "../../hooks/useWindowTelemetry";
 import { readingCoverage } from "../../lib/vehicleReadings";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import TableToolbar from "./TableToolbar";
+import TablePager, { usePager } from "./TablePager";
+import FilterBar from "./FilterBar";
 // The HISTORICAL view of the same probes. The grid below renders the live
 // snapshot and structurally cannot say when a channel stopped — see the panel.
 import ProbeHealthPanel from "./ProbeHealthPanel";
 import RepairJobsPanel from "./RepairJobsPanel";
 import RepairTrackingLine from "./RepairTrackingLine";
-import { latestRepairForVehicle } from "../../api/repairs";
+import { latestRepairForVehicle, mayWorkJob } from "../../api/repairs";
 import { faultAction } from "../../api/probeHealth";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useOpenRepairs } from "../../hooks/useOpenRepairs";
 import { restoreChoice, persistChoice } from "../../lib/navMemory";
+import { watchTableLabels } from "../../lib/tableLabels";
 import "./SensorPanel.css";
 
 /* Every tab this build has, and where the choice is stored. The allow-list is
@@ -137,7 +140,7 @@ const ENGINE_FILTERS = [
 // ── View on map button ─────────────────────────────────────────────────────────
 function ViewOnMapBtn({ vehicleId, vehicleName }) {
   const { can } = usePermissions();
-  const { setDesktopActiveTab, setPendingFocusId } = useAppContext();
+  const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
   if (!can("map:read")) return null;
 
   return (
@@ -394,6 +397,7 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
      colour, and the trailing cell is a button. Both are spelled out instead:
      each transmission becomes a signed volume and a time, which is what the
      chip was showing, and the "View on map" column simply has no CSV form. */
+  const pager = usePager(filtered, `${search}|${timeFilter}|${engineFilter}|${fuelFilter}|${day}`);
   const EXPORT_HEAD = [
     "Unit Reg", "Initial", "Current", "Mileage (km)", "Expected (km)", "Engine hrs",
     "Turbulence", "Recent FSL transmissions (last 5)", "Pattern", "Refills", "Drains", "Status",
@@ -451,10 +455,13 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
        : error ? <div className="sp4-error">⚠ {error}</div>
        : !filtered.length ? <div className="sp4-empty-tab">No fuel events match your filters</div>
        : (
+      /* Its own sideways scroller, so the toolbar above stays put on a phone
+         (`.sp4-keep-table`, SensorPanel.css). */
+      <div className="sp4-keep-table">
       <table className="sp4-table">
         <thead>
           <tr>
-            <th>Unit Reg</th>
+            <th className="sp4-th--pin">Unit Reg</th>
             <th title="Closing fuel level of the previous day">Initial</th>
             <th title="Closing fuel level of this day — the latest reading, for today">Current</th>
             <th title="Ground covered today, summed from the position fixes">Mileage (km)</th>
@@ -470,12 +477,12 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
           </tr>
         </thead>
         <tbody>
-          {filtered.map((row, i) => {
+          {pager.pageRows.map((row, i) => {
             const plate = plateFor(row.vehicleId);
             const last5 = row.events.slice(-5);
             return (
               <tr key={i} className={"sp4-tr sp4-tr--fuel" + (selectedId === row.vehicleId ? " sp4-tr--selected" : "")} onClick={() => onSelect({ vehicleId: row.vehicleId, vehicleName: plate, type: "fuel_anomaly", detail: row.pattern })}>
-                <td className="sp4-reg">{plate}</td>
+                <td className="sp4-reg sp4-td--pin">{plate}</td>
                 <td className="sp4-tank">{tankFor(row.vehicleId)}</td>
                 <td className="sp4-tank">{currentFor(row.vehicleId)}</td>
                 <td className="sp4-tank">{mileageFor(row.vehicleId)}</td>
@@ -504,7 +511,9 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
           })}
         </tbody>
       </table>
+      </div>
       )}
+      {!loading && !error && <TablePager pager={pager} label="Fuel FSL pages" />}
     </div>
   );
 }
@@ -1005,7 +1014,7 @@ function DrainEngineCheck({ vehicleId, orgId, event, rowKey, onLoadingChange }) 
 
 function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
   const { can } = usePermissions();
-  const { setDesktopActiveTab, setPendingFocusId } = useAppContext();
+  const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
   const pad = n => String(n).padStart(2, "0");
   const fmtTime = iso => {
     if (!iso) return "—";
@@ -1173,8 +1182,9 @@ function SensorDetail({
   canSeeRepairs = false, canResolveRepairs = false, faulty = false, repairNonce = 0,
 }) {
   const { can } = usePermissions();
+  const { user } = useAuth();
   const { pings, loading, error } = useVehicleTelemetry(vehicleId, orgId, 50);
-  const { setDesktopActiveTab, setPendingFocusId } = useAppContext();
+  const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
   const [page, setPage] = useState(0);
 
   /*
@@ -1260,7 +1270,7 @@ function SensorDetail({
           item={repair}
           faulty={faulty}
           orgId={orgId}
-          canResolve={canResolveRepairs}
+          canResolve={mayWorkJob(repair, { canResolve: canResolveRepairs, canWorkAny: can("repair:work_any"), userId: user?.id ?? null })}
           onChanged={() => setRepairTick((n) => n + 1)}
         />
       )}
@@ -1530,8 +1540,10 @@ export default function SensorPanel() {
          its readings. On Fuel FSL a click opens that day's drain trace; on
          Speed and Malfunction it opens every case for that unit. Three
          different destinations under one promise, and the two incident tabs
-         do not show sensor readings at all. */
-      hint: "Click any row to inspect that unit's live sensor readings" },
+         do not show sensor readings at all.
+         Probes has none now (operator, 2026-10-03: remove "Click any row to
+         inspect that unit's live sensor readings"). */
+      hint: null },
     // The tab reads /fuel/tank-state and /fuel/fillings, both on this slug.
     { key: "fuel",        allow: can("fuel_filling:read"),
       label: "Fuel FSL",    count: fuelLoading ? pending : fuelFlagged.length,
@@ -1576,8 +1588,16 @@ export default function SensorPanel() {
 
   const filterProps = { search, timeFilter, engineFilter, fuelFilter, vehicles };
 
+  /* Every grid on this screen turns into a stack of labelled cards below 768px
+     (SensorPanel.css). The labels are the column headers, copied onto the cells
+     they head — see lib/tableLabels for why they are read from the DOM rather
+     than written into each panel's markup, and why this watches for rows
+     instead of running on this component's own renders. */
+  const rootRef = useRef(null);
+  useEffect(() => watchTableLabels(rootRef.current), []);
+
   return (
-    <div className="sp4-root">
+    <div className="sp4-root sp4-root--framed" ref={rootRef}>
 
       {/* ── Header ─────────────────────────────────────────────
           No title here. The sub-tab that selects this panel is already
@@ -1616,31 +1636,44 @@ export default function SensorPanel() {
       </div>
 
       {/* ── Filter bar ───────────────────────────────────────── */}
-      <div className="sp4-filterbar">
-        {/* Search and Activity narrow the two LIVE tables — probes by
-            registration, fuel by how recently the unit last moved. Neither
-            reaches the incident ledgers, which are paged from the server over a
-            whole month, so on Speed and Malfunction they used to sit there
-            looking operable and doing nothing. A control that filters nothing
-            is worse than no control, so those tabs get their own two groups
-            below instead. */}
+      {/* Search and Activity narrow the two LIVE tables — probes by
+          registration, fuel by how recently the unit last moved. Neither
+          reaches the incident ledgers, which are paged from the server over a
+          whole month, so on Speed and Malfunction they used to sit there
+          looking operable and doing nothing. A control that filters nothing
+          is worse than no control, so those tabs get their own two groups
+          below instead.
+
+          On a phone the groups fold behind a Filters button and the search
+          stays out — see FilterBar. The count is what is narrowed away from
+          where each tab starts: Activity "all", today's date, the default sort,
+          and no drain filter. A typed search is not counted; it is visible. */}
+      <FilterBar
+        peek={!isIncidentTab && (
+          <div className="sp4-search-wrap">
+            <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              className="sp4-search"
+              type="text"
+              placeholder="Search vehicle reg…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && <button className="sp4-search-clear" onClick={() => setSearch("")}>✕</button>}
+          </div>
+        )}
+        activeCount={
+          (!isIncidentTab && timeFilter !== "all" ? 1 : 0)
+          + (isIncidentTab && incidentDay !== fleetDayKey() ? 1 : 0)
+          + (isIncidentTab && incidentSort !== INCIDENT_SORTS[0].key ? 1 : 0)
+          + (activeTab === "fuel" && fuelDay !== fleetDayKey() ? 1 : 0)
+          + (activeTab === "fuel" && fuelFilter !== "all" ? 1 : 0)
+        }
+      >
         {!isIncidentTab && (
         <>
-        {/* Search */}
-        <div className="sp4-search-wrap">
-          <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            className="sp4-search"
-            type="text"
-            placeholder="Search vehicle reg…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          {search && <button className="sp4-search-clear" onClick={() => setSearch("")}>✕</button>}
-        </div>
-
         <div className="sp4-filter-divider" />
 
         {/* Time filter */}
@@ -1747,7 +1780,7 @@ export default function SensorPanel() {
           </>
         )}
 
-      </div>
+      </FilterBar>
 
       {/* ── Body ─────────────────────────────────────────────── */}
       <div className="sp4-body">
@@ -1833,6 +1866,7 @@ export default function SensorPanel() {
                 orgId={orgId}
                 onReload={openRepairs.reload}
                 canResolve={can("repair:resolve")}
+                canWorkAny={can("repair:work_any")}
                 canAssign={canRepairAssign}
                 currentUserId={user?.id ?? null}
               />

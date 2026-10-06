@@ -9,6 +9,36 @@
  * gone, and both cards say "these two things belong to each other" with a
  * column gap instead of a line drawn between them.
  *
+ * 2026-09-21 · the roster takes the User accounts ROW.
+ *
+ * This grid already shared that table's grammar — same type, same rhythm, same
+ * 10/14 — and still read as another product beside it. Four things were doing
+ * that, and all four are now the roster's:
+ *
+ *   · the hairline. #dde1e7 (--color-border) against the roster's #e6e9ee; a
+ *     step heavier, drawn nine times down a page, and the rules arrive before
+ *     the figures do. `--dg-line` is the roster's value now.
+ *   · the head band. White over white rows leaves a STICKY head invisible
+ *     until a row slides under it. `--dg-head` is `--ua-raised`, #f5f7fa.
+ *   · the identity cell. A 26px disc and a bare name became the roster's 30px
+ *     disc with the name stacked over what identifies them — the employee
+ *     number and licence, which this page could already SEARCH by and never
+ *     showed, so a search by staff number returned a row that could not be
+ *     checked against the number typed.
+ *   · the status badge. `.ua-badge`: a pill in sentence case at 11.5/600 with
+ *     the dot inside it, rather than a 4px tracked-uppercase tag. The dot is
+ *     what survives a glance down forty rows, and this row already asks the
+ *     eye to separate an amber column from a red one.
+ *
+ * Selection moved with them: an accent wash rather than --elevated, which was
+ * hover's grey at a slightly different amount with a bar on it.
+ *
+ * NOT taken, deliberately: the hued avatar and the pager. The roster spends no
+ * other colour, so a hue per person costs it nothing; this row carries a status
+ * badge, a rating star and two coloured incident columns, and a fifth hue that
+ * means nothing would read as a signal. The pager is the note below — slicing
+ * a ranked roster into pages threw the top of it away.
+ *
  * 2026-09-15 (fourth pass) · a VEHICLE column, the exports moved onto the
  * table, and names repaired. The unit a driver is posted to comes from the
  * roster payload (fleet-server: the registration on
@@ -30,8 +60,8 @@
  * Monitor's own #0f1118 — about a fifth of that step — measured 1.05:1 against
  * the surface where the old line measured 1.6.
  *
- * No pager: the grid grows with `.dr-grid-more`, the Maintenance tab's
- * `.sp4-table-more`. Slicing a ranked roster into pages meant the control for
+ * (2026-10-03: superseded — the grid pages with Prev / Next again, and sits
+ * inside the Fuel report gutter in a box; see `.dr-pager` and `.dr-grid-card`.) It was load-more because paging meant the control for
  * "who is behind the top fifteen" threw the top fifteen away.
  *
  * Ten columns: the density band's ceiling is 1140, measured at the seam.
@@ -132,8 +162,10 @@
   --tone-speed: #eda100;   /* chart slot 4 */
   --tone-tonnes:  #1f9d55; /* chart slot 2 */
   --tone-mileage: #0891b2; /* chart slot 6 */
-  --tone-up:      #1f9d55;
-  --tone-down:    #e34948;
+  /* Deep enough to be read as TEXT on white (the deltas and "Clean" badge):
+     #1f9d55 / #e34948 measured 3.5 and 3.9:1. */
+  --tone-up:      #15803d;
+  --tone-down:    #c42b2b;
 
   flex: 1;
   min-height: 0;
@@ -158,8 +190,15 @@
   --tone-up:      #22c55e;
   --tone-down:    #e66767;
 }
+/* The Fuel report's gutter (operator, 2026-10-03): `--sp4-gutter` there,
+   4% of the viewport held between 20 and 64px, and 16px on a phone. This page
+   used `--app-gutter`, which nothing defines, so it sat at its 16px fallback
+   at every width and the two pages next to each other in the nav did not
+   line up. Named once here; every rule that needs the page edge reads it. */
+.drivers-page { --dr-gutter: clamp(20px, calc(var(--vw, 1vw) * 4), 64px); }
+@media (max-width: 767px) { .drivers-page { --dr-gutter: 16px; } }
 .drivers-page__inner {
-  padding: 12px var(--app-gutter, 16px) calc(64px + 16px);
+  padding: 16px var(--dr-gutter) calc(var(--app-footer-h, 64px) + 16px);
 }
 
 /* ── Header ─────────────────────────────────────────────────── */
@@ -234,123 +273,207 @@
   white-space: nowrap;
 }
 .dr-row:last-child td { border-bottom: none; }
-.dr-driver { display: inline-flex; align-items: center; gap: 8px; }
-.dr-driver__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+/* `.ua-who`'s measurements: a 30px disc at a 10px gap, and the name stacked
+   over what identifies them. What the disc actually buys is a fixed anchor
+   down the left edge of the column, which is what makes a long table scannable
+   by name — at 26px it was reading as a bullet. */
+.dr-driver { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.dr-driver__ident { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dr-driver__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+/* The staff number and licence, at `.ua-row__email`'s step: 11px on the label
+   tier. Quiet enough that the column still reads as a column of names. */
+.dr-driver__sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dg-label);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 170px;
+}
 .dr-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   border: 1.5px solid;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 800; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }
 .dr-star { color: #f59e0b; }
 
-/* ── Detail area — 2×2 grid: profile + tonnes on top, mileage + summary below ── */
-/* 10px, which is .an-grid's gap on Analytics. The 12 here put two more pixels
-   between four cards that are otherwise the same 324x18x box as that page's
-   KPI tiles, and a row of cards reads its gutter before it reads anything. */
-.dr-detail {
+/* ══ The selected driver: one strip, four cells ═════════════════════════════
+ * Hallmark · redesign 2026-10-03 · component: selected-driver strip
+ * genre: modern-minimal · theme: in-project --color-* tokens, preserved
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ * states: default · empty (no driver / loading) · live · engine off · no
+ *   vehicle · chart hover + focus (TrendLine, below) · threshold tones
+ * contrast: meter values and labels are ink / --text-2 on --card (≥ 4.8:1);
+ *   tones only on 4px bars (graphics, ≥ 3:1) and the tier pill (darkened ink)
+ *
+ * Four cards with four borders and three gutters read as four separate
+ * things. They are four readings of ONE driver, so they share a frame and the
+ * cells are split by hairlines: the 1px grid gap shows the line colour through
+ * and every cell paints the card over it. That works in every layout below
+ * (4 across, 1 + 3, stacked) without a rule per edge.
+ *
+ * The profile cell lost the three ring gauges and the radar. Ring gauges at
+ * 44–68px spent their area on a circle to show one number each; the radar
+ * plotted km/h, °C and percentages on one shared scale, which they do not
+ * have. Five labelled meters show the same five readings, each with its unit.
+ * ────────────────────────────────────────────────────────────────────────── */
+.dr-strip {
+  --strip-line: #e6e9ee;            /* the roster's hairline, see --dg-line */
+  --tier-good: var(--tone-up);
+  --tier-fair: var(--accent-warn, #b45309);
+  --tier-new:  var(--text-2);
+  --meter-track: color-mix(in srgb, var(--ink) 7%, transparent);
+  --meter-ok:    var(--tone-tonnes);
+  --meter-warn:  var(--tone-speed);
+  --meter-crit:  var(--tone-theft);
+  --meter-info:  var(--tone-mileage);
+  --meter-plain: color-mix(in srgb, var(--text-2) 70%, transparent);
+
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  gap: 10px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)) minmax(0, 0.9fr);
+  gap: 1px;
+  background: var(--strip-line);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
 }
-/* Same min-width:auto trap as .dr-layout — fixed-size gauges/charts inside a
-   card must not force the column past a narrow viewport. */
-.dr-detail > * { min-width: 0; max-width: 100%; overflow-x: auto; }
-@media (max-width: 980px) { .dr-detail { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* One card per row: `grid-auto-rows: 1fr` above exists to keep four tiles on
-   one line the same height, and at one column there is nothing left to line up
-   with — it was only padding every card out to the tallest one's height. */
-@media (max-width: 560px) {
-  .dr-detail { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+.app--dark .dr-strip {
+  --strip-line: color-mix(in srgb, var(--border) 65%, var(--card));
+  --tier-fair: #f59e0b;
+}
+.dr-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: var(--card);
+}
+.dr-cell__empty {
+  flex: 1 1 auto;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 96px;
+  font-size: 12px; color: var(--text-2); text-align: center;
 }
 
-/* Column, so the gauges below can claim whatever height is left once the head
-   has taken what it needs. The cards in this row are stretched to a common
-   height and the gauge block is a fixed-size SVG: without this it sat at its
-   natural height and left 30px of nothing under it — the single largest hole
-   on the page. Same fix .an-kpi__spark uses on Analytics. */
-.dr-profile { display: flex; flex-direction: column; }
-.dr-profile__head { display: flex; gap: 10px; margin-bottom: 8px; flex-shrink: 0; }
+/* Sized by the strip's OWN width, not the viewport's. The sidebar takes a
+   different share of the screen open and folded, so a 1280 screen can leave
+   this strip anywhere from ~1000 to ~1200px — and the five meters are the
+   first thing to crush when the profile cell narrows.
+   1 + 3: the profile takes the top row and the three readings share the one
+   under it. */
+.dr-layout { container: drstrip / inline-size; }
+@container drstrip (max-width: 1149px) {
+  .dr-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dr-profile { grid-column: 1 / -1; }
+}
+@container drstrip (max-width: 600px) {
+  .dr-strip { grid-template-columns: minmax(0, 1fr); }
+  .dr-cell { padding: 12px 14px; }
+}
+
+/* ── Profile cell ─────────────────────────────────────────────────────────── */
+.dr-profile__head { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+/* The ring is the rating tier, which is earned; the disc itself stays neutral
+   so a colour per person never reads as a signal. */
 .dr-profile__avatar {
-  width: 48px; height: 48px; border-radius: 50%;
-  border: 2px solid;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 17px; font-weight: 800; flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  font-size: 15px; font-weight: 800; letter-spacing: 0.01em;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text-2) 10%, transparent);
+  border: 2px solid var(--tier, var(--tier-new));
 }
 .dr-profile__ident { min-width: 0; flex: 1; }
-.dr-profile__namerow { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
-.dr-profile__name { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-profile__namerow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dr-profile__name {
+  font-size: 14px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .dr-profile__pill {
-  font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
-  border-radius: 20px; padding: 1px 6px; flex-shrink: 0; white-space: nowrap;
+  flex-shrink: 0; white-space: nowrap;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 2px 7px; border-radius: 999px;
+  color: color-mix(in srgb, var(--tier, var(--tier-new)) 80%, var(--ink));
+  background: color-mix(in srgb, var(--tier, var(--tier-new)) 12%, transparent);
 }
-.dr-profile__meta { font-size: 10.5px; color: var(--text-2); margin: 1px 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-tier--good { --tier: var(--tier-good); }
+.dr-tier--fair { --tier: var(--tier-fair); }
+.dr-tier--new  { --tier: var(--tier-new); }
+.dr-profile__meta {
+  margin: 2px 0 3px;
+  font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .dr-rating { display: flex; align-items: center; gap: 2px; }
-.dr-rating__num { font-size: 10.5px; color: var(--text-2); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.dr-rating__star { fill: none; stroke: var(--tone-speed); stroke-width: 1.5; }
+.dr-rating__star--on { fill: var(--tone-speed); }
+.dr-rating__num { font-size: 11px; color: var(--text-2); margin-left: 4px; font-variant-numeric: tabular-nums; }
 
-/* Gauges + radar — ported from the dash RightPanel ManagerCard, themed with the
-   page's light/dark-safe tokens. */
-/* Grid, not flex, for one reason: a percentage in `grid-template-columns`
-   resolves against the grid container, so the radar column can be told to take
-   a share of the card and be clamped at both ends. The same percentage on a
-   flex item's width has no definite box to resolve against. */
-.dr-gaugewrap {
+/* ── Live meters ──────────────────────────────────────────────────────────── */
+/* Pinned to the foot of the cell, so in a row of equal-height cells the slack
+   sits between who the driver is and what the truck is doing now. */
+.dr-live {
+  margin-top: auto;
+  padding-top: 12px;
+}
+.dr-live__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 8px;
+}
+.dr-live__state {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+}
+.dr-live__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.dr-live--on .dr-live__state { color: var(--ink); }
+.dr-live--on .dr-live__dot { background: var(--meter-ok); }
+.dr-live__unit {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px; letter-spacing: 0.02em; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dr-meters {
+  list-style: none; margin: 0; padding: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  flex: 1 1 auto;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
 }
-.dr-gauges { display: flex; gap: 4px; flex: 1; min-width: 0; }
-.dr-gauge { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; min-width: 0; }
-/* `min(..., 100%)` is what keeps this honest: the ring grows toward its target
-   but never past the column it is in, so a narrower card gets a smaller ring
-   instead of three rings overlapping each other and the radar. */
-.dr-gauge__ring {
-  position: relative;
-  width: min(var(--dr-ring, 44px), 100%);
-  aspect-ratio: 1;
-  height: auto;
+.dr-meter { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dr-meter__label {
+  font-size: 10.5px; font-weight: 600; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dr-gauge__svg { display: block; width: 100%; height: 100%; }
-.dr-gauge__val {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums;
+.dr-meter__value {
+  font-size: 15px; font-weight: 700; line-height: 1.1; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.dr-gauge__lbl {
-  font-size: 8px; color: var(--text-2); letter-spacing: 0.04em; text-align: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+.dr-meter__unit { margin-left: 4px; font-weight: 400; }
+.dr-meter--off .dr-meter__value { color: var(--text-3); }
+.dr-meter__track {
+  display: block; height: 4px; margin-top: 2px;
+  border-radius: 2px; background: var(--meter-track); overflow: hidden;
 }
-.dr-radar { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-.dr-radar__svg { display: block; width: var(--dr-radar, 72px); max-width: 100%; height: auto; }
-.dr-radar__lbl { font-size: 8px; font-weight: 600; color: var(--text-2); letter-spacing: 0.08em; margin-top: -4px; }
-
-/* ── Instruments at four columns ───────────────────────────────────────────
- *
- * The gauge row measured 51px tall inside a 103px block: the card is stretched
- * to the row's height, the gauges sat at their phone size in the middle of it,
- * and the 52px left over went half above and half below them. They are sized
- * to the space instead now — 44 → 68 on the rings, 72 → 96 on the radar, which
- * is what fits under a 45px head without making this card the tallest in the
- * row and dragging the other three up with it.
- *
- * 981px, because that is where .dr-detail goes to four columns; below it the
- * cards are half the width and the phone sizes are the right ones.
- * ────────────────────────────────────────────────────────────────────────── */
-@media (min-width: 981px) {
-  /* Targets, not fixed sizes — both are capped by the space available above. */
-  .dr-profile { --dr-ring: 68px; --dr-radar: 100%; }
-  /* The radar's share of the card, floored so it stays legible on a 1024 screen
-     and ceilinged so it stops growing once the drawing is big enough to read. */
-  .dr-gaugewrap { grid-template-columns: minmax(0, 1fr) clamp(72px, 28%, 96px); }
-  .dr-gauge { gap: 5px; }
-  .dr-gauge__val { font-size: 15px; }
-  .dr-gauge__lbl { font-size: 9px; letter-spacing: 0.05em; }
-  /* The overlap that pulled the caption up into the radar's bottom vertex was
-     tuned for a 68px drawing; at 91px the vertex sits lower. */
-  .dr-radar__lbl { font-size: 9px; margin-top: -6px; }
+/* transform, not width: the value changes every few seconds off the live
+   stream, and a width transition re-lays-out the cell on every tick. */
+.dr-meter__fill {
+  display: block; height: 100%;
+  background: var(--meter-tone, var(--meter-plain));
+  transform: scaleX(var(--share, 0));
+  transform-origin: left center;
+  transition: transform 400ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.dr-meter--ok   { --meter-tone: var(--meter-ok); }
+.dr-meter--warn { --meter-tone: var(--meter-warn); }
+.dr-meter--crit { --meter-tone: var(--meter-crit); }
+.dr-meter--info { --meter-tone: var(--meter-info); }
+/* A breach is the one place the figure itself takes the tone. */
+.dr-meter--crit .dr-meter__value { color: var(--dg-theft-ink, var(--tone-down)); }
+@container drstrip (max-width: 400px) {
+  .dr-meters { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dr-meter__fill { transition: none; }
 }
 
 /* Trend chart & summary tiles — stat-chart tiles that mirror the Analytics page
@@ -379,12 +502,12 @@
 
 .dr-statchart__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
 .dr-statchart__label { font-size: 11px; color: var(--text-2); font-weight: 600; }
-.dr-statchart__delta { font-size: 10px; font-weight: 700; border-radius: 20px; padding: 1px 6px; }
+.dr-statchart__delta { font-size: 11px; font-weight: 700; border-radius: 20px; padding: 1px 6px; }
 .dr-statchart__delta.up   { color: var(--tone-up);   background: color-mix(in srgb, var(--tone-up) 12%, transparent); }
 .dr-statchart__delta.down { color: var(--tone-down); background: color-mix(in srgb, var(--tone-down) 12%, transparent); }
 .dr-statchart__value { font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
 .dr-statchart__unit { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.dr-statchart__sub { font-size: 10px; color: var(--text-2); margin: 1px 0 6px; }
+.dr-statchart__sub { font-size: 11px; color: var(--text-2); margin: 1px 0 6px; }
 
 /* The grid takes the whole row.
  *
@@ -447,7 +570,16 @@
    * Light needs no such split: --color-border is #dde1e7 there, which is
    * already `--sp4-line`'s own light value. The token exists in both themes so
    * every rule can name one thing. */
-  --dg-line: var(--color-border, #dde1e7);
+  /* #e6e9ee is the User accounts roster's own `--ua-line`, and it is a step
+     lighter than --color-border's #dde1e7. That difference is the whole reason
+     the two tables read as different products at a glance: nine of these rules
+     down a roster at #dde1e7 arrive before the figures do. */
+  --dg-line: #e6e9ee;
+
+  /* The head is a BAND, not white. `--ua-raised`: white heads over white rows
+     leave the pinned band invisible until a row slides under it, and this head
+     is sticky. */
+  --dg-head: #f5f7fa;
 
   --dg-theft-ink: var(--accent-crit, #b91c1c);   /* ~5.9:1 on white */
   --dg-speed-ink: var(--accent-warn, #b45309);   /* ~4.8:1 on white */
@@ -456,6 +588,7 @@
   --dg-cell:  #c7d1dd;   /* ~11:1 */
   --dg-label: #9aa7b6;   /* ~7.5:1 */
   --dg-line:  #0f1118;   /* `--sp4-line` — see the light block above */
+  --dg-head:  var(--card);
   /* On the dark card the chart tones already measure 6.1 and 6.4 — no split
      needed, so these point straight back at them and there is one value in
      play rather than two that can drift. */
@@ -468,29 +601,44 @@
    wrapper were not there, so the desktop bar is exactly what it was. The
    wrapper exists only so the mobile block below has something to make a
    scrolling row out of. */
-.dr-filters__chips { display: contents; }
-/* `.sp4-filter-chip`: a 20px lozenge at 4/10, body size at 600, on the card
-   surface, and the accent WASH for the active one rather than an ink outline — these chips rank
-   the grid, so the one that is on should read the way a chosen filter reads
-   everywhere else in the product. */
+/* ── Rank by: one segmented control ───────────────────────────────────────
+ * Hallmark · redesign 2026-10-03 · component: segmented control
+ * states: default · hover · focus-visible · active (pressed) · on (aria-pressed)
+ *   (disabled / loading / error / success: n/a — it re-sorts rows in memory)
+ *
+ * Four loose pills read as filters that stack; the grid is ranked by exactly
+ * one measure at a time, so the four sit in one track and the chosen one is
+ * lifted onto the card surface.
+ */
+.dr-filters__chips { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dr-rankby__label { font-size: 12px; font-weight: 600; color: var(--dg-label); white-space: nowrap; }
+.dr-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
 .dr-chip {
   font-family: var(--font); font-size: 12.5px; font-weight: 600;
-  padding: 4px 10px; border-radius: 20px;
-  border: 1px solid var(--border);
-  /* A wash of the INK, which is white on the dark theme and near-black on the
-     light one — so the same 3% that lifts a dark chip DARKENS a light one, and
-     the label on it measured 4.17:1. The light theme takes the card surface
-     instead, where it measures 6. */
-  background: var(--card);
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
   color: var(--dg-label);
-  cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms var(--ease-out, ease-out), background-color 120ms var(--ease-out, ease-out);
 }
-.dr-chip:hover { border-color: var(--border-hi); color: var(--ink); background: var(--elevated); }
-.dr-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.dr-chip--active {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+.dr-chip:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.dr-chip:active { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.dr-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; transition: none; }
+.dr-chip--active,
+.dr-chip--active:hover {
+  color: var(--ink);
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 /* The search field, at Sensor Monitor's measurements: 8px radius, a
@@ -545,12 +693,17 @@
  * edge to edge the way they do on Maintenance; the content still lines up with
  * the filters above it, because the inset is the same token.
  */
+/* 2026-10-03 · back INSIDE the gutter. The full-bleed break-out above was
+   Sensor Monitor's; this page now keeps the Fuel report's margins, and there
+   the tables are boxed — a hairline frame at the strip's radius, so the strip
+   and the table read as two panels on one margin. `--dg-gutter` is now the
+   box's own inner inset for the edge cells, not the page's. */
 .dr-grid-card {
-  /* The gutter this page is padded by, named once so the break-out and the
-     edge cells cannot drift apart. */
-  --dg-gutter: var(--app-gutter, 16px);
-  margin-inline: calc(var(--dg-gutter) * -1);
-  border-top: 1px solid var(--dg-line);
+  --dg-gutter: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: clip;
 }
 .dr-grid-scroll { overflow-x: auto; }
 .dr-grid { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 720px; }
@@ -563,7 +716,7 @@
   /* The head is a BAND now rather than the top of a card, so it takes the
      surface a step over the page the way `.sp4-table thead th` does — it must
      stay opaque either way, since rows scroll under it. */
-  background: var(--card);
+  background: var(--dg-head);
   text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--dg-label); padding: 9px 14px; border-bottom: 1px solid var(--dg-line);
@@ -642,68 +795,58 @@
 
 .dr-grid__empty { text-align: center; color: var(--dg-label); font-size: 12.5px; padding: 32px 0; }
 
-/* ── Load more ────────────────────────────────────────────────────────────
+/* ── Pager: Prev · Page n of N · Next ────────────────────────────────────────
+ * Hallmark · component: pager · states: default · hover · focus-visible ·
+ *   active (pressed) · disabled (first / last page)
+ *   (loading / error / success: n/a — paging is an in-memory slice)
  *
- * `.sp4-table-more`, which is what the Maintenance tab's tables use: the
- * control sits under the last row, centred on the table's own width, closed
- * with the same hairline the head draws. The pager it replaces — first/last
- * arrows and a page count — cut a ranked roster into slices, so reading past
- * the fifteenth driver meant throwing the first fifteen off the screen.
- *
- * The tally rides beside the button rather than at the far edge: it qualifies
- * the button ("more of what, and how much"), and a figure pinned to the
- * opposite side of a 1,300px row is a figure nobody reads.
+ * Sensor Monitor's pager (`.sp4-pagination`), operator 2026-10-03, replacing
+ * the load-more row. Centred under the last row, closed with the row hairline.
+ * The two buttons are fixed-width and stay put at either end (disabled, not
+ * removed), so clicking through pages never moves the target under the
+ * pointer.
  */
-.dr-grid-more {
-  /* One centred group — "Load less · 30 of 549 · Load more" — not a pager with
-     a control pinned to each end of a 1,160px row. The tally is what both
-     buttons act on, and a figure half a screen away from the thing it
-     qualifies is a figure nobody reads. Sitting together they read as one
-     sentence, which is what they are.
-     Either button can be absent (less before the list is grown, more once it
-     is exhausted), so the group re-centres on what is left rather than leaving
-     a hole where the other was. */
+.dr-pager {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
   gap: 12px;
-  padding: 12px var(--dg-gutter, 16px);
+  padding: 10px var(--dg-gutter, 16px);
   border-top: 1px solid var(--dg-line);
 }
-.dr-grid-more__count {
+.dr-pager__info {
   font-size: 12.5px;
   color: var(--dg-label);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-/* `.sp4-page-btn`'s own measurements: 5/12 at a 6px radius, a translucent fill
-   on the card, body size at 600. */
-.dr-morebtn {
+.dr-pager__btn {
+  min-width: 76px;
   padding: 5px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   color: var(--dg-cell);
+  font-family: var(--font);
   font-size: 12.5px;
   font-weight: 600;
-  font-family: var(--font);
+  white-space: nowrap;
   cursor: pointer;
-  transition: background-color .15s, border-color .15s, color .15s;
+  transition: background-color 120ms var(--ease-out, ease-out), border-color 120ms var(--ease-out, ease-out), color 120ms var(--ease-out, ease-out);
 }
-.dr-morebtn:hover {
+.dr-pager__btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) 9%, transparent);
   border-color: var(--border-hi);
   color: var(--ink);
 }
-.dr-morebtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* The undo, and drawn as one: same size and shape so the pair reads as a set,
-   but no fill and the label tier, because giving back a step is the lesser of
-   the two things anybody comes down here to do. */
-.dr-morebtn--less {
-  background: none;
-  color: var(--dg-label);
+.dr-pager__btn:active:not(:disabled) { transform: translateY(1px); }
+.dr-pager__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; transition: none; }
+/* 0.45, Sensor Monitor's floor: unavailable, not blank. */
+.dr-pager__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  .dr-pager__btn { transition: none; }
+  .dr-pager__btn:active:not(:disabled) { transform: none; }
 }
-.dr-morebtn--less:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 
 /* ══ Chart — smooth, interactive, and the same shape it is measured in ══════
  *
@@ -782,7 +925,7 @@
  * ────────────────────────────────────────────────────────────────────────── */
 .dr-summary { display: flex; flex-direction: column; }
 .dr-summary__clean {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--tone-up);
   background: color-mix(in srgb, var(--tone-up) 12%, transparent);
   border-radius: 20px; padding: 2px 7px;
@@ -800,7 +943,7 @@
   color: var(--ink); font-variant-numeric: tabular-nums;
 }
 .dr-summary__caption {
-  font-size: 10px; line-height: 1.3; color: var(--text-2);
+  font-size: 11px; line-height: 1.3; color: var(--text-2);
 }
 
 /* The incident list is this card's data region, the way the sparkline is the
@@ -809,7 +952,7 @@
    stretched row collected into one 58px gap under the figure. */
 .dr-summary__incidents {
   flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center;
-  border-top: 1px solid var(--border); padding-top: 6px;
+  border-top: 1px solid var(--strip-line, var(--border)); padding-top: 6px;
 }
 /* Label and count with a gutter between them — no rule per row. Three columns
    so the dot never pushes the name out of alignment between rows. */
@@ -943,35 +1086,42 @@
   background: var(--elevated);
   box-shadow: inset 2px 0 0 var(--accent);
 }
+/* A wash of the ACCENT, not --elevated, which is the roster's `.ua-row--open`.
+   Hover is a grey wash and selection was a slightly different grey wash with a
+   bar on it — two states separated by 0.5% of one hue. Tinting the selected
+   row toward the accent it is already edged with makes the pair differ by
+   colour rather than by amount. */
 .dr-grid tbody tr.dr-grid__row--selected {
-  background: var(--elevated);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* Avatar — neutral. Colour on this page is spent on things that mean
  * something: status, rating tier, fuel theft, overspeed. An identity-hashed
  * hue spends it on nothing and reads as a sixth signal. */
-.dr-avatar,
-.dr-profile__avatar {
+.dr-avatar {
   color: var(--text-2);
   background: color-mix(in srgb, var(--text-2) 12%, transparent);
 }
 /* The roster avatar has no ring to inherit, so it draws its own. The profile
-   avatar keeps its inline ring — that one is the rating tier, which is earned. */
+   avatar's ring is the rating tier — see .dr-profile__avatar. */
 .dr-avatar { border-color: color-mix(in srgb, var(--text-2) 38%, transparent); }
 
-/* `.sp4-pill`: a 4px tag at 11px/800, uppercase and tracked, with a wash
-   behind the outline. The 20px lozenge it replaces was the only pill-shaped
-   thing left inside a square grid. */
+/* `.ua-badge`: the User accounts roster's status badge, dot and all.
+ *
+ * Sentence case at 11.5/600 rather than tracked uppercase at 11/800 — a status
+ * is a word, and SHOUTING it in a row that already carries two coloured
+ * incident columns adds emphasis where the emphasis is elsewhere. The dot is
+ * what survives being glanced at down a column of forty rows; the wash carries
+ * its meaning in its fill, which is the part a red-green reader cannot use. */
 .dr-grid__badge {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 3px 9px;
-  border-radius: 4px;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px 3px 8px;
+  border-radius: 999px;
   white-space: nowrap;
   /* The tone, driven down the lightness axis for the light page.
      The badge sits on a 10% wash of its OWN hue, which tints the ground toward
@@ -986,6 +1136,18 @@
   border: 1px solid color-mix(in srgb, var(--tone, var(--dg-label)) 27%, transparent);
 }
 .app--dark .dr-grid__badge { color: var(--tone, var(--dg-label)); }
+
+/* The dot keeps the PURE hue; only the words take the darkened ink. Same split
+   the roster makes, and the reason is the same: a 7px disc is a graphic and
+   clears its 3:1 at the undarkened tone, while the label beside it is 11.5px
+   text sitting on a wash of that tone and needs 4.5. */
+.dr-grid__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone, var(--dg-label));
+}
 
 /* The tones, per status and per theme. Light first, dark under .app--dark —
    this file's convention. The light steps are App.css's own accents, which is
@@ -1028,8 +1190,46 @@
 .dr-grid td.dr-incident--theft { color: var(--dg-theft-ink); }
 .dr-grid td.dr-incident--speed { color: var(--dg-speed-ink); }
 
+/* ── Rank and the ranked column ──────────────────────────────────────────────
+ * Hallmark · redesign 2026-10-03 · the roster as a ranking
+ *
+ * Sorting by a measure numbers the rows (1 = best on it) and draws a bar in
+ * that column against the roster's largest value, so the gap between first
+ * and fifth is visible without subtracting. One bar column at a time: the
+ * column the order comes from. The bar sits under the figure and is shorter
+ * than the driver cell's two lines, so switching the ranking never changes a
+ * row's height.
+ */
+.dr-rank {
+  flex: none;
+  width: 20px;
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dg-label);
+  font-variant-numeric: tabular-nums;
+}
+.dr-grid__row--selected .dr-rank { color: var(--accent); }
+.dr-metric { display: inline-flex; flex-direction: column; gap: 4px; vertical-align: middle; }
+.dr-grid td.dr-num--ranked { color: var(--ink); font-weight: 600; }
+.dr-metric__track {
+  display: block;
+  width: 72px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.dr-metric__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform: scaleX(var(--share, 0));
+  transform-origin: left center;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .dr-grid__sort, .dr-caret, .dr-grid tbody tr { transition: none; }
+  .dr-grid__sort, .dr-caret, .dr-grid tbody tr, .dr-chip { transition: none; }
 }
 
 /* ── Mobile ─────────────────────────────────────────────────────────────────
@@ -1098,7 +1298,7 @@
     width: 100%;
   }
   .dr-search {
-    min-height: 40px;
+    min-height: var(--m-field);
     /* 16px stops iOS zooming the viewport when the field takes focus — a zoom
        that does not zoom back out, leaving the grid off the right edge. */
     font-size: 16px;
@@ -1113,17 +1313,17 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    margin-inline: calc(var(--app-gutter, 16px) * -1);
-    padding-inline: var(--app-gutter, 16px);
+    margin-inline: calc(var(--dr-gutter) * -1);
+    padding-inline: var(--dr-gutter);
   }
   .dr-filters__chips::-webkit-scrollbar { display: none; }
+  .dr-seg { flex-shrink: 0; }
   .dr-chip {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    min-height: 36px;
-    padding: 0 14px;
-    border-radius: 999px;
+    min-height: var(--m-chip);
+    padding: 0 12px;
     line-height: 1;
   }
 
@@ -1133,7 +1333,6 @@
      fixed-width gauge forcing the column wide. At one column per row there is
      nothing to force, and the property was drawing a scrollbar under cards
      that had nothing to scroll. */
-  .dr-detail > * { overflow-x: visible; }
   .dr-layout { margin-bottom: 18px; }
 }
 
@@ -1183,8 +1382,10 @@
      697 scroller with the desk type, 719 with the cells alone stepped down,
      and 695 with these, which is the number this breakpoint was tuned to. */
   .dr-grid thead th { font-size: 9.5px; letter-spacing: 0.04em; }
-  .dr-driver__name { max-width: 100px; }
-  .dr-driver__name { max-width: 108px; }
+  .dr-driver__name,
+  .dr-driver__sub { max-width: 108px; }
+  .dr-metric__track { width: 44px; }
+  .dr-rank { width: 16px; }
 }
 
 /* ── Roster: table → cards, PHONES ONLY ───────────────────────────────────
@@ -1210,9 +1411,13 @@
   /* The desk grid is full-bleed; a stack of bordered cards must not be, or
      the radius and the border are cut off at both screen edges. The break-out
      is undone here and the cards keep the page's padding. */
+  /* Cards are their own boxes, so the table's frame comes off — a bordered
+     box of bordered cards is two frames for one list. */
   .dr-grid-card {
-    margin-inline: 0;
-    border-top: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    overflow: visible;
   }
 
   /* A three-column grid, because six figures in two rows of three is the
@@ -1291,9 +1496,14 @@
   .dr-grid tbody td:nth-child(9) { grid-area: m5; }
   .dr-grid tbody td:nth-child(10) { grid-area: m6; }
   .dr-driver { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  /* The desk cap was 160px against a fixed column. Here the column is a third
-     of the screen and the name should use all of it. */
-  .dr-driver__name { max-width: none; flex: 1 1 auto; font-weight: 600; }
+  /* The desk cap was 170px against a fixed column. Here the column is a third
+     of the screen and the name should use all of it. The IDENT is the flex
+     child now — left on the name, this grew a box inside a box that was not
+     growing, and the second line clipped at 170px in the middle of a card
+     with room to spare. */
+  .dr-driver__ident { min-width: 0; flex: 1 1 auto; }
+  .dr-driver__name { max-width: none; font-weight: 600; }
+  .dr-driver__sub { max-width: none; }
 
   /* The window, then six labelled figures, label over value. The explicit
      left-align that used to be here is gone with the right-aligned numeric
@@ -1322,17 +1532,17 @@
      (same specificity, later in the file) had just promoted it to one. */
   .dr-grid tbody td.dr-when--none { color: var(--text-3); font-weight: 500; }
   .dr-grid tbody td.dr-veh { font-size: 12px; }
+  .dr-metric { display: flex; }
+  .dr-metric__track { width: 100%; }
   .dr-grid tbody td.dr-veh--posted { color: var(--dg-label); }
   .dr-grid tbody td.dr-veh--none { color: var(--text-3); }
 
-  /* The load-more row loses the card it used to sit inside, so it keeps the
-     page gutter and draws its own rule. The button takes the full width: it is
-     the only control down here and a centred 90px target on a phone is a
-     smaller thing to hit than it needs to be. */
-  /* The same centred group on a phone — the three of them measure about 250px
-     of a 335px column, so nothing has to stack. Only the hit areas grow. */
-  .dr-grid-more { gap: 10px; padding: 12px 2px 0; margin-top: 4px; }
-  .dr-morebtn { min-width: 0; padding: 9px 14px; font-size: 13px; }
+  /* The pager under the cards: no rule (the cards draw their own edges),
+     bigger targets, and the "1–10 of 18" range dropped — "Page 1 of 2" is
+     what fits between two thumb-sized buttons on a 320px screen. */
+  .dr-pager { padding: 8px 0 0; border-top: 0; gap: 10px; }
+  .dr-pager__btn { min-width: 0; padding: 9px 14px; font-size: 13px; }
+  .dr-pager__range { display: none; }
 
   /* The "no drivers match" row has one cell and no area name, so it would be
      auto-placed into whatever slot the template left over. It takes the whole

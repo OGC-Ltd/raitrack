@@ -54,11 +54,6 @@ export default function VehicleCamera({ vehicle, onClose }) {
             <p className="vcam__empty-head">
               {hasCamera ? "Camera fitted, no stream available" : "No camera on this unit"}
             </p>
-            <p className="vcam__empty-note">
-              {hasCamera
-                ? "This unit reports a camera, but no live stream is wired up yet."
-                : "No unit in this fleet reports a camera. This view will show a feed once camera hardware is fitted and reporting through Wialon."}
-            </p>
           </div>
         )}
       </div>

@@ -43,17 +43,12 @@
  *   under the cursor every time a selection changed.
  */
 export default function TableToolbar({
-  summary, note, loading = false, onReload, onCsv, onPdf, disabled = false, actions,
+  summary, loading = false, onReload, onCsv, onPdf, disabled = false, actions,
 }) {
   return (
     <div className="sp4-table-sub sp4-gridbar">
       <span>
         {summary}
-        {/* The filter, said out loud beside the buttons that would bake it into
-            a file. It is a second line on narrow screens and a trailing clause
-            on wide ones — the bar is flex, so it wraps rather than truncating a
-            sentence the reader needs whole. */}
-        {note && <span className="sp4-gridbar-note"> · {note}</span>}
       </span>
       <span className="sp4-gridbar-tools">
         {actions && (

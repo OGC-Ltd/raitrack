@@ -165,7 +165,7 @@ html, body {
   --color-card-inner:   rgba(243, 246, 249, 1);
   --color-text-primary: #0f172a;
   --color-text-sec:     #475569;
-  --color-text-muted:   #64748b;
+  --color-text-muted:   #5f6e83;  /* 4.8:1 on the grey card-inner; #64748b was 4.4 */
   --accent-ok:     #15803d;
   --accent-warn:   #b45309;
   --accent-crit:   #b91c1c;

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../services/api', () => ({ apiFetch: vi.fn() }));
 
 import { apiFetch } from '../services/api';
-import { _resetVehicleDay, cachedDay, decodeColumns, fuelFromLevel, loadDay, mergeNewer, summariseDay } from './vehicleDay';
+import { _resetVehicleDay, cachedDay, decodeColumns, fuelFromLevel, journeySoFar, loadDay, mergeNewer, summariseDay, movingSpans } from './vehicleDay';
 
 const DAY = '2026-09-20'; // a finished day
 const FROM = Date.parse('2026-09-19T21:00:00.000Z');
@@ -130,6 +130,7 @@ describe('summariseDay', () => {
     const s = summariseDay(day(Array(12).fill(100)), 400);
     expect(s.unit).toBe('%');
     expect(s.series[0].v).toBe(25);
+    expect(s.series[0].l).toBe(100);   // the crosshair reads litres either way
   });
 
   it('fills distance, moving time, engine hours and the first move', () => {
@@ -158,5 +159,27 @@ describe('summariseDay', () => {
     const s = summariseDay([], 400);
     expect(s.distanceKm).toBeNull();
     expect(s.usedL).toBeNull();
+  });
+});
+
+describe('journeySoFar', () => {
+  it('starts at the first move and counts the ground covered since', () => {
+    // Parked for three readings, then off north at 0.001° a minute
+    const pings = day(Array(11).fill(100)).map((p, i) => (i < 3 ? { ...p, speedKmh: 0, lat: -1 + 3 * 0.001 } : p));
+    const j = journeySoFar(pings);
+    expect(j.start).toEqual({ t: FROM + 3 * MIN, lat: pings[3].lat, lng: 36 });
+    expect(j.km).toBeCloseTo(0.78, 1);   // 7 hops of 0.001°
+  });
+
+  it('has no start and no distance on a day the unit stood still', () => {
+    expect(journeySoFar(day(Array(6).fill(100), { speed: 0 }))).toEqual({ start: null, km: 0 });
+  });
+});
+
+describe('movingSpans', () => {
+  const at = (min, speedKmh) => ({ t: min * 60_000, speedKmh });
+  it('joins touching moving readings and breaks at a stop or a long silence', () => {
+    const spans = movingSpans([at(0, 30), at(1, 40), at(2, 0), at(5, 20), at(6, 25), at(30, 25)]);
+    expect(spans).toEqual([{ start: 0, end: 120_000 }, { start: 300_000, end: 360_000 }]);
   });
 });

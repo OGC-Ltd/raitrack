@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import BrandLogo from "./BrandLogo";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useFleetCount } from "../../hooks/useFleetCount";
 import "./CompanySwitcherDropdown.css";
 
 export default function CompanySwitcherDropdown() {
-  const { companies, activeCompany, activeCompanyId, setActiveCompanyId } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { setActiveCompanyId } = useAppActions();
+  const { companies, activeCompany } = useCompanies();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 

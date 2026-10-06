@@ -42,7 +42,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, ReferenceDot, Label,
 } from "recharts";
-import { buildBoard } from "../../lib/weighbridgeBoard";
+import { buildBoard, roadUnits, FIELDS } from "../../lib/weighbridgeBoard";
 import "./WeighbridgeBoard.css";
 
 const HOUR = 3_600_000;
@@ -93,6 +93,31 @@ function gap(msVal) {
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
 }
 
+/** Rows the overdue list draws before it counts instead. */
+const MAX_LATE_ROWS = 8;
+
+const TYPE_WORD = { TRUCK: "Truck", TRACTOR: "Tractor" };
+
+/** One vehicle's block: round for a tractor, filled once a scale has weighed
+ *  it loaded, red past its run. */
+function blockClass(x) {
+  return "wbb-block"
+    + (x.type === "TRACTOR" ? " wbb-block--tractor" : "")
+    + (x.loaded ? "" : " wbb-block--out")
+    + (x.overdue ? " wbb-block--late" : "");
+}
+
+/** "KDA 512Q · Truck · to OPAPO · loaded 17.6 t · out 3h 12m of a usual 12h 48m" */
+function unitTitle(x) {
+  return [
+    x.plate,
+    TYPE_WORD[x.type],
+    x.destination && `to ${x.destination}`,
+    x.loaded ? (x.netKg != null ? `loaded ${t1(x.netKg)} t` : "loaded") : "signed out",
+    `out ${gap(x.elapsedMs)}` + (x.typicalMs != null ? ` of a usual ${gap(x.typicalMs)}` : ""),
+  ].filter(Boolean).join(" · ");
+}
+
 /* Africa/Nairobi explicitly, not the browser's zone. The fleet day these rows
    are bucketed into is Kenyan, and a viewer in another zone reading "15:28"
    off their own clock beside a chart drawn on Nairobi's would be comparing two
@@ -100,6 +125,11 @@ function gap(msVal) {
 const clock = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Africa/Nairobi",
 });
+/** "28 Sept, 21:35" — a moment that may be days back, in the fleet's zone. */
+const dayClockFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Africa/Nairobi",
+});
+const dayClock = (ms) => dayClockFmt.format(ms);
 
 function verdict(site, totals, spanDays, overdueRuns = 0, quiet = null) {
   if (site.silentAllDay) {
@@ -117,7 +147,7 @@ function verdict(site, totals, spanDays, overdueRuns = 0, quiet = null) {
     ? ` No weighing since ${clock.format(site.lastAt)}.`
     : "";
   const late = overdueRuns > 0
-    ? ` ${overdueRuns} lorr${overdueRuns === 1 ? "y has" : "ies have"} been out past ${gap(OVERDUE_MS)}.`
+    ? ` ${overdueRuns} vehicle${overdueRuns === 1 ? " has" : "s have"} been out longer than the run takes.`
     : "";
   const alert = Boolean(stalled || late);
 
@@ -528,8 +558,10 @@ function FeedRow({ e }) {
  *                 Sukari has four. Every one gets a card, because a bridge
  *                 that weighed nothing is a card somebody needs and a board
  *                 drawn from the rows alone would simply not mention it.
+ * @param dispatched the server's /weighments/dispatched answer (the trucks and
+ *                 tractors FactorySuite signed out and not yet back), or null.
  */
-export default function WeighbridgeBoard({ rows, from, to, centres, loading }) {
+export default function WeighbridgeBoard({ rows, from, to, centres, loading, dispatched = null }) {
   /* `Date.now()` is read once per build rather than per render: the elapsed
      times below would otherwise disagree between two cards drawn in the same
      paint, and the span's figures do not move between them either. */
@@ -539,46 +571,54 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading }) {
   );
   const { totals, sites, flow, transit, activity, closed, asOf, spanDays, axis } = board;
 
-  /* The lorries on the road, grouped by the yard that loaded them.
-   *
-   * Built off the SITE list rather than off the transit list, so a yard that
-   * dispatched nothing still gets a line saying so — the reading somebody is
-   * looking for when the mill is short and wants to know who is not sending.
-   * The mill itself is left out: it is where these lorries are going.
-   */
-  const roadBySite = useMemo(() => sites
-    .filter(s => !s.factory)
-    .map(s => {
-      const trucks = transit.filter(x => x.code === s.code);
-      return {
-        code: s.code,
-        name: s.name,
-        trucks,
-        kg: trucks.reduce((n, x) => n + (x.netKg ?? 0), 0),
-      };
-    }), [sites, transit]);
-
-  const overdue = useMemo(
-    () => transit.filter(x => x.elapsedMs >= OVERDUE_MS),
-    [transit],
+  /* Every vehicle out on a run to the mill: FactorySuite's dispatches (trucks
+     and tractors signed out, from the webhook) merged with the transfer
+     tickets loaded at a yard and not yet weighed in. See lib/weighbridgeBoard
+     `roadUnits`. A closed span has nothing "out", so only tickets count there. */
+  const units = useMemo(
+    () => roadUnits(transit, closed ? [] : (dispatched?.units ?? []), OVERDUE_MS),
+    [transit, dispatched, closed],
   );
+  const unitCounts = useMemo(() => ({
+    trucks:   units.filter(u => u.type === "TRUCK").length,
+    tractors: units.filter(u => u.type === "TRACTOR").length,
+  }), [units]);
+
+  /* Grouped by yard. Built off the SITE list rather than off the units, so a
+     yard with nothing out still gets a line saying so — the reading somebody
+     is looking for when the mill is short. The mill itself is left out: it is
+     where these vehicles are going. Runs sent to a farm get one "Fields" row,
+     drawn only when there is one: their cane comes to the mill's own scale. */
+  const roadBySite = useMemo(() => {
+    const out = sites
+      .filter(s => !s.factory)
+      .map(s => {
+        const trucks = units.filter(u => u.code === s.code);
+        return { code: s.code, name: s.name, trucks, kg: trucks.reduce((n, x) => n + (x.netKg ?? 0), 0) };
+      });
+    const fields = units.filter(u => u.code === FIELDS || !sites.some(s => s.code === u.code && !s.factory));
+    if (fields.length) out.push({ code: FIELDS, name: "Fields", trucks: fields, kg: 0 });
+    return out;
+  }, [sites, units]);
+
+  const overdue = useMemo(() => units.filter(u => u.overdue), [units]);
   /* The SHORTEST wait in the set, which is what makes the header honest as a
-     "≥": every lorry in the panel has been out at least this long. The longest
-     would be the more alarming number and the less true one. */
+     "≥": every vehicle in the panel has been out at least this long. The
+     longest would be the more alarming number and the less true one. */
   const overdueFloor = overdue.length ? Math.min(...overdue.map(x => x.elapsedMs)) : null;
-  /* Overdue lorries per yard, keyed by centre — the same set the rail's panel
+  /* Overdue vehicles per yard, keyed by centre — the same set the rail's panel
      lists, so a card and that panel can never disagree about which yards have
      something outstanding. */
   const overdueByCode = useMemo(
     () => overdue.reduce((m, x) => m.set(x.code, (m.get(x.code) ?? 0) + 1), new Map()),
     [overdue],
   );
-  const overdueBySite = useMemo(
-    () => roadBySite
-      .map(r => ({ ...r, trucks: r.trucks.filter(x => x.elapsedMs >= OVERDUE_MS) }))
-      .filter(r => r.trucks.length > 0),
-    [roadBySite],
-  );
+
+  /* How live the dispatch feed is. FactorySuite sent no cane dispatch from 20
+     to 26 Sep 2026; when that happens the panel must say so, or an empty
+     "Fields" row reads as a quiet day rather than a silent feed. */
+  const lastDispatchAt = dispatched?.lastDispatchAt ? Date.parse(dispatched.lastDispatchAt) : null;
+  const feedQuiet = !closed && dispatched && (lastDispatchAt == null || asOf - lastDispatchAt > 24 * HOUR);
 
   if (!sites.length) {
     return (
@@ -835,67 +875,62 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading }) {
 
           <section className="wbb-panel">
             <h4 className="wbb-panel__h">
-              Trucks on the road to the mill
-              <span className="wbb-panel__n">{transit.length}</span>
+              Vehicles on the road to the mill
+              <span className="wbb-panel__n">{units.length}</span>
             </h4>
-            {/* One block per lorry, ranked by yard.
-                A block rather than a row because the question this panel gets
-                asked is "how many, and from where" — four blocks against one
-                is an answer at a glance, where four rows of plate, tonnage and
-                clock is a list to be read. The plate and the time are on the
-                block's title, so the detail is a hover away rather than gone;
-                the rows underneath carry the tonnage, which is the part an
-                operator writes down.
+            {/* Trucks and tractors, one block each, ranked by yard. FactorySuite's
+                dispatches (signed out, from the webhook) and the transfer
+                tickets loaded at a yard, as one list — see `roadUnits`. A block
+                is filled once a scale has weighed the vehicle loaded, hollow
+                while it is only signed out; a tractor is drawn round.
 
-                Every yard gets a line, including the ones that sent nothing —
-                "None dispatched" is the reading somebody is looking for when
-                the mill is short. */}
+                Every yard gets a line, including the ones with nothing out —
+                "None out" is the reading somebody is looking for when the mill
+                is short. */}
+            <p className="wbb-panel__sub">
+              {unitCounts.trucks} truck{unitCounts.trucks === 1 ? "" : "s"} · {unitCounts.tractors} tractor{unitCounts.tractors === 1 ? "" : "s"}
+              {units.length - unitCounts.trucks - unitCounts.tractors > 0 && <> · {units.length - unitCounts.trucks - unitCounts.tractors} other</>}
+              {" · "}<i className="wbb-key wbb-key--loaded" aria-hidden="true" /> loaded
+              {" "}<i className="wbb-key" aria-hidden="true" /> signed out
+            </p>
             <ul className="wbb-road">
               {roadBySite.map(r => (
                 <li key={r.code} className="wbb-road__row">
                   <span className="wbb-road__site">{r.name}</span>
                   {r.trucks.length === 0 ? (
-                    <span className="wbb-road__none">None dispatched</span>
+                    <span className="wbb-road__none">None out</span>
                   ) : (
                     <span className="wbb-road__blocks">
                       {r.trucks.slice(0, MAX_BLOCKS).map(x => (
-                        <i
-                          key={x.id}
-                          className={"wbb-block" + (x.elapsedMs >= OVERDUE_MS ? " wbb-block--late" : "")}
-                          title={`${x.vehicleNo} · ${t1(x.netKg)} t · out ${gap(x.elapsedMs)}`}
-                        />
+                        <i key={x.key} className={blockClass(x)} title={unitTitle(x)} />
                       ))}
                       {r.trucks.length > MAX_BLOCKS && (
                         <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
                       )}
-                      <b className="wbb-road__t">{t1(r.kg)} t</b>
+                      {r.kg > 0 && <b className="wbb-road__t">{t1(r.kg)} t</b>}
                     </span>
                   )}
                 </li>
               ))}
             </ul>
-            {transit.length > 0 && (
+            {feedQuiet && (
               <p className="wbb-panel__note">
-                {closed
-                  ? "Measured to the end of that day: these tickets closed without a factory weighing."
-                  : "Time since the centre weighed the lorry loaded. Nothing here tracks the vehicle itself — the ticket is simply still open at the mill's end."}
+                No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
+                {" — "}only lorries weighed loaded at a yard are shown.
               </p>
             )}
           </section>
 
           {/* ── Out longer than a run takes ──────────────────────────────
-              The same shape as the panel above and deliberately so: these are
-              a SUBSET of those lorries, the ones that have been out past the
-              point where the journey explains it.
-
-              This is the slot a "held for security" panel belongs in, and it
-              is not one: nothing in the weighbridge feed carries a hold, a
-              flag or a verification state. What a ticket CAN say is that the
-              centre weighed a lorry loaded four hours ago and the factory has
-              not weighed it since — which is the same lorry somebody would go
-              looking for, arrived at from the only evidence we hold. The
-              header reads "≥" because it is the shortest of these waits: every
-              lorry in the panel has been out at least that long. */}
+              A SUBSET of the vehicles above: the ones out past the point where
+              the journey explains it. For a dispatched unit that point is
+              MEASURED — the median of the completed runs to the same
+              destination, from FactorySuite's sign-out and sign-back — so a
+              tractor to a farm two hours away and a truck to Opapo are each
+              held to their own run. A lorry seen only on a transfer ticket is
+              held to the fixed mark: loaded at a yard and not weighed at the
+              factory after it. The header reads "≥" because it is the shortest
+              of these waits. */}
           <section className="wbb-panel">
             <h4 className="wbb-panel__h">
               Out longer than a run takes
@@ -904,38 +939,35 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading }) {
               </span>
             </h4>
             <p className="wbb-panel__sub">
-              Loaded at a yard, not yet weighed at the factory after {gap(OVERDUE_MS)}
+              Past the usual run to its destination, or loaded and not weighed at the factory after {gap(OVERDUE_MS)}
             </p>
             {overdue.length === 0 ? (
               <p className="wbb-panel__empty">
-                Nothing has been out past {gap(OVERDUE_MS)}. The feed carries no security or
-                verification flag of its own — this panel is what the weighings can show.
+                Nothing is out past its usual run.
               </p>
             ) : (
-              <>
-                <ul className="wbb-road wbb-road--late">
-                  {overdueBySite.map(r => (
-                    <li key={r.code} className="wbb-road__row">
-                      <span className="wbb-road__site">{r.name}</span>
-                      <span className="wbb-road__blocks">
-                        {r.trucks.slice(0, MAX_BLOCKS).map(x => (
-                          <i key={x.id} className="wbb-block wbb-block--late"
-                             title={`${x.vehicleNo} · ${t1(x.netKg)} t · out ${gap(x.elapsedMs)}`} />
-                        ))}
-                        {r.trucks.length > MAX_BLOCKS && (
-                          <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
-                        )}
-                      </span>
-                      <b className="wbb-road__n">{r.trucks.length}</b>
-                    </li>
-                  ))}
-                </ul>
-                <p className="wbb-panel__note">
-                  {t1(overdue.reduce((n, x) => n + (x.netKg ?? 0), 0))} t sitting in these
-                  tickets. The outstations are inside an hour of the mill, so a wait this long
-                  has stopped being a journey.
-                </p>
-              </>
+              <ul className="wbb-late">
+                {overdue.slice(0, MAX_LATE_ROWS).map(x => (
+                  <li key={x.key} className="wbb-late__row" title={unitTitle(x)}>
+                    <i className={blockClass(x)} aria-hidden="true" />
+                    <span className="wbb-late__plate">{x.plate}</span>
+                    <span className="wbb-late__dest">{x.destination ?? "—"}</span>
+                    <span className="wbb-late__time">
+                      <b>{gap(x.elapsedMs)}</b>
+                      {x.typicalMs != null && <> / {gap(x.typicalMs)}</>}
+                    </span>
+                  </li>
+                ))}
+                {overdue.length > MAX_LATE_ROWS && (
+                  <li className="wbb-late__more">+{overdue.length - MAX_LATE_ROWS} more</li>
+                )}
+              </ul>
+            )}
+            {dispatched?.staleCount > 0 && !closed && (
+              <p className="wbb-panel__note">
+                {dispatched.staleCount} older run{dispatched.staleCount === 1 ? " was" : "s were"} never
+                signed back in FactorySuite and {dispatched.staleCount === 1 ? "is" : "are"} not counted.
+              </p>
             )}
           </section>
 

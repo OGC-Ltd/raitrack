@@ -1,117 +1,149 @@
 // Who is signed in, what they may do, and which organisations they may open.
 //
-// Sits ABOVE AppProvider, because the organisation switcher can only be built
-// from the list this resolves — a user with one organisation should not be
-// offered four, and the active-company seed has to be validated against what
-// they may actually reach.
-//
 // The server answers all of it in one call. GET /api/v1/auth/me returns the
 // user, the organisations they can open, the permissions they hold IN EACH
 // (org-scoped roles mean the answer differs per organisation), and the vehicle
 // scope where their view is narrowed. Splitting that across several requests
 // would mean rendering a half-authorised UI while the rest arrived.
+//
+// That answer is one TanStack Query entry (authKeys.me): `null` is signed out,
+// an object is signed in. Sign-in is a mutation that writes the entry; sign-out
+// and a lost session empty it AND drop every other cached query, so the next
+// person to sign in on this browser never sees the last one's fleet, reports
+// or feed. `useAuth()` keeps the shape every screen was written against.
+//
+// The access token itself stays out of the cache, in memory in services/api.
+//
+// <AuthProvider> now only registers the session-lost handler; it still sits
+// above AppProvider, whose organisation switcher is built from `orgs`.
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, setAccessToken, setSessionLostHandler, refreshOnce } from "../services/api";
 
-const AuthContext = createContext(null);
+export const authKeys = { me: ["auth", "me"] };
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
-  return ctx;
+const readMe = async () => (await apiFetch("/api/v1/auth/me")).data;
+
+/**
+ * Silent re-login, then who this is. The access token lives in memory and is
+ * gone after a reload; the refresh cookie is httpOnly and survives, so trading
+ * it here keeps a signed-in user signed in across reloads. No session is not an
+ * error — it is the signed-out state, and the login screen says so already.
+ */
+async function bootSession() {
+  try {
+    await refreshOnce();
+    return await readMe();
+  } catch {
+    setAccessToken(null);
+    return null;
+  }
+}
+
+const meQuery = {
+  queryKey: authKeys.me,
+  queryFn: bootSession,
+  // Changes only by sign-in, sign-out or an explicit reload().
+  staleTime: Infinity,
+  gcTime: Infinity,
+  retry: false,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+};
+
+/** Signed out: forget the token, the user, and everything read as them. */
+function signOutLocally(queryClient) {
+  setAccessToken(null);
+  queryClient.setQueryData(authKeys.me, null);
+  // On the next tick, once the login screen has replaced the app: removed
+  // while its screens are still mounted, a query would just be re-created by
+  // its reader and asked again without a token.
+  setTimeout(() => {
+    if (queryClient.getQueryData(authKeys.me)) return;   // already signed back in
+    queryClient.cancelQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
+    queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
+  }, 0);
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [orgs, setOrgs] = useState([]);          // [{ id, name, code, permissions[], vehicleIds|null }]
-  const [isPlatform, setIsPlatform] = useState(false);
-  // `booting` covers the silent-refresh round trip on mount. Rendering the
-  // login screen during it would flash a sign-in form at someone who is
-  // already signed in, on every single page load.
-  const [booting, setBooting] = useState(true);
-  const [error, setError] = useState(null);
-
-  const clear = useCallback(() => {
-    setAccessToken(null);
-    setUser(null);
-    setOrgs([]);
-    setIsPlatform(false);
-  }, []);
-
-  const loadMe = useCallback(async () => {
-    const { data } = await apiFetch("/api/v1/auth/me");
-    setUser(data.user);
-    setOrgs(data.organisations ?? []);
-    setIsPlatform(Boolean(data.isPlatform));
-    return data;
-  }, []);
-
+  const queryClient = useQueryClient();
   // A refused refresh anywhere in the app means the cookie is spent — most
   // often because token reuse was detected and the family was revoked. Drop
-  // straight to the login screen rather than letting every panel render its own
-  // "failed to load".
-  useEffect(() => { setSessionLostHandler(clear); return () => setSessionLostHandler(null); }, [clear]);
-
-  // Silent re-login. The access token lives in memory and is gone after a
-  // reload; the refresh cookie is httpOnly and survives, so trading it here is
-  // what keeps a signed-in user signed in across reloads.
+  // straight to the login screen rather than letting every panel render its
+  // own "failed to load".
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await refreshOnce();
-        if (!cancelled) await loadMe();
-      } catch {
-        // No session, or it expired. Not an error worth showing — it is simply
-        // the signed-out state, and the login screen says so already.
-        if (!cancelled) clear();
-      } finally {
-        if (!cancelled) setBooting(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [loadMe, clear]);
+    setSessionLostHandler(() => signOutLocally(queryClient));
+    return () => setSessionLostHandler(null);
+  }, [queryClient]);
+  return children;
+}
 
-  const login = useCallback(async (email, password) => {
-    setError(null);
-    try {
+export function useAuth() {
+  const queryClient = useQueryClient();
+  // `booting` covers the silent-refresh round trip on first load. Rendering
+  // the login screen during it would flash a sign-in form at someone who is
+  // already signed in, on every single page load.
+  const { data: me, isPending: booting } = useQuery(meQuery);
+
+  const signIn = useMutation({
+    mutationKey: ["auth", "login"],
+    mutationFn: async ({ email, password }) => {
       const { data } = await apiFetch("/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
       setAccessToken(data.accessToken ?? null);
-      await loadMe();
+      return readMe();
+    },
+    onSuccess: (data) => queryClient.setQueryData(authKeys.me, data),
+  });
+
+  const login = useCallback(async (email, password) => {
+    try {
+      await signIn.mutateAsync({ email, password });
       return true;
-    } catch (err) {
-      // The server answers every failed sign-in identically on purpose, so
-      // nobody can probe which addresses exist. Pass that through unchanged.
-      setError(err?.status === 401 ? "Invalid email or password." : (err?.message ?? "Sign-in failed."));
+    } catch {
       return false;
     }
-  }, [loadMe]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signIn.mutateAsync]);
 
   const logout = useCallback(async () => {
-    // The cookie is what actually ends the session, so the request matters more
-    // than its answer — clear locally whatever it says.
+    // The cookie is what actually ends the session, so the request matters
+    // more than its answer — clear locally whatever it says.
     try { await apiFetch("/api/v1/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-    clear();
-  }, [clear]);
+    signOutLocally(queryClient);
+  }, [queryClient]);
 
-  const value = useMemo(() => {
+  /** Read who this is again (after a role or profile change); resolves to the answer. */
+  const reload = useCallback(async () => {
+    const data = await readMe();
+    queryClient.setQueryData(authKeys.me, data);
+    return data;
+  }, [queryClient]);
+
+  // The server answers every failed sign-in identically on purpose, so nobody
+  // can probe which addresses exist. Pass that through unchanged.
+  const err = signIn.error;
+  const error = err ? (err.status === 401 ? "Invalid email or password." : (err.message ?? "Sign-in failed.")) : null;
+
+  return useMemo(() => {
+    const user = me?.user ?? null;
+    const orgs = me?.organisations ?? NO_ORGS;   // [{ id, name, code, permissions[], vehicleIds|null }]
     const byId = new Map(orgs.map((o) => [o.id, o]));
     const permsFor = (orgId) => new Set(byId.get(orgId)?.permissions ?? []);
 
     return {
       user,
       orgs,
-      isPlatform,
+      isPlatform: Boolean(me?.isPlatform),
       booting,
       error,
       isAuthenticated: Boolean(user),
       login,
       logout,
-      reload: loadMe,
+      reload,
 
       /**
        * Does this person hold `slug` in this organisation?
@@ -133,7 +165,7 @@ export function AuthProvider({ children }) {
        */
       vehicleScope: (orgId) => byId.get(orgId)?.vehicleIds ?? null,
     };
-  }, [user, orgs, isPlatform, booting, error, login, logout, loadMe]);
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  }, [me, booting, error, login, logout, reload]);
 }
+
+const NO_ORGS = [];

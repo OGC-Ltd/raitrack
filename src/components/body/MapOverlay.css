@@ -399,7 +399,7 @@
   border-radius: 3px;
   border: 1px solid currentColor;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.4px;
   line-height: 1.5;
@@ -417,6 +417,13 @@
 .feed-badge--warning  { color: var(--amber); }
 .feed-badge--info     { color: var(--blue); }
 .feed-badge--success  { color: var(--green); }
+/* The feeds are white panels now, and the palette above is tuned for the dark
+   map overlay: the amber ALERT chip measured 2.1:1 on white. The same four
+   hues, at the depth that reads on a light surface. */
+.app--light .feed-badge--critical { color: #b91c1c; }
+.app--light .feed-badge--warning  { color: #a14c06; }
+.app--light .feed-badge--info     { color: #1d4ed8; }
+.app--light .feed-badge--success  { color: #15803d; }
 
 .overlay-right {
   position: absolute;
@@ -1262,7 +1269,13 @@
   outline: 2px solid var(--accent-info, #38bdf8);
   outline-offset: 1px;
 }
-.fi-icon--on { color: var(--amber); background: rgba(245,158,11,0.14); }
+/* Pinned is a state the window is IN, so it stays lit: the Units window's
+   pinned look (cyan, a hairline ring), not a colour of its own. */
+.fi-icon--on {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45);
+}
 /* The dialog is tinted by severity down its leading edge, the one cue the
    hover card has no equivalent for. */
 .fi-modal { border-left: 3px solid var(--red); }
@@ -1551,8 +1564,8 @@
     padding: 10px 16px max(12px, env(safe-area-inset-bottom));
   }
   .fi-btn {
-    min-height: 44px;
-    padding: 0 18px;
+    min-height: var(--m-action);
+    padding: 0 14px;
   }
   /* Close is the common exit and takes the width; Delete keeps its label and
      stays narrow. DOM order is left alone deliberately — reordering these

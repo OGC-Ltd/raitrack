@@ -21,7 +21,8 @@
 
 /**
  * @param {Array<{day:string, litres?:number, lost?:number, cost?:number,
- *                lossCost?:number}>} fuelDays  the ledger series
+ *                lossCost?:number, theft?:number, theftCost?:number}>} fuelDays
+ *   the ledger series; `theft` the suspected theft, apart from `lost`
  * @param {{days?: Array<{day:string, km?:number|null, litres?:number|null,
  *          hours?:number|null, litresPerKm?:number|null,
  *          litresPerHour?:number|null}>}|null} unitFuel
@@ -43,6 +44,8 @@ export function joinUnitFuelDays(fuelDays, unitFuel) {
       lost: d.lost ?? null,
       cost: d.cost ?? null,
       lossCost: d.lossCost ?? null,
+      theft: d.theft ?? null,
+      theftCost: d.theftCost ?? null,
       // `?? null` on every measured field, never `?? 0`: a day the guards
       // rejected has no reading, and a zero would draw a unit that ran nowhere
       // and burnt nothing. That is a claim about the day rather than the

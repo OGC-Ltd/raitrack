@@ -273,9 +273,6 @@ export default function RoutePlayback({
       {/* Minimised hides the CONTROLS, never the playback: the cursor keeps
           running and the marker keeps moving, which is the point of getting the
           panel out of the way. */}
-      {!minimized && loading && <div className="rp__note">Loading {day}…</div>}
-      {!minimized && error   && <div className="rp__note rp__note--err">{error}</div>}
-      {!minimized && empty   && <div className="rp__note">This unit reported no positions on {day}.</div>}
 
       {!minimized && !loading && !error && !empty && (
         <>

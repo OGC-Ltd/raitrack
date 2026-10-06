@@ -1,7 +1,7 @@
 // Mobile bottom tab bar.
 
 import "./MobileBottomNav.css";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useAppActions } from "../../context/AppContext";
 
 const TABS = [
   {
@@ -48,7 +48,8 @@ const TABS = [
 ];
 
 export default function MobileBottomNav() {
-  const { mobileActiveTab, setMobileActiveTab } = useAppContext();
+  const mobileActiveTab = useAppSelector((a) => a.mobileActiveTab);
+  const { setMobileActiveTab } = useAppActions();
 
   return (
     <nav className="mobile-bottomnav" role="navigation" aria-label="Main navigation">

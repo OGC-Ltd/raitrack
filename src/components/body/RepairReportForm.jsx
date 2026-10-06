@@ -294,7 +294,7 @@ export default function RepairReportForm({
               NOT gated on `rows.length > 1` the way "Set all to" is. A single
               unit still has to say when its part lands, and the row below has
               no date field any more — this is the only place to say it. */}
-          {waiting.length > 0 && (
+          {waiting.length > 0 && rows.length > 1 && (
             <span className="sp4-repair-setall">
               <label className="sp4-label" htmlFor={`${titleId}-eta`}>
                 Fix date
@@ -335,6 +335,37 @@ export default function RepairReportForm({
                     <div className="sp4-repair-itemhead">
                       <span className="sp4-repair-reg">{r.plate}</span>
                       <span className="sp4-repair-fault">{r.label}</span>
+                      {/* ONE unit: the date belongs on its row, at the right,
+                          where the unit it applies to is named. It is the same
+                          control and the same state as the head's — with a
+                          single row "set them all" and "set this one" are the
+                          same instruction, so nothing about the batch changes.
+
+                          Above one unit it stays in the head. Not tidiness:
+                          this is a BATCH field, and a box sitting on row three
+                          that silently rewrites rows one to twelve is a lie
+                          about its own scope. In the head it sits beside "Set
+                          all to", which is what says so. */}
+                      {rows.length === 1 && r.outcome === "needs_spare" && (
+                        <span className="sp4-repair-itemdate">
+                          <label className="sp4-label" htmlFor={`${titleId}-eta`}>
+                            Fix date
+                          </label>
+                          {/* `min` is today: an estimate in the past is not an
+                              estimate. The server refuses one too — a browser
+                              attribute is a courtesy, not a rule. */}
+                          <input
+                            id={`${titleId}-eta`}
+                            type="date"
+                            className="sp4-input sp4-input--date"
+                            value={expected}
+                            min={utcTodayISO()}
+                            onChange={(e) => setAllExpected(e.target.value)}
+                            disabled={busy}
+                            aria-invalid={!r.expectedResolutionAt || undefined}
+                          />
+                        </span>
+                      )}
                     </div>
 
                     <div className="sp4-repair-outcomes" role="group" aria-label={`Outcome for ${r.plate}`}>

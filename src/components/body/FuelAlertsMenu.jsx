@@ -29,7 +29,15 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import "./FuelAlertsMenu.css";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
+import { useMapLayers } from "../../context/MapLayersContext";
 import { fleetPrefix, withoutPrefix } from "../../lib/plateLabel";
+import { isConfirmedTheft, isTheftAlert } from "../../lib/fuelAlerts";
+import { useFloatingWindow } from "../../hooks/useFloatingWindow";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+
+/** Where the sidebar opens this as a window — the same line FuelAlertsMenu.css
+ *  hides the map button on. */
+const WINDOW_Q = "(min-width: 1024px)";
 
 /** A drop, which is what every one of these is about. */
 function DropIcon() {
@@ -38,6 +46,27 @@ function DropIcon() {
          fill="none" stroke="currentColor" strokeWidth="1.8"
          strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3s6 6.4 6 10.5a6 6 0 0 1-12 0C6 9.4 12 3 12 3Z" />
+    </svg>
+  );
+}
+
+/** The title bar's controls — the units window's glyphs, so the two read as one family. */
+function IconWinMin({ min }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+         fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      {min ? <path d="M6 15l6-6 6 6" /> : <path d="M6 12h12" />}
+    </svg>
+  );
+}
+
+function IconWinClose() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+         fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
     </svg>
   );
 }
@@ -85,17 +114,59 @@ function When({ value, label }) {
   );
 }
 
-export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSelect }) {
-  const [open, setOpen] = useState(false);
+export default function FuelAlertsMenu({ vehicles: all, showOnMap, onToggleMap, onSelect }) {
+  // Open from its own button, or from the sidebar's Fleets > Fuel > Alerts —
+  // one flag for both, held in the map's context. Local state where there is
+  // no provider (a test, a harness).
+  const shared = useMapLayers();
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = shared?.setFuelAlertsOpen ? shared.fuelAlertsOpen : localOpen;
+  const setOpen = shared?.setFuelAlertsOpen ?? setLocalOpen;
+  const vehicles = useMemo(() => all.filter(isTheftAlert), [all]);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
   const panelId = useId();
 
+  /* On a desktop, a WINDOW: dragged by its title bar and folded to it
+     (operator, 2026-09-27: "the modal to be draggable and also minimisable").
+     The hook the units window, the vehicle card and the incident window use,
+     so the drag, the clamp into the free map column and the remembered spot
+     behave the same in all of them. Below 1024 it stays the rail's popover. */
+  const asWindow = useMediaQuery(WINDOW_Q);
+  const [minimized, setMinimized] = useState(false);
+  const folded = asWindow && minimized;
+  // Opens beside the sidebar, measured — it is 320px wide, 260 at 1024.
+  const initialPos = useMemo(() => {
+    if (!asWindow || typeof document === "undefined") return undefined;
+    const rail = document.querySelector(".side-panel");
+    const head = document.querySelector(".app-header");
+    return {
+      x: (rail?.getBoundingClientRect().right ?? 0) + 12,
+      y: (head?.getBoundingClientRect().bottom ?? 0) + 12,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asWindow, open]);
+  const { ref: winRef, onPointerDown: onHeadPointerDown } = useFloatingWindow({
+    id: "fuel-alerts",
+    dock: "top-center",
+    enabled: asWindow && open,
+    initial: initialPos,
+  });
+  // Closed and opened again from the sidebar, it comes back as a list.
+  useEffect(() => { if (!open) setMinimized(false); }, [open]);
+
   // Same dismissal contract as the layers menu — see MapLayersMenu for why
   // `pointerdown` rather than `click`, and why Escape hands focus back.
+  //
+  // Except as a window: one that is dragged aside to work on the map, or
+  // folded out of the way, and then vanishes at the first press on the map was
+  // not worth moving. It has its own close button; Escape still works.
   useEffect(() => {
     if (!open) return undefined;
-    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const onDown = (e) => {
+      if (asWindow) return;
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
     const onKey = (e) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
@@ -108,7 +179,7 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, setOpen, asWindow]);
 
   const count = vehicles.length;
   const sorted = useMemo(() => [...vehicles].sort(byMostRecent), [vehicles]);
@@ -123,8 +194,11 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
    * A permanent "Fuel alerts: 0" is a control that reports the absence of its
    * own subject. The button appearing IS the alert — which is also why it is
    * amber only while something is open.
+   *
+   * Except when the sidebar asked for the list: then it opens and says there
+   * is none, rather than the click doing nothing.
    */
-  if (count === 0) return null;
+  if (count === 0 && !open) return null;
 
   return (
     <div className="fuel-alerts" ref={wrapRef}>
@@ -143,22 +217,58 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
       </button>
 
       {open && (
-        <div className="fuel-alerts__panel" id={panelId} role="group" aria-label="Fuel alerts">
-          <div className="fuel-alerts__head">
-            <span className="fuel-alerts__title">Fuel alerts</span>
-            <button
-              type="button"
-              className="fuel-alerts__switchrow"
-              role="switch"
-              aria-checked={showOnMap}
-              onClick={onToggleMap}
-              title={showOnMap ? "Stop painting these units red on the map" : "Paint these units red on the map"}
-            >
-              <span className="fuel-alerts__switch" aria-hidden="true" />
-              <span>On map</span>
-            </button>
+        <div
+          className={`fuel-alerts__panel${asWindow ? " fuel-alerts__panel--window" : ""}${folded ? " fuel-alerts__panel--min" : ""}`}
+          id={panelId}
+          role="group"
+          aria-label="Fuel alerts"
+          ref={asWindow ? winRef : undefined}
+        >
+          {/* The head is the drag handle. The hook ignores a press that starts
+              on a button, so On map, minimise and close keep theirs. */}
+          <div className="fuel-alerts__head" onPointerDown={asWindow ? onHeadPointerDown : undefined}>
+            <span className="fuel-alerts__title">
+              Fuel alerts{folded ? ` · ${count}` : ""}
+            </span>
+            {!folded && (
+              <button
+                type="button"
+                className="fuel-alerts__switchrow"
+                role="switch"
+                aria-checked={showOnMap}
+                onClick={onToggleMap}
+                title={showOnMap ? "Stop painting these units red on the map" : "Paint these units red on the map"}
+              >
+                <span className="fuel-alerts__switch" aria-hidden="true" />
+                <span>On map</span>
+              </button>
+            )}
+            {asWindow && (
+              <div className="fuel-alerts__winbtns">
+                <button
+                  type="button"
+                  className="fuel-alerts__winbtn"
+                  aria-expanded={!minimized}
+                  aria-label={minimized ? "Expand fuel alerts" : "Minimise fuel alerts"}
+                  onClick={() => setMinimized((v) => !v)}
+                  title={minimized ? "Expand" : "Minimise"}
+                >
+                  <IconWinMin min={minimized} />
+                </button>
+                <button
+                  type="button"
+                  className="fuel-alerts__winbtn"
+                  aria-label="Close fuel alerts"
+                  onClick={() => setOpen(false)}
+                  title="Close"
+                >
+                  <IconWinClose />
+                </button>
+              </div>
+            )}
           </div>
 
+          {!folded && (<>
           <div className="fuel-alerts__cols" aria-hidden="true">
             <span className="fuel-alerts__col-unit">Unit</span>
             <span className="fuel-alerts__col-vol">Volume</span>
@@ -167,18 +277,16 @@ export default function FuelAlertsMenu({ vehicles, showOnMap, onToggleMap, onSel
           </div>
 
           <div className="fuel-alerts__list">
+            {count === 0 && <div className="fuel-alerts__muted">No open fuel theft alerts.</div>}
             {sorted.map((v) => {
               const inc = v.fuelIncident;
               const theft = inc?.mayUseTheftWording === true;
               const began = stamp(inc?.beganAt);
               const reported = stamp(inc?.detectedAt);
-              // CONFIRMED means our own telemetry watched the level stay down or
-              // come back, rather than the provider's claim being relayed
-              // because we could not check it. The row is one line now, so this
-              // lives in the tooltip and the accessible name; the dot still
-              // tells a possible theft (red) from any other drain (amber).
-              const status = (inc?.confirmed ? "confirmed" : theft ? "unconfirmed" : "fuel event")
-                + (inc?.repeatCount > 1 ? ` · ${inc.repeatCount}× in 30 days` : "");
+              // CONFIRMED when the server is at least 80% sure it was a theft,
+              // as the incident window says it. The row is one line, so this
+              // lives in the tooltip and the accessible name.
+              const status = isConfirmedTheft(inc) ? "possible theft, confirmed" : "possible theft";
               return (
                 <button
                   type="button"
@@ -213,6 +321,7 @@ Show this unit and open its incident`}
               Hidden on the map. Still open, still listed here.
             </div>
           )}
+          </>)}
         </div>
       )}
     </div>

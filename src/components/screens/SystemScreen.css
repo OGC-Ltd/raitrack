@@ -24,3 +24,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+
+/* Stays a table on a phone: `.sp4-keep-table` in SensorPanel.css. */
+.sp4-keep-table .sys-where { max-width: 160px; }

@@ -28,12 +28,23 @@ import { useEffect, useState } from 'react';
 // Keep in step with the `--bp-*` tokens in index.css. Both exist because CSS
 // cannot read a JS constant and JS cannot read a media query's breakpoint.
 export const BP = {
+  /* A HANDSET, which is not the same question as `mobile`.
+     `mobile` (767) decides the app's chrome — the bottom tab bar, the 44px tap
+     floors — and an iPad mini at 744 x 1133 wants all of that. What it does NOT
+     want is the phone LAYOUT: a data grid folded into one card per row, filters
+     behind a button. It has 744px across and 1,133px down, so it can read a
+     table. 599 is above every phone in portrait (the widest is 430) and below
+     every iPad (the narrowest is the mini's 744), which is the split the grid
+     actually cares about. A phone in landscape is wider than this and keeps the
+     table, as it did before any of this existed. */
+  handset: 599,
   mobile:  767,   // phones — mobile chrome, bottom tab bar
   tablet:  1023,  // portrait tablets and small landscape phones
   laptop:  1279,  // small laptops — sidebar starts collapsed, panel overlays
 };
 
 const QUERIES = {
+  isHandset:      `(max-width: ${BP.handset}px)`,
   isMobile:       `(max-width: ${BP.mobile}px)`,
   isTablet:       `(min-width: ${BP.mobile + 1}px) and (max-width: ${BP.tablet}px)`,
   isLaptop:       `(min-width: ${BP.tablet + 1}px) and (max-width: ${BP.laptop}px)`,
@@ -51,8 +62,9 @@ function read() {
   // SSR and the vitest jsdom environment have no matchMedia. Defaulting to
   // desktop keeps tests rendering the full shell rather than the mobile one.
   if (typeof window === 'undefined' || !window.matchMedia) {
-    return { isMobile: false, isTablet: false, isLaptop: false, isDesktop: true,
-             isCompact: false, isNarrow: false, isShort: false, prefersReduced: false };
+    return { isHandset: false, isMobile: false, isTablet: false, isLaptop: false,
+             isDesktop: true, isCompact: false, isNarrow: false, isShort: false,
+             prefersReduced: false };
   }
   const out = {};
   for (const [name, q] of Object.entries(QUERIES)) out[name] = window.matchMedia(q).matches;

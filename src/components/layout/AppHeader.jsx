@@ -1,7 +1,7 @@
 // AppHeader — light top bar: logo, org switcher, search, notifications, avatar.
 
 import { useState, useRef, useEffect } from 'react';
-import { useAppContext } from '../../context/AppContext';
+import { useAppFields, useAppActions, useCompanies } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useMapLayers } from '../../context/MapLayersContext';
@@ -11,6 +11,7 @@ import { FuelFollowUpHost } from '../body/FuelFollowUp';
 import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
+import { initialsOf, avatarHue } from '../../lib/avatar';
 
 // Never opened in this browser → count only the last 24 hours, so a first
 // visit isn't greeted with every alert in the replayed history.
@@ -106,7 +107,9 @@ function CompanyMark({ company, size = 'md' }) {
 }
 
 export default function AppHeader() {
-  const { activeCompany, companies, setActiveCompanyId, activeCompanyId, setAccountOpen, setUserAdminOpen, selectedVehicleId, setSelectedVehicleId } = useAppContext();
+  const { activeCompanyId, selectedVehicleId } = useAppFields("activeCompanyId", "selectedVehicleId");
+  const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
+  const { activeCompany, companies } = useCompanies();
   const { can } = usePermissions();
   const { user, logout } = useAuth();
 
@@ -126,6 +129,7 @@ export default function AppHeader() {
 
   const [orgOpen,        setOrgOpen]        = useState(false);
   const [feedOpen,       setFeedOpen]       = useState(false);
+  const [feedUnreadSince, setFeedUnreadSince] = useState(() => Date.now());
   const [userOpen,       setUserOpen]       = useState(false);
   const [searchQuery,    setSearchQuery]    = useState('');
   const [searchResults,  setSearchResults]  = useState([]);
@@ -144,8 +148,23 @@ export default function AppHeader() {
     setLastSeen(now);
     try { localStorage.setItem(seenKey, String(now)); } catch { /* storage off */ }
   };
-  const { unreadCount } = summariseUnread(feed, lastSeen);
+  // No rights to the fleet (no map:read, operator 2026-10-01): no bell and no
+  // feed at all. The feed is the fleet's events, which such an account is not
+  // shown anywhere else (the sidebar dashes its counts).
+  const limited = !can('map:read');
+  const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, lastSeen);
   const badge = bellBadgeLabel(unreadCount);
+  // The bell swings once when the count goes up — news arrived — and not when
+  // it falls (opening the feed) or on a re-render with the same count.
+  const prevUnread = useRef(unreadCount);
+  const [swing, setSwing] = useState(0);
+  useEffect(() => {
+    if (unreadCount > prevUnread.current) setSwing(n => n + 1);
+    prevUnread.current = unreadCount;
+  }, [unreadCount]);
+  const bellWords = unreadCount === 0 ? 'Notifications'
+    : unreadCount >= BELL_CAP ? `Notifications, ${BELL_CAP} or more new events`
+    : `Notifications, ${unreadCount} new event${unreadCount === 1 ? '' : 's'}`;
 
   // The live feed and the vehicle detail panel share the right edge — only one
   // may be open. Selecting a vehicle (map pin, search, feed row) closes the feed…
@@ -155,7 +174,13 @@ export default function AppHeader() {
 
   // …and opening the feed closes the vehicle panel.
   const toggleFeed = () => {
-    if (!feedOpen) setSelectedVehicleId(null);
+    if (!feedOpen) {
+      setSelectedVehicleId(null);
+      // What was unread at the moment of opening: the panel marks those (and
+      // anything arriving while it is open) as new. Captured BEFORE markSeen,
+      // which would otherwise leave the panel nothing to mark.
+      setFeedUnreadSince(lastSeen);
+    }
     // Opening or closing the feed counts as having seen everything in it.
     markSeen();
     setFeedOpen(!feedOpen);
@@ -279,35 +304,49 @@ export default function AppHeader() {
           )}
         </div>
 
-        {/* Notification bell */}
+        {/* Notification bell — not rendered without rights to the fleet. */}
+        {!limited && (
         <button
-          className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}`}
+          className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}${unreadCount > 0 ? ' app-header__bell--news' : ''}`}
           onClick={toggleFeed}
-          aria-label="Notifications"
+          // The count lives in the name: a label on the badge inside a labelled
+          // button is never read out.
+          aria-label={bellWords}
+          aria-expanded={feedOpen}
         >
-          <i className="ti ti-bell" aria-hidden="true" />
+          <i
+            key={`icon-${swing}`}
+            className={`ti ${feedOpen ? 'ti-bell-filled' : 'ti-bell'}${swing ? ' app-header__bell-icon--swing' : ''}`}
+            aria-hidden="true"
+          />
           {unreadCount > 0 && (
-            <span
-              className="app-header__bell-count"
-              aria-label={unreadCount >= BELL_CAP
-                ? `${BELL_CAP} or more new events`
-                : `${unreadCount} new event${unreadCount === 1 ? '' : 's'}`}
-            >{badge}</span>
+            // Keyed on the figure so it pops when the figure changes
+            <span key={`count-${badge}`} className="app-header__bell-count" aria-hidden="true">{badge}</span>
           )}
         </button>
+        )}
+        {/* Holds the bell's place so the avatar stays where it always sits. */}
+        {limited && <span className="app-header__bell" aria-hidden="true" style={{ visibility: 'hidden', pointerEvents: 'none' }} />}
 
         {/* User avatar */}
         <div className="app-header__user-wrap" ref={userRef}>
+          {/* Initials in a small tinted circle, in a target the bell's size: the
+              old grey silhouette filled 30px solid and outweighed the bell's
+              outline icon (operator, 2026-10-02). */}
           <button
-            className="app-header__avatar"
+            className={`app-header__avatar${userOpen ? ' app-header__avatar--open' : ''}`}
             onClick={() => setUserOpen(o => !o)}
             aria-label="User menu"
+            aria-haspopup="menu"
+            aria-expanded={userOpen}
           >
-            <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" width="30" height="30">
-              <circle cx="18" cy="18" r="18" fill="#e2e8f0"/>
-              <circle cx="18" cy="14" r="6" fill="#94a3b8"/>
-              <ellipse cx="18" cy="30" rx="10" ry="7" fill="#94a3b8"/>
-            </svg>
+            {user
+              ? (
+                <span className="app-header__avatar-face" style={{ '--ua': avatarHue(displayName || user.email) }} aria-hidden="true">
+                  {initialsOf(displayName, user.email)}
+                </span>
+              )
+              : <i className="ti ti-user-circle" aria-hidden="true" />}
           </button>
 
           {userOpen && (
@@ -346,7 +385,7 @@ export default function AppHeader() {
       </header>
 
       {/* Live feed panel — slides in from right */}
-      <LiveFeed open={feedOpen} onClose={() => setFeedOpen(false)} />
+      {!limited && <LiveFeed open={feedOpen} onClose={() => setFeedOpen(false)} unreadSince={feedUnreadSince} />}
       {/* The fuel follow-up case window. Here rather than on the map because
           it opens from the Live Feed too, and technicians have no map. */}
       <FuelFollowUpHost />

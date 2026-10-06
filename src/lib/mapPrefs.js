@@ -48,6 +48,7 @@ const key = (companyId) => `ft-map-prefs:${companyId}`;
  */
 export const LAYERS = [
   "plan", "site", "bridges", "zones",
+  "traffic",       // TomTom live traffic, any org
   "site:nzoia",    // West Kenya's second mill
   "site:naitiri",  // and the sugar factory the lorries load at
   "site:raiply",   // and where that sugar is taken
@@ -105,7 +106,9 @@ const offAll = () => Object.fromEntries(LAYERS.map(l => [l, false]));
 export function defaultPrefs(companyId) {
   return {
     filter: DEFAULT_FILTER,
-    layers: { ...offAll(), ...(LAYER_DEFAULTS[companyId] ?? {}) },
+    // Live traffic is on everywhere until switched off (operator, 2026-10-04:
+    // "I still don't see the changes" with it defaulting off).
+    layers: { ...offAll(), traffic: true, ...(LAYER_DEFAULTS[companyId] ?? {}) },
   };
 }
 

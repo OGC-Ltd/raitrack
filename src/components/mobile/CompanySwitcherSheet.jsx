@@ -1,10 +1,12 @@
 // Mobile bottom sheet for switching companies.
 
 import "./CompanySwitcherSheet.css";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 
 export default function CompanySwitcherSheet({ open, onClose }) {
-  const { companies, activeCompanyId, setActiveCompanyId } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { setActiveCompanyId } = useAppActions();
+  const { companies } = useCompanies();
 
   if (!open) return null;
 

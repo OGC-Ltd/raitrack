@@ -27,7 +27,7 @@ import FleetAIInsightCard   from "../cards/FleetAIInsightCard";
 import VehicleBriefCard     from "../cards/VehicleBriefCard";
 import FleetCargoCard       from "../cards/FleetCargoCard";
 
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields, useCompanies, useAppSelector, useAppActions } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -35,14 +35,14 @@ import { useVehicleFeed } from "../../hooks/useVehicleFeed";
 import { feedPlainText } from "../../lib/feedMessage";
 import { driverIndex, driverFor } from "../../lib/feedDriver";
 import { liveTrip, roundTripKm } from "../../lib/tripProgress";
+import { travelModeFor } from "../../lib/tomtomTraffic";
+import { positionFresh } from "../../hooks/useTrafficRoute";
 import { vehicleReadings, formatKm, formatHours, formatSince, NO_READING } from "../../lib/vehicleReadings";
 import { driverDutyStatus, matchesFilter, matchesMapFilters, equipmentLabel } from "../../lib/vehicleMap";
 import LoadError from "../shared/LoadError";
 import { clampToSafeArea as sharedClamp } from "../../hooks/useFloatingWindow";
-import { useDismissedIncidents, dismissIncident } from "../../lib/fuelDismissals";
-import { apiFetch } from "../../services/api";
+import { useDismissedIncidents } from "../../lib/fuelDismissals";
 import { usePrefetchFuelAlerts } from "../../lib/fuelPrefetch";
-import { usePermissions } from "../../hooks/usePermissions";
 import FuelDayBreakdown from "./FuelDayBreakdown";
 import FuelReview from "./FuelReview";
 import { isConfirmedTheft } from "../../lib/fuelAlerts";
@@ -130,14 +130,6 @@ function readDismissed() {
   }
 }
 
-function writeDismissed(set) {
-  try {
-    // Bounded: an id per incident would grow without limit otherwise, and the
-    // window is 24 h so anything older can never be shown again anyway.
-    localStorage.setItem(DISMISS_KEY, JSON.stringify([...set].slice(-200)));
-  } catch { /* private mode, quota — dismissal is not worth failing over */ }
-}
-
 /**
  * What the incident says, as the body of the modal.
  *
@@ -195,7 +187,7 @@ function writeDismissed(set) {
  * the same claim.
  */
 
-function FuelIncidentBody({ incident, vehicleId }) {
+function FuelIncidentBody({ incident, vehicleId, cardShowsLevel = false }) {
   if (!incident) return null;
 
   const theft  = incident.mayUseTheftWording === true;
@@ -281,7 +273,7 @@ function FuelIncidentBody({ incident, vehicleId }) {
       <div className="vt-divider" />
 
       {/* The day this happened on, as a ledger and a timeline. */}
-      <FuelDayBreakdown incident={incident} vehicleId={vehicleId} />
+      <FuelDayBreakdown incident={incident} vehicleId={vehicleId} cardShowsLevel={cardShowsLevel} />
     </div>
   );
 }
@@ -361,12 +353,45 @@ const SHEET_Q = '(max-width: 720px)';
  *   COLLAPSE  folds to the title bar; the numbers are hidden, nothing is lost
  *   CLOSE     hides it; the panel banner reopens it
  *   ESCAPE / backdrop  same as close, and only when unpinned
- *   DELETE    removes this incident from this browser for good
  *
- * The recoverable gestures are the easy ones to hit; the irreversible one is
- * a labelled button in the footer, never an icon.
+ * There is no Delete (operator, 2026-09-30). An alert leaves the dashboard
+ * only by being escalated or de-escalated (FuelReview), so it always goes
+ * with a decision on its record.
  */
-function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, onClose, onDismiss, canDelete = true }) {
+/* The title bar's glyphs, drawn the way the Units window draws its own
+   (UnitsMenu IconPushPin / IconWinMin / IconWinClose) so the two windows read
+   as one family. The pin was an emoji, which every platform paints in its own
+   red whatever the theme. */
+function IconPushPin({ on }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+         fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 17v5" />
+      <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z" />
+    </svg>
+  );
+}
+function IconWinMin({ min }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+         fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      {min ? <path d="M6 15l6-6 6 6" /> : <path d="M6 12h12" />}
+    </svg>
+  );
+}
+function IconWinClose() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+         fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, onClose }) {
   // Lazy: useRef(readWindowState()) would re-read and re-parse localStorage on
   // every render and discard the result.
   const [saved] = useState(readWindowState);
@@ -387,40 +412,6 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
   // Folding is a window's control too. A sheet has no collapse button, so a
   // fold remembered from a desktop session must not arrive folded here.
   const collapsed = collapsedPref && asWindow;
-
-  /* Delete is irreversible and, on a sheet, sits in the bottom bar where a
-     thumb rests. Two taps rather than one: the first arms it and says so, the
-     second commits, and it disarms itself if the second never comes. Only on
-     the sheet — a mouse does not mis-click a labelled button in a footer. */
-  const [armed, setArmed] = useState(false);
-  const armRef = useRef(null);
-  useEffect(() => () => clearTimeout(armRef.current), []);
-  useEffect(() => { if (asWindow) { clearTimeout(armRef.current); setArmed(false); } }, [asWindow]);
-  /* The delete goes to the server now, so it can take a moment and it can
-     fail. The window stays up until it has succeeded, and says so if it did
-     not, rather than closing on a delete that never happened. */
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
-  const commitDelete = async () => {
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await onDismiss();
-    } catch (err) {
-      setDeleteError(err?.status === 403
-        ? "You don't have permission to delete fuel incidents."
-        : "Could not delete this incident. Try again.");
-      setDeleting(false);
-    }
-  };
-  const onDelete = () => {
-    if (deleting) return;
-    if (!sheet) { commitDelete(); return; }
-    if (armed) { clearTimeout(armRef.current); setArmed(false); commitDelete(); return; }
-    setArmed(true);
-    clearTimeout(armRef.current);
-    armRef.current = setTimeout(() => setArmed(false), 4000);
-  };
 
   const persist = (next) => writeWindowState({ pinned, collapsed, x: pos?.x, y: pos?.y, ...next });
 
@@ -547,13 +538,16 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
           Less its "Fuel Theft Alert" badge (operator, 2026-09-27): the
           window's own header says "Fuel theft alert" a column away. The card
           reads `status` for that badge and nothing else, so it is handed the
-          vehicle without the alert state. */}
-      <VehicleStatsCard vehicle={vehicle.status === 'theft' ? { ...vehicle, status: 'ok' } : vehicle} />
+          vehicle without the alert state. Opened by a click, so it reads the
+          unit's day for the start row, as the pinned map card does. */}
+      <VehicleStatsCard vehicle={vehicle.status === 'theft' ? { ...vehicle, status: 'ok' } : vehicle} withDay />
     </div>
   ) : null;
   const detailCol = (
     <div className="fi-body-detail" key="detail">
-      <FuelIncidentBody incident={incident} vehicleId={vehicle?.vehicleId} />
+      {/* The card beside it already shows the fuel level now; the phone's
+          sheet has no card, so there the day keeps its own. */}
+      <FuelIncidentBody incident={incident} vehicleId={vehicle?.vehicleId} cardShowsLevel={!sheet && !!vehicle} />
     </div>
   );
 
@@ -637,7 +631,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
               aria-pressed={pinned}
               aria-label={pinned ? 'Unpin' : 'Pin'}
               title={pinned ? 'Unpin — return to a dialog' : 'Pin — keep it open while you work'}
-            >📌</button>
+            ><IconPushPin on={pinned} /></button>
           )}
           <button
             className="fi-icon"
@@ -645,8 +639,8 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
             aria-expanded={!collapsed}
             aria-label={collapsed ? 'Expand' : 'Collapse'}
             title={collapsed ? 'Expand' : 'Collapse'}
-          >{collapsed ? '▢' : '—'}</button>
-          <button className="fi-icon" onClick={onClose} aria-label="Close" title="Close">✕</button>
+          ><IconWinMin min={collapsed} /></button>
+          <button className="fi-icon" onClick={onClose} aria-label="Close" title="Close"><IconWinClose /></button>
         </div>
         )}
 
@@ -685,25 +679,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
               {sheet ? detailCol : [cardCol, detailCol]}
             </div>
             <div className="fi-actions">
-              {deleteError && <span className="fi-delete-error" role="alert">{deleteError}</span>}
               <button className="fi-btn" onClick={onClose}>Close</button>
-              {/* Deleting hides the incident for the whole organisation, so it
-                  needs the same grant the server checks (fuel_theft:create).
-                  Without it there is no button rather than one that fails. */}
-              {canDelete && (
-                <button
-                  className="fi-btn fi-btn--danger"
-                  data-armed={armed ? 'true' : undefined}
-                  onClick={onDelete}
-                  disabled={deleting}
-                  title="Delete for everyone in this organisation. The record is kept, and a follow-up opens for someone else to accept and decide."
-                  // The label carries the arming, not a colour change alone —
-                  // "it went red" is not an instruction.
-                  aria-label={deleting ? 'Deleting' : armed ? 'Confirm delete' : 'Delete'}
-                >
-                  {deleting ? 'Deleting…' : armed ? 'Tap again' : 'Delete'}
-                </button>
-              )}
             </div>
           </>
         )}
@@ -713,7 +689,8 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
 }
 
 function LeftPanel({ onFocusVehicle, onClearVehicle, onFilter, activeFilter, onViewMap, showMobileMap }) {
-  const { activeCompanyId, activeCompany, feedVehicleId, fleetTypes, trackedIds, inTransitOnly } = useAppContext();
+  const { activeCompanyId, feedVehicleId, fleetTypes, trackedIds, inTransitOnly } = useAppFields("activeCompanyId", "feedVehicleId", "fleetTypes", "trackedIds", "inTransitOnly");
+  const { activeCompany } = useCompanies();
   // Membership only — the context deliberately holds an array; see the note
   // there.
   const trackedSet = useMemo(() => new Set(trackedIds ?? []), [trackedIds]);
@@ -1135,7 +1112,8 @@ function LeftPanel({ onFocusVehicle, onClearVehicle, onFilter, activeFilter, onV
 }
 
 function FleetOverviewPanel() {
-  const { activeCompanyId, activeCompany } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { activeCompany } = useCompanies();
 
   const hqVehicle = activeCompany
     ? {
@@ -1301,6 +1279,18 @@ function VehicleDetailPanel({ selectedVehicleId }) {
         // is a rough point and the card says so rather than implying survey
         // accuracy. See the server's sync-destinations.
         destinationPlaced: trip.destinationSamples >= 5 && trip.destinationSpreadM <= 500,
+        // Live-traffic routing from here to the end it is heading for — see
+        // DeliveryCard TrafficEta. The map's Traffic layer draws the same
+        // route (one shared query per unit).
+        traffic: {
+          vehicleId:  v.id,
+          trip,
+          lat:        v.lat,
+          lng:        v.lng,
+          speedKmh:   Number.isFinite(v.speed) ? v.speed : null,
+          travelMode: travelModeFor(v.vehicleType),
+          fresh:      positionFresh(v),
+        },
       }
     : null;
 
@@ -1444,14 +1434,15 @@ function VehicleDetailPanel({ selectedVehicleId }) {
  * window closes when the operator closes it, and at no other time.
  */
 function RightPanel() {
-  const { selectedVehicleId, setWindowOpen, incidentRequest } = useAppContext();
+  const { selectedVehicleId, incidentRequest } = useAppFields("selectedVehicleId", "incidentRequest");
+  const { setWindowOpen } = useAppActions();
   const { vehicles } = useFleetLiveShared();
   const v = selectedVehicleId != null
     ? vehicles.find((x) => x.id === selectedVehicleId) ?? null
     : null;
 
   // Dismissals are per browser and survive a reload; see readDismissed.
-  const [dismissed, setDismissed] = useState(readDismissed);
+  const [dismissed] = useState(readDismissed);
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [pinned, setPinned] = useState(() => !!readWindowState().pinned);
 
@@ -1537,13 +1528,6 @@ function RightPanel() {
               setHeld(next ? { incident, plate: incidentPlate, vehicle: incidentVehicle } : null);
             }}
             onClose={closeIncident}
-            onDismiss={() => {
-              const next = new Set(dismissed);
-              next.add(incident.id);
-              writeDismissed(next);
-              setDismissed(next);
-              closeIncident();
-            }}
           />
         </ErrorBoundary>
       )}
@@ -1567,9 +1551,9 @@ function RightPanel() {
  * unit's marker.
  */
 export function FuelIncidentHost() {
-  const { setWindowOpen, incidentRequest } = useAppContext();
+  const incidentRequest = useAppSelector((a) => a.incidentRequest);
+  const { setWindowOpen } = useAppActions();
   const { vehicles, orgId } = useFleetLiveShared();
-  const { can } = usePermissions();
   // Every open alert's window and side panel, read before they are opened, so
   // both open complete — see lib/fuelPrefetch.
   usePrefetchFuelAlerts(orgId, vehicles);
@@ -1615,6 +1599,16 @@ export function FuelIncidentHost() {
     if (!liveIncident && !pinned) setIncidentOpen(false);
   }, [liveIncident, pinned]);
 
+  // Escalated or de-escalated (here or by someone else): the alert is off the
+  // dashboard, so its window goes too, pinned or not.
+  const heldId = held?.incident?.id;
+  useEffect(() => {
+    if (heldId && dismissed.has(heldId)) {
+      setIncidentOpen(false);
+      setHeld(null);
+    }
+  }, [heldId, dismissed]);
+
   const closeIncident = () => {
     setIncidentOpen(false);
     setPinned(false);
@@ -1635,19 +1629,6 @@ export function FuelIncidentHost() {
           setHeld(next ? { incident, plate: incidentPlate, vehicle: incidentVehicle } : null);
         }}
         onClose={closeIncident}
-        canDelete={can('fuel_theft:create')}
-        onDismiss={async () => {
-          // Dismissed on the server for the whole organisation; the record is
-          // kept. Everyone else hears about it over SSE; this browser drops it
-          // straight away rather than waiting for its own echo. Throws on
-          // failure, which the window reports. See lib/fuelDismissals.
-          await apiFetch(
-            `/api/v1/organisations/${orgId}/fuel/thefts/${encodeURIComponent(incident.id)}/dismiss`,
-            { method: 'POST' },
-          );
-          dismissIncident(incident.id);
-          closeIncident();
-        }}
       />
     </ErrorBoundary>
   );

@@ -11,7 +11,7 @@ import FilterStrip from "./FilterStrip";
 import StatCarousel from "./StatCarousel";
 import { statMeta, statValues, StatButton, productKey } from "./StatKpis";
 
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { isInTransit, carriesCargo, equipmentLabel } from "../../lib/vehicleMap";
 import { useDashboardSummary } from "../../hooks/useDashboardSummary";
@@ -24,7 +24,8 @@ import "../../index.css";
 const CHIP_STATUS = { ok: "ok", speeding: "warn", theft: "crit", parked: "ok" };
 
 export default function SukariHeader() {
-  const { activeCompany, desktopActiveTab } = useAppContext();
+  const desktopActiveTab = useAppSelector((a) => a.desktopActiveTab);
+  const { activeCompany } = useCompanies();
 
   const [activeStat, setActiveStat] = useState(null);
 

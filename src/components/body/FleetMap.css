@@ -426,30 +426,24 @@
 .vt-action:hover:not(:disabled) { border-color: var(--accent-info); color: var(--accent-info); }
 .vt-action:disabled { opacity: 0.45; cursor: default; }
 
-/* The route button is the primary action on this card, so it carries the
-   accent while the window controls beside it stay neutral. */
-.vt-action--route {
-  color: var(--accent-info);
-  border-color: color-mix(in srgb, var(--accent-info) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-info) 12%, var(--color-card-inner));
-}
-.vt-action--route:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-info) 22%, var(--color-card-inner));
-}
+/* Neutral at rest, like every button beside it (operator, 2026-10-02: a tint
+   on an unpressed button read as "already on"). It lights only while this
+   unit's route is replaying — the same .vt-action--on the camera and zoom use
+   — and stays lit rather than greyed, since it is disabled for being on, not
+   for being unavailable. */
+.vt-action--route.vt-action--on:disabled { opacity: 1; }
 .vt-action--route svg { display: block; }
 .vt-action--cam svg { display: block; }
 .vt-action--zoom svg { display: block; }
 
-/* Neutral, unlike the route button beside it. The reticle only moves the
-   camera — nothing opens, nothing is fetched, nothing is recorded — so it has
-   no claim on the one accent this bar spends. It borrows .vt-action--on when
+/* Muted. The reticle only moves the camera — nothing opens, nothing is
+   fetched, nothing is recorded — so it has no claim on the accent. It borrows .vt-action--on when
    the map is sitting on the unit, which is the same convention the camera
    toggle uses and the only way to tell that a double-click has somewhere to
    go back to. */
 .vt-action--zoom { color: var(--color-text-muted); }
 
-/* A toggle, so it has to show its state. The route button fires an action and
-   returns; this one opens a window that stays, and a control that looks
+/* A toggle, so it has to show its state. The camera opens a window that stays, and a control that looks
    identical open and closed is a control you press twice. */
 .vt-action--on {
   color: var(--accent-info);
@@ -482,6 +476,25 @@
   border-radius: 99px;
   letter-spacing: 0.3px;
   white-space: nowrap;
+}
+
+/* The theft badge on a clicked card is a button that opens the fuel theft
+   window. Same pill; it only gains the button's affordances. */
+.vt-status-badge--action {
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  transition: filter 0.12s ease-out, transform 0.12s ease-out;
+}
+.vt-status-badge--action:hover { filter: brightness(0.94) saturate(1.2); }
+.vt-status-badge--action:active { transform: translateY(1px); }
+.vt-status-badge--action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vt-status-badge--action { transition: none; }
+  .vt-status-badge--action:active { transform: none; }
 }
 
 /* In-transit dot — carries the same rippling circle as the map marker, so the
@@ -1192,7 +1205,13 @@ html[data-theme="light"] #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  /* `flex: 1` — so each end grew to fill half the card and "Naitiri ⇄ Raiply"
+     came out as two words at opposite edges with the arrow adrift between
+     them. The arrow says these two places are the ends of ONE run, and it can
+     only say it while they are close enough to read as a pair.
+     Shrink-only: a long name still ellipsises rather than pushing the other
+     end off the card. */
+  flex: 0 1 auto;
 }
 .vt-jarrow {
   font-size: var(--vt-fs-label);
@@ -3125,11 +3144,13 @@ html[data-theme="light"] #root {
   /* Icon-only toggle — the words don't fit beside the chips on a phone. */
   .map-type-ico { display: block; }
   .map-type-txt { display: none; }
-  .map-type-btn { padding: 7px 12px; }
+  .map-type-btn { padding: 9px 12px; }
 
   /* Narrower without its labels. StatusRail shares this row and starts just
      past it — see --map-type-w below. */
-  :root { --map-type-w: 85px; --map-type-h: 33px; }
+  /* 36px: at 33 the two buttons measured 31px, under a thumb's reach. The
+     status chips on the same row read this height too. */
+  :root { --map-type-w: 85px; --map-type-h: 36px; }
 
   /* 16px off the map's own bottom edge — not off the viewport's.
    *
@@ -3192,8 +3213,9 @@ html[data-theme="light"] #root {
    altogether, and hiding these there would leave a phone with no way to reach
    a machine-type filter or a site plan at all.
 
-   Fuel alerts and the camera buttons stay. Fuel alerts is an alert feed rather
-   than a layer switch, and the camera is the map's own instrument.
+   The camera buttons stay: the camera is the map's own instrument. Fuel alerts
+   moved too, to Fleets > Fuel > Alerts — its button is hidden and its list
+   opens as a window, in FuelAlertsMenu.css.
 
    `display: none` rather than not rendering them: the menus are presentational
    and keep no state worth preserving, and a rule here keeps the breakpoint
@@ -3255,3 +3277,4 @@ html[data-theme="light"] #root {
     --rail-panel-max-h: calc(100dvh - var(--header-h, 57px) - var(--footer-h, 64px) - 122px);
   }
 }
+

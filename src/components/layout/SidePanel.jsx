@@ -2,16 +2,17 @@
 // Sample 2 design: cloud illustration weather, bordered stat boxes, bordered nav and layers sections.
 
 import { useState, useEffect } from 'react';
-import { useAppContext } from '../../context/AppContext';
+import { useAppSelector, useAppActions, useCompanies } from '../../context/AppContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import COMPANIES from '../../data/companyData';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
-import { needsMe, useFollowUps } from '../../lib/fuelFollowUps';
+import { TreeCountsMasked } from './SideTree';
 import FleetsTree from './FleetsTree';
 import MapLayersTree from './MapLayersTree';
+import { versionLabel, buildDetail } from '../../lib/version';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
@@ -20,10 +21,14 @@ export const NAV_ITEMS = [
   { key: 'analytics',    label: 'Analytics',    icon: 'chart-bar', permission: 'analytics:read'   },
   { key: 'maintenance',  label: 'Maintenance',  icon: 'tool',      permission: 'sensor:read'      },
   { key: 'weighbridges', label: 'Weighbridges', icon: 'scale',     permission: 'weighbridge:read' },
-  // System, pinned to the foot of the sidebar. Unlike the screens above it is
-  // not drawn at all without its permission: it is a place for case work, not
-  // a screen some roles are locked out of.
-  { key: 'system',       label: 'Cases',        icon: 'script',    permission: 'fuel_theft:triage', section: 'system' },
+  // Pinned to the foot of the sidebar, and not drawn at all without its
+  // permission. The Cases page that sat here is gone (operator, 2026-09-30):
+  // a deleted alert is removed from the UI for good, and the case work that
+  // matters (faulty probes and their repairs) lives on the Audit page.
+  // Fuel > Audit: cases found to be a faulty probe, and their repairs.
+  { key: 'audit',        label: 'Fuel Audit',   icon: 'clipboard-check', permission: 'fuel_audit:read', section: 'system' },
+  // Fuel > Report: advanced fuel analysis for one unit over a period.
+  { key: 'fuelReport',   label: 'Fuel Report',  icon: 'report-analytics', permission: 'fuel_filling:read', section: 'system' },
 ];
 
 function weatherDesc(code) {
@@ -174,12 +179,10 @@ export default function SidePanel() {
 
   useEffect(() => { setUserCollapsed(null); }, [isTablet, isLaptop]);
 
-  const { activeCompany, desktopActiveTab, setDesktopActiveTab } = useAppContext();
-  const { can, orgId } = usePermissions();
-  // Follow-ups waiting on this viewer: the System badge.
-  const canTriage = can('fuel_theft:triage');
-  const followUps = useFollowUps(orgId, canTriage);
-  const systemCount = followUps.items.filter(needsMe).length;
+  const desktopActiveTab = useAppSelector((a) => a.desktopActiveTab);
+  const { setDesktopActiveTab } = useAppActions();
+  const { activeCompany } = useCompanies();
+  const { can } = usePermissions();
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
   // `activeFilter` comes from the map rather than from local state here.
   // The local copy could not see the map clearing the filter on its own — on a
@@ -236,51 +239,104 @@ export default function SidePanel() {
       ].filter(Boolean).join(' ')}
     >
 
-      {/* Hamburger */}
-      <button
-        type="button"
-        className="side-panel__hamburger"
-        onClick={() => setUserCollapsed(collapsed ? false : true)}
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
-      >
-        <span className="side-panel__hb-lines">
-          <span /><span /><span />
-        </span>
-        {!collapsed && <span className="side-panel__hb-label">Menu</span>}
-      </button>
+      {/* Head: the panel's own toggle. Open, it sits at the far end of a
+          labelled row (where a "put this away" control is looked for); folded,
+          it is the first tile of the icon rail, on the same centre line as
+          every icon under it. The glyph says which way the panel will go. */}
+      <div className="side-panel__head">
+        {!collapsed && <span className="side-panel__head-label">Menu</span>}
+        <button
+          type="button"
+          className="side-panel__toggle"
+          onClick={() => setUserCollapsed(collapsed ? false : true)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
+          title={collapsed ? 'Expand menu' : 'Collapse menu'}
+        >
+          <i className={`ti ti-layout-sidebar-left-${collapsed ? 'expand' : 'collapse'}`} aria-hidden="true" />
+        </button>
+      </div>
 
       {!collapsed && (
         <div className="side-panel__body">
 
 
-          {/* ── Stats grid — clickable ── */}
+          {/* ── Stats grid — clickable ──
+              These are the map's status filters, drawn as counts, so without
+              `map:read` there is nothing for them to filter. They are still
+              DRAWN: a sidebar that loses its top third for one account and not
+              another looks half-loaded rather than restricted, and the shape of
+              the panel is part of knowing where you are.
+
+              What goes is the interaction and the figures. The cards are
+              disabled, and every value reads "–" — the same mark the grid
+              already shows while the fleet is still loading, so it needs no new
+              vocabulary. The labels stay, because the point is the shape.
+
+              Both halves matter. Numbers alone would tell somebody who cannot
+              open the map how many units exist and how many are in trouble;
+              a live button alone would filter a map they will never see. */}
           {(() => {
+            const locked = !can('map:read');
             // filterKey must match cases in lib/vehicleMap.js matchesFilter()
             const stats = STATUS_STATS.map(s => ({
               ...s,
-              value: waiting ? '–' : counts[s.key],
+              value: waiting || locked ? '–' : counts[s.key],
             }));
+            const by = Object.fromEntries(stats.map(s => [s.key, s]));
+            // Three rows, by what the figures ARE (lib/vehicleMap
+            // matchesFilter): the whole fleet; the two halves it splits into,
+            // Online + Offline = All; then Idling (part of Online) and the two
+            // alerts, which overlap and sum to nothing.
+            const order = ['all', 'online', 'offline', 'idling', 'warning', 'critical'];
+            const total = counts.all || 0;
+            const onShare = !waiting && !locked && total ? counts.online / total : 0;
             return (
-              <div className="sp-stats-grid">
-                {stats.map(s => {
-                  const isActive = activeFilter === s.filterKey;
+              <div className={`sp-stats-grid${locked ? ' sp-stats-grid--locked' : ''}`}>
+                {order.map(key => {
+                  const s = by[key];
+                  const isActive = !locked && activeFilter === s.filterKey;
                   // Clicking the lit card clears back to ALL, which is also
                   // what the ALL card does — so it can never leave the map
                   // filtered with nothing showing as filtered.
                   const next = isActive ? 'all' : s.filterKey;
+                  // Colour on the figure only where it asks for a look: an
+                  // alert with something in it. Everywhere else the dot
+                  // carries the status and the figure stays ink.
+                  const alert = (key === 'warning' || key === 'critical') && s.value > 0;
                   return (
                     <button
                       key={s.key}
                       type="button"
-                      className={`sp-stat-box${isActive ? ' sp-stat-box--active' : ''}`}
+                      className={[
+                        'sp-stat-box',
+                        `sp-stat-box--${s.key}`,
+                        isActive ? 'sp-stat-box--active' : '',
+                        alert ? 'sp-stat-box--alert' : '',
+                        s.value === 0 ? 'sp-stat-box--zero' : '',
+                      ].join(' ')}
                       style={{ '--stat-color': s.color }}
                       aria-pressed={isActive}
-                      title={`Show ${s.label.toLowerCase()} on the map`}
+                      disabled={locked}
+                      title={locked
+                        ? 'The Live Map is not part of your access'
+                        : `Show ${s.label.toLowerCase()} on the map`}
                       onClick={() => applyFilter(next)}
                     >
-                      <div className="sp-stat-num" style={{ color: s.color }}>{s.value}</div>
-                      <div className="sp-stat-lbl">{s.label}</div>
+                      <span className="sp-stat-num">{s.value}</span>
+                      <span className="sp-stat-lbl">
+                        {key !== 'all' && <i className="sp-stat-dot" aria-hidden="true" />}
+                        {s.label}
+                      </span>
+                      {key === 'all' && (
+                        // The fleet split the way the row beneath it is:
+                        // online, then offline. Only these two, because they
+                        // are the one pair that partitions the total.
+                        <span className="sp-stat-split" aria-hidden="true">
+                          {onShare > 0 && <b style={{ flexGrow: counts.online }} />}
+                          {onShare > 0 && <b style={{ flexGrow: counts.offline }} />}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -324,20 +380,48 @@ export default function SidePanel() {
               the map's menu said and grouped nothing: "Weighbridges", "Sukari
               Oyani" and "Nyaondo" as three peers, which is three names for two
               kinds of thing. */}
-          <div className="sp-trees">
-            <FleetsTree />
+          {/* Same treatment as the grid above, for the same reason: these two
+              are the MAP's controls — which fleets it draws and which layers it
+              shows — so without map:read they are drawn and dead.
+
+              `inert` rather than `pointer-events: none`, because these are
+              trees of real buttons and checkboxes: pointer-events stops a mouse
+              and does nothing about a Tab key, which would walk somebody
+              straight into controls the panel is saying are not theirs. Set
+              through a ref because React 18 does not pass the property through
+              from JSX. */}
+          <div
+            className={`sp-trees${can('map:read') ? '' : ' sp-trees--locked'}`}
+            ref={(el) => { if (el) el.inert = !can('map:read'); }}
+          >
+            {/* Limited access: every count in the trees reads "–", like the
+                status cards above (see TreeCountsMasked). */}
+            <TreeCountsMasked.Provider value={!can('map:read')}>
+            <FleetsTree
+              audit={can('fuel_audit:read') ? {
+                active: desktopActiveTab === 'audit',
+                open:   () => handleNav('audit'),
+              } : null}
+              report={can('fuel_filling:read') ? {
+                active: desktopActiveTab === 'fuelReport',
+                open:   () => handleNav('fuelReport'),
+              } : null}
+            />
             <MapLayersTree />
+            </TreeCountsMasked.Provider>
           </div>
 
         </div>
       )}
 
-      {/* ── Cases: the account's fuel follow-ups ──
+      {/* ── Fuel Audit at the foot ──
           Outside the scrolling body, so it stays at the foot of the sidebar
-          however long the trees above get. */}
-      {!collapsed && systemItems.length > 0 && (
+          however long the trees above get. It lives in Fleets > Fuel, so it
+          is drawn here only for an account whose trees are locked (no
+          map:read), which would otherwise have no way to it. */}
+      {!collapsed && systemItems.length > 0 && !can('map:read') && (
         <div className="sp-foot">
-          <nav className="sp-nav-box" aria-label="Cases">
+          <nav className="sp-nav-box" aria-label="Fuel audit">
             {systemItems.map(item => {
               const isActive = desktopActiveTab === item.key;
               return (
@@ -351,14 +435,6 @@ export default function SidePanel() {
                   {isActive && <span className="sp-nav-bar" />}
                   <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
                   <span className="sp-nav-label">{item.label}</span>
-                  {/* The Movement row's pair: the dot says something is
-                      waiting on you, the count says how much. */}
-                  {systemCount > 0 && (
-                    <>
-                      <span className="sp-nav-alertdot" role="img" aria-label="Waiting on you" />
-                      <span className="sp-nav-badge" aria-label={`${systemCount} waiting on you`}>{systemCount}</span>
-                    </>
-                  )}
                 </button>
               );
             })}
@@ -397,9 +473,9 @@ export default function SidePanel() {
         </nav>
       )}
 
-      {/* Collapsed Cases, at the foot of the icon rail like the open one. */}
+      {/* Collapsed Fuel Audit, at the foot of the icon rail like the open one. */}
       {collapsed && systemItems.length > 0 && (
-        <nav className="side-panel__nav side-panel__nav--foot" aria-label="Cases">
+        <nav className="side-panel__nav side-panel__nav--foot" aria-label="Fuel audit">
           {systemItems.map(item => {
             const isActive = desktopActiveTab === item.key;
             return (
@@ -409,18 +485,28 @@ export default function SidePanel() {
                 className={`side-panel__nav-item${isActive ? ' side-panel__nav-item--active' : ''}`}
                 onClick={() => handleNav(item.key)}
                 aria-current={isActive ? 'page' : undefined}
-                aria-label={systemCount > 0 ? `${item.label}, ${systemCount} waiting on you` : item.label}
+                aria-label={item.label}
                 title={item.label}
               >
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
-                {/* The icon rail has room for the dot only; the count is in
-                    the label and the open sidebar. */}
-                {systemCount > 0 && <span className="side-panel__nav-alertdot" aria-hidden="true" />}
               </button>
             );
           })}
         </nav>
       )}
+
+      {/* The very bottom: the login page's mark, its RAI GROUP wordmark and
+          the version under it (wordmark back, operator 2026-10-03; the year
+          stays off — the login page keeps it). Folded to the rail there is no
+          room for the wordmark, so the mark names the company there. The
+          tooltip carries the build and its date. */}
+      <div className="side-panel__meta" title={buildDetail()}>
+        <img className="side-panel__meta-mark" src="/logo-icon.png" alt={collapsed ? "RAI Group" : ""} width="34" height="34" />
+        <span className="side-panel__meta-text">
+          {!collapsed && <span className="side-panel__meta-word">RAI GROUP</span>}
+          <span className="side-panel__meta-version">{versionLabel()}</span>
+        </span>
+      </div>
 
     </aside>
     </>

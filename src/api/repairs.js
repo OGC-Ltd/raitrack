@@ -13,6 +13,22 @@ import { apiFetch } from "../services/api";
 
 const base = (orgId) => `/api/v1/organisations/${orgId}/repairs`;
 
+/*
+ * Maintenance > Repairs and Fuel > Audit show the same jobs. Every write here
+ * says so on `ft-repairs-changed`, and so does the server's `repair_changed`
+ * frame for writes made by anybody else (hooks/useFleetLive), so both views
+ * re-read and neither goes stale behind the other.
+ */
+export const REPAIRS_CHANGED = "ft-repairs-changed";
+export function repairsChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(REPAIRS_CHANGED));
+}
+async function writeFetch(url, init) {
+  const res = await apiFetch(url, init);
+  repairsChanged();
+  return res;
+}
+
 /**
  * Open (or resolved, or all) repair jobs for this organisation.
  *
@@ -51,7 +67,7 @@ export async function listRepairItems({
  * @param {{ orgId: string, itemId: string, technicianId?: string|null, reason?: string }} opts
  */
 export async function assignRepairItem({ orgId, itemId, technicianId, reason } = {}) {
-  const res = await apiFetch(`${base(orgId)}/items/${itemId}/assign`, {
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/assign`, {
     method: "POST",
     body: JSON.stringify({
       technicianId: technicianId ?? null,
@@ -61,9 +77,26 @@ export async function assignRepairItem({ orgId, itemId, technicianId, reason } =
   return res.data ?? null;
 }
 
+/**
+ * Who this organisation's triages may be handed to.
+ *
+ * The server decides. The picker used to ask for the USER ROSTER and work out
+ * in the browser which rows held `technician`, which was wrong twice over: the
+ * roster is scoped by user GROUP, and an assignee has to share the
+ * ORGANISATION but need not share the group — ControlTech are contractors in
+ * their own group who service all four tenants, and they are exactly who these
+ * jobs go to. Holding a second copy of the role rule here is also how the
+ * picker came to offer names the server refuses.
+ */
+export async function listRepairAssignees(orgId) {
+  if (!orgId) return [];
+  const res = await apiFetch(`${base(orgId)}/assignees`);
+  return res.data ?? [];
+}
+
 /** Respond to a repair assignment as the assigned user. */
 export async function respondToRepairAssignment({ orgId, itemId, status } = {}) {
-  const res = await apiFetch(`${base(orgId)}/items/${itemId}/assignment-response`, {
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/assignment-response`, {
     method: "POST",
     body: JSON.stringify({ status }),
   });
@@ -111,7 +144,7 @@ export async function listRepairReports({ orgId, cursor, limit = 20 } = {}) {
  * @param {{ orgId: string, items: object[], note?: string }} opts
  */
 export async function submitRepairReport({ orgId, items, note } = {}) {
-  const res = await apiFetch(base(orgId), {
+  const res = await writeFetch(base(orgId), {
     method: "POST",
     body: JSON.stringify({ items, ...(note ? { note } : {}) }),
   });
@@ -131,7 +164,7 @@ export async function submitRepairReport({ orgId, items, note } = {}) {
 export async function resolveRepairItem({
   orgId, itemId, fixNote, recommendation, verdict = "fixed",
 } = {}) {
-  const res = await apiFetch(`${base(orgId)}/items/${itemId}/resolve`, {
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/resolve`, {
     method: "POST",
     body: JSON.stringify({ fixNote, verdict, ...(recommendation ? { recommendation } : {}) }),
   });
@@ -150,6 +183,8 @@ export const OUTCOME_LABEL = {
   fixing:      "Fixing",
   needs_spare: "Needs a spare part",
   cannot_fix:  "Cannot be fixed",
+  // No technician recorded it: a fuel case found the probe faulty (Fuel Audit).
+  audit:       "From Fuel Audit",
 };
 
 /** The verb on the button, which is shorter than the noun on the chip. */
@@ -160,7 +195,7 @@ export const OUTCOME_ACTION = {
 };
 
 /** Maps onto the panel's existing .sp4-pill--* modifiers. */
-export const OUTCOME_PILL = { fixing: "con", needs_spare: "warn", cannot_fix: "inc" };
+export const OUTCOME_PILL = { fixing: "con", needs_spare: "warn", cannot_fix: "inc", audit: "info" };
 
 // ── the ladder ───────────────────────────────────────────────────────────────
 //
@@ -224,12 +259,105 @@ export const STAGE_PILL = {
 export const SETTABLE_STAGES = ["spare_outsourced", "fixing"];
 
 /**
+ * May this account WORK the job (move it, order and collect its parts, sign
+ * it off)? Operator, 2026-10-01: a technician works only a job assigned to
+ * them that they have accepted; every other job they read. `repair:work_any`
+ * (every other role that resolves repairs) lifts that. The server enforces
+ * the same rule (repairs.authz requireWorkableJob); this only hides what it
+ * would refuse.
+ */
+export function mayWorkJob(job, { canResolve, canWorkAny, userId }) {
+  if (!canResolve || !job || job.resolvedAt) return false;
+  if (canWorkAny) return true;
+  const assignee = job.assignedToId ?? job.assignedTo?.id ?? null;
+  return assignee != null && assignee === userId && (job.assignmentStatus ?? "accepted") === "accepted";
+}
+
+/**
+ * How a stage chip reads for a job (operator, 2026-10-01). Both chips can be
+ * lit: a job on Fixing has also been through Spare outsourced, so that chip
+ * stays on beside it. Blue when the spare really was outsourced (it is in the
+ * history), amber when the job went to Fixing without one.
+ *
+ * @returns {'on'|'passed'|'skipped'|null}
+ */
+export function stageChipState(item, stage) {
+  if (!item) return null;
+  if (item.stage === stage) return "on";
+  const past = STAGE_ORDER.indexOf(item.stage === "failed" ? "fixed" : item.stage);
+  const here = STAGE_ORDER.indexOf(stage);
+  if (here < 0 || past <= here) return null;
+  const history = Array.isArray(item.stageHistory) ? item.stageHistory : [];
+  return history.some((e) => e?.stage === stage) ? "passed" : "skipped";
+}
+export const STAGE_CHIP_CLASS = { on: " sp4-filter-chip--on", passed: " sp4-filter-chip--on", skipped: " sp4-filter-chip--skipped" };
+
+/**
  * Move one open job along the ladder.
  *
  * @param {{ orgId: string, itemId: string, stage: string, note?: string }} opts
  */
+// ── overhaul audit (fleet-server repairs.overhaul) ───────────────────────────
+
+/** One job's spare parts and inspections: { parts, inspections }. */
+export async function fetchRepairOverhaul({ orgId, itemId } = {}) {
+  const res = await apiFetch(`${base(orgId)}/items/${itemId}/overhaul`);
+  return res?.data ?? { parts: [], inspections: [] };
+}
+
+/** The checklist, in the order a technician walks the unit. */
+export const INSPECTION_COMPONENTS = [
+  ["probe",        "Fuel probe"],
+  ["probe_cable",  "Probe cable & connector"],
+  ["tank_bracket", "Tank & bracket"],
+  ["tracker",      "Tracker / FLS unit"],
+  ["calibration",  "Calibration"],
+];
+export const INSPECTION_VERDICTS = [
+  ["ok",       "OK",       "con"],
+  ["faulty",   "Faulty",   "inc"],
+  ["replaced", "Replaced", "info"],
+];
+export const PART_STATUS = {
+  ordered:   { label: "Ordered",   pill: "warn" },
+  received:  { label: "Received",  pill: "info" },
+  fitted:    { label: "Fitted",    pill: "con" },
+  cancelled: { label: "Cancelled", pill: "none" },
+};
+
+export async function setRepairInspection({ orgId, itemId, component, verdict, note } = {}) {
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/inspections`, {
+    method: "POST",
+    body: JSON.stringify({ component, verdict, ...(note?.trim() ? { note: note.trim() } : {}) }),
+  });
+  return res.data ?? null;
+}
+
+/** Order a spare. The first order moves the job to spare_outsourced (server-side). */
+export async function addRepairSparePart({ orgId, itemId, part } = {}) {
+  const body = { name: part.name.trim(), quantity: Number(part.quantity) || 1 };
+  if (part.supplier?.trim()) body.supplier = part.supplier.trim();
+  if (part.costKes !== "" && part.costKes != null) body.costKes = Number(part.costKes);
+  if (part.expectedAt) body.expectedAt = part.expectedAt;
+  if (part.note?.trim()) body.note = part.note.trim();
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/parts`, { method: "POST", body: JSON.stringify(body) });
+  return res.data ?? null;
+}
+
+/**
+ * received | fitted | cancelled. `fixDate` (YYYY-MM-DD) is required on
+ * received: the day the fix will happen now the part is collected. The last
+ * arrival moves the job to fixing (server-side).
+ */
+export async function updateRepairSparePart({ orgId, itemId, partId, status, fixDate } = {}) {
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/parts/${partId}`, {
+    method: "POST", body: JSON.stringify({ status, ...(fixDate ? { fixDate } : {}) }),
+  });
+  return res.data ?? null;
+}
+
 export async function setRepairStage({ orgId, itemId, stage, note } = {}) {
-  const res = await apiFetch(`${base(orgId)}/items/${itemId}/stage`, {
+  const res = await writeFetch(`${base(orgId)}/items/${itemId}/stage`, {
     method: "POST",
     body: JSON.stringify({ stage, ...(note ? { note } : {}) }),
   });
@@ -249,66 +377,75 @@ export async function setRepairStage({ orgId, itemId, stage, note } = {}) {
  * STAGE_ORDER. A job that failed, was retried and then signed off clean shows
  * the clean end on the rails, and the loop in the history beneath them.
  *
+ * A rung the job went past without ever standing on it is DROPPED, not drawn
+ * hollow — see `skipped` below. The returned array is therefore between two
+ * and four rungs long, and a caller must not index it by STAGE_ORDER.
+ *
  * @param {{ stage?: string, stageHistory?: object[], resolvedAt?: string }} item
  */
 export function trackingLine(item) {
   const history = Array.isArray(item?.stageHistory) ? item.stageHistory : [];
   /*
-   * No item means no repair has been filed, which is not "no information" —
+   * No item means no repair has been filed, which is not "no information":
    * it is the FIRST rung. A probe the fleet can see is broken and nobody has
-   * been out to is pending, and it says so with an empty history, so every
-   * rung above it reads as not-yet-reached rather than as skipped.
+   * been out to is pending, and every rung above it reads as not yet.
    */
   const current = item?.stage ?? "pending";
-  const seen = new Map();
-  for (const e of history) if (e?.stage && !seen.has(e.stage)) seen.set(e.stage, e);
-
-  // The last rung takes whichever end was actually reached; before either is,
-  // it reads "Fixed" because that is the one the job is aimed at.
   const endedBadly = current === "failed";
 
-  return STAGE_ORDER.map((stage, i) => {
-    const key = i === STAGE_ORDER.length - 1 && endedBadly ? "failed" : stage;
-    const isLast = i === STAGE_ORDER.length - 1;
-    const isCurrent = isLast ? current === "fixed" || current === "failed" : current === stage;
-    const event = seen.get(key) ?? (isLast ? seen.get("failed") ?? seen.get("fixed") : undefined);
+  /*
+   * The ladder is SEQUENTIAL: Pending -> Spare outsourced -> Fixing -> Fixed.
+   * Every rung below where the job is now is done, the one it is on is
+   * current, every rung above it is still to come. Always all four, in order.
+   *
+   * It is read from the job's stage, never from which stages appear somewhere
+   * in its history. A job moved back from Fixing to Spare outsourced (the part
+   * was wrong) has Fixing in its history, and drawing that rung done while the
+   * one below it is current left a filled line above an unfilled one. Where
+   * the job is NOW decides; the history only supplies the dates.
+   *
+   * An unknown stage indexes to -1: nothing reads as passed, the safe way.
+   */
+  const reachedIndex = endedBadly ? STAGE_ORDER.length - 1 : STAGE_ORDER.indexOf(current);
 
-    /*
-     * The one rung that is done WITHOUT an entry to prove it.
-     *
-     * Nothing writes a 'pending' history entry, because pending is the state a
-     * broken probe is in before this table knows about it at all. But every
-     * reported unit passed through it — that is what being reported means — so
-     * once an item exists, pending is behind us. Reading it off the history
-     * like every other rung would draw it hollow and claim the unit was never
-     * waiting, which is the opposite of true.
-     *
-     * Its date is deliberately absent rather than guessed: when the fault
-     * STARTED is a question for probe health, not for a table that only begins
-     * at the report.
-     */
-    const impliedPending = stage === "pending" && item != null;
+  /* The LATEST arrival at each stage: after a return, the date that counts is
+     the one the job came back on. */
+  const lastAt = new Map();
+  for (const e of history) if (e?.stage) lastAt.set(e.stage, e);
+
+  return STAGE_ORDER.map((stage, i) => {
+    const isLast = i === STAGE_ORDER.length - 1;
+    const key = isLast && endedBadly ? "failed" : stage;
+    const state = i < reachedIndex ? "done" : i === reachedIndex ? "current" : "todo";
+    const event = state === "todo" ? undefined
+      : lastAt.get(key) ?? (isLast ? lastAt.get("failed") ?? lastAt.get("fixed") : undefined);
+
+    /* Pending has no history entry of its own: every reported unit passed
+       through it, but when the fault STARTED is probe health's question, so
+       no date is guessed for it. */
+    const impliedPending = stage === "pending" && item != null && !event;
 
     return {
       key,
       label: STAGE_LABEL[key],
       blurb: STAGE_BLURB[key],
-      state: isCurrent ? "current" : (event || impliedPending) ? "done" : "todo",
+      state,
       tone:  key === "failed" ? "crit" : key === "fixed" ? "ok" : "mid",
       at:    event?.at ?? null,
       by:    event?.byName ?? null,
       note:  event?.note ?? null,
       auto:  event?.auto === true,
-      /* "Until it was reported" rather than a date we do not have. */
-      implied: impliedPending && !event,
-      /* The pending rung of a unit with no report at all. Distinct from
-         `implied`, which is the same rung once a report exists: one is "we
-         are here and nothing has been filed", the other is "we came through
-         here before the filing". Without it the meta line falls through to a
-         generic fallback and claims something was recorded. */
+      implied: impliedPending,
+      /* The pending rung of a unit with no report at all. */
       unreported: stage === "pending" && item == null,
+      /* Passed without anybody standing on it, e.g. no part was needed, so
+         the spare rung went by with no order. Done, and says so, rather than
+         showing a date it does not have. */
+      passedWithout: state === "done" && !event && !impliedPending,
     };
-  });
+  }).map((n) => (n.passedWithout
+    ? { ...n, blurb: n.key === "spare_outsourced" ? "Skipped: no spare part was outsourced." : "Passed without a record." }
+    : n));
 }
 
 /**
@@ -400,6 +537,19 @@ export function utcTodayISO(now = Date.now()) {
 }
 
 /**
+ * The calendar day on the viewer's own clock, `offset` days on, YYYY-MM-DD.
+ * For what a person PICKS (a delivery date, a fix date): "today" is the date
+ * on their wall, not UTC's. In Kenya (UTC+3) UTC is still on yesterday until
+ * 03:00, so the UTC day made 1 Oct read as "tomorrow" just after midnight.
+ */
+export function localDayISO(offset = 0, now = Date.now()) {
+  const d = new Date(now);
+  d.setDate(d.getDate() + offset);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
  * How the estimate stands: whole days from today, negative when it has passed.
  *
  * Subtracting two midnight-UTC instants is exact — no hour survives either
@@ -411,7 +561,9 @@ export function daysUntil(iso, now = Date.now()) {
   const day = dayOf(iso);
   if (!day) return null;
   const then = Date.parse(day + "T00:00:00.000Z");
-  const today = Date.parse(utcTodayISO(now) + "T00:00:00.000Z");
+  // Today on the viewer's own clock: a fix date of 1 Oct reads "today" on
+  // 1 Oct in Nairobi, not "tomorrow" because UTC is still on 30 Sept.
+  const today = Date.parse(localDayISO(0, now) + "T00:00:00.000Z");
   if (Number.isNaN(then)) return null;
   return Math.round((then - today) / 86400000);
 }

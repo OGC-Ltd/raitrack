@@ -314,16 +314,6 @@ export default function FuelRateChart({ series, views }) {
             </ResponsiveContainer>
           </div>
 
-          {gapSpan && (
-            <div className="an-rate__gapnote">
-              No rate {gaps.length === 1 ? "on" : "for"} {gapSpan}
-              {gaps.length > 1 && ` (${gaps.length} days)`} — the fleet worked,
-              but under {fmt(Math.max(...gaps.map(g => g.denom ?? 0)), 1)}{" "}
-              {view.denomLabel}, too little to divide a day's fuel by. The line
-              breaks rather than drawing a spike off a denominator that small.
-            </div>
-          )}
-
           <div className="an-rate__foot">
             <span>{view.note}</span>
             <span>

@@ -28,24 +28,33 @@
   justify-content: center;
   line-height: 1;
 }
-/* Attention count pinned to the icon's corner — same pill the header bell
-   used before the maintenance counter moved down here. */
+/* Attention count pinned to the icon's corner — the same badge the header
+   bell carries, and it inherited the same fault: `min-width` plus side padding
+   makes a shape whose width follows its content, so it was round on one digit
+   and an oval on two. One knob, both axes from it, and `aspect-ratio` because
+   this is positioned inside a flex icon. See .app-header__bell-count. */
 .nav-item__badge {
+  --nav-badge: 14px;
   position: absolute;
   top: -5px;
   right: -9px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 2px;
-  border-radius: 7px;
+  width: var(--nav-badge);
+  height: var(--nav-badge);
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
   background-color: #ef4444;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  line-height: 1;
   font-size: 8px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: #fff;
 }
+.nav-item__badge[data-len="3"] { --nav-badge: 17px; font-size: 7px; }
+.nav-item__badge[data-len="4"],
+.nav-item__badge[data-len="5"] { --nav-badge: 19px; font-size: 6.5px; letter-spacing: -0.03em; }
 .nav-item__label {
   font-size: 10px;
   font-weight: 600;

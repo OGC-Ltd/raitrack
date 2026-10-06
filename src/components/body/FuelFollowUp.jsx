@@ -1,6 +1,6 @@
 /**
  * Follow-ups on deleted fuel alerts: the case window. See lib/fuelFollowUps for
- * the rules and the store, and screens/SystemScreen for the list.
+ * the rules and the store; the Fuel Audit page lists the probe-fault cases.
  *
  * The case window is mounted once, in the header (FuelFollowUpHost), so it can
  * be opened from anywhere — the System screen, the Live Feed, a phone's feed
@@ -31,6 +31,8 @@ import {
   deescalateFollowUp, escalateFollowUp, fetchAssignees, fetchFollowUp, followUpAbilities,
   followUpStage, noteFollowUp, recallFollowUp, useOpenFollowUp,
 } from "../../lib/fuelFollowUps";
+import { STAGE_LABEL as REPAIR_STAGE_LABEL } from "../../api/repairs";
+import { ESCALATION_REASONS, escalationReason } from "../../lib/fuelReview";
 
 const TZ = "Africa/Nairobi";
 const WHEN = new Intl.DateTimeFormat("en-GB", {
@@ -46,14 +48,16 @@ export const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L
 export const STAGE_PILL = {
   OPEN: "warn", ASSIGNED: "info", NEEDS_ASSIGNING: "inc",
   ACCEPTED: "info", ESCALATED: "inc", DEESCALATED: "con",
+  PROBE_FAULT: "warn", PROBE_FIXED: "con",
 };
 
-/* The two decisions, as the repair dialog's outcome chips. The chip classes
-   borrow the repair outcomes that share their colour: red for a theft, green
-   for cleared. */
+/* The two decisions, as the repair dialog's outcome chips: red to escalate,
+   green to clear. What an escalation is FOR is chosen under it
+   (ESCALATION_REASONS, shared with the alert window), so a new kind of
+   escalation is a new reason, not a new button. */
 const DECISIONS = [
-  { id: "escalate",   label: "Confirmed theft", chip: "cannot_fix" },
-  { id: "deescalate", label: "Not a theft",     chip: "fixed" },
+  { id: "escalate",   label: "Escalate",    chip: "cannot_fix" },
+  { id: "deescalate", label: "De-escalate", chip: "fixed" },
 ];
 
 /** A readable error from an ApiError, preferring the server's own sentence. */
@@ -68,6 +72,16 @@ function whyNot(f, why) {
   if (why === "someone-else") return `${f.acceptedBy?.fullName ?? "Someone else"} accepted this follow-up; only they can decide it.`;
   if (why === "assigned-elsewhere") return `Assigned to ${f.assignedTo?.fullName ?? "someone else"}; only they can accept or decline it.`;
   if (why === "no-rights") return "Your role cannot take on fuel follow-ups.";
+  if (f?.status === "PROBE_FAULT") {
+    const job = f.repairItem;
+    if (!job) return "A faulty fuel probe. Its repair job is no longer in Repairs; raise a new one from Fuel > Audit.";
+    if (job.resolvedAt && job.stage !== "fixed") {
+      return "A faulty fuel probe. Its repair was signed off without a fix, so the case stays open: raise a new job from Fuel > Audit.";
+    }
+    return `A faulty fuel probe, waiting on its repair in Maintenance > Repairs (${REPAIR_STAGE_LABEL[job.stage] ?? job.stage}). `
+      + "It closes when a technician signs the job off fixed.";
+  }
+  if (f?.status === "PROBE_FIXED") return "A faulty fuel probe, repaired. The case closed when the job was signed off fixed.";
   return null;
 }
 
@@ -86,6 +100,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
   const [mode, setMode] = useState("main"); // 'main' | 'decline' | 'assign' | 'recall'
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState(null); // 'escalate' | 'deescalate' | null
+  const [reason, setReason] = useState(null);     // what an escalation is for: ESCALATION_REASONS
   const [assignees, setAssignees] = useState(null); // null until loaded
   const [assigneeId, setAssigneeId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -130,6 +145,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
     setMode(next);
     setNote("");
     setDecision(null);
+    setReason(null);
     setAssigneeId("");
     setError(null);
   };
@@ -138,6 +154,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
      The repair dialog's rule: a dead button always has its reason beside it. */
   let submit = null;
   let missing = null;
+  const chosen = decision === "escalate" ? escalationReason(reason) : null;
   if (mode === "decline") {
     submit = { label: "Decline follow-up", busyLabel: "Declining…", danger: true, run: () => declineFollowUp(orgId, id, note.trim()) };
     if (!noteOk) missing = "Say why you are declining";
@@ -150,13 +167,17 @@ function FollowUpWindow({ id, orgId, canTriage }) {
     submit = { label: "Accept follow-up", busyLabel: "Accepting…", run: () => acceptFollowUp(orgId, id) };
   } else if (can.act) {
     if (decision === "escalate") {
-      submit = { label: "Record confirmed theft", busyLabel: "Saving…", danger: true, run: () => escalateFollowUp(orgId, id, note.trim()) };
+      submit = {
+        label: chosen?.confirm ?? "Escalate", busyLabel: "Saving…", danger: chosen?.id === "theft",
+        run: () => escalateFollowUp(orgId, id, note.trim(), chosen.id),
+      };
     } else if (decision === "deescalate") {
-      submit = { label: "Close as not a theft", busyLabel: "Saving…", run: () => deescalateFollowUp(orgId, id, note.trim()) };
+      submit = { label: "De-escalate as not a theft", busyLabel: "Saving…", run: () => deescalateFollowUp(orgId, id, note.trim()) };
     } else {
       submit = { label: "Add note", busyLabel: "Adding…", run: () => noteFollowUp(orgId, id, note.trim()) };
     }
-    if (!noteOk) missing = decision ? "Say what you found" : "Write a note, or choose an outcome";
+    if (decision === "escalate" && !chosen) missing = "Choose what to escalate it as";
+    else if (!noteOk) missing = decision ? "Say what you found" : "Write a note, or choose an outcome";
   }
 
   const onSubmit = async (e) => {
@@ -182,6 +203,12 @@ function FollowUpWindow({ id, orgId, canTriage }) {
         role="presentation"
         onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) closeFollowUp(); }}
       >
+        {error && (
+          <div className="sp4-toast sp4-toast--crit" role="alert">
+            <span className="sp4-toast-text">{error}</span>
+            <button type="button" className="sp4-toast-x" aria-label="Dismiss notification" onClick={() => setError(null)}>×</button>
+          </div>
+        )}
         <div className="sp4-modal sp4-modal--narrow ffu-modal" ref={dialogRef}
              role="dialog" aria-modal="true" aria-labelledby={titleId}>
           <div className="sp4-modal-head">
@@ -319,11 +346,30 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                               className={"sp4-filter-chip sp4-out-chip sp4-out-chip--" + d.chip
                                          + (decision === d.id ? " sp4-out-chip--on" : "")}
                               aria-pressed={decision === d.id}
-                              onClick={() => setDecision(decision === d.id ? null : d.id)}
+                              onClick={() => { setDecision(decision === d.id ? null : d.id); setReason(null); }}
                               disabled={busy}
                             >{d.label}</button>
                           ))}
                         </div>
+
+                        {decision === "escalate" && (
+                          <div className="sp4-repair-outcomes" role="radiogroup" aria-label="Escalate as">
+                            <span className="sp4-label ffu-reason-label">Escalate as</span>
+                            {ESCALATION_REASONS.map((r) => (
+                              <button
+                                key={r.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={reason === r.id}
+                                className={"sp4-filter-chip sp4-out-chip sp4-out-chip--"
+                                           + (r.id === "theft" ? "cannot_fix" : "needs_spare")
+                                           + (reason === r.id ? " sp4-out-chip--on" : "")}
+                                onClick={() => setReason(r.id)}
+                                disabled={busy}
+                              >{r.label}</button>
+                            ))}
+                          </div>
+                        )}
 
                         <label className="sp4-field">
                           <span className="sp4-label">
@@ -334,15 +380,16 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
                             placeholder={decision === "escalate"
-                              ? "What confirms the theft: who, where, what was checked"
+                              ? (chosen?.placeholder ?? "Choose what it is escalated as first")
                               : decision === "deescalate"
-                                ? "Why it is not a theft: a refuel, a sensor fault, a drain on record"
+                                ? "Why it is not a theft: a refuel, a drain on record"
                                 : "What you checked, or who you spoke to"}
                             maxLength={2000}
                             disabled={busy}
                             rows={2}
                           />
                         </label>
+                        {chosen?.hint && <span className="ffu-muted">{chosen.hint}</span>}
                         {missing && decision && <span className="sp4-repair-why">{missing}</span>}
                       </>
                     )}
@@ -381,7 +428,6 @@ function FollowUpWindow({ id, orgId, canTriage }) {
             </div>
 
             <div className="sp4-modal-foot">
-              {error && <div className="sp4-banner sp4-banner--crit sp4-modal-err" role="alert">{error}</div>}
               {missing && <span className="sp4-repair-pending">{missing}</span>}
               {mode === "main" ? (
                 <>
