@@ -1,14 +1,14 @@
 // Desktop Drivers tab — real driver analytics from the fleet-server DB
 // (/analytics/drivers). An analytics-focused roster on the left; the selected
-// driver (first row by default) is profiled on the right with a rating gauge,
-// KPI tiles, heaviest-load callout, and tonnes/mileage trend charts. A
+// driver (first row by default) is profiled in a four-cell strip — identity +
+// live meters, tonnes and mileage trends, incident summary. A
 // full-width leaderboard compares all drivers. Design mirrors the Analytics and
 // Maintenance pages (cards, KPI tiles, ranked bars, Inter, --color-* tokens).
 
 import { useState, useEffect, useId } from "react";
 import "./DriversScreen.css";
 import { getDriversOverview } from "../../api/drivers";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { pendingDriver, clearPendingDriver, driverNameMatches } from "../../lib/driverHandoff";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useApiData } from "../../hooks/useApiData";
@@ -38,12 +38,14 @@ const initialsOf = (name = "") =>
 // (score still at its 0 default) reads as "NEW", not a judgment call. Below
 // "FAIR" (rating < 3) never shows a pill — the UI intentionally hides any
 // "Needs Work" style label for low performers.
+// `color` is for the PDF, which cannot resolve a CSS variable; on screen the
+// tier is a TONE name and its colour lives in DriversScreen.css, per theme.
 const ratingTier = (r = 0) => {
-  if (r === 0) return { label: "NEW", color: "#94a3b8" };
-  if (r >= 4.5) return { label: "EXCELLENT", color: "#22c55e" };
-  if (r >= 4) return { label: "GOOD", color: "#22c55e" };
-  if (r >= 3) return { label: "FAIR", color: "#f59e0b" };
-  return { label: "", color: "#94a3b8" };
+  if (r === 0) return { label: "NEW", color: "#94a3b8", tone: "new" };
+  if (r >= 4.5) return { label: "EXCELLENT", color: "#22c55e", tone: "good" };
+  if (r >= 4) return { label: "GOOD", color: "#22c55e", tone: "good" };
+  if (r >= 3) return { label: "FAIR", color: "#f59e0b", tone: "fair" };
+  return { label: "", color: "#94a3b8", tone: "new" };
 };
 
 /**
@@ -96,24 +98,28 @@ const activeWindow = (detail) => {
 // Roster table shows the top drivers a page at a time; the rest paginate.
 const ROSTER_PAGE_SIZE = 6;
 
-// Full driver datagrid (search + metric filter + sort + load-more), mirroring
+// Full driver datagrid (search + metric filter + sort + pages), mirroring
 // the Maintenance grid. The metric chips rank the grid by one of the numbers.
 //
-// LOAD MORE, not pages — `.sp4-table-more`, which is what the tables on that
-// tab do. A roster is a list you read down, and paging cuts it into arbitrary
-// slices: rank by tonnes, and the answer to "who is behind the top fifteen" is
-// a control that throws the top fifteen away to show you. Growing the list
-// keeps what has already been read on screen, and the tally beside the button
-// says how much is left rather than how many slices there are.
+// PAGES, Prev / Next — the Sensor Monitor's pager (operator, 2026-10-03).
+// The rank number on each row carries the position across pages, so page two
+// still reads as 16th to 30th rather than as a fresh list.
 //
 // The step is smaller on a phone because a row IS bigger there: the table
 // becomes a stack of cards, each about 133px tall, so 15 of those is a
-// ~2,000px scroll. The query is the same 700px the stylesheet switches on (see
+// ~2,000px page. The query is the same 700px the stylesheet switches on (see
 // DriversScreen.css) — the step and the row shape have to change at the same
 // width, or a tablet gets table rows counted out for cards.
 const GRID_CARDS_QUERY = "(max-width: 700px)";
 const GRID_STEP = 15;
 const GRID_STEP_PHONE = 10;
+// Columns that are a count the roster can be RANKED on. Sorting by one of these
+// numbers the rows (1 = best by that measure, whichever way the sort runs) and
+// draws a bar in that column against the roster's largest value — the gap
+// between first and fifth is what a ranking is for, and a column of bare
+// figures makes the reader do that subtraction row by row.
+const RANKED_KEYS = new Set(["rating", "trips", "tonnes", "mileageKm", "fuelTheftCases", "overspeedingCases"]);
+const BAR_KEYS = new Set(["rating", "trips", "tonnes", "mileageKm"]);
 const GRID_METRICS = [
   { key: "tonnes", label: "Tonnes" },
   { key: "mileageKm", label: "Mileage" },
@@ -151,7 +157,8 @@ function periodDelta(values) {
 }
 
 export default function DriversScreen() {
-  const { activeCompanyId, activeCompany } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { activeCompany } = useCompanies();
 
   // Live fleet (shared SSE stream) — powers the selected driver's realtime
   // gauges/radar. Same list the map renders, no extra request.
@@ -306,7 +313,12 @@ export default function DriversScreen() {
             <div className="dr-layout">
               {/* Selected-driver detail — the four KPI cards sit at the top as the
                   main summary area; the full driver grid follows below. */}
-              <div className="dr-detail">
+              {/* One strip, four cells — the selected driver read left to
+                  right: who and what they are driving now, what they hauled,
+                  how far, and what went wrong. Cells share hairlines rather
+                  than each carrying its own card, because they are four
+                  readings of one driver, not four things. */}
+              <section className="dr-strip" aria-label="Selected driver">
                 <DriverCard detail={detail} loading={detailLoading} liveVehicle={liveVehicle} />
                 <TrendStat
                   title="Tonnes ferried"
@@ -331,7 +343,7 @@ export default function DriversScreen() {
                   loading={detailLoading}
                 />
                 <SummaryCard detail={detail} loading={detailLoading} />
-              </div>
+              </section>
             </div>
 
             {/* All drivers — the datagrid, full width, in the Maintenance
@@ -360,17 +372,17 @@ export default function DriversScreen() {
 function DriverCard({ detail, loading, liveVehicle }) {
   if (!detail || !detail.driver) {
     return (
-      <div className="dr-card dr-profile">
-        <div className="dr-card__empty">{loading ? "Loading driver…" : "Select a driver to see their analytics."}</div>
+      <div className="dr-cell dr-profile">
+        <div className="dr-cell__empty">{loading ? "Loading driver…" : "Select a driver to see their analytics."}</div>
       </div>
     );
   }
   const { driver } = detail;
   const tier = ratingTier(driver.rating);
 
-  // Live telemetry off the shared SSE stream — the gauges/radar track the
-  // driver's vehicle in realtime. Engine off (or no assigned vehicle in this
-  // fleet) renders the card's grey engine-off state.
+  // Live telemetry off the shared SSE stream — the meters track the driver's
+  // vehicle in realtime. Engine off (or no vehicle of theirs in this fleet)
+  // empties the bars and says which of the two it is.
   const v        = liveVehicle;
   const engineOn = v?.engine === "on";
   const speed    = v?.speed ?? 0;
@@ -379,60 +391,71 @@ function DriverCard({ detail, loading, liveVehicle }) {
   const temp     = v?.engineTemp ?? 0;
   const oil      = v?.oilLevel ?? 0;
 
-  const speedColor = speed > (v?.speedLimit ?? 80) ? "#ef4444" : "#22c55e";
-  const fuelColor  = fuel < 15 ? "#ef4444" : fuel < 40 ? "#f59e0b" : "#22c55e";
-  const loadColor  = loadPct > 95 ? "#ef4444" : loadPct > 80 ? "#f59e0b" : "#06b6d4";
-
-  const radarVals  = engineOn
-    ? [Math.min(speed / 120, 1), fuel / 100, Math.min(temp / 120, 1), oil / 100, loadPct / 100]
-    : [0, 0, 0, 0, 0];
-  const radarLabel = !v ? "NO VEHICLE" : engineOn ? `LIVE · ${v.id}` : "ENGINE OFF";
+  // The same five readings the radar plotted, as five labelled bars. A radar
+  // spends a polygon on values that share no scale — km/h beside °C beside a
+  // percentage — and the reader has to find each spoke's label to read it.
+  // A bar per reading prints the figure and its unit, and colours only the
+  // ones with a threshold worth flagging.
+  const meters = [
+    { key: "speed", label: "Speed", value: speed,   unit: "km/h", max: 120,
+      tone: speed > (v?.speedLimit ?? 80) ? "crit" : "ok" },
+    { key: "fuel",  label: "Fuel",  value: fuel,    unit: "%",    max: 100,
+      tone: fuel < 15 ? "crit" : fuel < 40 ? "warn" : "ok" },
+    { key: "load",  label: "Load",  value: loadPct, unit: "%",    max: 100,
+      tone: loadPct > 95 ? "crit" : loadPct > 80 ? "warn" : "info" },
+    { key: "temp",  label: "Temp",  value: temp,    unit: "°C",   max: 120, tone: "plain" },
+    { key: "oil",   label: "Oil",   value: oil,     unit: "%",    max: 100, tone: "plain" },
+  ];
+  const liveState = !v ? "No vehicle on record" : engineOn ? "Live" : "Engine off";
 
   return (
-    <div className="dr-card dr-profile">
+    <div className="dr-cell dr-profile">
       <div className="dr-profile__head">
-        <span
-          className="dr-profile__avatar"
-          style={{ borderColor: tier.color, boxShadow: `0 0 0 2px ${tier.color}26` }}
-        >
+        <span className={`dr-profile__avatar dr-tier--${tier.tone}`}>
           {initialsOf(driver.fullName)}
         </span>
         <div className="dr-profile__ident">
           <div className="dr-profile__namerow">
             <span className="dr-profile__name">{titleCase(driver.fullName)}</span>
             {tier.label && (
-              <span
-                className="dr-profile__pill"
-                style={{ color: tier.color, background: `${tier.color}1f`, border: `1px solid ${tier.color}55` }}
-              >
-                {tier.label}
-              </span>
+              <span className={`dr-profile__pill dr-tier--${tier.tone}`}>{tier.label}</span>
             )}
           </div>
           <div className="dr-profile__meta">
             {driver.employeeId ? `#${driver.employeeId}` : "Driver"}
             {driver.licenceNumber ? ` · Lic ${driver.licenceNumber}` : ""}
-            {v ? ` · ${v.id}` : ""}
           </div>
           <StarRating value={driver.rating} />
         </div>
       </div>
 
-      {/* Gauges + radar — mirrors the dash RightPanel ManagerCard, now driven
-          by the vehicle's live telemetry (speed / fuel / load + the 5-axis
-          health radar). Grey engine-off state when the engine is off. */}
-      <div className="dr-gaugewrap">
-        <div className="dr-gauges">
-          <DriverGauge label="SPEED"  value={speed}   max={120} color={speedColor} off={!engineOn} />
-          <DriverGauge label="FUEL %" value={fuel}    max={100} color={fuelColor}  off={!engineOn} />
-          <DriverGauge label="LOAD %" value={loadPct} max={100} color={loadColor}  off={!engineOn} />
+      <div className={`dr-live${engineOn ? " dr-live--on" : ""}`}>
+        <div className="dr-live__head">
+          <span className="dr-live__state">
+            <span className="dr-live__dot" aria-hidden="true" />
+            {liveState}
+          </span>
+          {v && <span className="dr-live__unit">{v.id}</span>}
         </div>
-        <DriverRadar
-          axes={["Speed", "Fuel", "Temp", "Oil", "Load"]}
-          vals={radarVals}
-          label={radarLabel}
-          off={!engineOn}
-        />
+        <ul className="dr-meters">
+          {meters.map((m) => {
+            const share = engineOn ? Math.max(0, Math.min(m.value / m.max, 1)) : 0;
+            return (
+              <li key={m.key} className={`dr-meter dr-meter--${engineOn ? m.tone : "off"}`}>
+                {/* The unit rides with the label, not the figure: "86 km/h"
+                    at 15px is the full width of a fifth of the cell, and the
+                    figure is the part that has to stay whole. */}
+                <span className="dr-meter__label">
+                  {m.label}<span className="dr-meter__unit">{m.unit}</span>
+                </span>
+                <span className="dr-meter__value">{engineOn ? Math.round(m.value) : "—"}</span>
+                <span className="dr-meter__track" aria-hidden="true">
+                  <span className="dr-meter__fill" style={{ "--share": share }} />
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );
@@ -441,75 +464,14 @@ function DriverCard({ detail, loading, liveVehicle }) {
 function StarRating({ value }) {
   const v = Number(value ?? 0);
   return (
-    <div className="dr-rating">
+    <div className="dr-rating" aria-label={`Rating ${fmt(v, 1)} out of 5`}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i <= Math.round(v) ? "#f59e0b" : "none"} stroke="#f59e0b" strokeWidth="1.5">
+        <svg key={i} className={"dr-rating__star" + (i <= Math.round(v) ? " dr-rating__star--on" : "")}
+             width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
           <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
         </svg>
       ))}
       <span className="dr-rating__num">{fmt(v, 1)}/5</span>
-    </div>
-  );
-}
-
-const GAUGE_OFF = "#4b5563"; // ManagerCard's engine-off grey
-
-// Circular progress gauge — ported from the dash ManagerCard. `value/max` fills
-// the ring; in the `off` state the ring is empty and the centre shows "—".
-function DriverGauge({ value = 0, max = 100, label, color = "#22c55e", off = false }) {
-  const r = 18, cx = 22, cy = 22, stroke = 3.5;
-  const circ = 2 * Math.PI * r;
-  const dash = off ? 0 : circ * Math.max(0, Math.min(value / max, 1));
-  return (
-    <div className="dr-gauge">
-      <div className="dr-gauge__ring">
-        {/* No width/height attributes: the ring sizes it, so one media query
-            can grow all three gauges at once. The viewBox keeps the geometry. */}
-        <svg className="dr-gauge__svg" viewBox="0 0 44 44">
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
-          <circle
-            cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={stroke}
-            strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
-            transform={`rotate(-90 ${cx} ${cy})`}
-          />
-        </svg>
-        <div className="dr-gauge__val" style={off ? { color: GAUGE_OFF } : undefined}>{off ? "—" : Math.round(value)}</div>
-      </div>
-      <span className="dr-gauge__lbl">{label}</span>
-    </div>
-  );
-}
-
-// Vehicle-health radar — ported from the dash ManagerCard. Each `vals` entry is a
-// 0–1 spoke length; the `off` state greys the plot out.
-function DriverRadar({ axes, vals, label, off = false }) {
-  const n = axes.length;
-  const CX = 36, CY = 32, R = 22;
-  const angleStep = (2 * Math.PI) / n;
-  const offset = -Math.PI / 2;
-  const pt = (i, rr) => [CX + rr * Math.cos(offset + i * angleStep), CY + rr * Math.sin(offset + i * angleStep)];
-  const gridLevels = [0.33, 0.66, 1].map((lvl) => {
-    const pts = Array.from({ length: n }, (_, i) => pt(i, R * lvl));
-    return pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + "Z";
-  });
-  const dataPath =
-    vals.map((v, i) => { const p = pt(i, R * Math.max(v, 0.02)); return `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`; }).join(" ") + "Z";
-  return (
-    <div className="dr-radar">
-      <svg className="dr-radar__svg" viewBox="0 0 72 68">
-        {gridLevels.map((d, i) => <path key={i} d={d} fill="none" stroke="var(--border)" strokeWidth="0.8" />)}
-        {Array.from({ length: n }, (_, i) => {
-          const p = pt(i, R);
-          return <line key={i} x1={CX} y1={CY} x2={p[0].toFixed(1)} y2={p[1].toFixed(1)} stroke="var(--border)" strokeWidth="0.8" />;
-        })}
-        <path d={dataPath} fill={off ? "rgba(75,85,99,0.15)" : "rgba(34,197,94,0.2)"} stroke={off ? GAUGE_OFF : "#22c55e"} strokeWidth="1.5" strokeLinejoin="round" />
-        {vals.map((v, i) => { const p = pt(i, R * Math.max(v, 0.02)); return <circle key={i} cx={p[0]} cy={p[1]} r="2" fill={off ? GAUGE_OFF : "#22c55e"} />; })}
-        {axes.map((a, i) => {
-          const p = pt(i, R + 9);
-          return <text key={i} x={p[0].toFixed(1)} y={p[1].toFixed(1)} textAnchor="middle" dominantBaseline="middle" fontSize="6.5" fill="var(--text-2)">{a}</text>;
-        })}
-      </svg>
-      <span className="dr-radar__lbl">{label}</span>
     </div>
   );
 }
@@ -519,8 +481,8 @@ function DriverRadar({ axes, vals, label, off = false }) {
 function SummaryCard({ detail, loading }) {
   if (!detail || !detail.driver) {
     return (
-      <div className="dr-card dr-summary">
-        <div className="dr-card__empty">{loading ? "Loading…" : "Select a driver to see their summary."}</div>
+      <div className="dr-cell dr-summary">
+        <div className="dr-cell__empty">{loading ? "Loading…" : "Select a driver to see their summary."}</div>
       </div>
     );
   }
@@ -537,7 +499,7 @@ function SummaryCard({ detail, loading }) {
   const clean = incidents.every((i) => !i.n);
 
   return (
-    <div className="dr-card dr-summary">
+    <div className="dr-cell dr-summary">
       <div className="dr-statchart__head">
         <span className="dr-statchart__label">Summary</span>
         {clean && <span className="dr-summary__clean">Clean</span>}
@@ -576,7 +538,7 @@ function AllDriversSection({
   const [sortDir, setSortDir] = useState("desc");
   const cardView = useMediaQuery(GRID_CARDS_QUERY);
   const step = cardView ? GRID_STEP_PHONE : GRID_STEP;
-  const [shown, setShown] = useState(GRID_STEP);
+  const [page, setPage] = useState(0);
 
   const q = query.trim().toLowerCase();
   const filtered = drivers.filter((d) =>
@@ -588,6 +550,12 @@ function AllDriversSection({
   );
 
   const windowFor = (id) => activeWindow(details?.[id]);
+
+  // Bars measure against the WHOLE roster, not the filtered rows: a search
+  // that leaves three drivers must not stretch the smallest of them to full
+  // width. Rating is out of 5 whatever anybody scored.
+  const ranked = RANKED_KEYS.has(sortKey);
+  const barMax = sortKey === "rating" ? 5 : Math.max(1, ...drivers.map((d) => d[sortKey] ?? 0));
 
   const sorted = [...filtered].sort((a, b) => {
     let cmp;
@@ -613,27 +581,24 @@ function AllDriversSection({
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  // At least one step is always on screen. Rotating a tablet into portrait
-  // changes the step under a count that was set with the other one, and a grid
-  // that answers a rotation by showing FEWER rows than its own minimum is a
-  // grid that has lost the reader's place.
-  const pageRows = sorted.slice(0, Math.max(shown, step));
-  const rest = sorted.length - pageRows.length;
-  // "Load less" is only offered once the list HAS been grown. Before that it
-  // would be a control for collapsing a list to the size it is already at.
-  const grown = pageRows.length > step;
+  // Pages of one step each, Prev / Next — the Sensor Monitor's pager, so the
+  // two tables on either side of the Fuel report page the same way. The page
+  // is clamped rather than trusted: a search that leaves 9 drivers, or a phone
+  // rotated into a smaller step, would otherwise point past the last page.
+  const pageCount = Math.max(1, Math.ceil(sorted.length / step));
+  const at = Math.min(page, pageCount - 1);
+  const pageRows = sorted.slice(at * step, at * step + step);
 
-  // Re-ranking collapses the list back to one step. What is on screen after a
-  // sort is the TOP of the new order, which is what the reader just asked for;
-  // keeping sixty rows open would bury it under rows grown for the old one.
+  // Re-ranking or searching goes back to page one: what the reader asked for
+  // is the TOP of the new order, not whatever slice of it page four now holds.
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir(key === "driver" ? "asc" : "desc"); }
-    setShown(step);
+    setPage(0);
   };
   // Metric chips rank the grid by that number, highest first.
-  const rankBy = (key) => { setSortKey(key); setSortDir("desc"); setShown(step); };
-  const update = (fn) => { fn(); setShown(step); };
+  const rankBy = (key) => { setSortKey(key); setSortDir("desc"); setPage(0); };
+  const update = (fn) => { fn(); setPage(0); };
 
   return (
     <>
@@ -643,10 +608,16 @@ function AllDriversSection({
             lay out as direct children of the wrapping flex row and the desktop
             bar is unchanged. Below 768 the wrapper becomes a real box and takes
             one horizontally-scrolling line — see DriversScreen.css. */}
-        <div className="dr-filters__chips">
-          {GRID_METRICS.map((m) => (
-            <GridChip key={m.key} active={sortKey === m.key} onClick={() => rankBy(m.key)} label={m.label} />
-          ))}
+        {/* One control with four positions rather than four loose chips: the
+            grid is ranked by exactly one measure at a time, and a segmented
+            switch says so where a row of pills reads as filters that stack. */}
+        <div className="dr-filters__chips" role="group" aria-label="Rank drivers by">
+          <span className="dr-rankby__label" aria-hidden="true">Rank by</span>
+          <span className="dr-seg">
+            {GRID_METRICS.map((m) => (
+              <GridChip key={m.key} active={sortKey === m.key} onClick={() => rankBy(m.key)} label={m.label} />
+            ))}
+          </span>
         </div>
         {/* The glyph is drawn, not imported — the page carries no icon set, and
             it is the same two elements the Sensor Monitor bar and the User
@@ -712,8 +683,11 @@ function AllDriversSection({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((d) => {
+              {pageRows.map((d, i) => {
                 const st = statusMeta(d.status);
+                // Position by the measure, best first, whichever way it sorts.
+                const pos = at * step + i;
+                const rank = sortDir === "desc" ? pos + 1 : sorted.length - pos;
                 // The row IS the control — this is a master-detail grid and
                 // picking a driver is the point of it. It was mouse-only: no
                 // tabindex, no key handler, no selected state announced.
@@ -728,33 +702,73 @@ function AllDriversSection({
                     tabIndex={0}
                     aria-selected={d.id === selectedId}
                   >
-                    <td>
+                    <td className="dr-drivercell">
                       <span className="dr-driver">
+                        <span className="dr-rank" aria-label={ranked ? `Rank ${rank}` : undefined}>
+                          {ranked ? rank : ""}
+                        </span>
                         {/* Neutral, not per-driver. An identity hash paints a
                             colour that means nothing, and the eye reads it as
                             a status — next to the status badge and the two
                             incident columns, which DO carry colour, that is
                             six hues competing in one row. The initials are
-                            the identifier; grey lets them be. */}
+                            the identifier; grey lets them be. This is the one
+                            thing the User accounts row does that this row
+                            does not: that table spends no other colour, so a
+                            hue per person costs it nothing. */}
                         <span className="dr-avatar">
                           {initialsOf(d.fullName)}
                         </span>
-                        <span className="dr-driver__name">{titleCase(d.fullName)}</span>
+                        {/* Name over identifier, which is the roster's stack.
+                            The employee number and the licence were already
+                            SEARCHABLE from the box above this grid and were
+                            nowhere on screen — so a search by staff number
+                            returned a row that could not be checked against
+                            the number typed. The second line is also what
+                            separates two drivers with one name, which a
+                            registry synced from three sources has. */}
+                        <span className="dr-driver__ident">
+                          <span className="dr-driver__name">{titleCase(d.fullName)}</span>
+                          {(d.employeeId || d.licenceNumber) && (
+                            <span className="dr-driver__sub"
+                                  /* The column is capped, and on a tablet the
+                                     cap is 108px — a licence clipped mid-code
+                                     is recoverable from a pointer rather than
+                                     from the detail panel. */
+                                  title={[
+                                    d.employeeId ? `#${d.employeeId}` : null,
+                                    d.licenceNumber ? `Licence ${d.licenceNumber}` : null,
+                                  ].filter(Boolean).join(" · ")}>
+                              {d.employeeId ? `#${d.employeeId}` : ""}
+                              {d.employeeId && d.licenceNumber ? " · " : ""}
+                              {d.licenceNumber ? `Lic ${d.licenceNumber}` : ""}
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </td>
                     <VehicleCell plate={d.vehicle} from={d.vehicleFrom} />
                     <td>
-                      <span className={`dr-grid__badge dr-grid__badge--${st.tone}`}>{st.label}</span>
+                      {/* The dot is kept INSIDE the badge rather than replaced
+                          by it: a wash carries its meaning in its fill, which
+                          is the part a red-green reader cannot use, and this
+                          row already asks the eye to separate an amber column
+                          from a red one. */}
+                      <span className={`dr-grid__badge dr-grid__badge--${st.tone}`}>
+                        <span className="dr-grid__dot" aria-hidden="true" />
+                        {st.label}
+                      </span>
                     </td>
                     <PeriodCell w={windowFor(d.id)} />
                     {/* `data-label` is what lets a row become a card under
                         768px: with no table head above it, each figure has to
                         carry the column name it came from. Inert on a desk,
                         where the head is still doing that job. */}
-                    <td className="dr-num" data-label="Rating"><span className="dr-star">★</span> {fmt(d.rating, 1)}</td>
-                    <td className="dr-num" data-label="Trips">{fmt(d.trips)}</td>
-                    <td className="dr-num" data-label="Tonnes">{fmt(d.tonnes, 1)}</td>
-                    <td className="dr-num" data-label="Mileage">{fmt(d.mileageKm)}</td>
+                    <MetricCell label="Rating" k="rating" value={d.rating} decimals={1} sortKey={sortKey} max={barMax}
+                                prefix={<span className="dr-star" aria-hidden="true">★</span>} />
+                    <MetricCell label="Trips" k="trips" value={d.trips} sortKey={sortKey} max={barMax} />
+                    <MetricCell label="Tonnes" k="tonnes" value={d.tonnes} decimals={1} sortKey={sortKey} max={barMax} />
+                    <MetricCell label="Mileage" k="mileageKm" value={d.mileageKm} sortKey={sortKey} max={barMax} />
                     {/* Incidents carry a DOT as well as a colour. Red-on-amber
                         is exactly the pair a red-green dichromat cannot
                         separate, and these two columns sit side by side. The
@@ -771,43 +785,35 @@ function AllDriversSection({
             </tbody>
           </table>
         </div>
-        {/* `.sp4-table-more`: the buttons centred under the last row, with the
-            tally beside them — the one fact the pager carried that is worth
-            keeping is how much of the roster is on screen.
-
-            "Load less" appears only once the list has been grown, and gives
-            back exactly one step, so the two controls are each other's undo
-            rather than one growing by a step and the other collapsing the lot.
-            It disappears again at one step, which is where it came in.
-
-            The three sit together in the middle — "Load less · 30 of 549 ·
-            Load more" — rather than a button pinned to each end of the row:
-            the tally is what both buttons act on, and it reads as one sentence
-            with them beside it. */}
-        {(rest > 0 || grown) && (
-          <div className="dr-grid-more">
-            {grown && (
-              <button
-                type="button"
-                className="dr-morebtn dr-morebtn--less"
-                onClick={() => setShown((n) => Math.max(step, Math.max(n, step) - step))}
-              >
-                Load less
-              </button>
-            )}
-            <span className="dr-grid-more__count">
-              {fmt(pageRows.length)} of {fmt(sorted.length)}
+        {/* Prev · where you are · Next, centred under the last row. The
+            buttons stay in place and grey out at either end rather than
+            vanishing, so the pair never shifts under a pointer that is
+            clicking through pages. */}
+        {pageCount > 1 && (
+          <nav className="dr-pager" aria-label="Driver pages">
+            <button
+              type="button"
+              className="dr-pager__btn"
+              onClick={() => setPage(Math.max(0, at - 1))}
+              disabled={at === 0}
+            >
+              ← Prev
+            </button>
+            <span className="dr-pager__info" aria-live="polite">
+              Page {at + 1} of {pageCount}
+              <span className="dr-pager__range">
+                {" · "}{fmt(at * step + 1)}–{fmt(at * step + pageRows.length)} of {fmt(sorted.length)}
+              </span>
             </span>
-            {rest > 0 && (
-              <button
-                type="button"
-                className="dr-morebtn dr-morebtn--more"
-                onClick={() => setShown((n) => Math.max(n, step) + step)}
-              >
-                Load more
-              </button>
-            )}
-          </div>
+            <button
+              type="button"
+              className="dr-pager__btn"
+              onClick={() => setPage(Math.min(pageCount - 1, at + 1))}
+              disabled={at >= pageCount - 1}
+            >
+              Next →
+            </button>
+          </nav>
         )}
       </div>
     </>
@@ -815,15 +821,39 @@ function AllDriversSection({
 }
 
 
-function GridChip({ label, active, onClick, color }) {
+function GridChip({ label, active, onClick }) {
   return (
     <button
+      type="button"
       className={`dr-chip${active ? " dr-chip--active" : ""}`}
-      style={active && color ? { background: `${color}22`, borderColor: `${color}66`, color } : undefined}
+      aria-pressed={active}
       onClick={onClick}
     >
       {label}
     </button>
+  );
+}
+
+/**
+ * A figure, and — in the column the grid is ranked by — a bar under it.
+ *
+ * Only the ranked column draws one. Bars in all four would be four rankings at
+ * once, which is a chart nobody asked for; one bar says which column the order
+ * comes from and how far apart the rows are on it.
+ */
+function MetricCell({ label, k, value, decimals = 0, sortKey, max, prefix = null }) {
+  const barred = BAR_KEYS.has(k) && sortKey === k;
+  return (
+    <td className={"dr-num" + (barred ? " dr-num--ranked" : "")} data-label={label}>
+      <span className="dr-metric">
+        <span className="dr-metric__num">{prefix}{prefix ? " " : ""}{fmt(value, decimals)}</span>
+        {barred && (
+          <span className="dr-metric__track" aria-hidden="true">
+            <span className="dr-metric__fill" style={{ "--share": Math.max(0, Math.min((value ?? 0) / max, 1)) }} />
+          </span>
+        )}
+      </span>
+    </td>
   );
 }
 
@@ -929,7 +959,7 @@ function TrendStat({ title, series, valueKey, unit, value, tone, type, sub, load
   const decimals = unit === "t" ? 1 : 0;
 
   return (
-    <div className={`dr-card dr-statchart dr-statchart--${tone}`}>
+    <div className={`dr-cell dr-statchart dr-statchart--${tone}`}>
       <div className="dr-statchart__head">
         <span className="dr-statchart__label">{title}</span>
         {deltaPct != null && (

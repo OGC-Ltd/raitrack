@@ -13,6 +13,7 @@ import { readCache, writeCache } from "../../services/cache";
 import {
   PULSE_CACHE_KEY, usablePulse, nextPollDelay, mergePulse,
 } from "../../lib/fleetPulse";
+import { versionLabel, copyrightLabel, buildDetail } from "../../lib/version";
 import "./LoginScreen.css";
 
 /** At or above this share of the fleet, the platform is at its busiest and the
@@ -285,6 +286,12 @@ export default function LoginScreen() {
           </p>
           </>
           )}
+
+          {/* Every mode (sign-in and reset): "which version is this?" is the
+              first support question, and it is asked before signing in too. */}
+          <p className="login__version" title={buildDetail()}>
+            {versionLabel()} · {copyrightLabel()}
+          </p>
         </div>
 
         {/* Decorative only. Static copy — nothing here talks to the API, since

@@ -372,8 +372,16 @@ export const UNPREFIXED_CODE = '__unprefixed'
 /**
  * The specific equipment name for a vehicle, or null when its code is not one
  * we can name.
+ *
+ * The operator's own register wins: KASULU units listed on RaiFactorySuite's
+ * machine register carry its `machineName` ("Excavator", "Bull Dozer", "CASE
+ * PUMA"), which names the machine where the code only names its family —
+ * every CTR read "Cane Tractor" whether it was a Case Puma or a Steiger. Shown
+ * as the register spells it. Units it does not list fall back to the code.
  */
 export function equipmentLabel(vehicle) {
+  const registered = typeof vehicle?.machineName === 'string' ? vehicle.machineName.trim() : ''
+  if (registered) return registered
   const code = equipmentCode(vehicle)
   return code ? EQUIPMENT_LABELS[code] : null
 }
@@ -1075,10 +1083,15 @@ export function mapSnapshotVehicle(v) {
     fuelLevel:     v.fuelLevelPct ?? null,
     fuelLitres:    v.fuelLevelMl != null ? v.fuelLevelMl / 1000 : null,
     tankCapacityL: v.tankCapacityLitres ?? null,
+    // RaiFactorySuite machine register name (KASULU only) — see equipmentLabel.
+    machineName:   v.machineName ?? null,
     // Why fuelLitres is null, when the reason is a broken probe rather than a
     // missing one — the server derives it from the unit's own sensor config.
     // See wialon.sensors readFuelProbeFault.
     fuelProbeFault: v.fuelProbeFault === true,
+    // Flagged for a fuel probe repair: the server holds fuel theft alerts on
+    // this unit until the repair is signed off fixed (fleet-server probe-hold).
+    probeHold:     v.probeHold === true,
     // Snapshot rows don't carry temp/oil — both arrive with the first SSE
     // 'position' frame (same as fleetdash's useFleet).
     engineTemp:    null,
@@ -1203,6 +1216,45 @@ export function applyConnectionRefresh(existing, row) {
   }
 }
 
+/**
+ * Merge a live SSE 'dispatch' event onto the existing map vehicle.
+ *
+ * What the unit is CARRYING, pushed by the paperwork rather than by the wheels.
+ * The server emits one the moment a sales run is signed out at the gate or
+ * signed back in — see its modules/dispatches/dispatch-refresh — because a
+ * position frame cannot carry the load and a truck standing at the gate may not
+ * produce another position for an hour.
+ *
+ * ## What it deliberately does not touch
+ *
+ * `trip`. The Active Trip card runs on measured geometry — the yard, the
+ * destination point, the arrival probe — and this event carries a name, not
+ * coordinates. Building half a trip from it would draw a route to a place we
+ * have not placed; the snapshot brings the real one. The destination NAME is
+ * taken, because that is what the vehicle card prints and it is exactly as
+ * well-founded as the tonnage beside it.
+ *
+ * A closed run arrives as nulls throughout, which is how the bed is emptied
+ * when the guard signs the unit back in.
+ */
+export function applyDispatchUpdate(existing, data) {
+  return {
+    ...existing,
+    cargo:       cargoLabel(existing, data.cargoDesc, data.cargoWeightKg),
+    weight:      data.cargoWeightKg != null ? +(data.cargoWeightKg / 1000).toFixed(1) : 0,
+    cargoBags:   data.cargoBags ?? null,
+    // The driver who took the keys for THIS run — the same precedence the
+    // snapshot applies, where a dispatch beats the stale assignment. Kept when
+    // the run closes: whoever is assigned to the vehicle does not stop being
+    // assigned to it, and this event does not carry that name to fall back to.
+    driver:      data.driverName ?? existing.driver,
+    // Cleared when the run closes, unlike the driver. A destination is a
+    // property of the RUN and means nothing once the unit has signed back in;
+    // leaving it would caption a parked truck with where it went this morning.
+    destination: data.destination ?? null,
+  }
+}
+
 /** Merge a live SSE 'position' event onto the existing map vehicle. */
 export function applyLiveUpdate(existing, data) {
   return {
@@ -1249,12 +1301,31 @@ export function applyLiveUpdate(existing, data) {
     // which the Wialon adapter hardcodes to false on every frame.
     zones:         data.zones ?? existing.zones ?? null,
     movement:      mergeMovement(existing.movement, data.movement),
+    // The declared load survives a position frame, because a position frame
+    // knows nothing about it.
+    //
+    // This tested for PRESENCE, and the Wialon adapter sends
+    // `cargoWeightKg: null` on every frame — present, and meaning "this fleet
+    // has no load cells", not "the bed is empty". So the first live frame after
+    // the snapshot relabelled a loaded truck "Empty" while the line below kept
+    // its 29 tonnes: measured here, a unit signed out with 580 bags read
+    // "Empty · 29 t · 580 bags" seconds after the card was opened. The tonnage
+    // came from the dispatch and was right; the word came from an absent
+    // sensor. `dash` fixed the same bug in its own copy of this function — see
+    // its vehicleMapCargo.test.js — and this is the same rule.
+    //
+    // A null weight is the ABSENCE of a measurement and is treated as one. A
+    // frame carrying a real figure still wins, so a fleet with load cells keeps
+    // live weights; it is only nothing that no longer overwrites something.
+    //
     // `existing` is what carries the machine identity (name/id) — a live frame
     // has only telemetry, so the "is this even a carrier" question is answered
     // from the vehicle we already hold.
-    cargo:         data.cargoWeightKg !== undefined ? cargoLabel(existing, data.cargoDesc, data.cargoWeightKg) : existing.cargo,
+    cargo:         data.cargoWeightKg != null
+      ? cargoLabel(existing, data.cargoDesc, data.cargoWeightKg)
+      : existing.cargo,
     weight:        data.cargoWeightKg != null ? +(data.cargoWeightKg / 1000).toFixed(1) : existing.weight,
-    cargoBags:     data.cargoBags !== undefined ? data.cargoBags : existing.cargoBags,
+    cargoBags:     data.cargoWeightKg != null ? data.cargoBags ?? null : existing.cargoBags,
     location:      data.lat != null ? fmtLocation(data.lat, data.lng) : existing.location,
     departure:     data.leg?.from ?? existing.departure,
     departureLat:  data.leg?.fromLat ?? existing.departureLat,

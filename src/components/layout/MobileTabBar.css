@@ -41,22 +41,25 @@
 
   .mobile-tab-bar__icon {
     font-size: 20px;
-    color: #94a3b8;
+    color: #64748b;
   }
 
   .mobile-tab-bar__item--active .mobile-tab-bar__icon {
     color: #0f172a;
   }
 
+  /* 11px in #64748b: the old 10px #94a3b8 measured 2.6:1 on the white bar. */
   .mobile-tab-bar__label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
-    color: #94a3b8;
+    color: #64748b;
     white-space: nowrap;
   }
 
+  /* With the resting label darker, weight carries the "you are here". */
   .mobile-tab-bar__item--active .mobile-tab-bar__label {
     color: #0f172a;
+    font-weight: 700;
   }
 
   /* Center FAB — green truck button */
@@ -74,7 +77,12 @@
     position: relative;
   }
 
-  .mobile-tab-bar__fab > svg {
+  /* The green disc. Two selectors because the centre button is not always the
+     map: when the map is closed to somebody, another screen is promoted into
+     this slot and draws an icon font glyph instead of the truck. Same disc,
+     same size, same lift — only the mark inside it changes. */
+  .mobile-tab-bar__fab > svg,
+  .mobile-tab-bar__fab-icon {
     width: 52px;
     height: 52px;
     padding: 13px;
@@ -86,13 +94,91 @@
     margin-top: -20px; /* raises it above the bar */
   }
 
-  .mobile-tab-bar__fab--active > svg {
+  /* The glyph is text, not a 26px drawing, so it needs centring in the disc
+     the svg gets for free from its own viewBox. */
+  .mobile-tab-bar__fab-icon {
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    font-size: 26px;
+    line-height: 1;
+  }
+
+  .mobile-tab-bar__fab--active > svg,
+  .mobile-tab-bar__fab--active .mobile-tab-bar__fab-icon {
     background: #059669;
   }
 
   .mobile-tab-bar__fab-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
-    color: #059669;
+    color: #047857;   /* #059669 was 3.8:1 on white */
   }
+}
+
+/* The Fleet button stays at the exact centre of the bar, at every width.
+ *
+ * Five equal fifths put it there, but on a phone they are 64-75px each and
+ * "Weighbridges" and "Maintenance" need about 72px at 11px, so those two
+ * labels ran into each other. Sizing every item by its label cured that and
+ * pushed the Fleet button 28px left of centre. So the bar is a grid whose two
+ * halves weigh the same — 2fr either side of the button — and the room is
+ * shared out WITHIN each half: Weighbridges takes a little from Maintenance on
+ * the right, and the left half, whose labels are short, is split evenly.
+ */
+@media (max-width: 767px) {
+  .mobile-tab-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 60px 1.08fr 0.92fr;
+    align-items: end;
+    justify-items: center;
+    padding-inline: 4px;
+  }
+  .mobile-tab-bar__item,
+  .mobile-tab-bar__fab { min-width: 0; width: 100%; }
+}
+/* Common phones (375-420px): a half-size down, and the active tab marked at
+   600 rather than 700 — bold "Weighbridges" sat 2px from "Maintenance". */
+@media (max-width: 420px) {
+  .mobile-tab-bar__label,
+  .mobile-tab-bar__fab-label { font-size: 10.5px; }
+  .mobile-tab-bar__item--active .mobile-tab-bar__label { font-weight: 600; }
+}
+/* A 320px phone: a hair less gutter, a narrower button column, and the labels
+   a size down, so both right-hand labels fit their columns with a gap. */
+@media (max-width: 360px) {
+  .mobile-tab-bar {
+    padding-inline: 2px;
+    grid-template-columns: 1fr 1fr 56px 1.1fr 0.9fr;
+  }
+  .mobile-tab-bar__label,
+  .mobile-tab-bar__fab-label { font-size: 10px; letter-spacing: -0.02em; }
+}
+
+/* Not for this account. Same treatment as the sidebar's disabled nav item
+   (SidePanel.css) so the phone and the desktop say the same thing about the
+   same screen — 0.4 opacity and a cursor that refuses.
+
+   Dimmed rather than removed, deliberately. A bar that drops to two items for
+   a technician and five for a manager makes the app look broken or half
+   installed; a dimmed item says "this exists and is not yours", which is the
+   true statement. The FAB keeps its shape for the same reason — it is the
+   anchor the other four are spaced around, and taking it out would move every
+   remaining tab.
+
+   The centre slot is normally given to a screen the account HAS, so a disabled
+   FAB is the uncommon case: it happens only when nothing at all is open. */
+.mobile-tab-bar__item--disabled,
+.mobile-tab-bar__fab--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* Grey the disc as well, so "disabled" wins over "primary" — at 0.4 alone a
+   green circle still reads as the brightest thing on the bar. On the DISC, not
+   on the button: the button is a transparent flex column and painting it there
+   put a grey rectangle behind the label while the circle stayed green. */
+.mobile-tab-bar__fab--disabled > svg,
+.mobile-tab-bar__fab--disabled .mobile-tab-bar__fab-icon {
+  background: var(--color-text-muted, #64748b);
+  box-shadow: none;
 }

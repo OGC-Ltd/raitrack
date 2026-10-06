@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fleetDayOf, fleetDayBounds, dayBreakdown, dayAssessment, eventLabel, hoursLabel, isTheftEvent, unexplainedMatters } from "./fuelDay";
+import { fleetDayOf, fleetDayBounds, dayBreakdown, dayAssessment, engineBasisLabel, eventLabel, hoursLabel, isTheftEvent, unexplainedMatters } from "./fuelDay";
 
 describe("fleet days", () => {
   it("puts 01:23 EAT on its own Kenyan day, not the UTC one before", () => {
@@ -140,5 +140,29 @@ describe("dayAssessment — the day read for the case, not left as 'not explaine
     expect(dayAssessment({ used: 20, engine: null, engineHours: null, events: [] })[0])
       .toBe("There is no engine-hour record for that day, so the 20.0 L the tank lost cannot be set against a burn.");
     expect(hoursLabel(0.5)).toBe("30 min");
+  });
+});
+
+describe("the register's standard rate", () => {
+  const day = (tank) => dayBreakdown({ tank: { initialMl: 160_000, currentMl: 120_000, ...tank } });
+
+  it("names an hourly register rate as the standard one", () => {
+    const b = day({ engineSeconds: 3600, engineBurnMl: 14_000, engineRateLPerHour: 14, engineRateBasis: "register" });
+    expect(engineBasisLabel(b)).toBe("1 h 00 min at 14.0 L/h");
+    expect(dayAssessment(b)[0]).toBe("The engine ran 1 h 00 min at its standard 14.0 L/h, which burns 14.0 L of the 40.0 L the tank lost.");
+  });
+
+  it("states a road vehicle's expectation as distance at km/L", () => {
+    const b = day({
+      engineSeconds: 7200, distanceM: 38_000, engineBurnMl: 14_615,
+      engineRateLPerHour: null, engineRateKmPerL: 2.6, engineRateBasis: "register",
+    });
+    expect(engineBasisLabel(b)).toBe("38.0 km at 2.6 km/L");
+    expect(dayAssessment(b)[0]).toBe("It covered 38.0 km at its standard 2.6 km/L, which burns 14.6 L of the 40.0 L the tank lost.");
+  });
+
+  it("keeps 'usual' for a derived rate", () => {
+    const b = day({ engineSeconds: 3600, engineBurnMl: 9_100, engineRateLPerHour: 9.1, engineRateBasis: "vehicle" });
+    expect(dayAssessment(b)[0]).toContain("at its usual 9.1 L/h");
   });
 });

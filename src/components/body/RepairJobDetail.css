@@ -1,0 +1,69 @@
+/* One repair job, opened from its row (RepairJobDetail). Two columns like the
+   Fuel Audit's overhaul: the job and its progress, then its spare parts. */
+.rjd {
+  padding: 12px;
+  border: 1px solid var(--sp4-line, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  background: var(--sp4-surface);
+}
+.rjd-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.rjd-col { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.rjd-facts { display: grid; gap: 6px; }
+.rjd-fact {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 13px;
+}
+.rjd-fact-label { color: var(--sp4-text-3); font-size: 12px; }
+.rjd-fact-value { color: var(--sp4-text-1); overflow-wrap: anywhere; white-space: pre-wrap; }
+.rjd-late { color: var(--sp4-crit); font-weight: 600; }
+
+/* The row that opens it. */
+.rj-row { cursor: pointer; }
+.rj-row:hover > td { background: color-mix(in srgb, var(--sp4-accent) 5%, transparent); }
+.rj-row--open > td { border-bottom-color: transparent; background: color-mix(in srgb, var(--sp4-accent) 7%, transparent); }
+
+@media (max-width: 900px) {
+  .rjd-grid { grid-template-columns: minmax(0, 1fr); }
+  .rjd-grid > .aud-ov-col--parts {
+    padding-left: 0; padding-top: 14px; border-left: 0;
+    border-top: 1px solid var(--sp4-line, rgba(0, 0, 0, 0.1));
+  }
+  .rjd-fact { grid-template-columns: 100px minmax(0, 1fr); }
+}
+
+/* Focused on one job: the bar that takes the list back. */
+.rj-focus-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.rj-back { display: inline-flex; align-items: center; gap: 6px; }
+.rj-focus-title { font-size: 13px; }
+
+/* ── Count + Refresh, at the end of the State row ─────────────────────────────
+ * Hallmark · component: filter-row summary · states: Refresh button inherits
+ *   sp4-ghost-btn (default · hover · focus-visible · active · disabled/loading)
+ * pre-emit critique: P4 H4 E5 S4 R5 V4
+ *
+ * Operator, 2026-10-03: the grey TableToolbar band between the tabs and the
+ * State row is gone. Its two jobs — how many jobs, and Refresh — move here,
+ * right-aligned on the gutter. Rendered as FilterBar's `peek` (first in the
+ * DOM), so `order` sends it to the end on a wide screen; on a phone it stays
+ * beside the Filters toggle rather than inside the drawer. */
+.rj-sum {
+  order: 99;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+  white-space: nowrap;
+}
+.rj-sum__text b { color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
+@media (max-width: 599px) {
+  .rj-sum { order: 0; margin-left: 0; flex: 1 1 auto; justify-content: space-between; }
+}

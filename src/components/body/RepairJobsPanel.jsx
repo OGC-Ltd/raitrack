@@ -25,27 +25,27 @@
  * Classes are SensorPanel's, like every other panel on this screen.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import TableToolbar from "./TableToolbar";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assignRepairItem, assignmentToast, respondToRepairAssignment, setRepairStage, OUTCOME_LABEL, OUTCOME_PILL,
-  STAGE_LABEL, STAGE_PILL, SETTABLE_STAGES, humanKind, estimateState, daysUntil,
-  escalationOf, escalationPhrase,
+  STAGE_LABEL, STAGE_PILL, SETTABLE_STAGES, humanKind, estimateState, daysUntil, stageChipState, STAGE_CHIP_CLASS, mayWorkJob,
+  escalationOf, escalationPhrase, listRepairAssignees,
 } from "../../api/repairs";
-import { listOrgUsers } from "../../api/users";
 import RepairSignOffDialog from "./RepairSignOffDialog";
+import RepairJobDetail from "./RepairJobDetail";
 import { useRepairJobs } from "../../hooks/useRepairJobs";
+import FilterBar from "./FilterBar";
+import TablePager, { usePager } from "./TablePager";
 
-const TRIAGE_ROLE_SLUGS = new Set(["technician", "admin", "super_admin"]);
+/* The role rule that stood here is gone, and with it the client's second copy
+   of it. `GET /organisations/:orgId/repairs/assignees` answers "who may be
+   handed this", in the module that enforces it on the way back in.
 
-function canReceiveRepairAssignment(user, orgId) {
-  return (user?.userRoles ?? []).some(({ role }) => {
-    if (!role || !TRIAGE_ROLE_SLUGS.has(role.slug)) return false;
-    // Organisation admins and technicians must hold the role in this tenant.
-    // A platform super admin has no organisation id and is valid everywhere.
-    return role.slug === "super_admin" || role.organisationId === orgId;
-  });
-}
+   Worth keeping the reason visible: the old list filtered the USER ROSTER,
+   which is scoped by user GROUP. An assignee must share the ORGANISATION and
+   need not share the group -- ControlTech are contractors in a group of their
+   own who service all four tenants, and turning group enforcement on would
+   have made them quietly unpickable. */
 
 /*
  * Four buckets, because "signed off" is two different outcomes and lumping
@@ -76,7 +76,7 @@ function when(iso) {
 }
 
 export default function RepairJobsPanel({
-  orgId, onReload, canResolve = false, canAssign = false, currentUserId = null,
+  orgId, onReload, canResolve = false, canWorkAny = false, canAssign = false, currentUserId = null,
 }) {
   /*
    * The bucket being read, and the thing that makes it real.
@@ -113,6 +113,20 @@ export default function RepairJobsPanel({
   const [assigning, setAssigning] = useState(null);
   const [responding, setResponding] = useState(null);
   const [toast, setToast] = useState(null);
+  // The job opened under its row (RepairJobDetail), or null.
+  const [openId, setOpenId] = useState(null);
+  // Per job: a technician works only an accepted job of their own (mayWorkJob).
+  const mayWork = (r) => mayWorkJob(r, { canResolve, canWorkAny, userId: currentUserId });
+  // A click on the row opens it, but not a click on a control inside it.
+  /* Opening a job FOCUSES it (operator, 2026-10-01): every other row goes,
+     leaving the one picked and its detail, so the page is short enough to
+     read to the bottom. "All jobs" brings the list back. */
+  const sectionRef = useRef(null);
+  const toggleRow = (e, id) => {
+    if (e.target.closest("button, select, input, a, textarea, label")) return;
+    setOpenId((cur) => (cur === id ? null : id));
+    requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ block: "start" }));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -121,14 +135,8 @@ export default function RepairJobsPanel({
       return undefined;
     }
     setAssigneesLoading(true);
-    listOrgUsers(orgId, { access: "system", limit: 100 })
-      .then(({ users }) => {
-        if (!cancelled) {
-          setAssignees((users ?? []).filter((u) =>
-            u.status !== "SUSPENDED" && canReceiveRepairAssignment(u, orgId),
-          ));
-        }
-      })
+    listRepairAssignees(orgId)
+      .then((list) => { if (!cancelled) setAssignees(list ?? []); })
       .catch(() => { if (!cancelled) setAssignees([]); })
       .finally(() => { if (!cancelled) setAssigneesLoading(false); });
     return () => { cancelled = true; };
@@ -165,6 +173,10 @@ export default function RepairJobsPanel({
     };
     return kept.sort((a, b) => lateness(b) - lateness(a));
   }, [rows, state]);
+  // The job opened, if it is still in the list (a sign-off can take it out of
+  // "Open"; then the list simply comes back).
+  const focused = openId ? (rows.find((r) => r.id === openId) ?? null) : null;
+  const pager = usePager(shown, state);
 
   const summary = useMemo(() => {
     const spares  = shown.filter((r) => r.outcome === "needs_spare").length;
@@ -254,16 +266,39 @@ export default function RepairJobsPanel({
   }
 
   return (
-    <section className="sp4-repair-jobs">
+    <section className="sp4-repair-jobs" ref={sectionRef}>
       {toast && (
         <div className={`sp4-toast sp4-toast--${toast.tone}`} role="status" aria-live="polite">
           <span className="sp4-toast-text">{toast.text}</span>
           <button type="button" className="sp4-toast-x" aria-label="Dismiss notification" onClick={() => setToast(null)}>×</button>
         </div>
       )}
-      <TableToolbar summary={summary} loading={loading} onReload={reloadAll} disabled={!shown.length} />
+      {focused ? (
+        <div className="rj-focus-bar">
+          <button type="button" className="sp4-ghost-btn rj-back" onClick={() => setOpenId(null)}>
+            <i className="ti ti-arrow-left" aria-hidden="true" /> All jobs
+          </button>
+          <span className="rj-focus-title">
+            <span className="sp4-reg">{focused.vehicle?.registrationPlate ?? "—"}</span>
+            <span className="sp4-muted"> · one of {shown.length} job{shown.length === 1 ? "" : "s"}</span>
+          </span>
+        </div>
+      ) : null}
 
-      <div className="sp4-filterbar">
+      {/* Open jobs are what this panel is for, so that is not a narrowing.
+          The count and Refresh used to be their own grey band above this row
+          (TableToolbar); operator 2026-10-03 asked for that band gone, so they
+          ride at the right end of the State row instead. Passed as `peek` so a
+          phone keeps them out of the Filters drawer. */}
+      {!focused && <FilterBar label="State" activeCount={state !== "open" ? 1 : 0}
+        peek={
+          <span className="rj-sum">
+            <span className="rj-sum__text">{summary}</span>
+            <button type="button" className="sp4-ghost-btn" onClick={reloadAll} disabled={loading}>
+              {loading ? "Loading…" : "Refresh"}
+            </button>
+          </span>
+        }>
         <div className="sp4-filter-group">
           <span className="sp4-filter-label">State</span>
           {STATES.map(([id, label]) => (
@@ -276,7 +311,7 @@ export default function RepairJobsPanel({
             >{label}</button>
           ))}
         </div>
-      </div>
+      </FilterBar>}
 
       {error && <div className="sp4-banner sp4-banner--crit">{error}</div>}
       {/* A second crit banner stood here, fed by a `err` state that every
@@ -300,11 +335,13 @@ export default function RepairJobsPanel({
       )}
 
       {shown.length > 0 && (
-        <div className="sp4-table-scroll">
+        /* `.sp4-keep-table`: a table on a phone too, scrolling sideways with
+           the unit held at the left edge (SensorPanel.css). */
+        <div className="sp4-table-scroll sp4-keep-table">
           <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
             <thead>
               <tr>
-                <th className="sp4-th--left">Unit Reg</th>
+                <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
                 <th className="sp4-th--left">What was wrong</th>
                 <th className="sp4-th--left">Outcome</th>
                 {/* The outcome is what the technician found on the day and
@@ -322,12 +359,14 @@ export default function RepairJobsPanel({
               </tr>
             </thead>
             <tbody>
-              {shown.map((r) => (
-                /* Was a Fragment wrapping the row and an inline sign-off card
-                   below it. The card is a dialog now, so the row is the only
-                   child and the fragment has nothing left to hold together. */
-                <tr className="sp4-tr sp4-tr--static" key={r.id}>
-                    <td className="sp4-td--left">
+              {(focused ? [focused] : pager.pageRows).map((r) => (
+                /* The row, and under it the job opened (RepairJobDetail). A
+                   click anywhere on the row that is not a control opens it. */
+                <Fragment key={r.id}>
+                <tr className={"sp4-tr sp4-tr--static rj-row" + (openId === r.id ? " rj-row--open" : "")}
+                    onClick={(e) => toggleRow(e, r.id)}
+                    aria-expanded={openId === r.id}>
+                    <td className="sp4-td--left sp4-td--pin">
                       <span className="sp4-reg">{r.vehicle?.registrationPlate ?? "—"}</span>
                     </td>
                     <td className="sp4-td--left">
@@ -358,7 +397,7 @@ export default function RepairJobsPanel({
                       </span>
                     </td>
                     <td className="sp4-td--left">
-                      {r.resolvedAt || !canResolve
+                      {r.resolvedAt || !mayWork(r)
                         ? (
                           <span className={"sp4-pill sp4-pill--" + (STAGE_PILL[r.stage] ?? "none")}>
                             {STAGE_LABEL[r.stage] ?? r.stage ?? "—"}
@@ -375,8 +414,9 @@ export default function RepairJobsPanel({
                               <button
                                 key={st}
                                 type="button"
-                                className={"sp4-filter-chip" + (r.stage === st ? " sp4-filter-chip--on" : "")}
-                                aria-pressed={r.stage === st}
+                                className={"sp4-filter-chip" + (STAGE_CHIP_CLASS[stageChipState(r, st)] ?? "")}
+                                aria-pressed={stageChipState(r, st) != null}
+                                title={stageChipState(r, st) === "skipped" ? "Skipped: went to Fixing without a spare part" : undefined}
                                 disabled={moving === r.id}
                                 onClick={() => moveStage(r.id, st)}
                               >{STAGE_LABEL[st]}</button>
@@ -445,19 +485,32 @@ export default function RepairJobsPanel({
                                     they sort first. The server no longer accepts a body without
                                     an id. A placeholder that cannot be submitted replaces it —
                                     the select must name somebody. */}
-                                <option value="" disabled>Choose a person…</option>
-                                {currentUserId && <option value={currentUserId}>Assign to me</option>}
-                                {assignees
-                                  .filter((u) => u.id !== currentUserId)
-                                  .map((u) => {
-                                    const role = (u.userRoles ?? [])
-                                      .find(({ role: held }) => held && TRIAGE_ROLE_SLUGS.has(held.slug))?.role;
-                                    return (
-                                      <option key={u.id} value={u.id}>
-                                        {u.fullName || u.email || u.id}{role?.name ? ` · ${role.name}` : ""}
-                                      </option>
-                                    );
-                                  })}
+                                {/* Says which of the three it is. An empty list is now a real
+                                    state — an organisation can have administrators and no
+                                    technician at all — and "Choose a person…" over nothing
+                                    reads as a control that is broken rather than a roster
+                                    that is empty. */}
+                                <option value="" disabled>
+                                  {assigneesLoading
+                                    ? "Loading technicians…"
+                                    : assignees.length === 0
+                                      ? "No technician in this organisation"
+                                      : "Choose a technician…"}
+                                </option>
+                                {/* "Assign to me" is gone with the rule. The person using this
+                                    control is an administrator by definition — that is what
+                                    `canAssign` means — and an administrator is no longer a
+                                    valid assignee, so the button could only ever have produced
+                                    a refusal. An administrator who also holds `technician`
+                                    still appears in the list below, under their own name. */}
+                                {/* No role suffix any more: every row in this list is a
+                                    technician, so printing " · Technician" against all of
+                                    them said nothing and cost the name its room. */}
+                                {assignees.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.fullName || u.email || u.id}
+                                  </option>
+                                ))}
                               </select>
                               <button
                                 type="button"
@@ -485,7 +538,7 @@ export default function RepairJobsPanel({
                     <td className="sp4-td--right">
                       {r.resolvedAt
                         ? <span className="sp4-pill sp4-pill--con">Resolved</span>
-                        : canResolve
+                        : mayWork(r)
                           ? (
                             <button type="button" className="sp4-ghost-btn"
                                     onClick={() => { setSignOff(r); }}>
@@ -495,11 +548,28 @@ export default function RepairJobsPanel({
                           : <span className="sp4-pill sp4-pill--warn">Open</span>}
                     </td>
                 </tr>
+                {openId === r.id && (
+                  <tr className="aud-detail-row">
+                    <td colSpan={10}>
+                      <div className="aud-detail">
+                        <RepairJobDetail
+                          orgId={orgId}
+                          job={r}
+                          canResolve={mayWork(r)}
+                          onToast={setToast}
+                          onChanged={reloadAll}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {!focused && <TablePager pager={pager} label="Repair job pages" />}
 
       <RepairSignOffDialog
         open={signOff !== null}

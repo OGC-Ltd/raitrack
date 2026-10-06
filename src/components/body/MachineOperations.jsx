@@ -327,7 +327,10 @@ export default function MachineOperations({
               tickLine={false}
               axisLine={false}
               width={72}
-              tick={{ fontSize: 11, fill: "var(--text-3)" }}
+              /* Every bar named. Left to itself recharts drops labels it
+                 thinks will collide, which left every other bar unlabelled. */
+              interval={0}
+              tick={{ fontSize: 10, fill: "var(--text-3)" }}
             />
 
             <Tooltip

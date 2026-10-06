@@ -98,9 +98,7 @@
   right: calc(100% + 8px);
   bottom: 0;
   z-index: 451;
-  /* 440 until the video column; widened by that column and its gap so the
-     plate and location keep the room they had. */
-  width: 472px;
+  width: 440px;
   /* The column between MapOverlay's rails, published by useFloatingWindow. */
   max-width: var(--safe-w, calc(calc(var(--vw) * 100) - 24px));
   /* Bounded by the room above the button — --rail-panel-max-h lives beside the
@@ -198,13 +196,16 @@
   grid-template-columns:
     17px            /* track tick     */
     24px            /* machine sprite */
-    minmax(60px, 1.35fr)  /* plate    */
-    minmax(52px, 1fr)     /* location */
+    /* Location gets the larger share since it shows place names: half the
+       plates are under 92px once IMEI names are shortened, and a wide plate
+       column left a gap before every location. 1 : 1.6 puts ~137px / 218px
+       in the 600px window; the longest plates truncate (full in the title). */
+    minmax(60px, 1fr)     /* plate    */
+    minmax(52px, 1.6fr)   /* location */
     18px            /* motion         */
     32px            /* recency        */
     16px            /* connection     */
     28px            /* quick track    */
-    26px            /* video          */
     26px;           /* open           */
   align-items: center;
   gap: 0 6px;
@@ -386,6 +387,9 @@
 }
 
 .units-menu__plate {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
   /* Was the panel's inherited 12.5px, which made the plate the largest type
      on screen — larger than the panel's own title. It is the row's subject
@@ -397,6 +401,24 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The plate ellipses, never the Hold chip beside it. */
+.units-menu__plate-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Probe hold: the orange of the Warning status card and Stopped in transit
+   (operator, 2026-10-01). */
+.units-menu__hold {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, #d97706 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #d97706;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 /* Coordinates rather than a place name deliberately: resolving a name is a
@@ -475,10 +497,6 @@
   color: #38bdf8;
 }
 
-/* Lit for a unit that reports a camera; the rest stay muted but still open
-   the window, which says there is no camera. */
-.units-menu__act--video { color: #64748b; }
-.units-menu__act--has { color: #38bdf8; }
 
 .units-menu__empty {
   padding: 10px 6px;
@@ -575,19 +593,15 @@
     max-height: calc(calc(var(--vh) * 100) - var(--header-h, 57px) - var(--footer-h, 64px) - 24px - var(--map-bottom-band, 0px));
     max-height: calc(100dvh - var(--header-h, 57px) - var(--footer-h, 64px) - 24px - var(--map-bottom-band, 0px));
   }
-  /* A phone panel is ~300px, and the desktop grid needs ~360: the last
-     buttons were cut off the right edge. Tighter columns and gaps, and no
-     separate "open" column, since a tap on the plate or the location already
-     opens the unit. */
+  /* A phone panel is ~300px, and the desktop grid needs ~340: the last
+     buttons were cut off the right edge. Tighter columns and gaps. */
   .units-menu__row {
     grid-template-columns:
-      17px 22px minmax(56px, 1.35fr) minmax(48px, 1fr)
+      17px 22px minmax(56px, 1fr) minmax(44px, 1.6fr)
       16px 30px 12px 24px 24px;
     gap: 0 4px;
     padding: 3px 4px;
   }
-  .units-menu__h--open,
-  .units-menu__act--open { display: none; }
 }
 
 /* The rail shrinks its buttons to 28px below 560px tall, so the panel follows
@@ -669,57 +683,6 @@
 
 .units-menu__col-head { color: #94a3b8 !important; }
 
-/* ── Pagination ─────────────────────────────────────────────────────────── */
-.units-menu__foot {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 8px 12px !important;
-}
-
-.units-menu__pagination {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.units-menu__page-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #0f172a;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: inherit;
-  line-height: 1;
-}
-
-.units-menu__page-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.units-menu__page-btn:hover:not(:disabled) {
-  background: #f1f5f9;
-}
-
-.units-menu__page-info {
-  font-size: 11px;
-  color: #64748b;
-  white-space: nowrap;
-  font-family: 'Inter', 'Roboto', sans-serif;
-}
-
-/* Plate and location open the unit (and the vehicle detail panel) */
-.units-menu__cell--open { cursor: pointer; }
-.units-menu__plate.units-menu__cell--open:hover { text-decoration: underline; }
-
-
 /* ── As a window, beside the sidebar ───────────────────────────────────────
    Opened from the sidebar's Units row at 1024px and up, where the map's own
    button for it is hidden (FleetMap.css).
@@ -740,6 +703,10 @@
   /* Over the app header (500) and the vehicle panel, under the account and
      admin overlays (2500+), which are whole pages. */
   z-index: 1400;
+  /* Wider than the popover: as a window it has the room, and the extra goes
+     to the plate and location columns (the only `fr` tracks), which are what
+     truncated at 440. Still bounded by --safe-w above. */
+  width: 600px;
   max-height: min(78vh, 720px);
   /* The map is live behind it, so it reads as something ON the page rather
      than the page itself. */

@@ -1,7 +1,7 @@
 // MobileCompanyProfile — slide-up sheet showing company info, weather and fleet stats.
 // Matches the RN CompanyProfileModal but natural, no AI cards.
 
-import { useAppContext } from '../../context/AppContext';
+import { useCompanies } from '../../context/AppContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { matchesFilter } from '../../lib/vehicleMap';
 import './MobileCompanyProfile.css';
@@ -35,7 +35,7 @@ function useWeather(lat, lng) {
 }
 
 export default function MobileCompanyProfile({ open, onClose }) {
-  const { activeCompany } = useAppContext();
+  const { activeCompany } = useCompanies();
   const { vehicles = [] } = useFleetLiveShared();
   const weather  = useWeather(activeCompany?.hqLat, activeCompany?.hqLng);
 

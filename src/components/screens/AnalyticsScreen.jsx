@@ -54,6 +54,7 @@ import {
 import { niceScale } from "../../lib/niceScale";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { joinUnitFuelDays } from "../../lib/unitFuelSeries";
+import { splitDrained } from "../../lib/fuelTheftSplit";
 import "./AnalyticsScreen.css";
 
 import {
@@ -63,7 +64,7 @@ import {
   getVehicleFuelDays,
 } from "../../api/analytics";
 
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useCompanies, useTheme } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
 import DownloadReportButton from "../shared/DownloadReportButton";
@@ -198,11 +199,9 @@ const days_ = (n) =>
   `${fmt(n)} day${n === 1 ? "" : "s"}`;
 
 export default function AnalyticsScreen() {
-  const {
-    activeCompanyId,
-    activeCompany,
-    darkMode: contextDarkMode,
-  } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { activeCompany } = useCompanies();
+  const { darkMode: contextDarkMode } = useTheme();
 
   // Filtering the units on the map is its own permission, separate from
   // reading analytics — an account can be allowed to see the figures without
@@ -920,15 +919,26 @@ export default function AnalyticsScreen() {
   const fuelPrice =
     fuel?.price ?? null;
 
+  // `lost` is what drained OTHER than suspected theft, and `theft` the
+  // suspected theft — apart, so a litre is in one bar or the other, never
+  // both (lib/fuelTheftSplit).
   const fuelByDay = (
     fuel?.byDay ?? []
-  ).map((d) => ({
-    day: d.day,
-    litres: d.litresFilled,
-    cost: d.cost,
-    lost: d.litresLost,
-    lossCost: d.lossCost,
-  }));
+  ).map((d) => {
+    const { lost, lossCost, theft, theftCost } = splitDrained(d);
+    return {
+      day: d.day,
+      litres: d.litresFilled,
+      cost: d.cost,
+      lost,
+      lossCost,
+      theft,
+      theftCost,
+    };
+  });
+
+  // The same split for the rows under the chart
+  const fuelSplit = splitDrained(fuelTotals);
 
   /**
    * The individual drains behind `fuelTotals.litresLost`, newest first.
@@ -980,7 +990,14 @@ export default function AnalyticsScreen() {
 
   const lossPct =
     fuelTotals.litresFilled > 0
-      ? (fuelTotals.litresLost /
+      ? (fuelSplit.lost /
+        fuelTotals.litresFilled) *
+      100
+      : 0;
+
+  const theftPct =
+    fuelTotals.litresFilled > 0
+      ? (fuelSplit.theft /
         fuelTotals.litresFilled) *
       100
       : 0;
@@ -2130,27 +2147,6 @@ export default function AnalyticsScreen() {
                       />
                     </div>
 
-                    {ops.earlyDepartures
-                      ?.gateConfirmed >
-                      0 && (
-                        <div className="an-today__note">
-                          {fmt(
-                            ops
-                              .earlyDepartures
-                              .gateConfirmed,
-                          )}{" "}
-                          of the pre-06:00 runs
-                          {ops
-                            .earlyDepartures
-                            .gateConfirmed ===
-                            1
-                            ? " was"
-                            : " were"}{" "}
-                          also watched clearing the gate by GPS
-                          (ticked, hover for the measured time).
-                        </div>
-                      )}
-
                     {/* Either chart may be withheld on its own, and the row
                         collapses to one column when it is — see .an-fuelrow in
                         the stylesheet. The row itself goes only when BOTH have
@@ -2334,10 +2330,10 @@ export default function AnalyticsScreen() {
                           <em>
                             (
                             {fmt(
-                              fuelTotals.thefts,
+                              fuelSplit.drains,
                             )}{" "}
                             event
-                            {fuelTotals.thefts === 1
+                            {fuelSplit.drains === 1
                               ? ""
                               : "s"}
                             )
@@ -2346,7 +2342,7 @@ export default function AnalyticsScreen() {
 
                         <span className="an-calc__v">
                           {fmt(
-                            fuelTotals.litresLost,
+                            fuelSplit.lost,
                           )}{" "}
                           L ·{" "}
                           {fmt(
@@ -2366,7 +2362,53 @@ export default function AnalyticsScreen() {
                           {fuelPrice?.currency ??
                             "KES"}{" "}
                           {fmt(
-                            fuelTotals.lossCost,
+                            fuelSplit.lossCost,
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Suspected theft, apart from what drained above:
+                          the SIPHON drains, the only ones the product calls
+                          possible theft (lib/fuelTheftSplit). */}
+                      <div className="an-calc__row an-calc__row--theft">
+                        <span className="an-calc__k">
+                          Suspected theft{" "}
+                          <em>
+                            (
+                            {fmt(
+                              fuelSplit.thefts,
+                            )}{" "}
+                            event
+                            {fuelSplit.thefts === 1
+                              ? ""
+                              : "s"}
+                            )
+                          </em>
+                        </span>
+
+                        <span className="an-calc__v">
+                          {fmt(
+                            fuelSplit.theft,
+                          )}{" "}
+                          L ·{" "}
+                          {fmt(
+                            theftPct,
+                            1,
+                          )}
+                          %
+                        </span>
+                      </div>
+
+                      <div className="an-calc__row an-calc__row--em an-calc__row--theft">
+                        <span className="an-calc__k">
+                          Value of suspected theft
+                        </span>
+
+                        <span className="an-calc__v">
+                          {fuelPrice?.currency ??
+                            "KES"}{" "}
+                          {fmt(
+                            fuelSplit.theftCost,
                           )}
                         </span>
                       </div>
@@ -3560,9 +3602,18 @@ function FuelChart({
         "var(--chart-1)",
     },
 
+    // Amber: fuel that left the tank for any other reason. Red is kept for
+    // suspected theft, the bar beside it.
     lost: {
       mark: "bar",
       label: "Drained",
+      color:
+        "var(--chart-4)",
+    },
+
+    theft: {
+      mark: "bar",
+      label: "Suspected theft",
       color:
         "var(--chart-8)",
     },
@@ -3609,7 +3660,9 @@ function FuelChart({
     const cost =
       key === "lost"
         ? row?.lossCost
-        : row?.cost;
+        : key === "theft"
+          ? row?.theftCost
+          : row?.cost;
 
     return `${fmt(
       value,
@@ -3632,6 +3685,9 @@ function FuelChart({
           hidden.has("lost")
             ? 0
             : s.lost ?? 0,
+          hidden.has("theft")
+            ? 0
+            : s.theft ?? 0,
         ),
     ),
   );
@@ -3773,6 +3829,23 @@ function FuelChart({
           dataKey="lost"
           hide={hidden.has("lost")}
           fill="var(--color-lost)"
+          radius={[
+            4,
+            4,
+            0,
+            0,
+          ]}
+          maxBarSize={22}
+          isAnimationActive={
+            false
+          }
+        />
+
+        <Bar
+          yAxisId="left"
+          dataKey="theft"
+          hide={hidden.has("theft")}
+          fill="var(--color-theft)"
           radius={[
             4,
             4,
@@ -3962,6 +4035,7 @@ function UnitFuelChart({
       "litres",
       "used",
       "lost",
+      "theft",
       "avg",
     );
 
@@ -4004,6 +4078,7 @@ function UnitFuelChart({
       "litres",
       "used",
       "lost",
+      "theft",
       "avg",
     )
       ? "litres"
@@ -4022,6 +4097,7 @@ function UnitFuelChart({
     peakOf(
       "litres",
       "lost",
+      "theft",
       "used",
       "avg",
     ),
@@ -4160,6 +4236,12 @@ function UnitFuelChart({
     lost: {
       mark: "bar",
       label: "Fuel drained",
+      color: "var(--chart-4)",
+    },
+
+    theft: {
+      mark: "bar",
+      label: "Suspected theft",
       color: "var(--chart-8)",
     },
 
@@ -4256,7 +4338,9 @@ function UnitFuelChart({
     const cost =
       key === "lost"
         ? row?.lossCost
-        : row?.cost;
+        : key === "theft"
+          ? row?.theftCost
+          : row?.cost;
 
     return `${fmt(value)} L${
       cost != null
@@ -4493,6 +4577,20 @@ function UnitFuelChart({
               dataKey="lost"
               hide={hidden.has("lost")}
               fill="var(--color-lost)"
+              radius={[4, 4, 0, 0]}
+              maxBarSize={
+                phone ? 18 : 12
+              }
+              isAnimationActive={false}
+            />
+          )}
+
+{showLitres && (
+            <Bar
+              yAxisId="litres"
+              dataKey="theft"
+              hide={hidden.has("theft")}
+              fill="var(--color-theft)"
               radius={[4, 4, 0, 0]}
               maxBarSize={
                 phone ? 18 : 12

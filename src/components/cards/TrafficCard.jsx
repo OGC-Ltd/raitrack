@@ -63,9 +63,7 @@ export default function TrafficCard({ vehicle }) {
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="trf-clear-note">No delays reported on this route</div>
-          )}
+          ) : null}
         </>
       )}
     </div>

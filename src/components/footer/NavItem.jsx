@@ -18,7 +18,9 @@ export default function NavItem({ icon, label, active, onClick, badge = 0, disab
     >
       <span className="nav-item__icon">
         {icon}
-        {badge > 0 && <span className="nav-item__badge">{badge}</span>}
+        {badge > 0 && (
+          <span className="nav-item__badge" data-len={String(badge).length}>{badge}</span>
+        )}
       </span>
       <span className="nav-item__label">{label}</span>
       {active && <span className="nav-item__bar" />}

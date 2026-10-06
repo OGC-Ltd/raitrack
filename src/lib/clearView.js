@@ -85,8 +85,7 @@ let pending = null;
  */
 export function panClearOfWindows(map, pos) {
   pending?.();
-  const g = typeof window === 'undefined' ? null : window.google?.maps;
-  if (!map || !g || !pos) return;
+  if (!map || !pos) return;
 
   let raf = 0;
   let last = '';
@@ -120,8 +119,8 @@ export function panClearOfWindows(map, pos) {
     // The centre that draws the unit `off` px from it, worked out from the
     // unit rather than from wherever the camera is now.
     const scale = 2 ** map.getZoom();
-    const p = proj.fromLatLngToPoint(new g.LatLng(pos.lat, pos.lng));
-    map.panTo(proj.fromPointToLatLng(new g.Point(p.x - off.x / scale, p.y - off.y / scale)));
+    const p = proj.fromLatLngToPoint({ lat: pos.lat, lng: pos.lng });
+    map.panTo(proj.fromPointToLatLng({ x: p.x - off.x / scale, y: p.y - off.y / scale }));
   };
   raf = requestAnimationFrame(tick);
 }

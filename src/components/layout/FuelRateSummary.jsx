@@ -16,18 +16,21 @@ import { FUEL_EVENT_KINDS } from '../../lib/fuelEpisodes';
 import './FuelRateSummary.css';
 
 const HHMM = new Intl.DateTimeFormat('en-KE', { hour: '2-digit', minute: '2-digit', hour12: false });
+const DAY_HHMM = new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 const L1 = (l) => `${l.toLocaleString('en-KE', { maximumFractionDigits: 1 })} L`;
 
 /**
  * `drains` are the day's ledger rows and `episodes` the chart's events built
  * from them (hooks/useVehicleFuelEvents). `dayWord` finishes "None …".
  * `max` caps the rows, with `onMore` offered for the rest; `onPick(bandId)`
- * opens a band on the chart.
+ * opens a band on the chart. `withDate` puts the day on each row, for a range
+ * of days.
  */
 export default function FuelRateSummary({
   drains = [], episodes = [], dayWord = 'today', loading = false, error = null,
-  max = Infinity, onMore, onPick,
+  max = Infinity, onMore, onPick, withDate = false,
 }) {
+  const at = (ms) => (withDate ? DAY_HHMM : HHMM).format(ms);
   const findings = useMemo(() => fuelRateFindings(drains), [drains]);
   const text = fuelRateSummaryText(findings);
   const shown = findings.slice(0, max);
@@ -51,7 +54,7 @@ export default function FuelRateSummary({
           const dismissed = f.dismissed
             ? `Dismissed${f.dismissedBy ? ` by ${f.dismissedBy}` : ''}${f.dismissedAt ? ` at ${HHMM.format(f.dismissedAt)}` : ''}`
             : null;
-          const label = [HHMM.format(f.at), f.kind, litres, f.detail, dismissed].filter(Boolean).join(', ');
+          const label = [at(f.at), f.kind, litres, f.detail, dismissed].filter(Boolean).join(', ');
           return (
             <li key={f.id}>
               <button
@@ -65,7 +68,7 @@ export default function FuelRateSummary({
                 <span className="frs-n" style={{ background: FUEL_EVENT_KINDS.drop.color }} aria-hidden="true">
                   {band ? band.n : '·'}
                 </span>
-                <b className="frs-time">{HHMM.format(f.at)}</b>
+                <b className="frs-time">{at(f.at)}</b>
                 <span className="frs-kind">{f.kind}</span>
                 {f.dismissed && <span className="frs-tag">dismissed</span>}
                 {litres && <span className="frs-l">{litres}</span>}

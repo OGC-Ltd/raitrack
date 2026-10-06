@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../../services/api';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
-import { useAppContext } from '../../context/AppContext';
+import { useAppSelector, useAppActions, useCompanies } from '../../context/AppContext';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { requestOpenDriver } from '../../lib/driverHandoff';
@@ -20,26 +20,35 @@ import { createReport, addSectionTitle, addSummaryCards, addTable, downloadRepor
 import { usePlaceName } from '../../hooks/usePlaceName';
 import { fleetDayKey } from '../../hooks/useFuelEvents';
 import { vehicleReadings } from '../../lib/vehicleReadings';
-import { cachedDay, dayBounds, loadDay, summariseDay } from '../../lib/vehicleDay';
-import { useFuelEpisodes, useVehicleFuelEvents } from '../../hooks/useVehicleFuelEvents';
+import { cachedDay, dayBounds, loadDay, summariseDay, movingSpans } from '../../lib/vehicleDay';
+import { useFuelEpisodes, useVehicleFuelEventsRange } from '../../hooks/useVehicleFuelEvents';
+import { clampRange, daysBetween, joinDays, rangeWords } from '../../lib/dayRange';
+import { settleLimited } from '../../lib/settleLimited';
 import { fuelRateKind } from '../../lib/fuelEpisodes';
 import FuelChart from './FuelChart';
 import FuelRateSummary from './FuelRateSummary';
+import DateRangePicker from './DateRangePicker';
+import UnitFeed from './UnitFeed';
+import TripTrafficEta from './TripTrafficEta';
+import { SpeedNow, DaySummary, OverspeedTimeline } from './SafetyParts';
+import { DayGroups, TankGauge } from './FuelParts';
+import { ReadingsCard, FactsCard, OverspeedReadout, DriverRow, SummaryCard } from './OverviewParts';
+import { HealthSummary, CheckList } from './FaultsParts';
+import './VehicleHeader.css';
+// The panel's shared list, filter and empty-state styles (af-*): the Alerts
+// tab's filter row, the Safety timeline, EmptyNote.
+import './AlertsFeed.css';
 import './VehicleDetailPanel.css';
 
 // ── Config ──────────────────────────────────────────────────────────────────
-const FUEL_PRICE_KSH = 190;          // KSh per litre, for the cost estimate
+// KSh per litre, for the cost estimate: EPRA's Nairobi pump price as the
+// operator gave it on 28 Sep (petrol, 214.03)
+const FUEL_PRICE_KSH = 214.03;
 const RESERVE_PCT    = 25;           // fuel reserve threshold (%)
 const NA             = 'Not available';
 const TODAY_REFRESH_MS = 60_000;     // re-read today's tail while the panel is open
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function initials(name = '') {
-  const words = String(name).trim().split(/\s+/).filter(Boolean);
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-  return String(name).slice(0, 2).toUpperCase() || '?';
-}
 
 // status comes from lib/vehicleMap deriveStatus(): theft | speeding | parked | idling | ok
 function statusTag(v) {
@@ -92,16 +101,6 @@ function timeAgo(ms) {
 
 // Fleet days run on Nairobi time (UTC+3), same calendar as hooks/useFuelEvents
 const dayStart = (dayKey) => new Date(dayBounds(dayKey).start);
-function addDays(dayKey, n) {
-  const d = new Date(`${dayKey}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-function daysBetween(fromKey, toKey) {
-  const out = [];
-  for (let k = fromKey; k <= toKey && out.length < 31; k = addDays(k, 1)) out.push(k);
-  return out;
-}
 const DAY_LABEL = new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const fmtDay = (key) => DAY_LABEL.format(new Date(`${key}T00:00:00.000Z`));
 
@@ -136,6 +135,60 @@ function useDayTelemetry(orgId, vehicleId, dayKey) {
   }, [orgId, vehicleId, dayKey]);
 
   return state;
+}
+
+/**
+ * The Fuel tab's readings for one day or a range of them (lib/dayRange), as
+ * one run. Each past day comes through loadDay, so a day already opened costs
+ * nothing; today, when in the range, is the Overview's live telemetry rather
+ * than a second request, which is what the tab did for today before. A day
+ * that fails to load leaves a gap in the line, not an empty chart.
+ */
+const NO_DAYS = { key: null, parts: [], loading: false, error: null };
+
+function useRangeTelemetry(orgId, vehicleId, days, todayTele) {
+  const today = fleetDayKey();
+  const past = days.filter(d => d !== today);
+  const key = orgId && vehicleId && past.length ? `${orgId}|${vehicleId}|${past.join(',')}` : null;
+  // What is held for `key`, drawn from the first frame of a new pick; the state
+  // below is only ever the loaded copy of the same days.
+  const fromHeld = () => {
+    const h = past.map(d => cachedDay(orgId, vehicleId, d));
+    return { key, parts: h.map(x => x?.pings ?? []), loading: h.some(x => !x), error: null };
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pending = useMemo(() => (key ? fromHeld() : NO_DAYS), [key]);
+  const [state, setState] = useState(pending);
+  const cur = state.key === key ? state : pending;
+
+  useEffect(() => {
+    if (!key) return undefined;
+    let live = true;
+    settleLimited(past, DAY_REQUESTS, d => loadDay(orgId, vehicleId, d)).then(rs => {
+      if (!live) return;
+      const failed = rs.filter(r => r.status === 'rejected');
+      setState({
+        key,
+        parts: rs.map((r, i) => (r.status === 'fulfilled' ? r.value.pings : pending.parts[i])),
+        loading: false,
+        error: failed.length === rs.length ? failed[0].reason?.message ?? 'Could not load telemetry' : null,
+      });
+    });
+    return () => { live = false; };
+  // `key` carries the org, the unit and every past day
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const withToday = days.includes(today);
+  const pings = useMemo(
+    () => joinDays([...cur.parts, ...(withToday ? [todayTele.pings] : [])]),
+    [cur.parts, withToday, todayTele.pings],
+  );
+  return {
+    pings,
+    loading: cur.loading || (withToday && todayTele.loading),
+    error: cur.error ?? (withToday ? todayTele.error : null),
+  };
 }
 
 /**
@@ -217,184 +270,196 @@ function limitLabel(pings, limit) {
   return `${Math.min(...seen)}–${Math.max(...seen)} by zone`;
 }
 
-// Fuel used, with where the figure came from when it is not the device counter
-function usedText(sum) {
-  if (sum.usedL == null) return NA;
-  return `${num(sum.usedL, 1)} L${sum.usedSource === 'level' ? ' (from tank level)' : ''}`;
+// ── Layout pieces shared by the tabs ────────────────────────────────────────
+//
+// Every tab is built from the same three things (operator, 28 Sep: "have it
+// well designed, right typography and layout" — Overview, Fuel, Safety and
+// Faults alike). Figures are cards, label over value (FuelParts, OverviewParts,
+// SafetyParts, redesigned 2026-10-02); on Faults, a list of checks with a
+// state each.
+
+/**
+ * A day's (or a range's) figures, the same nine wherever they are shown —
+ * Overview's "Today so far" and the Fuel tab's picked dates: fuel, then
+ * driving, then engine and speed.
+ */
+function dayFigures(sum, { limit, runs, hasPings }) {
+  const cost = sum.usedL != null ? sum.usedL * FUEL_PRICE_KSH : null;
+  const top  = hasPings ? Math.round(sum.topSpeed ?? 0) : null;
+  return [
+    { label: 'Fuel used',  value: sum.usedL != null ? `${num(sum.usedL, 1)} L` : null,
+      sub: sum.usedL != null && sum.usedSource === 'level' ? 'from tank level' : null },
+    { label: 'Refuelled',  value: sum.refilledL != null ? `${num(sum.refilledL)} L` : null },
+    { label: 'Est. cost',  value: cost != null ? `KSh ${num(Math.round(cost))}` : null,
+      sub: cost != null ? `at KSh ${num(FUEL_PRICE_KSH, 2)}/L` : null },
+    { label: 'Distance',   value: sum.distanceKm != null ? `${num(sum.distanceKm, 1)} km` : null },
+    { label: 'Moving',     value: sum.movingMin != null ? fmtMinutes(sum.movingMin) : null },
+    { label: 'Idle',       value: sum.idleMin != null ? fmtMinutes(sum.idleMin) : null },
+    { label: 'Engine hours', value: sum.engineHoursToday != null ? `${num(sum.engineHoursToday, 1)} h` : null },
+    { label: 'Top speed',  value: top != null ? `${top} km/h` : null, tone: top > limit ? 'alert' : null },
+    { label: 'Overspeeds', value: hasPings ? String(runs.length) : null, tone: runs.length ? 'alert' : null },
+  ];
 }
 
-// ── AI summary (written locally from live fields) ───────────────────────────
-
-function AISummary({ vehicle, readings, place, usedL }) {
-  const parts = [];
-  const where = place ? ` near ${place}` : '';
-  if (!vehicle.online) {
-    const ago = timeAgo(readings.lastReportedAt);
-    parts.push(`${vehicle.id} is offline${ago ? ` — last reported ${ago}` : ''}${where}.`);
-  } else if ((vehicle.speed ?? 0) > 0) {
-    parts.push(`${vehicle.id} is moving at ${vehicle.speed} km/h${where}.`);
-  } else {
-    parts.push(`${vehicle.id} is stationary${where}${vehicle.engine === 'on' ? ' with the engine running' : ''}.`);
-  }
-  if (vehicle.status === 'theft') {
-    const inc = vehicle.fuelIncident;
-    parts.push(inc?.mayUseTheftWording
-      ? 'A possible fuel theft is flagged on this unit — review it and consider dispatching security.'
-      : `A ${fuelRateKind(inc?.reason) ?? 'fuel'} finding is open on this unit — check it against its fuel records.`);
-  }
-  if (vehicle.status === 'speeding' && vehicle.speedLimit) parts.push(`It is over the ${vehicle.speedLimit} km/h limit.`);
-  if (readings.fuelPct != null) {
-    parts.push(`Fuel is at ${readings.fuelPct}%${readings.fuelPct < RESERVE_PCT ? ', below reserve' : ''}.`);
-  } else if (readings.fuelProbeFault) {
-    parts.push('The fuel probe is reporting a fault.');
-  }
-  if (usedL != null) parts.push(`${num(usedL, 1)} L used today.`);
-  const loaded = vehicle.cargo && vehicle.cargo !== 'Empty' && vehicle.cargo !== 'No load expected';
-  if (loaded) parts.push(`Carrying ${vehicle.cargo}${vehicle.weight ? ` (${vehicle.weight} t)` : ''}.`);
-  else if (vehicle.cargo === 'Empty') parts.push('Running empty.');
-  if (vehicle.destination) parts.push(`Heading to ${vehicle.destination}.`);
-
+/**
+ * Nothing to list, said in the middle of what is left of the tab: an icon, a
+ * title and one line under it (AlertsFeed.css, .af-empty). The section holding
+ * it takes `vdp-block--fill` so there is a middle. `tone` 'error' is red.
+ */
+function EmptyNote({ icon, title, children, tone }) {
   return (
-    <div className="vdp-ai">
-      <div className="vdp-ai-title">AI summary</div>
-      <p className="vdp-ai-text">{parts.join(' ')}</p>
+    <div className={`af-empty${tone === 'error' ? ' af-empty--error' : ''}`} role="status">
+      <span className="af-empty-icon" aria-hidden="true"><i className={`ti ${icon}`} /></span>
+      <div className="af-empty-title">{title}</div>
+      {children && <div className="af-empty-sub">{children}</div>}
     </div>
   );
 }
 
+// ── Summary (written by rule from the live fields — no model involved) ──────
+
+/**
+ * What the unit is doing as one lead sentence, then a line each for what to
+ * know: flags first (red, then amber), then fuel, load and where it is going.
+ */
+function unitSummary({ vehicle, readings, place, usedL }) {
+  const where = place ? ` near ${place}` : '';
+  let lead;
+  if (!vehicle.online) {
+    const ago = timeAgo(readings.lastReportedAt);
+    lead = `${vehicle.id} is offline${ago ? `, last reported ${ago}` : ''}${where}.`;
+  } else if ((vehicle.speed ?? 0) > 0) {
+    lead = `${vehicle.id} is moving at ${vehicle.speed} km/h${where}.`;
+  } else {
+    lead = `${vehicle.id} is stationary${where}${vehicle.engine === 'on' ? ' with the engine running' : ''}.`;
+  }
+
+  const items = [];
+  if (vehicle.status === 'theft') {
+    const inc = vehicle.fuelIncident;
+    items.push(inc?.mayUseTheftWording
+      ? { icon: 'ti-alert-triangle', tone: 'alert', text: 'Possible fuel theft flagged. Review it and consider dispatching security.' }
+      : { icon: 'ti-alert-circle', tone: 'warn', text: `${fuelRateKind(inc?.reason) ?? 'A fuel'} finding is open. Check it against the fuel records.` });
+  }
+  if (vehicle.status === 'speeding' && vehicle.speedLimit) {
+    items.push({ icon: 'ti-gauge', tone: 'alert', text: `Over the ${vehicle.speedLimit} km/h limit.` });
+  }
+  if (vehicle.probeHold) {
+    items.push({ icon: 'ti-tool', tone: 'warn', text: 'On probe hold: fuel theft alerts are paused until the probe repair is signed off fixed.' });
+  }
+  if (readings.fuelPct != null) {
+    const low = readings.fuelPct < RESERVE_PCT;
+    items.push({ icon: 'ti-gas-station', tone: low ? 'warn' : null, text: `Fuel at ${readings.fuelPct}%${low ? ', below reserve' : ''}.` });
+  } else if (readings.fuelProbeFault) {
+    items.push({ icon: 'ti-gas-station-off', tone: 'warn', text: 'The fuel probe is reporting a fault.' });
+  }
+  if (usedL != null) items.push({ icon: 'ti-droplet', text: `${num(usedL, 1)} L used today.` });
+  const loaded = vehicle.cargo && vehicle.cargo !== 'Empty' && vehicle.cargo !== 'No load expected';
+  if (loaded) items.push({ icon: 'ti-package', text: `Carrying ${vehicle.cargo}${vehicle.weight ? ` (${vehicle.weight} t)` : ''}.` });
+  // "Running empty" after the fuel line read as an empty tank
+  else if (vehicle.cargo === 'Empty') items.push({ icon: 'ti-package-off', text: 'Carrying no load.' });
+  if (vehicle.destination) items.push({ icon: 'ti-flag', text: `Heading to ${vehicle.destination}.` });
+
+  const rank = { alert: 0, warn: 1 };
+  items.sort((a, b) => (rank[a.tone] ?? 2) - (rank[b.tone] ?? 2));
+  return { lead, items };
+}
+
 // ── Fuel level chart — see ./FuelChart ──────────────────────────────────────
 
-// ── Alerts tab (recorded events over a date range) ──────────────────────────
+// ── Alerts tab (the unit's feed — see ./UnitFeed) ──────────────────────────
 
-const ALERT_SEVERITIES = new Set(['warning', 'critical']);
-const MAX_RANGE_DAYS   = 14;
+// Up to 90 days a pick on the Fuel tab (operator, 28 Sep: "even more than 30
+// days"), one request a day, DAY_REQUESTS at a time — see lib/settleLimited.
+const MAX_RANGE_DAYS = 90;
+const DAY_REQUESTS   = 4;
 
-function useRangeEvents(orgId, vehicleId, fromKey, toKey) {
-  const [state, setState] = useState({ events: [], distanceM: null, loading: false, error: null });
+/** The longest period the feed's date picker offers — its last preset. */
+const FEED_MAX_DAYS = 90;
 
-  useEffect(() => {
-    if (!orgId || !vehicleId || !fromKey || !toKey) { setState({ events: [], distanceM: null, loading: false, error: null }); return undefined; }
-    const ctrl = new AbortController();
-    setState(s => ({ ...s, loading: true, error: null }));
-    const days = daysBetween(fromKey, toKey).slice(0, MAX_RANGE_DAYS);
-    Promise.all(days.map(day =>
-      apiFetch(`/api/v1/organisations/${orgId}/vehicles/${vehicleId}/playback?day=${day}`, { signal: ctrl.signal })
-        .then(res => res.data ?? null)
-        .catch(err => { if (err?.name === 'AbortError') throw err; return null; }),
-    ))
-      .then(results => {
-        if (ctrl.signal.aborted) return;
-        const events = results.flatMap(r => r?.events ?? []).sort((a, b) => b.t - a.t);
-        const distanceM = results.reduce((sum, r) => sum + (Number.isFinite(r?.distanceM) ? r.distanceM : 0), 0);
-        const allFailed = results.every(r => r == null);
-        setState({ events, distanceM, loading: false, error: allFailed ? 'Could not load alerts for this range' : null });
-      })
-      .catch(err => {
-        if (ctrl.signal.aborted || err?.name === 'AbortError') return;
-        setState({ events: [], distanceM: null, loading: false, error: err?.message ?? 'Could not load alerts' });
-      });
-    return () => ctrl.abort();
-  }, [orgId, vehicleId, fromKey, toKey]);
-
-  return state;
-}
-
-function sevColor(sev) {
-  if (sev === 'critical') return '#b91c1c';
-  if (sev === 'warning')  return '#b7791f';
-  return '#94a3b8';
-}
-
-const DT = new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
-
-function AlertsTab({ orgId, vehicleId }) {
+/**
+ * The unit's own feed (UnitFeed): its live items over its history, as the
+ * Live feed shows the fleet's — the shape dash gives a clicked unit (operator,
+ * 2026-10-02). All history by default; "Period" narrows it to fleet days.
+ */
+function AlertsTab({ vehicle }) {
   const today = fleetDayKey();
-  const [from, setFrom] = useState(today);
-  const [to,   setTo]   = useState(today);
-  const [showAll, setShowAll] = useState(false);
-
+  const [range, setRangeState] = useState(null);   // null: all history
   const setRange = (f, t) => {
-    // keep from <= to and the span within MAX_RANGE_DAYS
-    if (f > t) [f, t] = [t, f];
-    if (daysBetween(f, t).length > MAX_RANGE_DAYS) f = addDays(t, -(MAX_RANGE_DAYS - 1));
-    setFrom(f); setTo(t);
+    const [a, b] = clampRange(f, t, today, FEED_MAX_DAYS);
+    setRangeState({ from: a, to: b });
   };
-
-  const { events, distanceM, loading, error } = useRangeEvents(orgId, vehicleId, from, to);
-  const shown = showAll ? events : events.filter(e => ALERT_SEVERITIES.has(e.severity));
-  const multiDay = from !== to;
-  const presets = [
-    { label: 'Today',   f: today,              t: today },
-    { label: '7 days',  f: addDays(today, -6), t: today },
-    { label: '14 days', f: addDays(today, -13), t: today },
-  ];
+  const periodWords = !range ? 'All history'
+    : range.from === range.to ? (range.from === today ? 'Today' : fmtDay(range.from))
+    : `${fmtDay(range.from)} – ${fmtDay(range.to)}`;
 
   return (
-    <section className="vdp-block vdp-block--last">
+    <section className="vdp-block vdp-block--last vdp-block--fill">
       <div className="vdp-block-head">
         <div className="vdp-block-title">Alerts</div>
-        <span className="vdp-meta">{distanceM ? `${num(distanceM / 1000, 1)} km driven` : ''}</span>
+        <span className="vdp-meta">{periodWords}</span>
       </div>
 
-      {/* Range filter */}
-      <div className="vdp-range">
-        <div className="vdp-presets">
-          {presets.map(p => (
-            <button
-              key={p.label}
-              className={`vdp-chip${from === p.f && to === p.t ? ' vdp-chip--active' : ''}`}
-              onClick={() => setRange(p.f, p.t)}
-            >{p.label}</button>
-          ))}
+      {/* Everything the unit has logged, or a period of it. */}
+      <div className="af-filters">
+        <div className="af-seg" role="radiogroup" aria-label="Period">
+          <button type="button" role="radio" aria-checked={!range} onClick={() => setRangeState(null)}>
+            All history
+          </button>
+          <button type="button" role="radio" aria-checked={Boolean(range)}
+                  onClick={() => { if (!range) setRange(today, today); }}>
+            Period
+          </button>
         </div>
-        <div className="vdp-dates">
-          <input type="date" className="vdp-date" value={from} max={today} onChange={e => e.target.value && setRange(e.target.value, to)} aria-label="From date" />
-          <span className="vdp-date-sep">to</span>
-          <input type="date" className="vdp-date" value={to} max={today} onChange={e => e.target.value && setRange(from, e.target.value)} aria-label="To date" />
-        </div>
-        <label className="vdp-toggle">
-          <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} />
-          Show all activity (stops, zones)
-        </label>
+        {range && (
+          <DateRangePicker from={range.from} to={range.to} today={today} maxDays={FEED_MAX_DAYS}
+                           onChange={setRange} align="right" label="Feed dates" />
+        )}
       </div>
 
-      {!vehicleId && <div className="vdp-empty">{NA}</div>}
-      {vehicleId && loading && <div className="vdp-empty">Loading alerts…</div>}
-      {vehicleId && !loading && error && <div className="vdp-empty">{error}</div>}
-      {vehicleId && !loading && !error && shown.length === 0 && (
-        <div className="vdp-empty">No {showAll ? 'activity' : 'alerts'} {from === today && to === today ? 'today' : `from ${fmtDay(from)} to ${fmtDay(to)}`}.</div>
-      )}
-      {!loading && shown.length > 0 && (
-        <table className="vdp-events">
-          <tbody>
-            {shown.map((ev, i) => (
-              <tr key={`${ev.t}-${i}`}>
-                <td className="vdp-ev-time">{multiDay ? DT.format(ev.t) : fmtTime(ev.t)}</td>
-                <td className="vdp-ev-dot"><span style={{ background: sevColor(ev.severity) }} /></td>
-                <td className="vdp-ev-label">
-                  {ev.label}
-                  {ev.detail && <span className="vdp-ev-detail"> — {ev.detail}</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {!vehicle?.vehicleId
+        ? <div className="vdp-empty">{NA}</div>
+        : (
+          <UnitFeed
+            key={vehicle.vehicleId}
+            vehicle={vehicle}
+            range={range}
+            todayKey={today}
+            renderEmpty={({ error, retry }) => (error
+              ? (<>
+                <EmptyNote icon="ti-alert-triangle" tone="error" title="The Feed Could Not Be Loaded">
+                  {error.message ?? String(error)}
+                </EmptyNote>
+                <button type="button" className="uf-more" onClick={retry}>Try again</button>
+              </>)
+              : (
+                <EmptyNote icon="ti-bell-off" title={range ? 'Nothing in This Period' : 'Nothing Logged Yet'}>
+                  {range
+                    ? 'No arrivals, departures, fuel or alerts were logged for this unit. Pick other dates, or switch to All history.'
+                    : 'Arrivals, departures, fuel and alerts for this unit show here as they happen.'}
+                </EmptyNote>
+              ))}
+          />
+        )}
     </section>
   );
 }
 
-// ── Fuel tab (one day, custom date) ─────────────────────────────────────────
+// ── Fuel tab (one day, or a range of days) ──────────────────────────────────
 
 function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
   const today = fleetDayKey();
-  const [day, setDay] = useState(today);
-  const isToday = day === today;
-  // Reuse the Overview's request for today rather than fetching it twice
-  const other = useDayTelemetry(orgId, isToday ? null : vehicleId, isToday ? null : day);
-  const tele  = isToday ? todayTele : other;
+  // One day, or a range of up to MAX_RANGE_DAYS, from the one picker in the
+  // heading (operator, 28 Sep: "the date picker should be able to pick a range
+  // of dates or a single date" — "just one interface").
+  const [[from, to], setDays] = useState([today, today]);
+  const days = useMemo(() => daysBetween(from, to, MAX_RANGE_DAYS), [from, to]);
+  const multiDay = from !== to;
+  const isToday = !multiDay && from === today;
+  // Today comes from the Overview's request rather than a second one
+  const tele  = useRangeTelemetry(orgId, vehicleId, days, todayTele);
   const limit = vehicle.speedLimit ?? 80;
-  const events = useVehicleFuelEvents(orgId, vehicleId, day);
+  const events = useVehicleFuelEventsRange(orgId, vehicleId, days);
   const episodes = useFuelEpisodes(events.drains, events.fillings, tele.pings);
   // A band opened from the FUEL RATE / FUEL DOWN summary, and the chart to bring into view
   const [focus, setFocus] = useState(null);
@@ -406,53 +471,52 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
 
   const sum   = useMemo(() => summariseDay(tele.pings, vehicle.tankCapacityL), [tele.pings, vehicle.tankCapacityL]);
   const runs  = useMemo(() => overspeedRuns(tele.pings, limit), [tele.pings, limit]);
-  const topSpeed = sum.topSpeed ?? 0;
-  const cost  = sum.usedL != null ? sum.usedL * FUEL_PRICE_KSH : null;
-  const dayLabel = isToday ? 'today' : `on ${fmtDay(day)}`;
+  const dayLabel = rangeWords(from, to, today, fmtDay);
+  const title = isToday ? 'Today'
+    : multiDay ? `${fmtDay(from)} – ${to === today ? 'today' : fmtDay(to)}`
+    : fmtDay(from);
+  // Where each day after the first begins, for the chart's midnight lines
+  const dayStarts = useMemo(() => days.slice(1).map(d => dayBounds(d).start), [days]);
+
+  const pick = (f, t) => { setDays(clampRange(f, t, today, MAX_RANGE_DAYS)); setFocus(null); };
 
   return (<>
+    {/* The tank first, then the chart (operator, 2026-10-02) */}
+    <section className="vdp-block">
+      <div className="vdp-block-title">Tank</div>
+      <TankGauge
+        pct={readings.fuelPct} litres={readings.fuelLitres} capacityL={vehicle.tankCapacityL}
+        reservePct={RESERVE_PCT} probeFault={readings.fuelProbeFault} probeHold={vehicle.probeHold}
+      />
+    </section>
     <section className="vdp-block" ref={chartRef}>
       <div className="vdp-block-head">
         <div className="vdp-block-title">
           Fuel &amp; overspeed
-          {isToday && vehicle.online && <span className="vdp-live">live</span>}
+          {to === today && vehicle.online && <span className="vdp-live">live</span>}
         </div>
-        <input
-          type="date"
-          className="vdp-date"
-          value={day}
-          max={today}
-          onChange={e => { if (e.target.value) { setDay(e.target.value); setFocus(null); } }}
-          aria-label="Chart date"
+        <DateRangePicker from={from} to={to} today={today} maxDays={MAX_RANGE_DAYS} onChange={pick} align="right" label="Chart dates" />
+      </div>
+      {/* The whole width and a taller plot: no readout over it (operator, 2026-10-02) */}
+      <div className="fp-chart fp-chart--bare">
+        <FuelChart
+          key={`${from}|${to}`} series={sum.series} unit={sum.unit} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel}
+          pings={tele.pings} limit={limit} reservePct={RESERVE_PCT} limitText={limitLabel(tele.pings, limit)}
+          episodes={episodes} focus={focus} showList withDate={multiDay} dayStarts={dayStarts} tall
         />
       </div>
-      <FuelChart
-        key={day} series={sum.series} unit={sum.unit} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel}
-        pings={tele.pings} limit={limit} reservePct={RESERVE_PCT} limitText={limitLabel(tele.pings, limit)}
-        episodes={episodes} focus={focus} showList
-      />
       {events.error && <div className="vdp-empty">Fuel events could not be loaded: {events.error}</div>}
     </section>
     <section className="vdp-block vdp-block--last">
-      <div className="vdp-block-title">{isToday ? 'Today' : fmtDay(day)}</div>
+      <div className="vdp-block-head">
+        <div className="vdp-block-title">{title}</div>
+        {tele.loading && <span className="vdp-meta">Loading…</span>}
+      </div>
       <FuelRateSummary
-        drains={events.drains} episodes={episodes} dayWord={dayLabel}
+        drains={events.drains} episodes={episodes} dayWord={dayLabel} withDate={multiDay}
         loading={events.loading} error={events.error} onPick={pickBand}
       />
-      <dl className="vdp-kv">
-        <div><dt>Fuel used</dt><dd>{usedText(sum)}</dd></div>
-        <div><dt>Est. cost</dt><dd>{cost != null ? `KSh ${num(Math.round(cost))}` : NA}</dd></div>
-        <div><dt>Refuelled</dt><dd>{sum.refilledL != null ? `${num(sum.refilledL, 0)} L` : NA}</dd></div>
-        <div><dt>Distance</dt><dd>{sum.distanceKm != null ? `${num(sum.distanceKm, 1)} km` : NA}</dd></div>
-        <div><dt>Moving time</dt><dd>{sum.movingMin != null ? fmtMinutes(sum.movingMin) : NA}</dd></div>
-        <div><dt>Idle time</dt><dd>{sum.idleMin != null ? fmtMinutes(sum.idleMin) : NA}</dd></div>
-        <div><dt>Engine hours</dt><dd>{sum.engineHoursToday != null ? `${num(sum.engineHoursToday, 1)} h` : NA}</dd></div>
-        <div><dt>Overspeed events</dt><dd className={runs.length ? 'vdp-kv--danger' : ''}>{tele.pings.length ? runs.length : NA}</dd></div>
-        <div><dt>Top speed</dt><dd className={topSpeed > limit ? 'vdp-kv--danger' : ''}>{tele.pings.length ? `${Math.round(topSpeed)} km/h` : NA}</dd></div>
-        <div><dt>Current level</dt><dd>{readings.fuelPct != null ? `${readings.fuelPct}%` : readings.fuelLitres != null ? `${num(readings.fuelLitres)} L` : NA}</dd></div>
-        <div><dt>Tank capacity</dt><dd>{vehicle.tankCapacityL != null ? `${num(vehicle.tankCapacityL)} L` : 'Not recorded'}</dd></div>
-        <div><dt>Fuel probe</dt><dd className={readings.fuelProbeFault ? 'vdp-kv--danger' : ''}>{readings.fuelProbeFault ? 'Fault reported' : readings.fuelLitres != null ? 'Reporting' : 'No reading'}</dd></div>
-      </dl>
+      <DayGroups items={dayFigures(sum, { limit, runs, hasPings: tele.pings.length > 0 })} />
     </section>
   </>);
 }
@@ -518,7 +582,9 @@ const TABS = [
 export default function VehicleDetailPanel({ vehicle, onClose }) {
   const [tab, setTab] = useState('overview');
   const { orgId, vehicles = [] } = useFleetLiveShared();
-  const { trackedIds, setTrackedIds, activeCompany, setDesktopActiveTab } = useAppContext();
+  const trackedIds = useAppSelector((a) => a.trackedIds);
+  const { setTrackedIds, setDesktopActiveTab } = useAppActions();
+  const { activeCompany } = useCompanies();
   const { focusVehicle, startPlayback } = useMapLayers() ?? {};
   const { can } = usePermissions();
   const [reporting, setReporting] = useState(false);
@@ -534,8 +600,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
 
   const toggleTrack = () => {
     if (!vehicle) return;
-    const ids = trackedIds ?? [];
-    setTrackedIds(isTracked ? ids.filter(x => x !== vehicle.id) : [...ids, vehicle.id]);
+    const id = vehicle.id;
+    setTrackedIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   };
 
   // Step through the tracked list (wraps). If the open unit isn't tracked,
@@ -589,13 +655,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
     Number.isFinite(vehicle?.lng) ? vehicle.lng : null,
   );
   const dayTele = useDayTelemetry(orgId, vehicleId, fleetDayKey());
-  // Today's fuel ledger for this unit, shaded on the chart — see FuelChart —
-  // and summed up for FUEL RATE / FUEL DOWN under "Today so far".
-  const todayEvents = useVehicleFuelEvents(orgId, vehicleId, fleetDayKey());
   const tele  = useLiveTelemetry(dayTele, vehicle);
-  const todayEpisodes = useFuelEpisodes(todayEvents.drains, todayEvents.fillings, tele.pings);
-  const [chartFocus, setChartFocus] = useState(null);   // a band opened from that summary
-  const chartRef = useRef(null);
   const today = useMemo(
     () => summariseDay(tele.pings, vehicle?.tankCapacityL),
     [tele.pings, vehicle?.tankCapacityL],
@@ -607,96 +667,157 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
   );
 
   const todayRuns = useMemo(() => overspeedRuns(tele.pings, vehicle?.speedLimit ?? 80), [tele.pings, vehicle?.speedLimit]);
+  const todayMoving = useMemo(() => movingSpans(tele.pings), [tele.pings]);
 
-  useEffect(() => { setTab('overview'); setChartFocus(null); }, [vehicle?.id]);
+  useEffect(() => { setTab('overview'); }, [vehicle?.id]);
 
   if (!vehicle) return <div className="vdp" />;
 
   const tag      = statusTag(vehicle);
   const hasDriver = Boolean(vehicle.driver && vehicle.driver !== 'Unassigned');
   const fuelPct  = readings.fuelPct;
-  const lowFuel  = fuelPct != null && fuelPct < RESERVE_PCT;
-  const cost     = today.usedL != null ? today.usedL * FUEL_PRICE_KSH : null;
   const updated  = readings.lastReportedAt ? fmtTime(readings.lastReportedAt) : null;
-  const subtitle = [vehicle.driver ?? 'Unassigned', place ?? vehicle.location, updated].filter(Boolean).join(' · ');
   const rating   = Number.isFinite(vehicle.driverRatingScore) ? `${num(vehicle.driverRatingScore, 1)} / 5` : null;
+  const summary  = unitSummary({ vehicle, readings, place, usedL: today.usedL });
   const lastSeen = timeAgo(readings.lastReportedAt);
-  const gps = !readings.hasTracker
-    ? { label: 'No tracker', sub: 'no GPS unit fitted', alert: false }
+  // A unit that has reported has a tracker, whatever the provider's connection
+  // verdict: `hasTracker` reads that verdict alone, and a fleet without one
+  // (KASULU) showed "No tracker" over a fix two hours old.
+  const tracked  = readings.hasTracker || readings.lastReportedAt != null;
+  const gps = !tracked
+    ? { label: 'No tracker', sub: 'no GPS unit fitted', tone: null }
     : readings.isReporting
-      ? { label: 'Reporting', sub: lastSeen ? `last fix ${lastSeen}` : 'live', alert: false }
-      : { label: 'Not reporting', sub: lastSeen ? `last fix ${lastSeen}` : 'no fix received', alert: true };
+      ? { label: 'Reporting', sub: lastSeen ? `last fix ${lastSeen}` : 'live', tone: null }
+      : { label: 'Not reporting', sub: lastSeen ? `last fix ${lastSeen}` : 'no fix received', tone: 'warn' };
+  const limit    = vehicle.speedLimit ?? 80;
+  const engineWord = readings.engineOn == null ? null : readings.engineOn ? 'On' : 'Off';
+  const hasPings = tele.pings.length > 0;
+  const limitWords = limitLabel(tele.pings, limit);   // '80', or '60–100 by zone'
+  const lastReport = readings.lastReportedAt ? `${fmtTime(readings.lastReportedAt)} · ${timeAgo(readings.lastReportedAt)}` : null;
 
-  const pickBand = (id) => {
-    setChartFocus({ id });
-    chartRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-  };
-
-  const fuelSub = fuelPct != null
-    ? (lowFuel ? `below ${RESERVE_PCT}% reserve` : readings.fuelLitres != null ? `${num(readings.fuelLitres)} L in tank` : 'above reserve')
-    : readings.fuelProbeFault ? 'fuel probe fault'
-      : readings.fuelLitres != null ? 'in tank · tank size not recorded' : 'no calibrated probe';
+  // Faults: each part that reports, and how it is doing
+  const checks = [
+    vehicle.probeHold
+      ? { name: 'Fuel probe', icon: 'ti-gas-station', state: 'Probe hold', tone: 'warn', sub: 'Awaiting repair · fuel theft alerts paused' }
+      : readings.fuelProbeFault
+      ? { name: 'Fuel probe', icon: 'ti-gas-station', state: 'Fault', tone: 'alert', sub: 'Reporting a fault instead of a level' }
+      : readings.fuelLitres != null
+        ? { name: 'Fuel probe', icon: 'ti-gas-station', state: 'Reporting', tone: 'ok', sub: `${num(readings.fuelLitres)} L in tank${fuelPct != null ? ` · ${fuelPct}%` : ''}` }
+        : { name: 'Fuel probe', icon: 'ti-gas-station', state: 'No reading', tone: 'none', sub: 'No calibrated probe' },
+    !tracked
+      ? { name: 'GPS tracker', icon: 'ti-satellite', state: 'Not fitted', tone: 'none', sub: 'No GPS unit on this vehicle' }
+      : readings.isReporting
+        ? { name: 'GPS tracker', icon: 'ti-satellite', state: 'Reporting', tone: 'ok', sub: lastReport ? `Last report ${lastReport}` : null }
+        : { name: 'GPS tracker', icon: 'ti-satellite', state: 'Not reporting', tone: 'warn', sub: lastReport ? `Last report ${lastReport}` : 'No report received' },
+    readings.engineHours != null
+      ? { name: 'Engine-hours meter', icon: 'ti-engine', state: `${num(readings.engineHours)} h`, tone: 'ok', sub: engineWord ? `Engine ${engineWord.toLowerCase()}` : 'Engine state unknown' }
+      : { name: 'Engine-hours meter', icon: 'ti-engine', state: 'No reading', tone: 'none' },
+    readings.odometerKm != null
+      ? { name: 'Odometer', icon: 'ti-road', state: `${num(readings.odometerKm)} km`, tone: 'ok', sub: 'Total mileage' }
+      : { name: 'Odometer', icon: 'ti-road', state: 'No reading', tone: 'none' },
+  ];
 
   return (
     <div className="vdp vdp--open">
 
-      {/* ── Header ── */}
-      <div className="vdp-header">
-        <div className="vdp-header-top">
-          <div className="vdp-title">
-            <span className="vdp-plate" title={vehicle.name && vehicle.name !== vehicle.id ? `${vehicle.id} — ${vehicle.name}` : vehicle.id}>{vehicle.id}</span>
-            <span className={`vdp-tag vdp-tag--${tag.tone}`}>{tag.text}</span>
-          </div>
-          <div className="vdp-header-actions">
+      {/* ── Header: who and where (VehicleHeader.css) ── */}
+      <header className="vdp-header vh">
+        <div className="vh-top">
+          <h2 className="vh-name" title={vehicle.name && vehicle.name !== vehicle.id ? `${vehicle.id} · ${vehicle.name}` : vehicle.id}>
+            {vehicle.id}
+          </h2>
+          <div className="vh-tools">
             {canNav && (
-              <div className="vdp-nav" title="Step through tracked vehicles (← →)">
-                <button className="vdp-nav-btn" onClick={() => step(-1)} aria-label="Previous tracked vehicle">‹</button>
-                <span className="vdp-nav-count">{navIndex === -1 ? '–' : navIndex + 1} of {trackedList.length}</span>
-                <button className="vdp-nav-btn" onClick={() => step(1)} aria-label="Next tracked vehicle">›</button>
+              <div className="vh-nav" title="Step through tracked vehicles (← →)">
+                <button type="button" className="vh-icon-btn" onClick={() => step(-1)} aria-label="Previous tracked vehicle">
+                  <i className="ti ti-chevron-left" aria-hidden="true" />
+                </button>
+                <span className="vh-nav-count">{navIndex === -1 ? '–' : navIndex + 1}/{trackedList.length}</span>
+                <button type="button" className="vh-icon-btn" onClick={() => step(1)} aria-label="Next tracked vehicle">
+                  <i className="ti ti-chevron-right" aria-hidden="true" />
+                </button>
               </div>
             )}
-            <button className="vdp-close" onClick={onClose} aria-label="Close">
-              <i className="ti ti-x" />
+            <button type="button" className="vh-icon-btn" onClick={onClose} aria-label="Close">
+              <i className="ti ti-x" aria-hidden="true" />
             </button>
           </div>
         </div>
-        <div className="vdp-subtitle">{subtitle}</div>
 
-        {/* Trip: where it left from and where it's heading */}
-        <div className="vdp-trip">
-          <div className="vdp-trip-row">
-            <span className="vdp-trip-lbl">Departed</span>
-            <span className="vdp-trip-val" title={vehicle.departure ?? ''}>
+        {/* Status first, then who drives and where it last reported */}
+        <div className="vh-meta">
+          <span className={`vh-status vh-status--${tag.tone}`}>
+            <span className="vh-status-dot" aria-hidden="true" />{tag.text}
+          </span>
+          <span className="vh-fact" title="Driver">
+            <i className="ti ti-user" aria-hidden="true" />{vehicle.driver ?? 'Unassigned'}
+          </span>
+          {updated && (
+            <span className="vh-fact" title="Last report">
+              <i className="ti ti-clock" aria-hidden="true" />{updated}
+            </span>
+          )}
+        </div>
+        {(place ?? vehicle.location) && (
+          <div className="vh-where" title={place ?? vehicle.location}>
+            <i className="ti ti-map-pin" aria-hidden="true" />
+            <span>{place ?? vehicle.location}</span>
+          </div>
+        )}
+
+        {/* Probe hold (operator, 2026-10-01): flagged for a fuel probe repair,
+            so the server raises no fuel theft alert on it until the repair is
+            signed off fixed. Said here so a quiet unit is not read as clean. */}
+        {vehicle.probeHold && (
+          <div className="vdp-hold" role="note">
+            <i className="ti ti-tool" aria-hidden="true" />
+            <span><strong>Probe hold</strong> · Fuel theft alerts are paused until the probe repair is signed off fixed.</span>
+          </div>
+        )}
+
+        {/* Trip: from, then to, as two stops on one line */}
+        <ol className="vh-route" aria-label="Trip">
+          <li className="vh-stop vh-stop--from">
+            <span className="vh-stop-lbl">Departed</span>
+            <span className="vh-stop-val" title={vehicle.departure ?? ''}>
               {vehicle.departure
                 ?? (today.firstMove ? `${startPlace ?? 'Moved'} · ${fmtTime(today.firstMove.t)}` : tele.loading ? '…' : 'Not moved today')}
             </span>
-          </div>
-          <div className="vdp-trip-row">
-            <span className="vdp-trip-lbl">Destination</span>
-            <span className="vdp-trip-val" title={vehicle.destination ?? ''}>{vehicle.destination ?? 'No trip assigned'}</span>
-          </div>
-        </div>
+          </li>
+          <li className={`vh-stop vh-stop--to${vehicle.destination ? '' : ' vh-stop--none'}`}>
+            <span className="vh-stop-lbl">Destination</span>
+            <span className="vh-stop-val" title={vehicle.destination ?? ''}>{vehicle.destination ?? 'No trip assigned'}</span>
+          </li>
+          <TripTrafficEta vehicle={vehicle} />
+        </ol>
 
         {/* Quick actions */}
-        <div className="vdp-actions">
+        <div className="vh-actions">
           <button
-            className={`vdp-action${isTracked ? ' vdp-action--on' : ''}`}
+            type="button"
+            className={`vh-action${isTracked ? ' vh-action--on' : ''}`}
             onClick={toggleTrack}
+            aria-pressed={isTracked}
             title={isTracked ? 'Stop tracking this vehicle' : 'Add to tracked vehicles'}
           >
+            <i className={`ti ${isTracked ? 'ti-pinned-off' : 'ti-pin'}`} aria-hidden="true" />
             {/* Says what pressing it again does: "✓ Tracking" read as a status. */}
-            {isTracked ? 'Stop tracking' : 'Track'}
+            {isTracked ? 'Untrack' : 'Track'}
           </button>
           <button
-            className="vdp-action"
+            type="button"
+            className="vh-action"
             onClick={() => startPlayback?.(vehicle.id)}
             title="Replay today's route on the map"
           >
+            <i className="ti ti-player-play" aria-hidden="true" />
             Playback
           </button>
           {can('report:export') && (
             <button
-              className="vdp-action"
+              type="button"
+              className="vh-action"
+              data-state={reporting ? 'loading' : undefined}
               disabled={reporting || !vehicle.vehicleId || !orgId}
               onClick={async () => {
                 setReporting(true);
@@ -708,11 +829,12 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               }}
               title="Download today's vehicle report (PDF)"
             >
-              {reporting ? 'Preparing…' : 'Report'}
+              <i className={`ti ${reporting ? 'ti-loader-2' : 'ti-file-download'}`} aria-hidden="true" />
+              {reporting ? 'Preparing' : 'Report'}
             </button>
           )}
         </div>
-      </div>
+      </header>
 
       {/* ── Tabs ── */}
       <div className="vdp-tabs" role="tablist">
@@ -734,104 +856,72 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
         {/* ═════ OVERVIEW ═════ */}
         {tab === 'overview' && (<>
 
-          {/* Driver + AI summary */}
+          {/* The driver first (operator, 28 Sep), then the summary in words and
+              the four readings under it */}
           <section className="vdp-block">
             <div className="vdp-block-title">Driver</div>
-            <div className="vdp-driver">
-              <div className="vdp-av">{vehicle.driver && vehicle.driver !== 'Unassigned' ? initials(vehicle.driver) : '—'}</div>
-              <div className="vdp-driver-info">
-                {hasDriver && can('driver:read') ? (
-                  <button
-                    type="button"
-                    className="vdp-driver-name vdp-driver-link"
-                    onClick={() => { requestOpenDriver(vehicle.driver); setDesktopActiveTab('drivers'); onClose?.(); }}
-                    title="Open this driver on the Drivers page"
-                  >
-                    {vehicle.driver}
-                  </button>
-                ) : (
-                  <div className="vdp-driver-name">{vehicle.driver ?? 'Unassigned'}</div>
-                )}
-                <div className="vdp-driver-sub">
-                  {rating ? `Rating ${rating}` : 'Rating not available'}
-                  {vehicle.driverSource === 'last-dispatch' ? ' · drove today' : ''}
-                </div>
-              </div>
+            {/* The driver and what the unit is doing, as one card */}
+            <div className="ov-person">
+              <DriverRow
+                name={hasDriver ? vehicle.driver : null}
+                rating={rating}
+                droveToday={vehicle.driverSource === 'last-dispatch'}
+                onOpen={hasDriver && can('driver:read')
+                  ? () => { requestOpenDriver(vehicle.driver); setDesktopActiveTab('drivers'); onClose?.(); }
+                  : null}
+              />
+              <SummaryCard {...summary} asOf={updated} />
             </div>
-
-            <AISummary vehicle={vehicle} readings={readings} place={place} usedL={today.usedL} />
+            <ReadingsCard reservePct={RESERVE_PCT} items={[
+              // Idle in place of the fuel level, which the Fuel tab shows (operator, 2026-10-02)
+              { icon: 'ti-hourglass', label: 'Idle today', value: today.idleMin != null ? fmtMinutes(today.idleMin) : null,
+                sub: today.idleMin != null ? 'engine on, standing' : 'no engine state reported' },
+              { icon: 'ti-satellite', label: 'GPS', value: gps.label, sub: gps.sub, tone: gps.tone },
+              { icon: 'ti-engine', label: 'Engine hours', value: readings.engineHours != null ? `${num(readings.engineHours)} h` : null,
+                sub: readings.engineHours != null ? `engine ${engineWord ? engineWord.toLowerCase() : 'state unknown'}` : NA },
+              { icon: 'ti-road', label: 'Odometer', value: readings.odometerKm != null ? `${num(readings.odometerKm)} km` : null,
+                sub: readings.odometerKm != null ? 'total mileage' : NA },
+            ]} />
           </section>
 
-          {/* KPI cards */}
+          {/* Speed & overspeed — today, growing with every live frame. Fuel is the
+              Fuel tab's (operator, 2026-10-02: the Overview should not repeat it). */}
           <section className="vdp-block">
-            <div className="vdp-kpis">
-              <div className={`vdp-kpi${lowFuel ? ' vdp-kpi--alert' : ''}`}>
-                <div className="vdp-kpi-lbl">Fuel level</div>
-                <div className="vdp-kpi-val">{fuelPct != null ? `${fuelPct}%` : readings.fuelLitres != null ? `${num(readings.fuelLitres)} L` : '—'}</div>
-                <div className="vdp-kpi-sub">{fuelSub}</div>
-              </div>
-              <div className={`vdp-kpi${gps.alert ? ' vdp-kpi--alert' : ''}`}>
-                <div className="vdp-kpi-lbl">GPS status</div>
-                <div className="vdp-kpi-val">{gps.label}</div>
-                <div className="vdp-kpi-sub">{gps.sub}</div>
-              </div>
-              <div className="vdp-kpi">
-                <div className="vdp-kpi-lbl">Engine hours</div>
-                <div className="vdp-kpi-val">{readings.engineHours != null ? `${num(readings.engineHours)} h` : '—'}</div>
-                <div className="vdp-kpi-sub">{readings.engineHours != null ? `engine ${readings.engineOn ? 'on' : readings.engineOn === false ? 'off' : 'state unknown'}` : NA}</div>
-              </div>
-              <div className="vdp-kpi">
-                <div className="vdp-kpi-lbl">Odometer</div>
-                <div className="vdp-kpi-val">{readings.odometerKm != null ? `${num(readings.odometerKm)} km` : '—'}</div>
-                <div className="vdp-kpi-sub">{readings.odometerKm != null ? 'total mileage' : NA}</div>
-              </div>
-            </div>
-          </section>
-
-          {/* Fuel & overspeed — today, growing with every live frame */}
-          <section className="vdp-block" ref={chartRef}>
             <div className="vdp-block-head">
               <div className="vdp-block-title">
-                Fuel &amp; overspeed
+                Speed &amp; overspeed
                 {vehicle.online && <span className="vdp-live">live</span>}
               </div>
               <span className="vdp-meta">{updated ? `updated ${timeAgo(readings.lastReportedAt)}` : ''}</span>
             </div>
-            <FuelChart
-              key={vehicle.id} series={today.series} unit={today.unit} loading={tele.loading} overspeeds={todayRuns}
-              pings={tele.pings} limit={vehicle.speedLimit ?? 80} reservePct={RESERVE_PCT}
-              limitText={limitLabel(tele.pings, vehicle.speedLimit ?? 80)}
-              episodes={todayEpisodes} focus={chartFocus}
-            />
-          </section>
-
-          {/* Vehicle */}
-          <section className="vdp-block">
-            <div className="vdp-block-title">Vehicle</div>
-            <dl className="vdp-kv">
-              <div><dt>Type</dt><dd>{vehicle.vehicleType ? vehicle.vehicleType.charAt(0) + vehicle.vehicleType.slice(1).toLowerCase() : NA}</dd></div>
-              <div><dt>Fuel used today</dt><dd>{usedText(today)}</dd></div>
-              <div><dt>Est. fuel cost today</dt><dd>{cost != null ? `KSh ${num(Math.round(cost))}` : NA}</dd></div>
-              <div><dt>Load</dt><dd>{vehicle.cargo ? `${vehicle.cargo}${vehicle.weight ? ` · ${vehicle.weight} t` : ''}` : 'No load recorded'}</dd></div>
-              <div><dt>Odometer</dt><dd>{readings.odometerKm != null ? `${num(readings.odometerKm)} km` : NA}</dd></div>
-            </dl>
+            <div className="fp-chart">
+              <OverspeedReadout runs={todayRuns} topSpeed={today.topSpeed} limit={limit} hasPings={hasPings} fmtMinutes={fmtMinutes} />
+              <div className="fp-chart-body">
+                <FuelChart
+                  key={vehicle.id} series={today.series} unit={today.unit} loading={tele.loading} overspeeds={todayRuns}
+                  pings={tele.pings} limit={limit} limitText={limitLabel(tele.pings, limit)} speedOnly
+                />
+              </div>
+            </div>
           </section>
 
           {/* Today, from the day's readings (lib/vehicleDay) */}
+          <section className="vdp-block">
+            <div className="vdp-block-head">
+              <div className="vdp-block-title">Today so far</div>
+              {tele.loading && <span className="vdp-meta">Loading…</span>}
+            </div>
+            {/* Fuel and FUEL RATE / FUEL DOWN are the Fuel tab's */}
+            <DayGroups items={dayFigures(today, { limit, runs: todayRuns, hasPings })} only={['Driving', 'Engine & speed']} />
+          </section>
+
+          {/* What it is */}
           <section className="vdp-block vdp-block--last">
-            <div className="vdp-block-title">Today so far</div>
-            <FuelRateSummary
-              drains={todayEvents.drains} episodes={todayEpisodes} dayWord="today"
-              loading={todayEvents.loading} error={todayEvents.error}
-              max={3} onMore={() => setTab('fuel')} onPick={pickBand}
-            />
-            <dl className="vdp-kv">
-              <div><dt>Distance</dt><dd>{today.distanceKm != null ? `${num(today.distanceKm, 1)} km` : NA}</dd></div>
-              <div><dt>Moving time</dt><dd>{today.movingMin != null ? fmtMinutes(today.movingMin) : NA}</dd></div>
-              <div><dt>Idle time</dt><dd>{today.idleMin != null ? fmtMinutes(today.idleMin) : NA}</dd></div>
-              <div><dt>Engine hours</dt><dd>{today.engineHoursToday != null ? `${num(today.engineHoursToday, 1)} h` : NA}</dd></div>
-              <div><dt>Refuelled</dt><dd>{today.refilledL != null ? `${num(today.refilledL, 0)} L` : NA}</dd></div>
-            </dl>
+            <div className="vdp-block-title">Vehicle</div>
+            <FactsCard items={[
+              { label: 'Type', value: vehicle.vehicleType ? vehicle.vehicleType.charAt(0) + vehicle.vehicleType.slice(1).toLowerCase() : null },
+              { label: 'Load', value: vehicle.cargo ? `${vehicle.cargo}${vehicle.weight ? ` · ${vehicle.weight} t` : ''}` : 'No load recorded' },
+            ]} />
           </section>
         </>)}
 
@@ -841,33 +931,63 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
         )}
 
         {/* ═════ ALERTS ═════ */}
-        {tab === 'alerts' && <AlertsTab key={vehicleId} orgId={orgId} vehicleId={vehicleId} />}
+        {tab === 'alerts' && <AlertsTab key={vehicleId} vehicle={vehicle} />}
 
         {/* ═════ SAFETY ═════ */}
-        {tab === 'safety' && (
-          <section className="vdp-block vdp-block--last">
-            <div className="vdp-block-title">Speed &amp; safety</div>
-            <dl className="vdp-kv">
-              <div><dt>Current speed</dt><dd className={vehicle.status === 'speeding' ? 'vdp-kv--danger' : ''}>{vehicle.speed ?? 0} km/h</dd></div>
-              <div><dt>Speed limit</dt><dd>{vehicle.speedLimit != null ? `${vehicle.speedLimit} km/h` : NA}</dd></div>
-              <div><dt>Engine</dt><dd>{readings.engineOn == null ? NA : readings.engineOn ? 'On' : 'Off'}</dd></div>
-              <div><dt>Driver rating</dt><dd>{rating ?? NA}</dd></div>
-              <div><dt>Top speed today</dt><dd className={(today.topSpeed ?? 0) > (vehicle.speedLimit ?? 80) ? 'vdp-kv--danger' : ''}>{today.topSpeed != null ? `${Math.round(today.topSpeed)} km/h` : NA}</dd></div>
-              <div><dt>Overspeed events today</dt><dd className={todayRuns.length ? 'vdp-kv--danger' : ''}>{tele.pings.length ? todayRuns.length : NA}</dd></div>
-            </dl>
+        {tab === 'safety' && (<>
+          <section className="vdp-block">
+            <div className="vdp-block-title">Right now</div>
+            {/* One meter, speed against limit, rather than three boxes to
+                compare (SafetyParts). */}
+            <SpeedNow
+              speed={vehicle.speed}
+              limit={limit}
+              assumed={vehicle.speedLimit == null}
+              engineWord={engineWord}
+              online={vehicle.online}
+            />
           </section>
-        )}
+
+          <section className="vdp-block vdp-block--last vdp-block--fill">
+            <div className="vdp-block-head">
+              <div className="vdp-block-title">Today</div>
+              {tele.loading && <span className="vdp-meta">Loading…</span>}
+            </div>
+            {/* One card: the day's three figures over its 24-hour strip */}
+            <DaySummary
+              hasPings={hasPings} topSpeed={today.topSpeed} limit={limit} runs={todayRuns}
+              movingMin={today.movingMin} moving={todayMoving} fmtMinutes={fmtMinutes}
+            />
+            {todayRuns.length > 0 && (<>
+              <div className="sf-ev-head">
+                <span className="vdp-sub-title">Overspeed events</span>
+                <span className="sf-ev-count">{todayRuns.length} · newest first</span>
+              </div>
+              <OverspeedTimeline runs={todayRuns} fmtMinutes={fmtMinutes} />
+            </>)}
+            {/* None: said in the middle, as on the Alerts tab (operator, 28 Sep) */}
+            {todayRuns.length === 0 && !tele.loading && (hasPings
+              ? (
+                <EmptyNote icon="ti-shield-check" title="No overspeed events today">
+                  Never over {/^\d+$/.test(limitWords)
+                    ? `the ${limitWords} km/h limit`
+                    : `its zone limits (${limitWords.replace(' by zone', '')} km/h)`} today.
+                </EmptyNote>
+              ) : (
+                <EmptyNote icon="ti-map-pin-off" title="No readings today">
+                  The unit has not reported since midnight, so there is no speed to check.
+                </EmptyNote>
+              ))}
+          </section>
+        </>)}
 
         {/* ═════ FAULTS ═════ */}
         {tab === 'faults' && (
           <section className="vdp-block vdp-block--last">
             <div className="vdp-block-title">Diagnostics</div>
-            <dl className="vdp-kv">
-              <div><dt>Fuel probe</dt><dd className={readings.fuelProbeFault ? 'vdp-kv--danger' : ''}>{readings.fuelProbeFault ? 'Fault reported' : 'No fault reported'}</dd></div>
-              <div><dt>Tracker</dt><dd>{!readings.hasTracker ? 'No tracker fitted' : readings.isReporting ? 'Reporting' : 'Not reporting'}</dd></div>
-              <div><dt>Last report</dt><dd>{readings.lastReportedAt ? `${fmtTime(readings.lastReportedAt)} · ${timeAgo(readings.lastReportedAt)}` : NA}</dd></div>
-              <div><dt>Engine hours</dt><dd>{readings.engineHours != null ? `${num(readings.engineHours)} h` : NA}</dd></div>
-            </dl>
+            {/* The verdict first, then each part, faults at the top (FaultsParts) */}
+            <HealthSummary items={checks} asOf={updated} />
+            <CheckList items={checks} />
           </section>
         )}
 

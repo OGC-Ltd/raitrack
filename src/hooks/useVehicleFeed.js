@@ -39,6 +39,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getNotifications, fleetToday } from "../api/notifications";
+import { isDeletedCaseItem } from "../lib/fuelFollowUps";
 
 /**
  * One page. The endpoint caps at 200 (500 for a day read); 100 fills the panel
@@ -97,6 +98,22 @@ export function feedItemMatchesVehicle(item, vehicle) {
   return Boolean(item.plate) && item.plate === vehicle.id;
 }
 
+/** Fleet midnight (Africa/Nairobi, UTC+3 all year) of a `YYYY-MM-DD`, as ISO UTC. */
+export function fleetMidnightIso(day) {
+  return new Date(`${day}T00:00:00+03:00`).toISOString();
+}
+
+/**
+ * The bounds of a unit's date range as ISO UTC strings: `[start, end)`, from
+ * fleet midnight of `from` to fleet midnight after `to`. Null for no range.
+ */
+export function rangeBounds(from, to) {
+  if (!from || !to) return null;
+  const start = fleetMidnightIso(from);
+  const end = new Date(Date.parse(fleetMidnightIso(to)) + 24 * 3600_000).toISOString();
+  return { start, end };
+}
+
 /** Newest `ts` in a list of items, or null. ISO UTC strings compare lexically. */
 const newestTs = (items) => items.reduce((m, it) => (it?.ts && (!m || it.ts > m) ? it.ts : m), null);
 
@@ -134,9 +151,14 @@ export async function catchUp(fetchPage, since, maxPages = CATCH_UP_MAX_PAGES) {
  *                               hook off (nothing read, nothing kept), which is
  *                               how a closed panel stays idle
  * @param {Array}       liveFeed the shared org-wide live feed
+ * @param {{from: string, to: string}|null} [range] unit scope only: fleet days
+ *   `YYYY-MM-DD` to read between, inclusive. The server has no `after`, so the
+ *   read starts at the range's end (`before`) and pages back until a page
+ *   reaches past its start. Live items and the minute catch-up only apply
+ *   while the range includes today. Null or absent: the whole history.
  * @returns {{ items: Array, loading: boolean, error: Error|null, retry: () => void }}
  */
-export function useVehicleFeed(vehicle, orgId, liveFeed) {
+export function useVehicleFeed(vehicle, orgId, liveFeed, range = null) {
   // Depend on the IDENTITY strings, not on the vehicle object: every SSE
   // position flush hands back a new object for the same unit, so memoising on
   // the object would re-merge the whole feed a few times a second for a
@@ -148,6 +170,12 @@ export function useVehicleFeed(vehicle, orgId, liveFeed) {
   // in state — it is a string, so it is only a new dependency once a night,
   // and the rollover then resets the read the same way a new selection does.
   const day = vehicleId ? null : fleetToday();
+  // A unit's range, as primitives so it is a stable dependency.
+  const rangeFrom = vehicleId ? range?.from ?? null : null;
+  const rangeTo   = vehicleId ? range?.to ?? null : null;
+  const bounds = useMemo(() => rangeBounds(rangeFrom, rangeTo), [rangeFrom, rangeTo]);
+  // Does the range reach now? Then live items and catch-ups belong in it.
+  const reachesNow = !bounds || rangeTo >= fleetToday();
 
   /**
    * Every item in scope that this panel has seen, by id: history pages, head
@@ -186,9 +214,16 @@ export function useVehicleFeed(vehicle, orgId, liveFeed) {
    * where the server's cursor says it does.
    */
   const read = useCallback(async (before) => {
-    const page = await getNotifications({ orgId, vehicleId, day, limit: day ? DAY_PAGE : PAGE, before });
-    return day ? { ...page, items: page.items.filter((it) => onFleetDay(it, day)) } : page;
-  }, [orgId, vehicleId, day]);
+    // A range that ends before today starts its read at the range's end.
+    const from = before ?? (bounds && !reachesNow ? bounds.end : undefined);
+    const page = await getNotifications({ orgId, vehicleId, day, limit: day ? DAY_PAGE : PAGE, before: from });
+    if (day) return { ...page, items: page.items.filter((it) => onFleetDay(it, day)) };
+    if (!bounds) return page;
+    // Kept to the range; a page reaching past its start is the last one.
+    const inRange = page.items.filter((it) => it?.ts >= bounds.start && it.ts < bounds.end);
+    const oldest = page.items.length ? page.items[page.items.length - 1].ts : null;
+    return { items: inRange, nextBefore: oldest && oldest < bounds.start ? null : page.nextBefore };
+  }, [orgId, vehicleId, day, bounds, reachesNow]);
 
   /** Server rows go in under any copy already held: the live copy wins, as it
    *  carries a republished notification's corrected wording. */
@@ -238,30 +273,31 @@ export function useVehicleFeed(vehicle, orgId, liveFeed) {
     serverNewest.current = null;
     setKnown(new Map()); setCursor(null); setDone(false); setError(null); setFirstLoaded(false);
     if (orgId) fetchPage(undefined);
-  }, [orgId, vehicleId, day, fetchPage]);
+  }, [orgId, vehicleId, day, bounds, fetchPage]);
 
   // Keep every in-scope live item, so the buffer evicting it does not.
   // Off while the scope is off (no org: a closed panel), so a panel that is
   // mounted but shut does not accumulate a day in the background.
   useEffect(() => {
-    if (!orgId || !liveFeed?.length) return;
+    if (!orgId || !liveFeed?.length || !reachesNow) return;
     const subject = vehicleId || plate ? { vehicleId, id: plate } : null;
     setKnown((prev) => {
       let next = null;
       for (const it of liveFeed) {
         if (it?.id == null) continue;
         if (subject ? !feedItemMatchesVehicle(it, subject) : !onFleetDay(it, day)) continue;
+        if (bounds && !(it.ts >= bounds.start)) continue;
         if (prev.get(it.id) === it) continue;
         next ??= new Map(prev);
         next.set(it.id, it);
       }
       return next ?? prev;
     });
-  }, [orgId, liveFeed, vehicleId, plate, day]);
+  }, [orgId, liveFeed, vehicleId, plate, day, bounds, reachesNow]);
 
   // Fill anything the stream missed, from the record.
   const runCatchUp = useCallback(async () => {
-    if (!orgId || !firstLoaded || catchingUp.current || !serverNewest.current) return;
+    if (!orgId || !firstLoaded || !reachesNow || catchingUp.current || !serverNewest.current) return;
     catchingUp.current = true;
     const run = runRef.current;
     try {
@@ -272,7 +308,7 @@ export function useVehicleFeed(vehicle, orgId, liveFeed) {
     } finally {
       if (run === runRef.current) catchingUp.current = false;
     }
-  }, [orgId, firstLoaded, read, addFromServer]);
+  }, [orgId, firstLoaded, reachesNow, read, addFromServer]);
 
   useEffect(() => {
     if (!firstLoaded) return undefined;
@@ -297,8 +333,11 @@ export function useVehicleFeed(vehicle, orgId, liveFeed) {
 
   // `ts` is an ISO-8601 UTC string server-side, so a lexical compare is a
   // chronological one.
+  // A deleted alert's case items are never shown (lib/fuelFollowUps).
   const items = useMemo(
-    () => [...known.values()].sort((a, b) => String(b.ts).localeCompare(String(a.ts))),
+    () => [...known.values()]
+      .filter((it) => !isDeletedCaseItem(it))
+      .sort((a, b) => String(b.ts).localeCompare(String(a.ts))),
     [known],
   );
 

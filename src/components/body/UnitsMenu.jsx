@@ -35,18 +35,14 @@
  * belonging to anything. So the route toggle is exclusive: switching it on for
  * one unit takes it off whichever unit had it.
  *
- * ## Video
+ * ## Opened from the sidebar, as a window
  *
- * The camera column opens the unit's camera window (VehicleCamera) from the
- * list, the same window the vehicle card's camera button opens. The glyph is lit
- * only for a unit that reports a camera; on the others it still opens, and the
- * window says plainly that there is no camera, which is the true answer.
- *
- * ## Minimized
- *
- * As a window it folds to its title bar, so it can stay on screen, ticks and
- * route intact, without covering the map. A folded window is one being kept,
- * so a press outside does not dismiss it either, exactly like a pinned one.
+ * On a desktop new-ui opens this list from the sidebar's Units row rather than
+ * from a button on the map (that button is hidden at 1024px and up), so the
+ * list sits in a window beside the sidebar: draggable, pinnable, foldable to
+ * its title bar and closed from its own corner. The list inside is the same
+ * one dash ships: same columns, same search, same sort, same behaviour.
+ * Below 1024px it is the map's own popover, exactly as in dash.
  *
  * ## What a row must NOT do
  *
@@ -58,10 +54,10 @@
 
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ACTIVITY_COLORS, fleetTypeLabel, fleetType, spriteKind, vehicleActivity } from "../../lib/vehicleMap";
-import { usePlaceName } from "../../hooks/usePlaceName";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
+import { usePlaceName } from "../../hooks/usePlaceName";
 import "./UnitsMenu.css";
 
 /* ── header glyphs ──────────────────────────────────────────────────────────
@@ -86,7 +82,6 @@ const IconClock  = () => svg(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.
 const IconSignal = () => svg(<><path d="M4 18v-3M9 18v-6M14 18v-9M19 18V6" /></>);
 const IconRoute  = () => svg(<><path d="M4 18c0-3 3-3 3-6s-3-3-3-6" /><circle cx="17" cy="8" r="2.4" /><path d="M17 13V19" /></>);
 const IconOpen   = () => svg(<path d="M9 5l7 7-7 7" />);
-const IconVideo  = () => svg(<><rect x="3" y="7" width="12" height="10" rx="2" /><path d="M15 11l6-3v8l-6-3" /></>);
 
 /**
  * Which atlas ROW a status draws from.
@@ -97,43 +92,11 @@ const IconVideo  = () => svg(<><rect x="3" y="7" width="12" height="10" rx="2" /
  * in step, so if the atlas is re-baked with different rows, change both.
  */
 const ATLAS_ROWS = ["ok", "speeding", "theft", "parked", "idling"];
-const ATLAS_ROW_FOR = { stationary: "ok", "signal-lost": "ok" };
+const ATLAS_ROW_FOR = { stationary: "parked", "signal-lost": "ok" };
 const atlasRow = (status) =>
   Math.max(0, ATLAS_ROWS.indexOf(ATLAS_ROW_FOR[status] ?? status));
 
 const SPRITE_PX = 22;
-
-/**
- * The location cell — a place, not a coordinate pair.
- *
- * "-0.82, 34.38" names nothing to the person reading this list; it is a fact
- * about the earth rather than an answer to "where is this truck". usePlaceName
- * reverse-geocodes through the backend and is cheap to call from a row: it
- * caches per ~1.1 km grid cell in memory and localStorage, so a fleet parked at
- * two sites resolves to two lookups however many rows are showing, and a unit
- * moving along a fixed route re-uses cells it has already paid for.
- *
- * Its own component because it needs a hook and the rows are rendered in a map.
- *
- * The coordinates stay as the fallback and move into the tooltip once a name
- * arrives — a name is what you read, but the numbers are what you hand to
- * someone on a radio, and losing them would be a downgrade for that reader.
- */
-function LocCell({ v, onOpen }) {
-  const place = usePlaceName(v?.lat, v?.lng);
-  const coords = v?.location || "";
-  const label = place || coords;
-  return (
-    <span
-      className="units-menu__loc units-menu__cell--open"
-      role="cell"
-      title={place ? (coords ? `${place} — ${coords}` : place) : (coords || "No fix")}
-      onClick={onOpen}
-    >
-      {label || "—"}
-    </span>
-  );
-}
 
 /**
  * How old this unit's last fix is, at a glance.
@@ -220,22 +183,7 @@ function compareBy(a, b, dir) {
   return dir === "desc" ? -r : r;
 }
 
-/**
- * `open` / `onOpenChange` make this controllable from outside.
- *
- * On a desktop the trigger for this panel is no longer on the map — it is the
- * Units row in the sidebar (FleetsTree), because that is where Fleets and Map
- * layers now live too. The panel itself is unchanged: same list, same search,
- * same columns, same dismissal. Only who opens it moved, which is why this is a
- * controlled-open prop rather than a second copy of the list rendered in the
- * panel.
- *
- * Uncontrolled (no `open` prop) is still the default, and is what the map's own
- * button uses below 1024px where that button is still there.
- */
-/** A drawing pin, upright when loose and driven in when pinned.
- *  `IconPushPin`, not `IconPin` — that name is already taken above by the map
- *  PIN used in the location column, and they are different ideas. */
+/** A drawing pin, upright when loose and driven in when pinned. */
 function IconPushPin({ on }) {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
@@ -267,6 +215,52 @@ function IconWinClose() {
   );
 }
 
+/**
+ * `open` / `onOpenChange` let the sidebar open it (controlled); without them
+ * the map's own button does (uncontrolled, as in dash). `asWindow` draws it as
+ * the floating window beside the sidebar.
+ */
+/**
+ * Units with no plate are named after their tracker's IMEI ("MUFINDI -
+ * 864022086893947") — fifteen digits nobody reads, which pushed every such
+ * name past the column. Shown as "MUFINDI - 8640…"; the full id stays in the
+ * row's tooltip and in search.
+ */
+const shortPlate = (id) => String(id).replace(/(\d{4})\d{6,}$/, "$1…");
+
+/**
+ * The location cell: the place name, reverse-geocoded (usePlaceName — cached
+ * per ~1.1 km cell, so units parked together share one lookup), with the
+ * coordinates as the fallback until it resolves and in the tooltip after.
+ *
+ * Only a row that has been on screen asks the network. The list holds every
+ * unit in the fleet, the server answers one new lookup a second, and a
+ * request for a row nobody scrolled to would queue ahead of one they can see.
+ * Once seen, a row keeps its lookup — scrolling back must not ask again.
+ */
+function UnitPlace({ v }) {
+  const ref = useRef(null);
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    if (seen || !ref.current) return undefined;
+    // Root null still clips by the scrolling list, so off-list rows stay unseen.
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setSeen(true);
+    }, { rootMargin: "120px 0px" });
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [seen]);
+  const hasFix = Number.isFinite(v.lat) && Number.isFinite(v.lng);
+  const place = usePlaceName(hasFix ? v.lat : null, hasFix ? v.lng : null, { enabled: seen });
+  const coords = v.location || null;
+  return (
+    <span ref={ref} className="units-menu__loc" role="cell"
+          title={coords ? (place ? `${place} (${coords})` : coords) : "No fix"}>
+      {place || coords || "—"}
+    </span>
+  );
+}
+
 export default function UnitsMenu({
   vehicles,
   trackedIds,
@@ -274,9 +268,6 @@ export default function UnitsMenu({
   routeId,
   onToggleRoute,
   onOpenDetail,
-  onOpenVideo,
-  videoId = null,
-  onSelectUnit,
   nowTick,
   open: openProp,
   onOpenChange,
@@ -285,9 +276,8 @@ export default function UnitsMenu({
   const [openLocal, setOpenLocal] = useState(false);
   const controlled = typeof openProp === "boolean";
   const open = controlled ? openProp : openLocal;
-  /* The new value is worked out BEFORE any setState, not inside an updater.
-     `onOpenChange` is a side effect, and React is free to run an updater twice
-     (it does, in StrictMode), which would fire the callback twice per press. */
+  /* Worked out before any setState, not inside an updater: `onOpenChange` is a
+     side effect, and React may run an updater twice. */
   const openRef = useRef(open);
   openRef.current = open;
   const setOpen = useCallback((next) => {
@@ -295,45 +285,15 @@ export default function UnitsMenu({
     if (!controlled) setOpenLocal(v);
     onOpenChange?.(v);
   }, [controlled, onOpenChange]);
-  const [page, setPage] = useState(0);
-  /* Ten rows made a panel about 330px tall inside a cap of roughly 500 — it
-     was short because of the page size, not because anything was stopping it
-     growing. Eighteen fills the room that was already there. The list scrolls
-     and the panel is still capped by --rail-panel-max-h, so a short window
-     gets a scrollbar rather than a panel through the header; `content-visibility`
-     on the rows means the ones below the fold cost no layout. */
-  const PER_PAGE = 18;
-  const [query, setQuery] = useState("");
-  // Plate ascending is the default because it is the only column whose order
-  // an operator can predict before they look at it.
-  const [sort, setSort] = useState({ key: "plate", dir: "asc" });
-  const wrapRef = useRef(null);
-  const btnRef = useRef(null);
-  const panelId = useId();
 
-  /* Pinned means "stay put": a press outside stops dismissing it.
-   *
-   * As a popover on the map this panel had one way out and that was right —
-   * a menu belongs to its button. As a window beside the sidebar it is
-   * something an operator works FROM, clicking units on the map and coming
-   * back to it, and a list that vanished on the first of those clicks would be
-   * unusable. Escape and the close button still work pinned; only the
-   * accidental dismissal goes. */
+  /* Pinned: a press outside stops dismissing the window. Folded: only its
+     title bar shows. Both only mean anything for the window. */
   const [pinned, setPinned] = useState(false);
-  // Folded to the title bar. Only a window folds; see the note at the top.
   const [minimized, setMinimized] = useState(false);
   const folded = asWindow && minimized;
 
-  /* Opened beside the sidebar, then draggable anywhere.
-   *
-   * The same hook the vehicle card, the playback transport and the incident
-   * window use, so the gesture, the slop before a drag starts, the clamp back
-   * into the safe area on a resize and the remembered position all behave
-   * identically across the four. `id` is what that memory is keyed on.
-   *
-   * The initial spot is measured rather than declared: the sidebar is 320px on
-   * a desktop and 260 at 1024, and a constant here would overlap it at one of
-   * those two widths. */
+  /* Opened beside the sidebar, measured rather than declared (the sidebar is
+     320px on a desktop and 260 at 1024), then draggable anywhere. */
   const initialPos = useMemo(() => {
     if (!asWindow || typeof document === "undefined") return undefined;
     const rail = document.querySelector(".side-panel");
@@ -342,17 +302,21 @@ export default function UnitsMenu({
       x: (rail?.getBoundingClientRect().right ?? 0) + 12,
       y: (head?.getBoundingClientRect().bottom ?? 0) + 12,
     };
-    // `open` is in here so a panel closed and reopened after the sidebar was
-    // collapsed comes back beside where the sidebar is NOW.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asWindow, openProp]);
-
   const { ref: winRef, onPointerDown: onHeadPointerDown } = useFloatingWindow({
     id: "units",
     dock: "top-center",
-    enabled: asWindow && (controlled ? openProp : openLocal),
+    enabled: asWindow && open,
     initial: initialPos,
   });
+  const [query, setQuery] = useState("");
+  // Plate ascending is the default because it is the only column whose order
+  // an operator can predict before they look at it.
+  const [sort, setSort] = useState({ key: "plate", dir: "asc" });
+  const wrapRef = useRef(null);
+  const btnRef = useRef(null);
+  const panelId = useId();
 
   // Same dismissal contract as the fuel-alerts and layers menus — see
   // MapLayersMenu for why `pointerdown` rather than `click`, and why Escape
@@ -367,9 +331,8 @@ export default function UnitsMenu({
       if (e.key !== "Escape") return;
       e.stopPropagation();
       setOpen(false);
-      // The trigger is hidden on a desktop, where this panel is opened from the
-      // sidebar instead. Focusing a `display: none` button does nothing at all
-      // and silently drops focus to <body>.
+      // The map's trigger is hidden on a desktop; focusing a hidden button
+      // would drop focus to <body>.
       if (btnRef.current?.offsetParent) btnRef.current.focus();
     };
     document.addEventListener("pointerdown", onDown);
@@ -402,29 +365,13 @@ export default function UnitsMenu({
     // Plate is the tiebreak on every column, so equal values keep ONE stable
     // order rather than whatever the last sort happened to leave behind —
     // a list that reshuffles its ties on each re-render is unreadable.
-    // ONLINE UNITS FIRST, always — an operator opens this list to act on what
-    // is reporting now, and a page of units last seen 195 days ago is not that.
-    // The chosen column orders WITHIN each group, so sorting still works; only
-    // sorting by the connection column itself leaves this to that column.
-    const groupFirst = sort.key !== "conn";
     return [...list].sort((a, b) => {
-      if (groupFirst) {
-        const g = (a?.online ? 0 : 1) - (b?.online ? 0 : 1);
-        if (g !== 0) return g;
-      }
       const r = compareBy(value(a, sortClock), value(b, sortClock), sort.dir);
       return r !== 0 ? r : String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
     });
   }, [vehicles, deferredQuery, sort, sortClock]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
-  // Clamp so a shrinking list (search, filter) never leaves us on an empty page
-  const safePage   = Math.min(page, totalPages - 1);
-  const pagedRows  = useMemo(
-    () => rows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE),
-    [rows, safePage]
-  );
-  const shownIds   = useMemo(() => pagedRows.map((v) => v.id), [pagedRows]);
+  const shownIds = useMemo(() => rows.map((v) => v.id), [rows]);
 
   /* ── the unit that is in another one of your organisations ───────────────
    *
@@ -439,7 +386,9 @@ export default function UnitsMenu({
    * the panel would look empty for a query the lookup was not run for. */
   // `companies` from this context is ALREADY the filtered roster — the
   // organisations this account may open, not the platform's whole list.
-  const { activeCompany, activeCompanyId, setActiveCompanyId, companies, setPendingFocusId } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { setActiveCompanyId, setPendingFocusId } = useAppActions();
+  const { activeCompany, companies } = useCompanies();
   const { companies: elsewhere, loading: lookingElsewhere, move } = useCrossOrgUnitHandoff({
     query: deferredQuery,
     enabled: open && rows.length === 0,
@@ -458,14 +407,11 @@ export default function UnitsMenu({
   const allShownTracked = shownIds.length > 0 && shownIds.every((id) => tracked.has(id));
   const someShownTracked = !allShownTracked && shownIds.some((id) => tracked.has(id));
 
+  /* Updaters, not lists built from `trackedIds`: that prop is the list as of
+     the last render, and two ticks before the next one would each start from
+     it and the second would erase the first. */
   function toggleTracked(id) {
-    const adding = !tracked.has(id);
-    onSetTracked?.(adding
-      ? [...(trackedIds ?? []), id]
-      : (trackedIds ?? []).filter((x) => x !== id));
-    // Ticking a unit also shows it in the vehicle detail panel. The list stays
-    // open so several units can be ticked in a row; the panel follows the last.
-    if (adding) onSelectUnit?.(id);
+    onSetTracked?.((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   /** Click a column to sort by it; click it again to reverse. */
@@ -476,9 +422,10 @@ export default function UnitsMenu({
     sort.key !== key ? "none" : sort.dir === "asc" ? "ascending" : "descending";
 
   function toggleAllShown() {
+    const shown = new Set(shownIds);
     onSetTracked?.(allShownTracked
-      ? (trackedIds ?? []).filter((id) => !shownIds.includes(id))
-      : [...new Set([...(trackedIds ?? []), ...shownIds])]);
+      ? (prev) => prev.filter((id) => !shown.has(id))
+      : (prev) => [...new Set([...prev, ...shownIds])]);
   }
 
   return (
@@ -507,13 +454,9 @@ export default function UnitsMenu({
           aria-label="Units"
           ref={asWindow ? winRef : undefined}
         >
-          {/* The head is the drag handle. `useFloatingWindow` bails out of a
-              drag that starts on a button, so Show all, the pin and the close
-              keep their own press. */}
-          <div
-            className="units-menu__head"
-            onPointerDown={asWindow ? onHeadPointerDown : undefined}
-          >
+          {/* As a window the head is the drag handle; useFloatingWindow ignores
+              a drag that starts on a button, so these keep their own press. */}
+          <div className="units-menu__head" onPointerDown={asWindow ? onHeadPointerDown : undefined}>
             <span className="units-menu__title">
               Units{folded && trackedCount > 0 ? ` \u00b7 ${trackedCount} tracked` : ""}
             </span>
@@ -559,11 +502,12 @@ export default function UnitsMenu({
           </div>
 
           {!folded && (<>
+
           <input
             className="units-menu__search"
             type="search"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search plate or name"
             aria-label="Search units"
           />
@@ -602,12 +546,11 @@ export default function UnitsMenu({
                 ><Icon /></button>
               ))}
               <span className="units-menu__h units-menu__h--route"  role="columnheader" title="Quick track — draw this unit's route" aria-label="Quick track"><IconRoute /></span>
-              <span className="units-menu__h units-menu__h--video"  role="columnheader" title={"Video \u2014 open the unit's camera"} aria-label="Video"><IconVideo /></span>
               <span className="units-menu__h units-menu__h--open"   role="columnheader" title="Open unit" aria-label="Open unit"><IconOpen /></span>
             </div>
 
             <div className="units-menu__list">
-              {pagedRows.map((v) => {
+              {rows.map((v) => {
                 const isTracked = tracked.has(v.id);
                 const routeOn = routeId === v.id;
                 const activity = vehicleActivity(v);
@@ -643,19 +586,16 @@ export default function UnitsMenu({
                       aria-label={fleetTypeLabel(fleetType(v))}
                     />
 
-                    {/* Clicking the plate or location opens the unit — same as the › button —
-                        which selects it and opens the vehicle detail panel. */}
-                    <span
-                      className="units-menu__plate units-menu__cell--open"
-                      role="cell"
-                      title={`Open ${v.name || v.id}`}
-                      onClick={() => { setOpen(false); onOpenDetail?.(v.id); }}
-                    >{v.id}</span>
+                    <span className="units-menu__plate" role="cell" title={v.name || v.id}>
+                      <span className="units-menu__plate-text">{shortPlate(v.id)}</span>
+                      {/* Probe hold: awaiting a fuel probe repair, fuel theft alerts paused. */}
+                      {v.probeHold && (
+                        <span className="units-menu__hold"
+                              title="Probe hold: fuel theft alerts are paused until the probe repair is signed off fixed">Hold</span>
+                      )}
+                    </span>
 
-                    <LocCell
-                      v={v}
-                      onOpen={() => { setOpen(false); onOpenDetail?.(v.id); }}
-                    />
+                    <UnitPlace v={v} />
 
                     <span
                       className={`units-menu__motion units-menu__motion--${activity}`}
@@ -690,17 +630,6 @@ export default function UnitsMenu({
                       onClick={() => onToggleRoute?.(v.id)}
                     >
                       <IconRoute />
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`units-menu__act units-menu__act--video${v.hasCamera ? " units-menu__act--has" : ""}${videoId === v.id ? " units-menu__act--on" : ""}`}
-                      aria-pressed={videoId === v.id}
-                      aria-label={`Video for ${v.id}${v.hasCamera ? "" : ", no camera fitted"}`}
-                      title={videoId === v.id ? "Hide video" : v.hasCamera ? "Show video" : "No camera fitted on this unit"}
-                      onClick={() => onOpenVideo?.(v.id)}
-                    >
-                      <IconVideo />
                     </button>
 
                     <button
@@ -752,14 +681,9 @@ export default function UnitsMenu({
           </div>
 
           <div className="units-menu__foot">
-            <span>{trackedCount === 0 ? `${rows.length} units` : `${trackedCount} tracked · ${rows.length} shown`}</span>
-            {totalPages > 1 && (
-              <div className="units-menu__pagination">
-                <button className="units-menu__page-btn" disabled={safePage === 0} onClick={() => setPage(p => Math.max(0, Math.min(p, totalPages - 1) - 1))}>&#8249;</button>
-                <span className="units-menu__page-info">{safePage + 1} / {totalPages}</span>
-                <button className="units-menu__page-btn" disabled={safePage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}>&#8250;</button>
-              </div>
-            )}
+            {trackedCount === 0
+              ? `All ${vehicles.length} units`
+              : `${trackedCount} tracked · ${vehicles.length} in fleet`}
           </div>
           </>)}
         </div>

@@ -1,4 +1,7 @@
-// Google Maps fleet map: markers, routes, search, filters.
+// Fleet map: markers, routes, search, filters.
+// Engine: Leaflet behind a Google-Maps-shaped API (lib/mapEngine), on
+// OpenStreetMap tiles (lib/osmBase). Operator, 2026-10-04: "we are
+// openstreetmap now". `maps` below is that namespace, not Google's.
 //
 import { useMapLayers } from '../../context/MapLayersContext';
 // The map SHELL (tiles, controls) is created exactly once on mount; vehicle
@@ -28,11 +31,12 @@ import MapOverlay, { FuelIncidentHost } from "./MapOverlay";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import COMPANIES from "../../data/companyData";
 import { useEstateZones } from "../../hooks/useEstateZones";
 import { useWeighbridges } from "../../hooks/useWeighbridges";
+import { spokenSiteName } from "../../lib/spokenName";
 import { weighbridgeCard, bridgeTitle } from "../../lib/weighbridgeCard";
 import { readCache, writeCache } from "../../services/cache";
 import { readMapPrefs, writeMapPrefs } from "../../lib/mapPrefs";
@@ -55,6 +59,10 @@ import MapLayersMenu from "./MapLayersMenu";
 import FleetsMenu from "./FleetsMenu";
 import FuelAlertsMenu from "./FuelAlertsMenu";
 import UnitsMenu from "./UnitsMenu";
+import { loadMapEngine } from "../../lib/mapEngine";
+import { installOsmBase, OSM_ENABLED, OSM_TYPE_ID, OSM_ATTRIBUTION, SHOW_GOOGLE_TYPES } from "../../lib/osmBase";
+import MapStatusBar from "./MapStatusBar";
+import StrandedWindow from "./StrandedWindow";
 import { SITE_PLANS, NO_PLANS } from "../../lib/sitePlans";
 import { useGuestSitePlans } from "../../hooks/useGuestSitePlans";
 
@@ -64,6 +72,19 @@ const EMPTY_LINKS = [];
 import { useNowTick } from "../../hooks/useNowTick";
 import StatusRail from "../layout/StatusRail";
 import { useBreakpoint } from "../../hooks/useBreakpoint";
+import {
+  TRAFFIC_AVAILABLE, FLOW_TILE_URL, INCIDENT_TILE_URL, TILE_REFRESH_MS,
+  TRAFFIC_LEGEND, JAM_COLOR, ROUTE_COLOR, travelModeFor,
+  trackJourney, fetchExpectedTime, TRAFFIC_AVAILABLE as EXPECTED_AVAILABLE,
+} from "../../lib/tomtomTraffic";
+import RouteCoveredCard from "./RouteCoveredCard";
+
+/* "Show the route covered" → expected-time card (RouteCoveredCard, TomTom
+ * leg-by-leg timing). Switched OFF 2026-10-04 at the operator's request
+ * ("disable the calculate route for now"); true brings it back unchanged. */
+const ROUTE_TIMING_ENABLED = false;
+import { useTrafficRoute, routeTarget, positionFresh } from "../../hooks/useTrafficRoute";
+import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor } from "../../lib/zoneLegend";
 const STATUS_COLORS = {
@@ -479,9 +500,8 @@ const PLAN_LABELS = [
   { text: "B4", lat: -4.03175, lng: 30.52470, minZoom: 13, priority: 1 },
 ];
 
-function planLabelHtml(text, note) {
-  const sub = note ? `<span class="plan-label-note">${note}</span>` : "";
-  return `<div class="zone-label plan-label">${text}${sub}</div>`;
+function planLabelHtml(text) {
+  return `<div class="zone-label plan-label">${text}</div>`;
 }
 
 /**
@@ -802,15 +822,27 @@ const FIT_MAX_ZOOM   = 14;
 const FIT_CORE_SHARE = 0.75;
 /** Below this a fleet has no meaningful tail — fit all of it. */
 const FIT_CORE_MIN   = 12;
-// Zoom used when focusing a single vehicle from a live-feed notification. One
-// below the map's maxZoom of 18: close enough that neighbouring vehicles fall
-// outside the viewport, with a step of headroom left for the user to zoom in.
-// CHANGED 2026-08-05: raised from 17→20 to match new maxZoom of 21
-const FOCUS_ZOOM     = 20;
-/* A weighbridge, from the sidebar's Weighbridges rows. Lower than FOCUS_ZOOM:
-   a scale is a place with a yard around it, and the question being asked is
-   "which bridge is this and what is at it", not "which pixel". 20 puts the
-   marker alone in frame with no context at all. */
+// Zoom used whenever the camera is sent to ONE vehicle — a live-feed
+// notification, a marker click, the header search, a ticked unit. Close enough
+// that neighbouring vehicles fall outside the viewport, far enough that the
+// subject still has the road it is on around it.
+//
+// CHANGED 2026-08-05: raised from 17→20 to match new maxZoom of 21.
+// CHANGED 2026-09-22: back to 17. Chasing maxZoom was the wrong instinct — it
+// framed the vehicle and nothing else, which answers "which pixel" rather than
+// "what is this unit doing". Three comments in this file were never updated
+// for the raise and still described 17 (FIT_MAX_ZOOM's note above, and
+// FOCUS_EXIT_ZOOM's "three steps below"), which is its own evidence about
+// which number the rest of the design was built around.
+const FOCUS_ZOOM     = 17;
+/* A selection brought back by a reload: close enough to see the unit and what
+   is around it, not the street-level fly-to a search asks for. */
+const RESTORE_ZOOM   = 15;
+/* A weighbridge, from the sidebar's Weighbridges rows. Equal to FOCUS_ZOOM
+   since 2026-09-22 and kept separate anyway: a scale is a place with a yard
+   around it and a vehicle is a thing on a road, and the day one of those wants
+   retuning is not the day the other does. It was written when FOCUS_ZOOM was
+   20 and this needed to be lower. */
 const BRIDGE_FOCUS_ZOOM = 17;
 /* How long a focus request waits for its vehicle to arrive. Long enough for
    an organisation switch to fetch a cold snapshot (~seconds on the remote
@@ -1705,9 +1737,10 @@ function CameraIcon() {
 
 const VehicleTooltip = memo(function VehicleTooltip({
   vehicle, nodeRef, pinned = false, onReplay, onClose, replaying = false,
+  onToggleRoute, routeOn = false,
   onPointerDown, minimized = false, onToggleMinimize,
   onToggleCamera, cameraOn = false,
-  onZoomTo, onZoomBack, zoomedIn = false,
+  onZoomTo, onZoomBack, zoomedIn = false, onOpenTheft,
 }) {
   return (
     <div
@@ -1752,13 +1785,24 @@ const VehicleTooltip = memo(function VehicleTooltip({
           >
             <TargetIcon />
           </button>
+          {/* Route: click draws the path the unit has covered today (the
+              units list's quick-track line), click again takes it off;
+              double-click replays the day (operator, 2026-10-03). The same
+              no-debounce rule as the zoom button above: the two clicks of a
+              double toggle the line on and off, then the dblclick starts the
+              replay, which clears any line anyway — so a double-click lands
+              on the replay with nothing left drawn under it. */}
           <button
             type="button"
-            className="vt-action vt-action--route"
-            onClick={onReplay}
+            className={"vt-action vt-action--route" + (replaying || routeOn ? " vt-action--on" : "")}
+            onClick={onToggleRoute}
+            onDoubleClick={onReplay}
             disabled={replaying}
-            aria-label="Replay this unit's route"
-            title={replaying ? "Already replaying this unit" : "Replay this unit's route"}
+            aria-pressed={routeOn}
+            aria-label="Show this unit's route; double-click to replay it"
+            title={replaying ? "Already replaying this unit"
+              : routeOn ? "Hide the route - double-click to replay it"
+              : "Show the route covered - double-click to replay it"}
           >
             <RouteIcon />
           </button>
@@ -1795,7 +1839,13 @@ const VehicleTooltip = memo(function VehicleTooltip({
       )}
       {/* Minimised leaves the bar — and with it the route button, so a replay
           can still be started from a card folded out of the way. */}
-      {!(pinned && minimized) && <VehicleStatsCard vehicle={vehicle} />}
+      {/* A clicked (pinned) card reads the unit's day for its start row;
+          a hover card does not — see VehicleStatsCard `withDay`. */}
+      {/* The alert badge is a button only on a clicked card — a hover card is
+          pointer-events:none, so a button there could never be pressed. */}
+      {!(pinned && minimized) && (
+        <VehicleStatsCard vehicle={vehicle} withDay={pinned} onAlertClick={pinned ? onOpenTheft : undefined} />
+      )}
     </div>
   );
 });
@@ -1924,35 +1974,7 @@ function routePinHtml(kind, color, label) {
 // connected unit), not `status === 'ok'`.
 const visibleUnderFilter = matchesFilter;
 
-// ── Google Maps loader (singleton) ──────────────────────────────────────────
-// MUST be shared across mounts: StrictMode mounts the component twice, and two
-// injected <script> tags would each re-register the API and clobber
-// window.google. One promise = one script = one Maps namespace.
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-const GMAPS_CALLBACK  = "__fleetMapGoogleMapsReady";
-
-let googleMapsPromise = null;
-function loadGoogleMaps() {
-  if (window.google?.maps) return Promise.resolve(window.google.maps);
-  if (!GOOGLE_MAPS_KEY) {
-    return Promise.reject(new Error("VITE_GOOGLE_MAPS_API_KEY is not set"));
-  }
-  if (!googleMapsPromise) {
-    googleMapsPromise = new Promise((resolve, reject) => {
-      window[GMAPS_CALLBACK] = () => resolve(window.google.maps);
-      const s = document.createElement("script");
-      s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}` +
-              `&v=weekly&loading=async&callback=${GMAPS_CALLBACK}`;
-      s.async = true;
-      s.onerror = () => {
-        googleMapsPromise = null; // allow a retry after a network failure
-        reject(new Error("Failed to load Google Maps"));
-      };
-      document.head.appendChild(s);
-    });
-  }
-  return googleMapsPromise;
-}
+// Map engine loader: lib/mapEngine (shared with Fuel › Report).
 
 // ── DOM marker overlay ──────────────────────────────────────────────────────
 // google.maps.Marker only renders an image, and AdvancedMarkerElement needs a
@@ -2064,6 +2086,14 @@ function makeDomMarkerClass(maps) {
     onRemove() {
       this._div?.remove();
       this._div = null;
+      // Forget where the OLD node was drawn. The next onAdd builds a fresh
+      // node with no position on it, and draw() skips the write when the
+      // pixel matches the last one drawn — so a marker taken off and put
+      // back at the same place (every replay pin, tick and minute dot after
+      // a rewind) stayed parked at the pane origin, off the line and out of
+      // sight. Cleared, the first draw() after onAdd always places it.
+      this._px = this._py = null;
+      this._onScreen = true;
     }
 
     getPosition() { return this._pos; }
@@ -2173,10 +2203,14 @@ export default function FleetMap() {
   const DomMarkerRef    = useRef(null); // overlay class bound to that namespace
   // Read before any state below, because several of those states are seeded
   // from THIS ORGANISATION's stored preferences (lib/mapPrefs).
-  const { setSelectedVehicleId, setFeedVehicleId, windowOpen, activeCompanyId, desktopActiveTab, setDesktopActiveTab, setMobileActiveTab, pendingFocusId, setPendingFocusId, requestIncident, setSitePlanLinks, sitePlanRequest, fleetTypes, trackedIds, setTrackedIds, inTransitOnly, setInTransitOnly } = useAppContext();
+  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId");
+  const { setSelectedVehicleId, setFeedVehicleId, setDesktopActiveTab, setMobileActiveTab, setPendingFocusId, requestIncident, setSitePlanLinks, setTrackedIds, setInTransitOnly, markSelectionRestored } = useAppActions();
 
   const [mapReady, setMapReady]             = useState(false);
-  const [mapType,  setMapType]              = useState("hybrid");
+  // Opens on OpenStreetMap (operator, 2026-10-04: "the openstreetmap the
+  // default"); Google's road map when OSM is switched off in lib/osmBase.
+  // Map and Satellite are one click away.
+  const [mapType,  setMapType]              = useState(OSM_ENABLED ? "osm" : "roadmap");
 
   // Hover tracks the ID, not a vehicle snapshot — the card re-renders with
   // each SSE frame while the cursor rests on a marker.
@@ -2255,6 +2289,11 @@ export default function FleetMap() {
     () => readMapPrefs(activeCompanyId).layers.zones,
   );
   const zoneLayerRef      = useRef(null);   // { shapes[], labels[], info, bounds } | null
+  /* Live traffic (TomTom): flow + incident tiles over the base map, and the
+   * pinned unit's routed line with its jams. See lib/tomtomTraffic. */
+  const [showTraffic, setShowTraffic]       = useState(
+    () => TRAFFIC_AVAILABLE && readMapPrefs(activeCompanyId).layers.traffic,
+  );
   const zonesRequestedRef = useRef(false);  // a toggle is a request; a default is not
   // CAD plan overlay — separate toggle, separate layer, lazily fetched.
   const [showPlan, setShowPlan]             = useState(
@@ -2292,6 +2331,10 @@ export default function FleetMap() {
   const markerMapRef   = useRef({});   // vehicle id → DomMarker
 
   const routeLayerRef  = useRef({});   // vehicle id → { routeLines[], depPin, destPin }
+  /* The verdict on the drawn route: real time vs the time the same roads
+   * should take (RouteCoveredCard). One at a time, like the route itself. */
+  const [covered, setCovered] = useState(null);
+  const expectedCacheRef = useRef(new Map());  // `${vehicleId}:${start}:${end}` → expected
   const activeRouteRef = useRef(null);
   // The same value as activeRouteRef, for RENDER only. A ref cannot make a
   // control re-draw its own on/off state, and a second source of truth is only
@@ -2354,19 +2397,18 @@ export default function FleetMap() {
   // Membership, derived once. The context holds an ARRAY — see the note there
   // for why a Set must not live in the provider.
   //
-  // Tracking is a WATCH LIST first (the vehicle panel's ‹ › arrows step
-  // through it). It only narrows the map when the operator asks for that with
-  // "Show tracked only" on the tracking pill. `trackedSet` is the MAP FILTER,
-  // so everything below that filters, clusters or frames the map keys off it
-  // and sees an empty set — i.e. the whole fleet — unless the toggle is on.
-  // A stable empty Set keeps ticking units from re-running those effects.
-  const [trackedOnly, setTrackedOnly] = useState(false);
+  // ONE piece of state: the tracked list in AppContext, persisted per
+  // organisation. The map filter is DERIVED from it — ticked units narrow the
+  // map, no ticks shows the fleet — exactly as in dash. There used to be a
+  // second, unpersisted "Show tracked only" switch beside it, so a refresh
+  // restored the ticks but not the switch and the map came back showing the
+  // whole fleet with the ticks silently ignored. Derived state cannot drift
+  // from its source. A stable empty Set keeps an empty list from re-running
+  // the effects below.
   const trackedSet = useMemo(
-    () => (trackedOnly && trackedIds?.length ? new Set(trackedIds) : EMPTY_TRACKED),
-    [trackedIds, trackedOnly],
+    () => (trackedIds?.length ? new Set(trackedIds) : EMPTY_TRACKED),
+    [trackedIds],
   );
-  // Nothing left to show "only" — drop back to the full fleet.
-  useEffect(() => { if (!trackedIds?.length) setTrackedOnly(false); }, [trackedIds]);
 
   /**
    * Publish the free area — the map minus its two rails, the header and the
@@ -2389,8 +2431,8 @@ export default function FleetMap() {
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
   const { can: canDo } = usePermissions();
-  const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen } = useMapLayers();
-  const { isCompact } = useBreakpoint();
+  const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen } = useMapLayers();
+  const { isCompact, isMobile } = useBreakpoint();
 
   const { vehicles: _lv, orgId, loading: vehiclesLoading, error: vehiclesError, retry } = useFleetLiveShared();
   const vehicles = _lv ?? [];
@@ -2599,6 +2641,32 @@ export default function FleetMap() {
   const pinnedVehicle = pinnedId
     ? vehicles.find(v => v.id === pinnedId) ?? null
     : null;
+
+  /* The pinned (else the selected) unit's road to the end of its current
+   * leg, with live traffic. The same query the unit panel's Arrives row reads
+   * (keyed per unit and target), so the line on the map and the ETA beside it
+   * are one request and agree. */
+  const routedVehicle = pinnedVehicle
+    ?? (selectedVehicleId ? vehicles.find(v => v.id === selectedVehicleId) ?? null : null);
+  const pinnedTrip   = routedVehicle ? liveTrip(routedVehicle.trip, routedVehicle.lat, routedVehicle.lng) : null;
+  const pinnedTarget = positionFresh(routedVehicle) ? routeTarget(pinnedTrip) : null;
+  const { data: pinnedRoute } = useTrafficRoute({
+    vehicleId:  routedVehicle?.id ?? null,
+    lat:        routedVehicle?.lat,
+    lng:        routedVehicle?.lng,
+    to:         pinnedTarget?.to ?? null,
+    travelMode: travelModeFor(routedVehicle?.vehicleType),
+    enabled:    showTraffic && pinnedTarget != null,
+  });
+
+  /* A window opening on the map (Units, Stopped in transit, Fuel alerts)
+   * takes the card down with whatever window was open before it: one panel
+   * on the map at a time (operator, 2026-10-02). Only the opening edge — a
+   * row clicked inside the open window pins its unit's card beside it. */
+  const openWindow = unitsOpen ? "units" : strandedOpen ? "stranded" : fuelAlertsOpen ? "fuel" : null;
+  useEffect(() => {
+    if (openWindow) setPinnedId(null);
+  }, [openWindow]);
 
   const [cardMinimized, setCardMinimized] = useState(false);
   /** Which unit's camera window is open, if any. */
@@ -3075,6 +3143,7 @@ export default function FleetMap() {
       layers.destPin?.setMap(null);
     }
     delete routeLayerRef.current[id];
+    setCovered((c) => (c?.id === id ? null : c));
   }, []);
 
   /**
@@ -3112,7 +3181,7 @@ export default function FleetMap() {
     // Placeholder so a second click can detect an in-flight request and so
     // hideRoute always has something to tear down.
     const layers = {
-      routeLines: [], timeMarks: [], openTick: null,
+      routeLines: [], tailLine: null, timeMarks: [], openTick: null,
       depPin: null, destPin: null, token: {},
     };
     routeLayerRef.current[id] = layers;
@@ -3176,6 +3245,9 @@ export default function FleetMap() {
           zIndex: 1,
         });
         layers.routeLines.push(line);
+        // The newest run: the one the live pass extends. NOT routeLines' last
+        // entry, which is a gap connector whenever the track has a gap.
+        layers.tailLine = line;
       }
       // Dotted across the stretches the unit went quiet for — see gapConnector.
       for (let i = 1; i < segments.length; i++) {
@@ -3234,6 +3306,26 @@ export default function FleetMap() {
         zIndex:   2,
       });
       layers.depPin.setMap(map);
+
+      // How long it took vs how long it should have (operator, 2026-10-04).
+      if (!ROUTE_TIMING_ENABLED) return;
+      const journey = trackJourney(points);
+      if (!journey) { setCovered({ id, plate: v.id, status: "nodrive" }); return; }
+      if (!EXPECTED_AVAILABLE) { setCovered({ id, plate: v.id, status: "error", journey, error: "no TomTom key" }); return; }
+      const ekey = `${v.vehicleId}:${journey.startMs}:${journey.endMs}`;
+      const hitE = expectedCacheRef.current.get(ekey);
+      if (hitE) { setCovered({ id, plate: v.id, status: "ok", journey, expected: hitE }); return; }
+      setCovered({ id, plate: v.id, status: "loading", journey });
+      fetchExpectedTime(journey, { travelMode: travelModeFor(v.vehicleType) })
+        .then((expected) => {
+          expectedCacheRef.current.set(ekey, expected);
+          if (routeLayerRef.current[id] !== layers) return;
+          setCovered({ id, plate: v.id, status: "ok", journey, expected });
+        })
+        .catch((err) => {
+          if (routeLayerRef.current[id] !== layers) return;
+          setCovered({ id, plate: v.id, status: "error", journey, error: err.message });
+        });
     };
 
     if (cached) { draw(cached); return; }
@@ -3279,19 +3371,31 @@ export default function FleetMap() {
    * changes), and the state is what a control renders its own checked-ness
    * from. Written together, in one place, so the two cannot disagree — this is
    * now the only writer of activeRouteRef outside marker teardown.
+   *
+   * `draw: false` selects and highlights the unit WITHOUT its line. A click
+   * on a marker is a selection, not a request for the day's track (operator,
+   * 2026-10-02: clicking a unit "automatically displays the route path which
+   * should not be the case"); the line is asked for explicitly, from the
+   * units list's route switch or the card's Replay. So activeRouteRef is the
+   * highlighted unit, and routeId (what the route switch shows) is set only
+   * while its line is actually drawn.
    */
-  const setActiveRoute = useCallback((id) => {
+  const setActiveRoute = useCallback((id, { draw = true } = {}) => {
     const prev = activeRouteRef.current;
-    if (prev === id) return;
-    if (prev) { hideRoute(prev); reIcon(prev, {}); }
-    if (id)   { showRoute(id);   reIcon(id, { highlighted: true }); }
+    if (prev && prev !== id) { hideRoute(prev); reIcon(prev, {}); }
+    else if (prev && !draw) hideRoute(prev);
+    if (id) {
+      if (draw && !routeLayerRef.current[id]) showRoute(id);
+      if (prev !== id) reIcon(id, { highlighted: true });
+    }
     activeRouteRef.current = id;
-    setRouteId(id);
+    setRouteId(id && draw ? id : null);
   }, [hideRoute, showRoute, reIcon]);
 
   /** The same thing as a toggle, for a control that has an on/off state. */
   const toggleRoute = useCallback((id) => {
-    setActiveRoute(activeRouteRef.current === id ? null : id);
+    const drawn = activeRouteRef.current === id && Boolean(routeLayerRef.current[id]);
+    setActiveRoute(drawn ? null : id);
   }, [setActiveRoute]);
 
   // Clicking a MARKER is the one gesture that scopes the Live Feed to a unit.
@@ -3300,7 +3404,7 @@ export default function FleetMap() {
   // in AppContext.
   const handleMarkerClick = useCallback((id) => {
     const wasActive = activeRouteRef.current === id;
-    setActiveRoute(wasActive ? null : id);
+    setActiveRoute(wasActive ? null : id, { draw: false });
     if (wasActive) {
       // Clicking the same marker twice is the toggle-off gesture, so it hands
       // the feed back to the whole fleet as well.
@@ -3327,6 +3431,22 @@ export default function FleetMap() {
     setSelectedVehicleId(id);
     setPinnedId(id);
   }, [setSelectedVehicleId]);
+
+  /* Opening a fuel alert closes the unit's map card (operator, 28 Sep:
+     "whenever I open the fuel alert modal then the unit card should disappear
+     from the UI"). The alert window carries the unit's own card and the side
+     panel opens beside it, so a card left pinned over the map was a third
+     account of a unit — often a different one — under the window being
+     worked. Hover cards already stand down while the window is up
+     (hoverSuppressed); this is the pinned one, closed as its ✕ closes it,
+     route highlight and all. */
+  useEffect(() => {
+    if (!windowOpen || !pinnedId) return;
+    if (activeRouteRef.current === pinnedId) setActiveRoute(null);
+    setPinnedId(null);
+  // Only on the window opening: a unit clicked while it is up still pins
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowOpen]);
 
   // ── Route playback ────────────────────────────────────────────────────────
   const playbackVehicle = playbackId ? findVehicle(playbackId) : null;
@@ -3368,7 +3488,8 @@ export default function FleetMap() {
     // `timed` holds everything the clock reveals — events and time ticks alike
     // — each with the moment it belongs to. One array, because the reveal rule
     // is identical for both and two loops would be two chances to disagree.
-    const layers = { trail: [], timed: [], openTick: null };
+    // `trailT`: the moment the trail was last drawn to — see the cursor effect.
+    const layers = { trail: [], trailT: -Infinity, timed: [], openTick: null };
     playbackLayerRef.current = layers;
 
     // NO second marker. The unit's OWN marker is what moves — a replay that
@@ -3571,13 +3692,18 @@ export default function FleetMap() {
       // Seeking BACKWARD drops runs, so retire any the cursor no longer reaches.
       while (layers.trail.length > runs.length) layers.trail.pop().setMap(null);
 
+      // On an ordinary frame only the leading edge moves. A seek either way,
+      // or a new run starting, can change the runs before it too — a jump
+      // forward left the run it jumped out of drawn only as far as it had got
+      // — so those frames rewrite every run. Rare, so still O(1) per frame.
+      const rewriteAll = t < layers.trailT || runs.length !== layers.trail.length;
+      layers.trailT = t;
       for (let i = 0; i < runs.length; i++) {
         if (!layers.trail[i]) {
           layers.trail[i] = new maps.Polyline({
             map, path: runs[i], strokeColor: "#38bdf8", strokeOpacity: 0.95, strokeWeight: 4, zIndex: 2,
           });
-        } else if (i === runs.length - 1) {
-          // Only the leading edge moves; the rest were finished on earlier frames.
+        } else if (rewriteAll || i === runs.length - 1) {
           layers.trail[i].setPath(runs[i]);
         }
       }
@@ -3589,11 +3715,12 @@ export default function FleetMap() {
        * but `setMap` is not, so it is called only on the frames where a marker
        * actually crosses the cursor. `shown` is what makes that true.
        *
-       * The un-reveal half is not symmetry for its own sake: scrubbing
-       * backwards is the common way to re-watch something, and a pin that
-       * stayed up after the cursor moved back before it would put the day's
-       * events permanently on screen after one pass — exactly the state this
-       * change exists to remove.
+       * Against the CURSOR, so a rewind starts the day again from scratch:
+       * the trail, pins, ticks and minute dots all go back with it and come
+       * up again as the replay reaches them. Keeping the markers to the
+       * furthest point reached was tried 2026-10-02 and reverted the same
+       * day — dots and arrows standing on the map with no line under them
+       * read as the path half-cleared, not as information kept.
        */
       syncReveal(layers.timed, t, (e, due) => {
         e.marker.setMap(due ? map : null);
@@ -3677,7 +3804,7 @@ export default function FleetMap() {
     if (hasBridges) {
       out.push({
         id: "bridges",
-        label: "Weighbridges",
+        label: "Quick links",
         on: showBridges,
         onToggle: () => {
           bridgeRequestedRef.current = !showBridges;
@@ -3766,8 +3893,24 @@ export default function FleetMap() {
         hint: null,
       });
     }
+    // Live traffic is a property of the roads, not of the org, so every org
+    // with a key configured is offered it.
+    if (TRAFFIC_AVAILABLE) {
+      out.push({
+        id: "traffic",
+        label: "Live traffic",
+        on: showTraffic,
+        onToggle: () => setShowTraffic(v => {
+          writeMapPrefs(activeCompanyId, { layers: { traffic: !v } });
+          return !v;
+        }),
+        note: null,
+        legend: TRAFFIC_LEGEND,
+        hint: "TomTom live traffic · click a unit on a trip for its route and traffic-adjusted ETA",
+      });
+    }
     return out;
-  }, [showBridges, hasBridges, bridgesLoading, activeCompanyId,
+  }, [showTraffic, showBridges, hasBridges, bridgesLoading, activeCompanyId,
       showZones, zonesAllowed, hasZones, zoneCategories,
       showPlan, planAllowed, planState,
       sitePlans, siteOn, siteStatus, siteCats, canDo]);
@@ -3861,7 +4004,7 @@ export default function FleetMap() {
   useEffect(() => {
     let cancelled = false;
 
-    loadGoogleMaps().then((maps) => {
+    loadMapEngine().then((maps) => {
       if (cancelled || mapRef.current || !mapContainerRef.current) return;
 
       // Pin the exact namespace the map was built with. Everything downstream
@@ -3880,9 +4023,6 @@ export default function FleetMap() {
         // CHANGED 2026-08-05: maxZoom raised from 18→21 to allow zooming in
         // close enough to see individual vehicles in the yard.
         maxZoom:     21,
-        // Satellite imagery WITH place/road labels — the equivalent of the old
-        // ArcGIS World_Imagery + World_Boundaries_and_Places pair.
-        mapTypeId:   "hybrid",
         // Scroll wheel zooms without a modifier, matching the old behaviour.
         gestureHandling:    "greedy",
         // Every built-in control anchors to an EDGE of the map div, and on this
@@ -3902,12 +4042,18 @@ export default function FleetMap() {
         streetViewControl:  false,
         fullscreenControl:  false,
         rotateControl:      false,
-        // CHANGED 2026-08-05: enabled so operator can see current zoom level
-        scaleControl:       true,
+        // CHANGED 2026-08-05: enabled so operator can see current zoom level.
+        // CHANGED 2026-10-04: off again — MapStatusBar draws a km + mi scale
+        // in the free centre column instead (operator's screenshot).
+        scaleControl:       false,
         keyboardShortcuts:  false,
         clickableIcons:     false,
         tilt:               0,
       });
+
+      // OpenStreetMap, recoloured — the only base map (lib/osmBase).
+      installOsmBase(maps, map);
+      map.setMapTypeId(OSM_TYPE_ID);
 
       // Clicking/tapping empty map clears the active route + highlight AND
       // dismisses the hover card (touch devices never fire mouseleave). The
@@ -3922,6 +4068,7 @@ export default function FleetMap() {
         hideRoute(prevId);
         reIcon(prevId, {});
         activeRouteRef.current = null;
+        setRouteId(null);
         // Tapping empty map is a deselect, so the feed goes back to the fleet.
         setFeedVehicleId(null);
       });
@@ -4120,7 +4267,7 @@ export default function FleetMap() {
     const map = mapRef.current;
     if (!map) return;
     const z = map.getZoom();
-    // Google clamps to the map's own minZoom/maxZoom, so no bounds check here.
+    // The engine clamps to the map's own minZoom/maxZoom, so no bounds check here.
     if (Number.isFinite(z)) map.setZoom(z + delta);
   }, []);
 
@@ -4530,7 +4677,7 @@ export default function FleetMap() {
       planLabelsRef.current = PLAN_LABELS.map((l) => ({
         marker: new DomMarker({
           position: { lat: l.lat, lng: l.lng },
-          html: planLabelHtml(l.text, l.note),
+          html: planLabelHtml(l.text),
           anchor: "center",
           // Above the plan linework, below the zone plates — same order as the
           // layers themselves.
@@ -4708,29 +4855,20 @@ export default function FleetMap() {
       const name = feature.getProperty("name");
       const category = feature.getProperty("category");
       const style = ZONE_STYLE[category] ?? ZONE_FALLBACK;
-      // The survey recorded four places twice, once as a place and once as a
-      // camera position; the converter merged them. Saying so here is how
-      // someone holding the original sheet can tell the map did not lose one.
-      const aliases = feature.getProperty("aliases");
-      // Kept rather than dropped, and flagged: the distillery and its two gates
-      // are genuinely outside the mill fence, which is a fact about the site.
-      const outside = feature.getProperty("outsideSite");
-      // Name, then class, then the notes — which are sentences about the SURVEY
-      // rather than about the place, so they sit last and quieter. The swatch
-      // repeats the marker's colour, which is how you get from a pin you are
-      // pointing at back to the row in the layer key.
+      // Name, then class. The swatch repeats the marker's colour, which is how
+      // you get from a pin you are pointing at back to the row in the layer key.
+      //
+      // Spoken, not shouted: surveys are traced by different hands and they do
+      // not agree about capitals. Of the nine on this map only Molo's does it
+      // — "MOLO RIVER", "MOLO RIVER 2" — and one survey shouting while the
+      // other eight do not is the card looking broken on one site. Display
+      // only; the geojson keeps the surveyor's spelling. See spokenSiteName.
       return (
         `<article class="mapcard mapcard--site">` +
-          `<header class="mapcard__head"><h3 class="mapcard__title">${esc(name)}</h3></header>` +
+          `<header class="mapcard__head"><h3 class="mapcard__title">${esc(spokenSiteName(name))}</h3></header>` +
           `<p class="mapcard__class">` +
             `<i class="mapcard__swatch" style="--swatch:${style.color}"></i>${esc(style.label)}` +
           `</p>` +
-          (outside || aliases?.length
-            ? `<footer class="mapcard__foot mapcard__foot--notes">` +
-                (outside ? `<span>Outside the mill fence</span>` : "") +
-                (aliases?.length ? `<span>Also surveyed as ${esc(aliases.join(", "))}</span>` : "") +
-              `</footer>`
-            : "") +
         `</article>`
       );
     };
@@ -4969,17 +5107,14 @@ export default function FleetMap() {
             if (hoveredIdRef.current === v.id && performance.now() - hoverOpenedAtRef.current > 600) {
               clearHover();
             }
-            // Clicking a unit draws BOTH of its lines: the route (plain
-            // travelled track with its From/To pins) and the trip path (the
-            // same window annotated with speed, fuel events and stops). The
-            // click does not open a card of its own — hovering already shows
-            // the stats, and a second copy of them on click was the same
-            // content twice.
-            //
-            // Both lines toggle off on a repeat click of the same marker, so
-            // the two stay in step with one gesture.
+            // Clicking a unit selects it: highlight, pinned card, feed.
+            // It used to draw BOTH of its lines as well — the route and the
+            // trip path — and no longer does (operator, 2026-10-02): the
+            // track is asked for from the units list's route switch or the
+            // card's Replay. A click that lands while a line is up for some
+            // other unit takes that line away with the old selection.
             handleMarkerClick(v.id);
-            showTripPathRef.current?.(v.id);
+            clearTripPath();
           },
           onOver: (e) => {
             // Position the card from THIS event rather than from a previously
@@ -5133,10 +5268,14 @@ export default function FleetMap() {
       // re-rasterises the line, and doing that for GPS jitter on a parked unit
       // would be constant work for no visible change.
       if (activeRouteRef.current === v.id && Number.isFinite(v.lat)) {
-        const lines = routeLayerRef.current[v.id]?.routeLines;
-        const line  = lines?.[lines.length - 1];
-        if (line) {
-          const path = line.getPath();
+        // The last real run of the track — never a dotted gap connector, whose
+        // path is two points that must stay where they are. A line Google has
+        // not finished building can throw from getPath; skip it for this frame
+        // rather than take the whole map down with it.
+        const line = routeLayerRef.current[v.id]?.tailLine;
+        let path = null;
+        try { path = line?.getPath() ?? null; } catch { path = null; }
+        if (path) {
           const last = path.getLength() > 0 ? path.getAt(path.getLength() - 1) : null;
           const here = { lat: v.lat, lng: v.lng };
           if (!last || metresBetween({ lat: last.lat(), lng: last.lng() }, here) >= ROUTE_EXTEND_MIN_M) {
@@ -5173,7 +5312,7 @@ export default function FleetMap() {
     // hide the rest of the fleet, and once when it ends, to bring them back.
     // Without it the fleet would linger until the next SSE frame happened to
     // invalidate the pass, which on a quiet night is minutes.
-  }, [vehicles, mapReady, searchedId, activeFilter, fleetTypes, trackedSet, inTransitOnly, focusedId, activeCompanyId, alertOpts, playbackId, handleMarkerClick, clearHover, hideRoute, setSelectedVehicleId, resetCamera, notePointer]);
+  }, [vehicles, mapReady, searchedId, activeFilter, fleetTypes, trackedSet, inTransitOnly, focusedId, activeCompanyId, alertOpts, playbackId, handleMarkerClick, clearHover, clearTripPath, hideRoute, setSelectedVehicleId, resetCamera, notePointer]);
 
   /* -- Marker clustering ----------------------------------------------------
    *
@@ -5805,6 +5944,7 @@ export default function FleetMap() {
     setSiteOn(siteOnFor(activeCompanyId));
     setShowBridges(layers.bridges);
     setShowZones(layers.zones);
+    setShowTraffic(TRAFFIC_AVAILABLE && layers.traffic);
     bridgeRequestedRef.current = false;
     zonesRequestedRef.current  = false;
     planRequestedRef.current   = false;
@@ -5983,8 +6123,8 @@ export default function FleetMap() {
    *
    * Search uses zoom 13, which at this fleet's density still shows a dozen
    * neighbours; clicking "KTCB 419R is overdue" and getting a cluster defeats
-   * the point. FOCUS_ZOOM is deliberately near the map's maxZoom so the subject
-   * is the only vehicle in frame.
+   * the point. FOCUS_ZOOM is four steps in from there, which on this fleet
+   * puts the subject alone in frame with the road it is on still visible.
    *
    * Also claims the camera (fittedCompanyRef), or the next SSE reconcile pass
    * would fling the view back out to the whole fleet — the same trap the estate
@@ -6046,11 +6186,71 @@ export default function FleetMap() {
   }, [activeCompanyId, setSelectedVehicleId, revealMap]);
 
   /**
-   * Take the camera to a unit picked from the fuel-alerts list, and open its
-   * side panel beside the incident window the list also asks for (operator,
-   * 2026-09-27: "when we click on an item on the fuel alerts it should render
-   * the modal and the right side panel of the unit"). Both open complete: what
-   * they show was read ahead for every open alert — see lib/fuelPrefetch.
+   * Put back the unit that was selected when the page was reloaded.
+   *
+   * The way a marker click leaves it — highlighted with its route, its card
+   * pinned, the side panel open — with the camera brought to it, since the
+   * view itself is not remembered. NOT handleFocusVehicle: that isolates the
+   * map to one unit and calls revealMap, and a reload on the Drivers page must
+   * stay on the Drivers page.
+   *
+   * Waits for the unit's marker, which the reconcile pass builds after the
+   * fleet lands; a unit no longer in the fleet is let go rather than left
+   * selected over an empty panel.
+   */
+  useEffect(() => {
+    if (!restoredVehicleId || !mapReady) return undefined;
+    const v = vehicles.find(x => x.id === restoredVehicleId);
+    if (!v) {
+      if (!vehiclesLoading && vehicles.length) markSelectionRestored(false);
+      return undefined;
+    }
+    // The camera first: inside a cluster the unit has no marker of its own
+    // until the map is zoomed in, so waiting for the marker would wait forever.
+    //
+    // Twice: now, and again when the map next settles. The opening fleet fit
+    // has usually run a moment earlier and left a one-off `idle` listener that
+    // caps the zoom at FIT_MAX_ZOOM — and the move below is what fires that
+    // idle, so on its own the camera arrived at the unit and was zoomed
+    // straight back out to fleet level.
+    // The settle listener is deliberately not removed on cleanup: marking the
+    // restore done re-runs this effect, and that must not cancel the move.
+    const map = mapRef.current;
+    const maps = mapsLibRef.current;
+    if (map && Number.isFinite(v.lat) && Number.isFinite(v.lng)) {
+      fittedCompanyRef.current = activeCompanyId;   // claim the camera from the fleet fit
+      pendingFitRef.current = false;
+      const move = () => {
+        map.panTo({ lat: v.lat, lng: v.lng });
+        map.setZoom(RESTORE_ZOOM);
+      };
+      move();
+      maps?.event.addListenerOnce(map, "idle", move);
+    }
+    // Then the highlight and the pinned card, once its marker exists.
+    const put = () => {
+      if (!markerMapRef.current[v.id]) return false;
+      setActiveRoute(v.id, { draw: false });
+      setPinnedId(v.id);
+      markSelectionRestored(true);
+      return true;
+    };
+    if (put()) return undefined;
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (put() || Date.now() - started > 10_000) { clearInterval(timer); markSelectionRestored(true); }
+    }, 250);
+    return () => clearInterval(timer);
+  // vehicles: once the unit is in the list the timer does the rest.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoredVehicleId, mapReady, vehicles.length > 0, vehiclesLoading]);
+
+  /**
+   * Take the camera to a unit picked from the fuel-alerts list, for the
+   * incident window the list also asks for. Until 2026-10-03 this opened the
+   * unit's side panel beside that window too (operator, 2026-09-27); it no
+   * longer does — see the last paragraph. The window opens complete: what it
+   * shows was read ahead for every open alert — see lib/fuelPrefetch.
    *
    * Still not handleFocusVehicle, which also isolates the unit and hides every
    * other marker; the alert is about one unit, the map stays the fleet's.
@@ -6059,6 +6259,17 @@ export default function FleetMap() {
    * middle of the map (operator, 2026-09-28: "when the modal is opened then we
    * also need to zoom into the vehicle"), so the map then glides it into the
    * clear once the window and the panel have settled — see lib/clearView.
+   *
+   * Not on a phone. There the side panel is a bottom sheet, so the tap opened
+   * two modals at once, the sheet over the incident window (operator,
+   * 2026-09-30: "leave only the critical modal on the mobile view"). The
+   * incident window alone, and any sheet already open is closed under it.
+   *
+   * And now not on a desk either (operator, 2026-10-03: "whenever I click on
+   * the item in the fuel alerts it opens two modals, the middle one and the
+   * side panel"). The incident window carries the unit's card and the alert,
+   * so the side panel beside it was the same unit twice. The window alone, at
+   * every width, and a panel already open is closed under it.
    */
   const handleShowIncidentUnit = useCallback((vehicleId) => {
     const map = mapRef.current;
@@ -6072,9 +6283,10 @@ export default function FleetMap() {
     map.setZoom(FOCUS_ZOOM);
     panClearOfWindows(map, { lat: v.lat, lng: v.lng });
     setSearchedId(v.id);
-    setSelectedVehicleId(v.id);
+    setSelectedVehicleId(null);
     setTimeout(() => setSearchedId(null), 6000);
   }, [activeCompanyId, revealMap, setSelectedVehicleId]);
+
 
   // Register focus function with context so AppHeader search can trigger zoom
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -6292,6 +6504,49 @@ export default function FleetMap() {
     };
   }, [showBridges, hasBridges, bridges, mapReady, activeCompanyId, handleFocusVehicle]);
 
+  // ── Live traffic tiles ────────────────────────────────────────────────────
+  // Flow under incidents, both under every vector and marker (the engine's
+  // g-tiles pane). Re-fetched every TILE_REFRESH_MS while on; TomTom serves
+  // them no-store, so a redraw is a fresh read of the roads.
+  useEffect(() => {
+    const map  = mapRef.current;
+    const maps = mapsLibRef.current;
+    if (!mapReady || !map || !maps?.TileOverlay || !showTraffic) return undefined;
+    const flow = new maps.TileOverlay({ url: FLOW_TILE_URL, zIndex: 1, opacity: 0.85, maxNativeZoom: 18 });
+    const incidents = new maps.TileOverlay({ url: INCIDENT_TILE_URL, zIndex: 2, maxNativeZoom: 18 });
+    flow.setMap(map);
+    incidents.setMap(map);
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      flow.refresh();
+      incidents.refresh();
+    }, TILE_REFRESH_MS);
+    return () => {
+      clearInterval(timer);
+      flow.setMap(null);
+      incidents.setMap(null);
+    };
+  }, [mapReady, showTraffic]);
+
+  // ── The pinned unit's routed line ─────────────────────────────────────────
+  // Blue along TomTom's road route to the end of the current leg, with each
+  // traffic section over it in the flow tiles' colours. Under the markers and
+  // the travelled track (zIndex 0), so it reads as the road AHEAD.
+  useEffect(() => {
+    const map  = mapRef.current;
+    const maps = mapsLibRef.current;
+    if (!mapReady || !map || !maps || !showTraffic || !pinnedRoute || !pinnedTarget) return undefined;
+    const lines = [];
+    const add = (path, color, weight, opacity) => {
+      lines.push(new maps.Polyline({ map, path, strokeColor: color, strokeWeight: weight, strokeOpacity: opacity, zIndex: 0 }));
+    };
+    add(pinnedRoute.points, "#ffffff", 8, 0.9);
+    add(pinnedRoute.points, ROUTE_COLOR, 4, 0.85);
+    for (const jam of pinnedRoute.jams) add(jam.points, JAM_COLOR[jam.magnitude] ?? JAM_COLOR[0], 6, 1);
+    return () => { for (const l of lines) l.setMap(null); };
+    // The target's coordinates, not the object, which is rebuilt every render.
+  }, [mapReady, showTraffic, pinnedRoute, pinnedTarget?.to.lat, pinnedTarget?.to.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /**
    * Search resolves a query to one vehicle and then focuses it — the SAME
    * isolate treatment a live-feed notification gets, deliberately shared rather
@@ -6332,6 +6587,7 @@ export default function FleetMap() {
       hideRoute(prevId);
       reIcon(prevId, {});
       activeRouteRef.current = null;
+      setRouteId(null);
     }
     setSearchedId(null);
     setSelectedVehicleId(null);
@@ -6444,11 +6700,20 @@ export default function FleetMap() {
       <div className={`map-layer${showMobileMap ? " map-layer--visible" : ""}`}>
         <div ref={mapContainerRef} className="gmap-fill" />
 
-        {/* Map / Satellite toggle.
+        {/* Scale (km over mi), the base map's credit, cursor coordinates.
+            OSM's licence requires its attribution wherever its tiles show. */}
+        <RouteCoveredCard covered={covered} onClose={() => setCovered(null)} />
+        <MapStatusBar
+          map={mapReady ? mapRef.current : null}
+          attribution={OSM_ATTRIBUTION}
+          className="map-status--live"
+        />
+
+        {/* Map / OSM toggle (Satellite removed, operator 2026-10-04).
             On a phone the two words ate the top-left corner, so there it is
             Google's own pair of icons: a folded map, and a globe for satellite.
             The labels stay on desktop, where there is room for them. */}
-        <div className="map-type-toggle">
+        {SHOW_GOOGLE_TYPES && <div className="map-type-toggle">
           <button
             className={`map-type-btn${mapType === "roadmap" ? " map-type-btn--active" : ""}`}
             onClick={() => {
@@ -6464,23 +6729,24 @@ export default function FleetMap() {
             </svg>
             <span className="map-type-txt">Map</span>
           </button>
-          <button
-            className={`map-type-btn${mapType === "hybrid" ? " map-type-btn--active" : ""}`}
-            onClick={() => {
-              setMapType("hybrid");
-              if (mapRef.current) mapRef.current.setMapTypeId("hybrid");
-            }}
-            title="Satellite view"
-            aria-label="Satellite view"
-          >
-            <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-              <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6"/>
-              <path d="M3.5 12h17M12 3.5c2.4 2.5 2.4 14.5 0 17M12 3.5c-2.4 2.5-2.4 14.5 0 17"
-                    fill="none" stroke="currentColor" strokeWidth="1.4"/>
-            </svg>
-            <span className="map-type-txt">Satellite</span>
-          </button>
-        </div>
+          {OSM_ENABLED && (
+            <button
+              className={`map-type-btn${mapType === "osm" ? " map-type-btn--active" : ""}`}
+              onClick={() => {
+                setMapType("osm");
+                if (mapRef.current) mapRef.current.setMapTypeId(OSM_TYPE_ID);
+              }}
+              title="OpenStreetMap view"
+              aria-label="OpenStreetMap view"
+            >
+              <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                <circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.6"/>
+              </svg>
+              <span className="map-type-txt">OSM</span>
+            </button>
+          )}
+        </div>}
 
         {/* The status filters, for screens with no room for the sidebar's
             stat grid. This was two chips — CRITICAL and WARNING — which left
@@ -6537,17 +6803,10 @@ export default function FleetMap() {
             routeId={routeId}
             onToggleRoute={toggleRoute}
             onOpenDetail={handleOpenUnit}
-            /* The camera window alone: no card, no detail panel. The panel
-               is a sheet over the whole map layer on a phone and hid the
-               window under it; the card is what a map click opens, and a
-               press on Video asked for video. */
-            videoId={cameraId}
-            onOpenVideo={(id) => {
-              if (cameraId === id) { setCameraId(null); return; }
-              cameraDetachedRef.current = true;
-              setCameraId(id);
-            }}
-            onSelectUnit={setSelectedVehicleId}
+            /* The same 30-second clock the stranded-stop list runs on. The
+               recency column measures against NOW, so with no tick it would
+               freeze at whatever "now" was when the panel opened and quietly
+               claim every unit was fresh. */
             nowTick={nowTick}
             open={unitsOpen}
             onOpenChange={setUnitsOpen}
@@ -6555,6 +6814,24 @@ export default function FleetMap() {
                own popover where it does not — the same 1024 line FleetMap.css
                hides the rail button on. */
             asWindow={!isCompact}
+          />
+          {/* Opened from the sidebar's Movement branch, and only from there:
+              the map's own Fleets menu already lists these in its popover, so
+              a second button in this rail would be the same list twice within
+              40px of itself. The window is FleetMap's because clicking a row
+              in it moves the CAMERA — the sidebar owns the flag, nothing
+              more. */}
+          <StrandedWindow
+            flagged={strandedVehicles}
+            open={strandedOpen}
+            onOpenChange={setStrandedOpen}
+            onSelect={handleFocusVehicle}
+            /* The SAME tracking state the Units panel writes, not a second
+               one: ticking a unit here and opening Units must show it already
+               ticked, or the map is being narrowed by two lists that disagree
+               about what they narrowed it to. */
+            trackedIds={trackedIds}
+            onSetTracked={setTrackedIds}
           />
           {/* The camera controls turn the corner — below 1024px.
               A single column of seven was 274px of a screen whose free height
@@ -6640,16 +6917,8 @@ export default function FleetMap() {
                 </span>
                 <button
                   type="button"
-                  className={`tracked-pill__btn${trackedOnly ? " tracked-pill__btn--on" : ""}`}
-                  onClick={() => setTrackedOnly(v => !v)}
-                  title={trackedOnly ? "Show the whole fleet on the map" : "Show only tracked units on the map"}
-                >
-                  {trackedOnly ? "Show all" : "Show tracked only"}
-                </button>
-                <button
-                  type="button"
                   className="tracked-pill__clear"
-                  onClick={() => { setTrackedOnly(false); setTrackedIds([]); }}
+                  onClick={() => setTrackedIds([])}
                   title="Stop tracking and show the whole fleet"
                 >
                   Stop <span aria-hidden="true">{"×"}</span>
@@ -6761,6 +7030,13 @@ export default function FleetMap() {
               setCameraId(id => (id === pinnedId ? null : pinnedId));
             }}
             replaying={Boolean(pinnedId) && playbackId === pinnedId}
+            routeOn={Boolean(pinnedId) && routeId === pinnedId}
+            // Off keeps the unit selected and highlighted — only the line
+            // goes (`draw: false`), since the card is still open on it.
+            onToggleRoute={() => {
+              if (!pinnedId) return;
+              setActiveRoute(pinnedId, routeId === pinnedId ? { draw: false } : undefined);
+            }}
             onReplay={() => {
               // The static answers and the replay are answers to the same
               // question; showing both draws the day twice in two colours.
@@ -6786,6 +7062,16 @@ export default function FleetMap() {
               if (activeRouteRef.current === pinnedId) setActiveRoute(null);
               setPinnedId(null);
             }}
+            // The card's "Fuel Theft Alert" badge opens the unit's fuel theft
+            // window and hands over to it: the window carries the same card,
+            // so keeping this one open would show the unit twice (operator,
+            // 2026-10-02). Only with an open incident to show — the window
+            // renders nothing without one, and the card would close for nothing.
+            onOpenTheft={pinnedVehicle?.status === "theft" && pinnedVehicle?.fuelIncident ? () => {
+              requestIncident(pinnedVehicle.id);
+              if (activeRouteRef.current === pinnedId) setActiveRoute(null);
+              setPinnedId(null);
+            } : undefined}
           />
         )}
 

@@ -49,17 +49,62 @@ describe("listUsersAcrossOrgs", () => {
     ]);
   });
 
-  it("keeps one person once PER ORGANISATION rather than deduplicating them", async () => {
-    // Deliberate. "Dispatcher at A" and "Operator at B" are different rows
-    // with different chips and different buttons, and suspending them in one
-    // is not suspending them in the other.
+  it("is ONE row per person, whatever they belong to", async () => {
+    // The same person read from two organisations used to be two rows
+    // carrying the same name, address, phone and status. Status lives on the
+    // user row on this server, so those two rows could never disagree about
+    // anything except the roles - which are merged onto the one row instead.
     apiFetch.mockResolvedValue(roster("Ada"));
 
     const { users } = await listUsersAcrossOrgs(["org-a", "org-b"]);
 
-    expect(users).toHaveLength(2);
-    expect(users.every((u) => u.id === "u-Ada")).toBe(true);
-    expect(users.map((u) => u.scopeOrgId)).toEqual(["org-a", "org-b"]);
+    expect(users).toHaveLength(1);
+    expect(users[0].scopeOrgIds).toEqual(["org-a", "org-b"]);
+  });
+
+  it("addresses the row to the organisation that employs them, when it is in the read", async () => {
+    // The server resolves identity edits against organisationId, so a row
+    // pointed anywhere else PATCHes into a 404.
+    apiFetch.mockResolvedValue({
+      data: [{ id: "u-Ada", fullName: "Ada", organisationId: "org-b" }],
+      meta: { total: 1 },
+    });
+
+    const { users } = await listUsersAcrossOrgs(["org-a", "org-b"]);
+
+    expect(users[0].scopeOrgId).toBe("org-b");
+    expect(users[0].scopeOrgIds).toEqual(["org-a", "org-b"]);
+  });
+
+  it("merges the role grants and says each role once", async () => {
+    const grant = (id, orgId) => ({ id: `ur-${orgId}`, role: { id, organisationId: orgId, name: id } });
+    apiFetch.mockImplementation((url) => Promise.resolve({
+      data: [{
+        id: "u-Ada",
+        fullName: "Ada",
+        // The duplicate is not hypothetical: a grant table carries one row per
+        // grant, and the same role can be granted twice over.
+        userRoles: url.includes("org-a")
+          ? [grant("dispatcher", "org-a"), grant("dispatcher", "org-a")]
+          : [grant("auditor", "org-b")],
+      }],
+      meta: { total: 1 },
+    }));
+
+    const { users } = await listUsersAcrossOrgs(["org-a", "org-b"]);
+
+    expect(users[0].userRoles.map((ur) => ur.role.id)).toEqual(["dispatcher", "auditor"]);
+  });
+
+  it("survives one organisation listing the same person twice", async () => {
+    apiFetch.mockResolvedValue({
+      data: [{ id: "u-Ada", fullName: "Ada" }, { id: "u-Ada", fullName: "Ada" }],
+      meta: { total: 2 },
+    });
+
+    const { users } = await listUsersAcrossOrgs(["org-a"]);
+
+    expect(users).toHaveLength(1);
   });
 
   it("lets one organisation fail without blanking the others", async () => {

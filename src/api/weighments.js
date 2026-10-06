@@ -127,6 +127,27 @@ export async function getWeighbridges({ orgId } = {}) {
   return res.data ?? [];
 }
 
+/**
+ * The trucks and tractors FactorySuite dispatched for this organisation and
+ * that are not signed back yet — the board's units on the road.
+ *
+ * @returns {Promise<{
+ *   asOf: string,
+ *   units: Array<{ id: string, plate: string, vehicleType: 'TRUCK'|'TRACTOR'|'OTHER',
+ *     driverName: string, destination: string|null, siteCode: number|null,
+ *     siteName: string|null, dispatchedAt: string, elapsedMs: number,
+ *     typicalHours: number, typicalSource: string, overdue: boolean }>,
+ *   counts: { trucks: number, tractors: number, other: number, overdue: number },
+ *   staleCount: number,
+ *   lastDispatchAt: string|null,
+ * }|null>}
+ */
+export async function getDispatchedUnits({ orgId } = {}) {
+  if (!orgId) return null;
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/weighments/dispatched`);
+  return res.data ?? null;
+}
+
 // ── formatting ─────────────────────────────────────────────────────────────
 // Kept beside the fetch, like the incidents module's labels, so the grid and
 // the detail card cannot format the same number two ways.

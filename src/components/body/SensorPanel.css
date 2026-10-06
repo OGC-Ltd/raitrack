@@ -212,6 +212,14 @@
   min-height: 0;
   flex: 1;
 }
+/* The Repairs tab scrolls too. Its list, and a job opened under its row,
+   ran past the panel's foot and .sp4-body's `overflow: hidden` cut it off
+   with no way down to it (operator, 2026-10-01). */
+.sp4-body > .sp4-repair-jobs {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
 
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
 .sp4-tabs {
@@ -1040,7 +1048,7 @@
   .sp4-kpi { padding: 5px 10px; min-width: 55px; }
   .sp4-kpi-n { font-size: var(--sp4-title); }
   .sp4-kpi-l { font-size: var(--sp4-label); }
-  .sp4-tab { padding: 10px 14px; font-size: var(--sp4-body); }
+  .sp4-tab { padding: 8px 12px; font-size: var(--sp4-body); }
   .sp4-tabs-hint { display: none; }
   .sp4-table { min-width: 400px; }
   .sp4-table thead th { font-size: var(--sp4-label); padding: 8px 10px; }
@@ -1068,10 +1076,40 @@
      KPIs that the tabs already counted. Coverage is not a duplicate of
      anything, and it is the first thing to know about the panel, so it stays —
      just tighter. The header wraps, so it takes its own line if it must. */
-  .sp4-kpi   { padding: 4px 10px; min-width: 0; }
-  .sp4-kpi-n { font-size: var(--sp4-strong); }
-  .sp4-kpi-l { font-size: var(--sp4-label); letter-spacing: 0.04em; }
   .sp4-table { min-width: 320px; }
+}
+
+/* ── Handsets: the stat cards fill the row ─────────────────────────────────
+ *
+ * These used to SHRINK on a phone — 14px numerals in 4px-padded boxes pushed
+ * to the right-hand end of the header, which read as footnotes rather than the
+ * figures each screen leads with. On a handset the strip now spans the width,
+ * every card takes an equal share, and the numeral goes back up to the size it
+ * has on a desktop. Labels may wrap to two lines rather than being clipped.
+ */
+@media (max-width: 599px) {
+  .sp4-header { justify-content: stretch; }
+  .sp4-header-kpis {
+    flex: 1 1 100%;
+    border-radius: 10px;
+  }
+  .sp4-kpi {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 9px 6px 8px;
+    gap: 3px;
+  }
+  /* A step under the desktop's 26px: the strip still leads the screen, but
+     four 26px numerals read louder than everything else a phone shows. */
+  .sp4-kpi-n { font-size: 21px; }
+  .sp4-kpi-l {
+    font-size: var(--sp4-label);
+    letter-spacing: 0.02em;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+    line-height: 1.2;
+  }
 }
 
 /* ── Light mode ──────────────────────────────────────────────────────────── */
@@ -2038,13 +2076,13 @@
   min-height: 0;
 }
 
-/* Ten columns of triage do not fit a phone, and squeezing them is worse than
- * scrolling them: measured at 375px the Action cell was 82px wide and 122px
- * tall for a 49-character sentence, laddering about one word per line. Give the
- * table its natural width and let the scroller move sideways — the dense grid
- * on the All Probes tab already behaves that way, so it is this screen's own
- * idiom rather than a new one. The page itself never scrolls horizontally; the
- * overflow belongs to the scroller.
+/* Ten columns of triage do not fit a phone, so this grid is given its natural
+ * width and the scroller moves sideways. That holds on a tablet and on a desk.
+ * It did NOT hold on a phone: measured at 375px the table resolved to 1,684px,
+ * four and a half screens across, and reading one unit meant panning back and
+ * forth past ten columns to collect ten values. Below 768px the grid therefore
+ * stops being a grid — see "Mobile: one card per row" further down. This
+ * minimum applies above that breakpoint, where sideways scrolling is fine.
  */
 .sp4-ph-scroll .sp4-table { min-width: 920px; }
 
@@ -2079,8 +2117,17 @@
  */
 @media (max-width: 767px) {
   .sp4-ph-scroll {
-    flex: none;
-    max-height: min(calc(var(--vh) * 60), 460px);
+    /* Was `flex: none` plus `max-height: min(60vh, 460px)`. A fraction of the
+       viewport is not the space this box actually has: the chrome above it
+       varies by tab, by whether a unit is ticked, and by how many chip rows
+       wrapped. When the fraction came out larger than the room left, the
+       scroller ran off the bottom of a shell that clips — measured on an SE at
+       375 x 667, 262px of the list hung past the end with no way to reach it.
+       Sized by the flex parent instead, it is whatever is left and no more.
+       Below BP.handset none of this applies: there the whole panel scrolls. */
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
   }
 }
 
@@ -2130,7 +2177,7 @@
   /* 31px on a phone, from desk padding. It is the control most likely to be
      aimed at first and the one a mis-tap is most annoying on, because the
      keyboard has already come up by the time you see you missed. */
-  .sp4-search { min-height: 40px; }
+  .sp4-search { min-height: var(--m-field); }
 
   /* A rule drawn between two STACKED rows is a rule between nothing. */
   .sp4-filter-divider { display: none; }
@@ -2157,11 +2204,11 @@
   .sp4-filter-group::-webkit-scrollbar { display: none; }
   .sp4-filter-label { flex-shrink: 0; }
 
-  /* THE OVAL. 36px tall (index.css) with padding to match, centred as a flex
-     box so the label sits on the middle of that height rather than 4px down
-     from the top of it. At 36 the 999px radius resolves to a true 18px
-     capsule: one-word chips read as round-ended pills, "Fuel probe" as a
-     longer one of the same family. */
+  /* THE OVAL. --m-chip tall (index.css) with padding to match, centred as a
+     flex box so the label sits on the middle of that height rather than 4px
+     down from the top of it. The 999px radius resolves to a true capsule:
+     one-word chips read as round-ended pills, "Fuel probe" as a longer one of
+     the same family. */
   .sp4-filter-chip {
     flex-shrink: 0;
     display: inline-flex;
@@ -2174,11 +2221,9 @@
        Without it, nothing set a height at all and the chip collapsed to its
        own line box: MEASURED at 375px, 14.5px tall. A third of a thumb, and
        the reason these read as unreachably small on a phone.
-       36px is this app's mobile control height — `.dr-chip` in
-       DriversScreen.css is this same rule with the line present, and the
-       back button in WeighbridgesScreen.css matches. */
-    min-height: 36px;
-    padding: 0 14px;
+       `.dr-chip` in DriversScreen.css reads the same token. */
+    min-height: var(--m-chip);
+    padding: 0 12px;
     border-radius: 999px;
     line-height: 1;
   }
@@ -2200,25 +2245,24 @@
   }
 
   /* ── Refresh · CSV · PDF ───────────────────────────────────────────────
-     The summary takes the first line whole (it wraps to two or three and must
-     not have buttons threaded through it); the three buttons take the second
-     as equal thirds. `space-between` on a wrapped row is what left the ragged
-     gap — with the row full there is nothing left to distribute, and each
-     button becomes a target the width of a thumb rather than the width of its
-     own word. */
+     Compact buttons the width of their word, at the phone control height.
+     Stretched into equal thirds of a full row they read as the page's main
+     content rather than its tools. */
   .sp4-gridbar { gap: 8px; }
-  .sp4-gridbar > span:first-child { flex: 1 0 100%; min-width: 0; }
-  .sp4-gridbar-tools { flex: 1 0 100%; gap: 8px; }
+  /* The summary wraps inside its own box and the buttons sit beside it when
+     they fit, dropping to their own right-aligned line when they do not. */
+  .sp4-gridbar > span:first-child { flex: 1 1 150px; min-width: 0; }
+  .sp4-gridbar-tools { flex: 0 0 auto; gap: 6px; margin-left: auto; justify-content: flex-end; }
   .sp4-gridbar-tools .sp4-ghost-btn {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     /* 17px measured, for the same reason as the chips: the padding was
-       zeroed for a height that never came. 40 rather than 36 — these three
-       are the bar's actions, they already take a full row as equal thirds,
-       and one of them exports a file. */
-    min-height: 40px;
+       zeroed for a height that never came. The phone control height, sized
+       to the word and pushed right — as equal thirds of a full row at 40px
+       they were three slabs that read as the page's main content. */
+    min-height: var(--m-ctl);
     padding: 0 10px;
     border-radius: 8px;
     font-size: var(--sp4-body);
@@ -2325,6 +2369,29 @@
   background: rgba(255,255,255,0.02);
 }
 .sp4-repair-itemhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* The fix date, on the row of the unit it applies to, pushed to the right end
+   of that row — see RepairReportForm for why this placement is the ONE-unit
+   case only. `margin-left: auto` rather than `justify-content: space-between`
+   on the parent: the plate and the fault are a pair and must stay together at
+   the left, which space-between would pull apart the moment a third child
+   appeared.
+
+   `align-items: baseline` on the parent would sit the input's text baseline on
+   the plate's, which drops the box a few pixels below the line it shares. The
+   label and the field are their own baseline group, centred against the plate
+   instead. */
+.sp4-repair-itemdate {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+}
+/* At a phone width the row wraps and this lands on a line of its own, where a
+   right-hand margin would leave it floating in the middle of nowhere. */
+@media (max-width: 599px) {
+  .sp4-repair-itemdate { margin-left: 0; width: 100%; }
+}
 .sp4-repair-reg {
   font-family: var(--font-display, inherit);
   font-size: var(--sp4-strong);
@@ -3196,6 +3263,12 @@
 .sp4-track-row--crit.sp4-track-row--current .sp4-track-name { color: var(--sp4-crit); }
 .sp4-track-row--crit .sp4-track-now { background: var(--sp4-crit); color: var(--sp4-bg); }
 .sp4-track-row--ok .sp4-track-now   { background: var(--sp4-ok);   color: var(--sp4-bg); }
+/* A stage passed WITHOUT standing on it (no spare was outsourced before the
+   fix): amber dot, and amber line in and out, so the bypass reads at a glance
+   (operator, 2026-10-01). After the general rules so it wins over them. */
+.sp4-track-row--skipped.sp4-track-row--done .sp4-track-dot { border-color: var(--sp4-warn); background: var(--sp4-warn); }
+.sp4-track-row--skipped .sp4-track-name { color: var(--sp4-warn); }
+.sp4-track-connector--filled.sp4-track-connector--skipped { background: var(--sp4-warn); }
 
 /* ── Horizontal, once there is room for it ───────────────────────────────────
  *
@@ -3279,6 +3352,39 @@
   padding-top: var(--sp4-sm);
   border-top: 1px solid var(--sp4-line-hi);
 }
+/* The same row shape as the sign-off below it, one rung up: where the job is
+   now, and the two stages it can be moved to. Sits ABOVE "Close this job"
+   because moving is the reversible one, and a control that ends a ticket
+   should not be the first one under the ladder. */
+.sp4-track-move {
+  display: flex;
+  align-items: center;
+  gap: var(--sp4-xs);
+  flex-wrap: wrap;
+  margin-top: var(--sp4-sm);
+  padding-top: var(--sp4-sm);
+  border-top: 1px solid var(--sp4-line-hi);
+}
+/* Disabled here means "this is where the job already is", which the `--on`
+   chip is already saying — so it reads as the current answer rather than as a
+   control that has been taken away. */
+.sp4-track-move .sp4-filter-chip:disabled { cursor: default; opacity: 1; }
+.sp4-track-move .sp4-filter-chip:disabled:not(.sp4-filter-chip--on) { opacity: 0.55; }
+
+/* A stage the job went past WITHOUT (no spare outsourced before Fixing): lit,
+   in amber, like its dot and line on the tracking ladder. */
+.sp4-filter-chip.sp4-filter-chip--skipped,
+.app--light .sp4-filter-chip.sp4-filter-chip--skipped {
+  background: color-mix(in srgb, var(--sp4-warn) 14%, transparent);
+  color: var(--sp4-warn);
+  border-color: color-mix(in srgb, var(--sp4-warn) 45%, transparent);
+}
+.sp4-track-move-error {
+  flex: 1 0 100%;
+  font-size: var(--sp4-body);
+  color: var(--sp4-crit);
+}
+
 .sp4-track-mark-label {
   font-size: var(--sp4-label);
   text-transform: uppercase; letter-spacing: 0.08em;
@@ -3498,4 +3604,621 @@
 .rj-esc--again {
   font-weight: 800;
   box-shadow: 0 0 0 1px var(--sp4-crit) inset;
+}
+
+
+/* ── Handsets: one card per row ─────────────────────────────────────────────
+ *
+ * Every grid on this screen is wider than a phone — the probe grid resolves to
+ * 1,684px at 375px wide, the repairs grid to about 1,100px. Sideways scrolling
+ * was the earlier answer and it is the wrong one at this width: a row is 54px
+ * tall and ten columns away from itself, so reading one unit is a pan, and
+ * tapping the right one is aiming at a strip you cannot see the whole of.
+ *
+ * 599px, NOT the 767px the rest of the mobile chrome uses — see BP.handset in
+ * hooks/useBreakpoint. A tablet keeps the table: an iPad mini has 744px across
+ * and 1,133px down, which is enough to read a grid and scroll it sideways, and
+ * a card list there would be spreading ten short values over a screen that had
+ * room for all of them at once.
+ *
+ * On a handset each row becomes a card instead: the registration is its title,
+ * every other cell is a label/value line beneath it, and the whole card is the
+ * tap target the row already was. Nothing scrolls sideways.
+ *
+ * The header row is HIDDEN rather than restyled, which is only safe because
+ * none of these headers is a control — there is no sort button in any thead on
+ * this screen (checked: no .sp4-sort in any panel's markup). Its text is not
+ * lost: lib/tableLabels copies each column head onto the cells under it as
+ * `data-label`, and the ::before below draws it. A cell that somehow arrives
+ * without one simply shows its value, which is the old behaviour.
+ */
+@media (max-width: 599px) {
+  .sp4-table-scroll { overflow-x: hidden; }
+  .sp4-table,
+  .sp4-ph-scroll .sp4-table,
+  .sp4-probe-table--comfortable { min-width: 0; display: block; }
+
+  .sp4-table > thead { display: none; }
+
+  .sp4-table > tbody { display: block; }
+  /* Two columns of fields, not twelve stacked lines. Single-column measured
+     401px per unit at 375px wide, so one card filled the panel's window and
+     scanning the fleet meant scrolling one unit at a time. The values here are
+     short — "9m ago", "0 L · 0%", a state pill — and pair comfortably. The
+     title and the Action sentence span both tracks. */
+  .sp4-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    position: relative;          /* the select box is pinned to this box */
+    padding: 4px 0 8px;
+    border-bottom: 1px solid var(--sp4-line);
+  }
+  .sp4-table > tbody > tr:last-child { border-bottom: none; }
+
+  .sp4-table > tbody > tr > td,
+  .sp4-table > tbody > tr > td.sp4-td {
+    /* Label above value, not beside it: at half a phone wide a label and a
+       state pill on one line wrap into a ragged two-line cell anyway, and the
+       ragged version puts the label's tail under the value. */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    /* The edge inset from the desktop grid, both sides, on every cell — as
+       cards these are all first and last in their own row. */
+    padding: 5px var(--sp4-gutter);
+    text-align: left;
+    /* nowrap is right for a column 210px wide and wrong for a value with half
+       a phone to itself; the Action sentence is the whole point of this. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* The title and the Action sentence run the full width. */
+  .sp4-table > tbody > tr > td.sp4-reg,
+  .sp4-table > tbody > tr > td:has(> .sp4-reg),
+  .sp4-table > tbody > tr > td.sp4-td--action { grid-column: 1 / -1; }
+
+  .sp4-table > tbody > tr > td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    text-align: left;
+    font-size: var(--sp4-label);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sp4-text-3);
+  }
+  /* An unlabelled cell — the select box, the view-on-map button — keeps its
+     value full width rather than opening a gap where a label would be. */
+  .sp4-table > tbody > tr > td[data-label=""]::before,
+  .sp4-table > tbody > tr > td:not([data-label])::before { content: none; }
+
+  /* The registration is the card's heading, not its first field. Two shapes
+     across these panels: the probe and repairs grids wrap the plate in a span
+     inside a plain cell, alongside the tracker id; the fuel grid puts the
+     class on the cell itself. Both are the title. */
+  .sp4-table > tbody > tr > td.sp4-reg,
+  .sp4-table > tbody > tr > td:has(> .sp4-reg) {
+    display: block;
+    padding-top: 9px;
+    padding-right: 52px;         /* clear of the pinned select box */
+    font-size: var(--sp4-strong);
+    text-align: left;
+  }
+  .sp4-table > tbody > tr > td.sp4-reg::before,
+  .sp4-table > tbody > tr > td:has(> .sp4-reg)::before { content: none; }
+
+  /* The tick box rides on the title line instead of taking a line of its own,
+     where an unlabelled checkbox reads as a stray mark. Its 44px cell (above)
+     becomes a 44px corner, which is the same target. */
+  .sp4-table > tbody > tr > td.sp4-td--check {
+    position: absolute;
+    top: 4px;
+    right: calc(var(--sp4-gutter) - 10px);
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  /* The Action sentence is the one cell worth reading in full, so it drops the
+     label/value split and runs the width of the card. */
+  .sp4-probe-health .sp4-td--action,
+  .sp4-table > tbody > tr > td.sp4-td--action {
+    display: block;
+    min-width: 0;
+    text-align: left;
+    white-space: normal;
+    color: var(--sp4-text-1);
+  }
+  .sp4-table > tbody > tr > td.sp4-td--action::before {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* Selection has to read without the row outline a table gave it. */
+  .sp4-table > tbody > tr.sp4-tr--selected {
+    box-shadow: inset 3px 0 0 var(--sp4-accent, #3b82f6);
+  }
+
+  /* ── One scroller, at the panel root ──────────────────────────────────
+   *
+   * The probe grid used to have its own bounded scroll box, capped at a share
+   * of the viewport. On an iPhone SE (375 x 667) that cap put the LIST BELOW
+   * THE SHELL: measured on the Probes tab, the panel chrome — KPIs, search,
+   * activity chips, sub-tabs, the summary and export bar, the bulk-action row
+   * that appears once a unit is ticked, then Channel and State — ended at
+   * y=475, the scroller was 454px tall, and 475 + 454 = 929 in a 667px window.
+   * Its parent section was 297px with `overflow: visible`, so the bottom 262px
+   * of the list simply hung past the end of an app shell whose every level is
+   * `overflow: hidden` and whose document does not scroll. The list could not
+   * be reached at all — three quarters of one card and then nothing.
+   *
+   * A cap that fits would leave about 116px of a 667px screen for the data,
+   * with 58% of the phone spent on filters. So the fix is not a smaller number
+   * here: below 768px the PANEL scrolls instead of the grid. The chrome scrolls
+   * away, the cards get the whole screen, and there is exactly one scrolling
+   * box on the screen rather than one nested in another.
+   *
+   * Above 768px nothing changes: the header stays put and the grid scrolls
+   * under it, which is what a mouse and a tall window want.
+   */
+  .sp4-root {
+    overflow-y: auto;
+    /* A card list this long behind a fixed footer nav: without this, flinging
+       past the end scrolls the shell behind it. */
+    overscroll-behavior-y: contain;
+    /* The footer nav floats over the last 64px. This used to sit on the grid's
+       own scroller, which is no longer the thing that scrolls. */
+    padding-bottom: calc(var(--app-footer-h, 64px) + var(--sp4-md));
+  }
+  /* Every box between the root and the rows now takes its content's height
+     rather than a share of a viewport it no longer fills. `overflow: hidden`
+     on these was what clipped the overspill into invisibility. */
+  .sp4-root .sp4-body,
+  .sp4-root .sp4-probe-health {
+    flex: none;
+    overflow: visible;
+  }
+  .sp4-root .sp4-table-scroll {
+    flex: none;
+    max-height: none;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+}
+
+
+/* ── Handsets: grids that stay grids ───────────────────────────────────────
+ *
+ * The card layout above suits a list read one unit at a time. Some lists are
+ * read DOWN a column — probe state, case status — and a card per row breaks
+ * that up. A scroller marked `.sp4-keep-table` keeps its table on a phone:
+ * header row shown, one line per row, the columns scrolling sideways, and the
+ * cell marked `.sp4-td--pin` (with its `.sp4-th--pin` head) held at the left
+ * edge so a row never loses its registration.
+ *
+ * `.sp4-root` in every selector is there for weight: it outranks each card
+ * rule above whatever order the sheets load in.
+ */
+@media (max-width: 599px) {
+  .sp4-root .sp4-table-scroll.sp4-keep-table,
+  .sp4-root .sp4-keep-table {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .sp4-root .sp4-keep-table .sp4-table {
+    display: table;
+    width: max-content;
+    min-width: 100%;
+  }
+  .sp4-root .sp4-keep-table .sp4-table > thead { display: table-header-group; }
+  .sp4-root .sp4-keep-table .sp4-table > tbody { display: table-row-group; }
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr {
+    display: table-row;
+    padding: 0;
+  }
+  .sp4-root .sp4-keep-table .sp4-table > thead > tr > th,
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td,
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td:has(> .sp4-reg) {
+    display: table-cell;
+    position: static;
+    grid-column: auto;
+    width: auto;
+    height: auto;
+    padding: 9px 10px;
+    font-size: var(--sp4-body);
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .sp4-root .sp4-keep-table .sp4-table > thead > tr > th { position: sticky; top: 0; }
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--right { text-align: right; }
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td::before,
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td:has(> .sp4-reg)::before { content: none; }
+
+  /* The tick box keeps the 44px target it has at tablet width. */
+  .sp4-root .sp4-keep-table .sp4-table > thead > tr > th.sp4-th--check,
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--check {
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    text-align: center;
+  }
+  /* A sentence, so it wraps — at a width that breaks on a phrase. */
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--action {
+    white-space: normal;
+    min-width: 200px;
+    max-width: 240px;
+  }
+
+  .sp4-root .sp4-keep-table .sp4-table > thead > tr > th.sp4-th--pin,
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    box-shadow: inset -1px 0 0 var(--sp4-line);
+    /* Capped, and allowed to wrap: some units are named like
+       "West Sugar - 864022086612164", and at its natural width that one name
+       made the pinned column 388px — wider than the phone, so nothing else in
+       the row could be seen. */
+    min-width: 96px;
+    max-width: 136px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* The last five FSL transmissions stay on one line, like every other cell. */
+  .sp4-root .sp4-keep-table .sp4-fsl-events { flex-wrap: nowrap; }
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin .sp4-reg {
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin .sp4-muted {
+    font-size: var(--sp4-label);
+  }
+  /* The head keeps whatever fill its row has — it is already opaque, and
+     naming a token here painted it a different grey from its neighbours in
+     the light theme. */
+  .sp4-root .sp4-keep-table .sp4-table > thead > tr > th.sp4-th--pin { z-index: 2; }
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr > td.sp4-td--pin { background: var(--sp4-bg); }
+  /* Repairs: the stage chips and the assignment buttons stay on one line.
+     Wrapped, they stacked three deep and made each job a 100px row. */
+  .sp4-root .sp4-keep-table .sp4-stage-set,
+  .sp4-root .sp4-keep-table .sp4-assignment-actions { flex-wrap: nowrap; }
+  /* A selected row keeps its tint under the pinned cell. */
+  .sp4-root .sp4-keep-table .sp4-table > tbody > tr.sp4-tr--selected > td.sp4-td--pin {
+    background: linear-gradient(rgba(59,130,246,0.06), rgba(59,130,246,0.06)), var(--sp4-bg);
+  }
+}
+
+/* ── Handsets: the filters, folded ──────────────────────────────────────────
+ *
+ * See FilterBar.jsx for why, and BP.handset for why 599 rather than 767 — a
+ * tablet has the height to show the bar. Only the folded shape lives here;
+ * wider than this, that component renders the plain `.sp4-filterbar` these
+ * rules never touch.
+ */
+@media (max-width: 599px) {
+  .sp4-filterbar--collapsible {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px var(--sp4-gutter);
+  }
+
+  /* Search and the button share ONE row. The rule above this block gives the
+     search `flex: 1 0 100%` so it does not end two-thirds of the way over with
+     a dead stub beside it — and the Filters button is exactly the thing that
+     stub wanted. Two 40px rows become one, which on a 667px screen is the
+     difference between the first unit at 439px and at 391px. */
+  .sp4-filterbar--collapsible .sp4-search-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .sp4-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: var(--m-ctl);
+    padding: 0 14px;
+    border: 1px solid var(--sp4-line-hi);
+    border-radius: 999px;
+    background: var(--sp4-raised);
+    color: var(--sp4-text-2);
+    font-family: var(--font-body);
+    font-size: var(--sp4-body);
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .sp4-filters-toggle:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+  .sp4-filters-toggle--open {
+    color: var(--sp4-text-1);
+    border-color: var(--sp4-accent);
+  }
+  /* How many filters are narrowing the list while the drawer is shut. A
+     collapsed filter is an invisible one, and a reader who cannot see that
+     State is set to "Not working" reads a partial fleet as the whole fleet. */
+  .sp4-filters-toggle__n {
+    display: grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--sp4-accent);
+    color: #fff;
+    font-size: var(--sp4-label);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* `hidden` does the hiding, so the drawer is only laid out when it is open —
+     a bare `display: flex` here would beat the attribute and the drawer would
+     never shut. */
+  .sp4-filters-drawer:not([hidden]) {
+    display: flex;
+    flex: 1 0 100%;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 2px;
+  }
+  /* Each group keeps the scrolling chip strip it already had; what changes is
+     that the groups stack instead of competing for one line. */
+  .sp4-filters-drawer .sp4-filter-group { width: 100%; }
+}
+
+/* ── Phones: small controls, thumb-sized ───────────────────────────────────
+ * Measured at 375px: the day pickers were 24px tall and the rows' Map button
+ * 25px. Both grow to the phone scale (index.css); the text does not change.
+ */
+@media (max-width: 767px) {
+  .sp4-date-input { min-height: var(--m-field); padding: 6px 10px; }
+  .sp4-map-btn    { min-height: var(--m-ctl); padding: 4px 10px; }
+}
+
+/* Amber text on its own amber wash was 4.2:1 on the light sheet. */
+.app--light .sp4-pill--warn { color: #92400e; }
+
+/* The grids' scrollbar thumb is --sp4-raised, which the light theme re-points
+   to #f5f7fa — near-white on white, so a grid wider than its box scrolled
+   sideways with no visible sign that it could. A mid slate thumb instead. */
+.app--light .sp4-table-scroll { scrollbar-color: #a3aebd transparent; }
+
+/* ══ Sensor Monitor on the Fuel report's margins ═════════════════════════════
+ * Hallmark · redesign 2026-10-03 · scope: Sensor Monitor body (all five tabs)
+ * genre: modern-minimal · theme: in-project --sp4-* tokens, preserved
+ * pre-emit critique: P5 H4 E4 S5 R5 V3 (V low by design: the point is that this
+ *   page and the Fuel report now share one margin rule)
+ *
+ * The bands (header, filter bar, tabs) already ran on --sp4-gutter. What did
+ * not: the tables were full-bleed, so their rules and the open row's wash ran
+ * to the bezel, and the Repairs "All jobs" bar had no inset at all — it sat
+ * against the left edge. The Fuel report keeps everything inside the gutter
+ * and boxes its tables (`.frv-table`: a hairline frame, 10px radius), so every
+ * edge on the page is the same edge. Same here, scoped by `--monitor` so the
+ * Fuel report, which shares these sp4 classes, is untouched.
+ *
+ * Tablet and desk only. Under 768 this panel page-scrolls and its phone
+ * layouts (cards, the pinned-column `.sp4-keep-table`) carry their own edges.
+ */
+@media (min-width: 768px) {
+  /* The box. Every table on this page is inside a `.sp4-keep-table`: the
+     scroller itself on Probes and Repairs, an inner wrapper on Fuel FSL and
+     Malfunction (where the toolbar and states share the outer scroller). */
+  .sp4-root--framed .sp4-keep-table {
+    margin: var(--sp4-md) var(--sp4-gutter) 0;
+    border: 1px solid var(--sp4-line-hi);
+    border-radius: 10px;
+    overflow: auto;
+    /* Grow to its rows and no further: a short list is a short box, not a
+       frame with empty space to the foot of the screen. */
+    flex: 0 1 auto;
+    min-height: 0;
+    background: var(--sp4-surface);
+  }
+  .app--light .sp4-root--framed .sp4-keep-table { border-color: var(--sp4-line); }
+
+  /* Where the box IS the scroller, it clears the footer nav with its margin
+     rather than with padding inside it, which would show as a blank band at
+     the bottom of the frame. */
+  .sp4-root--framed .sp4-table-scroll.sp4-keep-table {
+    margin-bottom: calc(var(--app-footer-h, 64px) + var(--sp4-md));
+    padding-bottom: 0;
+  }
+
+  /* Where the box sits INSIDE the scroller, the box becomes the thing that
+     scrolls, so the sticky head stays a sticky head: the outer turns into a
+     column that hands the box whatever height is left. */
+  .sp4-root--framed .sp4-table-scroll:not(.sp4-keep-table):has(> .sp4-keep-table) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sp4-root--framed .sp4-table-scroll:not(.sp4-keep-table):has(> .sp4-keep-table) > :not(.sp4-keep-table) {
+    flex: none;
+  }
+
+  /* Edge cells: the inset that put the first column on the gutter now lives
+     in the margin, so inside the frame the cells take the grid's own 14px. */
+  .sp4-root--framed .sp4-keep-table .sp4-table thead th:first-child,
+  .sp4-root--framed .sp4-keep-table .sp4-table tbody td:first-child { padding-left: 14px; }
+  .sp4-root--framed .sp4-keep-table .sp4-table thead th:last-child,
+  .sp4-root--framed .sp4-keep-table .sp4-table tbody td:last-child { padding-right: 14px; }
+  .sp4-root--framed .sp4-keep-table .sp4-table thead th.sp4-th:first-child .sp4-sort { padding-left: 14px; }
+  .sp4-root--framed .sp4-keep-table .sp4-table thead th.sp4-th:last-child .sp4-sort { padding-right: 14px; }
+  .sp4-root--framed .sp4-keep-table .sp4-table tbody tr:last-child { border-bottom: 0; }
+  /* ...but not the opened job's cell: it is one cell across the whole row and
+     its card is inset by the card's own margin below. Caught by the
+     first-child rule above, it was inset twice. */
+  .sp4-root--framed .sp4-keep-table .sp4-table tbody .aud-detail-row > td { padding-left: 0; padding-right: 0; }
+
+  /* An opened repair job: on the frame's 14px, not the page gutter it used
+     to be measured from, so its card lines up with the first column above. */
+  .sp4-root--framed .sp4-keep-table .aud-detail {
+    left: 14px;
+    margin-left: 14px;
+    width: calc(100cqw - 28px);
+  }
+
+  /* Repairs, focused on one job: the back bar on the gutter like every other
+     bar on the page. It sat at 0 — "All jobs" against the screen edge. */
+  .sp4-root--framed .rj-focus-bar {
+    margin: 0;
+    padding: 12px var(--sp4-gutter) 0;
+  }
+}
+
+/* ── Coverage figures: the Fuel report's strip ───────────────────────────────
+ * Hallmark · component: KPI strip · genre: modern-minimal · theme: the app's own
+ * states: static (read-only figures; hover/focus/active/disabled/loading/error/
+ *   success n/a — the tiles are not controls, the title attribute is the hint)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator, 2026-10-03: the three coverage tiles were the panel's 26px/900
+ * numerals in 70px-wide padded boxes, a size louder than the Fuel report's
+ * strip on the page next to it in the nav. They now take that strip's exact
+ * measure — 18px/800 tabular figures, 10px labels, 6px × 14px tiles — and no
+ * shadow: one hairline frame with hairline dividers, flat on the header.
+ * Same specificity as `.frp-root`, so the phone rule's 21px does not win here
+ * either and the two strips match at every width. */
+.sp4-root--framed .sp4-header-kpis { box-shadow: none; }
+.sp4-root--framed .sp4-kpi { padding: 6px 14px; box-shadow: none; }
+.sp4-root--framed .sp4-kpi-n { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.sp4-root--framed .sp4-kpi-l { font-size: 10px; }
+
+/* ── Repairs: the opened job, no accent edge ─────────────────────────────────
+ * Hallmark · component: repair job detail row · states: open (n/a otherwise)
+ * pre-emit critique: P4 H4 E5 S4 R5 V4
+ *
+ * Operator, 2026-10-03: the opened job carried Audit's 3px blue inset down its
+ * left side (`.aud-detail-row > td`, AuditScreen.css). Inside the boxed table
+ * that edge ran along the frame's own border, a second, coloured rule beside
+ * the hairline. The open row already says which job this is (its tint and the
+ * card under it), so here the edge comes off. Audit keeps it. */
+.sp4-root--framed .sp4-table tbody .aud-detail-row > td { box-shadow: none; }
+
+/* `.sp4-root--framed` (was `--monitor`, renamed 2026-10-03 when Weighbridges
+   took the same treatment): every rule below scoped to it is the "framed"
+   page — bands on the panel ground, hairlines between the gutters, tables
+   boxed on the gutter, the Fuel report's KPI measure. Sensor Monitor and
+   Weighbridges wear it. */
+/* ── The bands stop at the gutter ────────────────────────────────────────────
+ * Hallmark · redesign 2026-10-03 · scope: Sensor Monitor header bands
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator: "remove the white that has stretched to the far right and left".
+ * The KPI header, the search/activity bar, the tab strip, the State row and
+ * the table captions were each a white slab from screen edge to screen edge,
+ * closed by a full-width hairline — while the content in them, and the boxed
+ * table below, sat on the gutter. Now the bands are the panel's own ground
+ * (no fill) and each closing hairline is drawn only between the gutters, as a
+ * 1px background line: it paints under the children, so the active tab's 2px
+ * underline still lies over it. The KPI tiles, search field and chips keep
+ * their own surfaces. Phones keep their full-bleed bands. */
+@media (min-width: 768px) {
+  .app--light .sp4-root--framed .sp4-header,
+  .app--light .sp4-root--framed .sp4-filterbar,
+  .app--light .sp4-root--framed .sp4-tabs,
+  .app--light .sp4-root--framed .sp4-table-sub,
+  .app--light .sp4-root--framed .sp4-detail-head,
+  .sp4-root--framed .sp4-detail-head,
+  .sp4-root--framed .sp4-header,
+  .sp4-root--framed .sp4-filterbar,
+  .sp4-root--framed .sp4-tabs,
+  .sp4-root--framed .sp4-table-sub {
+    border-bottom: 0;
+    background-color: transparent;
+    background-image: linear-gradient(var(--sp4-line), var(--sp4-line));
+    background-repeat: no-repeat;
+    background-size: calc(100% - 2 * var(--sp4-gutter)) 1px;
+    background-position: center bottom;
+  }
+  /* The tab's own -1px pulled its underline onto the strip's border; with no
+     border the underline sits inside the strip, over the drawn line. */
+  .sp4-root--framed .sp4-tab { margin-bottom: 0; }
+  /* The search field and the filter chips were "raised" (#f5f7fa) on a white
+     band; on the panel ground (#f0f4f8) that is no step at all. They take the
+     card surface instead, as the KPI tiles do, and keep their hover / pressed
+     / on fills. */
+  .app--light .sp4-root--framed .sp4-search,
+  .app--light .sp4-root--framed .sp4-date-input,
+  .app--light .sp4-root--framed .sp4-filter-chip:not(.sp4-filter-chip--on) { background: var(--sp4-surface); }
+  .app--light .sp4-root--framed .sp4-filter-chip:not(.sp4-filter-chip--on):hover { background: var(--sp4-raised); }
+  .app--light .sp4-root--framed .sp4-filter-chip:not(.sp4-filter-chip--on):active { background: var(--sp4-line-hi); }
+}
+
+/* ── Table pager: Prev · Page n of N · a–b of N · Next ───────────────────────
+ * Hallmark · component: pager (TablePager.jsx) · genre: modern-minimal · theme: sp4 tokens
+ * states: default · hover · focus-visible · active (pressed) · disabled (first /
+ *   last page) · (loading / error / success: n/a — an in-memory slice; the
+ *   tables' own states cover the data)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator, 2026-10-03: pagination on Probes, Fuel FSL, Speed, Malfunction and
+ * Repairs. The Drivers roster's and Weighbridges grid's pager, fifteen rows a
+ * page: centred under the boxed table on the gutter, two fixed-width buttons
+ * that stay put at either end (disabled, not removed) so clicking through
+ * never moves the target under the pointer. Shown only when there is a
+ * second page.
+ */
+.sp4-tpager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px var(--sp4-gutter);
+}
+.sp4-tpager__info {
+  font-size: 12.5px;
+  color: var(--sp4-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sp4-tpager__btn {
+  min-width: 76px;
+  padding: 5px 12px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 6px;
+  background: var(--sp4-surface);
+  color: var(--sp4-text-2);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+}
+.sp4-tpager__btn:hover:not(:disabled) {
+  background: var(--sp4-raised);
+  border-color: var(--sp4-line-hi);
+  color: var(--sp4-text-1);
+}
+.sp4-tpager__btn:active:not(:disabled) { transform: translateY(1px); background: var(--sp4-line); }
+.sp4-tpager__btn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; transition: none; }
+.sp4-tpager__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Probes and Repairs: the box IS the scroller and cleared the footer nav with
+   its own margin. With a pager under it, the pager does the clearing, so the
+   two sit together instead of the footer gap opening between them. */
+@media (min-width: 768px) {
+  .sp4-root--framed .sp4-table-scroll.sp4-keep-table:has(+ .sp4-tpager) { margin-bottom: 0; }
+  .sp4-root--framed .sp4-table-scroll.sp4-keep-table + .sp4-tpager {
+    padding-bottom: calc(var(--app-footer-h, 64px) + var(--sp4-md));
+  }
+}
+/* Phones: thumb-sized buttons, and the range dropped so "Page 1 of 4" fits
+   between them at 320px. */
+@media (max-width: 767px) {
+  .sp4-tpager { gap: 10px; }
+  .sp4-tpager__btn { min-width: 0; padding: 9px 14px; font-size: 13px; }
+  .sp4-tpager__range { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp4-tpager__btn { transition: none; }
+  .sp4-tpager__btn:active:not(:disabled) { transform: none; }
 }

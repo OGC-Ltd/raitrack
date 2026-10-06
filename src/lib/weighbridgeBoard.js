@@ -416,3 +416,79 @@ export function buildBoard(rows, {
     activityTotal: activity.length,
   };
 }
+
+/* ── Units on the road: dispatches and tickets, one list ─────────────────────
+ *
+ * Two sources say a vehicle is out on a run to the mill, and they overlap:
+ *
+ *   · a DISPATCH (FactorySuite's sign-out, via the webhook) — every truck and
+ *     tractor the yard sent out, with where to and how long that run usually
+ *     takes. It knows the unit has gone; it does not know whether it has
+ *     loaded.
+ *   · a TRANSFER TICKET weighed loaded at a yard and not yet at the factory —
+ *     the `transit` list above. It knows the cane is on the lorry; it covers
+ *     contractor lorries no dispatcher raised.
+ *
+ * One vehicle, matched on its plate with the spacing removed, is drawn once:
+ * in the row of the yard that actually loaded it when a ticket says so, else
+ * of the yard its dispatch names, else under the fields (a tractor sent to a
+ * farm brings its cane to the mill's own scale).
+ */
+
+/** Rows key for runs whose destination is a farm rather than a yard. */
+export const FIELDS = "fields";
+
+const plateKey = (p) => String(p ?? "").replace(/\s+/g, "").toUpperCase();
+
+/**
+ * @param transit    buildBoard's `transit` (loaded at a yard, not at the mill)
+ * @param dispatched the server's `units` from /weighments/dispatched, or []
+ * @param overdueMs  the ticket-only mark (a loaded lorry not weighed in by then)
+ * @returns units: {key, plate, type, code, destination, loaded, fromDispatch,
+ *                  netKg, elapsedMs, typicalMs, overdue}
+ */
+export function roadUnits(transit = [], dispatched = [], overdueMs = 4 * 3_600_000) {
+  const byPlate = new Map();
+  for (const d of dispatched) {
+    byPlate.set(plateKey(d.plate), {
+      key: `d-${d.id}`,
+      plate: d.plate,
+      type: d.vehicleType ?? "OTHER",
+      code: d.siteCode ?? FIELDS,
+      destination: d.destination ?? null,
+      loaded: false,
+      fromDispatch: true,
+      netKg: null,
+      elapsedMs: d.elapsedMs,
+      typicalMs: d.typicalHours != null ? d.typicalHours * 3_600_000 : null,
+      overdue: Boolean(d.overdue),
+    });
+  }
+  for (const t of transit) {
+    const k = plateKey(t.vehicleNo);
+    const late = t.elapsedMs >= overdueMs;
+    const known = byPlate.get(k);
+    if (known) {
+      // The ticket is the better witness of WHERE it loaded and that it has.
+      known.code = t.code;
+      known.loaded = true;
+      known.netKg = t.netKg;
+      known.overdue = known.overdue || late;
+    } else {
+      byPlate.set(k, {
+        key: `t-${t.id}`,
+        plate: t.vehicleNo,
+        type: "OTHER",
+        code: t.code,
+        destination: t.site ?? null,
+        loaded: true,
+        fromDispatch: false,
+        netKg: t.netKg,
+        elapsedMs: t.elapsedMs,
+        typicalMs: overdueMs,
+        overdue: late,
+      });
+    }
+  }
+  return [...byPlate.values()].sort((a, b) => b.elapsedMs - a.elapsedMs);
+}

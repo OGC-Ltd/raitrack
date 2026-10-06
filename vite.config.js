@@ -1,7 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
+
+/* The version the app shows (sidebar foot, login page) — package.json's, so
+ * `npm version patch|minor|major` is the one place it changes. The commit is
+ * read at build time for support ("which build is that?"); no git, no hash. */
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+let APP_COMMIT = ''
+try { APP_COMMIT = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* not a checkout */ }
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __APP_COMMIT__: JSON.stringify(APP_COMMIT),
+    __APP_BUILT__: JSON.stringify(new Date().toISOString()),
+  },
+
   /**
    * Unit tests.
    *
@@ -28,7 +43,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // 3000 belongs to the fleet-server backend, so the frontend can't share it.
+    // dash sits on 5175 so this one can keep 5174 to itself.
     port: 5174,
+    // Fail rather than drift onto 5175 and land on top of dash — see the note
+    // in dash/vite.config.js for the confusion that caused.
+    strictPort: true,
     open: true,
     // Same-origin API in dev: relative /api/* calls (services/api.js) are proxied
     // to the backend, so no CORS and no hardcoded host baked into the build.

@@ -280,3 +280,26 @@
 }
 .maint-subtab:hover { color: #f0f4f8; }
 .maint-subtab--active { color: #f0f4f8; border-bottom-color: #3b82f6; }
+
+/* ── The header is white, as on the Fuel report ──────────────────────────────
+ * Hallmark · redesign 2026-10-03 · scope: Maintenance header (breadcrumb + KPI strip)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator: "on the header to be white background", matching the Fuel report,
+ * whose KPI strip sits on a white band from edge to edge closed by one
+ * full-width hairline. Here the header is two rows, the breadcrumb and the
+ * coverage strip, so both take the white and the rule between them comes
+ * off: one white header, one hairline under it. Everything below the header
+ * (tabs, captions, boxed tables) keeps the clear bands asked for earlier.
+ * Scoped to this screen: Weighbridges wears the same `.sp4-root--framed` and
+ * is untouched. */
+.maint-screen-scroll { --maint-band: #ffffff; --maint-band-line: #dde1e7; }
+.app--light .maint-crumbs {
+  background: var(--maint-band);
+  border-bottom: 0;
+}
+.app--light .maint-screen-scroll .sp4-root--framed .sp4-header {
+  background: var(--maint-band);
+  background-image: none;
+  border-bottom: 1px solid var(--maint-band-line);
+}

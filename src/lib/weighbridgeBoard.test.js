@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildBoard, fleetDayBounds, fleetRangeBounds, fleetDaysBetween, bucketLabel,
+  buildBoard, fleetDayBounds, fleetRangeBounds, fleetDaysBetween, bucketLabel, roadUnits, FIELDS,
 } from "./weighbridgeBoard";
 
 /* The fleet day is Nairobi's, so every fixture stamp below is written with its
@@ -333,5 +333,35 @@ describe("a run of days", () => {
     const board = buildBoard([transfer()], { from: DAY, to: dayAfter, now: AFTER });
     // Loaded at 14:14 on the first day, and the span closes a day later.
     expect(board.transit[0].elapsedMs).toBe((24 + 9) * 3_600_000 + 45 * 60_000);
+  });
+});
+
+describe("roadUnits", () => {
+  const H = 3_600_000;
+  const disp = (over) => ({
+    id: "d1", plate: "KDA 512Q", vehicleType: "TRUCK", siteCode: 102, destination: "OPAPO",
+    elapsedMs: 3 * H, typicalHours: 12.8, overdue: false, ...over,
+  });
+  const tick = (over) => ({ id: "t1", vehicleNo: "KDA512Q", site: "OPAPO", code: 102, netKg: 18000, elapsedMs: H, ...over });
+
+  it("draws a dispatched lorry once when its transfer ticket is also on the road", () => {
+    const u = roadUnits([tick()], [disp()]);
+    expect(u).toHaveLength(1);
+    expect(u[0]).toMatchObject({ type: "TRUCK", code: 102, loaded: true, fromDispatch: true, netKg: 18000, overdue: false });
+  });
+
+  it("files a tractor sent to a farm under the fields", () => {
+    const u = roadUnits([], [disp({ id: "d2", plate: "KTCC 1", vehicleType: "TRACTOR", siteCode: null, destination: "ADEK" })]);
+    expect(u[0]).toMatchObject({ code: FIELDS, type: "TRACTOR", loaded: false });
+  });
+
+  it("keeps a contractor lorry no dispatcher raised, judged on the ticket mark", () => {
+    const u = roadUnits([tick({ id: "t9", vehicleNo: "KBX 1", elapsedMs: 5 * H })], []);
+    expect(u[0]).toMatchObject({ fromDispatch: false, type: "OTHER", overdue: true });
+  });
+
+  it("carries the dispatch's own overdue verdict, against its destination's run", () => {
+    const u = roadUnits([], [disp({ elapsedMs: 14 * H, overdue: true })]);
+    expect(u[0]).toMatchObject({ overdue: true, typicalMs: 12.8 * H });
   });
 });

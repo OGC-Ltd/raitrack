@@ -684,3 +684,45 @@
   .wbb-stat__l { white-space: normal; }
   .wbb-site__counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ── Dispatched units: trucks and tractors ────────────────────────────────
+   A tractor is drawn round, a truck square-ended; a unit only signed out (no
+   scale has weighed it loaded yet) is hollow. Shape and fill, not more hues:
+   the red of "past its run" stays the one colour that means something. */
+.wbb-block--tractor { width: 11px; border-radius: 50%; }
+.wbb-block--out { background: transparent; box-shadow: inset 0 0 0 1.5px var(--chart-1); }
+.wbb-block--out.wbb-block--late { background: transparent; box-shadow: inset 0 0 0 1.5px var(--chart-8); }
+
+.wbb-key {
+  display: inline-block;
+  width: 9px;
+  height: 7px;
+  margin: 0 2px 0 4px;
+  border-radius: 1.5px;
+  vertical-align: 0;
+  box-shadow: inset 0 0 0 1.5px var(--chart-1);
+}
+.wbb-key--loaded { background: var(--chart-1); box-shadow: none; }
+
+.wbb-panel__note {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+/* The overdue vehicles, one line each: plate, where to, out / usual. */
+.wbb-late { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.wbb-late__row {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 0.9fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 11px;
+}
+.wbb-late__plate { font-weight: 700; color: var(--ink, var(--text-1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 10.5px; }
+.wbb-late__dest { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wbb-late__time { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wbb-late__time b { color: var(--chart-8); }
+.wbb-late__more { font-size: 10.5px; color: var(--text-3); padding-top: 2px; }

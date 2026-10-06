@@ -220,6 +220,42 @@ export function fuelFromLevel(pings, tankL) {
 }
 
 /**
+ * Where and when a unit set off today, and how far it has gone since — the
+ * unit card's start row (operator, 28 Sep: "the start and the current
+ * location, departed will be the time they start, outbound will be the
+ * distance covered since start"). The start is the day's first moving
+ * reading with a position, the same one the vehicle panel's "Departed" names,
+ * so the card and the panel cannot give two different times. Nothing before
+ * it moved, so the distance since it is the day's distance. `start` is null
+ * on a day the unit has not moved.
+ */
+export function journeySoFar(pings) {
+  const s = summariseDay(pings, null);
+  const start = s.firstMove ? { t: s.firstMove.t, lat: s.firstMove.lat, lng: s.firstMove.lng } : null;
+  return { start, km: start ? s.distanceKm ?? 0 : 0 };
+}
+
+/**
+ * When the unit was moving, as [{ start, end }] spans — the same rule as
+ * summariseDay's movingMin (a reading at walking pace or faster, up to the
+ * next reading, across no silence longer than MAX_GAP_MS), so the Safety tab's
+ * day strip and its "moving" figure agree. Spans that touch are one.
+ */
+export function movingSpans(pings) {
+  const spans = [];
+  for (let i = 1; i < pings.length; i++) {
+    const prev = pings[i - 1];
+    const p = pings[i];
+    const gap = p.t - prev.t;
+    if (gap <= 0 || gap > MAX_GAP_MS || (prev.speedKmh ?? 0) < MOVING_KMH) continue;
+    const last = spans[spans.length - 1];
+    if (last && last.end === prev.t) last.end = p.t;
+    else spans.push({ start: prev.t, end: p.t });
+  }
+  return spans;
+}
+
+/**
  * Everything the panel shows about one day, from its pings. Each figure is null
  * when the pings cannot support it — never zero by default.
  */
@@ -232,11 +268,12 @@ export function summariseDay(pings, tankL) {
 
   // Fuel line: % of tank where the tank size is known, else litres. Menengai
   // records a tank size for 8 of 244 units, so % alone left the chart empty
-  // for nearly the whole fleet while the probe was reporting fine.
+  // for nearly the whole fleet while the probe was reporting fine. `l` is the
+  // litres either way, for the chart's crosshair.
   const withFuel = pings.filter((p) => Number.isFinite(p.fuelLevelMl));
   const series = tankL
-    ? withFuel.map((p) => ({ t: p.t, v: (p.fuelLevelMl / 1000 / tankL) * 100 })).filter((p) => p.v >= 0 && p.v <= 110)
-    : withFuel.map((p) => ({ t: p.t, v: p.fuelLevelMl / 1000 })).filter((p) => p.v >= 0);
+    ? withFuel.map((p) => ({ t: p.t, v: (p.fuelLevelMl / 1000 / tankL) * 100, l: p.fuelLevelMl / 1000 })).filter((p) => p.v >= 0 && p.v <= 110)
+    : withFuel.map((p) => ({ t: p.t, v: p.fuelLevelMl / 1000, l: p.fuelLevelMl / 1000 })).filter((p) => p.v >= 0);
 
   // Fuel used: the device's counter where it has one, else the tank level.
   const counter = pings.filter((p) => Number.isFinite(p.fuelUsedMl));

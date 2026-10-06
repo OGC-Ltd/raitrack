@@ -43,7 +43,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, useId } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields, useAppActions } from "../../context/AppContext";
 import { fleetTypeOptions } from "../../lib/vehicleMap";
 import "./FleetsMenu.css";
 
@@ -79,7 +79,8 @@ export default function FleetsMenu({
   flagged = [],
   onSelectFlagged,
 }) {
-  const { fleetTypes, setFleetTypes, trackedIds } = useAppContext();
+  const { fleetTypes, trackedIds } = useAppFields("fleetTypes", "trackedIds");
+  const { setFleetTypes } = useAppActions();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
@@ -250,15 +251,18 @@ export default function FleetsMenu({
                       {why.state === "idling" ? "engine running" : "engine off"}
                       {/* Said out loud rather than assumed either way: we know
                           where it stopped only when the zone engine has
-                          actually evaluated this unit. */}
-                      {why.zonesKnown ? "" : " · location unverified"}
+                          actually evaluated this unit.
+
+                          Wording kept in step with the map window, which had to
+                          drop "location unverified" when it started naming the
+                          place each unit stopped at — beside a place name that
+                          phrase reads as doubt about the NAME. Two panels over
+                          one list must not describe the same condition in two
+                          ways, so the plainer sentence is used in both. */}
+                      {why.zonesKnown ? "" : " · no zones to check"}
                     </span>
                   </button>
                 ))}
-              </div>
-
-              <div className="fleets-menu__note">
-                Moving, then stationary 10 min or more, outside every known zone.
               </div>
             </div>
           )}

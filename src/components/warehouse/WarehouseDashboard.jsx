@@ -6,7 +6,7 @@ import {
   getWarehouseKPIs, getDepots, getIncomingDeliveries,
   getOutboundDispatch, getQualityHolds, getStockByProduct, getWarehouseAlerts,
 } from "../../api/warehouse";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
@@ -27,7 +27,8 @@ function Bar({ pct, tone = "info" }) {
 
 // Fetch all depot data for the active company.
 export default function WarehouseDashboard() {
-  const { activeCompanyId, activeCompany } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { activeCompany } = useCompanies();
 
   const { data, loading, error, retry } = useApiData(
     () => Promise.all([
@@ -172,7 +173,6 @@ export default function WarehouseDashboard() {
           <div className="wh-panel">
             <div className="wh-section__head">
               <h2 className="wh-h2">Depots</h2>
-              <span className="wh-section__note">{depots.length} active</span>
             </div>
             <div className="wh-depot-rail">
               {depots.map((d) => (
@@ -195,7 +195,6 @@ export default function WarehouseDashboard() {
           <div className="wh-panel">
             <div className="wh-section__head">
               <h2 className="wh-h2">Stock by product</h2>
-              <span className="wh-section__note">{kpis.inStock.tonnes.toLocaleString()}t total</span>
             </div>
             <div className="wh-stockbars">
               {kpis.inStock.byCargo.map((c, i) => (
@@ -216,7 +215,6 @@ export default function WarehouseDashboard() {
 
             <div className="wh-section__head" style={{ marginTop: 22 }}>
               <h2 className="wh-h2">Deliveries coming in</h2>
-              <span className="wh-section__note">{kpis.incoming.truckCount} trucks</span>
             </div>
             <div className="wh-deliveries-toolbar">
               <input
@@ -270,7 +268,6 @@ export default function WarehouseDashboard() {
           <div className="wh-panel-stack">
             <div className="wh-panel">
               <h2 className="wh-h2">Quality holds</h2>
-              <p className="wh-section__note">{holds.total} load{holds.total === 1 ? "" : "s"} flagged.</p>
               <div className="wh-holds-grid">
                 <div className="wh-holds-cell wh-tone-info">
                   <div className="wh-num wh-num--sm">{holds.underInspection}</div>
@@ -289,7 +286,6 @@ export default function WarehouseDashboard() {
 
             <div className="wh-panel">
               <h2 className="wh-h2">Going out today</h2>
-              <p className="wh-section__note">Dispatch progress by depot.</p>
               <div className="wh-dispatch-list">
                 {outbound.map((o) => (
                   <div className="wh-dispatch-row" key={o.depot}>
@@ -311,7 +307,6 @@ export default function WarehouseDashboard() {
         <section className="wh-section">
           <div className="wh-section__head">
             <h2 className="wh-h2">Stock by cargo type</h2>
-            <span className="wh-section__note">How much of each cargo type you have, and where.</span>
           </div>
           <div className="wh-table-card">
             <div className="wh-table-scroll">
@@ -349,9 +344,6 @@ export default function WarehouseDashboard() {
         {alerts.length > 0 && (
           <section className="wh-section">
             <h2 className="wh-h2">Needs your attention</h2>
-            <p className="wh-section__note" style={{ marginBottom: 12 }}>
-              {alerts.length} thing{alerts.length === 1 ? "" : "s"} to look at.
-            </p>
             <div className="wh-alerts">
               {alerts.map((a, i) => (
                 <div className={`wh-alert wh-alert--${a.severity}`} key={i}>

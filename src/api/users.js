@@ -48,13 +48,33 @@ export async function listOrgUsers(orgId, { page = 1, limit = 100, access = "sys
  * `organisationId: 'A'`. Addressing their B roles to A would edit the wrong
  * membership, or 404.
  *
- * ## The same person appears once PER ORGANISATION
+ * ## The same person is ONE row
  *
- * Somebody who belongs to A and B is two rows, not one, and that is the point
- * rather than a defect to be deduplicated away: "Dispatcher at A" and
- * "Operator at B" are different facts, the role chips differ, and suspending
- * them in A is not suspending them in B. Callers must key rows on the PAIR —
- * `scopeOrgId` + `id` — because the id alone is no longer unique.
+ * This was the other way round and it was wrong. Somebody who belongs to A and
+ * B came back as two rows carrying the same name, the same address, the same
+ * phone number and the same status, differing only in which organisation they
+ * were read from — a roster of twelve people that printed twenty-two lines,
+ * where the thing an administrator is scanning for (a person) had no single
+ * place to be.
+ *
+ * The defence for the split was that suspending somebody in A is not
+ * suspending them in B. That is not true of this server: `status` lives on the
+ * USER row, so a suspension is the person, everywhere. What genuinely differs
+ * per organisation is the role grant, and roles are merged onto the one row
+ * as a set.
+ *
+ * Each row therefore carries:
+ *   • `scopeOrgIds` — every organisation in this read that holds them, in
+ *     the order they were asked for. This is the Organisation cell.
+ *   • `scopeOrgId` — ONE of those, the address for any request made about
+ *     the row. Their employing organisation when that is among them, because
+ *     it is the one the server resolves identity edits against; otherwise the
+ *     first that holds them.
+ *   • `userRoles` — the union across those organisations, deduplicated,
+ *     since a grant table can and does carry the same role twice.
+ *
+ * Deduplicating also covers a smaller fault that used to reach the screen: a
+ * single organisation's list returning one person more than once.
  *
  * ## One slow tenant must not blank the others
  *
@@ -70,18 +90,69 @@ export async function listUsersAcrossOrgs(orgIds, { access = "system", limit = 1
   const settled = await Promise.all(ids.map(async (id) => {
     try {
       const { users } = await listOrgUsers(id, { limit, access });
-      return { id, users: users.map((u) => ({ ...u, scopeOrgId: id })) };
+      return { id, users };
     } catch (err) {
       return { id, users: [], error: err };
     }
   }));
 
-  const users = settled.flatMap((r) => r.users);
+  /* Merged in the order the organisations were asked for, so the list is
+     stable between reads: the first organisation that holds somebody is the
+     one whose copy of their details is kept. The copies do not disagree —
+     they are the same row of the same table — apart from the role grants,
+     which are unioned below. */
+  const byUser = new Map();
+  for (const { id, users: rows } of settled) {
+    for (const row of rows) {
+      const held = byUser.get(row.id);
+      if (!held) {
+        byUser.set(row.id, {
+          ...row,
+          // Through the merge even when there is nothing to merge with: one
+          // organisation's own list can carry the same grant twice.
+          userRoles: mergeRoleGrants([], row.userRoles),
+          scopeOrgId: id,
+          scopeOrgIds: [id],
+        });
+        continue;
+      }
+      if (!held.scopeOrgIds.includes(id)) held.scopeOrgIds.push(id);
+      held.userRoles = mergeRoleGrants(held.userRoles, row.userRoles);
+    }
+  }
+
+  const users = [...byUser.values()].map((u) => (
+    /* Their employer, when this read reaches it. Identity edits are resolved
+       by the server against `organisationId`, so addressing the row there is
+       the difference between a PATCH that lands and one that 404s. */
+    u.organisationId && u.scopeOrgIds.includes(u.organisationId)
+      ? { ...u, scopeOrgId: u.organisationId }
+      : u
+  ));
   return {
     users,
     total: users.length,
     failures: settled.filter((r) => r.error).map((r) => ({ orgId: r.id, error: r.error })),
   };
+}
+
+/**
+ * Two organisations' copies of one person's grants, said once each.
+ *
+ * Keyed on the ROLE id rather than the grant id: the same role reached through
+ * two organisations' lists is two grant rows, and a person does not hold a
+ * role twice.
+ */
+function mergeRoleGrants(a = [], b = []) {
+  const out = [...a];
+  const seen = new Set(out.map((ur) => ur.role?.id ?? ur.roleId ?? ur.id));
+  for (const ur of b) {
+    const key = ur.role?.id ?? ur.roleId ?? ur.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ur);
+  }
+  return out;
 }
 
 /** The roles this organisation can hand out. Platform roles are never among them. */
@@ -121,6 +192,39 @@ export async function createOrgUser(
     }),
   });
   return res.data;
+}
+
+/**
+ * Change a person's own details — name, phone, employee id.
+ *
+ * ## Against their HOME organisation, not the roster's
+ *
+ * `PATCH /organisations/:orgId/users/:userId` resolves the row with
+ * `where: { id, organisationId: orgId }` — the home ORGANISATION COLUMN, not
+ * a membership. The roster lists anybody with a live membership here too, so
+ * calling this with the roster's scope organisation 404s for every visiting
+ * member: the same asymmetry the delete path documents, where it measured 35
+ * of 48 rows across the four live fleets.
+ *
+ * So the caller passes the person's own `organisationId`. The server still
+ * checks the caller against THAT organisation — `requireOrgAccess` plus
+ * `user:update` — which is why the panel disables these fields when the
+ * administrator cannot reach the person's home.
+ *
+ * Email is not here because it is not in `updateUserSchema`: the server omits
+ * it from the update shape deliberately, since the address is the identity an
+ * invitation was issued against.
+ */
+export async function updateOrgUser(homeOrgId, userId, fields) {
+  const body = {};
+  for (const key of ["fullName", "phone", "employeeId"]) {
+    if (fields[key] !== undefined) body[key] = fields[key];
+  }
+  const res = await apiFetch(`${base(homeOrgId)}/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return res.data?.user ?? res.data ?? null;
 }
 
 /** Send the set-password link again, invalidating the previous one. */

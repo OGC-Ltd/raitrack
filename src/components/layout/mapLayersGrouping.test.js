@@ -56,3 +56,24 @@ describe('groupLayers', () => {
     expect(() => groupLayers([null, undefined])).not.toThrow()
   })
 })
+
+import { groupBridges, bridgeActivity } from './MapLayersTree.jsx';
+
+describe('Quick links: scales grouped by site', () => {
+  const b = (id, centerCode, centerName, bridgeNo, at = null) =>
+    ({ id, centerCode, centerName, bridgeNo, last: at ? { at } : null });
+
+  it('puts a site with two scales on one row, in bridge order', () => {
+    const sites = groupBridges([b('2', 101, 'FACTORY', 2), b('3', 102, 'OPAPO', 3), b('1', 101, 'FACTORY', 1)]);
+    expect(sites.map(s => s.name)).toEqual(['FACTORY', 'OPAPO']);
+    expect(sites[0].scales.map(s => s.bridgeNo)).toEqual([1, 2]);
+  });
+
+  it('colours a scale by how recently it weighed', () => {
+    const now = Date.parse('2026-09-25T12:00:00Z');
+    expect(bridgeActivity(b('1', 1, 'X', 1, '2026-09-25T11:30:00Z'), now)).toBe('live');
+    expect(bridgeActivity(b('1', 1, 'X', 1, '2026-09-25T01:00:00Z'), now)).toBe('today');
+    expect(bridgeActivity(b('1', 1, 'X', 1, '2026-09-20T01:00:00Z'), now)).toBe('idle');
+    expect(bridgeActivity(b('1', 1, 'X', 1), now)).toBe('idle');
+  });
+});

@@ -36,6 +36,7 @@
 // tabs, and a second visual language on one screen reads as two products.
 
 import { useCallback, useEffect, useMemo, useState, memo } from "react";
+import TablePager, { usePager } from "./TablePager";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { vehicleReadings } from "../../lib/vehicleReadings";
 import {
@@ -45,6 +46,7 @@ import { downloadProbeCsv, downloadProbePdf } from "../../utils/probeReport";
 import TableToolbar from "./TableToolbar";
 import RepairReportForm from "./RepairReportForm";
 import { submitRepairReport, emailBanner, humanKind, OUTCOME_ACTION } from "../../api/repairs";
+import FilterBar from "./FilterBar";
 
 /** What the operator can narrow to. `bad` decides which of that channel's
  *  states count as not working. */
@@ -153,7 +155,7 @@ const ProbeRow = memo(
             />
           </td>
         )}
-        <td className="sp4-td--left">
+        <td className="sp4-td--left sp4-td--pin">
           <span className="sp4-reg">{r.plate}</span>
           <div className="sp4-muted">{r.deviceId ?? "—"}</div>
         </td>
@@ -296,6 +298,7 @@ export default function ProbeHealthPanel({
       return true;
     });
   }, [data, search, channel, status]);
+  const pager = usePager(rows, `${search}|${channel}|${status}`);
 
   /*
    * What SUBMIT sends. Derived from `rows`, never from `picked` directly, so a
@@ -486,7 +489,12 @@ export default function ProbeHealthPanel({
         />
       )}
 
-      <div className="sp4-filterbar">
+      {/* Channel "all" and State "faulty" are where this panel starts, so
+          neither counts as a narrowing the reader needs warning about. */}
+      <FilterBar
+        label="Channel & state"
+        activeCount={(channel !== "all" ? 1 : 0) + (status !== "faulty" ? 1 : 0)}
+      >
         <div className="sp4-filter-group">
           <span className="sp4-filter-label">Channel</span>
           {CHANNELS.map(c => (
@@ -512,7 +520,7 @@ export default function ProbeHealthPanel({
             >{label}</button>
           ))}
         </div>
-      </div>
+      </FilterBar>
 
           {error ? (
             <div className="sp4-state" role="alert">
@@ -542,7 +550,7 @@ export default function ProbeHealthPanel({
             </div>
           ) : (
             <>
-              <div className="sp4-table-scroll sp4-ph-scroll">
+              <div className="sp4-table-scroll sp4-ph-scroll sp4-keep-table">
                 <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
                   <thead>
                     <tr>
@@ -571,7 +579,7 @@ export default function ProbeHealthPanel({
                           />
                         </th>
                       )}
-                      <th className="sp4-th--left">Unit Reg</th>
+                      <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
                       <th className="sp4-th--left sp4-td--action">Action</th>
                       <th className="sp4-th--right">Last report</th>
                       <th className="sp4-th--right">Fuel now</th>
@@ -586,7 +594,7 @@ export default function ProbeHealthPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(r => (
+                    {pager.pageRows.map(r => (
                       <ProbeRow
                         key={r.vehicleId}
                         r={r}
@@ -602,17 +610,7 @@ export default function ProbeHealthPanel({
                   </tbody>
                 </table>
               </div>
-              <p className="sp4-probe-note">
-                “No fuel reading” has three causes and the Action column names
-                which — <b>Always reads 0 L</b> (calibrated and reporting, but
-                every reading is zero, so the fault is between the tank and the
-                probe), <b>Uncalibrated</b> (the provider has no calibration
-                table, so no level can ever be computed and no fault ever
-                raised — fixed in Wialon, not the workshop), and{' '}
-                <b>Stopped reading</b> (real levels until the date shown, then
-                flat) — while GPS and ignition report only whether they are
-                alive, carrying no fault codes.
-              </p>
+              <TablePager pager={pager} label="Probe pages" />
         </>
       )}
     </section>

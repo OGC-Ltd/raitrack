@@ -490,15 +490,6 @@
   text-overflow: ellipsis;
 }
 
-/* The rule, once, under the list — not repeated on every row. */
-.fleets-menu__note {
-  flex: 0 0 auto;
-  margin-top: 4px;
-  padding: 0 2px;
-  font-size: 9.5px;
-  color: #64748b;
-}
-
 .fleets-menu__foot {
   flex: 0 0 auto;
   margin-top: 6px;

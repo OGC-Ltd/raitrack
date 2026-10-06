@@ -30,7 +30,7 @@
 
 import { useEffect, useRef, useState, useId } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { useAppContext } from "../../context/AppContext";
+import { useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import "./UserMenu.css";
 
@@ -49,7 +49,7 @@ export default function UserMenu() {
   const { user, logout } = useAuth();
   // The account page is a full screen now, so whether it is open is app-level
   // navigation rather than something this menu owns.
-  const { setAccountOpen, setUserAdminOpen } = useAppContext();
+  const { setAccountOpen, setUserAdminOpen } = useAppActions();
   // User accounts used to be a Maintenance sub-tab. It is here because it
   // belongs with Account rather than with vehicle servicing — and because this
   // menu is already the one place in the app that is about WHO you are.

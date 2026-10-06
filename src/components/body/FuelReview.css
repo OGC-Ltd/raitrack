@@ -9,6 +9,7 @@
 }
 /* A decided alert sits in a tinted box in the decision's tone. */
 .frv--bad,
+.frv--warn,
 .frv--ok {
   padding: 7px 9px;
   border-radius: 6px;
@@ -16,6 +17,7 @@
   background: var(--frv-bg);
 }
 .frv--bad { --frv-fg: var(--red, #dc2626); --frv-edge: color-mix(in srgb, var(--red, #dc2626) 35%, transparent); --frv-bg: color-mix(in srgb, var(--red, #dc2626) 7%, transparent); }
+.frv--warn { --frv-fg: var(--amber, #d97706); --frv-edge: color-mix(in srgb, var(--amber, #d97706) 35%, transparent); --frv-bg: color-mix(in srgb, var(--amber, #d97706) 7%, transparent); }
 .frv--ok  { --frv-fg: var(--green, #16a34a); --frv-edge: color-mix(in srgb, var(--green, #16a34a) 35%, transparent); --frv-bg: color-mix(in srgb, var(--green, #16a34a) 7%, transparent); }
 
 .frv-status {
@@ -78,8 +80,29 @@
 }
 .frv-error { margin: 0; font-size: var(--vt-fs-label); color: var(--red, #dc2626); }
 
+/* What an escalation is raised to handle: one choice under the one Escalate
+   button (lib/fuelReview ESCALATION_REASONS). */
+.frv-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.frv-reasons .frv-ask { margin-right: 4px; }
+.frv-reason {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--vt-fs-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+.frv-reason--on { background: var(--red, #dc2626); border-color: var(--red, #dc2626); color: #fff; }
+.frv-reason:disabled { opacity: 0.55; cursor: default; }
+.frv-reason:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.frv-hint { margin: 0; font-size: var(--vt-fs-label); line-height: 1.45; color: var(--text-muted); }
+
 @media (max-width: 720px) {
-  .frv-btn { min-height: 36px; }
+  .frv-btn, .frv-reason { min-height: var(--m-ctl); }
   /* 16px stops iOS zooming the page when the box takes focus. */
   .frv-input { font-size: 16px; }
 }

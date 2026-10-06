@@ -53,8 +53,23 @@ export async function fetchAssignees(orgId, id) {
   return res?.data ?? [];
 }
 export const noteFollowUp       = (orgId, id, note) => post(orgId, id, 'notes', { note });
-export const escalateFollowUp   = (orgId, id, note) => post(orgId, id, 'escalate', { note });
+/** `reason` is what the escalation is for (lib/fuelReview ESCALATION_REASONS):
+ *  'theft' closes it as a confirmed theft, 'probe_fault' sends it to Fuel
+ *  Audit with a probe job in Repairs. */
+export const escalateFollowUp   = (orgId, id, note, reason = 'theft') => post(orgId, id, 'escalate', { note, reason });
 export const deescalateFollowUp = (orgId, id, note) => post(orgId, id, 'deescalate', { note });
+/** Decided as a faulty fuel probe: stays open on the Fuel Audit page and
+ *  raises (or joins) a pending probe job in Maintenance > Repairs. */
+export const probeFaultFollowUp = (orgId, id, note) => post(orgId, id, 'probe-fault', { note });
+/** A new probe job for an audit case whose last one was signed off unfixed. */
+export const reraiseProbeRepair = (orgId, id, note) => post(orgId, id, 'repair', { note });
+
+/** The Fuel Audit page: probe-fault cases grouped by unit, with each unit's
+ *  probe jobs in Repairs and its dead-probe episodes. */
+export async function fetchFuelAudit(orgId) {
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/audit`);
+  return res?.data ?? [];
+}
 
 // ── Wording ────────────────────────────────────────────────────────────────
 
@@ -63,6 +78,8 @@ export const STATUS_LABEL = {
   ACCEPTED:    'Under review',
   ESCALATED:   'Confirmed theft',
   DEESCALATED: 'Not a theft',
+  PROBE_FAULT: 'Faulty probe · in repair',
+  PROBE_FIXED: 'Probe repaired',
 };
 
 export const ACTION_LABEL = {
@@ -74,6 +91,10 @@ export const ACTION_LABEL = {
   ASSIGNED:    'assigned it',
   DECLINED:    'declined it',
   RECALLED:    'recalled it',
+  PROBE_FAULT:   'found it was a faulty fuel probe',
+  REPAIR_RAISED: 'sent the probe to Repairs',
+  REPAIR_FAILED: 'signed the probe repair off without a fix',
+  PROBE_FIXED:   'signed the probe repair off fixed, closing the case',
 };
 
 /**
@@ -206,6 +227,21 @@ export function useOpenFollowUp() {
   );
 }
 
+/* The follow-up feed items that belong to the Fuel Audit (a probe fault and
+   its repair). Every other follow-up item is about the case a DELETED alert
+   opens, and a deleted alert is removed from the UI for good (operator,
+   2026-09-30), so those are never shown. */
+const AUDIT_FEED_KINDS = new Set(['probe_fault', 'repair_raised', 'repair_failed', 'probe_fixed']);
+const FEED_KIND = /^fu-.+?-(opened|escalated|deescalated|assigned|declined|recalled|probe_fault|repair_raised|repair_failed|probe_fixed)(?:-\d+)?$/;
+
+/** True for a feed item about a deleted alert's case: hidden from every feed. */
+export function isDeletedCaseItem(item) {
+  const fromType = typeof item?.alertType === 'string' && item.alertType.startsWith('FUEL_FOLLOWUP_')
+    ? item.alertType.slice('FUEL_FOLLOWUP_'.length).toLowerCase() : null;
+  const kind = fromType ?? FEED_KIND.exec(item?.id ?? '')?.[1] ?? null;
+  return Boolean(kind) && !AUDIT_FEED_KINDS.has(kind);
+}
+
 /**
  * The follow-up a Live Feed item is about, if any. Live items carry
  * `followUpId`; items read back from history lose extras but keep their id,
@@ -216,7 +252,7 @@ export function feedItemFollowUp(item) {
   // The feed id is minted as `fu-<followUpId>-<what>` (fuel-followup.service),
   // and it survives the round trip through history where extras do not.
   // Assignments, declines and recalls repeat, so theirs end in a timestamp.
-  const m = /^fu-(.+?)-(opened|escalated|deescalated|assigned|declined|recalled)(?:-\d+)?$/.exec(item?.id ?? '');
+  const m = /^fu-(.+?)-(opened|escalated|deescalated|assigned|declined|recalled|probe_fault|repair_raised|repair_failed|probe_fixed)(?:-\d+)?$/.exec(item?.id ?? '');
   if (m) return m[1];
   return typeof item?.alertType === 'string' && item.alertType.startsWith('FUEL_FOLLOWUP_') ? true : null;
 }

@@ -117,14 +117,6 @@ export default function VehicleBriefCard({ orgId, vehicleId, plate, distanceToda
             the chips to explain itself. A brief that has to apologise for one of
             its own figures should not be carrying that figure. */}
       </div>
-
-      {/* Which evidence put the unit outside the gate. The provider's own EXIT
-          record is the same event the Live Feed narrates; the derived one is
-          the first fix beyond the yard radius, which is a good answer but not
-          the gate's, and the operator is entitled to know which they have. */}
-      {f.leftYardSource === "telemetry" && (
-        <div className="vb-note">Departure derived from position — no gate record for this run</div>
-      )}
     </div>
   );
 }

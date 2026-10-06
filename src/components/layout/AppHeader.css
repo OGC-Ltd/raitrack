@@ -61,7 +61,7 @@
 
 .app-header__org-chevron {
   font-size: 10px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .app-header__org-menu {
@@ -80,7 +80,7 @@
 .app-header__org-menu-label {
   font-size: 10px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   padding: 4px 8px 8px;
@@ -194,7 +194,7 @@
 
 .app-header__search-result-driver {
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -210,7 +210,7 @@
 
 .app-header__search-icon {
   font-size: 13px;
-  color: #94a3b8;
+  color: #64748b;
   flex-shrink: 0;
 }
 
@@ -225,10 +225,14 @@
 }
 
 .app-header__search-input::placeholder {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 /* Bell */
+/* Hallmark · component: header bell + badge · genre: modern-minimal · theme: the app's own header
+ * states: default · hover · focus · active (pressed) · news (unread: darker icon + badge) · open (feed showing: filled blue bell) · arriving (one swing, badge pop)
+ * contrast: icon #64748b 4.8:1, with news #1e293b 14:1; badge #fff on #dc2626 4.8:1
+ * motion: swing 600ms once per rise in the count; badge pop 180ms; none under reduced motion */
 .app-header__bell {
   width: 34px;
   height: 34px;
@@ -242,28 +246,31 @@
   color: #64748b;
   position: relative;
   flex-shrink: 0;
-  font-size: 18px;
+  font-size: 19px;
   margin-left: auto; /* pushes bell + avatar to the right edge */
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
-
-.app-header__bell:hover {
-  background: #f8fafc;
-}
-
-.app-header__bell--active {
+.app-header__bell:hover { background: #f8fafc; color: #1e293b; }
+.app-header__bell:active { background: #f1f5f9; }
+.app-header__bell:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.app-header__bell--news { color: #1e293b; }
+.app-header__bell--active,
+.app-header__bell--active:hover {
   background: #eff6ff;
   color: #2563eb;
 }
 
-.app-header__bell-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ef4444;
-  border: 1.5px solid #fff;
+/* One swing when news arrives, from the bell's crown */
+.app-header__bell-icon--swing {
+  transform-origin: 50% 2px;
+  animation: app-bell-swing 600ms cubic-bezier(0.36, 0, 0.3, 1) 1;
+}
+@keyframes app-bell-swing {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(14deg); }
+  45% { transform: rotate(-10deg); }
+  70% { transform: rotate(5deg); }
+  85% { transform: rotate(-2deg); }
 }
 
 /* Avatar + user menu */
@@ -272,10 +279,15 @@
   flex-shrink: 0;
 }
 
+/* Hallmark · component: header avatar · genre: modern-minimal · theme: the app's own header
+ * states: default · hover · focus · active · open (menu showing, as the bell's active) · signed out (icon)
+ * contrast: initials on their 14% tint >= 4.6:1 (lib/avatar hues are all 600-700 weights)
+ * The target matches the bell (34px, 7px radius); the face inside is 26px, so
+ * the avatar carries the weight of an icon, not of a filled 30px disc. */
 .app-header__avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
   background: none;
   border: none;
   cursor: pointer;
@@ -283,7 +295,31 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  overflow: hidden;
+  color: #64748b;
+  font-size: 20px;
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.app-header__avatar:hover { background: #f8fafc; }
+.app-header__avatar:active { background: #f1f5f9; }
+.app-header__avatar:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.app-header__avatar--open { background: #eff6ff; }
+.app-header__avatar-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ua, #64748b) 14%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ua, #64748b) 30%, transparent);
+  color: var(--ua, #64748b);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-header__avatar { transition: none; }
 }
 
 .app-header__user-menu {
@@ -325,7 +361,7 @@
 
 .app-header__user-email {
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
   margin-top: 2px;
   /* An address has no spaces to break on, so the same treatment: it is a
      label here, not something anyone retypes from this menu. */
@@ -363,13 +399,13 @@
 
 .app-header__user-item i {
   font-size: 15px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 /* Last-online time on each search result */
 .app-header__search-result-seen {
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
   white-space: nowrap;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -437,31 +473,40 @@
  */
 .app-header__bell-count {
   position: absolute;
-  top: 1px;
-  /* Hangs slightly off the bell's corner, which is where a badge belongs. */
-  right: -1px;
-  width: 18px;
-  height: 18px;
-  aspect-ratio: 1;
-  padding: 0;
-  border-radius: 50%;
+  /* On the bell's shoulder, inside the button: a pill that hugs its figure
+     rather than an 18px disc hanging off the corner. */
+  top: 4px;
+  left: calc(50% + 1px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
   /* Always red: an unread count on a bell is a summons whatever it is made
      of, and one colour is one less thing to decode at a glance. */
   background: #dc2626;
   color: #fff;
-  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 2px #fff;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 650;
   line-height: 1;
   display: grid;
   place-items: center;
   box-sizing: border-box;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
   pointer-events: none;
   /* Centre on the figures' CAP height, not the line box. A line box carries
      room for descenders that digits never use, so grid centring alone left
      the number sitting visibly high in so small a ring. */
   text-box: trim-both cap alphabetic;
+  animation: app-bell-pop 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+.app-header__bell--active .app-header__bell-count { box-shadow: 0 0 0 2px #eff6ff; }
+@keyframes app-bell-pop { from { transform: scale(0.6); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header__bell { transition: none; }
+  .app-header__bell-icon--swing, .app-header__bell-count { animation: none; }
 }
 /* ── Responsive ────────────────────────────────────────────────────────────
 
@@ -509,8 +554,10 @@
   }
 }
 
-/* Tablet — the organisation name goes, the logo and chevron stay. The name is
-   the longest item in the row and the logo already identifies the org. */
+/* Tablet — the organisation name stays, shortened. It used to be hidden here
+   (font-size 0), leaving a lone "▾" beside the logo: on a 768px screen the
+   header then gave no clue which of four organisations was on screen. It is
+   capped and ellipsed instead, so it cannot crowd the search. */
 @media (max-width: 1023px) {
   .app-header {
     padding-right: 12px;
@@ -518,14 +565,17 @@
   }
 
   .app-header__org-btn {
-    max-width: none;
-    /* Keeps the chevron: without it the logo looks decorative rather than
-       like the control that switches organisation. */
-    font-size: 0;
-    gap: 0;
+    display: block;
+    max-width: 22vw;
+    min-height: 36px;
     padding: 8px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    color: #0f172a;
   }
-  .app-header__org-chevron { font-size: 11px; }
+  .app-header__org-chevron { font-size: 11px; margin-left: 4px; }
 
   .app-header__divider { display: none; }
 

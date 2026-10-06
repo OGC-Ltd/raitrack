@@ -373,6 +373,18 @@
   color: var(--color-text-muted, #7d8a9c);
 }
 
+/* Version, at the foot of the form column — pushed to its bottom so it sits
+   under the form in every mode without moving the form itself. */
+.login__version {
+  margin: auto 0 0;
+  padding-top: 18px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--color-text-muted, #7d8a9c);
+  cursor: default;
+}
+
 /* The fleet photograph, with its own branding taken off.
    The file shipped with a fingerprint mark and "RAI GROUP KENYA" burnt across
    the top — measured at rows 17-147 of 925, so the top 160px was cropped away
@@ -421,12 +433,7 @@
   min-height: 420px;
   padding: 26px;
   box-sizing: border-box;
-  /* No radius on the TOP-LEFT: the scoop below is that corner.
-     Rounding it as well left an 8px crescent of sheet colour trapped between
-     the panel's convex 22px corner and the scoop's concave 30px arc — a sliver
-     that tapered to nothing at each end, and those two tapering tips were the
-     points. A concave corner and a convex one cannot both describe the same
-     corner; one of them has to go. */
+  /* No radius on the TOP-LEFT: the scoop below (a mask) is that corner. */
   border-radius: 0 22px 22px 22px;
   overflow: hidden;
   background-color: var(--login-plate);
@@ -603,72 +610,39 @@
 }
 
 
-/* ── The notch, top-left of the picture ──────────────────────────────────────
+/* ── The scoop, top-left of the picture ─────────────────────────────────────
+ * Hallmark · component: login hero corner · genre: modern-minimal · theme: the app's own (login-* tokens)
+ * states: static (decorative); light · dark need nothing — the cut shows the sheet itself
+ * contrast: n/a (no text) · motion: none
  *
- * The mirror of the corner card's cut, and made the same way: a block of the
- * sheet's own colour sitting in the corner, curved on the one edge that faces
- * into the photograph. Because it is the sheet's colour and the sheet is
- * immediately above and to the left of it, it does not read as a shape ON the
- * picture — it reads as the sheet flowing into the corner and the picture
- * curving away from it.
+ * A quarter circle (r 44 of 56) centred ON the corner and cut out of the
+ * photograph: the opposite of a rounded corner, the curve bows into the
+ * picture. Where the cut meets the top and left edges a 12-unit fillet turns
+ * it in, so the picture keeps no sharp points. It mirrors the corner card's
+ * cut on the right: both top corners are bitten, one by the sheet, one by the
+ * card.
  *
- * The radius is on `border-bottom-right` alone, which is what makes the curve
- * CONCAVE. A rounded corner bulges out of a shape; this one bites into it, and
- * that is the whole difference between the two top corners of this panel
- * having the same treatment and having opposite ones.
- *
- * The hero's own `overflow: hidden` and 22px radius clip the block's outer
- * corner, so the panel's outside edge stays exactly as round as it was and
- * only the inside changes. Nothing here needs a second element or a mask.
- *
- * It sits above the scrim (`::before`, which starts 38% down and never reaches
- * this corner) and beside the corner card, so the two top corners are a pair:
- * one bitten by the sheet, one bitten by the card.
- *
- * Kept SMALL on purpose. The first cut was 78x58 and took a visible bite out of
- * the sky, which turned a corner detail into a missing piece of the picture —
- * the eye read it as damage rather than as shaping. At this size it is a
- * chamfer: enough to soften the corner and rhyme with the card opposite, not
- * enough to be an object in its own right. */
-.login__hero::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
-  /* SQUARE, and the arc is drawn rather than cornered.
-   *
-   * A rectangle with one rounded corner is what this was, and it is why the
-   * curve did not read as smooth: the block met the panel's top edge and its
-   * left edge at two hard right angles, so the eye saw a rounded rectangle
-   * pushed into the corner instead of one continuous edge.
-   *
-   * A quarter-disc has no such junctions. The circle is centred on the far
-   * corner of a square of its own radius, so the arc starts on the left edge
-   * travelling straight down and ends on the top edge travelling straight
-   * across — TANGENT to both. There is no angle anywhere for the eye to catch,
-   * which is the whole of what "smooth" means here. */
-  --notch: 30px;
-  width: var(--notch);
-  height: var(--notch);
-  background: radial-gradient(
-    circle at 100% 100%,
-    transparent 0,
-    transparent var(--notch),
-    /* The half-pixel overlap is not a fudge: a gradient stop shared exactly by
-       two colours renders as a hard edge the browser antialiases badly, and
-       against a photograph that shows up as a fringe along the arc. */
-    var(--login-sheet) calc(var(--notch) + 0.5px)
-  );
-  pointer-events: none;
+ * A MASK, not a shape painted over the corner in the sheet colour. A painted
+ * patch shares its edge with the photo, and where the hero lands on a
+ * fractional pixel the photo bleeds through that shared edge as a hairline.
+ * Masked, the photo is simply not drawn there. The bite is the first layer;
+ * `exclude` subtracts it from the solid second layer that keeps the rest.
+ * It starts 1px outside the box for the same reason: the mask has an edge too,
+ * and on a fractional pixel that edge left a hairline of photo along the cut. */
+.login__hero {
+  --scoop: 56px;
+  -webkit-mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M0 0H54.7A12 12 0 0 0 42.98 9.43A44 44 0 0 1 9.43 42.98A12 12 0 0 0 0 54.7Z'/%3E%3C/svg%3E") -1px -1px / calc(var(--scoop) + 1px) calc(var(--scoop) + 1px) no-repeat,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M0 0H54.7A12 12 0 0 0 42.98 9.43A44 44 0 0 1 9.43 42.98A12 12 0 0 0 0 54.7Z'/%3E%3C/svg%3E") -1px -1px / calc(var(--scoop) + 1px) calc(var(--scoop) + 1px) no-repeat exclude,
+    linear-gradient(#000 0 0);
 }
 
-/* Smaller where the panel itself is smaller, so the curve stays a detail rather
-   than becoming a corner missing from a small picture. */
 @media (max-width: 1080px) {
-  .login__hero::after { --notch: 24px; }
+  .login__hero { --scoop: 46px; }
 }
-
 
 /* ── Laptops, and anything else short ────────────────────────────────────────
  *
@@ -728,7 +702,7 @@
   .login__stat-label  { font-size: 10.5px; line-height: 1.3; }
   /* Kept in proportion with the card opposite it — the two top corners are a
      pair, and shrinking one alone breaks the rhyme. */
-  .login__hero::after { --notch: 20px; }
+  .login__hero { --scoop: 40px; }
 }
 
 /* Shorter again — a netbook, or a laptop with the window not maximised. The

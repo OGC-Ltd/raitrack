@@ -21,7 +21,7 @@
 
 import { useMemo, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
-import { useAppContext } from '../../context/AppContext';
+import { useAppActions } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import './MobileSearchTray.css';
 
@@ -30,7 +30,7 @@ const norm = (s) => String(s ?? '').toLowerCase();
 export default function MobileSearchTray({ open, onClose }) {
   const [query, setQuery] = useState('');
   const { vehicles = [] } = useFleetLiveShared();
-  const { setSelectedVehicleId, setPendingFocusId, setDesktopActiveTab } = useAppContext();
+  const { setSelectedVehicleId, setPendingFocusId, setDesktopActiveTab } = useAppActions();
   const { can } = usePermissions();
   /* An account without map:read is bounced straight back off the Fleet tab by
      the guard in App.jsx. Selecting still opens the unit's own sheet, which is

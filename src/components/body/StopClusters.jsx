@@ -140,12 +140,6 @@ export default function StopClusters({ data, loading }) {
               </ScatterChart>
             </ResponsiveContainer>
           </div>
-          <p className="an-stops__note">
-            {fmt(points.length)} stationary fixes · metres from{" "}
-            <span className="an-stops__coord">
-              {focus.lat.toFixed(5)}, {focus.lng.toFixed(5)}
-            </span>
-          </p>
         </figure>
 
         {/* WHETHER */}

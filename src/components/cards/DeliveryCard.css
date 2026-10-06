@@ -99,6 +99,27 @@
   font-weight: 600;
 }
 
+/* Live-traffic ETA (lib/tomtomTraffic). The cause line is the one coloured
+   thing: red when traffic is holding the unit, amber when it is stopped and
+   traffic does NOT explain it (the delay to chase), orange for a jam ahead. */
+.dc-eta--muted { font-style: italic; }
+.dc-eta-in { color: var(--text-sec-adaptive, #7c8899); }
+.dc-cause {
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.dc-cause--traffic-here  { color: var(--accent-crit, #ef4444); }
+.dc-cause--stopped-clear { color: var(--accent-warn, #f59e0b); }
+.dc-cause--traffic-ahead { color: #f07d1a; }
+.dc-cause--clear         { color: var(--accent-ok, #22c55e); }
+.dc-eta-src {
+  margin-top: 2px;
+  font-size: 9px;
+  color: var(--text-sec-adaptive, #7c8899);
+  opacity: 0.8;
+}
+
 /* Standing at the gate with the signature outstanding.
    Amber, like the serial and like the "not yet arrived" dot — this product's
    colour for "true, and waiting on somebody". Not green: green on this card

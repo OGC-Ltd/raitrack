@@ -5,7 +5,7 @@
 
 import "./MobileDriversScreen.css";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { useAppContext } from "../../context/AppContext";
+import { useAppActions } from "../../context/AppContext";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import { ONLINE_COLORS } from "../../lib/vehicleMap";
 import LoadError from "../shared/LoadError";
@@ -24,7 +24,7 @@ const STATUS_LABELS = {
 };
 
 function DriversContent() {
-  const { setSelectedVehicleId, setMobileActiveTab, setPendingFocusId } = useAppContext();
+  const { setSelectedVehicleId, setMobileActiveTab, setPendingFocusId } = useAppActions();
   const { vehicles, loading, error, retry } = useFleetLiveShared();
 
   // One row per vehicle with an assigned driver, alphabetical for a stable

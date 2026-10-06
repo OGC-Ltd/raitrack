@@ -38,11 +38,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useWeighments } from "../../hooks/useWeighments";
+import { useDispatchedUnits } from "../../hooks/useDispatchedUnits";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { tonnes, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
 import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
+import EmptyNote from "../shared/EmptyNote";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import "../body/SensorPanel.css";
 /* For its TOKENS, not for its layout: the `an-*` chart palette the board draws
@@ -308,6 +310,10 @@ const exportBody = (rows) => rows.map(r => [
 
 // ── the screen ─────────────────────────────────────────────────────────────
 
+
+/** Tickets per page — the Drivers roster's step. */
+const GRID_STEP = 15;
+
 export default function WeighbridgesScreen() {
   const { orgId } = useFleetLiveShared();
   const [view,     setView]     = useState(VIEWS[0].key);
@@ -354,10 +360,27 @@ export default function WeighbridgesScreen() {
   // from a quiet day, and the only one of the two the reader can act on.
   const noBridges = Boolean(data) && !data.captured;
 
+  // Units FactorySuite dispatched and not yet signed back. Only while the board
+  // is up and its span reaches today: a closed day has nothing "out".
+  const dispatched = useDispatchedUnits(orgId, { enabled: view === "analytics" && to >= fleetDayKey() });
+
+  // A tap anywhere on a date field opens the calendar: on a phone the field
+  // hides the browser's small glyph to leave the date its full width.
+  const openPicker = useCallback((e) => {
+    try { e.currentTarget.showPicker?.(); } catch { /* not allowed here: typing still works */ }
+  }, []);
+
   // Close the breakdown when the set behind it changes. Leaving it open across
   // a day or centre change left a ticket on screen that the grid behind it no
   // longer contained.
   useEffect(() => { setSelected(null); }, [from, to, centre, search, view]);
+
+  // Pages of fifteen, Prev / Next — the Drivers roster's pager and step, so
+  // the two grids page alike (operator, 2026-10-03). Back to the first page
+  // whenever the set behind the grid changes; clamped too, so a refresh that
+  // returns fewer tickets can never leave the grid on a page past the end.
+  const [page, setPage] = useState(0);
+  useEffect(() => { setPage(0); }, [from, to, centre, search]);
 
   const openRow = useCallback((row) => setSelected(row), []);
   const selectedRow = useMemo(
@@ -366,6 +389,9 @@ export default function WeighbridgesScreen() {
   );
 
   const centreName = centres.find(c => c.code === centre)?.name ?? "";
+  const pageCount = Math.max(1, Math.ceil(rows.length / GRID_STEP));
+  const at        = Math.min(page, pageCount - 1);
+  const pageRows  = rows.slice(at * GRID_STEP, at * GRID_STEP + GRID_STEP);
 
   // What a downloaded file is a set OF. An export with no filter control on it
   // has to say so out loud — the same rule the probes tab's note follows.
@@ -381,7 +407,7 @@ export default function WeighbridgesScreen() {
   const shownNetKg = rows.reduce((sum, r) => sum + (r.netWeightKg ?? 0), 0);
 
   return (
-    <div className="sp4-root wb-root">
+    <div className="sp4-root sp4-root--framed wb-root">
       {/* --- Breadcrumb ------------------------------------------------
           Where you are, and the one place you can go from here.
 
@@ -503,6 +529,7 @@ export default function WeighbridgesScreen() {
           <input
             type="date"
             className="sp4-date-input"
+            onClick={openPicker}
             value={from}
             /* Bounded at both ends. No future days, because there is nothing
                there and an empty grid reads as a fault rather than as
@@ -526,6 +553,7 @@ export default function WeighbridgesScreen() {
           <input
             type="date"
             className="sp4-date-input"
+            onClick={openPicker}
             value={to}
             min={from || bounds.min}
             max={bounds.max}
@@ -575,22 +603,18 @@ export default function WeighbridgesScreen() {
              unresolved variables. */
           <div className="analytics-page wb-analytics">
             {noBridges ? (
-              <div className="sp4-state">
-                <div className="sp4-state-title">No weighbridges on this fleet</div>
-                <p className="sp4-state-body">
-                  This company has no weighbridge records at all. Weighbridges report from one
-                  fleet only - switch company to see them.
-                </p>
-              </div>
+              <EmptyNote icon="ti-scale" title="No Weighbridges on This Fleet">
+                This company has no weighbridge records. Weighbridges report from one fleet
+                only, so switch company to see them.
+              </EmptyNote>
             ) : error ? (
-              <div className="sp4-state" role="alert">
-                <div className="sp4-state-title">Weighbridge tickets unavailable</div>
-                <p className="sp4-state-body">{error}</p>
-                <button type="button" className="sp4-state-btn" onClick={reload}>Try again</button>
-              </div>
+              <EmptyNote icon="ti-cloud-off" tone="error" title="Weighbridge Tickets Unavailable"
+                         action={{ label: "Try again", onClick: reload }}>
+                {error}
+              </EmptyNote>
             ) : (
               <>
-                <WeighbridgeBoard rows={rows} from={from} to={to} centres={centres} loading={loading} />
+                <WeighbridgeBoard rows={rows} from={from} to={to} centres={centres} loading={loading} dispatched={dispatched} />
               </>
             )}
           </div>
@@ -620,37 +644,32 @@ export default function WeighbridgesScreen() {
                 // going to arrive. That case is now the state block below.
                 <span className="sp4-tabs-hint">Loading bridges…</span>
               )}
-              <div className="sp4-tabs-hint">
-                Click any ticket for its weighings — each weight with the moment it was captured.
-              </div>
             </div>
 
             {error ? (
-              <div className="sp4-state" role="alert">
-                <div className="sp4-state-title">Weighbridge tickets unavailable</div>
-                <p className="sp4-state-body">{error}</p>
-                <button type="button" className="sp4-state-btn" onClick={reload}>Try again</button>
-              </div>
+              <EmptyNote icon="ti-cloud-off" tone="error" title="Weighbridge Tickets Unavailable"
+                         action={{ label: "Try again", onClick: reload }}>
+                {error}
+              </EmptyNote>
             ) : loading && !data ? (
-              <div className="sp4-loading">
-                <div className="sp4-spinner" />
-                Reading the day’s tickets…
-              </div>
+              <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Tickets">
+                Fetching the weighbridge tickets for this span…
+              </EmptyNote>
             ) : rows.length === 0 ? (
-              <div className="sp4-state">
-                {/* Three different silences, and they are not the same news:
-                    a search that matched nothing, a bridge that was quiet, and
-                    a feed that has never delivered anything at all. */}
-                <div className="sp4-state-title">
-                  {search
-                    ? "No ticket matches"
-                    : noBridges
-                      ? "No weighbridges on this fleet"
-                      : data?.total
-                        ? `Nothing weighed at ${centreName || "this bridge"}`
-                        : "No tickets in this span"}
-                </div>
-                <p className="sp4-state-body">
+              /* Three different silences, and they are not the same news:
+                 a search that matched nothing, a bridge that was quiet, and
+                 a feed that has never delivered anything at all. */
+              <EmptyNote
+                icon={search ? "ti-search-off" : noBridges ? "ti-scale" : "ti-receipt-off"}
+                tone={search ? "warn" : "ok"}
+                title={search
+                  ? "No Ticket Matches"
+                  : noBridges
+                    ? "No Weighbridges on This Fleet"
+                    : data?.total
+                      ? `Nothing Weighed at ${centreName || "This Bridge"}`
+                      : "No Tickets in This Span"}
+              >
                   {search
                     ? `Nothing on this day matches “${search}”. Tokens, plates and driver names are all searched.`
                     : noBridges
@@ -659,17 +678,11 @@ export default function WeighbridgesScreen() {
                          "your bridges stopped reporting" and "your fleet does
                          not have bridges". Switch company to reach one that
                          does. */
-                      ? "This company has no weighbridge records at all. Weighbridges report from one fleet only — switch company to see them."
+                      ? "This company has no weighbridge records. Weighbridges report from one fleet only, so switch company to see them."
                       : data?.total
-                        ? `${data.total} ticket${data.total === 1 ? "" : "s"} were raised elsewhere — try another bridge.`
+                        ? `${data.total} ticket${data.total === 1 ? "" : "s"} were raised elsewhere. Try another bridge.`
                         : "Nothing was captured for these days. The provider serves about two days of tickets, so days before we began recording are outside the record rather than quiet."}
-                </p>
-                {!search && !data?.total && !noBridges && (
-                  <p className="sp4-state-body">
-                    <WeighbridgeIcon size={20} /> Factory · Opapo · Oyani · Nyaondo
-                  </p>
-                )}
-              </div>
+              </EmptyNote>
             ) : (
               <>
                 {/* The panel's own export bar, the same one Probes, Fuel FSL,
@@ -696,7 +709,15 @@ export default function WeighbridgesScreen() {
                   disabled={!rows.length}
                 />
 
-                <div className="sp4-table-scroll">
+                {/* A table at every width. From a tablet up it scrolls sideways
+                    with the vehicle held at the left edge; on a phone it keeps
+                    the five columns a clerk checks (time, vehicle, type, net,
+                    payload) and fits the screen. The `wb-col-full` columns are
+                    in the ticket a tap opens (WeighbridgesScreen.css). */}
+                {/* The Drivers roster's card: one rounded frame holding the
+                    scroller and the pager (WeighbridgesScreen.css). */}
+                <div className="wb-grid-card">
+                <div className="sp4-table-scroll sp4-keep-table wb-grid">
                   {/* `sp4-probe-table` is not decoration — the panel's cell
                       padding, alignment and density rules are scoped to it, so
                       claiming the class is what makes this grid sit at the
@@ -706,27 +727,27 @@ export default function WeighbridgesScreen() {
                     <thead>
                       <tr>
                         <th className="sp4-th--left">Time</th>
-                        <th className="sp4-th--left">Vehicle</th>
-                        <th className="sp4-th--left">Driver</th>
+                        <th className="sp4-th--left sp4-th--pin">Vehicle</th>
+                        <th className="sp4-th--left wb-col-full">Driver</th>
                         <th className="sp4-th--left">Type</th>
-                        <th className="sp4-th--left">Token</th>
+                        <th className="sp4-th--left wb-col-full">Token</th>
                         {/* Tare before gross: that is the order 715 of 729
                             tickets were actually weighed in — empty first,
                             loaded later — so the row reads as the lorry's
                             morning rather than as a form. */}
-                        <th className="sp4-th--right">Tare</th>
-                        <th className="sp4-th--right">Tare at</th>
-                        <th className="sp4-th--right">Gross</th>
-                        <th className="sp4-th--right">Gross at</th>
+                        <th className="sp4-th--right wb-col-full">Tare</th>
+                        <th className="sp4-th--right wb-col-full">Tare at</th>
+                        <th className="sp4-th--right wb-col-full">Gross</th>
+                        <th className="sp4-th--right wb-col-full">Gross at</th>
                         <th className="sp4-th--right">Net</th>
                         <th className="sp4-th--right">Payload</th>
-                        <th className="sp4-th--right">Load time</th>
-                        <th className="sp4-th--right">Ticket</th>
-                        <th className="sp4-th--right">Since previous</th>
+                        <th className="sp4-th--right wb-col-full">Load time</th>
+                        <th className="sp4-th--right wb-col-full">Ticket</th>
+                        <th className="sp4-th--right wb-col-full">Since previous</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map(r => (
+                      {pageRows.map(r => (
                         <tr
                           key={r.id}
                           className="sp4-tr"
@@ -737,28 +758,28 @@ export default function WeighbridgesScreen() {
                           <td className="sp4-td--left wb-mono">
                             {from === to ? clockLabel(r.tokenAt) : stampLabel(r.tokenAt, null)}
                           </td>
-                          <td className="sp4-td--left"><span className="sp4-reg">{r.vehicleNo}</span></td>
-                          <td className="sp4-td--left wb-td-driver">{r.driverName}</td>
+                          <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{r.vehicleNo}</span></td>
+                          <td className="sp4-td--left wb-td-driver wb-col-full">{r.driverName}</td>
                           <td className="sp4-td--left"><TypeChip category={r.category} /></td>
-                          <td className="sp4-td--left wb-mono sp4-muted">{r.token}</td>
-                          <td className="sp4-td--right sp4-num">{kilos(r.tareWeightKg)}</td>
+                          <td className="sp4-td--left wb-mono sp4-muted wb-col-full">{r.token}</td>
+                          <td className="sp4-td--right sp4-num wb-col-full">{kilos(r.tareWeightKg)}</td>
                           {/* One fact per cell, like every other grid on this
                               screen. The weight and the moment it was captured
                               used to share a cell in two stacked lines, which
                               is a shape nothing else here uses — and the stamp
                               is a column somebody sorts by eye, not a footnote
                               to the number above it. */}
-                          <td className="sp4-td--right wb-mono">{stampLabel(r.tareAt, from === to ? from : null)}</td>
-                          <td className="sp4-td--right sp4-num">{kilos(r.grossWeightKg)}</td>
-                          <td className="sp4-td--right wb-mono">{stampLabel(r.grossAt, from === to ? from : null)}</td>
+                          <td className="sp4-td--right wb-mono wb-col-full">{stampLabel(r.tareAt, from === to ? from : null)}</td>
+                          <td className="sp4-td--right sp4-num wb-col-full">{kilos(r.grossWeightKg)}</td>
+                          <td className="sp4-td--right wb-mono wb-col-full">{stampLabel(r.grossAt, from === to ? from : null)}</td>
                           <td className="sp4-td--right sp4-num wb-td-net">{kilos(r.netWeightKg)}</td>
                           <td className="sp4-td--right sp4-num">{tonnes(r.netWeightKg)}</td>
-                          <td className="sp4-td--right sp4-num">{gapLabel(r.turnaroundMs)}</td>
+                          <td className="sp4-td--right sp4-num wb-col-full">{gapLabel(r.turnaroundMs)}</td>
                           {/* "3 of 4" rather than "3": the position is only
                               meaningful against the lorry's whole day, and that
                               day may run across other bridges than this tab. */}
-                          <td className="sp4-td--right sp4-num">{r.seq} of {r.vehicleTickets}</td>
-                          <td className="sp4-td--right sp4-num">
+                          <td className="sp4-td--right sp4-num wb-col-full">{r.seq} of {r.vehicleTickets}</td>
+                          <td className="sp4-td--right sp4-num wb-col-full">
                             {r.seq === 1
                               ? <span className="sp4-muted">first</span>
                               : gapLabel(r.sincePreviousMs)}
@@ -768,10 +789,31 @@ export default function WeighbridgesScreen() {
                     </tbody>
                   </table>
                 </div>
+                {pageCount > 1 && (
+                  <nav className="wb-pager" aria-label="Ticket pages">
+                    <button type="button" className="wb-pager__btn"
+                            onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>
+                      ← Prev
+                    </button>
+                    <span className="wb-pager__info" aria-live="polite">
+                      Page {at + 1} of {pageCount}
+                      <span className="wb-pager__range">
+                        {" · "}{at * GRID_STEP + 1}–{at * GRID_STEP + pageRows.length} of {rows.length}
+                      </span>
+                    </span>
+                    <button type="button" className="wb-pager__btn"
+                            onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>
+                      Next →
+                    </button>
+                  </nav>
+                )}
+                {/* The count line is the card's foot, so the card can run
+                    down to the footer nav with nothing hanging under it. */}
                 <div className="sp4-grid-footer">
                   {data.matched} of {data.total} ticket{data.total === 1 ? "" : "s"} in {spanLabel(from, to)}
                   {centreName ? ` · ${centreName}` : ""}
                   {loading && <span className="sp4-muted"> · refreshing…</span>}
+                </div>
                 </div>
               </>
             )}

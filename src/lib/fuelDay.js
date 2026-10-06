@@ -99,6 +99,11 @@ export function dayBreakdown({ tank, fillings = [], drops = [] }) {
     engine,
     engineHours: tank?.engineSeconds != null ? tank.engineSeconds / 3600 : null,
     engineRate: tank?.engineRateLPerHour ?? null,
+    // A road vehicle on RaiFactorySuite's register is rated in km/L: the
+    // expectation is then its distance at that rate, not hours at an hourly one.
+    engineKmPerL: tank?.engineRateKmPerL ?? null,
+    // 'register' = the operator's standard rate; 'vehicle' / 'type' = derived.
+    engineRateBasis: tank?.engineRateBasis ?? null,
     unexplained,
     distanceKm: tank?.distanceM != null ? tank.distanceM / 1000 : null,
     events,
@@ -144,6 +149,18 @@ export function hoursLabel(h) {
  * (its tank before/after and start time place the rest of the fall), `today`
  * whether the day is still running.
  */
+/** "standard" for the operator's register rate, "usual" for a derived one. */
+const rateWord = (b) => (b.engineRateBasis === "register" ? "standard" : "usual");
+
+/** The "Engine should use" caption: what the figure is that rate times. */
+export function engineBasisLabel(b) {
+  if (b.engineKmPerL != null) {
+    return b.distanceKm != null ? `${b.distanceKm.toFixed(1)} km at ${b.engineKmPerL.toFixed(1)} km/L` : "no distance";
+  }
+  if (b.engineHours == null) return "no engine hours";
+  return `${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at ${b.engineRate.toFixed(1)} L/h` : ""}`;
+}
+
 export function dayAssessment(b, incident = null, today = false) {
   if (b?.used == null) return [];
   const dayWord = today ? "today" : "that day";
@@ -156,10 +173,13 @@ export function dayAssessment(b, incident = null, today = false) {
   if (b.engineHours != null && !ran) {
     out.push(`The engine did not run ${dayWord}, so none of the ${litres(lost)} the tank lost was burned.`);
   } else if (engineL != null) {
-    const rate = b.engineRate != null ? ` at its usual ${b.engineRate.toFixed(1)} L/h` : "";
+    const which = rateWord(b);
+    const did = b.engineKmPerL != null && b.distanceKm != null
+      ? `It covered ${b.distanceKm.toFixed(1)} km at its ${which} ${b.engineKmPerL.toFixed(1)} km/L`
+      : `The engine ran ${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at its ${which} ${b.engineRate.toFixed(1)} L/h` : ""}`;
     out.push(engineL >= lost
-      ? `The engine ran ${hoursLabel(b.engineHours)}${rate}, which burns ${litres(engineL)} — all of the ${litres(lost)} the tank lost.`
-      : `The engine ran ${hoursLabel(b.engineHours)}${rate}, which burns ${litres(engineL)} of the ${litres(lost)} the tank lost.`);
+      ? `${did}, which burns ${litres(engineL)} — all of the ${litres(lost)} the tank lost.`
+      : `${did}, which burns ${litres(engineL)} of the ${litres(lost)} the tank lost.`);
   } else {
     out.push(`There is no engine-hour record for ${dayWord}, so the ${litres(lost)} the tank lost cannot be set against a burn.`);
   }
@@ -187,7 +207,7 @@ export function dayAssessment(b, incident = null, today = false) {
     return out;
   }
   if (rest < 0) {
-    out.push(`That is ${litres(-rest)} under its usual rate for those hours, so nothing is missing.`);
+    out.push(`That is ${litres(-rest)} under its ${rateWord(b)} rate for ${b.engineKmPerL != null ? "that distance" : "those hours"}, so nothing is missing.`);
     return out;
   }
   // Placed against the case's own levels, where no refuel and no running

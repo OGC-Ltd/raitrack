@@ -1,12 +1,12 @@
 // Mobile top bar: company + fleet status counts.
 
 import "./MobileTopBar.css";
-import { useAppContext } from "../../context/AppContext";
+import { useCompanies } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
 import { getFleetStatusCounts } from "../../api/vehicles";
 
 export default function MobileTopBar({ onOpenSwitcher }) {
-  const { activeCompany } = useAppContext();
+  const { activeCompany } = useCompanies();
   const { data, error, retry } = useApiData(
     () => getFleetStatusCounts({ companyId: activeCompany?.id }),
     [activeCompany?.id]

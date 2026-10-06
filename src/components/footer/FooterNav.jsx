@@ -38,7 +38,7 @@ import "./FooterNav.css";
 import NavItem from "./NavItem";
 import NavFab from "./NavFab";
 import { DriversIcon, FleetIcon, MaintenanceIcon, AnalyticsIcon, WeighbridgeIcon } from "./NavIcons";
-import { useAppContext } from "../../context/AppContext";
+import { useAppSelector, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 
 /**
@@ -118,7 +118,8 @@ export function arrangeNav(graded) {
 }
 
 export default function FooterNav() {
-  const { desktopActiveTab, setDesktopActiveTab } = useAppContext();
+  const desktopActiveTab = useAppSelector((a) => a.desktopActiveTab);
+  const { setDesktopActiveTab } = useAppActions();
   const { can } = usePermissions();
 
   // The Maint icon used to carry an "attention" badge counting Overdue + Due

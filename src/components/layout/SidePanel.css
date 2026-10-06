@@ -22,31 +22,83 @@
    has to stop the collapsed rule from winning on specificity. */
 .side-panel--overlay { width: 288px; }
 
-/* ── Hamburger ── */
-.side-panel__hamburger {
+/* Hallmark · component: sidebar toggle + icon rail · genre: modern-minimal · theme: the app's own (preflight 2026-09-21)
+ * states: default · hover · focus · active (pressed) · current page · disabled
+ *         (loading / error / success: n/a — navigation has no async state)
+ * contrast: icons #5f6e83 on white 4.8:1; current #2563eb on #eff6ff 4.9:1; focus ring #2563eb 5.2:1
+ *
+ * Every icon in the rail — the toggle included — is a 40px tile centred in the
+ * 56px column, so the toggle, the five destinations and the fuel pair all sit
+ * on one vertical centre line. The old three-line glyph was hand-drawn spans
+ * 2.5px off that line, and the only icon in the panel not from Tabler. */
+.side-panel {
+  --sp-rail: 56px;
+  --sp-tile: 40px;
+  --sp-icon: var(--color-text-muted, #5f6e83);
+  --sp-ink-2: var(--text-secondary, #475569);
+  --sp-hover: #f1f5f9;
+  --sp-press: #e2e8f0;
+  --sp-current: var(--accent, #2563eb);
+  --sp-current-soft: var(--accent-light, #eff6ff);
+  --sp-rule: #edf0f4;
+  --sp-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.side-panel__head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  border: none;
-  border-bottom: 1px solid #f1f5f9;
-  background: transparent;
-  cursor: pointer;
-  width: 100%;
+  gap: 8px;
   flex-shrink: 0;
-  text-align: left;
+  min-height: 48px;
+  /* Open: the label lines up with the nav labels' box below (10px body
+     padding + 14px item padding); the toggle sits flush at the far end. */
+  padding: 4px 8px 4px 24px;
+  border-bottom: 1px solid var(--sp-rule);
 }
-.side-panel__hamburger:hover { background: #f8fafc; }
+.side-panel--collapsed .side-panel__head {
+  justify-content: center;
+  padding: 4px 0;
+}
+.side-panel__head-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sp-ink-2);
+  white-space: nowrap;
+}
 
-.side-panel__hb-lines { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
-.side-panel__hb-lines span { display: block; width: 18px; height: 1.5px; background: #64748b; border-radius: 2px; }
+/* The toggle and the rail tiles share one button anatomy. */
+.side-panel__toggle,
+.side-panel__nav-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sp-tile);
+  height: var(--sp-tile);
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sp-icon);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 120ms var(--sp-ease), color 120ms var(--sp-ease), transform 80ms var(--sp-ease);
+}
+.side-panel__toggle i,
+.side-panel__nav-icon { font-size: 19px; line-height: 1; color: inherit; }
 
-.side-panel__hb-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: #94a3b8;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+.side-panel__toggle:hover,
+.side-panel__nav-item:hover:not(:disabled) { background: var(--sp-hover); color: var(--text-primary, #0f172a); }
+.side-panel__toggle:active,
+.side-panel__nav-item:active:not(:disabled) { background: var(--sp-press); transform: scale(0.96); }
+/* Shown instantly, never animated in. */
+.side-panel__toggle:focus-visible,
+.side-panel__nav-item:focus-visible {
+  outline: 2px solid var(--sp-current);
+  outline-offset: 2px;
+  transition: none;
 }
 
 /* ── Scrollable body ── */
@@ -141,67 +193,130 @@
 
 
 
-/* ── Stats grid — 2x3 ── */
+/* ── Status filters ─────────────────────────────────────────────────────
+ * Hallmark · component: sidebar status filters · genre: modern-minimal
+ * theme: the app's own (preflight 2026-09-21) · tokens on the grid below
+ * pre-emit critique: P4 H5 E4 S5 R5 V4
+ * states: default · hover · focus (keyboard ring) · active (pressed) ·
+ *         disabled (locked: no map:read, dimmed further down) · loading ("–",
+ *         the split bar an empty track) · error (n/a: the counts come from the
+ *         live feed, which owns its errors) · success (n/a: a filter applies
+ *         at once; the lit card is the confirmation).
+ * Six equal cards in six colours read as six equal facts, and they are not:
+ * one total, the two halves it splits into, and three things inside those.
+ * So three rows. All across the top with the online/offline split drawn under
+ * it; Online | Offline beneath their own segments; then Idling, Warning,
+ * Critical. Figures are ink. A status colour sits in a dot beside its label
+ * and moves onto the figure only for an alert with something in it, so a red
+ * number always means "look". A zero recedes. The lit card is tinted and
+ * ringed in its own colour rather than underlined. */
 .sp-stats-grid {
+  --sps-ink: #0f172a;
+  --sps-muted: #64748b;
+  --sps-faint: #94a3b8;
+  --sps-line: #e2e8f0;
+  --sps-line-hi: #cbd5e1;
+  --sps-hover: #f8fafc;
+  --sps-surface: #fff;
+  --sps-track: #eef1f5;
+  --sps-online: #16a34a;
+  --sps-offline: #94a3b8;
+  --sps-focus: var(--sp-current, #2563eb);
+  --sps-ease: cubic-bezier(0.2, 0, 0, 1);
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .sp-stat-box {
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  padding: 12px 10px;
-  background: #fff;
+  grid-column: span 2;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  cursor: pointer;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--sps-line);
+  border-radius: 8px;
+  background: var(--sps-surface);
+  text-align: left;
   font-family: inherit;
-  transition: border-color 0.15s;
-  position: relative;
-  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: border-color 140ms var(--sps-ease), background-color 140ms var(--sps-ease), box-shadow 140ms var(--sps-ease);
 }
+.sp-stat-box--online,
+.sp-stat-box--offline { grid-column: span 3; }
 
-.sp-stat-box:hover {
-  border-color: #cbd5e1;
-  border-bottom-color: transparent;
+/* All: the figure and its label on one line, the split under both. */
+.sp-stat-box--all {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 8px;
 }
-
-.sp-stat-box--active {
-  border-bottom: 3px solid var(--stat-color);
-  background: #fafafa;
+.sp-stat-split {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--sps-track);
+  overflow: hidden;
 }
-
-
-
-
-
+.sp-stat-split b { display: block; flex-basis: 0; min-width: 2px; height: 100%; border-radius: 3px; }
+.sp-stat-split b:first-child { background: var(--sps-online); }
+.sp-stat-split b:last-child { background: var(--sps-offline); }
 
 .sp-stat-num {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  color: #0f172a;
   line-height: 1;
   letter-spacing: -0.01em;
+  color: var(--sps-ink);
+  font-variant-numeric: tabular-nums;
 }
-
-.sp-stat-num--green { color: #16a34a; }
-.sp-stat-num--blue  { color: #2563eb; }
-.sp-stat-num--amber { color: #d97706; }
-.sp-stat-num--red   { color: #dc2626; }
-.sp-stat-num--grey  { color: #64748b; }
+.sp-stat-box--all .sp-stat-num { font-size: 22px; }
+.sp-stat-box--zero .sp-stat-num { color: var(--sps-faint); }
+.sp-stat-box--alert .sp-stat-num { color: var(--stat-color); }
 
 .sp-stat-lbl {
-  font-size: 10px;
-  color: #94a3b8;
-  margin-top: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: .05em;
-  font-weight: 500;
+  color: var(--sps-muted);
+  white-space: nowrap;
+}
+.sp-stat-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--stat-color);
+}
+
+.sp-stat-box:hover { border-color: var(--sps-line-hi); background: var(--sps-hover); }
+.sp-stat-box:focus-visible { outline: 2px solid var(--sps-focus); outline-offset: 2px; }
+.sp-stat-box:active:not(:disabled) { transform: translateY(1px); }
+.sp-stat-box--active,
+.sp-stat-box--active:hover {
+  border-color: var(--stat-color);
+  background: color-mix(in srgb, var(--stat-color) 7%, var(--sps-surface));
+  box-shadow: inset 0 0 0 1px var(--stat-color);
+}
+.sp-stat-box--active .sp-stat-lbl { color: var(--sps-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-stat-box { transition: none; }
+  .sp-stat-box:active:not(:disabled) { transform: none; }
 }
 
 /* ── Nav box ── */
@@ -245,7 +360,7 @@
 
 .sp-nav-icon {
   font-size: 16px;
-  color: #94a3b8;
+  color: #64748b;
   width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -275,32 +390,42 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 0;
+  /* Never shrunk by the scrolling body: shrunk, the trees spilled past their
+     own box, so the body's bottom padding sat under the spill and the last
+     map layer ran into the version below it. */
+  flex-shrink: 0;
 }
 
 /* ── Collapsed — icon only nav ── */
 .side-panel__nav {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
-}
-
-.side-panel__nav-item {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 13px 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  width: 100%;
-  border-bottom: 1px solid #f1f5f9;
+  gap: 4px;
+  padding: 8px 0;
 }
-.side-panel__nav-item:last-child { border-bottom: none; }
-.side-panel__nav-item:hover { background: #f8fafc; }
-.side-panel__nav-item--active { background: #eff6ff; }
 
-.side-panel__nav-icon { font-size: 17px; color: #94a3b8; }
+/* The page you are on: tinted tile, accent glyph, and a bar on the rail's
+   outer edge — the same bar the open list draws, so folding the panel does
+   not change how "here" looks. */
+.side-panel__nav-item--active,
+.side-panel__nav-item--active:hover:not(:disabled) {
+  background: var(--sp-current-soft);
+  color: var(--sp-current);
+}
+.side-panel__nav-item--active::before {
+  content: "";
+  position: absolute;
+  /* Tile is centred in the rail: (56 - 40) / 2 = 8px to the rail's edge. */
+  left: calc((var(--sp-tile) - var(--sp-rail)) / 2);
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--sp-current);
+}
+.side-panel__nav-item--disabled,
+.side-panel__nav-item:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── System, at the foot of the sidebar ──
    Same box and item as the nav above; only the count is new. It is amber, the
@@ -340,20 +465,20 @@
   line-height: 1;
 }
 
-.side-panel__nav--foot { margin-top: auto; border-top: 1px solid #edf0f4; }
+.side-panel__nav--foot { margin-top: auto; border-top: 1px solid var(--sp-rule); }
 
 /* Selected System keeps the nav's blue icon and label but not its blue fill or
-   side bar: the amber count is the thing that should catch the eye there. */
-.sp-foot .sp-nav-item--active,
-.side-panel__nav--foot .side-panel__nav-item--active { background: transparent; }
-.sp-foot .sp-nav-item--active:hover,
-.side-panel__nav--foot .side-panel__nav-item--active:hover { background: #f8fafc; }
+   side bar: the amber count is the thing that should catch the eye there.
+   (Open list only — in the folded rail Fuel Audit and Fuel Report are two
+   destinations like the rest, and "here" looks the same for all seven.) */
+.sp-foot .sp-nav-item--active { background: transparent; }
+.sp-foot .sp-nav-item--active:hover { background: #f8fafc; }
 .sp-foot .sp-nav-bar { display: none; }
-.side-panel__nav-item { position: relative; }
 .side-panel__nav-alertdot {
   position: absolute;
-  top: 9px;
-  right: 14px;
+  /* Corner of the 40px tile, clear of the 19px glyph. */
+  top: 6px;
+  right: 6px;
   flex-shrink: 0;
   width: 7px;
   height: 7px;
@@ -361,7 +486,6 @@
   background: #d97706;
   box-shadow: 0 0 0 2px #fff;
 }
-.side-panel__nav-item--active .side-panel__nav-icon { color: #2563eb; }
 
 /* ── Hide on mobile ── */
 @media (max-width: 767px) {
@@ -373,18 +497,150 @@
   /* Tap targets. At 32px these rows were under the 44px the platform guidance
      asks for, and they are the app's primary navigation. */
   .sp-nav-item { min-height: 44px; }
-  .side-panel__nav-item { min-height: 48px; }
+  .side-panel { --sp-tile: 44px; }
   .sp-layer-row { min-height: 40px; }
 }
 
 /* Coarse pointers get the larger targets whatever the viewport width is — a
    1280px touchscreen laptop is still being used with a finger. */
 @media (pointer: coarse) {
-  .sp-nav-item,
-  .side-panel__nav-item { min-height: 44px; }
+  .sp-nav-item { min-height: 44px; }
+  .side-panel { --sp-tile: 44px; }
   .sp-stat-box { min-height: 56px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .side-panel { transition: none; }
+  .side-panel,
+  .side-panel__toggle,
+  .side-panel__nav-item { transition: none; }
+  .side-panel__toggle:active,
+  .side-panel__nav-item:active:not(:disabled) { transform: none; }
+}
+
+/* ── Drawn, but not yours ───────────────────────────────────────────────────
+   The stat grid and the map trees are the Live Map's controls. An account
+   without `map:read` still sees them, so the panel keeps its shape, but they
+   are dead and the counts read "–" (SidePanel.jsx).
+
+   Dimmed to the same 0.4 the disabled nav item uses two rules up, so every
+   unavailable thing in this panel looks unavailable in the same way. */
+/* The sheet dims as one: per cell, the hairline ground showed through. */
+.sp-stats-grid--locked,
+.sp-trees--locked {
+  opacity: 0.4;
+}
+.sp-stats-grid--locked .sp-stat-box {
+  cursor: not-allowed;
+}
+/* The border highlight is a promise this card cannot keep any more, so it goes
+   with the click. The literal #e2e8f0 rather than `inherit`, because the base
+   rule sets it on the shorthand and `inherit` there takes the PARENT's border
+   colour, which is not the same thing and happened to be nearly black. */
+.sp-stats-grid--locked .sp-stat-box:hover {
+  border-color: var(--sps-line);
+  background: var(--sps-surface);
+}
+
+/* ── Mark + version, at the very bottom ──────────────────────
+ * Hallmark · component: sidebar foot (mark + version) · genre: modern-minimal · theme: the app's own
+ * states: default only — not interactive (a tooltip carries the build detail)
+ * contrast: version #5f6e83 on white 4.8:1
+ *
+ * The login page's fingerprint-tree mark, scaled down to a signature, with the
+ * version beside it, its baseline level with the roots — no wordmark
+ * (operator, 2026-10-02). Open, the pair sits side by side on the left; folded to
+ * the 56px rail there is no room for that, so the version goes under the
+ * trunk. Pushed to the foot when nothing else is (the folded rail
+ * without fuel pages); after the folded fuel pair, that pair already holds the
+ * auto margin. */
+.side-panel__meta {
+  --sp-mark: 34px;
+  flex-shrink: 0;
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 14px 16px 14px;
+  border-top: 1px solid var(--sp-rule);
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: default;
+  user-select: text;
+}
+/* Fine line art inside generous transparent padding: the tree itself is about
+   half the box, so the box runs larger than an icon would. The trunk is
+   centred in the artwork, so centring the box puts it on the panel's axis. */
+.side-panel__meta-mark {
+  width: var(--sp-mark);
+  height: var(--sp-mark);
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+/* Open, the pair sits on the left (operator, 2026-10-03). The canopy starts
+   ~28% into the box (column ~390 of 1402), so pull the box out by that much
+   and the drawn tree, not its padding, lines up with the panel's 16px edge. */
+.side-panel:not(.side-panel--collapsed) .side-panel__meta-mark {
+  margin-left: calc(var(--sp-mark) * -0.28);
+}
+.side-panel__meta-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  /* The artwork ends 9% above its own bottom edge (roots at row 1270 of
+     1402); lift the version's baseline by that much so it stands on the
+     same ground as the roots. */
+  margin-bottom: calc(var(--sp-mark) * 0.09 - 2px);
+  /* The canopy spans columns ~390–1010, leaving 28% of the box empty on the
+     right; tuck the version in so the gap is measured from the tree. */
+  margin-left: calc(var(--sp-mark) * -0.28);
+}
+.side-panel__meta-version {
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--sp-icon);
+}
+.side-panel__nav--foot + .side-panel__meta,
+.side-panel__body + .side-panel__meta,
+.sp-foot + .side-panel__meta { margin-top: 0; }
+/* Room between the last map layer and the foot's rule, so the two do not
+   read as one block (operator, 2026-10-02). */
+.side-panel__body { padding-bottom: 28px; }
+
+.side-panel--collapsed .side-panel__meta {
+  --sp-mark: 30px;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 12px 0 12px;
+}
+.side-panel--collapsed .side-panel__meta-text {
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-top: calc(var(--sp-mark) * -0.09 + 2px);
+}
+.side-panel--collapsed .side-panel__meta-version { font-size: 9.5px; letter-spacing: 0; }
+
+/* ── The wordmark is back ────────────────────────────────────────────────────
+ * Hallmark · component: sidebar foot (mark + wordmark + version) · static
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ * Operator, 2026-10-03: "return the text RAI GROUP on the logo", then "the
+ * text to be small and dull, then we centre align". A small, quiet wordmark —
+ * the version's own muted ink, 10px, tracked capitals — over the version, and
+ * the mark + text pair centred in the panel rather than set on its left edge.
+ * Open panel only; the folded rail keeps the mark alone. */
+.side-panel__meta { justify-content: center; }
+.side-panel:not(.side-panel--collapsed) .side-panel__meta-mark { margin-left: 0; }
+.side-panel__meta-text { align-items: center; gap: 3px; }
+.side-panel__meta-word {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--sp-icon);
 }

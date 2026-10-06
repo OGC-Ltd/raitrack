@@ -21,10 +21,12 @@
     height: 38px;
   }
 
-  .mst-icon { font-size: 14px; color: #94a3b8; flex-shrink: 0; }
+  .mst-icon { font-size: 14px; color: #64748b; flex-shrink: 0; }
 
   .mst-input {
     flex: 1;
+    align-self: stretch;   /* the whole 38px bar takes the tap, not a 16px line */
+    min-width: 0;
     border: none;
     background: transparent;
     font-size: 13px;
@@ -33,12 +35,18 @@
     outline: none;
   }
 
-  .mst-input::placeholder { color: #94a3b8; }
+  .mst-input::placeholder { color: #64748b; }
 
+  /* 36px square around a 14px glyph: the bare glyph was a 14x16 target. */
   .mst-close {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin: -10px -10px -10px 0;
     background: none;
     border: none;
-    font-size: 14px;
+    font-size: 16px;
     color: #64748b;
     cursor: pointer;
     padding: 0;
@@ -55,9 +63,9 @@
   }
 
   .mst-pills-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    color: #94a3b8;
+    color: #64748b;
     flex-shrink: 0;
   }
 
@@ -65,13 +73,14 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 10px;
+    min-height: 32px;
+    padding: 4px 12px;
     border-radius: 8px;
     background: #f0fdf4;
     border: 1px solid #d1fae5;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
-    color: #059669;
+    color: #047857;   /* #059669 was 3.6:1 on the mint fill */
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;

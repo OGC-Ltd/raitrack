@@ -1686,7 +1686,7 @@ select.ua-input { appearance: none; cursor: pointer; }
      when it holds no chips, and the organisation toggle has always been about
      23 — which mattered less when it was one of four and matters now that the
      add tray can be a scrolling list of eighteen of them. */
-  .ua-org__roles, .ua-org__toggle { min-height: 36px; }
+  .ua-org__roles, .ua-org__toggle { min-height: var(--m-ctl); }
   /* The row checkbox keeps its 16px BOX but gets a thumb-sized hit area
      around it, which is what the guideline is actually about. */
   .ua-check { position: relative; }
@@ -1858,7 +1858,7 @@ select.ua-input { appearance: none; cursor: pointer; }
     gap: 8px;
   }
   .ua-action {
-    min-height: 36px;
+    min-height: var(--m-ctl);
     display: inline-flex;
     align-items: center;
     padding: 0 14px;
@@ -2870,7 +2870,7 @@ select.ua-input { appearance: none; cursor: pointer; }
   /* Stacked, primary on top. Side by side at this width the two labels are one
      bad translation away from wrapping to two lines each. */
   .ua-drawer__acts { flex-direction: column-reverse; }
-  .ua-drawer__acts > * { width: 100%; min-height: 36px; }
+  .ua-drawer__acts > * { width: 100%; min-height: var(--m-action); }
 }
 
 @media (prefers-reduced-motion: reduce) {

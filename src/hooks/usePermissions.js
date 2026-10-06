@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useAppContext } from "../context/AppContext";
+import { useAppSelector } from "../context/AppContext";
 import { ORG_CODE_BY_COMPANY } from "../api/org";
 
 /**
@@ -64,7 +64,7 @@ export function canInOrg(orgs, orgId, slug) {
 
 export function usePermissions() {
   const { orgs, isPlatform } = useAuth();
-  const { activeCompanyId } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
 
   const { org, can } = useMemo(
     () => accessIn(orgs, activeCompanyId),

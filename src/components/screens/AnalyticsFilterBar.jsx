@@ -302,14 +302,6 @@ function UnitFilter({ options, value, onToggle, onClear }) {
             {value.length === 0
               ? `All ${fmt(options.length)} units`
               : `${fmt(value.length)} of ${fmt(options.length)} units`}
-            {/* What the ordering is, said once. Only where it makes a
-                difference: a fleet that all worked has no second tier and needs
-                no explanation of one. */}
-            {worked > 0 && worked < shown.length && (
-              <span className="an-filter__footnote">
-                {fmt(worked)} worked in this window, listed first
-              </span>
-            )}
           </div>
         </div>
       )}

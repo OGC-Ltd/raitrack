@@ -413,6 +413,114 @@
   padding: 2px 8px; border-radius: 20px;
 }
 
+/* Pagination. These used to be inline styles on the component; they moved here
+   so a media query can reach them — an inline `width: 24` outranks any
+   selector, and 24px is half a fingertip. */
+.maint-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.maint-pagebtn {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  font-size: 13px;
+  font-family: var(--font);
+  line-height: 1;
+}
+
+/* ── The grid on a phone ────────────────────────────────────── */
+/* The table is 640px wide at its minimum, in 11.5px type with 8px rows. On a
+   375px screen that is a sideways-scrolling strip where a row is ~28px tall:
+   readable only by panning, and tappable only by aiming. Below 768px each row
+   becomes a card instead — label on the left, value on the right, one vehicle
+   per block — so nothing scrolls sideways and the whole card is the tap
+   target for selecting that vehicle.
+
+   The header row is NOT hidden, which is the usual shortcut here: those <th>s
+   are the only sort control on the page, so hiding them would trade a tiny
+   table for a table that cannot be sorted. They become a wrapping row of
+   pills instead. */
+@media (max-width: 599px) {
+  .maint-grid-scroll { overflow-x: visible; }
+  .maint-grid { min-width: 0; display: block; }
+
+  .maint-grid thead { display: block; }
+  .maint-grid thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .maint-grid thead th {
+    position: static;          /* sticky is meaningless once these are pills */
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--card);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
+  .maint-grid tbody { display: block; }
+  .maint-grid tbody tr {
+    display: block;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .maint-grid tbody tr:last-child { border-bottom: none; }
+  .maint-grid tbody tr.maint-row--selected {
+    box-shadow: inset 3px 0 0 var(--accent, #2563eb);
+  }
+
+  .maint-grid tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 6px 14px;
+    border-bottom: none;
+    font-size: 13px;
+    white-space: normal;
+    text-align: right;
+  }
+  .maint-grid tbody td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+
+  /* The vehicle is the card's title, not one field among seven. */
+  .maint-grid tbody td[data-label="Vehicle"] {
+    padding-top: 10px;
+    font-size: 15px;
+    text-align: left;
+  }
+  .maint-grid tbody td[data-label="Vehicle"]::before { content: none; }
+  .maint-grid tbody td[data-label="Last reported"] { padding-bottom: 10px; }
+
+  /* "No vehicles match." spans all seven columns and has no label. */
+  .maint-grid__empty { display: block; }
+  .maint-grid__empty::before { content: none; }
+
+  .maint-pagination { padding: 10px 12px; }
+  .maint-pagebtn { width: var(--m-ctl); height: var(--m-ctl); font-size: 14px; border-radius: 8px; }
+}
+
 /* ── Section titles ─────────────────────────────────────────── */
 .maint-section-title {
   font-size: 13.5px;

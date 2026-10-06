@@ -16,7 +16,7 @@ import {
 import { useMaintenanceHistory } from '../../hooks/useMaintenanceHistory';
 import { useVehicleServiceHistory } from '../../hooks/useVehicleServiceHistory';
 import { useVehicleGarageVisits } from '../../hooks/useVehicleGarageVisits';
-import { useAppContext } from '../../context/AppContext';
+import { useAppSelector, useCompanies } from '../../context/AppContext';
 import { createReport, addSectionTitle, addSummaryCards, addTable, downloadReport } from '../../utils/pdfReport';
 import DownloadReportButton from '../shared/DownloadReportButton';
 import { downloadOrgReportPdf } from '../../api/reports';
@@ -78,7 +78,8 @@ const HISTORY_CHARTS = [
 const PAGE_SIZE = 20;
 
 export default function MaintenancePage({ vehicles = [], selectedId, onSelectVehicle, orgId }) {
-  const { activeCompany, activeCompanyId } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { activeCompany } = useCompanies();
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey]           = useState('urgency');
   const [sortDir, setSortDir]           = useState('asc');
@@ -325,24 +326,24 @@ export default function MaintenancePage({ vehicles = [], selectedId, onSelectVeh
                       className={v.id === selectedId ? 'maint-row--selected' : ''}
                       onClick={() => selectVehicle(v)}
                     >
-                      <td style={{ fontWeight: 700, color: 'var(--text-1)' }}>{v.id}</td>
-                      <td>{v.vehicleType}</td>
-                      <td>{v.driver}</td>
-                      <td style={{ color: r.odometerKm  == null ? 'var(--text-2)' : undefined }}>{formatKm(r.odometerKm)}</td>
-                      <td style={{ color: r.engineHours == null ? 'var(--text-2)' : undefined }}>{formatHours(r.engineHours)}</td>
+                      <td data-label="Vehicle" style={{ fontWeight: 700, color: 'var(--text-1)' }}>{v.id}</td>
+                      <td data-label="Type">{v.vehicleType}</td>
+                      <td data-label="Driver">{v.driver}</td>
+                      <td data-label="Odometer" style={{ color: r.odometerKm  == null ? 'var(--text-2)' : undefined }}>{formatKm(r.odometerKm)}</td>
+                      <td data-label="Engine hours" style={{ color: r.engineHours == null ? 'var(--text-2)' : undefined }}>{formatHours(r.engineHours)}</td>
                       {/* A faulty probe reads as a fault, not as an empty
                           cell — "—" here would be indistinguishable from a
                           vehicle that never had a sensor fitted. */}
-                      <td style={{ color: r.fuelProbeFault ? '#f97316' : r.fuelLitres == null ? 'var(--text-2)' : undefined }}>
+                      <td data-label="Fuel" style={{ color: r.fuelProbeFault ? '#f97316' : r.fuelLitres == null ? 'var(--text-2)' : undefined }}>
                         {r.fuelProbeFault
                           ? <span title="The fuel probe is transmitting, but reporting a fault instead of a level. Needs a workshop visit.">Probe fault</span>
                           : r.fuelPct != null ? `${formatPct(r.fuelPct)} · ${formatLitres(r.fuelLitres)}` : formatLitres(r.fuelLitres)}
                       </td>
-                      <td style={{ color: r.isReporting ? undefined : 'var(--text-2)' }}>{formatSince(r.lastReportedAt)}</td>
+                      <td data-label="Last reported" style={{ color: r.isReporting ? undefined : 'var(--text-2)' }}>{formatSince(r.lastReportedAt)}</td>
                     </tr>
                   ))}
                   {sorted.length === 0 && (
-                    <tr><td colSpan={7} style={{ color: 'var(--text-2)', textAlign: 'center', padding: '20px 0' }}>No vehicles match.</td></tr>
+                    <tr><td className="maint-grid__empty" colSpan={7} style={{ color: 'var(--text-2)', textAlign: 'center', padding: '20px 0' }}>No vehicles match.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -560,20 +561,11 @@ function ScheduledServiceEntry({ entry }) {
         <span className="maint-invoice__leader" aria-hidden="true" />
         <span className="maint-invoice__type-tag" style={{ color: '#3b82f6' }}>Scheduled</span>
       </div>
-      <div className="maint-invoice__note">
-        {Math.round(entry.odometerKm).toLocaleString()} km
-        {entry.kmCovered != null
-          ? ` · ${Math.round(entry.kmCovered).toLocaleString()} km covered since previous`
-          : ' · first recorded service'}
-        {' · next due at '}{Math.round(entry.nextServiceOdoKm).toLocaleString()} km
-      </div>
     </div>
   );
 }
 
 function GarageVisitEntry({ entry }) {
-  const replaced = entry.itemsFixed.filter(i => i.replaced);
-  const serviced = entry.itemsFixed.filter(i => !i.replaced);
   return (
     <div className="maint-invoice__entry">
       <div className="maint-invoice__line">
@@ -581,19 +573,6 @@ function GarageVisitEntry({ entry }) {
         <span className="maint-invoice__leader" aria-hidden="true" />
         <span className="maint-invoice__type-tag" style={{ color: '#f59e0b' }}>Garage Repair</span>
       </div>
-      <div className="maint-invoice__note">
-        {entry.garageName} · {entry.durationMinutes} min · {Math.round(entry.odometerKm).toLocaleString()} km
-      </div>
-      {replaced.length > 0 && (
-        <div className="maint-invoice__note maint-invoice__note--replaced">
-          Replaced: {replaced.map(i => i.name).join(', ')}
-        </div>
-      )}
-      {serviced.length > 0 && (
-        <div className="maint-invoice__note">
-          Serviced: {serviced.map(i => i.name).join(', ')}
-        </div>
-      )}
     </div>
   );
 }
@@ -624,10 +603,7 @@ function Pagination({ page, pageCount, total, pageSize, onPage }) {
   const from = (page - 1) * pageSize + 1;
   const to   = Math.min(page * pageSize, total);
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '8px 12px', borderTop: '1px solid var(--border)',
-    }}>
+    <div className="maint-pagination">
       <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{from}–{to} of {total}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <PageBtn disabled={page <= 1} onClick={() => onPage(page - 1)}>‹</PageBtn>
@@ -643,13 +619,8 @@ function PageBtn({ children, disabled, onClick }) {
     <button
       disabled={disabled}
       onClick={onClick}
-      style={{
-        width: 24, height: 24, borderRadius: 6,
-        border: '1px solid var(--border)', background: 'var(--elevated)',
-        color: disabled ? 'var(--text-3)' : 'var(--text-1)',
-        cursor: disabled ? 'default' : 'pointer',
-        fontSize: 13, fontFamily: 'var(--font)', lineHeight: 1,
-      }}
+      className="maint-pagebtn"
+      style={{ color: disabled ? 'var(--text-3)' : 'var(--text-1)', cursor: disabled ? 'default' : 'pointer' }}
     >
       {children}
     </button>

@@ -1,19 +1,20 @@
-// One live fleet, shared app-wide. useFleetLive opens a snapshot fetch + SSE
-// stream per instance, so components must NOT each call it — this provider
-// mounts it once for the active company and the header, map, side panels and
-// maintenance screen all read the same realtime stream (vehicles update on
-// every SSE position flush).
+// One live fleet, shared app-wide. The fleet itself lives in the TanStack Query
+// cache (hooks/useFleetLive's fleetKeys), but the SSE stream that keeps it
+// current must be opened ONCE — this provider mounts it for the active company.
+// It also applies the dismissed-incident filter once, here, rather than in each
+// of the ~36 components that read the fleet (vehicles update on every SSE
+// position flush, so doing it per reader would repeat it per frame).
 
 import { createContext, useContext, useMemo } from "react";
 import { useFleetLive } from "../hooks/useFleetLive";
-import { useAppContext } from "./AppContext";
+import { useAppSelector } from "./AppContext";
 import { useDismissedIncidents, withoutDismissed } from "../lib/fuelDismissals";
 import { deriveStatus } from "../lib/vehicleMap";
 
 const FleetLiveContext = createContext(null);
 
 export function FleetLiveProvider({ children }) {
-  const { activeCompanyId } = useAppContext();
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const live = useFleetLive(activeCompanyId);
   // Incidents deleted in the incident window leave the fleet here, once, so the
   // alerts list, the map, the side panel and the window all drop them together.

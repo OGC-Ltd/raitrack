@@ -3,7 +3,7 @@
 import { useState } from "react";
 import "./MobileShell.css";
 
-import { useAppContext } from "../../context/AppContext";
+import { useAppFields } from "../../context/AppContext";
 import ErrorBoundary from "../shared/ErrorBoundary";
 
 import MobileTopBar from "./MobileTopBar";
@@ -17,7 +17,7 @@ import MobileDriversScreen from "./MobileDriversScreen";
 import FleetMap from "../body/FleetMap";
 
 export default function MobileShell() {
-  const { mobileActiveTab, mapEverMounted, selectedVehicleId } = useAppContext();
+  const { mobileActiveTab, mapEverMounted, selectedVehicleId } = useAppFields("mobileActiveTab", "mapEverMounted", "selectedVehicleId");
   const [switcherOpen, setSwitcherOpen] = useState(false);
 
   const [dismissedVehicleId, setDismissedVehicleId] = useState(null);

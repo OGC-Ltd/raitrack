@@ -34,7 +34,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAppContext } from "../../context/AppContext";
+import { useCompanies } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
@@ -788,7 +788,7 @@ function fmtDate(value) {
 }
 
 export default function UserAdminPanel() {
-  const { activeCompany } = useAppContext();
+  const { activeCompany } = useCompanies();
   const { orgs, user: me } = useAuth();
   const { orgId, can, canIn, isPlatform } = usePermissions();
 

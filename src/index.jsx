@@ -7,10 +7,13 @@ import './index.css';
 // no preflight/reset, see tailwind.config.js.
 import './tailwind.css';
 import App from './App';
+import StoreProviders from './store/Providers';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <StoreProviders>
+      <App />
+    </StoreProviders>
   </React.StrictMode>
 );
