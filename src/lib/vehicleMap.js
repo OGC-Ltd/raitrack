@@ -1252,6 +1252,17 @@ export function applyDispatchUpdate(existing, data) {
     // property of the RUN and means nothing once the unit has signed back in;
     // leaving it would caption a parked truck with where it went this morning.
     destination: data.destination ?? null,
+    // The run's seal serial (SEAL SERIAL on the unit card, which falls back to
+    // this when the snapshot's trip has none). It can arrive after the
+    // sign-out, on a parked unit with no position to carry it. Only taken when
+    // the server sends the field, so an older server leaves it alone; a closed
+    // run sends null and clears it with the load.
+    sealSerial:  'serialNumber' in data ? (data.serialNumber ?? null) : existing.sealSerial,
+    // The trip keeps its geometry (see above), but its serial must not
+    // outrank the one just pushed — the card reads trip.serialNumber first.
+    trip:        existing.trip && 'serialNumber' in data
+      ? { ...existing.trip, serialNumber: data.serialNumber ?? null }
+      : existing.trip,
   }
 }
 

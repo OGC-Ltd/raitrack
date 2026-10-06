@@ -114,3 +114,28 @@ describe('applyDispatchUpdate — the paperwork', () => {
     expect(next.trip).toBe(onTrip.trip)
   })
 })
+
+describe('applyDispatchUpdate — the seal serial', () => {
+  const base = { id: 'v1', cargo: 'Empty', weight: 0, trip: { serialNumber: null, destination: 'Raiply' }, sealSerial: null };
+
+  it('takes a serial that arrives after the sign-out, over the trip\'s empty one', () => {
+    const next = applyDispatchUpdate(base, { destination: 'Raiply', serialNumber: 'C098062' });
+    expect(next.sealSerial).toBe('C098062');
+    expect(next.trip.serialNumber).toBe('C098062');
+    expect(next.trip.destination).toBe('Raiply');
+  });
+
+  it('clears it when the run closes', () => {
+    const loaded = { ...base, sealSerial: 'C098062', trip: { serialNumber: 'C098062' } };
+    const next = applyDispatchUpdate(loaded, { serialNumber: null });
+    expect(next.sealSerial).toBeNull();
+    expect(next.trip.serialNumber).toBeNull();
+  });
+
+  it('leaves it alone when the server does not send the field', () => {
+    const loaded = { ...base, sealSerial: 'C098062', trip: { serialNumber: 'C098062' } };
+    const next = applyDispatchUpdate(loaded, { destination: 'Raiply' });
+    expect(next.sealSerial).toBe('C098062');
+    expect(next.trip.serialNumber).toBe('C098062');
+  });
+});
