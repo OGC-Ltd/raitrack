@@ -261,6 +261,9 @@ export class Map extends Evented {
     const type = this._types[this._typeId];
     if (this._typeLayer) { this._typeLayer.remove(); this._typeLayer = null; }
     if (!type) return;
+    // A type that brings its own Leaflet layer (lib/googleBase: Google's map
+    // drawn by its own JS API) is mounted as-is instead of tiled through getTile.
+    if (type.leafletLayer) { this._typeLayer = type.leafletLayer().addTo(this._l); return; }
     this._typeLayer = new TypeLayer(type, {
       tileSize: type.tileSize?.width ?? 256,
       minZoom: type.minZoom ?? 0,

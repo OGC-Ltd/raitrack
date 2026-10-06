@@ -1,0 +1,284 @@
+/**
+ * The map's left tool rail, beside the sidebar.
+ *
+ * Eight tools in three groups — finding (search, names, layers, fit), measuring
+ * (ruler, route covered, geofences) and the rail's own expander. Desktop only:
+ * FleetMap renders it where the sidebar exists (not `isCompact`), because a
+ * phone already has its own controls and no room for a second column of them.
+ *
+ * Presentational apart from the search box, which owns its query and its
+ * results; everything that touches the map is a callback from FleetMap.
+ */
+import { useEffect, useRef, useState } from "react";
+import MapLayersMenu from "./MapLayersMenu";
+import { findVehicleByQuery } from "../../lib/vehicleMap";
+import "./MapToolRail.css";
+
+/* OpenStreetMap's geocoder: free, keyless, and limited to one request a second
+   per client, which the 600 ms debounce on typing respects. */
+const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+
+function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`mtr-btn${on ? " mtr-btn--on" : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      aria-label={label}
+      title={title ?? label}
+    >
+      <i className={`ti ${icon}`} aria-hidden="true" />
+      {expanded && <span className="mtr-btn__label">{label}</span>}
+    </button>
+  );
+}
+
+/** Up to six units: an exact plate or name first, then everything whose
+ *  plate, name or DRIVER contains the term. This is the app's only vehicle
+ *  search since the header's box was retired (2026-10-07), so it keeps what
+ *  that box did — a driver's name finds the unit they are on. */
+function matchUnits(vehicles, term) {
+  const t = term.toLowerCase();
+  const exact = findVehicleByQuery(vehicles, term);
+  const out = exact ? [exact] : [];
+  for (const v of vehicles) {
+    if (out.length >= 6) break;
+    if (v === exact) continue;
+    if ([v.id, v.name, v.driver].some((f) => String(f ?? "").toLowerCase().includes(t))) out.push(v);
+  }
+  return out;
+}
+
+/** "Online" for a live unit, otherwise when it was last heard from. */
+function lastSeenLabel(v) {
+  if (v.online) return "Online";
+  const ms = v.capturedAtMs;
+  if (!Number.isFinite(ms)) return "Never reported";
+  const mins = Math.floor((Date.now() - ms) / 60000);
+  if (mins < 1) return "Last seen just now";
+  if (mins < 60) return `Last seen ${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Last seen ${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `Last seen ${days}d ago`;
+  return `Last seen ${new Date(ms).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}`;
+}
+
+/** Vehicles first (they are what this map is for), then places. */
+function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose }) {
+  const [q, setQ] = useState("");
+  const [places, setPlaces] = useState([]);
+  const [state, setState] = useState("idle"); // idle | loading | done | error
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const term = q.trim();
+  const units = term.length >= 2 ? matchUnits(vehicles, term) : [];
+
+  useEffect(() => {
+    if (term.length < 3) { setPlaces([]); setState("idle"); return undefined; }
+    const ctl = new AbortController();
+    const t = setTimeout(async () => {
+      setState("loading");
+      try {
+        const params = new URLSearchParams({ format: "jsonv2", limit: "6", q: term, "accept-language": "en" });
+        // Biased to what is on screen, not bounded by it: a yard name finds the
+        // nearby yard first, and a town two countries away still works.
+        const b = getBias?.();
+        if (b) params.set("viewbox", `${b.west},${b.north},${b.east},${b.south}`);
+        const r = await fetch(`${NOMINATIM}?${params}`, { signal: ctl.signal });
+        const rows = r.ok ? await r.json() : [];
+        setPlaces(rows.map((row) => ({
+          id: row.place_id,
+          name: row.name || String(row.display_name).split(",")[0],
+          detail: row.display_name,
+          lat: Number(row.lat),
+          lng: Number(row.lon),
+          bbox: row.boundingbox?.map(Number) ?? null,   // [south, north, west, east]
+        })));
+        setState("done");
+      } catch (e) {
+        if (e.name !== "AbortError") setState("error");
+      }
+    }, 600);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [term, getBias]);
+
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+    if (e.key === "Enter") {
+      if (units[0]) onPickVehicle(units[0].id);
+      else if (places[0]) onPickPlace(places[0]);
+    }
+  };
+
+  return (
+    <div className="mtr-pop mtr-search" role="dialog" aria-label="Search the map">
+      <div className="mtr-search__field">
+        <i className="ti ti-search" aria-hidden="true" />
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={onKey}
+          placeholder="Plate, driver, place or road"
+          aria-label="Plate, driver, place or road"
+        />
+        {q && (
+          <button type="button" className="mtr-search__clear" onClick={() => setQ("")} aria-label="Clear">
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      {units.length > 0 && (
+        <div className="mtr-search__group">
+          <div className="mtr-search__head">Vehicles</div>
+          {units.map((v) => (
+            <button type="button" key={v.id} className="mtr-search__row" onClick={() => onPickVehicle(v.id)}>
+              <i className="ti ti-truck" aria-hidden="true" />
+              <span className="mtr-search__text">
+                <span className="mtr-search__name">{v.name || v.id}</span>
+                <span className="mtr-search__detail">
+                  {[v.name && v.name !== v.id ? v.id : null, v.driver].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              <span className={`mtr-search__seen${v.online ? " mtr-search__seen--on" : ""}`}>{lastSeenLabel(v)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {term.length >= 3 && (
+        <div className="mtr-search__group">
+          <div className="mtr-search__head">Places</div>
+          {state === "loading" && places.length === 0 && <div className="mtr-search__note">Searching…</div>}
+          {state === "error" && <div className="mtr-search__note">Place search is unavailable right now.</div>}
+          {state === "done" && places.length === 0 && <div className="mtr-search__note">No Places Found</div>}
+          {places.map((p) => (
+            <button type="button" key={p.id} className="mtr-search__row" onClick={() => onPickPlace(p)}>
+              <i className="ti ti-map-pin" aria-hidden="true" />
+              <span className="mtr-search__text">
+                <span className="mtr-search__name">{p.name}</span>
+                <span className="mtr-search__detail">{p.detail}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {term.length < 2 && <div className="mtr-search__note">Type a plate, a driver, a place or a road.</div>}
+    </div>
+  );
+}
+
+export default function MapToolRail({
+  expanded, onToggleExpanded,
+  vehicles, getBias, onPickVehicle, onPickPlace,
+  namesOn, onToggleNames,
+  layers,
+  bases, base, onBase, baseNote,   // base map choice, shown in the Maps panel
+  onFitFleet,
+  measuring, measureText, onToggleMeasure,
+  route,            // { available, on, onToggle, title }
+  traffic,          // the "traffic" map layer ({ on, onToggle }) or null
+  zones,            // the "zones" map layer ({ on, onToggle, label }) or null
+}) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // The search panel closes on a press outside the rail, like the layers menu.
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) setSearchOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [searchOpen]);
+
+  const close = () => setSearchOpen(false);
+
+  return (
+    <div className={`mtr${expanded ? " mtr--expanded" : ""}`} ref={wrapRef}>
+      <div className="mtr-card" role="toolbar" aria-label="Map tools" aria-orientation="vertical">
+        <div className="mtr-group">
+          <RailButton
+            icon="ti-search" label="Search" title="Search for a plate, driver, place or road"
+            on={searchOpen} expanded={expanded} onClick={() => setSearchOpen((v) => !v)}
+          />
+          <RailButton
+            icon={namesOn ? "ti-eye" : "ti-eye-off"} label={namesOn ? "Hide names" : "Show names"}
+            title={namesOn ? "Hide vehicle names on the map" : "Show vehicle names on the map"}
+            on={namesOn} expanded={expanded} onClick={onToggleNames}
+          />
+          <MapLayersMenu
+            layers={layers} rail label={expanded ? "Maps" : null}
+            bases={bases} base={base} onBase={onBase} baseNote={baseNote}
+          />
+          <RailButton
+            icon="ti-scan" label="Fit fleet" title="Fit the whole fleet in view"
+            expanded={expanded} onClick={onFitFleet}
+          />
+        </div>
+
+        <div className="mtr-group">
+          <RailButton
+            icon="ti-ruler-measure" label="Measure"
+            title={measuring ? "Stop measuring (Esc)" : "Measure a distance: click points on the map"}
+            on={measuring} expanded={expanded} onClick={onToggleMeasure}
+          />
+          <RailButton
+            icon="ti-route" label="Route covered" title={route.title}
+            on={route.on} disabled={!route.available} expanded={expanded} onClick={route.onToggle}
+          />
+          {/* Live traffic: its own tool rather than a row in the Maps panel. */}
+          <RailButton
+            icon="ti-traffic-lights" label={traffic?.on ? "Hide traffic" : "Live traffic"}
+            title={traffic
+              ? `${traffic.on ? "Hide" : "Show"} live traffic on the map`
+              : "Live traffic is not available"}
+            on={Boolean(traffic?.on)} disabled={!traffic} expanded={expanded} onClick={traffic?.onToggle}
+          />
+          {/* Drawn for every company, disabled where no geofence layer is
+              offered — a tool that comes and goes between companies reads as
+              a broken rail. */}
+          <RailButton
+            icon="ti-map-pins" label={zones?.on ? "Hide geofences" : "Show geofences"}
+            title={zones
+              ? `${zones.on ? "Hide" : "Show"} geofences (${zones.label})`
+              : "No geofences are drawn for this company"}
+            on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
+          />
+        </div>
+
+        <div className="mtr-group">
+          <RailButton
+            icon={expanded ? "ti-chevron-left" : "ti-chevron-right"} label={expanded ? "Collapse" : "Expand"}
+            title={expanded ? "Collapse the tools" : "Show tool names"}
+            expanded={expanded} onClick={onToggleExpanded}
+          />
+        </div>
+      </div>
+
+      {searchOpen && (
+        <SearchPanel
+          vehicles={vehicles}
+          getBias={getBias}
+          onPickVehicle={(id) => { close(); onPickVehicle(id); }}
+          onPickPlace={(p) => { close(); onPickPlace(p); }}
+          onClose={close}
+        />
+      )}
+
+      {measuring && (
+        <div className="mtr-pop mtr-measure" role="status" aria-live="polite">
+          <i className="ti ti-ruler-measure" aria-hidden="true" />
+          <span className="mtr-measure__value">{measureText ?? "Click the map to start"}</span>
+          <span className="mtr-measure__hint">Backspace undoes · Esc ends</span>
+        </div>
+      )}
+    </div>
+  );
+}

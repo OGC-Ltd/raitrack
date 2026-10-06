@@ -132,101 +132,14 @@
   color: #2563eb;
 }
 
-/* Search */
-.app-header__search-wrap {
-  /* centred in the header, independent of logo/org width */
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(420px, 40vw);
-}
 
-.app-header__search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #f8fafc;
-  border: 1px solid #e8edf2;
-  border-radius: 7px;
-  height: 32px;
-  padding: 0 12px;
-  width: 100%;
-  box-sizing: border-box;
-}
 
-.app-header__search-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
-  z-index: 500;
-  overflow: hidden;
-}
 
-.app-header__search-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  width: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  border-bottom: 1px solid #f1f5f9;
-}
 
-.app-header__search-result:last-child { border-bottom: none; }
-.app-header__search-result:hover { background: #f8fafc; }
 
-.app-header__search-result-plate {
-  font-size: 12px;
-  font-weight: 600;
-  color: #0f172a;
-  flex-shrink: 0;
-}
 
-.app-header__search-result-driver {
-  font-size: 11px;
-  color: #64748b;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-.app-header__search-result-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
 
-.app-header__search-icon {
-  font-size: 13px;
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.app-header__search-input {
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  color: #334155;
-  font-family: inherit;
-  width: 100%;
-  outline: none;
-}
-
-.app-header__search-input::placeholder {
-  color: #64748b;
-}
 
 /* Bell */
 /* Hallmark · component: header bell + badge · genre: modern-minimal · theme: the app's own header
@@ -402,16 +315,6 @@
   color: #64748b;
 }
 
-/* Last-online time on each search result */
-.app-header__search-result-seen {
-  font-size: 11px;
-  color: #64748b;
-  white-space: nowrap;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-.app-header__search-result-seen--on { color: #15803d; }
-
 /* Company logos in the organisation switcher */
 
 .app-header__co-mark {
@@ -517,15 +420,6 @@
    wins. Below 1100px the search rejoins the flow and the row simply shares
    itself out. */
 @media (max-width: 1100px) {
-  .app-header__search-wrap {
-    position: static;
-    transform: none;
-    /* Takes the slack left by the fixed-width items either side of it. */
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto;
-    max-width: 420px;
-  }
 
   /* The dropdown is positioned against this wrapper, which is no longer
      absolute — so the wrapper has to become the containing block itself or
@@ -539,8 +433,7 @@
      hung 15px BELOW the 52px header, over the breadcrumbs, with its right end
      under the notification bell, while the row it had left went on reserving
      its empty seat. Every width from 768 to 1100 had this. */
-  .app-header__org-wrap,
-  .app-header__search-wrap {
+  .app-header__org-wrap {
     position: relative;
     top: auto;
     left: auto;
@@ -557,7 +450,7 @@
 /* Tablet — the organisation name stays, shortened. It used to be hidden here
    (font-size 0), leaving a lone "▾" beside the logo: on a 768px screen the
    header then gave no clue which of four organisations was on screen. It is
-   capped and ellipsed instead, so it cannot crowd the search. */
+   capped and ellipsed instead. */
 @media (max-width: 1023px) {
   .app-header {
     padding-right: 12px;
@@ -591,38 +484,3 @@
   .app-header__org-menu { max-width: min(320px, 86vw); }
 }
 
-/* ── …and with the name gone, the search is centred again ──────────────────
- *
- * The 1100px rule above takes the search out of the flow's way because the
- * absolutely-centred box was painted over a long organisation NAME. That name
- * is `font-size: 0` from 1023px down — there is nothing left for the box to
- * collide with, and sharing the row out instead left it visibly off centre: at
- * 768px it sat 119px from the org chevron and 228px from the bell.
- *
- * So below the name, centred on the header again. The width caps keep it clear
- * of both ends by construction: the right cluster (bell + avatar + padding) is
- * about 102px, so a 240px box centred in a 375-to-860px header cannot reach it
- * — measured at 768px it runs 264 to 504, with the bell starting at 666.
- */
-@media (max-width: 1023px) {
-  .app-header__search-wrap {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    flex: none;
-    width: min(420px, 62vw);
-    max-width: none;
-  }
-}
-
-/* The search box is the first thing to give up space — below this it is an
-   icon that expands the mobile search tray instead. */
-@media (max-width: 860px) {
-  .app-header__search-wrap { max-width: 240px; }
-}
-
-@media (pointer: coarse) {
-  .app-header__search { height: 38px; }
-  .app-header__search-input { font-size: 16px; }  /* stops iOS zooming on focus */
-}

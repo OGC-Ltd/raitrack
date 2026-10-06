@@ -156,7 +156,9 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 36px;
+  /* 32, not 36: five rows of four px is what keeps the sidebar inside a
+     900px window without a scrollbar (2026-10-07). */
+  min-height: 32px;
   padding: 0 8px;
   border: none;
   border-radius: 7px;
