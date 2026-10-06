@@ -669,72 +669,53 @@
  *
  * Height, not width, is what actually runs out on the machines this is used
  * on. A 1366x768 panel has roughly 640px left once the browser's own chrome is
- * taken out, and a 1280x720 has under 600 — both plenty wide for the two
- * columns and neither with room for a 587px sheet plus its margins.
+ * taken out, a 1280x720 under 600, and a laptop at 150% display scaling about
+ * 585 — all plenty wide for the two columns, none with room for the 608px
+ * sheet plus margins that read as margins.
  *
- * So this trades vertical air rather than dropping to the stacked layout: the
- * picture is worth keeping on a laptop, and a one-column sign-in on a wide
- * screen looks like a page that failed to load its other half.
+ * The sheet is SCALED here, whole, rather than squeezed. This block used to
+ * tighten the padding and step the type down a size or two, which kept the
+ * sheet from overflowing but left it touching the top and bottom of the window
+ * (16px of air on a 585px laptop) with every proportion slightly off. The
+ * operator wants what a tall screen shows: the same sheet, in the middle, with
+ * the photograph around it. `zoom` gives exactly that — it lays out at the
+ * smaller size, so text stays crisp, unlike `transform: scale()`.
  *
- * `min-width: 901px` keeps it away from the stacked layout below, where the
- * picture is gone and these numbers would only squeeze the form for no reason. */
-@media (max-height: 820px) and (min-width: 901px) {
-  .login { padding: 16px; }
-  .login__shell { padding: 18px; gap: 20px; border-radius: 24px; }
-  /* The floor was there to stop the picture collapsing when it was a
-     ratio-shaped plate. It stretches to the form now, so the form is the floor
-     and this one only fights it. */
-  .login__hero { min-height: 0; }
-  .login__title { margin-top: 18px; font-size: 26px; }
-  .login__sub { margin-top: 9px; }
-  .login__form { margin-top: 18px; gap: 10px; }
-}
+ * Each step keeps the sheet to about two-thirds of the window's height, which
+ * is the proportion on a 948px screen at full size.
+ *
+ * The TEXT is mostly exempt. Scaled with the sheet, the 13px copy drew at 9px
+ * on a laptop and the operator could not read it, so body copy is divided back
+ * up by the zoom (--lz) and never draws below 90% of its full size (--lt).
+ * Not 100%: at full size the copy wraps into extra lines in the narrowed
+ * column, the sheet grows back to the window's edges and the air this block
+ * exists for is gone. Only the spacing and the headings shrink further.
+ *
+ * `min-width: 901px` keeps it away from the stacked layout below, which scrolls
+ * and has no photograph to frame. */
+@media (min-width: 901px) {
+  @media (max-height: 860px) { .login__shell { --lz: 0.92; zoom: var(--lz); } }
+  @media (max-height: 800px) { .login__shell { --lz: 0.86; } }
+  @media (max-height: 740px) { .login__shell { --lz: 0.8; } }
+  @media (max-height: 680px) { .login__shell { --lz: 0.74; } }
+  @media (max-height: 620px) { .login__shell { --lz: 0.68; } }
+  @media (max-height: 560px) { .login__shell { --lz: 0.62; } }
+  @media (max-height: 500px) { .login__shell { --lz: 0.56; } }
 
-/* Shorter still — a 1280x720 with a bookmarks bar, or a tablet in landscape. */
-@media (max-height: 700px) and (min-width: 901px) {
-  .login__shell { padding: 14px; gap: 16px; }
-  .login__title { margin-top: 12px; font-size: 23px; }
-  .login__form { margin-top: 14px; }
-  .login__hero { padding: 18px; }
-
-  /* The corner card used to be dropped here, and this is the band most
-     laptops actually sit in: a 1366x768 has around 640px of viewport once the
-     browser's chrome is taken out, a 1280x720 under 600. So the one live
-     figure on the page was missing on the machines it is most often opened on.
-     The rule was written when the card was decorative — static copy, nothing
-     fetched, "no information anybody needs to sign in" — and that stopped
-     being true when it started carrying the platform's in-transit count.
-     Hiding it also bought nothing: the card is absolutely positioned in the
-     hero's corner, so it occupies no height in the flow and removing it
-     recovered not one pixel of the space this whole block exists to find.
-     It is made SMALLER instead, because the picture behind it is smaller. */
-  .login__stat {
-    max-width: 158px;
-    padding: 9px 12px 10px;
-    /* The ring is what reads as the cut in the photograph. It thins with the
-       card rather than staying 9px, which at this size would be a border
-       around a label instead of a gap in a picture. */
-    box-shadow:
-      0 0 0 7px var(--login-sheet),
-      var(--login-stat-shadow);
-    border-radius: 0 22px 0 18px;
+  @media (max-height: 860px) {
+    .login__shell      { --lt: 0.9; }
+    .login__sub        { font-size: calc(13px * max(1, var(--lt) / var(--lz))); }
+    .login__label      { font-size: calc(11px * max(1, var(--lt) / var(--lz))); }
+    .login__input      { font-size: calc(14px * max(1, var(--lt) / var(--lz))); }
+    .login__error      { font-size: calc(12.5px * max(1, var(--lt) / var(--lz))); }
+    .login__submit     { font-size: calc(14px * max(1, var(--lt) / var(--lz))); }
+    .login__link       { font-size: calc(12px * max(1, var(--lt) / var(--lz))); }
+    .login__foot       { font-size: calc(12px * max(1, var(--lt) / var(--lz))); }
+    .login__version    { font-size: calc(11px * max(1, var(--lt) / var(--lz))); }
+    .login__hero-sub   { font-size: calc(12.5px * max(1, var(--lt) / var(--lz))); }
+    .login__tag        { font-size: calc(12px * max(1, var(--lt) / var(--lz))); }
+    .login__stat-label { font-size: calc(11.5px * max(1, var(--lt) / var(--lz))); }
   }
-  .login__stat-figure { font-size: 16px; }
-  .login__stat-label  { font-size: 10.5px; line-height: 1.3; }
-  /* Kept in proportion with the card opposite it — the two top corners are a
-     pair, and shrinking one alone breaks the rhyme. */
-  .login__hero { --scoop: 40px; }
-}
-
-/* Shorter again — a netbook, or a laptop with the window not maximised. The
-   picture is now short enough that a three-line card would be most of it, so
-   the BUSY flag goes: it is the one line here that repeats something the
-   figure and its share already say. The count itself stays. */
-@media (max-height: 600px) and (min-width: 901px) {
-  .login__stat { max-width: 146px; padding: 8px 10px 9px; }
-  .login__stat-figure { font-size: 15px; }
-  .login__stat-label  { font-size: 10px; }
-  .login__stat-flag   { display: none; }
 }
 
 /* ── The live pulse, and the badge marks ─────────────────────────────────────

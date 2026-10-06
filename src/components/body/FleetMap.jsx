@@ -3836,7 +3836,7 @@ export default function FleetMap() {
     if (hasBridges) {
       out.push({
         id: "bridges",
-        label: "Quick links",
+        label: "All Weighbridges",
         on: showBridges,
         onToggle: () => {
           bridgeRequestedRef.current = !showBridges;

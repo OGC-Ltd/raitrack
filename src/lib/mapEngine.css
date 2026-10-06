@@ -10,6 +10,11 @@
   background: #eef0ed;
   font: inherit;
   outline: none;
+  /* Leaflet's panes and controls carry z-index 400–1000. Without a stacking
+     context of its own the map competes with the whole page at those values
+     and paints over the live feed drawer (150) and anything else fixed above
+     it; isolated, it stacks as one ordinary block where it sits. */
+  isolation: isolate;
 }
 .leaflet-container a { color: inherit; }
 

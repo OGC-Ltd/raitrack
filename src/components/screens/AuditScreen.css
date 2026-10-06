@@ -480,3 +480,41 @@
   .aud-raise { max-width: none; }
   .aud-raise-foot .sp4-submit-btn { margin-left: auto; }
 }
+
+/* ── The units table, boxed on the page margin ──────────────────────────────
+ * Operator: the same edges as the Fuel report. That page keeps everything on
+ * --sp4-gutter and frames its tables (`.frv-table`: hairline, 10px corners);
+ * this table was full-bleed, so its header fill and row rules ran out through
+ * the margin on both sides as a striped band beside the cards above it. Now
+ * the frame sits on the gutter, flush with the stat cards, and inside it the
+ * edge cells take the grid's own 14px — the same rule SensorPanel's
+ * `--framed` pages use. Not `.sp4-keep-table`: that class also pins a column
+ * on phones, and this table turns into cards there.
+ *
+ * Tablet and desk only; under 768 the units are cards with their own edges. */
+@media (min-width: 768px) {
+  .aud-units {
+    flex: 0 1 auto;
+    min-height: 0;
+    margin: var(--sp4-md) var(--sp4-gutter) calc(var(--app-footer-h, 64px) + var(--sp4-md));
+    padding-bottom: 0;
+    border: 1px solid var(--sp4-line-hi);
+    border-radius: 10px;
+    background: var(--sp4-surface);
+  }
+  .app--light .aud-units { border-color: var(--sp4-line); }
+
+  .aud-units .sp4-table thead th:first-child,
+  .aud-units .sp4-table tbody td:first-child { padding-left: 14px; }
+  .aud-units .sp4-table thead th:last-child,
+  .aud-units .sp4-table tbody td:last-child { padding-right: 14px; }
+  .aud-units .sp4-table tbody tr:last-child { border-bottom: 0; }
+  .aud-units .sp4-table tbody .aud-detail-row > td { padding-left: 0; padding-right: 0; }
+
+  /* The open unit's cards on the frame's 14px, under the first column. */
+  .aud-units .aud-detail {
+    left: 14px;
+    margin-left: 14px;
+    width: calc(100cqw - 28px);
+  }
+}

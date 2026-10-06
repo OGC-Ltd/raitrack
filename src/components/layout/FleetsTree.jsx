@@ -11,7 +11,7 @@
  *             switch whose sub-line carries the moving count
  *   Open      one flat list of the places this block opens — Units, Stopped
  *             in transit, Fuel alerts / audit / report — each a row with its
- *             count and a chevron
+ *             count (no chevron: nothing unfolds beneath them)
  *
  * What each control does, its permission gate and its count are unchanged.
  *
@@ -47,7 +47,8 @@ import './FleetsTree.css';
 /** Chips shown before "N more": about two rows at the sidebar's width. */
 const CHIP_FOLD = 6;
 
-/** A place this block opens: icon, label, count, chevron. */
+/** A place this block opens: icon, label, count. No chevron — nothing
+ *  unfolds beneath these rows, so an arrow promised children they lack. */
 function OpenRow({ icon, label, count = null, tone = 'plain', current = false, onClick, title }) {
   const masked = useContext(TreeCountsMasked);
   if (masked && count != null) { count = MASKED_COUNT; tone = 'plain'; }
@@ -62,7 +63,6 @@ function OpenRow({ icon, label, count = null, tone = 'plain', current = false, o
       <i className={`ti ti-${icon} fleets__row-icon`} aria-hidden="true" />
       <span className="fleets__row-label">{label}</span>
       {count != null && <span className={`fleets__count fleets__count--${tone}`}>{count}</span>}
-      <i className="ti ti-chevron-right fleets__row-chev" aria-hidden="true" />
     </button>
   );
 }
