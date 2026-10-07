@@ -7055,10 +7055,9 @@ export default function FleetMap() {
               A single column of seven was 274px of a screen whose free height
               is often 450, which is what forced every menu panel to open into
               a sliver. The three CAMERA buttons are one group and read fine
-              side by side, so they become the foot of an L: reset, out, in —
-              left to right, ending under the menus, which keeps the zoom pair
-              in their conventional order and puts the destructive one furthest
-              from the cursor's resting place.
+              side by side, so they become the foot of an L: out, reset, in —
+              left to right, ending under the menus. Reset sits BETWEEN the two
+              zooms (operator, 2026-10-08), as the camera's centre control.
 
               At 1024 and up they stand back up into a column. The crowding the
               L solved is gone there: Map layers, Fleets and Units moved to the
@@ -7067,16 +7066,9 @@ export default function FleetMap() {
               else on the web and the reason to break that had expired.
               CSS-only — see the min-width: 1024px block in FleetMap.css, which
               also re-sizes --rail-panel-max-h for the shorter rail. The order
-              is set there too, because the vertical reading is reset, in, out
-              while the horizontal one is reset, out, in. */}
+              is set there too, because the vertical reading is in, reset, out
+              while the horizontal one is out, reset, in. */}
           <div className="map-cam-row">
-            <button
-              type="button"
-              className="map-cam-btn map-cam-btn--reset"
-              onClick={resetView}
-              title="Reset the view — level the camera and go back to the whole estate"
-              aria-label="Reset view"
-            >⌖</button>
             <button
               type="button"
               className="map-cam-btn map-cam-btn--out"
@@ -7084,6 +7076,13 @@ export default function FleetMap() {
               title="Zoom out"
               aria-label="Zoom out"
             >−</button>
+            <button
+              type="button"
+              className="map-cam-btn map-cam-btn--reset"
+              onClick={resetView}
+              title="Reset the view — level the camera and go back to the whole estate"
+              aria-label="Reset view"
+            >⌖</button>
             <button
               type="button"
               className="map-cam-btn map-cam-btn--in"
