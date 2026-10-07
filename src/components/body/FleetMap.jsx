@@ -2464,6 +2464,16 @@ export default function FleetMap() {
   const { can: canDo } = usePermissions();
   const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen } = useMapLayers();
   const { isCompact, isMobile } = useBreakpoint();
+  /* Where the side panel exists (desktop) a click selects the unit and the
+     panel shows it; the map card is the HOVER preview only (operator,
+     2026-10-07: "the unit card should be seen on hover since we have the
+     sidepanel card already"). Pinning a second card beside the panel showed
+     the same unit twice and, being pinned, switched hover off for every other
+     marker. Phones and tablets have no side panel (selection is cleared below
+     1024px), so there the click still pins the card — it is the only detail
+     they get. A ref so the restore effect below reads the current layout. */
+  const isCompactRef = useRef(isCompact);
+  isCompactRef.current = isCompact;
 
   const { vehicles: _lv, orgId, loading: vehiclesLoading, error: vehiclesError, retry } = useFleetLiveShared();
   const vehicles = _lv ?? [];
@@ -3446,9 +3456,10 @@ export default function FleetMap() {
     }
     setSelectedVehicleId(id);
     setFeedVehicleId(id);
-    // Pin the card where the click happened. It stops following the cursor from
-    // here, so the Replay button inside it can actually be reached.
-    setPinnedId(id);
+    // Pin the card where the click happened — phones and tablets only, where
+    // there is no side panel (see isCompactRef). It stops following the cursor
+    // from here, so the Replay button inside it can actually be reached.
+    if (isCompactRef.current) setPinnedId(id);
   }, [setActiveRoute, setSelectedVehicleId, setFeedVehicleId]);
 
   /**
@@ -3461,7 +3472,7 @@ export default function FleetMap() {
    */
   const handleOpenUnit = useCallback((id) => {
     setSelectedVehicleId(id);
-    setPinnedId(id);
+    if (isCompactRef.current) setPinnedId(id);
   }, [setSelectedVehicleId]);
 
   /* Opening a fuel alert closes the unit's map card (operator, 28 Sep:
@@ -6389,7 +6400,7 @@ export default function FleetMap() {
     const put = () => {
       if (!markerMapRef.current[v.id]) return false;
       setActiveRoute(v.id, { draw: false });
-      setPinnedId(v.id);
+      if (isCompactRef.current) setPinnedId(v.id);
       markSelectionRestored(true);
       return true;
     };
