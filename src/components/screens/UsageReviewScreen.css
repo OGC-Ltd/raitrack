@@ -1,0 +1,163 @@
+/* Motor Report — built on the sp4 panel tokens, so it follows the theme like
+   the Fuel Report and Audit pages beside it. */
+
+.urv-root .sp4-header-kpis { flex-wrap: wrap; }
+.urv-kpi { min-width: 140px; }
+.urv-kpi__u { font-size: 12px; font-weight: 600; color: var(--sp4-text-3); margin-left: 2px; }
+.urv-kpi__sub {
+  display: block;
+  font-size: 10.5px;
+  color: var(--sp4-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.urv-kmpl { cursor: text; }
+.urv-kmpl input {
+  width: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--sp4-text-1);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.urv-kmpl input::placeholder { color: var(--sp4-text-4); font-weight: 500; }
+
+/* The body scrolls: map and charts on top, the tables under them. */
+.urv-body { overflow-y: auto; padding-bottom: 16px; }
+
+.urv-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px var(--sp4-gutter);
+  border-bottom: 1px solid var(--sp4-line);
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+}
+.urv-bar__what b { color: var(--sp4-text-1); }
+.urv-bar__acts { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.urv-bar__acts .sp4-ghost-btn { display: inline-flex; align-items: center; gap: 5px; }
+.urv-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.urv-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 8px 0 10px;
+  border: 1px solid var(--frv-s1); border-radius: 999px;
+  background: color-mix(in srgb, var(--frv-s1) 12%, transparent); color: var(--sp4-text-1);
+  font: inherit; font-size: var(--sp4-label); font-weight: 600; cursor: pointer;
+}
+.urv-chip--place { border-color: var(--frv-s2); background: color-mix(in srgb, var(--frv-s2) 12%, transparent); }
+.urv-chip .ti { font-size: 12px; opacity: 0.7; }
+
+.urv-note {
+  margin: 10px var(--sp4-gutter) 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: var(--sp4-body);
+}
+.urv-note--warn { border: 1px solid var(--sp4-warn); color: var(--sp4-text-1); background: color-mix(in srgb, var(--sp4-warn) 10%, transparent); }
+
+.urv-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px var(--sp4-gutter) 0;
+}
+/* Same columns as the row above, so the places table lines up under the map. */
+.urv-grid--lower { align-items: start; }
+
+.urv-map {
+  position: relative;
+  min-height: 480px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.urv-map__canvas { position: absolute; inset: 0; }
+.app--light .urv-map { border-color: var(--sp4-line); }
+.urv-map__legend {
+  position: absolute;
+  left: 10px;
+  bottom: 30px;
+  z-index: 500;
+  display: grid;
+  gap: 3px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+.urv-map__legend span { display: inline-flex; align-items: center; gap: 6px; }
+.urv-map__legend i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+.urv-map__legend i.urv-line { width: 14px; height: 3px; border-radius: 2px; border: 0; box-shadow: none; }
+
+.urv-side { display: grid; gap: 12px; align-content: start; min-width: 0; }
+
+/* Cards are the Fuel Report's .frv-card (border, radius, title, note); these
+   only add what this page needs on top. */
+.urv-card { overflow: hidden; }
+.urv-card--table { padding-bottom: 0; }
+.urv-card--table .sp4-table-scroll { margin: 0 -16px; }
+.urv-card__sub {
+  margin: -4px 0 0;
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-3);
+}
+
+.urv-chart { height: 190px; }
+.urv-chart--hours { height: 170px; }
+.urv-chart .recharts-surface { cursor: pointer; }
+/* Recharts' keyboard layer takes focus on a click and the browser rings it
+   in its own orange; the panel's accent ring, for the keyboard only. */
+.urv-chart .recharts-wrapper:focus,
+.urv-chart .recharts-surface:focus { outline: none; }
+.urv-chart .recharts-wrapper:focus-visible,
+.urv-chart .recharts-surface:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; border-radius: 6px; }
+
+.urv-table { max-height: 380px; overflow: auto; }
+.urv-table .sp4-table { width: 100%; }
+.urv-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.urv-mono { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--sp4-text-2); }
+.urv-row { cursor: pointer; }
+.urv-row:hover td { background: var(--sp4-raised); }
+.urv-row--on td { background: color-mix(in srgb, var(--frv-s2) 14%, transparent); }
+.urv-hbar {
+  display: inline-block;
+  width: 44px;
+  height: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--frv-s2) var(--w), var(--frv-track) var(--w));
+}
+.urv-trip td { color: var(--sp4-text-2); }
+.urv-hint { padding: 6px 14px 16px; font-size: var(--sp4-body); color: var(--sp4-text-3); }
+
+.urv-foot {
+  padding: 12px var(--sp4-gutter) 0;
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-3);
+}
+
+@media (max-width: 1100px) {
+  .urv-grid, .urv-grid--lower { grid-template-columns: minmax(0, 1fr); }
+  .urv-map { min-height: 380px; }
+}
+@media (max-width: 767px) {
+  .urv-grid { padding: 10px 16px 0; }
+  .urv-bar { padding: 10px 16px; }
+  .urv-bar__acts { margin-left: 0; }
+  .urv-map { min-height: 320px; }
+  .urv-map__legend { display: none; }
+  .urv-hbar { display: none; }
+  .urv-kpi { min-width: 0; }
+  .urv-kpi__sub { max-width: 150px; }
+}

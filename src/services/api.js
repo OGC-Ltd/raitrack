@@ -144,6 +144,30 @@ export async function apiFetch(path, options = {}, retried = false) {
   return res.json()
 }
 
+/**
+ * A file from the API — a workbook or a PDF — with the same auth and one
+ * refresh-and-retry as apiFetch. Resolves to { blob, filename }, the filename
+ * taken from the server's Content-Disposition when it sends one.
+ */
+export async function apiFetchBlob(path, options = {}, retried = false) {
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    credentials: 'include',
+    headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...options.headers },
+  })
+  if (res.status === 401 && !retried) {
+    try { await refreshOnce() } catch { setAccessToken(null); onSessionLost?.(); throw new ApiError('Session expired', 401) }
+    return apiFetchBlob(path, options, true)
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(detailedMessage(body) ?? `HTTP ${res.status}`, res.status, body)
+  }
+  const cd = res.headers.get('Content-Disposition') ?? ''
+  const filename = /filename="?([^";]+)"?/i.exec(cd)?.[1] ?? null
+  return { blob: await res.blob(), filename }
+}
+
 // EventSource can't send headers, so it must hit the same origin as the app —
 // the Vite proxy (dev) / nginx (prod) forwards it to the backend. Returning a
 // BASE-prefixed path keeps it consistent with apiFetch.
