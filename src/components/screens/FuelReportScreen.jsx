@@ -41,6 +41,8 @@ import TableToolbar from "../body/TableToolbar";
 import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
 import FuelReportOverview from "./FuelReportOverview";
+import FuelPerformanceReview from "./FuelPerformanceReview";
+import { useCompanies } from "../../context/AppContext";
 import { TripsView, ParkingsView } from "./FuelReportSegments";
 import { watchTableLabels } from "../../lib/tableLabels";
 import {
@@ -562,7 +564,7 @@ function Kpi({ n, label, tone, title }) {
   );
 }
 
-export default function FuelReportScreen() {
+function UnitFuelReport() {
   const { vehicles = [], orgId } = useFleetLiveShared();
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
@@ -868,6 +870,42 @@ export default function FuelReportScreen() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Two views of the fleet's fuel: the FLEET REVIEW (every unit against its
+ * standard — the operator's performance review) and the UNIT ANALYSIS (one
+ * tank, one period). Selecting a unit in the review opens its analysis.
+ */
+const MODE_KEY = "fuelReport.mode";
+export default function FuelReportScreen() {
+  const { orgId } = useFleetLiveShared();
+  const { activeCompany } = useCompanies();
+  const dispatch = useDispatch();
+  const [mode, setModeState] = useState(() => {
+    try { return localStorage.getItem(MODE_KEY) === "unit" ? "unit" : "review"; } catch { return "review"; }
+  });
+  const setMode = (m) => {
+    setModeState(m);
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* per-viewer nicety only */ }
+  };
+  const openUnit = (vehicleId) => {
+    if (orgId) dispatch(unitChosen(orgId, vehicleId));
+    setMode("unit");
+  };
+  return (
+    <div className="sp4-root frp-shell">
+      <div className="frp-modes" role="tablist" aria-label="Fuel report view">
+        {[["review", "Fleet review"], ["unit", "Unit analysis"]].map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={mode === k}
+                  className={`frp-mode${mode === k ? " frp-mode--on" : ""}`} onClick={() => setMode(k)}>{label}</button>
+        ))}
+      </div>
+      {mode === "review"
+        ? <FuelPerformanceReview orgId={orgId} orgName={activeCompany?.name} onOpenUnit={openUnit} />
+        : <UnitFuelReport />}
     </div>
   );
 }

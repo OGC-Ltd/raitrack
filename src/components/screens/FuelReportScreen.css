@@ -636,3 +636,21 @@
   .frs-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .frs-bin { grid-template-columns: 88px minmax(0, 1fr) 68px; gap: 8px; }
 }
+
+/* ── Fleet review | Unit analysis ──
+   The two views share the page; the switch sits above both, in the panel's
+   own surface, so it reads as the page's top level and not as another tab. */
+.frp-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.frp-shell > .sp4-root { flex: 1; min-height: 0; }
+.frp-modes {
+  display: flex; gap: 2px; padding: 8px var(--sp4-gutter, 20px) 0;
+  background: var(--sp4-surface, transparent); border-bottom: 1px solid var(--sp4-line, #dde1e7);
+}
+.frp-mode {
+  border: 0; background: none; cursor: pointer; font: inherit;
+  padding: 7px 12px 9px; font-size: 13px; font-weight: 600;
+  color: var(--sp4-text-3, #52606f); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.frp-mode:hover { color: var(--sp4-text-1, #0f172a); }
+.frp-mode--on { color: var(--sp4-text-1, #0f172a); border-bottom-color: var(--sp4-accent, #0369a1); }
+.frp-mode:focus-visible { outline: 2px solid var(--sp4-accent, #0369a1); outline-offset: -2px; }
