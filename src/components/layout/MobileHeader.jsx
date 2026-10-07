@@ -172,6 +172,11 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel report
                 </button>
               )}
+              {can('telemetry:read') && (
+                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('usageReview'); setUserOpen(false); }}>
+                  <i className="ti ti-route" aria-hidden="true" /> Motor report
+                </button>
+              )}
               {can('user:create') && (
                 <button className="mobile-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" /> User accounts

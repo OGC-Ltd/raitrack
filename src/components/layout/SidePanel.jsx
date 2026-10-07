@@ -28,6 +28,9 @@ export const NAV_ITEMS = [
   { key: 'audit',        label: 'Fuel Audit',   icon: 'clipboard-check', permission: 'fuel_audit:read', section: 'system' },
   // Fuel > Report: advanced fuel analysis for one unit over a period.
   { key: 'fuelReport',   label: 'Fuel Report',  icon: 'report-analytics', permission: 'fuel_filling:read', section: 'system' },
+  // Motor Report: how one unit was used over a period — drive hours, km, fuel,
+  // where it spent its time — with the workbook and a PDF.
+  { key: 'usageReview',  label: 'Motor Report', icon: 'route', permission: 'telemetry:read', section: 'system' },
 ];
 
 function weatherDesc(code) {
@@ -404,6 +407,10 @@ export default function SidePanel() {
               report={can('fuel_filling:read') ? {
                 active: desktopActiveTab === 'fuelReport',
                 open:   () => handleNav('fuelReport'),
+              } : null}
+              review={can('telemetry:read') ? {
+                active: desktopActiveTab === 'usageReview',
+                open:   () => handleNav('usageReview'),
               } : null}
             />
             {/* No Map layers here since 2026-10-07: base map and layers are in

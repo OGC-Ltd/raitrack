@@ -68,10 +68,11 @@ function OpenRow({ icon, label, count = null, tone = 'plain', current = false, o
 }
 
 /**
- * `audit` is the Fuel Audit page and `report` the Fuel Report, where this
+ * `audit` is the Fuel Audit page, `report` the Fuel Report and `review` the
+ * Motor Report, where this
  * account may open them: { active, open }. Null hides the row.
  */
-export default function FleetsTree({ audit = null, report = null }) {
+export default function FleetsTree({ audit = null, report = null, review = null }) {
   const { fleetTypes = [], inTransitOnly } = useAppFields("fleetTypes", "inTransitOnly");
   const { setFleetTypes, setInTransitOnly } = useAppActions();
   const { vehicles = [] } = useFleetLiveShared();
@@ -238,6 +239,15 @@ export default function FleetsTree({ audit = null, report = null }) {
             current={report.active}
             onClick={report.open}
             title="Advanced fuel analysis — one unit over a period: statistics, fuel graph, fillings, drains, trips and the track"
+          />
+        )}
+        {review && (
+          <OpenRow
+            icon="route"
+            label="Motor report"
+            current={review.active}
+            onClick={review.open}
+            title="How one unit was used over a period — drive hours, distance, fuel and where it spent its time — with Excel and PDF"
           />
         )}
       </nav>
