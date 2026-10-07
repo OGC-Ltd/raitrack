@@ -17,6 +17,8 @@ import menengaiMark  from '../assets/logos/menengai-mark.png';
 import westsugarMark from '../assets/logos/westsugar-mark.png';
 import kabrasLogo    from '../assets/logos/kabras-logo.png';     // the operator's Kabras.png, background removed
 import kabrasMark    from '../assets/logos/kabras-mark.png';     // the oval emblem, without the ribbon
+import nzoiaLogo     from '../assets/logos/nzoia-logo.png';      // the operator's Nzoia Sugar.png, trimmed
+import nzoiaMark     from '../assets/logos/nzoia-mark.png';      // the round emblem, without the ribbon
 import timsalesLogo  from '../assets/logos/timsales.png';
 import timsalesMark  from '../assets/logos/timsales-mark.png';         // the tree, without the wordmark
 import aquamistLogo  from '../assets/logos/aquamist.png';
@@ -24,8 +26,8 @@ import aquamistLogo  from '../assets/logos/aquamist.png';
 // out of the logo, not a font set to look like it.
 import aquamistMark  from '../assets/logos/aquamist-mark.png';
 
-const LOGOS = { sukari: sukariLogo, kasulu: kasuluLogo, menengai: menengaiLogo, westsugar: westsugarLogo, kabras: kabrasLogo, timsales: timsalesLogo, aquamist: aquamistLogo };
-const MARKS = { sukari: sukariMark, kasulu: kasuluMark, menengai: menengaiMark, westsugar: westsugarMark, kabras: kabrasMark, timsales: timsalesMark, aquamist: aquamistMark };
+const LOGOS = { sukari: sukariLogo, kasulu: kasuluLogo, menengai: menengaiLogo, westsugar: westsugarLogo, kabras: kabrasLogo, nzoia: nzoiaLogo, timsales: timsalesLogo, aquamist: aquamistLogo };
+const MARKS = { sukari: sukariMark, kasulu: kasuluMark, menengai: menengaiMark, westsugar: westsugarMark, kabras: kabrasMark, nzoia: nzoiaMark, timsales: timsalesMark, aquamist: aquamistMark };
 
 const keyOf = (c) => (c ? (c.id in LOGOS ? c.id : String(c.code ?? '').toLowerCase()) : null);
 
