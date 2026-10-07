@@ -128,6 +128,24 @@ const COMPANIES = [
     hqLng:        34.8333,
   },
   {
+    // Split out of West Kenya Sugar on request (2026-10-07), as Kabras was:
+    // the 60 units named "WKS - Nzoia Sugar - …" / "WKS - Nzoia Quarry - …".
+    id:           "nzoia",
+    name:         "Nzoia Sugar",
+    suffix:       "· KE",
+    short:        "Nzoia",
+    avatarLetter: "N",
+    avatarColor:  "#2b3a8f",   // the logo's blue
+    accentColor:  "#2b3a8f",
+    vehicleCount: 0,
+    tagline:      "Sugar milling & cane haulage",
+    // MEASURED 2026-10-07: 25 of the 60 units in one 1.1 km cell, beside the
+    // mill's CW and HD weighbridges.
+    hqLocation:   "Nzoia Factory, Bungoma",
+    hqLat:        0.5719,
+    hqLng:        34.6544,
+  },
+  {
     id:           "timsales",
     name:         "Timsales Ltd",
     suffix:       "· KE",

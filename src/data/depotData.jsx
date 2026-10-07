@@ -16,6 +16,7 @@ const DEPOTS_BY_COMPANY = {
   menengai: [],
   westsugar: [],
   kabras: [],
+  nzoia: [],
   timsales: [],
   aquamist: [],
 };

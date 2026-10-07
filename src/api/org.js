@@ -16,6 +16,7 @@ export const ORG_CODE_BY_COMPANY = {
   menengai:  'MENENGAI',
   westsugar: 'WESTSUGAR',
   kabras:    'KABRAS',
+  nzoia:     'NZOIA',
   timsales:  'TIMSALES',
   aquamist:  'AQUAMIST',
 }
