@@ -133,16 +133,10 @@
    row (they leave the rail for it — see WeighbridgeBoard). Top-aligned, so a
    short panel does not stretch to the card's height. */
 .wbb-sites--few {
-  /* auto-fit, not auto-fill: card(s) + two stacks share the row evenly, and a
-     narrower screen wraps the stacks under the card. */
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   align-items: start;
 }
-/* Every panel is in the stacks then, so the rail is not drawn and the grid
-   is one column wide. */
-.wbb-grid--few { grid-template-columns: minmax(0, 1fr); }
-/* Road over live activity; overdue over cane flow (operator, 2026-10-07). */
-.wbb-stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wbb-sites--few > .wbb-panel { min-width: 0; }
 
 /* ── One bridge ────────────────────────────────────────────────────────────
    The card is a fixed reading order, top to bottom: who and how fresh, the
