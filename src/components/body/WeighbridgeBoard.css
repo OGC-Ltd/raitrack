@@ -127,6 +127,16 @@
   grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
   gap: 10px;
 }
+/* One or two yards (Kabras and Nzoia since the 2026-10-07 split). `auto-fit`
+   would stretch a lone card across the whole row; here the card keeps a
+   column and the road / overdue / live-activity panels take the rest of the
+   row (they leave the rail for it — see WeighbridgeBoard). Top-aligned, so a
+   short panel does not stretch to the card's height. */
+.wbb-sites--few {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-items: start;
+}
+.wbb-sites--few > .wbb-panel { min-width: 0; }
 
 /* ── One bridge ────────────────────────────────────────────────────────────
    The card is a fixed reading order, top to bottom: who and how fresh, the
