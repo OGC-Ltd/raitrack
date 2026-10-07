@@ -376,6 +376,10 @@
   background: #dc2626;
   color: #fff;
   box-shadow: 0 0 0 2px #fff;
+  /* A <button> does not inherit the page font, so without this the figure
+     was Arial, whose digits sit 0.5px above centre in a flex line box.
+     Inter's measure dead centre (headless Edge, 2026-10-08). */
+  font-family: var(--font-body);
   font-size: 10px;
   font-weight: 650;
   line-height: 1;
