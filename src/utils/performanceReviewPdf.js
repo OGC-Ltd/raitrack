@@ -36,7 +36,7 @@ function text(doc, s, x, y, { size = 9, bold = false, color = C.ink, align = "le
 }
 
 /** Wrapped paragraph; returns the y under it. `runs` may mix bold and plain. */
-function para(doc, runs, x, y, width, { size = 8.6, color = C.ink, lead = 1.38 } = {}) {
+function para(doc, runs, x, y, width, { size = 8.6, color = C.ink, lead = 1.38, draw = true } = {}) {
   const parts = typeof runs === "string" ? [{ t: runs }] : runs;
   doc.setFontSize(size);
   const lineH = size * lead;
@@ -50,7 +50,7 @@ function para(doc, runs, x, y, width, { size = 8.6, color = C.ink, lead = 1.38 }
       const w = doc.getTextWidth(word);
       if (/^\s+$/.test(word)) { if (cx > x) cx += w; continue; }
       if (cx + w > x + width && cx > x) { cx = x; cy += lineH; }
-      doc.text(word, cx, cy);
+      if (draw) doc.text(word, cx, cy);
       cx += w;
     }
   }
@@ -115,6 +115,13 @@ function tiles(doc, items, y) {
   return y + 66;
 }
 
+/** Height a box needs for its items — the boxes are as tall as their content. */
+function boxHeight(doc, items, w) {
+  let cy = 28;
+  for (const runs of items) cy = para(doc, runs, 16, cy, w - 24, { size: 7.8, draw: false }) + 1;
+  return cy + 2;
+}
+
 function box(doc, title, color, tint, items, x, y, w, h) {
   doc.setFillColor(color); doc.rect(x, y, w, 16, "F");
   text(doc, title, x + 8, y + 11, { size: 8.4, bold: true, color: "#ffffff" });
@@ -122,18 +129,37 @@ function box(doc, title, color, tint, items, x, y, w, h) {
   doc.rect(x, y + 16, w, h - 16, "FD");
   let cy = y + 28;
   for (const runs of items) {
-    if (cy > y + h - 8) break;
     doc.setFillColor(color); doc.rect(x + 8, cy - 5, 3.2, 3.2, "F");
     cy = para(doc, runs, x + 16, cy, w - 24, { size: 7.8 }) + 1;
   }
 }
 
 /** One exhibit chart: units sorted worst first, the 100% line dashed. */
+const EX_ROW = 8.6;
+
+/** Units that cannot be judged, as one line under the chart rather than a row each. */
+function restRuns(units) {
+  const rest = units.filter((u) => u.ratio == null);
+  if (!rest.length) return null;
+  return [{ t: `Not assessed (${rest.length}): `, b: true, c: C.sub },
+          { t: rest.map((u) => `${u.ref}${u.rate == null ? " (no standard)" : ""}`).join(", "), c: C.sub }];
+}
+
+/** Height one exhibit block takes: title, bars, axis, the not-assessed line and the note. */
+function exhibitHeight(doc, units, note, w) {
+  const n = units.filter((u) => u.ratio != null).length;
+  let h = 14 + n * EX_ROW + 16;
+  const rest = restRuns(units);
+  if (rest) h = para(doc, rest, 0, h + 4, w, { size: 6.6, draw: false });
+  if (note) h = para(doc, note, 0, h + 2, w, { size: 7.4, draw: false });
+  return h;
+}
+
 function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
-  const rows = [...units].sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1));
-  const assessed = rows.filter((u) => u.ratio != null);
+  const rows = units.filter((u) => u.ratio != null).sort((a, b) => b.ratio - a.ratio);
+  const assessed = rows;
   const best = assessed.at(-1);
-  const rowH = rows.length > 24 ? 8.2 : 9.6;
+  const rowH = EX_ROW;
   const lw = 58;
   const pw = w - lw - 50;
   const scale = 2.5;
@@ -145,7 +171,7 @@ function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
   y += 4;
   rows.forEach((u) => {
     const ref = `${u.ref}${u.id === busiestId ? " *" : ""}`;
-    text(doc, ref, x + lw - 4, y + rowH - 2.6, { size: rowH < 9 ? 6.2 : 6.8, color: C.sub, align: "right" });
+    text(doc, ref, x + lw - 4, y + rowH - 2.6, { size: 6.4, color: C.sub, align: "right" });
     if (u.ratio != null) {
       const bw = Math.min(u.ratio / scale, 1) * pw;
       doc.setFillColor(suspect ? C.grey : BAND[band(u)]);
@@ -155,8 +181,6 @@ function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
       else if (!suspect && assessed.length > 1 && u.id === best?.id) label += "  < BEST";
       text(doc, label, x + lw + bw + 3, y + rowH - 2.6, { size: 6.2, bold: /WORST|BEST/.test(label),
         color: /WORST/.test(label) ? C.red : /BEST/.test(label) ? C.green : C.ink });
-    } else {
-      text(doc, u.rate == null ? "no standard" : "too few refills", x + lw + 3, y + rowH - 2.6, { size: 6, color: C.faint });
     }
     y += rowH;
   });
@@ -169,7 +193,10 @@ function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
   if (suspect) {
     text(doc, "Not assessable: standards look set too high", x + lw + pw * 0.55, top + 12, { size: 6.8, color: C.sub, align: "center" });
   }
-  return y + 16;
+  y += 16;
+  const rest = restRuns(units);
+  if (rest) y = para(doc, rest, x, y + 4, w, { size: 6.6 });
+  return y;
 }
 
 function exhibitNote(group, read, review) {
@@ -257,18 +284,22 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   y += 6;
 
   // Attention / benchmarks
-  const bh = 128;
   const attention = read.attention.slice(0, 6).map((u) => [
     { t: `${u.ref} `, b: true }, { t: `(${u.group.replace(/s$/, "").toLowerCase()}): ${pct(u.ratio)} of standard over ${u.usableRefills} refills, ${litres(u.excessL)} above.` },
   ]);
   if (read.meterFixes.length) attention.push([{ t: "Readings to check: ", b: true }, { t: `${listRefs(read.meterFixes.slice(0, 6))} — refills logged against next to no hours or km.` }]);
-  const bench = read.benchmarks.slice(0, 5).map((b) => [
+  // As many benchmark groups as there are attention lines, so the two boxes
+  // come out about the same height.
+  const bench = read.benchmarks.slice(0, Math.max(5, Math.min(8, Math.min(6, read.attention.length) + (read.meterFixes.length ? 2 : 0)))).map((b) => [
     { t: `${b.group}: `, b: true },
     { t: b.units.map((u) => `${u.ref} (${pct(u.ratio)})${u.id === b.busiestId ? ", the busiest" : ""}`).join(" and ") + "." },
   ]);
+  const attItems = attention.length ? attention : [[{ t: "No unit is 10% or more over standard." }]];
+  const benchItems = bench.length ? bench : [[{ t: "No unit is within standard yet." }]];
+  const bh = Math.max(boxHeight(doc, attItems, colW + 12), boxHeight(doc, benchItems, colW + 12));
   if (y + bh > H - 120) { doc.addPage(); y = 44; }
-  box(doc, "UNITS NEEDING ATTENTION", C.red, C.tint, attention.length ? attention : [[{ t: "No unit is 10% or more over standard." }]], M, y, colW + 12, bh);
-  box(doc, "BENCHMARK PERFORMERS", C.green, C.tintGood, bench.length ? bench : [[{ t: "No unit is within standard yet." }]], M + colW + 12, y, colW + 12, bh);
+  box(doc, "UNITS NEEDING ATTENTION", C.red, C.tint, attItems, M, y, colW + 12, bh);
+  box(doc, "BENCHMARK PERFORMERS", C.green, C.tintGood, benchItems, M + colW + 12, y, colW + 12, bh);
   y += bh + 10;
 
   if (read.actions.length) {
@@ -279,11 +310,13 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
     cy = para(doc, [{ t: `About ${litres(read.excessPerMonth, { short: true })} a month goes in above standard, mostly to the units above. ` }, { t: "Recommended actions:", b: true }], M + 10, cy, W - 2 * M - 20, { size: 8.2 });
     read.actions.forEach((a, i) => { cy = para(doc, [{ t: `${i + 1}. `, b: true }, { t: a }], M + 10, cy, W - 2 * M - 20, { size: 8.2 }); });
     doc.setFillColor(C.green); doc.rect(M, startY, 3, cy - startY, "F");
+    y = cy;
   }
 
   // ── Exhibit pages ─────────────────────────────────────────────────────────
-  doc.addPage();
-  y = 44;
+  // The exhibit follows straight on when page 1 has room for its heading and
+  // a chart, rather than leaving the foot of the page blank.
+  if (y + 220 > H - 40) { doc.addPage(); y = 44; } else { y += 18; }
   text(doc, "EXHIBIT — HOW EACH UNIT COMPARES WITH ITS STANDARD", M, y, { size: 13, bold: true, color: C.greenDeep });
   y += 13;
   y = para(doc, "Each bar shows a unit's typical refill as a percentage of its standard rate. 100% = on standard; higher is worse. The worst unit sits at the top of each chart. Units with at least 5 usable refills (3 for CASE tractors). * = largest fuel user in its group.",
@@ -298,21 +331,35 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   y += 20;
 
   const groups = review.groups.filter((g) => (read.byGroup.get(g.group) ?? []).length);
+  // Two packed columns: each chart goes under whichever column is shorter,
+  // so a 4-unit chart never sits beside a 36-unit one with a gap under it.
   const cw = (W - 2 * M - 24) / 2;
-  for (let i = 0; i < groups.length; i += 2) {
-    const pair = groups.slice(i, i + 2);
-    const need = Math.max(...pair.map((g) => 30 + (read.byGroup.get(g.group).length * (read.byGroup.get(g.group).length > 24 ? 8.2 : 9.6)) + 50));
-    if (y + need > H - 50) { doc.addPage(); y = 44; }
-    let rowBottom = y;
-    pair.forEach((g, j) => {
-      const units = read.byGroup.get(g.group);
-      const busiest = [...units].sort((a, b) => b.litres - a.litres)[0]?.id;
-      const x = M + j * (cw + 24);
-      let by = exhibit(doc, g.group, units, busiest, read.suspectGroups.includes(g.group), x, y, cw);
-      by = para(doc, exhibitNote(g.group, read, review), x, by + 2, cw, { size: 7.4, color: C.ink });
-      rowBottom = Math.max(rowBottom, by);
-    });
-    y = rowBottom + 12;
+  const bottom = H - 34;
+  // In order, except that a chart too tall for what is left of the page gives
+  // way to the next one that fits, so a short chart fills the gap instead of
+  // the page ending early.
+  let cols = [y, y];
+  const queue = groups.map((g) => {
+    const units = read.byGroup.get(g.group);
+    const note = exhibitNote(g.group, read, review);
+    return { g, units, note, need: exhibitHeight(doc, units, note, cw) };
+  });
+  while (queue.length) {
+    const fits = (q, c) => cols[c] + q.need <= bottom;
+    let pick = -1;
+    let j = 0;
+    for (let i = 0; i < queue.length && pick < 0; i++) {
+      const order = cols[0] <= cols[1] ? [0, 1] : [1, 0];
+      const c = order.find((k) => fits(queue[i], k));
+      if (c != null) { pick = i; j = c; }
+    }
+    if (pick < 0) { doc.addPage(); cols = [44, 44]; pick = 0; j = 0; }
+    const [{ g, units, note }] = queue.splice(pick, 1);
+    const busiest = [...units].sort((a, b) => b.litres - a.litres)[0]?.id;
+    const x = M + j * (cw + 24);
+    let by = exhibit(doc, g.group, units, busiest, read.suspectGroups.includes(g.group), x, cols[j], cw);
+    by = para(doc, note, x, by + 2, cw, { size: 7.4, color: C.ink });
+    cols[j] = by + 14;
   }
 
 
