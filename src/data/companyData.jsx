@@ -107,6 +107,46 @@ const COMPANIES = [
     hqLat:        0.3781,
     hqLng:        34.8333,
   },
+  {
+    id:           "timsales",
+    name:         "Timsales Ltd",
+    suffix:       "· KE",
+    short:        "Timsales",
+    avatarLetter: "T",
+    avatarColor:  "#106802",   // the logo's green
+    accentColor:  "#106802",
+    vehicleCount: 0,
+    tagline:      "Timber harvesting & haulage",
+
+    // 115 units on Timsales' own Wialon account (26777960): loggers, CATs,
+    // bulldozers, timber jacks and trucks.
+    //
+    // MEASURED 2026-10-07: 54 of the 114 located units sat in one 1.1 km cell,
+    // and this is that cell's centre — Elburgon. The next cluster has 8.
+    hqLocation:   "Timsales, Elburgon",
+    hqLat:        -0.3008,
+    hqLng:        35.8016,
+  },
+  {
+    id:           "aquamist",
+    name:         "Aquamist Ltd",
+    suffix:       "· KE",
+    short:        "Aquamist",
+    avatarLetter: "A",
+    avatarColor:  "#263b7a",   // the wordmark's blue
+    accentColor:  "#263b7a",
+    vehicleCount: 0,
+    tagline:      "Bottled water distribution",
+
+    // 77 units named "AQUAMIST - <plate>", sharing Rai Group's Wialon account
+    // with Sukari and West Sugar.
+    //
+    // MEASURED 2026-10-07: 43 of 77 sat in two adjacent cells at this point —
+    // Limuru. Mombasa is the next site, with 8.
+    hqLocation:   "Aquamist, Limuru",
+    hqLat:        -1.2045,
+    hqLng:        36.6580,
+  },
 ];
 
 export default COMPANIES;

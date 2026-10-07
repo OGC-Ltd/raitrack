@@ -15,6 +15,8 @@ const DEPOTS_BY_COMPANY = {
   kasulu: [],
   menengai: [],
   westsugar: [],
+  timsales: [],
+  aquamist: [],
 };
 
 export default DEPOTS_BY_COMPANY;
