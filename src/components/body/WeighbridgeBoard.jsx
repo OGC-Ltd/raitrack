@@ -654,121 +654,230 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
     ? null
     : totals.openTickets * zoneAvgLoadKg;
 
-  /* What is still out, and the feed: the rail's lower three panels. A mill
-     with only one or two yards lays them beside its card(s) instead. */
+  /* The board's four panels. A mill with many yards keeps them in the rail;
+     one with one or two lays them beside its card(s) — see the grid below. */
   const fewSites = sites.length <= 2;
-  const outstandingPanels = (
-    <>
-      <section className="wbb-panel">
-        <h4 className="wbb-panel__h">
-          Vehicles on the road to the mill
-          <span className="wbb-panel__n">{units.length}</span>
-        </h4>
-        {/* Trucks and tractors, one block each, ranked by yard. FactorySuite's
-            dispatches (signed out, from the webhook) and the transfer
-            tickets loaded at a yard, as one list — see `roadUnits`. A block
-            is filled once a scale has weighed the vehicle loaded, hollow
-            while it is only signed out; a tractor is drawn round.
+  const roadPanel = (
+    <section className="wbb-panel">
+      <h4 className="wbb-panel__h">
+        Vehicles on the road to the mill
+        <span className="wbb-panel__n">{units.length}</span>
+      </h4>
+      {/* Trucks and tractors, one block each, ranked by yard. FactorySuite's
+          dispatches (signed out, from the webhook) and the transfer
+          tickets loaded at a yard, as one list — see `roadUnits`. A block
+          is filled once a scale has weighed the vehicle loaded, hollow
+          while it is only signed out; a tractor is drawn round.
 
-            Every yard gets a line, including the ones with nothing out —
-            "None out" is the reading somebody is looking for when the mill
-            is short. */}
-        <p className="wbb-panel__sub">
-          {unitCounts.trucks} truck{unitCounts.trucks === 1 ? "" : "s"} · {unitCounts.tractors} tractor{unitCounts.tractors === 1 ? "" : "s"}
-          {units.length - unitCounts.trucks - unitCounts.tractors > 0 && <> · {units.length - unitCounts.trucks - unitCounts.tractors} other</>}
-          {" · "}<i className="wbb-key wbb-key--loaded" aria-hidden="true" /> loaded
-          {" "}<i className="wbb-key" aria-hidden="true" /> signed out
+          Every yard gets a line, including the ones with nothing out —
+          "None out" is the reading somebody is looking for when the mill
+          is short. */}
+      <p className="wbb-panel__sub">
+        {unitCounts.trucks} truck{unitCounts.trucks === 1 ? "" : "s"} · {unitCounts.tractors} tractor{unitCounts.tractors === 1 ? "" : "s"}
+        {units.length - unitCounts.trucks - unitCounts.tractors > 0 && <> · {units.length - unitCounts.trucks - unitCounts.tractors} other</>}
+        {" · "}<i className="wbb-key wbb-key--loaded" aria-hidden="true" /> loaded
+        {" "}<i className="wbb-key" aria-hidden="true" /> signed out
+      </p>
+      <ul className="wbb-road">
+        {roadBySite.map(r => (
+          <li key={r.code} className="wbb-road__row">
+            <span className="wbb-road__site">{r.name}</span>
+            {r.trucks.length === 0 ? (
+              <span className="wbb-road__none">None out</span>
+            ) : (
+              <span className="wbb-road__blocks">
+                {r.trucks.slice(0, MAX_BLOCKS).map(x => (
+                  <i key={x.key} className={blockClass(x)} title={unitTitle(x)} />
+                ))}
+                {r.trucks.length > MAX_BLOCKS && (
+                  <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
+                )}
+                {r.kg > 0 && <b className="wbb-road__t">{t1(r.kg)} t</b>}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {feedQuiet && (
+        <p className="wbb-panel__note">
+          No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
+          {" — "}only lorries weighed loaded at a yard are shown.
         </p>
-        <ul className="wbb-road">
-          {roadBySite.map(r => (
-            <li key={r.code} className="wbb-road__row">
-              <span className="wbb-road__site">{r.name}</span>
-              {r.trucks.length === 0 ? (
-                <span className="wbb-road__none">None out</span>
-              ) : (
-                <span className="wbb-road__blocks">
-                  {r.trucks.slice(0, MAX_BLOCKS).map(x => (
-                    <i key={x.key} className={blockClass(x)} title={unitTitle(x)} />
-                  ))}
-                  {r.trucks.length > MAX_BLOCKS && (
-                    <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
-                  )}
-                  {r.kg > 0 && <b className="wbb-road__t">{t1(r.kg)} t</b>}
-                </span>
-              )}
+      )}
+    </section>
+  );
+
+  const overduePanel = (
+    {/* ── Out longer than a run takes ──────────────────────────────
+        A SUBSET of the vehicles above: the ones out past the point where
+        the journey explains it. For a dispatched unit that point is
+        MEASURED — the median of the completed runs to the same
+        destination, from FactorySuite's sign-out and sign-back — so a
+        tractor to a farm two hours away and a truck to Opapo are each
+        held to their own run. A lorry seen only on a transfer ticket is
+        held to the fixed mark: loaded at a yard and not weighed at the
+        factory after it. The header reads "≥" because it is the shortest
+        of these waits. */}
+    <section className="wbb-panel">
+      <h4 className="wbb-panel__h">
+        Out longer than a run takes
+        <span className={"wbb-panel__fig" + (overdue.length ? " wbb-panel__fig--late" : "")}>
+          {overdue.length ? <>≥ {gap(overdueFloor)}</> : "none"}
+        </span>
+      </h4>
+      <p className="wbb-panel__sub">
+        Past the usual run to its destination, or loaded and not weighed at the factory after {gap(OVERDUE_MS)}
+      </p>
+      {overdue.length === 0 ? (
+        <p className="wbb-panel__empty">
+          Nothing is out past its usual run.
+        </p>
+      ) : (
+        <ul className="wbb-late">
+          {overdue.slice(0, MAX_LATE_ROWS).map(x => (
+            <li key={x.key} className="wbb-late__row" title={unitTitle(x)}>
+              <i className={blockClass(x)} aria-hidden="true" />
+              <span className="wbb-late__plate">{x.plate}</span>
+              <span className="wbb-late__dest">{x.destination ?? "—"}</span>
+              <span className="wbb-late__time">
+                <b>{gap(x.elapsedMs)}</b>
+                {x.typicalMs != null && <> / {gap(x.typicalMs)}</>}
+              </span>
             </li>
           ))}
+          {overdue.length > MAX_LATE_ROWS && (
+            <li className="wbb-late__more">+{overdue.length - MAX_LATE_ROWS} more</li>
+          )}
         </ul>
-        {feedQuiet && (
-          <p className="wbb-panel__note">
-            No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
-            {" — "}only lorries weighed loaded at a yard are shown.
-          </p>
-        )}
-      </section>
-
-      {/* ── Out longer than a run takes ──────────────────────────────
-          A SUBSET of the vehicles above: the ones out past the point where
-          the journey explains it. For a dispatched unit that point is
-          MEASURED — the median of the completed runs to the same
-          destination, from FactorySuite's sign-out and sign-back — so a
-          tractor to a farm two hours away and a truck to Opapo are each
-          held to their own run. A lorry seen only on a transfer ticket is
-          held to the fixed mark: loaded at a yard and not weighed at the
-          factory after it. The header reads "≥" because it is the shortest
-          of these waits. */}
-      <section className="wbb-panel">
-        <h4 className="wbb-panel__h">
-          Out longer than a run takes
-          <span className={"wbb-panel__fig" + (overdue.length ? " wbb-panel__fig--late" : "")}>
-            {overdue.length ? <>≥ {gap(overdueFloor)}</> : "none"}
-          </span>
-        </h4>
-        <p className="wbb-panel__sub">
-          Past the usual run to its destination, or loaded and not weighed at the factory after {gap(OVERDUE_MS)}
+      )}
+      {dispatched?.staleCount > 0 && !closed && (
+        <p className="wbb-panel__note">
+          {dispatched.staleCount} older run{dispatched.staleCount === 1 ? " was" : "s were"} never
+          signed back in FactorySuite and {dispatched.staleCount === 1 ? "is" : "are"} not counted.
         </p>
-        {overdue.length === 0 ? (
-          <p className="wbb-panel__empty">
-            Nothing is out past its usual run.
-          </p>
-        ) : (
-          <ul className="wbb-late">
-            {overdue.slice(0, MAX_LATE_ROWS).map(x => (
-              <li key={x.key} className="wbb-late__row" title={unitTitle(x)}>
-                <i className={blockClass(x)} aria-hidden="true" />
-                <span className="wbb-late__plate">{x.plate}</span>
-                <span className="wbb-late__dest">{x.destination ?? "—"}</span>
-                <span className="wbb-late__time">
-                  <b>{gap(x.elapsedMs)}</b>
-                  {x.typicalMs != null && <> / {gap(x.typicalMs)}</>}
-                </span>
-              </li>
-            ))}
-            {overdue.length > MAX_LATE_ROWS && (
-              <li className="wbb-late__more">+{overdue.length - MAX_LATE_ROWS} more</li>
-            )}
-          </ul>
-        )}
-        {dispatched?.staleCount > 0 && !closed && (
-          <p className="wbb-panel__note">
-            {dispatched.staleCount} older run{dispatched.staleCount === 1 ? " was" : "s were"} never
-            signed back in FactorySuite and {dispatched.staleCount === 1 ? "is" : "are"} not counted.
-          </p>
-        )}
-      </section>
+      )}
+    </section>
+  );
 
-      <section className="wbb-panel">
-        <h4 className="wbb-panel__h">
-          Live activity
-          <span className="wbb-panel__n">{board.activityTotal}</span>
-        </h4>
-        <ul className="wbb-feed">
-          {activity.map((e, i) => (
-            <FeedRow key={`${e.at}-${e.vehicleNo}-${e.kind}-${i}`} e={e} />
-          ))}
-        </ul>
-      </section>
-    </>
+  const livePanel = (
+    <section className="wbb-panel">
+      <h4 className="wbb-panel__h">
+        Live activity
+        <span className="wbb-panel__n">{board.activityTotal}</span>
+      </h4>
+      <ul className="wbb-feed">
+        {activity.map((e, i) => (
+          <FeedRow key={`${e.at}-${e.vehicleNo}-${e.kind}-${i}`} e={e} />
+        ))}
+      </ul>
+    </section>
+  );
+
+  const flowPanel = (
+    {/* ── The zone's day ──────────────────────────────────────────────
+        First in the rail, above the two panels that answer what is still
+        out — the day, then what is outstanding from it.
+
+        It is a taller, quieter panel than it was: the gap between these
+        two lines is the whole question — is the mill being fed faster
+        than the yards are filling — and at 190px with a Y axis eating
+        the left edge that gap was visible without being readable. The
+        axis is gone, the plot has its own frame and its own air, and
+        each line carries its running total printed where it ends, so
+        the two figures are read off the picture rather than hunted for
+        in the strip above. */}
+    <section className="wbb-panel wbb-flow">
+      <div className="wbb-flow__head">
+        <h4 className="wbb-flow__h">
+      Cane flow{spanDays > 1 ? ` over ${spanDays} days` : closed ? "" : " so far today"}
+    </h4>
+        <span className="wbb-flow__keys">
+          <span className="wbb-flow__key"><i className="wbb-key wbb-key--in" />Received from fields</span>
+          <span className="wbb-flow__key"><i className="wbb-key wbb-key--out" />Dispatched to the mill</span>
+        </span>
+      </div>
+
+      {/* Cumulative, not per-hour. The question is "are we ahead of the mill
+          or behind it", which is a question about two running totals — an
+          hourly bar chart makes the same two numbers a comparison the reader
+          has to do in their head.
+
+          No Y axis. The two figures worth reading off this chart are where
+          the lines END, and those are printed on the lines; a column of
+          gridline values down the left is then a second way of saying the
+          same thing, in the space the chart is trying to give back. */}
+      <div className="wbb-flow__plot">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chart} margin={{ top: 16, right: 54, bottom: 2, left: 2 }}>
+            <defs>
+              <linearGradient id="wbbIn" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor="var(--chart-2)" stopOpacity={0.22} />
+                <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0.01} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: "var(--text-3)" }}
+              tickLine={false}
+              axisLine={{ stroke: "var(--border)" }}
+              interval="preserveStartEnd"
+              minTickGap={34}
+            />
+            <YAxis hide domain={[0, "auto"]} />
+            <Tooltip content={<FlowTip />} cursor={{ stroke: "var(--border-hi)" }} />
+
+            {/* Where the day has got to. On a running day that is the clock;
+                on a closed one the lines simply end and the rule would be
+                marking midnight, which is not news. */}
+            {!closed && last && (
+              <ReferenceLine x={last.label} stroke="var(--text-3)" strokeDasharray="4 4" strokeOpacity={0.55} />
+            )}
+
+            <Area type="monotone" dataKey="received"   stroke="var(--chart-2)" strokeWidth={2.2} fill="url(#wbbIn)" />
+            <Area type="monotone" dataKey="dispatched" stroke="var(--chart-1)" strokeWidth={2.2} fill="none" />
+
+            {/* The running total, printed on the line that carries it.
+                Dispatched sits above its point and received below, because
+                on this fleet the two cross and re-cross through the morning
+                and two labels on the same side would collide on exactly the
+                days worth looking at. */}
+            {last && (
+              <ReferenceDot x={last.label} y={last.dispatched} r={3.5}
+                            fill="var(--chart-1)" stroke="none" isFront>
+                <Label value={`${fmt(last.dispatched, 0)} t`} position="right" offset={10}
+                       style={{ fill: "var(--chart-1)", fontSize: 13, fontWeight: 800 }} />
+              </ReferenceDot>
+            )}
+            {last && (
+              <ReferenceDot x={last.label} y={last.received} r={3.5}
+                            fill="var(--chart-2)" stroke="none" isFront>
+                <Label value={`${fmt(last.received, 0)} t`} position="right" offset={10}
+                       style={{ fill: "var(--chart-2)", fontSize: 13, fontWeight: 800 }} />
+              </ReferenceDot>
+            )}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="wbb-flow__foot">
+        {/* The gap between the two lines, said in words, because it is the
+            reading the chart is FOR and a picture of two lines does not
+            state which is ahead. */}
+        {last
+          ? <>
+              <b>{fmt(last.dispatched, 0)} t</b> sent to the mill against{" "}
+              <b>{fmt(last.received, 0)} t</b> taken in off the fields
+              {" — "}
+              {last.dispatched > last.received
+                ? <>the yards are <b>{fmt(last.dispatched - last.received, 0)} t</b> down on the day.</>
+                : last.dispatched < last.received
+                  ? <>the yards are <b>{fmt(last.received - last.dispatched, 0)} t</b> up on the day.</>
+                  : <>level on the day.</>}
+            </>
+          : "Nothing weighed at any bridge on this day."}
+      </div>
+    </section>
   );
 
   return (
@@ -865,7 +974,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
         />
       </div>
 
-      <div className="wbb-grid">
+      <div className={"wbb-grid" + (fewSites ? " wbb-grid--few" : "")}>
         {/* ── Every bridge, its own card ───────────────────────────────── */}
         <div className={"wbb-sites" + (fewSites ? " wbb-sites--few" : "")}>
           {sites.map(s => (
@@ -882,120 +991,26 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
             />
           ))}
           {/* One or two yards (Kabras, Nzoia since 2026-10-07): the card keeps
-              its column and the outstanding-work panels fill the rest of the
-              row, rather than the card stretching across it. */}
-          {fewSites && outstandingPanels}
+              its column and the panels fill the row in two stacks, road over
+              live activity and overdue over cane flow (operator, 2026-10-07),
+              rather than the card stretching across it. */}
+          {fewSites && (
+            <>
+              <div className="wbb-stack">{roadPanel}{livePanel}</div>
+              <div className="wbb-stack">{overduePanel}{flowPanel}</div>
+            </>
+          )}
         </div>
 
         {/* ── The rail ─────────────────────────────────────────────────── */}
-        <aside className="wbb-rail">
-          {/* ── The zone's day ──────────────────────────────────────────────
-              First in the rail, above the two panels that answer what is still
-              out — the day, then what is outstanding from it.
-
-              It is a taller, quieter panel than it was: the gap between these
-              two lines is the whole question — is the mill being fed faster
-              than the yards are filling — and at 190px with a Y axis eating
-              the left edge that gap was visible without being readable. The
-              axis is gone, the plot has its own frame and its own air, and
-              each line carries its running total printed where it ends, so
-              the two figures are read off the picture rather than hunted for
-              in the strip above. */}
-          <section className="wbb-panel wbb-flow">
-            <div className="wbb-flow__head">
-              <h4 className="wbb-flow__h">
-            Cane flow{spanDays > 1 ? ` over ${spanDays} days` : closed ? "" : " so far today"}
-          </h4>
-              <span className="wbb-flow__keys">
-                <span className="wbb-flow__key"><i className="wbb-key wbb-key--in" />Received from fields</span>
-                <span className="wbb-flow__key"><i className="wbb-key wbb-key--out" />Dispatched to the mill</span>
-              </span>
-            </div>
-
-            {/* Cumulative, not per-hour. The question is "are we ahead of the mill
-                or behind it", which is a question about two running totals — an
-                hourly bar chart makes the same two numbers a comparison the reader
-                has to do in their head.
-
-                No Y axis. The two figures worth reading off this chart are where
-                the lines END, and those are printed on the lines; a column of
-                gridline values down the left is then a second way of saying the
-                same thing, in the space the chart is trying to give back. */}
-            <div className="wbb-flow__plot">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chart} margin={{ top: 16, right: 54, bottom: 2, left: 2 }}>
-                  <defs>
-                    <linearGradient id="wbbIn" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="var(--chart-2)" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0.01} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10, fill: "var(--text-3)" }}
-                    tickLine={false}
-                    axisLine={{ stroke: "var(--border)" }}
-                    interval="preserveStartEnd"
-                    minTickGap={34}
-                  />
-                  <YAxis hide domain={[0, "auto"]} />
-                  <Tooltip content={<FlowTip />} cursor={{ stroke: "var(--border-hi)" }} />
-
-                  {/* Where the day has got to. On a running day that is the clock;
-                      on a closed one the lines simply end and the rule would be
-                      marking midnight, which is not news. */}
-                  {!closed && last && (
-                    <ReferenceLine x={last.label} stroke="var(--text-3)" strokeDasharray="4 4" strokeOpacity={0.55} />
-                  )}
-
-                  <Area type="monotone" dataKey="received"   stroke="var(--chart-2)" strokeWidth={2.2} fill="url(#wbbIn)" />
-                  <Area type="monotone" dataKey="dispatched" stroke="var(--chart-1)" strokeWidth={2.2} fill="none" />
-
-                  {/* The running total, printed on the line that carries it.
-                      Dispatched sits above its point and received below, because
-                      on this fleet the two cross and re-cross through the morning
-                      and two labels on the same side would collide on exactly the
-                      days worth looking at. */}
-                  {last && (
-                    <ReferenceDot x={last.label} y={last.dispatched} r={3.5}
-                                  fill="var(--chart-1)" stroke="none" isFront>
-                      <Label value={`${fmt(last.dispatched, 0)} t`} position="right" offset={10}
-                             style={{ fill: "var(--chart-1)", fontSize: 13, fontWeight: 800 }} />
-                    </ReferenceDot>
-                  )}
-                  {last && (
-                    <ReferenceDot x={last.label} y={last.received} r={3.5}
-                                  fill="var(--chart-2)" stroke="none" isFront>
-                      <Label value={`${fmt(last.received, 0)} t`} position="right" offset={10}
-                             style={{ fill: "var(--chart-2)", fontSize: 13, fontWeight: 800 }} />
-                    </ReferenceDot>
-                  )}
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="wbb-flow__foot">
-              {/* The gap between the two lines, said in words, because it is the
-                  reading the chart is FOR and a picture of two lines does not
-                  state which is ahead. */}
-              {last
-                ? <>
-                    <b>{fmt(last.dispatched, 0)} t</b> sent to the mill against{" "}
-                    <b>{fmt(last.received, 0)} t</b> taken in off the fields
-                    {" — "}
-                    {last.dispatched > last.received
-                      ? <>the yards are <b>{fmt(last.dispatched - last.received, 0)} t</b> down on the day.</>
-                      : last.dispatched < last.received
-                        ? <>the yards are <b>{fmt(last.received - last.dispatched, 0)} t</b> up on the day.</>
-                        : <>level on the day.</>}
-                  </>
-                : "Nothing weighed at any bridge on this day."}
-            </div>
-          </section>
-
-          {!fewSites && outstandingPanels}
-        </aside>
+        {!fewSites && (
+          <aside className="wbb-rail">
+            {flowPanel}
+            {roadPanel}
+            {overduePanel}
+            {livePanel}
+          </aside>
+        )}
       </div>
     </div>
   );
