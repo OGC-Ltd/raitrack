@@ -2785,7 +2785,11 @@ html[data-theme="light"] #root {
    the type steps down with it so the label keeps the same breathing room
    inside the curve at every width. */
 .lf-cluster-badge[data-len="2"] { --lf-badge: 19px; font-size: 8px; }
-.lf-cluster-badge[data-len="3"] { --lf-badge: 22px; font-size: 7.5px; letter-spacing: -0.02em; }
+/* "99+" in Inter is wider than the system face this was tuned in: at 22px the
+   label touched the curve (operator, 2026-10-07). 24px gives it the same air
+   as "42" has in 19px; the extra size goes outward, off the sprite, so the
+   badge covers no more of the vehicle than before. */
+.lf-cluster-badge[data-len="3"] { --lf-badge: 24px; font-size: 7.5px; letter-spacing: -0.03em; top: -5px; right: -7px; }
 
 /* ── Cluster hover list ──────────────────────────────────────────────────────
    A three-column table, not a list of lines: activity glyph, registration,
