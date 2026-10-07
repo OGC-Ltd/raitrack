@@ -174,7 +174,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               )}
               {can('telemetry:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('usageReview'); setUserOpen(false); }}>
-                  <i className="ti ti-car" aria-hidden="true" /> Highlights
+                  <i className="ti ti-car" aria-hidden="true" /> Logbook
                 </button>
               )}
               {can('user:create') && (

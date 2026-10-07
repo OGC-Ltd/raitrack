@@ -40,7 +40,6 @@ import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { fleetTypeOptions, isInTransit } from '../../lib/vehicleMap';
-import { isTheftAlert } from '../../lib/fuelAlerts';
 import { TreeCountsMasked, MASKED_COUNT } from './SideTree';
 import './FleetsTree.css';
 
@@ -69,21 +68,17 @@ function OpenRow({ icon, label, count = null, tone = 'plain', current = false, o
 
 /**
  * `audit` is the Fuel Audit page, `report` the Fuel Report and `review` the
- * Highlights page, where this
+ * Logbook page (was Highlights), where this
  * account may open them: { active, open }. Null hides the row.
  */
 export default function FleetsTree({ audit = null, report = null, review = null }) {
   const { fleetTypes = [], inTransitOnly } = useAppFields("fleetTypes", "inTransitOnly");
   const { setFleetTypes, setInTransitOnly } = useAppActions();
   const { vehicles = [] } = useFleetLiveShared();
-  const { stranded = [], setUnitsOpen, setStrandedOpen, setFuelAlertsOpen, revealMap } = useMapLayers() ?? {};
+  const { setUnitsOpen, revealMap } = useMapLayers() ?? {};
   const { can } = usePermissions();
   const masked = useContext(TreeCountsMasked);
   const [allTypes, setAllTypes] = useState(false);
-  // Units with an open fuel THEFT alert — the same test the alerts list uses.
-  const theftAlerts = useMemo(() => vehicles.filter(isTheftAlert).length, [vehicles]);
-  const showFuelAlerts = can('map:fuel_alerts');
-
   const options  = useMemo(() => fleetTypeOptions(vehicles), [vehicles]);
   const selected = useMemo(() => new Set(fleetTypes), [fleetTypes]);
 
@@ -197,58 +192,41 @@ export default function FleetsTree({ audit = null, report = null, review = null 
           onClick={() => { revealMap?.(); setUnitsOpen?.(true); }}
           title="Every unit — pick which ones the map is about"
         />
-        {/* Count drawn even at zero: "none right now" is the answer somebody
-            opens it to get. */}
-        {canFilter && (
-          <OpenRow
-            icon="alert-triangle"
-            label="Stopped in transit"
-            count={stranded.length}
-            tone={stranded.length ? 'orange' : 'plain'}
-            onClick={() => { revealMap?.(); setStrandedOpen?.(true); }}
-            title={stranded.length
-              ? 'List the units standing where they should not be'
-              : 'Nothing standing where it should not be — open the list anyway'}
-          />
-        )}
-        {showFuelAlerts && (
-          <OpenRow
-            icon="gas-station"
-            label="Fuel alerts"
-            count={theftAlerts}
-            tone={theftAlerts > 0 ? 'alert' : 'plain'}
-            onClick={() => { revealMap?.(); setFuelAlertsOpen?.(true); }}
-            title={theftAlerts
-              ? 'List the units with an open fuel theft alert'
-              : 'No open fuel theft alerts — open the list anyway'}
-          />
-        )}
-        {audit && (
-          <OpenRow
-            icon="clipboard-check"
-            label="Fuel audit"
-            current={audit.active}
-            onClick={audit.open}
-            title="Fuel Audit — theft alerts that were a faulty probe, and where each probe repair stands"
-          />
-        )}
-        {report && (
-          <OpenRow
-            icon="report-analytics"
-            label="Fuel report"
-            current={report.active}
-            onClick={report.open}
-            title="Advanced fuel analysis — one unit over a period: statistics, fuel graph, fillings, drains, trips and the track"
-          />
-        )}
+        {/* One vehicle over a chosen period — not a fuel page, so it sits
+            above the Fuel group rather than after it (operator, 2026-10-07). */}
         {review && (
           <OpenRow
             icon="car"
-            label="Highlights"
+            label="Logbook"
             current={review.active}
             onClick={review.open}
-            title="How one unit was used over a period — drive hours, distance, fuel and where it spent its time — with Excel and PDF"
+            title="Vehicle logbook — a report on one unit was used over a period — drive hours, distance, fuel and where it spent its time — with Excel and PDF"
           />
+        )}
+        {/* Fuel (operator, 2026-10-07): audit and report under one heading
+            (Alerts moved to the map's tool rail), so each row drops the word the heading already says. */}
+        {(audit || report) && (
+          <div className="fleets__group" role="group" aria-labelledby="fleets-fuel-group">
+            <div className="fleets__group-title" id="fleets-fuel-group">Fuel</div>
+            {audit && (
+              <OpenRow
+                icon="clipboard-check"
+                label="Audit"
+                current={audit.active}
+                onClick={audit.open}
+                title="Fuel Audit — theft alerts that were a faulty probe, and where each probe repair stands"
+              />
+            )}
+            {report && (
+              <OpenRow
+                icon="report-analytics"
+                label="Report"
+                current={report.active}
+                onClick={report.open}
+                title="Advanced fuel analysis — one unit over a period: statistics, fuel graph, fillings, drains, trips and the track"
+              />
+            )}
+          </div>
         )}
       </nav>
     </div>

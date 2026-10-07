@@ -195,6 +195,19 @@
 .fleets__row--current .fleets__row-label { color: var(--fl-accent-ink); }
 .fleets__row--current .fleets__row-label { font-weight: 600; }
 
+/* Fuel: a heading over Alerts, Audit and Report. The sidebar's uppercase
+   micro-label (.side-tree__section-title), set tight so the group costs one
+   short line, not a row. */
+.fleets__group { display: flex; flex-direction: column; margin-top: 4px; }
+.fleets__group-title {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fl-muted);
+}
+
 /* Locked trees (no map:read) are `inert` and dimmed by SidePanel.css;
    disabled controls read the same way. */
 .fleets button:disabled { opacity: 0.4; cursor: not-allowed; }

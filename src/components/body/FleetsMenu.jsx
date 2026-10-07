@@ -231,7 +231,7 @@ export default function FleetsMenu({
           {flagCount > 0 && (
             <div className="fleets-menu__section fleets-menu__section--rule">
               <div className="fleets-menu__sechead">
-                <span className="fleets-menu__sectitle">Stopped in transit</span>
+                <span className="fleets-menu__sectitle">Halted</span>
                 <span className="fleets-menu__secn">{flagCount}</span>
               </div>
 

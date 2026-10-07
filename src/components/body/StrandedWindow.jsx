@@ -306,7 +306,7 @@ export default function StrandedWindow({
       className="stranded-win"
       ref={ref}
       role="dialog"
-      aria-label="Stopped in transit"
+      aria-label="Halted"
     >
       {/* The head is the handle. */}
       <div className="stranded-win__head" onPointerDown={onPointerDown}>
@@ -315,7 +315,7 @@ export default function StrandedWindow({
             an `auto` margin on a button that is sometimes absent moves the
             other one every time the list empties. */}
         <span className="stranded-win__lead">
-          <span className="stranded-win__title">Stopped in transit</span>
+          <span className="stranded-win__title">Halted</span>
           {flagged.length > 0 && <span className="stranded-win__n">{flagged.length}</span>}
         </span>
         {flagged.length > 0 && (
@@ -383,7 +383,7 @@ export default function StrandedWindow({
           pager reading "1–10 of 6, page 1 of 1" is chrome reporting on
           itself. */}
       {paged.pageCount > 1 && (
-        <nav className="stranded-win__pager" aria-label="Stopped in transit pages">
+        <nav className="stranded-win__pager" aria-label="Halted pages">
           <span className="stranded-win__range">
             {paged.from}{"\u2013"}{paged.to} of {paged.total}
           </span>
