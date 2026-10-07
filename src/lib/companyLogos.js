@@ -17,12 +17,13 @@ import menengaiMark  from '../assets/logos/menengai-mark.png';
 import westsugarMark from '../assets/logos/westsugar-mark.png';
 import timsalesLogo  from '../assets/logos/timsales.png';
 import timsalesMark  from '../assets/logos/timsales-mark.png';         // the tree, without the wordmark
-// Aquamist's logo is a wordmark only — no symbol to crop to a square — so it
-// has no mark and the header falls back to its letter in the brand blue.
 import aquamistLogo  from '../assets/logos/aquamist.png';
+// The wordmark has no symbol, so the mark is its own "A" — the glyph lifted
+// out of the logo, not a font set to look like it.
+import aquamistMark  from '../assets/logos/aquamist-mark.png';
 
 const LOGOS = { sukari: sukariLogo, kasulu: kasuluLogo, menengai: menengaiLogo, westsugar: westsugarLogo, timsales: timsalesLogo, aquamist: aquamistLogo };
-const MARKS = { sukari: sukariMark, kasulu: kasuluMark, menengai: menengaiMark, westsugar: westsugarMark, timsales: timsalesMark };
+const MARKS = { sukari: sukariMark, kasulu: kasuluMark, menengai: menengaiMark, westsugar: westsugarMark, timsales: timsalesMark, aquamist: aquamistMark };
 
 const keyOf = (c) => (c ? (c.id in LOGOS ? c.id : String(c.code ?? '').toLowerCase()) : null);
 
