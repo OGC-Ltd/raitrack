@@ -315,10 +315,6 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
     y = rowBottom + 12;
   }
 
-  const method = "How the figures are calculated. Each refill is compared with the fuel its standard allows for the hours or kilometres logged since the previous refill. A unit's figure is its typical (median) refill, so one bad reading cannot distort the result; refills above 5 times or below one-tenth of standard are treated as reading errors. Excess litres are the fuel put in above standard across the usable refills. Source: telemetry — refills confirmed by the fuel sensors, hours from the engine-hours meter (engine time where there is none), km from the trackers; standards from the FactorySuite machine register. Issued (SIV) litres will be larger where units have no working fuel sensor.";
-  if (y > H - 90) { doc.addPage(); y = 44; }
-  doc.setDrawColor(C.rule); doc.line(M, y, W - M, y);
-  para(doc, method, M, y + 12, W - 2 * M, { size: 7, color: C.sub });
 
   const pages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
