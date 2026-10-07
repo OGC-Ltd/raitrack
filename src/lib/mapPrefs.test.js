@@ -50,8 +50,9 @@ describe("defaults", () => {
     }
   });
 
-  it("opens Kabras on its survey", () => {
-    expect(defaultPrefs("westsugar").layers.site).toBe(true);
+  it("opens Kabras and Nzoia each on its own survey", () => {
+    expect(defaultPrefs("kabras").layers.site).toBe(true);
+    expect(defaultPrefs("nzoia").layers.site).toBe(true);
   });
 
   it("leaves the weighbridges off everywhere", () => {
@@ -85,14 +86,14 @@ describe("per organisation", () => {
     writeMapPrefs("kasulu", { layers: { plan: false } });
     expect(readMapPrefs("kasulu").layers.plan).toBe(false);
     // Closing Mufindi's drawing says nothing about Kabras's survey.
-    expect(readMapPrefs("westsugar").layers.site).toBe(true);
+    expect(readMapPrefs("kabras").layers.site).toBe(true);
   });
 
   it("remembers a layer switched OFF against its own default", () => {
     // The harder half: a default-on layer must stay closed once closed, which
     // a "store only what is on" scheme gets wrong.
-    writeMapPrefs("westsugar", { layers: { site: false } });
-    expect(readMapPrefs("westsugar").layers.site).toBe(false);
+    writeMapPrefs("kabras", { layers: { site: false } });
+    expect(readMapPrefs("kabras").layers.site).toBe(false);
   });
 });
 
@@ -169,15 +170,15 @@ describe("the works-site surveys", () => {
   it("keeps the two surveys' preferences apart", () => {
     writeMapPrefs("sukari", { layers: { site: false } });
     expect(readMapPrefs("sukari").layers.site).toBe(false);
-    expect(readMapPrefs("westsugar").layers.site).toBe(true);
+    expect(readMapPrefs("kabras").layers.site).toBe(true);
   });
 });
 
 describe("an organisation with more than one survey", () => {
-  it("opens West Kenya on Kabras and not on Nzoia", () => {
+  it("opens West Kenya on neither of its surveys", () => {
     const { layers } = defaultPrefs("westsugar");
-    expect(layers.site).toBe(true);          // Kabras keeps the original key
-    expect(layers["site:nzoia"]).toBe(false);
+    expect(layers["site:naitiri"]).toBe(false);
+    expect(layers["site:raiply"]).toBe(false);
   });
 
   it("offers Menengai both of its surveys, and opens on neither", () => {
@@ -187,18 +188,16 @@ describe("an organisation with more than one survey", () => {
   });
 
   it("remembers the two West Kenya surveys separately", () => {
-    writeMapPrefs("westsugar", { layers: { "site:nzoia": true } });
+    writeMapPrefs("westsugar", { layers: { "site:naitiri": true } });
     const { layers } = readMapPrefs("westsugar");
-    expect(layers["site:nzoia"]).toBe(true);
-    expect(layers.site).toBe(true);          // untouched by the patch
+    expect(layers["site:naitiri"]).toBe(true);
+    expect(layers["site:raiply"]).toBe(false);   // untouched by the patch
   });
 
-  it("keeps a preference stored before the second survey existed", () => {
-    // What a West Kenya user's blob looked like when `site` was the only
-    // works-site key there was: Kabras deliberately closed.
-    writeMapPrefs("westsugar", { layers: { site: false } });
+  it("still reads a blob stored when Kabras and Nzoia were West Kenya's", () => {
+    writeMapPrefs("westsugar", { layers: { site: false, "site:nzoia": true } });
     const { layers } = readMapPrefs("westsugar");
     expect(layers.site).toBe(false);
-    expect(layers["site:nzoia"]).toBe(false);
+    expect(layers["site:nzoia"]).toBe(true);
   });
 });
