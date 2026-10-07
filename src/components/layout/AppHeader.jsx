@@ -247,7 +247,7 @@ export default function AppHeader() {
           />
           {unreadCount > 0 && (
             // Keyed on the figure so it pops when the figure changes
-            <span key={`count-${badge}`} className="app-header__bell-count" aria-hidden="true">{badge}</span>
+            <span key={`count-${badge}`} className="app-header__bell-count" data-len={badge.length} aria-hidden="true">{badge}</span>
           )}
         </button>
         )}

@@ -350,40 +350,23 @@
 /*
  * Unread alert count on the bell (replaces the red dot).
  *
- * A CIRCLE. `min-width: 17px` with `padding: 0 4px` was round on one digit by
- * coincidence and an oval on every number past nine: the 8px of side padding
- * plus two glyphs is wider than the fixed 17px height, and `border-radius: 9px`
- * merely rounded the ends of the result.
+ * One digit is a 16px circle; "10"–"20" (bellBadgeLabel stops at 20) is a
+ * 20px pill of the same height, so the ring never turns into an oval egg.
+ * Flex centring with line-height 1, and NO `text-box` trim: the trim was
+ * applied to a grid container, where browsers disagree about it, and that is
+ * what pushed the figure off-centre (operator, 2026-10-08).
  *
- * The centring was one-axis too — `text-align: center` across, and a
- * `line-height: 13px` tuned to land inside `17px` minus the 2px border on each
- * side. That arithmetic is correct only while all three numbers agree, so
- * changing the ring width or the size silently pushed the digits off-centre.
- * Grid centres both axes and needs no arithmetic to stay true.
- *
- * Same knob and the same digit steps as .side-tree__count and
- * .lf-cluster-badge, which is the point: three round number badges, one shape.
- */
-/*
- * ONE ring size, because the badge never holds more than two digits —
- * bellBadgeLabel stops the count at 20. 18px with a 1.5px border leaves 15px
- * inside, and "20" at 10px bold needs ~11.7px. 10px is the floor for a figure
- * read at a glance on red: 7px was tried and could not be read at 1x.
- *
- * `aspect-ratio: 1` alongside the explicit width and height is belt and
- * braces: a flex parent will stretch a fixed height given the chance, which
- * would make an oval of it. Same idiom as `.side-tree__count`.
+ * It sits on the bell's top-right shoulder, measured from the button's centre
+ * so it stays put when the target grows to 40px on a tablet.
  */
 .app-header__bell-count {
   position: absolute;
-  /* On the bell's shoulder, inside the button: a pill that hugs its figure
-     rather than an 18px disc hanging off the corner. */
-  top: 4px;
-  left: calc(50% + 1px);
+  top: calc(50% - 15px);
+  left: calc(50% + 2px);
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: 8px;
   /* Always red: an unread count on a bell is a summons whatever it is made
      of, and one colour is one less thing to decode at a glance. */
   background: #dc2626;
@@ -392,18 +375,17 @@
   font-size: 10px;
   font-weight: 650;
   line-height: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   pointer-events: none;
-  /* Centre on the figures' CAP height, not the line box. A line box carries
-     room for descenders that digits never use, so grid centring alone left
-     the number sitting visibly high in so small a ring. */
-  text-box: trim-both cap alphabetic;
   animation: app-bell-pop 180ms cubic-bezier(0.2, 0, 0, 1);
 }
+.app-header__bell-count[data-len="1"] { width: 16px; padding: 0; }
 .app-header__bell--active .app-header__bell-count { box-shadow: 0 0 0 2px #eff6ff; }
 @keyframes app-bell-pop { from { transform: scale(0.6); opacity: 0; } }
 
