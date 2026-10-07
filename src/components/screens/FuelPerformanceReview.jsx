@@ -313,14 +313,6 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                          suspect={read.suspectGroups.includes(g.group)} onOpen={onOpenUnit} />
               ))}
             </div>
-
-            <p className="fpr-method">
-              <b>How the figures are calculated.</b> Each refill is compared with the fuel its standard allows for the hours or kilometres
-              logged since the previous refill. A unit's figure is its typical (median) refill, so one bad reading cannot distort it;
-              refills above 5 times or below one-tenth of standard are treated as reading errors. Excess litres are the fuel put in above
-              standard across the usable refills. Litres are the refills the fuel sensors confirmed; hours come from the engine-hours
-              meter (engine time where there is none) and km from the tracker. Standards are FactorySuite's machine register.
-            </p>
           </>
         )}
       </div>

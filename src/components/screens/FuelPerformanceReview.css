@@ -122,7 +122,6 @@
 .fpr-ex__tag--worst { color: var(--sp4-crit); }
 .fpr-ex__tag--best { color: var(--sp4-ok); }
 
-.fpr-method { margin-top: 20px; font-size: var(--sp4-label); color: var(--sp4-text-3); line-height: 1.5; max-width: 1100px; }
 
 @media (max-width: 640px) {
   .fpr-grid, .fpr-split { grid-template-columns: 1fr; }
