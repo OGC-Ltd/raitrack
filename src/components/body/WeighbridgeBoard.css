@@ -167,7 +167,8 @@
 }
 /* The mill is not one site among four — it is where every other card's cane is
    going — so it carries the one accent edge on the grid. */
-.wbb-site--mill { border-top: 2px solid var(--chart-4); }
+/* No coloured top edge on a mill card (operator, 2026-10-07: it read as a
+   shadow along the rounded top). The MILL tag beside the name says it. */
 
 .wbb-site__head { display: flex; align-items: center; gap: 7px; }
 .wbb-site__name {
