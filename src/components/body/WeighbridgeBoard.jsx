@@ -654,6 +654,123 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
     ? null
     : totals.openTickets * zoneAvgLoadKg;
 
+  /* What is still out, and the feed: the rail's lower three panels. A mill
+     with only one or two yards lays them beside its card(s) instead. */
+  const fewSites = sites.length <= 2;
+  const outstandingPanels = (
+    <>
+      <section className="wbb-panel">
+        <h4 className="wbb-panel__h">
+          Vehicles on the road to the mill
+          <span className="wbb-panel__n">{units.length}</span>
+        </h4>
+        {/* Trucks and tractors, one block each, ranked by yard. FactorySuite's
+            dispatches (signed out, from the webhook) and the transfer
+            tickets loaded at a yard, as one list — see `roadUnits`. A block
+            is filled once a scale has weighed the vehicle loaded, hollow
+            while it is only signed out; a tractor is drawn round.
+
+            Every yard gets a line, including the ones with nothing out —
+            "None out" is the reading somebody is looking for when the mill
+            is short. */}
+        <p className="wbb-panel__sub">
+          {unitCounts.trucks} truck{unitCounts.trucks === 1 ? "" : "s"} · {unitCounts.tractors} tractor{unitCounts.tractors === 1 ? "" : "s"}
+          {units.length - unitCounts.trucks - unitCounts.tractors > 0 && <> · {units.length - unitCounts.trucks - unitCounts.tractors} other</>}
+          {" · "}<i className="wbb-key wbb-key--loaded" aria-hidden="true" /> loaded
+          {" "}<i className="wbb-key" aria-hidden="true" /> signed out
+        </p>
+        <ul className="wbb-road">
+          {roadBySite.map(r => (
+            <li key={r.code} className="wbb-road__row">
+              <span className="wbb-road__site">{r.name}</span>
+              {r.trucks.length === 0 ? (
+                <span className="wbb-road__none">None out</span>
+              ) : (
+                <span className="wbb-road__blocks">
+                  {r.trucks.slice(0, MAX_BLOCKS).map(x => (
+                    <i key={x.key} className={blockClass(x)} title={unitTitle(x)} />
+                  ))}
+                  {r.trucks.length > MAX_BLOCKS && (
+                    <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
+                  )}
+                  {r.kg > 0 && <b className="wbb-road__t">{t1(r.kg)} t</b>}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {feedQuiet && (
+          <p className="wbb-panel__note">
+            No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
+            {" — "}only lorries weighed loaded at a yard are shown.
+          </p>
+        )}
+      </section>
+
+      {/* ── Out longer than a run takes ──────────────────────────────
+          A SUBSET of the vehicles above: the ones out past the point where
+          the journey explains it. For a dispatched unit that point is
+          MEASURED — the median of the completed runs to the same
+          destination, from FactorySuite's sign-out and sign-back — so a
+          tractor to a farm two hours away and a truck to Opapo are each
+          held to their own run. A lorry seen only on a transfer ticket is
+          held to the fixed mark: loaded at a yard and not weighed at the
+          factory after it. The header reads "≥" because it is the shortest
+          of these waits. */}
+      <section className="wbb-panel">
+        <h4 className="wbb-panel__h">
+          Out longer than a run takes
+          <span className={"wbb-panel__fig" + (overdue.length ? " wbb-panel__fig--late" : "")}>
+            {overdue.length ? <>≥ {gap(overdueFloor)}</> : "none"}
+          </span>
+        </h4>
+        <p className="wbb-panel__sub">
+          Past the usual run to its destination, or loaded and not weighed at the factory after {gap(OVERDUE_MS)}
+        </p>
+        {overdue.length === 0 ? (
+          <p className="wbb-panel__empty">
+            Nothing is out past its usual run.
+          </p>
+        ) : (
+          <ul className="wbb-late">
+            {overdue.slice(0, MAX_LATE_ROWS).map(x => (
+              <li key={x.key} className="wbb-late__row" title={unitTitle(x)}>
+                <i className={blockClass(x)} aria-hidden="true" />
+                <span className="wbb-late__plate">{x.plate}</span>
+                <span className="wbb-late__dest">{x.destination ?? "—"}</span>
+                <span className="wbb-late__time">
+                  <b>{gap(x.elapsedMs)}</b>
+                  {x.typicalMs != null && <> / {gap(x.typicalMs)}</>}
+                </span>
+              </li>
+            ))}
+            {overdue.length > MAX_LATE_ROWS && (
+              <li className="wbb-late__more">+{overdue.length - MAX_LATE_ROWS} more</li>
+            )}
+          </ul>
+        )}
+        {dispatched?.staleCount > 0 && !closed && (
+          <p className="wbb-panel__note">
+            {dispatched.staleCount} older run{dispatched.staleCount === 1 ? " was" : "s were"} never
+            signed back in FactorySuite and {dispatched.staleCount === 1 ? "is" : "are"} not counted.
+          </p>
+        )}
+      </section>
+
+      <section className="wbb-panel">
+        <h4 className="wbb-panel__h">
+          Live activity
+          <span className="wbb-panel__n">{board.activityTotal}</span>
+        </h4>
+        <ul className="wbb-feed">
+          {activity.map((e, i) => (
+            <FeedRow key={`${e.at}-${e.vehicleNo}-${e.kind}-${i}`} e={e} />
+          ))}
+        </ul>
+      </section>
+    </>
+  );
+
   return (
     <div className="wbb">
       {/* ── The day in seven figures ─────────────────────────────────────
@@ -750,7 +867,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
 
       <div className="wbb-grid">
         {/* ── Every bridge, its own card ───────────────────────────────── */}
-        <div className="wbb-sites">
+        <div className={"wbb-sites" + (fewSites ? " wbb-sites--few" : "")}>
           {sites.map(s => (
             <SiteCard
               key={s.code}
@@ -764,6 +881,10 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
               overdueRuns={overdueByCode.get(s.code) ?? 0}
             />
           ))}
+          {/* One or two yards (Kabras, Nzoia since 2026-10-07): the card keeps
+              its column and the outstanding-work panels fill the rest of the
+              row, rather than the card stretching across it. */}
+          {fewSites && outstandingPanels}
         </div>
 
         {/* ── The rail ─────────────────────────────────────────────────── */}
@@ -873,115 +994,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
             </div>
           </section>
 
-          <section className="wbb-panel">
-            <h4 className="wbb-panel__h">
-              Vehicles on the road to the mill
-              <span className="wbb-panel__n">{units.length}</span>
-            </h4>
-            {/* Trucks and tractors, one block each, ranked by yard. FactorySuite's
-                dispatches (signed out, from the webhook) and the transfer
-                tickets loaded at a yard, as one list — see `roadUnits`. A block
-                is filled once a scale has weighed the vehicle loaded, hollow
-                while it is only signed out; a tractor is drawn round.
-
-                Every yard gets a line, including the ones with nothing out —
-                "None out" is the reading somebody is looking for when the mill
-                is short. */}
-            <p className="wbb-panel__sub">
-              {unitCounts.trucks} truck{unitCounts.trucks === 1 ? "" : "s"} · {unitCounts.tractors} tractor{unitCounts.tractors === 1 ? "" : "s"}
-              {units.length - unitCounts.trucks - unitCounts.tractors > 0 && <> · {units.length - unitCounts.trucks - unitCounts.tractors} other</>}
-              {" · "}<i className="wbb-key wbb-key--loaded" aria-hidden="true" /> loaded
-              {" "}<i className="wbb-key" aria-hidden="true" /> signed out
-            </p>
-            <ul className="wbb-road">
-              {roadBySite.map(r => (
-                <li key={r.code} className="wbb-road__row">
-                  <span className="wbb-road__site">{r.name}</span>
-                  {r.trucks.length === 0 ? (
-                    <span className="wbb-road__none">None out</span>
-                  ) : (
-                    <span className="wbb-road__blocks">
-                      {r.trucks.slice(0, MAX_BLOCKS).map(x => (
-                        <i key={x.key} className={blockClass(x)} title={unitTitle(x)} />
-                      ))}
-                      {r.trucks.length > MAX_BLOCKS && (
-                        <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
-                      )}
-                      {r.kg > 0 && <b className="wbb-road__t">{t1(r.kg)} t</b>}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {feedQuiet && (
-              <p className="wbb-panel__note">
-                No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
-                {" — "}only lorries weighed loaded at a yard are shown.
-              </p>
-            )}
-          </section>
-
-          {/* ── Out longer than a run takes ──────────────────────────────
-              A SUBSET of the vehicles above: the ones out past the point where
-              the journey explains it. For a dispatched unit that point is
-              MEASURED — the median of the completed runs to the same
-              destination, from FactorySuite's sign-out and sign-back — so a
-              tractor to a farm two hours away and a truck to Opapo are each
-              held to their own run. A lorry seen only on a transfer ticket is
-              held to the fixed mark: loaded at a yard and not weighed at the
-              factory after it. The header reads "≥" because it is the shortest
-              of these waits. */}
-          <section className="wbb-panel">
-            <h4 className="wbb-panel__h">
-              Out longer than a run takes
-              <span className={"wbb-panel__fig" + (overdue.length ? " wbb-panel__fig--late" : "")}>
-                {overdue.length ? <>≥ {gap(overdueFloor)}</> : "none"}
-              </span>
-            </h4>
-            <p className="wbb-panel__sub">
-              Past the usual run to its destination, or loaded and not weighed at the factory after {gap(OVERDUE_MS)}
-            </p>
-            {overdue.length === 0 ? (
-              <p className="wbb-panel__empty">
-                Nothing is out past its usual run.
-              </p>
-            ) : (
-              <ul className="wbb-late">
-                {overdue.slice(0, MAX_LATE_ROWS).map(x => (
-                  <li key={x.key} className="wbb-late__row" title={unitTitle(x)}>
-                    <i className={blockClass(x)} aria-hidden="true" />
-                    <span className="wbb-late__plate">{x.plate}</span>
-                    <span className="wbb-late__dest">{x.destination ?? "—"}</span>
-                    <span className="wbb-late__time">
-                      <b>{gap(x.elapsedMs)}</b>
-                      {x.typicalMs != null && <> / {gap(x.typicalMs)}</>}
-                    </span>
-                  </li>
-                ))}
-                {overdue.length > MAX_LATE_ROWS && (
-                  <li className="wbb-late__more">+{overdue.length - MAX_LATE_ROWS} more</li>
-                )}
-              </ul>
-            )}
-            {dispatched?.staleCount > 0 && !closed && (
-              <p className="wbb-panel__note">
-                {dispatched.staleCount} older run{dispatched.staleCount === 1 ? " was" : "s were"} never
-                signed back in FactorySuite and {dispatched.staleCount === 1 ? "is" : "are"} not counted.
-              </p>
-            )}
-          </section>
-
-          <section className="wbb-panel">
-            <h4 className="wbb-panel__h">
-              Live activity
-              <span className="wbb-panel__n">{board.activityTotal}</span>
-            </h4>
-            <ul className="wbb-feed">
-              {activity.map((e, i) => (
-                <FeedRow key={`${e.at}-${e.vehicleNo}-${e.kind}-${i}`} e={e} />
-              ))}
-            </ul>
-          </section>
+          {!fewSites && outstandingPanels}
         </aside>
       </div>
     </div>
