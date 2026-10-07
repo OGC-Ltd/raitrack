@@ -146,22 +146,21 @@ function restRuns(units) {
 }
 
 /** Height one exhibit block takes: title, bars, axis, the not-assessed line and the note. */
-function exhibitHeight(doc, units, note, w) {
+function exhibitHeight(doc, units, note, w, rowH = EX_ROW) {
   const n = units.filter((u) => u.ratio != null).length;
-  let h = 14 + n * EX_ROW + 16;
+  let h = 14 + n * rowH + 16;
   const rest = restRuns(units);
   if (rest) h = para(doc, rest, 0, h + 4, w, { size: 6.6, draw: false });
   if (note) h = para(doc, note, 0, h + 2, w, { size: 7.4, draw: false });
   return h;
 }
 
-function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
+function exhibit(doc, group, units, busiestId, suspect, x, y, w, rowH = EX_ROW) {
   const rows = units.filter((u) => u.ratio != null).sort((a, b) => b.ratio - a.ratio);
   const assessed = rows;
   const best = assessed.at(-1);
-  const rowH = EX_ROW;
-  const lw = 58;
-  const pw = w - lw - 50;
+  const lw = w < 200 ? 46 : 58;
+  const pw = w - lw - (w < 200 ? 40 : 50);
   const scale = 2.5;
   text(doc, `${group} (${units.length} unit${units.length === 1 ? "" : "s"})`, x + w / 2, y, { size: 9, bold: true, align: "center" });
   y += 10;
@@ -169,6 +168,11 @@ function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
   const stdX = x + lw + pw / scale;
   text(doc, "Standard", stdX, y, { size: 6.4, color: C.sub, align: "center" });
   y += 4;
+  // The standard line first, so the bars and their figures are drawn over it
+  // and it passes behind a label instead of through it.
+  doc.setDrawColor(C.sub); doc.setLineWidth(0.5); doc.setLineDashPattern([2, 2], 0);
+  doc.line(stdX, top + 2, stdX, y + rows.length * rowH);
+  doc.setLineDashPattern([], 0);
   rows.forEach((u) => {
     const ref = `${u.ref}${u.id === busiestId ? " *" : ""}`;
     text(doc, ref, x + lw - 4, y + rowH - 2.6, { size: 6.4, color: C.sub, align: "right" });
@@ -177,19 +181,20 @@ function exhibit(doc, group, units, busiestId, suspect, x, y, w) {
       doc.setFillColor(suspect ? C.grey : BAND[band(u)]);
       doc.rect(x + lw, y + 1.2, Math.max(1, bw), rowH - 2.4, "F");
       let label = pct(u.ratio);
-      if (!suspect && assessed.length > 1 && u.id === assessed[0].id && u.ratio >= 1.1) label += "  < WORST";
-      else if (!suspect && assessed.length > 1 && u.id === best?.id) label += "  < BEST";
-      text(doc, label, x + lw + bw + 3, y + rowH - 2.6, { size: 6.2, bold: /WORST|BEST/.test(label),
-        color: /WORST/.test(label) ? C.red : /BEST/.test(label) ? C.green : C.ink });
+      const narrow = w < 200;
+      if (!suspect && assessed.length > 1 && u.id === assessed[0].id && u.ratio >= 1.1) label += narrow ? " worst" : "  < WORST";
+      else if (!suspect && assessed.length > 1 && u.id === best?.id) label += narrow ? " best" : "  < BEST";
+      doc.setFont("helvetica", /worst|best/i.test(label) ? "bold" : "normal").setFontSize(6.2);
+      doc.setFillColor("#ffffff");
+      doc.rect(x + lw + bw + 1.5, y + 1, doc.getTextWidth(label) + 3, rowH - 2, "F");
+      text(doc, label, x + lw + bw + 3, y + rowH - 2.6, { size: 6.2, bold: /worst|best/i.test(label),
+        color: /worst/i.test(label) ? C.red : /best/i.test(label) ? C.green : C.ink });
     }
     y += rowH;
   });
-  doc.setDrawColor(C.sub); doc.setLineWidth(0.5); doc.setLineDashPattern([2, 2], 0);
-  doc.line(stdX, top + 2, stdX, y);
-  doc.setLineDashPattern([], 0);
   // axis
   doc.setDrawColor(C.rule); doc.line(x + lw, y + 1, x + lw + pw, y + 1);
-  [0, 0.5, 1, 1.5, 2, 2.5].forEach((t) => text(doc, `${Math.round(t * 100)}%`, x + lw + (t / scale) * pw, y + 9, { size: 5.8, color: C.faint, align: "center" }));
+  (w < 200 ? [0, 1, 2] : [0, 0.5, 1, 1.5, 2, 2.5]).forEach((t) => text(doc, `${Math.round(t * 100)}%`, x + lw + (t / scale) * pw, y + 9, { size: 5.8, color: C.faint, align: "center" }));
   if (suspect) {
     text(doc, "Not assessable: standards look set too high", x + lw + pw * 0.55, top + 12, { size: 6.8, color: C.sub, align: "center" });
   }
@@ -331,35 +336,59 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   y += 20;
 
   const groups = review.groups.filter((g) => (read.byGroup.get(g.group) ?? []).length);
-  // Two packed columns: each chart goes under whichever column is shorter,
-  // so a 4-unit chart never sits beside a 36-unit one with a gap under it.
-  const cw = (W - 2 * M - 24) / 2;
+  // Packed columns: each chart goes under whichever column is shortest, and
+  // a chart too tall for what is left of the page gives way to the next one
+  // that fits. Two columns or three — whichever needs fewer pages — and then
+  // the tallest bar rows (within a readable cap) that keep that page count,
+  // so the last page is filled rather than left half blank.
   const bottom = H - 34;
-  // In order, except that a chart too tall for what is left of the page gives
-  // way to the next one that fits, so a short chart fills the gap instead of
-  // the page ending early.
-  let cols = [y, y];
-  const queue = groups.map((g) => {
-    const units = read.byGroup.get(g.group);
-    const note = exhibitNote(g.group, read, review);
-    return { g, units, note, need: exhibitHeight(doc, units, note, cw) };
-  });
-  while (queue.length) {
-    const fits = (q, c) => cols[c] + q.need <= bottom;
-    let pick = -1;
-    let j = 0;
-    for (let i = 0; i < queue.length && pick < 0; i++) {
-      const order = cols[0] <= cols[1] ? [0, 1] : [1, 0];
-      const c = order.find((k) => fits(queue[i], k));
-      if (c != null) { pick = i; j = c; }
+  const GAP = 16;
+  const items = groups.map((g) => ({ g, units: read.byGroup.get(g.group), note: exhibitNote(g.group, read, review) }));
+  const plan = (rowH, n) => {
+    const cw = (W - 2 * M - GAP * (n - 1)) / n;
+    const queue = items.map((it) => ({ ...it, need: exhibitHeight(doc, it.units, it.note, cw, rowH) }));
+    const placed = [];
+    let page = 0;
+    let cols = Array(n).fill(y);
+    while (queue.length) {
+      let pick = -1;
+      let j = 0;
+      const order = cols.map((v, k) => k).sort((p, q) => cols[p] - cols[q]);
+      for (let i = 0; i < queue.length && pick < 0; i++) {
+        const c = order.find((k) => cols[k] + queue[i].need <= bottom);
+        if (c != null) { pick = i; j = c; }
+      }
+      if (pick < 0) { page++; cols = Array(n).fill(44); pick = 0; j = 0; }
+      const [q] = queue.splice(pick, 1);
+      placed.push({ ...q, page, j, y: cols[j] });
+      cols[j] += q.need + 14;
     }
-    if (pick < 0) { doc.addPage(); cols = [44, 44]; pick = 0; j = 0; }
-    const [{ g, units, note }] = queue.splice(pick, 1);
-    const busiest = [...units].sort((a, b) => b.litres - a.litres)[0]?.id;
-    const x = M + j * (cw + 24);
-    let by = exhibit(doc, g.group, units, busiest, read.suspectGroups.includes(g.group), x, cols[j], cw);
-    by = para(doc, note, x, by + 2, cw, { size: 7.4, color: C.ink });
-    cols[j] = by + 14;
+    // How full the last page is: its tallest column against the page.
+    const last = placed.filter((p) => p.page === page);
+    const fill = Math.max(...last.map((p) => p.y + p.need)) ;
+    return { placed, pages: page + 1, cw, n, fill };
+  };
+  const MIN_ROW = 7.6;
+  const MAX_ROW = 10.4;
+  const two = plan(MIN_ROW, 2);
+  const three = plan(MIN_ROW, 3);
+  const n = three.pages < two.pages ? 3 : 2;
+  let rowH = MIN_ROW;
+  let best = n === 3 ? three : two;
+  for (let r = MIN_ROW + 0.2; r <= MAX_ROW + 1e-9; r += 0.2) {
+    const tryPlan = plan(r, n);
+    if (tryPlan.pages > best.pages) break;
+    rowH = r;
+    best = tryPlan;
+  }
+  const cw = best.cw;
+  let page = 0;
+  for (const it of best.placed) {
+    while (page < it.page) { doc.addPage(); page++; }
+    const busiest = [...it.units].sort((a, b) => b.litres - a.litres)[0]?.id;
+    const x = M + it.j * (cw + GAP);
+    const by = exhibit(doc, it.g.group, it.units, busiest, read.suspectGroups.includes(it.g.group), x, it.y, cw, rowH);
+    para(doc, it.note, x, by + 2, cw, { size: 7.4, color: C.ink });
   }
 
 
