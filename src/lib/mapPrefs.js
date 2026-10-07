@@ -49,7 +49,7 @@ const key = (companyId) => `ft-map-prefs:${companyId}`;
 export const LAYERS = [
   "plan", "site", "bridges", "zones",
   "traffic",       // TomTom live traffic, any org
-  "site:nzoia",    // West Kenya's second mill
+  "site:nzoia",    // Nzoia's survey while it sat under West Kenya; kept so old blobs still read
   "site:naitiri",  // and the sugar factory the lorries load at
   "site:raiply",   // and where that sugar is taken
   "site:bigfarm",  // Menengai's estate
@@ -83,12 +83,13 @@ export const LAYER_DEFAULTS = {
   // here: two dense layers over the same ground, both on by default, is how
   // one came to be mistaken for the other.
   kasulu:    { zones: true },
-  // The Kabras survey, default-on since it was added. `site:nzoia` is NOT
-  // beside it: West Kenya's two mills are 29 km apart and each survey takes
-  // the camera when it is switched on, so two default-on layers would be two
-  // fits racing on every load — and the loser is the one you were reading.
-  // Kabras is the org's opening view; Nzoia is a place you go to.
-  westsugar: { site: true },
+  // Each mill opens on its own survey, as Sukari does on its plant. They were
+  // one org until 2026-10-07, when only Kabras could open on (two default-on
+  // surveys 29 km apart would race for the camera); as organisations of their
+  // own each has one survey and nothing to race. West Kenya keeps Naitiri and
+  // Raiply, off until asked for.
+  kabras:    { site: true },
+  nzoia:     { site: true },
   // The Ndhiwa plant's survey, on for the same reason and with an extra one:
   // this org already opens ON the plant — half its located units sit within
   // 600 m of it — so the layer's camera fit frames the ground the map was

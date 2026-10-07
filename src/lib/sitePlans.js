@@ -65,9 +65,17 @@ const SITE_FIT_REACH  = { min: 13, max: 16 };   // a river run
 // (SITE_MIN_ZOOM / SITE_MAX_ZOOM), which is what the three mill yards want.
 
 export const SITE_PLANS = {
+  // Kabras and Nzoia are organisations of their own since 2026-10-07, and each
+  // mill's survey went with it (it sat under West Kenya before). Each is that
+  // org's only survey, so each takes the plain `site` key — preferences are
+  // stored per company, so the two cannot collide.
+  kabras: [
+    { id: "kabras", prefKey: "site", url: "/kabras-site.geojson", label: "Kabras site plan" },
+  ],
+  nzoia: [
+    { id: "nzoia",  prefKey: "site", url: "/nzoia-site.geojson",  label: "Nzoia site plan" },
+  ],
   westsugar: [
-    { id: "kabras", prefKey: "site",       url: "/kabras-site.geojson", label: "Kabras site plan" },
-    { id: "nzoia",  prefKey: "site:nzoia", url: "/nzoia-site.geojson",  label: "Nzoia site plan" },
     // The sugar run, both ends of it. Naitiri is where a loaded lorry starts
     // and Raiply is where it is going, 50 km east — so unlike the two mills
     // above these are a PAIR, and an operator reading one usually wants the
