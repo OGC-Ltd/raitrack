@@ -3264,8 +3264,9 @@ html[data-theme="light"] #root {
      is reset · in · out, because + above − is the convention everywhere a zoom
      control is stacked. Same three buttons, same markup, one property. */
   .map-cam-row { flex-direction: column; }
-  .map-cam-btn--reset { order: 0; }
-  .map-cam-btn--in    { order: 1; }
+  /* Reset between the two zooms (operator, 2026-10-08): in, reset, out. */
+  .map-cam-btn--in    { order: 0; }
+  .map-cam-btn--reset { order: 1; }
   .map-cam-btn--out   { order: 2; }
 
   /* The rail is four tall now — fuel alerts over the three camera buttons —
