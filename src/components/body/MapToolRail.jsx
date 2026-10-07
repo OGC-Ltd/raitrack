@@ -1,8 +1,8 @@
 /**
  * The map's left tool rail, beside the sidebar.
  *
- * Eight tools in three groups — finding (search, names, layers, fit), measuring
- * (ruler, route covered, geofences) and the rail's own expander. Desktop only:
+ * Eleven tools in three groups — finding (search, names, layers, fit), measuring
+ * (ruler, route covered, traffic, geofences, halted, fuel alerts) and the rail's own expander. Desktop only:
  * FleetMap renders it where the sidebar exists (not `isCompact`), because a
  * phone already has its own controls and no room for a second column of them.
  *
@@ -18,7 +18,7 @@ import "./MapToolRail.css";
    per client, which the 600 ms debounce on typing respects. */
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
-function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick }) {
+function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn" }) {
   return (
     <button
       type="button"
@@ -29,7 +29,15 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
       aria-label={label}
       title={title ?? label}
     >
-      <i className={`ti ${icon}`} aria-hidden="true" />
+      {count > 0 ? (
+        // The count rides the icon's corner, as on the Maps button.
+        <span className="mtr-btn__icon">
+          <i className={`ti ${icon}`} aria-hidden="true" />
+          <span className={`mtr-btn__count mtr-btn__count--${tone}`} data-digits={String(count).length}>{count}</span>
+        </span>
+      ) : (
+        <i className={`ti ${icon}`} aria-hidden="true" />
+      )}
       {expanded && <span className="mtr-btn__label">{label}</span>}
     </button>
   );
@@ -186,6 +194,8 @@ export default function MapToolRail({
   route,            // { available, on, onToggle, title }
   traffic,          // the "traffic" map layer ({ on, onToggle }) or null
   zones,            // the "zones" map layer ({ on, onToggle, label }) or null
+  halted,           // { count, open, onOpen } or null without map:filter
+  fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -251,6 +261,28 @@ export default function MapToolRail({
               : "No geofences are drawn for this company"}
             on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
           />
+          {/* Halted (operator, 2026-10-07: "right below geofences"): units
+              that stopped mid-journey — on the highway or outside their
+              geofences. Opens the same window the sidebar row used to. */}
+          {halted && (
+            <RailButton
+              icon="ti-alert-triangle" label="Halted"
+              title={halted.count
+                ? `Halted: ${halted.count} ${halted.count === 1 ? "unit" : "units"} stopped mid-journey, on the highway or outside their geofences`
+                : "Halted: no unit has stopped mid-journey — open the list anyway"}
+              on={halted.open} count={halted.count} expanded={expanded} onClick={halted.onOpen}
+            />
+          )}
+          {/* Fuel alerts, below Halted: open theft cases, in the alert red. */}
+          {fuelAlerts && (
+            <RailButton
+              icon="ti-gas-station" label="Fuel alerts"
+              title={fuelAlerts.count
+                ? `Fuel alerts: ${fuelAlerts.count} ${fuelAlerts.count === 1 ? "unit" : "units"} with an open fuel theft alert`
+                : "Fuel alerts: none open — open the list anyway"}
+              on={fuelAlerts.open} count={fuelAlerts.count} tone="alert" expanded={expanded} onClick={fuelAlerts.onOpen}
+            />
+          )}
         </div>
 
         <div className="mtr-group">

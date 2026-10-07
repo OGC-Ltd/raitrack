@@ -58,6 +58,7 @@ import VehicleCamera from "./VehicleCamera";
 import MapLayersMenu from "./MapLayersMenu";
 import FleetsMenu from "./FleetsMenu";
 import FuelAlertsMenu from "./FuelAlertsMenu";
+import { isTheftAlert } from "../../lib/fuelAlerts";
 import UnitsMenu from "./UnitsMenu";
 import { loadMapEngine } from "../../lib/mapEngine";
 import { installOsmBase, OSM_ENABLED, OSM_TYPE_ID, OSM_ATTRIBUTION, SHOW_GOOGLE_TYPES } from "../../lib/osmBase";
@@ -2462,7 +2463,7 @@ export default function FleetMap() {
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
   const { can: canDo } = usePermissions();
-  const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen } = useMapLayers();
+  const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen, setFuelAlertsOpen } = useMapLayers();
   const { isCompact, isMobile } = useBreakpoint();
   /* Where the side panel exists (desktop) a click selects the unit and the
      panel shows it; the map card is the HOVER preview only (operator,
@@ -6965,6 +6966,14 @@ export default function FleetMap() {
               };
             })()}
             zones={mapLayers.find(l => l.id === "zones") ?? null}
+            halted={canDo("map:filter")
+              ? { count: strandedVehicles.length, open: strandedOpen, onOpen: () => setStrandedOpen(v => !v) }
+              : null}
+            /* Fuel alerts, below Halted (operator, 2026-10-07). Counted with
+               isTheftAlert, the test FuelAlertsMenu lists by. */
+            fuelAlerts={canDo("map:fuel_alerts")
+              ? { count: flaggedVehicles.filter(isTheftAlert).length, open: fuelAlertsOpen, onOpen: () => setFuelAlertsOpen(v => !v) }
+              : null}
           />
         )}
 
@@ -7026,10 +7035,8 @@ export default function FleetMap() {
                hides the rail button on. */
             asWindow={!isCompact}
           />
-          {/* Opened from the sidebar's Movement branch, and only from there:
-              the map's own Fleets menu already lists these in its popover, so
-              a second button in this rail would be the same list twice within
-              40px of itself. The window is FleetMap's because clicking a row
+          {/* Halted: opened from the left tool rail, below geofences
+              (operator, 2026-10-07) — it was a sidebar row before. The window is FleetMap's because clicking a row
               in it moves the CAMERA — the sidebar owns the flag, nothing
               more. */}
           <StrandedWindow

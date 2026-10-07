@@ -574,7 +574,7 @@ export default function UsageReviewScreen() {
               One review covers up to {MAX_DAYS} days. Shorten the period, then Build.
             </EmptyNote>
           ) : (
-            <EmptyNote icon="ti-car" title={unit ? `Ready for ${unit.id}` : "Highlights"}>
+            <EmptyNote icon="ti-car" title={unit ? `Ready for ${unit.id}` : "Logbook"}>
               {unit
                 ? `Build to see how ${unit.id} was used from ${dayLabel(span.from)} to ${dayLabel(span.to)} (${nDays} days): drive hours, distance, fuel and where it spent its time.`
                 : "Choose a unit and a period, then Build: drive hours a day, distance, fuel a day and where it spent its time, on a map, with the workbook and a PDF."}
