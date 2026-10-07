@@ -101,7 +101,7 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
         {rows.map((u) => (
           <li key={u.id}>
             <button type="button" className="fpr-ex__row" onClick={() => onOpen?.(u.id)}
-                    title={`${u.name} — ${u.ratio != null ? `${pct(u.ratio)} of standard, ` : ""}${u.usableRefills}/${u.refills} usable refills, ${litres(u.litres)}. Open the unit's fuel analysis.`}>
+                    title={`${u.name} — ${u.ratio != null ? `${pct(u.ratio)} of standard, ` : ""}${u.usableRefills}/${u.refills} usable refills, ${litres(u.litres)}. Open its vehicle analytics.`}>
               <span className="fpr-ex__ref">{u.ref}{u.id === busiestId && <i aria-label="largest fuel user"> ★</i>}</span>
               <span className="fpr-ex__track">
                 <span className="fpr-ex__std" aria-hidden="true" style={{ left: `${TRACK / SCALE}%` }} />
@@ -298,7 +298,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
             )}
 
             <h3 className="fpr-h">How each unit compares with its standard</h3>
-            <p className="fpr-sub">Each bar is a unit's typical (median) refill as a share of its standard; 100% = on standard, higher is worse. Units with at least 5 usable refills (3 for CASE tractors). Select a unit to open its fuel analysis.</p>
+            <p className="fpr-sub">Each bar is a unit's typical (median) refill as a share of its standard; 100% = on standard, higher is worse. Units with at least 5 usable refills (3 for CASE tractors). Select a unit to open its vehicle analytics.</p>
             <div className="fpr-legend">
               <span><i className="fpr-sw fpr-sw--over" />10% or more above standard</span>
               <span><i className="fpr-sw fpr-sw--slight" />Up to 10% above</span>
