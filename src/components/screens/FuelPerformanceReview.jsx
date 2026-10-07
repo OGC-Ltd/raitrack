@@ -87,8 +87,11 @@ const TRACK = 78;  // …across this share of the row, leaving room for the figu
 
 /** One group's units, worst at the top, against the 100% standard line. */
 function Exhibit({ group, units, busiestId, suspect, onOpen }) {
-  const rows = [...units].sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1));
-  const assessed = rows.filter((u) => u.ratio != null);
+  const assessed = units.filter((u) => u.ratio != null).sort((a, b) => b.ratio - a.ratio);
+  // Units that cannot be judged go in one line under the chart, not a bar
+  // each: a column of "0 usable refills" rows was most of some charts' height.
+  const rest = units.filter((u) => u.ratio == null);
+  const rows = assessed;
   const best = assessed.at(-1);
   return (
     <section className="fpr-ex">
@@ -106,7 +109,7 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
                   ? <span className={`fpr-ex__bar fpr-ex__bar--${suspect ? "none" : band(u)}`} style={{ width: `${Math.min(u.ratio / SCALE, 1) * TRACK}%` }} />
                   : null}
                 <span className="fpr-ex__v">
-                  {u.ratio != null ? pct(u.ratio) : u.rate == null ? "no standard" : `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"}`}
+                  {pct(u.ratio)}
                   {!suspect && assessed.length > 1 && u.id === assessed[0]?.id && u.ratio >= 1.1 && <b className="fpr-ex__tag fpr-ex__tag--worst"> ← worst</b>}
                   {!suspect && assessed.length > 1 && u.id === best?.id && <b className="fpr-ex__tag fpr-ex__tag--best"> ← best</b>}
                 </span>
@@ -115,6 +118,15 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
           </li>
         ))}
       </ul>
+      {rest.length > 0 && (
+        <p className="fpr-ex__rest">
+          <b>Not assessed ({rest.length}):</b>{" "}
+          {rest.map((u, i) => (
+            <span key={u.id}>{i > 0 && ", "}<button type="button" onClick={() => onOpen?.(u.id)}
+              title={u.rate == null ? "No standard on the register" : `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"} — at least 5 needed`}>{u.ref}</button>{u.rate == null ? " (no standard)" : ""}</span>
+          ))}
+        </p>
+      )}
     </section>
   );
 }
@@ -237,10 +249,10 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                 <h3 className="fpr-card__t">How reliable are the {read.recordsTotal.toLocaleString("en-KE")} refill records?</h3>
                 <Bars format={(v) => `${Math.round((v / Math.max(1, read.recordsTotal)) * 100)}%`} tone="fleet"
                       rows={[
-                        { label: "Plausible, at or near standard", value: review.records.near, tone: "ok" },
-                        { label: "Plausible, well over standard", value: review.records.over, tone: "crit" },
-                        { label: "Implausible — needs checking", value: review.records.implausible, tone: "warn" },
-                        { label: "Hours, km or standard missing", value: review.records.missing, tone: "muted" },
+                        { label: "At or near standard", value: review.records.near, tone: "ok" },
+                        { label: "Well over standard", value: review.records.over, tone: "crit" },
+                        { label: "Implausible", value: review.records.implausible, tone: "warn" },
+                        { label: "Data missing", value: review.records.missing, tone: "muted" },
                       ]} />
               </section>
             </div>
@@ -250,21 +262,18 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                 <h3>Units needing attention</h3>
                 {read.attention.length ? (
                   <ul>
-                    {read.attention.slice(0, 8).map((u) => (
+                    {read.attention.slice(0, Math.max(6, Math.min(8, read.benchmarks.length))).map((u) => (
                       <li key={u.id}><button type="button" onClick={() => onOpenUnit?.(u.id)}>{u.ref}</button>
                         {" "}<span className="fpr-muted">{u.group.replace(/s$/, "").toLowerCase()}</span>: <b>{pct(u.ratio)}</b> of standard over {u.usableRefills} refills, {litres(u.excessL)} above.</li>
                     ))}
                   </ul>
                 ) : <p>No unit is 10% or more over standard.</p>}
-                {read.meterFixes.length > 0 && (
-                  <p className="fpr-box__foot"><b>Readings to check:</b> {listRefs(read.meterFixes.slice(0, 8))}: refills logged against next to no hours or km. Often a tracker that was not reporting.</p>
-                )}
               </section>
               <section className="fpr-box fpr-box--good">
                 <h3>Benchmark performers</h3>
                 {read.benchmarks.length ? (
                   <ul>
-                    {read.benchmarks.slice(0, 6).map((b) => (
+                    {read.benchmarks.slice(0, 8).map((b) => (
                       <li key={b.group}><span className="fpr-muted">{b.group}:</span>{" "}
                         {b.units.map((u, i) => (
                           <span key={u.id}>{i > 0 && " and "}<button type="button" onClick={() => onOpenUnit?.(u.id)}>{u.ref}</button> ({pct(u.ratio)}){u.id === b.busiestId && " — the busiest"}</span>
@@ -275,6 +284,10 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                 ) : <p>No unit is within standard yet.</p>}
               </section>
             </div>
+
+            {read.meterFixes.length > 0 && (
+              <p className="fpr-note"><i className="ti ti-gauge" aria-hidden="true" /> <b>Readings to check:</b> {listRefs(read.meterFixes.slice(0, 8))}: most refills were logged against next to no hours or km, usually a tracker meter that is not reporting.</p>
+            )}
 
             {read.actions.length > 0 && (
               <section className="fpr-means">

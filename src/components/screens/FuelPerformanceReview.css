@@ -13,24 +13,28 @@
 
 .fpr-lede {
   font-size: 15px; line-height: 1.5; font-weight: 600; color: var(--sp4-text-1);
-  margin-top: 16px; margin-bottom: 16px; max-width: 980px;
+  margin-top: 16px; margin-bottom: 16px;
 }
 .fpr-lede b { color: var(--sp4-crit); }
 .fpr-muted { color: var(--sp4-text-3); }
 
-.fpr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+/* Four charts: one even row on a wide screen, two by two below that, one
+   column on a phone — never three and a stray. */
+.fpr-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1400px) { .fpr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .fpr-card {
   background: var(--sp4-surface); border: 1px solid var(--sp4-line);
   border-radius: 10px; padding: 14px 16px; min-width: 0;
 }
-.fpr-card__t, .fpr-h {
+.fpr-card__t {
   font-size: var(--sp4-strong); font-weight: 700; color: var(--sp4-text-1); margin: 0 0 12px;
 }
 
 /* Horizontal bars */
 .fpr-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
-.fpr-bars__row { display: grid; grid-template-columns: minmax(110px, 38%) 1fr; align-items: center; gap: 10px; }
-.fpr-bars__l { font-size: var(--sp4-body); color: var(--sp4-text-2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpr-bars { grid-template-columns: max-content minmax(0, 1fr); column-gap: 10px; }
+.fpr-bars__row { display: contents; }
+.fpr-bars__l { font-size: var(--sp4-body); color: var(--sp4-text-2); text-align: right; white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 .fpr-bars__track { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .fpr-bars__fill { height: 12px; border-radius: 2px; min-width: 2px; flex: none; max-width: calc(100% - 56px); }
 .fpr-bars__v { font-size: var(--sp4-label); font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -41,7 +45,7 @@
 .fpr-bars__fill--muted  { background: var(--sp4-line-hi); }
 
 /* Month columns */
-.fpr-cols { display: flex; align-items: flex-end; gap: 16px; height: 170px; padding-top: 4px; }
+.fpr-cols { display: flex; align-items: flex-end; gap: 12px; height: 150px; padding-top: 4px; }
 .fpr-cols__col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
 .fpr-cols__v { font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
 .fpr-cols__bar { width: 100%; max-width: 72px; background: #1e7a55; border-radius: 2px 2px 0 0; min-height: 2px; }
@@ -77,8 +81,8 @@
 .fpr-means ol { margin: 0; padding-left: 20px; display: grid; gap: 3px; }
 
 /* Exhibit */
-.fpr-h { margin-top: 24px; margin-bottom: 4px; font-size: 16px; }
-.fpr-sub { margin-top: 0; font-size: var(--sp4-body); color: var(--sp4-text-3); max-width: 980px; }
+.fpr-h { margin-top: 24px; margin-bottom: 4px; font-size: 16px; font-weight: 700; color: var(--sp4-text-1); }
+.fpr-sub { margin-top: 0; margin-bottom: 8px; font-size: var(--sp4-body); color: var(--sp4-text-3); }
 .fpr-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--sp4-label); color: var(--sp4-text-2); margin-bottom: 12px; }
 .fpr-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .fpr-sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
@@ -87,14 +91,17 @@
 .fpr-sw--within, .fpr-ex__bar--within { background: #1e7a55; }
 .fpr-sw--none, .fpr-ex__bar--none { background: var(--sp4-line-hi); }
 
-.fpr-exhibits { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; align-items: start; }
+/* Packed columns, not grid rows: the charts run from 4 units to 36, and a
+   row as tall as its tallest chart left the short ones floating in space. */
+.fpr-exhibits { columns: 3 360px; column-gap: 12px; }
+.fpr-exhibits > .fpr-ex { break-inside: avoid; margin-bottom: 12px; }
 .fpr-ex { background: var(--sp4-surface); border: 1px solid var(--sp4-line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
 .fpr-ex__t { margin: 0 0 8px; font-size: var(--sp4-strong); font-weight: 700; color: var(--sp4-text-1); text-align: center; }
 .fpr-ex__t span { font-weight: 500; color: var(--sp4-text-3); }
 .fpr-ex__note { margin: 0 0 8px; font-size: var(--sp4-label); color: var(--sp4-warn); font-style: italic; text-align: center; }
 .fpr-ex__rows { list-style: none; margin: 0; padding: 0; }
 .fpr-ex__row {
-  display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px;
   width: 100%; padding: 1px 4px; border: 0; border-radius: 4px; background: none; cursor: pointer; text-align: left;
 }
 .fpr-ex__row:hover { background: var(--sp4-raised); }
@@ -104,7 +111,13 @@
 .fpr-ex__track { position: relative; display: flex; align-items: center; gap: 5px; height: 15px; min-width: 0; }
 .fpr-ex__std { position: absolute; top: -1px; bottom: -1px; border-left: 1px dashed var(--sp4-text-4); pointer-events: none; }
 .fpr-ex__bar { height: 10px; border-radius: 1px; flex: none; min-width: 2px; }
-.fpr-ex__v { font-size: 10.5px; font-weight: 600; color: var(--sp4-text-2); white-space: nowrap; font-variant-numeric: tabular-nums; position: relative; }
+/* The figure sits over the dashed standard line, so it carries the card's
+   own ground behind it: the line passes UNDER the label, never through it. */
+.fpr-ex__v {
+  font-size: 10.5px; font-weight: 600; color: var(--sp4-text-2); white-space: nowrap; font-variant-numeric: tabular-nums;
+  position: relative; z-index: 1; background: var(--sp4-surface); padding: 0 3px; border-radius: 2px; line-height: 13px;
+}
+.fpr-ex__row:hover .fpr-ex__v { background: var(--sp4-raised); }
 .fpr-ex__tag { font-weight: 800; }
 .fpr-ex__tag--worst { color: var(--sp4-crit); }
 .fpr-ex__tag--best { color: var(--sp4-ok); }
@@ -112,7 +125,24 @@
 .fpr-method { margin-top: 20px; font-size: var(--sp4-label); color: var(--sp4-text-3); line-height: 1.5; max-width: 1100px; }
 
 @media (max-width: 640px) {
-  .fpr-grid, .fpr-split, .fpr-exhibits { grid-template-columns: 1fr; }
+  .fpr-grid, .fpr-split { grid-template-columns: 1fr; }
+  .fpr-exhibits { columns: 1; }
   .fpr-ex__row { grid-template-columns: 84px 1fr; }
   .fpr-source { margin-left: 0; }
 }
+
+.fpr-ex__rest { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--sp4-line); font-size: 10.5px; line-height: 1.5; color: var(--sp4-text-3); }
+.fpr-ex__rest b { color: var(--sp4-text-2); }
+.fpr-ex__rest button { font: inherit; background: none; border: 0; padding: 0; color: var(--sp4-text-2); cursor: pointer; }
+.fpr-ex__rest button:hover { text-decoration: underline; }
+
+.fpr-note {
+  margin-top: 12px; margin-bottom: 0; padding: 8px 12px; border-radius: 8px;
+  background: var(--sp4-surface); border: 1px solid var(--sp4-line);
+  font-size: var(--sp4-body); color: var(--sp4-text-2);
+}
+.fpr-note i { color: var(--sp4-warn); }
+
+/* The body is a column that scrolls: its sections must keep their height
+   rather than shrink to fit, or they overflow into one another. */
+.fpr-body > * { flex-shrink: 0; }
