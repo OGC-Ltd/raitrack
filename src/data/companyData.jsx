@@ -108,6 +108,26 @@ const COMPANIES = [
     hqLng:        34.8333,
   },
   {
+    // Split out of West Kenya Sugar on request (2026-10-07): the 154 units
+    // named "WKS - Kabras - …". West Kenya keeps the rest (Nzoia, Naitiri, …)
+    // and, for now, its logo, the Kabras weighbridges and the past alerts of
+    // these units.
+    id:           "kabras",
+    name:         "Kabras Sugar",
+    suffix:       "· KE",
+    short:        "Kabras",
+    avatarLetter: "K",
+    avatarColor:  "#2e9e3e",   // the logo's green
+    accentColor:  "#2e9e3e",
+    vehicleCount: 0,
+    tagline:      "Sugar milling & cane haulage",
+    // The Kabras factory cell West Kenya's HQ was measured at (82 of 448
+    // reporting units, 2026-08-31).
+    hqLocation:   "Kabras Factory, Malava",
+    hqLat:        0.3781,
+    hqLng:        34.8333,
+  },
+  {
     id:           "timsales",
     name:         "Timsales Ltd",
     suffix:       "· KE",
