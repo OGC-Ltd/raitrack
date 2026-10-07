@@ -20,12 +20,12 @@
   position: relative;
 }
 .map-layers__btn--on {
-  border-color: rgba(74, 222, 128, 0.55);
-  color: #4ade80;
+  border-color: rgba(22, 163, 74, 0.45);
+  --chip-ink: #15803d;
 }
 .map-layers__btn--open {
-  background: rgba(15, 23, 42, 1);
-  border-color: rgba(255, 255, 255, 0.4);
+  --chip: #f1f5f9;
+  border-color: rgba(15, 23, 42, 0.22);
 }
 /* How many layers are on, while the panel is shut. Without it the button says
    nothing about the state it controls. */
@@ -109,12 +109,12 @@
   max-height: var(--rail-panel-max-h, var(--safe-h, calc(calc(var(--vh) * 100) - 160px)));
   overflow-y: auto;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  /* White, as the tool rail beside it (MapToolRail.css .mtr-card). */
+  border: 1px solid rgba(15, 23, 42, 0.10);
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.94);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
-  color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+  color: #475569;
   font-family: var(--font-ui);
   font-size: 11.5px;
   line-height: 1.5;
@@ -124,12 +124,12 @@
 .map-layers__title {
   margin-bottom: 7px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .map-layers__layer + .map-layers__layer { margin-top: 3px; }
@@ -144,15 +144,15 @@
   border: 0;
   border-radius: 7px;
   background: none;
-  color: #e2e8f0;
+  color: #0f172a;
   font: inherit;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
-.map-layers__row:hover { background: rgba(255, 255, 255, 0.07); }
+.map-layers__row:hover { background: #f1f5f9; }
 .map-layers__row:focus-visible {
-  outline: 2px solid rgba(148, 163, 184, 0.75);
+  outline: 2px solid #2563eb;
   outline-offset: -1px;
 }
 
@@ -164,7 +164,7 @@
   width: 26px;
   height: 15px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.3);
+  background: #cbd5e1;
   transition: background 140ms ease;
 }
 .map-layers__switch::after {
@@ -175,15 +175,16 @@
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
   transition: transform 140ms ease, background 140ms ease;
 }
 .map-layers__row[aria-checked="true"] .map-layers__switch {
-  background: rgba(74, 222, 128, 0.55);
+  background: #16a34a;
 }
 .map-layers__row[aria-checked="true"] .map-layers__switch::after {
   transform: translateX(11px);
-  background: #f0fdf4;
+  background: #ffffff;
 }
 
 .map-layers__label { flex: 1; min-width: 0; }
@@ -194,9 +195,9 @@
   flex: 0 0 auto;
   font-size: 10px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #64748b;
 }
-.map-layers__row[aria-checked="true"] .map-layers__note { color: #fca5a5; }
+.map-layers__row[aria-checked="true"] .map-layers__note { color: #dc2626; }
 
 /* Switch and key on one line. The switch takes the room it needs for its
    label; the strip takes what is left and never pushes the row taller. */
@@ -229,12 +230,12 @@
   min-height: 22px;
   transition: background 0.15s ease;
 }
-.map-layers__strip:hover { background: rgba(255, 255, 255, 0.07); }
+.map-layers__strip:hover { background: #f1f5f9; }
 .map-layers__strip:focus-visible {
-  outline: 2px solid var(--accent-info, #38bdf8);
+  outline: 2px solid #2563eb;
   outline-offset: 1px;
 }
-.map-layers__strip[aria-expanded="true"] { background: rgba(255, 255, 255, 0.1); }
+.map-layers__strip[aria-expanded="true"] { background: #e2e8f0; }
 
 /* The key — shown only under a layer that is switched ON, because colours for
    geometry nobody is drawing are furniture, not information. */
@@ -244,11 +245,11 @@
   gap: 2px 10px;
   margin: 1px 0 5px;
   padding: 6px 7px 7px 12px;
-  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  border-left: 2px solid #e2e8f0;
   margin-left: 13px;
   font-size: 10.5px;
   font-weight: 500;
-  color: #cbd5e1;
+  color: #475569;
 }
 .map-layers__keyrow {
   display: flex;
@@ -273,10 +274,10 @@
   grid-column: 1 / -1;
   margin-top: 4px;
   padding-top: 5px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
   font-size: 9.5px;
   font-weight: 400;
-  color: #94a3b8;
+  color: #64748b;
   white-space: normal;
 }
 
@@ -374,19 +375,19 @@
   text-align: left;
   cursor: pointer;
 }
-.map-layers__base:hover { background: rgba(255, 255, 255, 0.06); }
-.map-layers__base--on { color: #ffffff; }
+.map-layers__base:hover { background: #f1f5f9; }
+.map-layers__base--on { color: #0f172a; font-weight: 600; }
 .map-layers__radio {
   flex: none;
   width: 12px;
   height: 12px;
-  border: 1.5px solid #64748b;
+  border: 1.5px solid #94a3b8;
   border-radius: 50%;
   box-sizing: border-box;
 }
 .map-layers__base--on .map-layers__radio {
-  border-color: #4ade80;
-  background: radial-gradient(circle, #4ade80 0 3px, transparent 3.5px);
+  border-color: #16a34a;
+  background: radial-gradient(circle, #16a34a 0 3px, transparent 3.5px);
 }
-.map-layers__base-note { margin-top: 4px; padding-top: 0; border-top: 0; color: #fbbf24; font-size: 10.5px; }
+.map-layers__base-note { margin-top: 4px; padding-top: 0; border-top: 0; color: #b45309; font-size: 10.5px; }
 .map-layers__title--gap { margin-top: 10px; }

@@ -1377,8 +1377,9 @@ html[data-theme="light"] #root {
   /* The chip's own colour, as a variable, because two things need to know it:
      the chip paints it, and a badge sitting on the chip's corner draws a ring
      in it. Overridden by the open state below, so the ring follows. */
-  --chip: rgba(15, 23, 42, 0.82);
-  --chip-ink: #e2e8f0;
+  /* White, as the tool rail (MapToolRail.css .mtr-card). */
+  --chip: #ffffff;
+  --chip-ink: #334155;
 
   pointer-events: auto;
   width: 34px;
@@ -1386,10 +1387,10 @@ html[data-theme="light"] #root {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(15, 23, 42, 0.10);
   border-radius: 8px;
   background: var(--chip);
-  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
   color: var(--chip-ink);
   font-size: 17px;
   font-weight: 600;
@@ -1398,8 +1399,9 @@ html[data-theme="light"] #root {
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 .map-cam-btn:hover {
-  --chip: rgba(15, 23, 42, 0.94);
-  border-color: rgba(255, 255, 255, 0.32);
+  --chip: #f1f5f9;
+  --chip-ink: #0f172a;
+  border-color: rgba(15, 23, 42, 0.18);
 }
 
 /* A press that moves. The only feedback was the background going from 0.94 to
@@ -1408,7 +1410,7 @@ html[data-theme="light"] #root {
    whatever is underneath. One pixel down is felt rather than seen, which is
    what a press wants to be. */
 .map-cam-btn:active {
-  --chip: rgba(15, 23, 42, 1);
+  --chip: #e2e8f0;
   transform: translateY(1px);
 }
 
@@ -1425,9 +1427,9 @@ html[data-theme="light"] #root {
  * snow-bright tile or a night one. Not transitioned — a focus ring that fades
  * in leaves a keyboard user with no indicator for the length of the fade. */
 .map-cam-btn:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid #2563eb;
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(8, 12, 18, 0.55);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85);
 }
 /* Set apart from the zoom pair — it moves the camera rather than scaling it. */
 /* No margin now that it heads a row rather than trailing a column. */
@@ -2795,12 +2797,13 @@ html[data-theme="light"] #root {
    chrome uses, and one place to retune them is the difference between a panel
    that tracks the map and one that drifts from it. */
 .lf-cluster-tip {
-  --ct-paper:  rgba(17, 20, 26, 0.95);
-  --ct-line:   rgba(255, 255, 255, 0.12);
-  --ct-rule:   rgba(255, 255, 255, 0.07);
-  --ct-ink:    #e6e8ee;
-  --ct-ink-2:  #9aa3b2;
-  --ct-ink-3:  #7f8798;
+  /* White, as the rest of the map chrome (MapToolRail.css .mtr-card). */
+  --ct-paper:  #ffffff;
+  --ct-line:   rgba(15, 23, 42, 0.10);
+  --ct-rule:   rgba(15, 23, 42, 0.08);
+  --ct-ink:    #0f172a;
+  --ct-ink-2:  #475569;
+  --ct-ink-3:  #64748b;
 
   position: fixed;
   left: 0;
@@ -2812,7 +2815,7 @@ html[data-theme="light"] #root {
   border-radius: 8px;
   background: var(--ct-paper);
   border: 1px solid var(--ct-line);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
   color: var(--ct-ink);
   /* It follows the cursor, so it must never take the pointer: intercepting it
      would swallow the badge's own mouseleave and strand the panel on screen.
@@ -2913,8 +2916,8 @@ html[data-theme="light"] #root {
    healthy fleet almost every row is live, and colouring the common case green
    would leave nothing for the exceptions to stand out against. */
 .lf-ct-age--live    { color: var(--ct-ink-3); }
-.lf-ct-age--delayed { color: #cbd5e1; }
-.lf-ct-age--dark    { color: #f0a04a; }
+.lf-ct-age--delayed { color: #334155; }
+.lf-ct-age--dark    { color: #c2410c; }
 .lf-ct-age--unknown { color: var(--ct-ink-3); opacity: 0.75; }
 
 .lf-ct-more,

@@ -28,9 +28,9 @@ export const NAV_ITEMS = [
   { key: 'audit',        label: 'Fuel Audit',   icon: 'clipboard-check', permission: 'fuel_audit:read', section: 'system' },
   // Fuel > Report: advanced fuel analysis for one unit over a period.
   { key: 'fuelReport',   label: 'Fuel Report',  icon: 'report-analytics', permission: 'fuel_filling:read', section: 'system' },
-  // Motor Report: how one unit was used over a period — drive hours, km, fuel,
+  // Highlights: how one unit was used over a period — drive hours, km, fuel,
   // where it spent its time — with the workbook and a PDF.
-  { key: 'usageReview',  label: 'Motor Report', icon: 'route', permission: 'telemetry:read', section: 'system' },
+  { key: 'usageReview',  label: 'Highlights',   icon: 'car', permission: 'telemetry:read', section: 'system' },
 ];
 
 function weatherDesc(code) {

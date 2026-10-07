@@ -1,7 +1,10 @@
-/* Motor Report — built on the sp4 panel tokens, so it follows the theme like
+/* Highlights — built on the sp4 panel tokens, so it follows the theme like
    the Fuel Report and Audit pages beside it. */
 
 .urv-root .sp4-header-kpis { flex-wrap: wrap; }
+/* One height for "When it drives" and the two tables under the map
+   (operator, 2026-10-07: "the height should be similar to When it drives"). */
+.urv-root { --urv-card-h: 300px; --urv-map-h: 360px; }
 .urv-kpi { min-width: 140px; }
 .urv-kpi__u { font-size: 12px; font-weight: 600; color: var(--sp4-text-3); margin-left: 2px; }
 .urv-kpi__sub {
@@ -73,7 +76,9 @@
 
 .urv-map {
   position: relative;
-  min-height: 480px;
+  /* Fixed, with "Distance per day" beside it at the same height (operator,
+     2026-10-07: the map stretched to both side charts, ~600px, too tall). */
+  height: var(--urv-map-h);
   border: 1px solid var(--sp4-line-hi);
   border-radius: 12px;
   overflow: hidden;
@@ -99,12 +104,24 @@
 .urv-map__legend i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
 .urv-map__legend i.urv-line { width: 14px; height: 3px; border-radius: 2px; border: 0; box-shadow: none; }
 
-.urv-side { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.urv-card--top { height: var(--urv-map-h); }
+.urv-card--top .urv-chart { flex: 1 1 auto; min-height: 0; height: auto; }
+.urv-grid--detail { grid-template-columns: minmax(0, 1fr); }
 
 /* Cards are the Fuel Report's .frv-card (border, radius, title, note); these
    only add what this page needs on top. */
 .urv-card { overflow: hidden; }
-.urv-card--table { padding-bottom: 0; }
+/* Fixed at the shared height: a page of rows and the pager fit, a short list
+   leaves the card its size, longer content scrolls inside. */
+.urv-card--table {
+  height: var(--urv-card-h);
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.urv-card--table .sp4-table-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.urv-card--table .urv-hint { flex: 1 1 auto; }
+.urv-card--table .sp4-tpager { margin: 0 -16px; }
 .urv-card--table .sp4-table-scroll { margin: 0 -16px; }
 .urv-card__sub {
   margin: -4px 0 0;
@@ -113,7 +130,8 @@
 }
 
 .urv-chart { height: 190px; }
-.urv-chart--hours { height: 170px; }
+.urv-card--fixed { height: var(--urv-card-h); }
+.urv-card--fixed .urv-chart--hours { flex: 1 1 auto; min-height: 0; height: auto; }
 .urv-chart .recharts-surface { cursor: pointer; }
 /* Recharts' keyboard layer takes focus on a click and the browser rings it
    in its own orange; the panel's accent ring, for the keyboard only. */
@@ -122,7 +140,7 @@
 .urv-chart .recharts-wrapper:focus-visible,
 .urv-chart .recharts-surface:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; border-radius: 6px; }
 
-.urv-table { max-height: 380px; overflow: auto; }
+.urv-table { overflow: auto; }
 .urv-table .sp4-table { width: 100%; }
 .urv-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .urv-mono { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--sp4-text-2); }
@@ -141,21 +159,16 @@
 .urv-trip td { color: var(--sp4-text-2); }
 .urv-hint { padding: 6px 14px 16px; font-size: var(--sp4-body); color: var(--sp4-text-3); }
 
-.urv-foot {
-  padding: 12px var(--sp4-gutter) 0;
-  font-size: var(--sp4-label);
-  color: var(--sp4-text-3);
-}
 
 @media (max-width: 1100px) {
   .urv-grid, .urv-grid--lower { grid-template-columns: minmax(0, 1fr); }
-  .urv-map { min-height: 380px; }
+  .urv-root { --urv-map-h: 340px; }
 }
 @media (max-width: 767px) {
   .urv-grid { padding: 10px 16px 0; }
   .urv-bar { padding: 10px 16px; }
   .urv-bar__acts { margin-left: 0; }
-  .urv-map { min-height: 320px; }
+  .urv-root { --urv-map-h: 300px; }
   .urv-map__legend { display: none; }
   .urv-hbar { display: none; }
   .urv-kpi { min-width: 0; }

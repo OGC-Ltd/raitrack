@@ -1,12 +1,12 @@
 /**
- * Motor Report — how one unit was used over a chosen period.
+ * Highlights — how one unit was used over a chosen period.
  *
  * The four figures the operators asked for on the August–September reviews
  * (drive hours a day, total km, km a day, fuel a day) and the places it spent
  * its time, worked out on the server from the unit's Wialon history
  * (fleet-server modules/usage-review) with the method those reviews were
  * proofread on. The page draws it and ties every view together: pick a day on
- * the chart, the hour grid or the map and the others follow; pick a place on
+ * the distance chart or the map and the others follow; pick a place on
  * the map or in the list and the days it was there light up.
  *
  * The workbook (every row, Power BI-ready) and the PDF (figures and pictures)
@@ -28,6 +28,7 @@ import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from "../../lib/osmBase"
 import MapStatusBar from "../body/MapStatusBar";
 import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
+import TablePager, { usePager } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
 import { watchTableLabels } from "../../lib/tableLabels";
 
@@ -54,6 +55,21 @@ const hm = (h) => {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 };
 const minutes = (m) => (m < 60 ? `${Math.round(m)} min` : hm(m / 60));
+/**
+ * A place name in Title Case: OpenStreetMap spells many in lower case ("riat
+ * centre, Kanyikela"). Only the name is touched — a trailing "(north-west,
+ * 0.9 km)" stays as written — and only first letters are raised, so "KDW" or
+ * "C103" are left alone.
+ */
+export const placeCase = (name) => {
+  if (!name) return name;
+  const cut = name.indexOf(" (");
+  const head = cut >= 0 ? name.slice(0, cut) : name;
+  const tail = cut >= 0 ? name.slice(cut) : "";
+  return head.replace(/(^|[\s,/–-])(\p{Ll})/gu, (_, sep, ch) => sep + ch.toUpperCase()) + tail;
+};
+/** Rows a table page holds: what fits the shared card height (--urv-card-h). */
+const PAGE_ROWS = 5;
 
 // ── period ──────────────────────────────────────────────────────────────────
 
@@ -182,7 +198,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
     placeMarks.current = top.map((p) => {
       const marker = new mapsNs.Marker({
         map: m, position: { lat: p.lat, lng: p.lng }, zIndex: 100 - p.id,
-        title: `${p.id}. ${p.name ?? "Place"} · ${nf(p.hours, 1)} h over ${p.visits} stop(s) on ${p.days} day(s)`,
+        title: `${p.id}. ${placeCase(p.name) ?? "Place"} · ${nf(p.hours, 1)} h over ${p.visits} stop(s) on ${p.days} day(s)`,
       });
       marker.addListener("click", () => setSel((s) => ({ ...s, place: s.place === p.id ? null : p.id })));
       return { id: p.id, marker, scale: 7 + 9 * Math.sqrt(Math.min(1, p.hours / ref)) };
@@ -398,6 +414,9 @@ export default function UsageReviewScreen() {
       return getUsageReview({ ...live, fresh, signal });
     },
     refetchInterval: (query) => (query.state.data?.status === "running" ? 1500 : false),
+    // Keep asking while the tab is in the background: a build takes up to a
+    // minute, and the operator who switches away should come back to it done.
+    refetchIntervalInBackground: true,
     staleTime: 5 * 60_000,
     retry: 0,
   });
@@ -453,7 +472,7 @@ export default function UsageReviewScreen() {
       await downloadUsageReview({
         orgId: live.orgId, vehicleId: live.vehicleId, from: live.from, to: live.to, kind,
         kmpl: kmplText && kmplIn > 0 ? kmplIn : undefined,
-        fallbackName: `${review.vehicle.plate.replace(/\s+/g, "")}_${live.from}_${live.to}_motor-report.${kind}`,
+        fallbackName: `${review.vehicle.plate.replace(/\s+/g, "")}_${live.from}_${live.to}_highlights.${kind}`,
       });
     } catch (e) { setDlError(e.message || "Download failed"); }
     finally { setBusy(null); }
@@ -464,7 +483,18 @@ export default function UsageReviewScreen() {
   const detailStops = useMemo(() => (review?.stops ?? []).filter((x) =>
     (!sel.day || dayKeyOf(x.start) === sel.day) && (sel.place == null || x.place === sel.place)), [review, sel]);
   const detailTrips = useMemo(() => (sel.day ? (review?.trips ?? []).filter((t) => dayKeyOf(t.start) === sel.day) : []), [review, sel.day]);
-  const pname = (id) => review?.places.find((p) => p.id === id)?.name ?? `Place ${id}`;
+  const detailRows = useMemo(() => [
+    ...detailStops.map((x) => ({ t: x.start, kind: "stop", x })),
+    ...detailTrips.map((x) => ({ t: x.start, kind: "trip", x })),
+  ].sort((a, b) => a.t - b.t), [detailStops, detailTrips]);
+  const placePager = usePager(review?.places ?? [], review, PAGE_ROWS);
+  const detailPager = usePager(detailRows, `${sel.day}|${sel.place}`, PAGE_ROWS);
+  // A place picked on the map opens the list on its page.
+  const setPlacePage = placePager.setPage;
+  useEffect(() => {
+    if (sel.place != null) setPlacePage(Math.floor((sel.place - 1) / PAGE_ROWS));
+  }, [sel.place, setPlacePage]);
+  const pname = (id) => placeCase(review?.places.find((p) => p.id === id)?.name) ?? `Place ${id}`;
 
   const dash = <span className="frp-kpi-none">—</span>;
   const top = review?.places[0];
@@ -487,7 +517,7 @@ export default function UsageReviewScreen() {
           <Kpi n={s ? `${s.activeDays}/${s.calendarDays}` : dash} label="Days it moved" tone="fleet"
                sub={s?.longestDay ? `Longest ${nf(s.longestDay.km, 0)} km, ${dayLabel(s.longestDay.date)}` : null} />
           <Kpi n={top ? nf(top.hours, 0) : dash} unit={top ? " h" : ""} label="At its base" tone="stat"
-               sub={top ? top.name : null} title={top ? `${top.lat.toFixed(5)}, ${top.lng.toFixed(5)}` : undefined} />
+               sub={top ? placeCase(top.name) : null} title={top ? `${top.lat.toFixed(5)}, ${top.lng.toFixed(5)}` : undefined} />
         </div>
       </div>
 
@@ -544,7 +574,7 @@ export default function UsageReviewScreen() {
               One review covers up to {MAX_DAYS} days. Shorten the period, then Build.
             </EmptyNote>
           ) : (
-            <EmptyNote icon="ti-route" title={unit ? `Ready for ${unit.id}` : "Motor Report"}>
+            <EmptyNote icon="ti-car" title={unit ? `Ready for ${unit.id}` : "Highlights"}>
               {unit
                 ? `Build to see how ${unit.id} was used from ${dayLabel(span.from)} to ${dayLabel(span.to)} (${nDays} days): drive hours, distance, fuel and where it spent its time.`
                 : "Choose a unit and a period, then Build: drive hours a day, distance, fuel a day and where it spent its time, on a map, with the workbook and a PDF."}
@@ -590,26 +620,14 @@ export default function UsageReviewScreen() {
               </div>
             )}
 
-            <div className="urv-grid">
+            <div className="urv-grid urv-grid--top">
               <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
 
-              <div className="urv-side">
-                <section className="frv-card urv-card">
-                  <h3 className="frv-card__t">Distance per day</h3>
-                  <DailyChart days={review.days} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
-                  <p className="frv-card__note">Bars are km, dots are hours driving. Click a day to follow it on the map.</p>
-                </section>
-
-                <section className="frv-card urv-card">
-                  <h3 className="frv-card__t">When it drives</h3>
-                  <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal} />
-                  <p className="frv-card__note">
-                    {sel.day ? `Minutes driving in each hour on ${dayLabel(sel.day, true)}, over the period's average.`
-                      : sel.place != null ? "Minutes driving in each hour on the days it was at this place, over the period's average."
-                      : "Average minutes driving in each hour of the day (EAT) over the period."}
-                  </p>
-                </section>
-              </div>
+              <section className="frv-card urv-card urv-card--top">
+                <h3 className="frv-card__t">Distance per day</h3>
+                <DailyChart days={review.days} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
+                <p className="frv-card__note">Bars are km, dots are hours driving. Click a day to follow it on the map.</p>
+              </section>
             </div>
 
             <div className="urv-grid urv-grid--lower">
@@ -620,11 +638,11 @@ export default function UsageReviewScreen() {
                   <table className="sp4-table">
                     <thead><tr><th>#</th><th>Place</th><th>County</th><th className="urv-num">Hours</th><th className="urv-num">Stops</th><th className="urv-num">Days</th><th>Coordinates</th></tr></thead>
                     <tbody>
-                      {review.places.slice(0, 40).map((p) => (
+                      {placePager.pageRows.map((p) => (
                         <tr key={p.id} className={`urv-row${sel.place === p.id ? " urv-row--on" : ""}`}
                             onClick={() => setSel((x) => ({ ...x, place: x.place === p.id ? null : p.id }))}>
                           <td>{p.id}</td>
-                          <td title={p.address ?? undefined}>{p.name ?? `Place ${p.id}`}</td>
+                          <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
                           <td className="urv-num">
                             <span className="urv-hbar" style={{ "--w": `${Math.min(100, (p.hours / review.places[0].hours) * 100)}%` }} />
@@ -638,26 +656,36 @@ export default function UsageReviewScreen() {
                     </tbody>
                   </table>
                 </div>
+                <TablePager pager={placePager} label="Places pages" />
               </section>
 
+              <section className="frv-card urv-card urv-card--fixed">
+                <h3 className="frv-card__t">When it drives</h3>
+                <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal} />
+                <p className="frv-card__note">
+                  {sel.day ? `Minutes driving in each hour on ${dayLabel(sel.day, true)}, over the period's average.`
+                    : sel.place != null ? "Minutes driving in each hour on the days it was at this place, over the period's average."
+                    : "Average minutes driving in each hour of the day (EAT) over the period."}
+                </p>
+              </section>
+            </div>
+
+            <div className="urv-grid urv-grid--detail">
               <section className="frv-card urv-card urv-card--table">
-                <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${selPlace.name ?? "Place"}` : "Day and place detail"}</h3>
+                <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${placeCase(selPlace.name) ?? "Place"}` : "Day and place detail"}</h3>
                 <p className="urv-card__sub">
                   {selDay && <span>{nf(selDay.km, 1)} km · {hm(selDay.driveH)} driving{selDay.engineH != null ? ` · ${hm(selDay.engineH)} engine` : ""}{kmpl ? ` · ~${nf(selDay.km / kmpl, 1)} L` : ""}</span>}
                   {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days</span>}
                   {!selDay && !selPlace && <span>Nothing picked yet</span>}
                 </p>
                 {!selDay && !selPlace ? (
-                  <div className="urv-hint">Pick a day on the chart, the hour grid or the map, or a place in the list or on the map, to see its trips and stops here.</div>
+                  <div className="urv-hint">Pick a day on the distance chart or the map, or a place in the list or on the map, to see its drives and stops here.</div>
                 ) : (
                   <div className="sp4-table-scroll urv-table">
                     <table className="sp4-table">
                       <thead><tr><th>{selDay ? "Time" : "Date"}</th><th>What</th><th>Where</th><th className="urv-num">km</th><th className="urv-num">Duration</th></tr></thead>
                       <tbody>
-                        {[
-                          ...detailStops.map((x) => ({ t: x.start, kind: "stop", x })),
-                          ...detailTrips.map((x) => ({ t: x.start, kind: "trip", x })),
-                        ].sort((a, b) => a.t - b.t).map(({ kind, x }) => (
+                        {detailPager.pageRows.map(({ kind, x }) => (
                           <tr key={`${kind}${x.id}`} className={kind === "trip" ? "urv-trip" : ""}>
                             <td className="urv-mono">{selDay ? `${clock.format(x.start)}–${clock.format(x.end)}` : stamp.format(x.start)}</td>
                             <td>{kind === "trip" ? "Drive" : x.overnight ? "Stop (overnight)" : "Stop"}</td>
@@ -670,16 +698,10 @@ export default function UsageReviewScreen() {
                     </table>
                   </div>
                 )}
+                {(selDay || selPlace) && <TablePager pager={detailPager} label="Detail pages" />}
               </section>
             </div>
 
-            <div className="urv-foot">
-              {review.quality.distanceSource === "odometer" ? "Distance from the tracker's odometer" : review.quality.distanceSource === "mixed" ? "Distance from the odometer and the GPS track" : "Distance from the GPS track"}
-              {review.quality.gpsVsOdometerPct != null ? ` (GPS agrees within ${nf(review.quality.gpsVsOdometerPct, 1)}%)` : ""}
-              {" · "}{review.quality.messages.toLocaleString("en-GB")} messages
-              {" · "}fuel is an estimate{kmpl ? ` at ${kmpl} km/L${kmplText ? " (entered)" : review.vehicle.kmplSource === "unit-name" ? " (from the Wialon unit name)" : " (vehicle record)"}` : ""}
-              {" · "}built {stamp.format(review.builtAt)}
-            </div>
           </>
         )}
       </div>
