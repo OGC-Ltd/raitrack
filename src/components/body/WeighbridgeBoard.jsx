@@ -707,17 +707,17 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
     </section>
   );
 
+  /* ── Out longer than a run takes ──────────────────────────────
+     A SUBSET of the vehicles above: the ones out past the point where
+     the journey explains it. For a dispatched unit that point is
+     MEASURED — the median of the completed runs to the same
+     destination, from FactorySuite's sign-out and sign-back — so a
+     tractor to a farm two hours away and a truck to Opapo are each
+     held to their own run. A lorry seen only on a transfer ticket is
+     held to the fixed mark: loaded at a yard and not weighed at the
+     factory after it. The header reads "≥" because it is the shortest
+     of these waits. */
   const overduePanel = (
-    {/* ── Out longer than a run takes ──────────────────────────────
-        A SUBSET of the vehicles above: the ones out past the point where
-        the journey explains it. For a dispatched unit that point is
-        MEASURED — the median of the completed runs to the same
-        destination, from FactorySuite's sign-out and sign-back — so a
-        tractor to a farm two hours away and a truck to Opapo are each
-        held to their own run. A lorry seen only on a transfer ticket is
-        held to the fixed mark: loaded at a yard and not weighed at the
-        factory after it. The header reads "≥" because it is the shortest
-        of these waits. */}
     <section className="wbb-panel">
       <h4 className="wbb-panel__h">
         Out longer than a run takes
@@ -773,19 +773,19 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
     </section>
   );
 
+  /* ── The zone's day ──────────────────────────────────────────────
+     First in the rail, above the two panels that answer what is still
+     out — the day, then what is outstanding from it.
+     
+     It is a taller, quieter panel than it was: the gap between these
+     two lines is the whole question — is the mill being fed faster
+     than the yards are filling — and at 190px with a Y axis eating
+     the left edge that gap was visible without being readable. The
+     axis is gone, the plot has its own frame and its own air, and
+     each line carries its running total printed where it ends, so
+     the two figures are read off the picture rather than hunted for
+     in the strip above. */
   const flowPanel = (
-    {/* ── The zone's day ──────────────────────────────────────────────
-        First in the rail, above the two panels that answer what is still
-        out — the day, then what is outstanding from it.
-
-        It is a taller, quieter panel than it was: the gap between these
-        two lines is the whole question — is the mill being fed faster
-        than the yards are filling — and at 190px with a Y axis eating
-        the left edge that gap was visible without being readable. The
-        axis is gone, the plot has its own frame and its own air, and
-        each line carries its running total printed where it ends, so
-        the two figures are read off the picture rather than hunted for
-        in the strip above. */}
     <section className="wbb-panel wbb-flow">
       <div className="wbb-flow__head">
         <h4 className="wbb-flow__h">
