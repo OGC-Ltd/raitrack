@@ -15,6 +15,8 @@ export const ORG_CODE_BY_COMPANY = {
   kasulu:   'KASULU',
   menengai:  'MENENGAI',
   westsugar: 'WESTSUGAR',
+  timsales:  'TIMSALES',
+  aquamist:  'AQUAMIST',
 }
 
 const BOOTSTRAP_CACHE = 'ft-bootstrap'
