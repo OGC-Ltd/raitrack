@@ -64,7 +64,8 @@ import {
   getVehicleFuelDays,
 } from "../../api/analytics";
 
-import { useAppSelector, useCompanies, useTheme } from "../../context/AppContext";
+import { useAppSelector, useAppActions, useCompanies, useTheme } from "../../context/AppContext";
+import FuelStandardCard from "../body/FuelStandardCard";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
 import DownloadReportButton from "../shared/DownloadReportButton";
@@ -207,6 +208,7 @@ export default function AnalyticsScreen() {
   // reading analytics — an account can be allowed to see the figures without
   // being allowed to slice them by vehicle type.
   const { can: canDo } = usePermissions();
+  const { setDesktopActiveTab } = useAppActions();
   const canFilterUnits = canDo("map:filter");
 
   const darkMode =
@@ -2240,6 +2242,19 @@ export default function AnalyticsScreen() {
                     <StopClusters data={stopClusters} loading={stopsLoading} />
                   )} */}
                 </>
+              )}
+
+              {/* Fuel against standard — the Fuel › Report fleet review over this
+                  window. Draws itself only where the review judged a unit (the
+                  machine register's standards are Kasulu's alone today). */}
+              {canDo("fuel_filling:read") && (
+                <FuelStandardCard
+                  companyId={activeCompanyId} days={days} to={to} windowLabel={month}
+                  onOpen={() => {
+                    try { localStorage.setItem("fuelReport.mode", "review"); } catch { /* opens on its default */ }
+                    setDesktopActiveTab("fuelReport");
+                  }}
+                />
               )}
 
               {/* GRID: FUEL + DAILY ACTIVITY */}

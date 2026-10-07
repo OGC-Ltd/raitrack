@@ -22,3 +22,10 @@ export async function getUnitPerformance({ orgId, vehicleId, from, to } = {}) {
   const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/performance-review/vehicles/${vehicleId}?${qs}`);
   return res.data ?? null;
 }
+
+/** The same review, addressed by the app's company id ("kasulu") as the analytics feeds are. */
+export async function getPerformanceReviewForCompany({ companyId, from, to } = {}) {
+  const { resolveOrgId } = await import("./org");
+  const orgId = await resolveOrgId(companyId);
+  return orgId ? getPerformanceReview({ orgId, from, to }) : null;
+}

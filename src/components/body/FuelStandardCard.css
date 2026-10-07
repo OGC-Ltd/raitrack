@@ -1,0 +1,30 @@
+/* Analytics › Fuel against standard. The analytics card's own tokens
+   (--ink, --text-2/3, --border, --elevated); bar colours as the review's. */
+.fsc-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.fsc-figs > div { background: var(--elevated); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fsc-figs b { font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fsc-figs span { font-size: 11px; color: var(--text-2); }
+.fsc-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.fsc-h { margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.fsc-h--bad { color: #c0362c; }
+.fsc-h--good { color: #1e7a55; }
+:root[data-theme="dark"] .fsc-h--good { color: #34d399; }
+:root[data-theme="dark"] .fsc-h--bad { color: #fca5a5; }
+.fsc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.fsc-row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 8px; }
+.fsc-row__ref { font-size: 12px; font-weight: 600; color: var(--text-2); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fsc-row__track { position: relative; display: flex; align-items: center; gap: 6px; height: 14px; }
+.fsc-row__std { position: absolute; left: 32%; top: -1px; bottom: -1px; border-left: 1px dashed var(--text-3); }
+.fsc-row__bar { height: 9px; border-radius: 1px; min-width: 2px; flex: none; }
+.fsc-row__bar--over { background: #c0362c; }
+.fsc-row__bar--slight { background: #d4900a; }
+.fsc-row__bar--within { background: #1e7a55; }
+.fsc-row__bar--none { background: var(--border-hi); }
+.fsc-row__v { font-size: 11px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.fsc-open {
+  align-self: flex-start; margin-top: 12px; border: 1px solid var(--border); background: none; border-radius: 7px;
+  padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.fsc-open:hover { background: var(--elevated); }
+.fsc-open:focus-visible { outline: 2px solid var(--chart-1); outline-offset: 1px; }
