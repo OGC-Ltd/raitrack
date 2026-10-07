@@ -196,7 +196,7 @@ function AppShell() {
 
           {show('usageReview') && (
             <div className="app-tab-panel app-tab-panel--screen">
-              <ErrorBoundary label="Motor Report" fullSection>
+              <ErrorBoundary label="Highlights" fullSection>
                 <UsageReviewScreen />
               </ErrorBoundary>
             </div>

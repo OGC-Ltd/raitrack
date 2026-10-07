@@ -69,7 +69,7 @@ function OpenRow({ icon, label, count = null, tone = 'plain', current = false, o
 
 /**
  * `audit` is the Fuel Audit page, `report` the Fuel Report and `review` the
- * Motor Report, where this
+ * Highlights page, where this
  * account may open them: { active, open }. Null hides the row.
  */
 export default function FleetsTree({ audit = null, report = null, review = null }) {
@@ -243,8 +243,8 @@ export default function FleetsTree({ audit = null, report = null, review = null 
         )}
         {review && (
           <OpenRow
-            icon="route"
-            label="Motor report"
+            icon="car"
+            label="Highlights"
             current={review.active}
             onClick={review.open}
             title="How one unit was used over a period — drive hours, distance, fuel and where it spent its time — with Excel and PDF"
