@@ -83,7 +83,7 @@ export default function FuelStandardCard({ companyId, days, to, windowLabel, onO
       </div>
       {onOpen && (
         <button type="button" className="fsc-open" onClick={onOpen}>
-          Open the full review <i className="ti ti-arrow-right" aria-hidden="true" />
+          Open fleet analytics <i className="ti ti-arrow-right" aria-hidden="true" />
         </button>
       )}
     </div>
