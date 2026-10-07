@@ -350,8 +350,9 @@
 /*
  * Unread alert count on the bell (replaces the red dot).
  *
- * One digit is a 16px circle; "10"–"20" (bellBadgeLabel stops at 20) is a
- * 20px pill of the same height, so the ring never turns into an oval egg.
+ * A PERFECT circle at every count (operator, 2026-10-08): one fixed 18px
+ * square, radius 50%, no side padding. bellBadgeLabel stops at "20", and two
+ * digits at 10px bold (~12px) fit inside 18px with room to spare.
  * Flex centring with line-height 1, and NO `text-box` trim: the trim was
  * applied to a grid container, where browsers disagree about it, and that is
  * what pushed the figure off-centre (operator, 2026-10-08).
@@ -361,12 +362,15 @@
  */
 .app-header__bell-count {
   position: absolute;
-  top: calc(50% - 15px);
-  left: calc(50% + 2px);
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
+  top: calc(50% - 16px);
+  left: calc(50% + 1px);
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  aspect-ratio: 1;
+  flex: none;
+  padding: 0;
+  border-radius: 50%;
   /* Always red: an unread count on a bell is a summons whatever it is made
      of, and one colour is one less thing to decode at a glance. */
   background: #dc2626;
@@ -385,7 +389,7 @@
   pointer-events: none;
   animation: app-bell-pop 180ms cubic-bezier(0.2, 0, 0, 1);
 }
-.app-header__bell-count[data-len="1"] { width: 16px; padding: 0; }
+.app-header__bell-count[data-len="2"] { letter-spacing: -0.02em; }
 .app-header__bell--active .app-header__bell-count { box-shadow: 0 0 0 2px #eff6ff; }
 @keyframes app-bell-pop { from { transform: scale(0.6); opacity: 0; } }
 
