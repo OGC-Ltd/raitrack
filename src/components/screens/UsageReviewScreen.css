@@ -298,3 +298,7 @@
   .urv-kpi { min-width: 0; }
   .urv-kpi__sub { max-width: 150px; }
 }
+
+/* "Where it spent its time": Google's exact name for the spot (operator,
+   2026-10-08), the column the eye goes to first. */
+.urv-exact { font-weight: 600; white-space: nowrap; }

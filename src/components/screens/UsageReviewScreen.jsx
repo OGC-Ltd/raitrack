@@ -887,13 +887,14 @@ export default function UsageReviewScreen() {
                 <p className="urv-card__sub">{s.places} places · {nf(s.stoppedH, 0)} h stopped in stops of 10 min or more · click a place</p>
                 <div className="sp4-table-scroll urv-table">
                   <table className="sp4-table">
-                    <thead><tr><th>#</th><th>Place</th><th>County</th><th className="urv-num">Hours</th><th className="urv-num">Stops</th><th className="urv-num">Days</th><th>Coordinates</th></tr></thead>
+                    <thead><tr><th>#</th><th>Exact location</th><th>Area</th><th>County</th><th className="urv-num">Hours</th><th className="urv-num">Stops</th><th className="urv-num">Days</th><th>Coordinates</th></tr></thead>
                     <tbody>
                       {placePager.pageRows.map((p) => (
                         <tr key={p.id} className={`urv-row${sel.place === p.id ? " urv-row--on" : ""}`}
                             onClick={() => setSel((x) => ({ ...x, place: x.place === p.id ? null : p.id }))}>
                           <td>{p.id}</td>
-                          <td title={[gnames.has(p.id) ? placeCase(p.name) : null, p.address].filter(Boolean).join(" · ") || undefined}>{nameOf(p, gnames) ?? `Place ${p.id}`}</td>
+                          <td className="urv-exact">{gnames.get(p.id) ?? <span className="frp-kpi-none" title="Google has no named place within 150 m">—</span>}</td>
+                          <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
                           <td className="urv-num">
                             <span className="urv-hbar" style={{ "--w": `${Math.min(100, (p.hours / review.places[0].hours) * 100)}%` }} />
