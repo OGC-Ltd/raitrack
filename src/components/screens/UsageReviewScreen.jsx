@@ -726,7 +726,9 @@ export default function UsageReviewScreen() {
         orgId: live.orgId, vehicleId: live.vehicleId, from: live.from, to: live.to, kind,
         kmpl: kmplText && kmplIn > 0 ? kmplIn : undefined,
         names: Object.fromEntries(gnamesRef.current),
-        fallbackName: `${review.vehicle.plate.replace(/\s+/g, "")}_${live.from}_${live.to}_highlights.${kind}`,
+        // The report's subject: the driver on the vehicle, as the map shows it.
+        driver: runUnit?.driver && runUnit.driver !== "Unassigned" ? runUnit.driver : undefined,
+        fallbackName: `${review.vehicle.plate.replace(/\s+/g, "")}_${live.from}_${live.to}_${kind === "pdf" ? "tracking-report" : "logbook"}.${kind}`,
       });
     } catch (e) { setDlError(e.message || "Download failed"); }
     finally { setBusy(null); }
@@ -879,7 +881,7 @@ export default function UsageReviewScreen() {
                   <i className="ti ti-file-spreadsheet" aria-hidden="true" /> {busy === "xlsx" ? "Preparing…" : "Excel"}
                 </button>
                 <button type="button" className="sp4-ghost-btn" onClick={() => download("pdf")} disabled={busy != null}
-                        title="Two pages: the figures, the map and the charts">
+                        title="Vehicle tracking report: executive summary and key findings, where the time went, when it drives, routes, top sites with arrival and departure times, entries and exits, the route map and gate times for CCTV">
                   <i className="ti ti-file-type-pdf" aria-hidden="true" /> {busy === "pdf" ? "Preparing…" : "PDF"}
                 </button>
                 <button type="button" className="sp4-ghost-btn" onClick={build} title="Read the history again and rebuild">
