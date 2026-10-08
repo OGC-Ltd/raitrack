@@ -819,3 +819,11 @@
   .urv-journey__key { padding-left: 0; }
   .urv-vlog__time { min-width: 52px; }
 }
+
+/* ── Movement web: the map's Route / Web switch sits before the fence tools ── */
+.urv-map__mode { margin-left: auto; }
+.urv-map__mode + .urv-fence-bar { margin-left: 0; }
+.urv-web .urv-arrow { width: 18px; padding-left: 0; padding-right: 0; text-align: center; color: var(--sp4-text-3); }
+@media (max-width: 767px) {
+  .urv-map__top { flex-wrap: wrap; justify-content: flex-end; }
+}
