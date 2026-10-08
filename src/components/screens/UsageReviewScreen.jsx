@@ -25,6 +25,7 @@ import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { loadMapEngine, maps as mapsNs } from "../../lib/mapEngine";
 import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from "../../lib/osmBase";
+import { installGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
 import MapStatusBar from "../body/MapStatusBar";
 import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
@@ -147,8 +148,16 @@ function readPalette(el) {
 }
 const MAX_PLACES_ON_MAP = 30;
 
+/** The base map picked here and on the live map's Maps panel (one choice). */
+const BASE_MAP_KEY = "ft-map-base";
+const readBase = () => {
+  try { return GOOGLE_BASE_AVAILABLE && localStorage.getItem(BASE_MAP_KEY) === "google" ? "google" : "osm"; } catch { return "osm"; }
+};
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function ReviewMap({ review, sel, setSel, placeDays, pal }) {
   const el = useRef(null);
+  const wrap = useRef(null);
   const map = useRef(null);
   const tracks = useRef([]);
   const placeMarks = useRef([]);
@@ -156,12 +165,20 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(null);
   const [mapObj, setMapObj] = useState(null);
+  const [base, setBase] = useState(readBase);
+  const [baseNote, setBaseNote] = useState(null);
+  // What the pointer is over (a place, a day's route or a stop) and where.
+  const [hover, setHover] = useState(null);
 
   useEffect(() => {
     let alive = true;
     loadMapEngine().then((maps) => {
       if (!alive || !el.current || map.current) return;
-      map.current = new maps.Map(el.current, { center: { lat: 0.5, lng: 34.6 }, zoom: 9, zoomControl: true, fullscreenControl: true });
+      // No wheel zoom: the map sits in a scrolling page, and the wheel is for
+      // the page (operator, 2026-10-08). The +/- buttons and double-click zoom.
+      map.current = new maps.Map(el.current, {
+        center: { lat: 0.5, lng: 34.6 }, zoom: 9, zoomControl: true, fullscreenControl: true, scrollwheel: false,
+      });
       installOsmBase(maps, map.current);
       map.current.setMapTypeId(OSM_TYPE_ID);
       setMapObj(map.current);
@@ -169,6 +186,32 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
     }).catch((e) => alive && setFailed(e.message || "Map unavailable"));
     return () => { alive = false; };
   }, []);
+
+  // The base map. Google's imagery loads on first use; if it cannot (a refused
+  // key, offline) the map stays on OpenStreetMap and says why.
+  useEffect(() => {
+    const m = map.current;
+    if (!ready || !m) return undefined;
+    let dead = false;
+    if (base === "google") {
+      installGoogleBase(m)
+        .then(() => { if (!dead) { m.setMapTypeId(GOOGLE_TYPE_ID); setBaseNote(null); } })
+        .catch((e) => {
+          if (dead) return;
+          setBaseNote(`Satellite is unavailable: ${e.message}.`);
+          setBase("osm");
+        });
+    } else {
+      m.setMapTypeId(OSM_TYPE_ID);
+    }
+    return () => { dead = true; };
+  }, [base, ready]);
+
+  const chooseBase = (id) => {
+    try { localStorage.setItem(BASE_MAP_KEY, id); } catch { /* a remembered choice only */ }
+    setBaseNote(null);
+    setBase(id);
+  };
 
   const fitTo = useCallback((pts, maxZoom = 14) => {
     const m = map.current;
@@ -179,32 +222,50 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
     if (m.getZoom() > maxZoom) m.setZoom(maxZoom);
   }, []);
 
+  /** The pointer's position inside the map box, for the hover card. */
+  const at = useCallback((ev) => {
+    const box = wrap.current?.getBoundingClientRect();
+    const d = ev?.domEvent;
+    return box && d ? { x: d.clientX - box.left, y: d.clientY - box.top, w: box.width, h: box.height } : null;
+  }, []);
+
   // Tracks and places: drawn once per review.
   useEffect(() => {
     const m = map.current;
     if (!ready || !m) return;
-    tracks.current.forEach((t) => t.line.setMap(null));
+    tracks.current.forEach((t) => { t.line.setMap(null); t.hit.setMap(null); });
     placeMarks.current.forEach((p) => p.marker.setMap(null));
+    setHover(null);
+    const dayOf = new Map(review.days.map((d) => [d.date, d]));
     tracks.current = review.tracks.map((t) => {
-      const line = new mapsNs.Polyline({
-        map: m, path: t.path.map(([lat, lng]) => ({ lat, lng })),
-        strokeColor: pal.route, strokeOpacity: 0.6, strokeWeight: 2.5, clickable: true,
+      const path = t.path.map(([lat, lng]) => ({ lat, lng }));
+      const line = new mapsNs.Polyline({ map: m, path, strokeColor: pal.route, strokeOpacity: 0.6, strokeWeight: 2.5 });
+      // A wide, all-but-invisible twin takes the pointer: the drawn line is
+      // too thin to hover or click reliably.
+      const hit = new mapsNs.Polyline({ map: m, path, strokeColor: "#000", strokeOpacity: 0.01, strokeWeight: 14, clickable: true, zIndex: 3 });
+      const rec = { date: t.date, line, hit, w: 2.5 };
+      hit.addListener("click", () => setSel((s) => ({ ...s, day: s.day === t.date ? null : t.date })));
+      hit.addListener("mouseover", (ev) => {
+        line.setOptions({ strokeWeight: 5 });
+        setHover({ kind: "day", day: dayOf.get(t.date) ?? { date: t.date }, pos: at(ev) });
       });
-      line.addListener("click", () => setSel((s) => ({ ...s, day: s.day === t.date ? null : t.date })));
-      return { date: t.date, line };
+      hit.addListener("mouseout", () => {
+        line.setOptions({ strokeWeight: rec.w });
+        setHover((h) => (h?.kind === "day" ? null : h));
+      });
+      return rec;
     });
     const top = review.places.slice(0, MAX_PLACES_ON_MAP);
     const ref = Math.max(1, ...top.slice(0, 2).map((p) => p.hours));
     placeMarks.current = top.map((p) => {
-      const marker = new mapsNs.Marker({
-        map: m, position: { lat: p.lat, lng: p.lng }, zIndex: 100 - p.id,
-        title: `${p.id}. ${placeCase(p.name) ?? "Place"} · ${nf(p.hours, 1)} h over ${p.visits} stop(s) on ${p.days} day(s)`,
-      });
+      const marker = new mapsNs.Marker({ map: m, position: { lat: p.lat, lng: p.lng }, zIndex: 100 - p.id });
       marker.addListener("click", () => setSel((s) => ({ ...s, place: s.place === p.id ? null : p.id })));
+      marker.addListener("mouseover", (ev) => setHover({ kind: "place", place: p, pos: at(ev) }));
+      marker.addListener("mouseout", () => setHover((h) => (h?.kind === "place" ? null : h)));
       return { id: p.id, marker, scale: 7 + 9 * Math.sqrt(Math.min(1, p.hours / ref)) };
     });
     fitTo(review.tracks.flatMap((t) => t.path).concat(top.slice(0, 10).map((p) => [p.lat, p.lng])), 13);
-  }, [ready, review, setSel, fitTo, pal]);
+  }, [ready, review, setSel, fitTo, at, pal]);
 
   // Selection: restyle, show the day's stops, and frame what was picked.
   useEffect(() => {
@@ -215,10 +276,11 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
     const focused = sel.day != null || daysOfPlace != null;
     for (const t of tracks.current) {
       const lit = on(t.date);
+      t.w = lit && focused ? 4 : 2.5;
       t.line.setOptions({
         strokeColor: lit ? pal.route : pal.fade,
         strokeOpacity: lit ? (focused ? 0.95 : 0.6) : 0.22,
-        strokeWeight: lit && focused ? 4 : 2.5,
+        strokeWeight: t.w,
         zIndex: lit ? 2 : 1,
       });
     }
@@ -239,28 +301,111 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
     stopMarks.current = [];
     if (sel.day) {
       const st = review.stops.filter((s) => dayKeyOf(s.start) === sel.day);
-      stopMarks.current = st.map((s) => new mapsNs.Marker({
-        map: m, position: { lat: s.lat, lng: s.lng }, zIndex: 200, clickable: false,
-        title: `Stop ${clock.format(s.start)}–${clock.format(s.end)} · ${minutes(s.min)}`,
-        icon: { path: mapsNs.SymbolPath.CIRCLE, scale: 4, fillColor: "#111827", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 1.5 },
-      }));
+      stopMarks.current = st.map((s) => {
+        const mk = new mapsNs.Marker({
+          map: m, position: { lat: s.lat, lng: s.lng }, zIndex: 200,
+          icon: { path: mapsNs.SymbolPath.CIRCLE, scale: 4.5, fillColor: "#111827", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 1.5 },
+        });
+        mk.addListener("mouseover", (ev) => setHover({ kind: "stop", stop: s, pos: at(ev) }));
+        mk.addListener("mouseout", () => setHover((h) => (h?.kind === "stop" ? null : h)));
+        mk.addListener("click", () => { if (s.place != null) setSel((x) => ({ ...x, place: x.place === s.place ? null : s.place })); });
+        return mk;
+      });
       const path = review.tracks.filter((t) => t.date === sel.day).flatMap((t) => t.path);
       fitTo(path.length ? path : st.map((s) => [s.lat, s.lng]), 15);
     } else if (sel.place != null) {
+      // Bring it into view without throwing away the zoom the operator chose.
       const p = review.places.find((x) => x.id === sel.place);
-      if (p) { m.setCenter({ lat: p.lat, lng: p.lng }); m.setZoom(Math.max(m.getZoom(), 14)); }
+      if (p) {
+        if (m.getZoom() < 12) { m.setCenter({ lat: p.lat, lng: p.lng }); m.setZoom(12); }
+        else m.panTo({ lat: p.lat, lng: p.lng });
+      }
     }
-  }, [ready, sel, review, placeDays, fitTo, pal]);
+  }, [ready, sel, setSel, review, placeDays, fitTo, at, pal]);
+
+  const placeName = (id) => placeCase(review.places.find((p) => p.id === id)?.name) ?? `Place ${id}`;
+  const picked = sel.place != null ? review.places.find((p) => p.id === sel.place) : null;
+  const pickedDay = sel.day ? review.days.find((d) => d.date === sel.day) : null;
+  const dayStops = sel.day ? review.stops.filter((s) => dayKeyOf(s.start) === sel.day).length : 0;
+
+  let tip = null;
+  if (hover?.pos) {
+    const { x, y, w, h } = hover.pos;
+    const style = {
+      ...(x > w - 230 ? { right: w - x + 12 } : { left: x + 14 }),
+      ...(y > h - 110 ? { bottom: h - y + 12 } : { top: y + 14 }),
+    };
+    if (hover.kind === "place") {
+      const p = hover.place;
+      tip = (
+        <div className="urv-tip" style={style}>
+          <b>{p.id}. {placeCase(p.name) ?? "Place"}</b>
+          <span>{nf(p.hours, 1)} h · {plural(p.visits, "stop")} · {plural(p.days, "day")}</span>
+          {p.county && <span>{p.county}</span>}
+          <em>{sel.place === p.id ? "Click to clear" : "Click to light up its days"}</em>
+        </div>
+      );
+    } else if (hover.kind === "day") {
+      const d = hover.day;
+      tip = (
+        <div className="urv-tip" style={style}>
+          <b>{dayLabel(d.date, true)}</b>
+          {d.km != null && <span>{nf(d.km, 1)} km · {hm(d.driveH)} driving</span>}
+          <em>{sel.day === d.date ? "Click to clear" : "Click to follow this day"}</em>
+        </div>
+      );
+    } else if (hover.kind === "stop") {
+      const s = hover.stop;
+      tip = (
+        <div className="urv-tip" style={style}>
+          <b>Stop {clock.format(s.start)}–{clock.format(s.end)}</b>
+          <span>{minutes(s.min)}{s.place != null ? ` · ${placeName(s.place)}` : ""}</span>
+        </div>
+      );
+    }
+  }
 
   return (
-    <div className="urv-map">
+    <div className="urv-map" ref={wrap}>
       <div ref={el} className="urv-map__canvas" />
-      <MapStatusBar map={mapObj} attribution={OSM_ATTRIBUTION} className="map-status--panel" />
-      <div className="urv-map__legend" aria-hidden="true">
-        <span><i style={{ background: pal.route }} className="urv-line" />Route</span>
-        <span><i style={{ background: pal.base }} />Base (most time)</span>
-        <span><i style={{ background: pal.place }} />Other places · size = hours</span>
+      <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
+      <div className="urv-map__top">
+        <div className="urv-map__legend" aria-hidden="true">
+          <span><i style={{ background: pal.route }} className="urv-line" />Route</span>
+          <span><i style={{ background: pal.base }} />Base (most time)</span>
+          <span><i style={{ background: pal.place }} />Other places · size = hours</span>
+        </div>
+        {GOOGLE_BASE_AVAILABLE && (
+          <div className="urv-map__base" role="group" aria-label="Base map">
+            {[["osm", "OpenStreetMap"], ["google", "Satellite"]].map(([id, label]) => (
+              <button key={id} type="button" className={base === id ? "is-on" : ""} aria-pressed={base === id} onClick={() => chooseBase(id)}>{label}</button>
+            ))}
+          </div>
+        )}
       </div>
+      {baseNote && <div className="urv-map__note">{baseNote}</div>}
+      {(picked || pickedDay) && (
+        <div className="urv-map__pick">
+          <div>
+            {pickedDay ? (
+              <>
+                <b>{dayLabel(pickedDay.date, true)}</b>
+                <span>{nf(pickedDay.km, 1)} km · {hm(pickedDay.driveH)} driving · {plural(dayStops, "stop")}</span>
+              </>
+            ) : (
+              <>
+                <b>{picked.id}. {placeCase(picked.name) ?? "Place"}</b>
+                <span>{nf(picked.hours, 1)} h · {plural(picked.visits, "stop")} · {plural(picked.days, "day")}{picked.county ? ` · ${picked.county}` : ""}</span>
+              </>
+            )}
+          </div>
+          <button type="button" aria-label="Clear" title="Clear"
+                  onClick={() => setSel((x) => (x.day ? { ...x, day: null } : { ...x, place: null }))}>
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {tip}
       {failed && <div className="frp-map__msg">The map could not load: {failed}</div>}
     </div>
   );

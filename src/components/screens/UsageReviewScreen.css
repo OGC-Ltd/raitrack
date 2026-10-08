@@ -85,11 +85,21 @@
 }
 .urv-map__canvas { position: absolute; inset: 0; }
 .app--light .urv-map { border-color: var(--sp4-line); }
-.urv-map__legend {
+/* Along the top: the legend on the left, the base-map switch on the right,
+   clear of Leaflet's full-screen button in the corner (operator, 2026-10-08). */
+.urv-map__top {
   position: absolute;
+  top: 10px;
   left: 10px;
-  bottom: 30px;
+  right: 46px;
   z-index: 500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+.urv-map__legend {
   display: grid;
   gap: 3px;
   padding: 6px 9px;
@@ -103,6 +113,99 @@
 .urv-map__legend span { display: inline-flex; align-items: center; gap: 6px; }
 .urv-map__legend i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
 .urv-map__legend i.urv-line { width: 14px; height: 3px; border-radius: 2px; border: 0; box-shadow: none; }
+
+.urv-map__base {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  pointer-events: auto;
+}
+.urv-map__base button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.urv-map__base button:hover { background: #f1f5f9; }
+.urv-map__base button.is-on { background: var(--frv-s1, #2a78d6); color: #fff; }
+
+.urv-map__note {
+  position: absolute;
+  top: 46px;
+  right: 46px;
+  z-index: 500;
+  max-width: 260px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #b45309;
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* What is picked, docked bottom-left above the scale bar (and Google's logo
+   on Satellite), with a clear. */
+.urv-map__pick {
+  position: absolute;
+  left: 10px;
+  bottom: 50px;
+  z-index: 500;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: calc(100% - 70px);
+  padding: 7px 8px 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+.urv-map__pick b { display: block; font-size: 12px; font-weight: 700; }
+.urv-map__pick span { color: #4b5563; }
+.urv-map__pick button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+}
+.urv-map__pick button:hover { background: #f1f5f9; color: #111827; }
+
+/* The hover card that follows the pointer over a place, route or stop. */
+.urv-tip {
+  position: absolute;
+  z-index: 600;
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  max-width: 230px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.94);
+  color: #f9fafb;
+  font-size: 11px;
+  line-height: 1.35;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.urv-tip b { font-size: 12px; font-weight: 700; }
+.urv-tip span { color: #d1d5db; }
+.urv-tip em { margin-top: 2px; font-style: normal; color: #93c5fd; }
 
 .urv-card--top { height: var(--urv-map-h); }
 .urv-card--top .urv-chart { flex: 1 1 auto; min-height: 0; height: auto; }
