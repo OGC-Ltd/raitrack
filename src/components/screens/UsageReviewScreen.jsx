@@ -33,7 +33,7 @@ import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
 import TablePager, { usePager, PAGE_STEP } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
-import { googlePlaceNames } from "../../lib/googlePlaceNames";
+import { googlePlaceNames, googleLabel } from "../../lib/googlePlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
 
@@ -620,12 +620,23 @@ export default function UsageReviewScreen() {
   // Google's exact names for the places on the map, filled in as they arrive;
   // the OpenStreetMap name stands until then, and wherever Google has none.
   const [gnames, setGnames] = useState(() => new Map());
+  // The lookup in flight, so a download can wait for the names to land; and
+  // the names as they arrive, read by the download after that wait.
+  const namingRef = useRef(Promise.resolve());
+  const gnamesRef = useRef(new Map());
   useEffect(() => {
     setGnames(new Map());
-    if (!review) return undefined;
+    gnamesRef.current = new Map();
+    if (!review) { namingRef.current = Promise.resolve(); return undefined; }
     const ac = new AbortController();
-    googlePlaceNames(review.places.slice(0, MAX_PLACES_ON_MAP),
-      (id, g) => setGnames((m) => new Map(m).set(id, g.name)), { signal: ac.signal });
+    namingRef.current = googlePlaceNames(review.places.slice(0, MAX_PLACES_ON_MAP),
+      (id, g) => {
+        const label = googleLabel(g);
+        if (!label) return;
+        gnamesRef.current.set(id, label);
+        setGnames((m) => new Map(m).set(id, label));
+      },
+      { signal: ac.signal }).catch(() => {});
     return () => ac.abort();
   }, [review]);
   // The theme's colours, read once the page is up and again on a theme switch.
@@ -687,10 +698,13 @@ export default function UsageReviewScreen() {
     if (!live || !review) return;
     setBusy(kind); setDlError(null);
     try {
+      // Google's names go into the file: wait for any still on their way,
+      // ten seconds at most — a name that has not come by then is left out.
+      await Promise.race([namingRef.current, new Promise((r) => setTimeout(r, 10_000))]);
       await downloadUsageReview({
         orgId: live.orgId, vehicleId: live.vehicleId, from: live.from, to: live.to, kind,
         kmpl: kmplText && kmplIn > 0 ? kmplIn : undefined,
-        names: Object.fromEntries(gnames),
+        names: Object.fromEntries(gnamesRef.current),
         fallbackName: `${review.vehicle.plate.replace(/\s+/g, "")}_${live.from}_${live.to}_highlights.${kind}`,
       });
     } catch (e) { setDlError(e.message || "Download failed"); }
