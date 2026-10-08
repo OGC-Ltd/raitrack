@@ -9,9 +9,11 @@
  * Presentational apart from the search box, which owns its query and its
  * results; everything that touches the map is a callback from FleetMap.
  */
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import MapLayersMenu from "./MapLayersMenu";
 import { findVehicleByQuery } from "../../lib/vehicleMap";
+import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
+import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import "./MapToolRail.css";
 
 /* OpenStreetMap's geocoder: free, keyless, and limited to one request a second
@@ -43,20 +45,17 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
   );
 }
 
-/** Up to six units: an exact plate or name first, then everything whose
- *  plate, name or DRIVER contains the term. This is the app's only vehicle
- *  search since the header's box was retired (2026-10-07), so it keeps what
- *  that box did — a driver's name finds the unit they are on. */
+/** Every unit whose plate, name or DRIVER contains the term — the Units
+ *  panel's search (from the first character, no cap), plus the driver, which
+ *  the header's retired box (2026-10-07) also matched. An exact plate or name
+ *  leads, then plates that start with the term, then the rest by plate. */
 function matchUnits(vehicles, term) {
   const t = term.toLowerCase();
   const exact = findVehicleByQuery(vehicles, term);
-  const out = exact ? [exact] : [];
-  for (const v of vehicles) {
-    if (out.length >= 6) break;
-    if (v === exact) continue;
-    if ([v.id, v.name, v.driver].some((f) => String(f ?? "").toLowerCase().includes(t))) out.push(v);
-  }
-  return out;
+  const rank = (v) => (v === exact ? 0 : String(v.id ?? "").toLowerCase().startsWith(t) ? 1 : 2);
+  return (vehicles ?? [])
+    .filter((v) => v === exact || [v.id, v.name, v.driver].some((f) => String(f ?? "").toLowerCase().includes(t)))
+    .sort((a, b) => rank(a) - rank(b) || String(a.id ?? "").localeCompare(String(b.id ?? "")));
 }
 
 /** "Online" for a live unit, otherwise when it was last heard from. */
@@ -84,7 +83,24 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const term = q.trim();
-  const units = term.length >= 2 ? matchUnits(vehicles, term) : [];
+  // Deferred like the Units panel: the match runs over the whole fleet.
+  const unitTerm = useDeferredValue(term);
+  const units = useMemo(() => (unitTerm ? matchUnits(vehicles, unitTerm) : []), [vehicles, unitTerm]);
+
+  /* A unit in another of the operator's organisations, as in the Units panel:
+     asked only once this fleet has no match; one answer switches there and
+     focuses it, several are listed to pick from. */
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const { setActiveCompanyId, setPendingFocusId } = useAppActions();
+  const { activeCompany, companies } = useCompanies();
+  const { companies: elsewhere, loading: lookingElsewhere, move } = useCrossOrgUnitHandoff({
+    query: unitTerm,
+    enabled: Boolean(unitTerm) && units.length === 0,
+    activeCompanyId,
+    visibleCompanies: companies,
+    setActiveCompanyId,
+    setPendingFocusId,
+  });
 
   useEffect(() => {
     if (term.length < 3) { setPlaces([]); setState("idle"); return undefined; }
@@ -160,6 +176,39 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
         </div>
       )}
 
+      {unitTerm && units.length === 0 && (lookingElsewhere || elsewhere.length > 0) && (
+        <div className="mtr-search__group">
+          <div className="mtr-search__head">Vehicles</div>
+          {lookingElsewhere
+            ? <div className="mtr-search__note">Checking your other organisations…</div>
+            : (
+              <>
+                <div className="mtr-search__note">Not in {activeCompany?.short || "this organisation"}. Found in:</div>
+                {elsewhere.map(({ company, units: found }) => (
+                  <button
+                    type="button" key={company.id} className="mtr-search__row"
+                    onClick={() => { move(company, found[0]); onClose(); }}
+                    title={`Switch to ${company.name} and open ${found[0].plate}`}
+                  >
+                    <i className="ti ti-building" aria-hidden="true" />
+                    <span className="mtr-search__text">
+                      <span className="mtr-search__name">{company.short || company.name}</span>
+                      <span className="mtr-search__detail">
+                        {found.slice(0, 3).map((u) => u.plate).join(", ")}
+                        {found.length > 3 ? ` +${found.length - 3}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+        </div>
+      )}
+
+      {unitTerm && units.length === 0 && !lookingElsewhere && elsewhere.length === 0 && term.length < 3 && (
+        <div className="mtr-search__note">No unit matches that search.</div>
+      )}
+
       {term.length >= 3 && (
         <div className="mtr-search__group">
           <div className="mtr-search__head">Places</div>
@@ -178,7 +227,7 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
         </div>
       )}
 
-      {term.length < 2 && <div className="mtr-search__note">Type a plate, a driver, a place or a road.</div>}
+      {!term && <div className="mtr-search__note">Type a plate, a driver, a place or a road.</div>}
     </div>
   );
 }
