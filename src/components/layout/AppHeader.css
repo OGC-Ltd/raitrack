@@ -143,10 +143,29 @@
 
 /* Bell */
 /* Hallmark · component: header bell + badge · genre: modern-minimal · theme: the app's own header
- * states: default · hover · focus · active (pressed) · news (unread: darker icon + badge) · open (feed showing: filled blue bell) · arriving (one swing, badge pop)
+ * states: default · hover · focus · active (pressed) · news (unread: darker icon, notched, + badge) · open (feed showing: filled blue bell) · arriving (one swing, badge pop)
  * contrast: icon #64748b 4.8:1, with news #1e293b 14:1; badge #fff on #dc2626 4.8:1
- * motion: swing 600ms once per rise in the count; badge pop 180ms; none under reduced motion */
+ * motion: swing 600ms once per rise in the count; badge pop 180ms; none under reduced motion
+ * redesign 2026-10-08: the badge's 2px white ring is gone; the bell is notched instead (see .app-header__bell-glyph)
+ * aligned 2026-10-08: the bell is a 26px disc built like the avatar face, so the pair share top, bottom and centre lines
+ * pre-emit critique: P4 H5 E5 S4 R5 V4 */
 .app-header__bell {
+  /* Badge geometry, measured from the button's centre so a 40px tablet target
+     keeps it on the same shoulder. The notch reads these too. */
+  --bell-badge: #dc2626;
+  --bell-badge-ink: #fff;
+  --bell-badge-size: 18px;
+  --bell-badge-dx: 12px;   /* badge centre, right of the button centre */
+  --bell-badge-dy: -10px;  /* badge centre, above the button centre */
+  --bell-notch: 1.5px;     /* clear gap between the badge and the bell */
+  /* The bell is built like the avatar beside it (operator, 2026-10-08): a 26px
+     disc in a 34px target, so the two share a top line, a bottom line and a
+     centre. The badge sits on the disc's top-right corner, the way a status
+     badge sits on an avatar, clear of the glyph. */
+  --bell-disc: #f1f5f9;
+  --bell-disc-edge: #e2e8f0;
+  --bell-disc-open: #dbeafe;
+  --bell-disc-open-edge: #bfdbfe;
   width: 34px;
   height: 34px;
   border-radius: 7px;
@@ -159,7 +178,8 @@
   color: #64748b;
   position: relative;
   flex-shrink: 0;
-  font-size: 19px;
+  /* 16px inside the 26px disc, the same proportion as the avatar's initials. */
+  font-size: 16px;
   margin-left: auto; /* pushes bell + avatar to the right edge */
   transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
@@ -171,6 +191,33 @@
 .app-header__bell--active:hover {
   background: #eff6ff;
   color: #2563eb;
+}
+
+/* The bell's disc: the avatar face's twin (26px, round, tint + 1px inner
+   edge). With unread news it is cut by a circle 1.5px wider than the badge,
+   so the badge sits in a notch of whatever the button's background is
+   (hover, pressed, open) instead of wearing a white ring that seamed against
+   every one of them. The icon swings inside the still disc. */
+.app-header__bell-glyph {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bell-disc);
+  box-shadow: inset 0 0 0 1px var(--bell-disc-edge);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.app-header__bell--active .app-header__bell-glyph {
+  background: var(--bell-disc-open);
+  box-shadow: inset 0 0 0 1px var(--bell-disc-open-edge);
+}
+.app-header__bell--news .app-header__bell-glyph {
+  --notch-at: calc(13px + var(--bell-badge-dx)) calc(13px + var(--bell-badge-dy));
+  --notch-r: calc(var(--bell-badge-size) / 2 + var(--bell-notch));
+  -webkit-mask: radial-gradient(circle at var(--notch-at), transparent calc(var(--notch-r) - 0.5px), #000 var(--notch-r));
+          mask: radial-gradient(circle at var(--notch-at), transparent calc(var(--notch-r) - 0.5px), #000 var(--notch-r));
 }
 
 /* One swing when news arrives, from the bell's crown */
@@ -357,30 +404,32 @@
  * applied to a grid container, where browsers disagree about it, and that is
  * what pushed the figure off-centre (operator, 2026-10-08).
  *
- * It sits on the bell's top-right shoulder, measured from the button's centre
- * so it stays put when the target grows to 40px on a tablet.
+ * It sits on the bell's top-right shoulder, in a notch cut from the bell
+ * (.app-header__bell-glyph), placed by --bell-badge-dx/-dy from the button's
+ * centre so it stays put when the target grows to 40px on a tablet.
  */
 .app-header__bell-count {
   position: absolute;
-  top: calc(50% - 16px);
-  left: calc(50% + 1px);
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
+  top: calc(50% + var(--bell-badge-dy) - var(--bell-badge-size) / 2);
+  left: calc(50% + var(--bell-badge-dx) - var(--bell-badge-size) / 2);
+  width: var(--bell-badge-size);
+  height: var(--bell-badge-size);
+  min-width: var(--bell-badge-size);
   aspect-ratio: 1;
   flex: none;
   padding: 0;
   border-radius: 50%;
   /* Always red: an unread count on a bell is a summons whatever it is made
      of, and one colour is one less thing to decode at a glance. */
-  background: #dc2626;
-  color: #fff;
-  box-shadow: 0 0 0 2px #fff;
+  background: var(--bell-badge);
+  color: var(--bell-badge-ink);
+  /* No ring: the bell is notched round the badge instead. */
   /* A <button> does not inherit the page font, so without this the figure
      was Arial, whose digits sit 0.5px above centre in a flex line box.
      Inter's measure dead centre (headless Edge, 2026-10-08). */
   font-family: var(--font-body);
-  font-size: 10px;
+  /* 9px, down from 10 (operator, 2026-10-08): the figure filled the disc. */
+  font-size: 9px;
   font-weight: 650;
   line-height: 1;
   display: flex;
@@ -394,7 +443,6 @@
   animation: app-bell-pop 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 .app-header__bell-count[data-len="2"] { letter-spacing: -0.02em; }
-.app-header__bell--active .app-header__bell-count { box-shadow: 0 0 0 2px #eff6ff; }
 @keyframes app-bell-pop { from { transform: scale(0.6); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
