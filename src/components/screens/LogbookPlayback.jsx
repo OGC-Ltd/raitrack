@@ -291,57 +291,51 @@ export default function LogbookPlayback({ date, review, req, unitLabel, placeNam
   const dayLabel = new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
   const body = (
-    <div className="lbp-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sp4-root lbp" role="dialog" aria-modal="true" aria-label={`Playback of ${dayLabel}`}>
-        <header className="lbp-head">
-          <div className="lbp-title">
-            <i className="ti ti-player-play" aria-hidden="true" />
-            <div>
-              <b>Playback · {dayLabel}</b>
-              <span>{unitLabel}</span>
-            </div>
-          </div>
-          <div className="lbp-head__acts">
+    <div className="sp4-root lbp-scope">
+      <div className="sp4-modal-overlay" role="presentation"
+           onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="sp4-modal lbp" role="dialog" aria-modal="true" aria-labelledby="lbp-title">
+          <div className="sp4-modal-head">
+            <span className="sp4-repair-title" id="lbp-title">Playback · {dayLabel}</span>
+            <span className="lbp-unit">{unitLabel}</span>
             {GOOGLE_BASE_AVAILABLE && (
               <div className="urv-seg lbp-seg" role="group" aria-label="Base map">
-                {[["osm", "OpenStreetMap"], ["google", "Satellite"]].map(([id, label]) => (
+                {[["osm", "Map"], ["google", "Satellite"]].map(([id, label]) => (
                   <button key={id} type="button" className={base === id ? "is-on" : ""} aria-pressed={base === id} onClick={() => chooseBase(id)}>{label}</button>
                 ))}
               </div>
             )}
-            <button type="button" className="lbp-x" onClick={onClose} aria-label="Close" title="Close (Esc)"><i className="ti ti-x" aria-hidden="true" /></button>
+            <button type="button" className="sp4-modal-x" onClick={onClose} aria-label="Close" title="Close (Esc)">×</button>
           </div>
-        </header>
 
-        <div className="lbp-body">
-          <div className="lbp-stage">
-            <div className="lbp-map">
-              <div ref={el} className="lbp-map__canvas" />
-              <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
-              {q.isLoading && <div className="lbp-msg">Loading the day&apos;s track…</div>}
-              {q.isError && <div className="lbp-msg">The day&apos;s track could not load: {q.error?.message ?? "error"}</div>}
-              {q.isSuccess && !pts.n && <div className="lbp-msg">No GPS fixes on this day.</div>}
-              {pts.n > 0 && (
-                <div className="lbp-hud">
-                  <b>{clockS.format(now)}</b>
-                  <span>{curSpeed != null ? `${curSpeed} km/h` : ""}</span>
-                </div>
-              )}
-            </div>
+          <div className="lbp-map">
+            <div ref={el} className="lbp-map__canvas" />
+            <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
+            {q.isLoading && <div className="lbp-msg">Loading the day&apos;s track…</div>}
+            {q.isError && <div className="lbp-msg">The day&apos;s track could not load: {q.error?.message ?? "error"}</div>}
+            {q.isSuccess && !pts.n && <div className="lbp-msg">No GPS fixes on this day.</div>}
+            {pts.n > 0 && (
+              <div className="lbp-hud">
+                <b>{clockS.format(now)}</b>
+                <span>{curSpeed != null ? `${curSpeed} km/h` : ""}</span>
+              </div>
+            )}
+          </div>
 
-            <div className="lbp-ctrl">
-              <button type="button" className="lbp-play" onClick={() => (now >= t1 ? restart() : setPlaying((p) => !p))} disabled={!pts.n}
-                      aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space)" : "Play (Space)"}>
-                <i className={`ti ${playing ? "ti-player-pause-filled" : "ti-player-play-filled"}`} aria-hidden="true" />
-              </button>
-              <button type="button" className="lbp-icon" onClick={restart} disabled={!pts.n} aria-label="From the start" title="From the start">
-                <i className="ti ti-player-skip-back" aria-hidden="true" />
-              </button>
-              <span className="lbp-time">{pts.n ? clock.format(t0) : "--:--"}</span>
-              <input type="range" className="lbp-scrub" min={t0} max={t1 || 1} step={1000} value={now} disabled={!pts.n}
-                     style={{ backgroundImage: track }}
-                     onChange={(e) => seek(Number(e.target.value))} aria-label="Playback position" />
-              <span className="lbp-time">{pts.n ? clock.format(t1) : "--:--"}</span>
+          <div className="lbp-ctrl">
+            <button type="button" className="lbp-play" onClick={() => (now >= t1 ? restart() : setPlaying((p) => !p))} disabled={!pts.n}
+                    aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space)" : "Play (Space)"}>
+              <i className={`ti ${playing ? "ti-player-pause-filled" : "ti-player-play-filled"}`} aria-hidden="true" />
+            </button>
+            <button type="button" className="lbp-icon" onClick={restart} disabled={!pts.n} aria-label="From the start" title="From the start">
+              <i className="ti ti-player-skip-back" aria-hidden="true" />
+            </button>
+            <span className="lbp-time">{pts.n ? clock.format(t0) : "--:--"}</span>
+            <input type="range" className="lbp-scrub" min={t0} max={t1 || 1} step={1000} value={now} disabled={!pts.n}
+                   style={{ backgroundImage: track }}
+                   onChange={(e) => seek(Number(e.target.value))} aria-label="Playback position" />
+            <span className="lbp-time">{pts.n ? clock.format(t1) : "--:--"}</span>
+            <div className="lbp-ctrl__row">
               <div className="urv-seg lbp-seg" role="group" aria-label="Speed">
                 {SPEEDS.map((s) => (
                   <button key={s} type="button" className={speed === s ? "is-on" : ""} aria-pressed={speed === s} onClick={() => setSpeed(s)}>{s}×</button>
@@ -352,8 +346,7 @@ export default function LogbookPlayback({ date, review, req, unitLabel, placeNam
             </div>
           </div>
 
-          <aside className="lbp-side">
-            <h3 className="frv-card__t">Highlights</h3>
+          <div className="sp4-modal-body lbp-body">
             <div className="lbp-stats">
               <div><b>{nf(day.km, 1)}<small> km</small></b><span>Distance</span></div>
               <div><b>{day.driveH != null ? hm(day.driveH) : "—"}</b><span>Driving</span></div>
@@ -383,7 +376,7 @@ export default function LogbookPlayback({ date, review, req, unitLabel, placeNam
               })}
               {!events.length && <li className="lbp-empty">No stops or drives recorded on this day.</li>}
             </ol>
-          </aside>
+          </div>
         </div>
       </div>
     </div>

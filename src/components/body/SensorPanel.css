@@ -2719,9 +2719,9 @@
   background: var(--sp4-surface);
   border: 1px solid var(--sp4-line-hi);
   border-radius: 12px;
-  /* Deeper than the export menu's 0 10px 28px: this sits over a scrim rather
-     than over the page, and has to read as the nearer of two surfaces. */
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  /* No shadow on dialogs (operator, 2026-10-08): the scrim and the border
+     already set it apart. */
+  box-shadow: none;
   overflow: hidden;
 }
 /* The sign-off is one unit and three fields. At 760px its textareas run to a
@@ -3033,7 +3033,7 @@
 .app--light .sp4-modal {
   background: var(--sp4-surface);
   border-color: var(--sp4-line-hi);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
 }
 .app--light .sp4-modal-x:hover,
 .app--light .sp4-modal-x.is-hover { background: rgba(0,0,0,0.06); }
