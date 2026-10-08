@@ -80,7 +80,8 @@ import {
   hasRateDays, hasHaulDays, hasHaulUnits, hasFleetUnits, hasFuelPerHour,
   hasActiveDays, hasAreaDays,
 } from "../../lib/analyticsSections";
-import { summariseToday } from "../../lib/todayOps";
+import { summariseToday, hoursRunBands } from "../../lib/todayOps";
+import HoursRunRadar from "../body/HoursRunRadar";
 import {
   windowFor,
   categoriesParam,
@@ -1194,6 +1195,26 @@ export default function AnalyticsScreen() {
     )
     : tractorFleet;
 
+  /* Today on the ground is a row of FOUR tiles, and which four depends on
+     what the org records. Composition and sensors are always there; the
+     coverage donut nearly always; the rest needs paperwork (Tractors, Trucks)
+     or machine families (Machines working early). A fleet with none of that
+     (WESTSUGAR, KABRAS, NZOIA, TIMSALES, AQUAMIST raise no dispatches) drew
+     three tiles and an empty quarter. The hours-run tile fills the slot from
+     the fleet-state rows every tracked org has, and only when the slot is
+     empty, so a fleet that has its own fourth keeps it. */
+  const todayTiles =
+    2 +
+    (showFleetDonut ? 1 : 0) +
+    (isPlantFleet ? 1 : 0) +
+    (!isPlantFleet && gateDeliveries && gateTractorFleet > 0 ? 1 : 0) +
+    (!isPlantFleet && gateDeliveries ? 1 : 0);
+  const showHoursRun = todayTiles < 4;
+  const hoursRun = useMemo(
+    () => (showHoursRun ? hoursRunBands(fleetState?.units) : null),
+    [showHoursRun, fleetState],
+  );
+
   const activeDaysList =
     byDay.filter(
       (d) => d.trips > 0,
@@ -2144,6 +2165,40 @@ export default function AnalyticsScreen() {
                            excavator under a filter naming one. */
                         unitFiltered={unitFiltered}
                       />
+
+                      {/* The fourth tile for fleets with no other fourth —
+                          see `showHoursRun`. The units that ran, drawn as a
+                          radar over six engine-hour bands. */}
+                      {showHoursRun && (
+                        <OpsBlock
+                          accent="var(--chart-5)"
+                          className="an-ops--radar"
+                          label="Hours run today"
+                          value={fmtOrDash(hoursRun?.ran)}
+                          /* One line under the figure: the denominator and
+                             the mean, where the old tile spent two rows and a
+                             caveat paragraph on them. */
+                          sub={
+                            hoursRun
+                              ? `of ${fmt(hoursRun.units)}` +
+                                (todayOps?.avgHours != null
+                                  ? ` · ${fmt(todayOps.avgHours, 1)} h avg`
+                                  : "")
+                              : "ran"
+                          }
+                        >
+                          {!hoursRun ? (
+                            <div className="an-ops__none">Reading engine hours…</div>
+                          ) : hoursRun.ran === 0 ? (
+                            <div className="an-ops__none">Nothing has run since midnight.</div>
+                          ) : (
+                            <HoursRunRadar
+                              bands={hoursRun.bands}
+                              unbanded={hoursRun.movedNoHours}
+                            />
+                          )}
+                        </OpsBlock>
+                      )}
                     </div>
 
                     {/* Either chart may be withheld on its own, and the row

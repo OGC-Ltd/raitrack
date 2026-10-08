@@ -64,3 +64,58 @@ export function summariseToday(units) {
     totalHours: hours,
   };
 }
+
+/**
+ * The units that ran today, split by how long their engines ran.
+ *
+ * The fourth tile of Today on the ground for fleets that have nothing else to
+ * put there: no dispatch paperwork, so no Trucks or Tractors tile, and no
+ * machine families, so no early-starts chart. Hours today come off the
+ * fleet-state rows every tracked organisation already has, so this is the one
+ * figure every fleet can answer.
+ *
+ * "Ran" is `summariseToday`'s definition, so the tile and the ledger above it
+ * agree. A unit that moved but logged no engine time (no ignition input wired)
+ * ran, but has no hours to bucket; it is counted apart rather than filed under
+ * "under 1 h", which would say something the telemetry never measured.
+ *
+ * @returns `null` before anything has loaded, as `summariseToday` does.
+ */
+/* Six bands, not four: the tile draws them as the spokes of a radar, and four
+   spokes only ever make a diamond. Two-hour steps through the working day keep
+   the shape readable as "short runs" against "full shifts". */
+export const HOUR_BANDS = [
+  { key: "lt1", label: "<1 h", lo: 0, hi: 1 },
+  { key: "h1", label: "1–2 h", lo: 1, hi: 2 },
+  { key: "h2", label: "2–4 h", lo: 2, hi: 4 },
+  { key: "h4", label: "4–6 h", lo: 4, hi: 6 },
+  { key: "h6", label: "6–8 h", lo: 6, hi: 8 },
+  { key: "h8", label: "8 h+", lo: 8, hi: Infinity },
+];
+
+export function hoursRunBands(units) {
+  if (!units || units.length === 0) return null;
+
+  const counts = Object.fromEntries(HOUR_BANDS.map((b) => [b.key, 0]));
+  let ran = 0;
+  let movedNoHours = 0;
+
+  for (const u of units) {
+    const h = u.hoursToday ?? 0;
+    if (h > 0) {
+      ran++;
+      const band = HOUR_BANDS.find((b) => h >= b.lo && h < b.hi);
+      counts[band.key]++;
+    } else if ((u.distanceTodayKm ?? 0) > 0) {
+      ran++;
+      movedNoHours++;
+    }
+  }
+
+  return {
+    units: units.length,
+    ran,
+    movedNoHours,
+    bands: HOUR_BANDS.map((b) => ({ key: b.key, label: b.label, n: counts[b.key] })),
+  };
+}

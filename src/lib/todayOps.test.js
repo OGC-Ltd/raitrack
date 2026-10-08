@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { summariseToday } from "./todayOps";
+import { summariseToday, hoursRunBands } from "./todayOps";
 
 const unit = (hoursToday, distanceTodayKm = 0) => ({ hoursToday, distanceTodayKm });
 
@@ -89,5 +89,31 @@ describe("summariseToday", () => {
     const out = summariseToday([{ }, { hoursToday: null, distanceTodayKm: null }, unit(2)]);
     expect(out.operational).toBe(1);
     expect(out.nonOperational).toBe(2);
+  });
+});
+
+describe("hoursRunBands", () => {
+  it("is null before anything has loaded", () => {
+    expect(hoursRunBands(undefined)).toBeNull();
+    expect(hoursRunBands([])).toBeNull();
+  });
+
+  it("files each unit that ran under exactly one band, edges going up", () => {
+    const out = hoursRunBands([unit(0.5), unit(1), unit(3.9), unit(4), unit(8), unit(11.2), unit(0)]);
+    expect(out.ran).toBe(6);
+    expect(out.units).toBe(7);
+    expect(out.bands.map((b) => b.n)).toEqual([1, 1, 1, 1, 0, 2]);
+  });
+
+  it("counts a unit that moved with no engine hours as ran, but in no band", () => {
+    const out = hoursRunBands([unit(0, 12), unit(2)]);
+    expect(out.ran).toBe(2);
+    expect(out.movedNoHours).toBe(1);
+    expect(out.bands.reduce((s, b) => s + b.n, 0)).toBe(1);
+  });
+
+  it("agrees with summariseToday on how many ran", () => {
+    const units = [unit(6.2), unit(0, 3), unit(0), unit(1.1, 40)];
+    expect(hoursRunBands(units).ran).toBe(summariseToday(units).operational);
   });
 });
