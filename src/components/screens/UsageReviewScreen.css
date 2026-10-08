@@ -381,3 +381,22 @@
    the card without gaps between the short columns. */
 .urv-detail th:not(.urv-wide), .urv-detail td:not(.urv-where) { width: 1%; white-space: nowrap; }
 .urv-none { color: var(--sp4-text-4); }
+
+.stop-sign { flex: none; display: block; }
+.urv-playbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sp4-accent);
+  color: #fff;
+  font: inherit;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.urv-playbtn:hover { filter: brightness(1.08); }
+.urv-detail__head .urv-playbtn + .urv-seg { margin-left: 0; }
