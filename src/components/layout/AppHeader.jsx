@@ -240,11 +240,14 @@ export default function AppHeader() {
           aria-label={bellWords}
           aria-expanded={feedOpen}
         >
-          <i
-            key={`icon-${swing}`}
-            className={`ti ${feedOpen ? 'ti-bell-filled' : 'ti-bell'}${swing ? ' app-header__bell-icon--swing' : ''}`}
-            aria-hidden="true"
-          />
+          {/* The badge's notch is cut from this still frame, so the bell swings
+              behind the badge instead of dragging the notch with it. */}
+          <span className="app-header__bell-glyph" aria-hidden="true">
+            <i
+              key={`icon-${swing}`}
+              className={`ti ${feedOpen ? 'ti-bell-filled' : 'ti-bell'}${swing ? ' app-header__bell-icon--swing' : ''}`}
+            />
+          </span>
           {unreadCount > 0 && (
             // Keyed on the figure so it pops when the figure changes
             <span key={`count-${badge}`} className="app-header__bell-count" data-len={badge.length} aria-hidden="true">{badge}</span>
