@@ -273,6 +273,9 @@
   --frv-s1: #3987e5;
   --frv-s2: #d95926;
   --frv-s3: #199e70;
+  /* The Logbook's fences: plum, the page palette's sixth slot, apart from the
+     route's blue and the places' orange and green. */
+  --frv-fence: #c27bb6;
   --frv-crit: #ef4444;
   --frv-neutral: #4b5563;
   --frv-neutral-2: #6b7280;
@@ -283,6 +286,7 @@
   --frv-s1: #2a78d6;
   --frv-s2: #eb6834;
   --frv-s3: #1baf7a;
+  --frv-fence: #6b3361;
   --frv-crit: #dc2626;
   --frv-neutral: #94a3b8;
   --frv-neutral-2: #cbd5e1;

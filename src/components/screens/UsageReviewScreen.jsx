@@ -36,6 +36,8 @@ import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
 import { googlePlaceNames, googleLabel } from "../../lib/googlePlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
+import { useLogbookFences } from "./LogbookFences";
+import { boxOf } from "../../lib/fenceDraw";
 
 export { placeCase };
 import { watchTableLabels } from "../../lib/tableLabels";
@@ -130,7 +132,7 @@ const STAGE_WORD = {
  * page so the map, whose markers are drawn outside CSS, and the charts wear
  * the same blue, orange and green as the Fuel Report, in either theme.
  */
-const PALETTE_FALLBACK = { route: "#2a78d6", place: "#eb6834", base: "#1baf7a", fade: "#94a3b8", faint: "#cbd5e1", ink: "#4b5563" };
+const PALETTE_FALLBACK = { route: "#2a78d6", place: "#eb6834", base: "#1baf7a", fence: "#6b3361", fade: "#94a3b8", faint: "#cbd5e1", ink: "#4b5563" };
 function readPalette(el) {
   if (!el) return PALETTE_FALLBACK;
   const cs = getComputedStyle(el);
@@ -139,6 +141,7 @@ function readPalette(el) {
     route: v("--frv-s1", PALETTE_FALLBACK.route),
     place: v("--frv-s2", PALETTE_FALLBACK.place),
     base: v("--frv-s3", PALETTE_FALLBACK.base),
+    fence: v("--frv-fence", PALETTE_FALLBACK.fence),
     fade: v("--frv-neutral", PALETTE_FALLBACK.fade),
     faint: v("--frv-neutral-2", PALETTE_FALLBACK.faint),
     ink: v("--sp4-text-3", PALETTE_FALLBACK.ink),
@@ -155,7 +158,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** A place's name: Google's exact name when it has one, else OpenStreetMap's. */
 const nameOf = (p, gnames) => (p ? gnames?.get(p.id) ?? placeCase(p.name) : null);
-function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
+function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecount }) {
   const el = useRef(null);
   const wrap = useRef(null);
   const map = useRef(null);
@@ -178,6 +181,12 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
   const [baseNote, setBaseNote] = useState(null);
   // What the pointer is over (a place, a day's route or a stop) and where.
   const [hover, setHover] = useState(null);
+  // The site fences around the route, and the tool to draw more.
+  const area = useMemo(() => {
+    const pts = review.tracks.flatMap((t) => t.path).map(([lat, lng]) => ({ lat, lng }));
+    return pts.length ? boxOf(pts) : null;
+  }, [review]);
+  const fences = useLogbookFences({ map: mapObj, orgId, area, color: pal.fence, onRecount });
 
   useEffect(() => {
     let alive = true;
@@ -408,7 +417,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
   }
 
   return (
-    <div className="urv-map" ref={wrap}>
+    <div className={`urv-map${fences.drawing ? " is-drawing" : ""}`} ref={wrap}>
       <div ref={el} className="urv-map__canvas" />
       <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
       <div className="urv-map__top">
@@ -416,7 +425,9 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
           <span><i style={{ background: pal.route }} className="urv-line" />Route</span>
           <span><i style={{ background: pal.base }} />Base (most time)</span>
           <span><i style={{ background: pal.place }} />Other places · size = hours</span>
+          <span><i style={{ background: pal.fence }} className="urv-line" />Site fence</span>
         </div>
+        {fences.toolbar}
         {GOOGLE_BASE_AVAILABLE && (
           <div className="urv-map__base" role="group" aria-label="Base map">
             {[["osm", "OpenStreetMap"], ["google", "Satellite"]].map(([id, label]) => (
@@ -447,7 +458,8 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
           </button>
         </div>
       )}
-      {tip}
+      {!fences.drawing && tip}
+      {fences.overlay}
       {failed && <div className="frp-map__msg">The map could not load: {failed}</div>}
     </div>
   );
@@ -678,6 +690,14 @@ export default function UsageReviewScreen() {
     } else setRequest(next);
   };
 
+  // Build the same logbook again past the server's copy: after a fence is
+  // drawn, renamed or removed, so where the time went is counted against it.
+  const recount = useCallback(() => {
+    if (!live) return;
+    freshRef.current = true;
+    queryClient.refetchQueries({ queryKey: ["usage-review", live.orgId, live.vehicleId, live.from, live.to], exact: true });
+  }, [live, queryClient]);
+
   const kmplIn = Number(kmplText);
   const kmpl = kmplText && kmplIn > 0 && kmplIn < 100 ? kmplIn : review?.vehicle.kmpl ?? null;
   const s = review?.summary;
@@ -875,7 +895,8 @@ export default function UsageReviewScreen() {
             )}
 
             <div className="urv-grid urv-grid--top">
-              <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames} />
+              <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames}
+                         orgId={live?.orgId ?? null} onRecount={recount} />
 
               <section className="frv-card urv-card urv-card--top">
                 <h3 className="frv-card__t">Distance per Day</h3>
