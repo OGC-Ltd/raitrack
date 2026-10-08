@@ -502,8 +502,10 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
                   </div>
                 </td>
                 <td className="sp4-muted">{row.pattern}</td>
-                <td style={{color:"#86efac",fontWeight:600}}>{row.refillCount}</td>
-                <td style={{color:"#fca5a5",fontWeight:600}} title={splitTitle(row.verdictSplit)}>{row.drainCount}</td>
+                {/* The panel's ok / crit inks, not the dark theme's pastels: on
+                    white #86efac and #fca5a5 read at ~1.6:1. Zero stays muted. */}
+                <td className={"sp4-count" + (row.refillCount ? " sp4-count--ok" : "")}>{row.refillCount}</td>
+                <td className={"sp4-count" + (row.drainCount ? " sp4-count--crit" : "")} title={splitTitle(row.verdictSplit)}>{row.drainCount}</td>
                 <td><span className={"sp4-pill " + FSL_PILL[row.status]}>{FSL_STATUS[row.status]}</span></td>
                 <td><ViewOnMapBtn vehicleId={plate} vehicleName={plate} /></td>
               </tr>

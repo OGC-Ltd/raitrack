@@ -4223,3 +4223,126 @@
   .sp4-tpager__btn { transition: none; }
   .sp4-tpager__btn:active:not(:disabled) { transform: none; }
 }
+
+/* ── Sensor Monitor tables: one card, the roster's grid ──────────────────────
+ * Hallmark · redesign 2026-10-08 · scope: Maintenance › Sensor Monitor tables
+ *   (Probes, Fuel FSL, Speed, Malfunction, Repairs)
+ * component: data grid + pager · states: row default · hover · active (pressed) ·
+ *   focus-visible · selected; pager default · hover · focus-visible · active ·
+ *   disabled; (loading / error / empty: the tabs' own states, unchanged)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
+ * Operator: "redesign the tables in maintenance page". They were boxed on the
+ * gutter (2026-10-03) but the pager floated under the box on the page ground,
+ * a second object, and the rows used the panel's generic hairline and inks.
+ * Now the five tables read as the Weighbridges ticket grid the operator signed
+ * off today:
+ *   · table and pager are ONE card: the box squares its foot and the pager
+ *     closes it with a hairline above, side borders and the bottom corners;
+ *   · a #f5f7fa head band, 11px/700 tracked caps in the label tier;
+ *   · rows at least 40px, cells 12.5px in the cell tier, #e6e9ee row lines,
+ *     figures tabular so a column of numbers lines up digit over digit;
+ *   · hover is a 2.5% ink wash on the cells (pinned cells included), a
+ *     pressed row deepens it, keyboard focus is a 2px accent edge;
+ *   · the card is as tall as its rows: a short page is a short card.
+ * Weighbridges keeps its own card (`.wb-grid-card`), so it is left out. */
+.sp4-root--framed:not(.wb-root) {
+  --sp4-grid-line: var(--sp4-line);
+  --sp4-grid-head: var(--sp4-raised);
+  --sp4-grid-row: 40px;
+}
+.app--light .sp4-root--framed:not(.wb-root) { --sp4-grid-line: #e6e9ee; }
+
+/* Counts in the Fuel FSL table: refills in the ok ink, drains in the crit
+   ink, a zero in neither. */
+/* Element-qualified so the table's own cell ink (`.sp4-table td`) does not
+   win; the framed grid below leaves these cells out of its ink rule. */
+.sp4-table td.sp4-count { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--sp4-text-3); }
+.sp4-table td.sp4-count--ok   { color: var(--sp4-ok); }
+.sp4-table td.sp4-count--crit { color: var(--sp4-crit); }
+
+@media (min-width: 768px) {
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table thead th {
+    background: var(--sp4-grid-head);
+    border-bottom: 1px solid var(--sp4-grid-line);
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    color: var(--sp4-text-3);
+  }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr {
+    border-bottom-color: var(--sp4-grid-line);
+  }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr > td {
+    height: var(--sp4-grid-row);
+    padding-top: 9px;
+    padding-bottom: 9px;
+    box-sizing: border-box;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The cell ink, except where a cell carries its own (the FSL counts). */
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr > td:not(.sp4-count) { color: var(--sp4-text-2); }
+  /* An opened repair job is one cell holding a card: no row height on it. */
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.aud-detail-row > td { height: auto; }
+
+  /* Hover on the cells, not the row, so the opaque pinned plate washes with
+     the rest instead of staying a white notch. */
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.sp4-tr:not(.sp4-tr--static):hover { background: transparent; }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.sp4-tr:not(.sp4-tr--static):hover > td {
+    background-color: color-mix(in srgb, var(--sp4-text-1) 2.5%, var(--sp4-surface));
+    transition: background-color 120ms var(--ease-out, ease-out);
+  }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.sp4-tr:not(.sp4-tr--static):active > td {
+    background-color: color-mix(in srgb, var(--sp4-text-1) 5%, var(--sp4-surface));
+  }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.sp4-tr:focus-visible { outline: none; }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.sp4-tr:focus-visible > td {
+    background-color: color-mix(in srgb, var(--sp4-accent) 7%, var(--sp4-surface));
+  }
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr.sp4-tr:focus-visible > td:first-child {
+    box-shadow: inset 2px 0 0 var(--sp4-accent);
+  }
+
+  /* One card: the box squares its foot where a pager follows... */
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table:has(+ .sp4-tpager) {
+    margin-bottom: 0;
+    border-bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  /* ...and the pager is its foot row: same frame, a hairline above, the
+     bottom corners. It clears the footer nav with its margin, so the gap
+     opens under the card rather than inside it. */
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table + .sp4-tpager,
+  .sp4-root--framed:not(.wb-root) .sp4-table-scroll.sp4-keep-table + .sp4-tpager {
+    margin: 0 var(--sp4-gutter) calc(var(--app-footer-h, 64px) + var(--sp4-md));
+    padding: 10px 14px;
+    border: 1px solid var(--sp4-line-hi);
+    border-top: 1px solid var(--sp4-grid-line);
+    border-radius: 0 0 10px 10px;
+    background: var(--sp4-surface);
+  }
+  .app--light .sp4-root--framed:not(.wb-root) .sp4-keep-table + .sp4-tpager {
+    border-color: var(--sp4-line);
+    border-top-color: var(--sp4-grid-line);
+  }
+  /* Inside an outer scroller (Fuel FSL, Speed, Malfunction) the card is as
+     tall as its rows instead of being handed the rest of the screen. */
+  .sp4-root--framed:not(.wb-root) .sp4-table-scroll:not(.sp4-keep-table):has(> .sp4-keep-table) {
+    overflow-y: auto;
+  }
+  .sp4-root--framed:not(.wb-root) .sp4-table-scroll:not(.sp4-keep-table) > .sp4-keep-table {
+    flex: none;
+    max-height: none;
+  }
+  /* Where the box IS the scroller (Probes, Repairs) it was allowed to shrink
+     into whatever height the header left, and a page of fifteen scrolled
+     inside a letterbox. It never goes shorter than its rows now; when the
+     window is shorter than the card, the panel's body scrolls instead. */
+  .sp4-root--framed:not(.wb-root) .sp4-table-scroll.sp4-keep-table { flex: none; }
+  .sp4-root--framed:not(.wb-root) > .sp4-body,
+  .sp4-root--framed:not(.wb-root) .sp4-body:has(.sp4-keep-table) { overflow-y: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr > td { transition: none; }
+}
