@@ -16,6 +16,7 @@
   width: min(880px, 100%);
   height: min(546px, 63vh);
   max-height: none;
+  border-radius: 6px; /* operator, 2026-10-08: the radii were overkill */
 }
 .lbp .sp4-modal-head { padding: 10px 14px; gap: 12px; flex-wrap: nowrap; }
 
@@ -32,7 +33,7 @@
 .lbp-unit {
   padding: 2px 8px;
   border: 1px solid var(--sp4-line-hi);
-  border-radius: 999px;
+  border-radius: 3px;
   background: var(--sp4-raised);
   color: var(--sp4-text-2);
   font-size: var(--sp4-label);
@@ -44,6 +45,9 @@
 }
 .lbp .sp4-modal-head .lbp-seg { margin-left: auto; flex: none; }
 .lbp .sp4-modal-head .lbp-seg + .sp4-modal-x { margin-left: 0; }
+.lbp .urv-seg { border-radius: 4px; }
+.lbp .sp4-modal-x { border-radius: 3px; }
+.lbp .urv-seg button { border-radius: 3px; }
 .lbp .urv-seg button.is-on { box-shadow: none; outline: 1px solid var(--sp4-line-hi); }
 .lbp .urv-seg button:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
 
@@ -110,10 +114,11 @@
 .lbp-left .rp__events, .lbp-left .rp__plate { display: none; }
 .lbp-left .rp__head { cursor: default; }
 .lbp-left .rp__day button,
-.lbp-left .rp__day input { border-radius: 6px; }
+.lbp-left .rp__day input { border-radius: 3px; }
 .lbp-left .rp__play {
   width: 32px;
   height: 32px;
+  border-radius: 4px;
   border-color: var(--sp4-accent);
   background: var(--sp4-accent);
   color: #fff;
@@ -122,7 +127,7 @@
 .lbp-left .rp__play:active { transform: translateY(1px); }
 .lbp-left .rp__play:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
 .lbp-left .rp__clock { font-size: var(--sp4-strong); font-weight: 700; }
-.lbp-left .rp__rate { border-radius: 6px; font-size: var(--sp4-label); padding: 3px 6px; }
+.lbp-left .rp__rate { border-radius: 3px; font-size: var(--sp4-label); padding: 3px 6px; }
 .lbp-left .rp__ratelbl { font-size: 9px; color: var(--sp4-text-3); }
 
 /* ── right column ── */
@@ -149,7 +154,7 @@
   gap: 1px;
   margin: 0;
   border: 1px solid var(--sp4-line-hi);
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--sp4-line-hi);
 }
@@ -223,7 +228,7 @@
   place-items: center;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 3px;
   background: var(--sp4-raised);
   color: var(--sp4-text-3);
   font-size: 13px;
