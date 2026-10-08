@@ -37,6 +37,7 @@ import { googlePlaceNames, googleLabel } from "../../lib/googlePlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
 import { useLogbookFences } from "./LogbookFences";
+import LogbookVisits from "./LogbookVisits";
 import { boxOf } from "../../lib/fenceDraw";
 
 export { placeCase };
@@ -944,6 +945,10 @@ export default function UsageReviewScreen() {
                     : "Average minutes driving in each hour of the day (EAT) over the period."}
                 </p>
               </section>
+            </div>
+
+            <div className="urv-grid urv-grid--visits">
+              <LogbookVisits review={review} pal={pal} gnames={gnames} sel={sel} setSel={setSel} onPlayDay={setPlayDay} />
             </div>
 
             {playDay && live && (
