@@ -778,10 +778,6 @@ export default function UsageReviewScreen() {
       return { from: inn?.fromPlace ?? null, to: out?.toPlace ?? null };
     };
   }, [review]);
-  const detailTotals = useMemo(() => ({
-    km: detailRows.reduce((a, r) => a + (r.kind === "trip" ? r.x.km ?? 0 : 0), 0),
-    min: detailRows.reduce((a, r) => a + (r.x.min ?? 0), 0),
-  }), [detailRows]);
   const placePager = usePager(review?.places ?? [], review, PAGE_ROWS);
   // Up to 15 rows a page, and the card grows to hold them.
   const detailPager = usePager(detailRows, `${sel.day}|${sel.place}|${detailKind}`, PAGE_STEP);
@@ -1055,14 +1051,6 @@ export default function UsageReviewScreen() {
                           );
                         })}
                       </tbody>
-                      <tfoot>
-                        <tr>
-                          <td colSpan={selDay ? 3 : 5}>{detailRows.length} {detailRows.length === 1 ? "row" : "rows"}</td>
-                          {showKm && <td className="urv-num">{nf(detailTotals.km, 1)}</td>}
-                          <td className="urv-num">{minutes(detailTotals.min)}</td>
-                          <td />
-                        </tr>
-                      </tfoot>
                     </table>
                   </div>
                 )}

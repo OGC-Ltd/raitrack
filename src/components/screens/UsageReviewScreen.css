@@ -344,15 +344,6 @@
 .urv-seg__n { margin-left: 3px; color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
 
 .urv-detail td { vertical-align: middle; }
-.urv-detail tfoot td {
-  border-top: 1px solid var(--sp4-line);
-  font-size: var(--sp4-label);
-  font-weight: 700;
-  color: var(--sp4-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.urv-detail tfoot .urv-num { text-transform: none; letter-spacing: 0; font-size: var(--sp4-body); }
 
 .urv-kind {
   display: inline-flex;
