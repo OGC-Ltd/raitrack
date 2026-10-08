@@ -298,7 +298,6 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
             )}
 
             <h3 className="fpr-h">How each unit compares with its standard</h3>
-            <p className="fpr-sub">Each bar is a unit's typical (median) refill as a share of its standard; 100% = on standard, higher is worse. Units with at least 5 usable refills (3 for CASE tractors). Select a unit to open its vehicle analytics.</p>
             <div className="fpr-legend">
               <span><i className="fpr-sw fpr-sw--over" />10% or more above standard</span>
               <span><i className="fpr-sw fpr-sw--slight" />Up to 10% above</span>
