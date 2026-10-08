@@ -29,7 +29,7 @@ import { installGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIB
 import MapStatusBar from "../body/MapStatusBar";
 import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
-import TablePager, { usePager } from "../body/TablePager";
+import TablePager, { usePager, PAGE_STEP } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
 import { googlePlaceNames } from "../../lib/googlePlaceNames";
 import { watchTableLabels } from "../../lib/tableLabels";
@@ -41,7 +41,6 @@ const UNIT_KEY = "ft-usage-review-unit:";
 
 const nf = (n, d = 1) =>
   n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
-const stamp = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -236,6 +235,14 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
   const placeMarks = useRef([]);
   const stopMarks = useRef([]);
   const names = useRef(null);
+  // The selection the tracks were drawn under, and whether the review's first
+  // pick (the default, place 1) is still to come: neither moves the camera,
+  // so a new review opens on the whole route.
+  const selNow = useRef(sel);
+  selNow.current = sel;
+  const drawnWith = useRef(null);
+  const fresh = useRef(false);
+  const framedSel = useRef(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(null);
   const [mapObj, setMapObj] = useState(null);
@@ -341,6 +348,8 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
       return { id: p.id, marker, scale: 7 + 9 * Math.sqrt(Math.min(1, p.hours / ref)) };
     });
     fitTo(review.tracks.flatMap((t) => t.path).concat(top.slice(0, 10).map((p) => [p.lat, p.lng])), 13);
+    drawnWith.current = selNow.current;
+    fresh.current = true;
   }, [ready, review, setSel, fitTo, at, pal]);
 
   // Selection: restyle, show the day's stops, and frame what was picked.
@@ -387,6 +396,16 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
         mk.addListener("click", () => { if (s.place != null) setSel((x) => ({ ...x, place: x.place === s.place ? null : s.place })); });
         return mk;
       });
+    }
+    const stale = sel === drawnWith.current;
+    const firstPick = !stale && fresh.current;
+    if (!stale) fresh.current = false;
+    // Frame only on a new pick, not when a theme switch redraws the same one.
+    const changed = sel !== framedSel.current;
+    framedSel.current = sel;
+    if (stale || firstPick || !changed) return;
+    if (sel.day) {
+      const st = review.stops.filter((s) => dayKeyOf(s.start) === sel.day);
       const path = review.tracks.filter((t) => t.date === sel.day).flatMap((t) => t.path);
       fitTo(path.length ? path : st.map((s) => [s.lat, s.lng]), 15);
     } else if (sel.place != null) {
@@ -664,7 +683,9 @@ export default function UsageReviewScreen() {
   const review = st?.status === "ready" ? st.review : null;
   const runUnit = useMemo(() => (live ? vehicles.find((v) => v.vehicleId === live.vehicleId) : null), [live, vehicles]);
 
-  useEffect(() => { setSel({ day: null, place: null }); }, [review]);
+  // A new review opens with its first place (most time) picked, so the
+  // detail table has something to show (operator, 2026-10-08).
+  useEffect(() => { setSel({ day: null, place: review?.places.length ? review.places[0].id : null }); }, [review]);
   // Google's exact names for the places on the map, filled in as they arrive;
   // the OpenStreetMap name stands until then, and wherever Google has none.
   const [gnames, setGnames] = useState(() => new Map());
@@ -734,12 +755,36 @@ export default function UsageReviewScreen() {
   const detailStops = useMemo(() => (review?.stops ?? []).filter((x) =>
     (!sel.day || dayKeyOf(x.start) === sel.day) && (sel.place == null || x.place === sel.place)), [review, sel]);
   const detailTrips = useMemo(() => (sel.day ? (review?.trips ?? []).filter((t) => dayKeyOf(t.start) === sel.day) : []), [review, sel.day]);
-  const detailRows = useMemo(() => [
+  const [detailKind, setDetailKind] = useState("all");
+  useEffect(() => { setDetailKind("all"); }, [sel.day, sel.place]);
+  const detailAll = useMemo(() => [
     ...detailStops.map((x) => ({ t: x.start, kind: "stop", x })),
     ...detailTrips.map((x) => ({ t: x.start, kind: "trip", x })),
   ].sort((a, b) => a.t - b.t), [detailStops, detailTrips]);
+  const detailRows = useMemo(() => (detailKind === "all" ? detailAll : detailAll.filter((r) => r.kind === detailKind)), [detailAll, detailKind]);
+  // Columns that would only repeat the title or stand empty are left out: a
+  // place's list is all that place, and a list without drives has no km.
+  const showKm = detailRows.some((r) => r.kind === "trip");
+  // For a place's stops: the drive that brought it there and the one that took
+  // it on, so the list says where it came from and went next.
+  const legs = useMemo(() => {
+    const trips = [...(review?.trips ?? [])].sort((a, b) => a.start - b.start);
+    const before = (t) => { let lo = 0, hi = trips.length - 1, at = -1; while (lo <= hi) { const mid = (lo + hi) >> 1; if (trips[mid].start <= t) { at = mid; lo = mid + 1; } else hi = mid - 1; } return at; };
+    return (stop) => {
+      const i = before(stop.start);
+      const inn = i >= 0 && trips[i].toPlace === stop.place && stop.start - trips[i].end < 3_600_000 ? trips[i] : null;
+      const j = before(stop.end - 1) + 1;
+      const out = trips[j] && trips[j].fromPlace === stop.place && trips[j].start - stop.end < 3_600_000 ? trips[j] : null;
+      return { from: inn?.fromPlace ?? null, to: out?.toPlace ?? null };
+    };
+  }, [review]);
+  const detailTotals = useMemo(() => ({
+    km: detailRows.reduce((a, r) => a + (r.kind === "trip" ? r.x.km ?? 0 : 0), 0),
+    min: detailRows.reduce((a, r) => a + (r.x.min ?? 0), 0),
+  }), [detailRows]);
   const placePager = usePager(review?.places ?? [], review, PAGE_ROWS);
-  const detailPager = usePager(detailRows, `${sel.day}|${sel.place}`, PAGE_ROWS);
+  // Up to 15 rows a page, and the card grows to hold them.
+  const detailPager = usePager(detailRows, `${sel.day}|${sel.place}|${detailKind}`, PAGE_STEP);
   // A place picked on the map opens the list on its page.
   const setPlacePage = placePager.setPage;
   useEffect(() => {
@@ -923,30 +968,101 @@ export default function UsageReviewScreen() {
             </div>
 
             <div className="urv-grid urv-grid--detail">
-              <section className="frv-card urv-card urv-card--table">
-                <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and place detail"}</h3>
-                <p className="urv-card__sub">
-                  {selDay && <span>{nf(selDay.km, 1)} km · {hm(selDay.driveH)} driving{selDay.engineH != null ? ` · ${hm(selDay.engineH)} engine` : ""}{kmpl ? ` · ~${nf(selDay.km / kmpl, 1)} L` : ""}</span>}
-                  {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days</span>}
-                  {!selDay && !selPlace && <span>Nothing picked yet</span>}
-                </p>
+              <section className="frv-card urv-card urv-card--detail">
+                <div className="urv-detail__head">
+                  <div>
+                    <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and place detail"}</h3>
+                    <p className="urv-card__sub">
+                      {selDay && <span>{nf(selDay.km, 1)} km · {hm(selDay.driveH)} driving{selDay.engineH != null ? ` · ${hm(selDay.engineH)} engine` : ""}{kmpl ? ` · ~${nf(selDay.km / kmpl, 1)} L` : ""}{selPlace ? ` · stops at ${selPlace.id}. ${nameOf(selPlace, gnames)}` : ""}</span>}
+                      {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days{selPlace.name && gnames.has(selPlace.id) ? ` · ${placeCase(selPlace.name)}` : ""}</span>}
+                      {!selDay && !selPlace && <span>Nothing picked yet</span>}
+                    </p>
+                  </div>
+                  {(selDay || selPlace) && (
+                    <div className="urv-seg" role="group" aria-label="Show">
+                      {[["all", "All", detailAll.length], ["stop", "Stops", detailStops.length], ["trip", "Drives", detailTrips.length]]
+                        .filter(([k, , n]) => k === "all" || n > 0 || (k === "trip" && selDay))
+                        .map(([k, label, n]) => (
+                          <button key={k} type="button" className={detailKind === k ? "is-on" : ""} aria-pressed={detailKind === k}
+                                  onClick={() => setDetailKind(k)}>
+                            {label} <span className="urv-seg__n">{n}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
                 {!selDay && !selPlace ? (
                   <div className="urv-hint">Pick a day on the distance chart or the map, or a place in the list or on the map, to see its drives and stops here.</div>
+                ) : detailRows.length === 0 ? (
+                  <div className="urv-hint">Nothing to show for this pick.</div>
                 ) : (
                   <div className="sp4-table-scroll urv-table">
-                    <table className="sp4-table">
-                      <thead><tr><th>{selDay ? "Time" : "Date"}</th><th>What</th><th>Where</th><th className="urv-num">km</th><th className="urv-num">Duration</th></tr></thead>
+                    <table className="sp4-table urv-detail">
+                      <thead><tr>
+                        {!selDay && <th>Date</th>}
+                        <th>Time</th><th>What</th>
+                        {selDay ? <th className="urv-wide">Where</th> : <><th className="urv-wide">Came from</th><th className="urv-wide">Went to</th></>}
+                        {showKm && <th className="urv-num">km</th>}
+                        <th className="urv-num">Duration</th><th aria-label="Open" />
+                      </tr></thead>
                       <tbody>
-                        {detailPager.pageRows.map(({ kind, x }) => (
-                          <tr key={`${kind}${x.id}`} className={kind === "trip" ? "urv-trip" : ""}>
-                            <td className="urv-mono">{selDay ? `${clock.format(x.start)}–${clock.format(x.end)}` : stamp.format(x.start)}</td>
-                            <td>{kind === "trip" ? "Drive" : x.overnight ? "Stop (overnight)" : "Stop"}</td>
-                            <td>{kind === "trip" ? `${pname(x.fromPlace)} → ${pname(x.toPlace)}` : pname(x.place)}</td>
-                            <td className="urv-num">{kind === "trip" ? nf(x.km, 1) : ""}</td>
-                            <td className="urv-num">{minutes(x.min)}</td>
-                          </tr>
-                        ))}
+                        {detailPager.pageRows.map(({ kind, x }) => {
+                          const day = dayKeyOf(x.start);
+                          // A row opens what it points at: in a place's list,
+                          // the day it happened; in a day's list, a stop's place.
+                          const go = !selDay
+                            ? { label: "Follow this day", run: () => setSel((v) => ({ ...v, day })) }
+                            : kind === "stop" && x.place != null
+                              ? { label: sel.place === x.place ? "Show the whole day" : "This place only", run: () => setSel((v) => ({ ...v, place: v.place === x.place ? null : x.place })) }
+                              : null;
+                          const placeLink = (id) => (
+                            <button type="button" className="urv-link" title="Pick this place"
+                                    onClick={(e) => { e.stopPropagation(); setSel((v) => ({ day: v.day, place: v.place === id ? null : id })); }}>
+                              {id}. {pname(id)}
+                            </button>
+                          );
+                          return (
+                            <tr key={`${kind}${x.id}`} className={`urv-row${kind === "trip" ? " urv-trip" : ""}`}
+                                onClick={go?.run} title={go?.label}>
+                              {!selDay && <td className="urv-mono">{dayLabel(day, true)}</td>}
+                              <td className="urv-mono">{clock.format(x.start)}–{clock.format(x.end)}</td>
+                              <td>
+                                <span className={`urv-kind urv-kind--${kind === "trip" ? "drive" : x.overnight ? "night" : "stop"}`}>
+                                  <i className={`ti ${kind === "trip" ? "ti-route" : x.overnight ? "ti-moon" : "ti-player-stop"}`} aria-hidden="true" />
+                                  {kind === "trip" ? "Drive" : x.overnight ? "Overnight" : "Stop"}
+                                </span>
+                              </td>
+                              {!selDay && (() => {
+                                const l = kind === "stop" ? legs(x) : { from: null, to: null };
+                                return (
+                                  <>
+                                    <td className="urv-where">{l.from != null ? placeLink(l.from) : <span className="urv-none">—</span>}</td>
+                                    <td className="urv-where">{l.to != null ? placeLink(l.to) : <span className="urv-none">—</span>}</td>
+                                  </>
+                                );
+                              })()}
+                              {selDay && (
+                                <td className="urv-where">
+                                  {kind === "trip"
+                                    ? <>{placeLink(x.fromPlace)} <span className="urv-arrow">→</span> {placeLink(x.toPlace)}</>
+                                    : x.place != null ? placeLink(x.place) : "—"}
+                                </td>
+                              )}
+                              {showKm && <td className="urv-num">{kind === "trip" ? nf(x.km, 1) : ""}</td>}
+                              <td className="urv-num">{minutes(x.min)}</td>
+                              <td className="urv-go">{go && <i className="ti ti-chevron-right" aria-hidden="true" />}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={selDay ? 3 : 5}>{detailRows.length} {detailRows.length === 1 ? "row" : "rows"}</td>
+                          {showKm && <td className="urv-num">{nf(detailTotals.km, 1)}</td>}
+                          <td className="urv-num">{minutes(detailTotals.min)}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 )}
