@@ -209,12 +209,6 @@
   min-width: 0;
 }
 
-/* Above a phone this wrapper is not in the layout at all: `display: contents`
-   hands its two children straight to .sp4-filter-group, so the bar is the same
-   flex row it has always been and every sp4-* rule still applies to the label
-   and the field directly. It only becomes a real box inside the phone query
-   below, where it stops a wrap from separating "to" from the date it names. */
-.wb-range-leg { display: contents; }
 
 @media (max-width: 767px) {
   /* ── The filter bar wraps; it does not ride on one line ──────────────────
@@ -266,21 +260,6 @@
     margin-inline: 0;
     padding-inline: 0;
     gap: 6px 8px;
-  }
-  /* "From" and "to" stay. They were dropped when this row had one date field
-     and the label was the redundant word "DAY"; with two identical native
-     date widgets side by side, they are the only thing saying which end is
-     which. */
-  .wb-root .sp4-date-input { padding-inline: 6px; }
-
-  /* One end of the range, label and field together. Above this width the rule
-     below keeps it out of the layout entirely. */
-  .wb-root .wb-range-leg {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-    min-width: 0;
   }
   .wb-root .sp4-filter-chip { padding: 0 10px; }
 
@@ -348,64 +327,6 @@
 
   /* The ticket's five figures, three then two, rather than three rows. */
   .wb-stat { flex-basis: 96px; padding: 8px 10px; }
-}
-
-/* Handsets: the two ends of the range share one row, half each, and the three
-   quick spans share the next, a third each. With the date fields at 16px (the
-   size that stops iOS zooming on focus, index.css) a free wrap put "From" on
-   one line, "to" plus two chips on the next and "Last 7d" alone on a third. */
-@media (max-width: 599px) {
-  /* Each end is ONE field, half the row: the box is the leg, with its label
-     inside on the left and the date filling the rest. A label row above two
-     dark-ruled native widgets read as a form, not as the search box's
-     sibling, and cost a line. */
-  .wb-root .wb-range-leg {
-    flex: 1 1 calc(50% - 4px);
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-    min-height: var(--m-field);
-    padding: 0 8px 0 10px;
-    border: 1px solid var(--sp4-line-hi);
-    border-radius: 8px;
-    background: var(--sp4-surface);
-    box-sizing: border-box;
-  }
-  .wb-root .wb-range-leg:focus-within { border-color: var(--sp4-accent); }
-  .wb-root .wb-range-leg .sp4-filter-label { margin: 0; font-size: 10px; }
-  /* iOS Safari draws a date input at its own intrinsic width, centred, and
-     ignores flex sizing unless the native appearance is dropped; the value
-     is then left-aligned so both ends line up under the search text. */
-  .wb-root .wb-range-leg .sp4-date-input {
-    -webkit-appearance: none;
-    appearance: none;
-    flex: 1 1 auto;
-    display: block;
-    width: 100%;
-    min-width: 0;
-    height: calc(var(--m-field) - 2px);
-    min-height: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    font-weight: 500;
-    line-height: calc(var(--m-field) - 2px);
-    text-align: left;
-  }
-  .wb-root .wb-range-leg .sp4-date-input:hover { background: transparent; }
-  .wb-root .wb-range-leg .sp4-date-input:focus-visible { outline: none; }
-  .wb-root .wb-range-leg .sp4-date-input::-webkit-date-and-time-value { text-align: left; margin: 0; }
-  /* The glyph took the year's room at 375px ("10/01/202"); the whole field
-     opens the calendar on a tap instead (showPicker in the screen). */
-  .wb-root .wb-range-leg .sp4-date-input::-webkit-calendar-picker-indicator { display: none; }
-  .wb-root .wb-range-leg .sp4-date-input::-webkit-datetime-edit-text { padding: 0; }
-  .wb-root .wb-range-leg { cursor: pointer; }
-  .wb-root .sp4-filter-group > .sp4-filter-chip {
-    flex: 1 1 0;
-    min-height: var(--m-chip);
-    justify-content: center;
-  }
 }
 
 /* ── Breadcrumb ───────────────────────────────────────────────────────────
@@ -856,5 +777,83 @@
     padding: 10px var(--wbg-edge);
     border-top: 1px solid var(--wbg-line);
     color: var(--wbg-label);
+  }
+}
+
+/* ── The grid as tall as its rows ───────────────────────────────────────────
+ * Hallmark · redesign 2026-10-08 · scope: ticket table height
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ * Operator: "cover more height, and per page 15", then "the table to be
+ * responsive based on the amount of data rows it populates". The card had been
+ * stretched to the footer AND allowed to shrink (flex 1 1, min-height 0): under
+ * the header, KPI tiles, filters and bridge strip a laptop left it ~330px, so
+ * a page of fifteen showed seven in a letterbox, and a page of three sat in a
+ * tall white box. Now the card is exactly its content:
+ *   · every row one fixed height (--wbg-row), so the grid's height is the
+ *     head plus however many rows the page holds, fifteen at most;
+ *   · it never shrinks below that, so a whole page is always on screen; where
+ *     the window is shorter, the PAGE scrolls (.sp4-body), never the grid;
+ *   · it no longer stretches to the footer: a short page ends under its last
+ *     row, with the pager and count line right beneath it.
+ * Tablet and desk only; phones keep their own page-scrolled column. */
+@media (min-width: 768px) {
+  .wb-grid-card {
+    --wbg-row: 40px;
+    flex: 0 0 auto;
+  }
+  .sp4-root--framed.wb-root .wb-grid-card .wb-grid.sp4-keep-table { flex: 0 0 auto; }
+  .sp4-root.wb-root .wb-grid-card .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td {
+    height: var(--wbg-row);
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+  }
+  /* The page scrolls when the grid needs more room than the window has. */
+  .sp4-root--framed.wb-root .sp4-body:has(.wb-grid-card) { overflow-y: auto; }
+}
+
+/* ── One date picker for a day or a range ────────────────────────────────────
+ * Hallmark · component: date range field · genre: modern-minimal · theme: the panel's own (sp4)
+ * states: default · hover · focus-visible · open · day: in-range · ends · today · disabled (future / before records / past the span)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ * Operator, 2026-10-08: "one date (calendar) picker for single date selection
+ * to date ranges". The From / To pair of native boxes and the three chips
+ * beside them are replaced by the unit panel's DateRangePicker: one field
+ * that reads "Today" or "1 Oct – today", one calendar; the quick spans stay
+ * outside it as the bar's own buttons (operator, 2026-10-08).
+ * The picker draws in the vehicle panel's --vdp-* names; here they point at
+ * the panel's own scale, and the field takes the filter bar's height. */
+.wb-root .drp {
+  --vdp-border: var(--sp4-field-line);
+  --vdp-ink: var(--sp4-text-1);
+  --vdp-ink2: var(--sp4-text-2);
+  --vdp-faint: var(--sp4-text-3);
+  --vdp-navy: var(--sp4-accent);
+}
+.wb-root .drp-field {
+  height: 30px;
+  border-radius: 6px;
+  background: var(--sp4-surface, #fff);
+  font-family: var(--font-body);
+  font-size: var(--sp4-label, 12.5px);
+}
+.wb-root .drp-field:hover { border-color: var(--sp4-text-3); }
+.wb-root .drp-field--open,
+.wb-root .drp-field:focus-visible { border-color: var(--sp4-accent); outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--sp4-accent) 30%, transparent); }
+.wb-root .drp-pop { z-index: 60; }
+@media (max-width: 767px) {
+  .wb-root .drp { display: block; width: 100%; }
+  .wb-root .drp-field { width: 100%; height: auto; min-height: var(--m-field, 40px); }
+  .wb-root .drp-caret { margin-left: auto; }
+  /* On a phone the calendar spans the bar rather than hanging off one edge. */
+  .wb-root .drp-pop { left: 0; right: 0; width: auto; max-width: 340px; }
+}
+/* Handsets: the field takes its own row, the three spans share the next, a
+   third each, so "Last 7 days" never wraps onto a line alone. */
+@media (max-width: 599px) {
+  .wb-root .sp4-filter-group > .sp4-filter-chip {
+    flex: 1 1 0;
+    min-height: var(--m-chip, 36px);
+    justify-content: center;
   }
 }

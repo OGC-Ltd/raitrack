@@ -11,8 +11,12 @@
  *     the same day again keeps just that day;
  *   · or take a quick pick along the top.
  *
- * Days after `today` cannot be picked, and while a range is being drawn the
- * days further than `maxDays` from its first day cannot either. Days are fleet
+ * Days after `today` cannot be picked, nor days before `minDay` when one is
+ * given (the first day a screen holds records for), and while a range is being
+ * drawn the days further than `maxDays` from its first day cannot either.
+ * `spans` names the "Last N days" quick picks; it defaults to 7, 30 and
+ * `maxDays`, whichever of those fit. `quickPicks={false}` leaves them out of
+ * the calendar, for a screen that sets them as buttons of its own. Days are fleet
  * day keys ('YYYY-MM-DD'), laid out by lib/dayRange monthGrid.
  */
 
@@ -38,7 +42,7 @@ export function pickedText(from, to, today) {
  * `from`/`to` are the picked days; `onChange(from, to)` picks others. `align`
  * is the side of the field the calendar lines up with.
  */
-export default function DateRangePicker({ from, to, today, maxDays = 14, onChange, align = 'left', label = 'Dates' }) {
+export default function DateRangePicker({ from, to, today, maxDays = 14, onChange, align = 'left', label = 'Dates', minDay = null, spans = null, quickPicks = true }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState(null);   // a first click waiting for a second
   const [hover, setHover] = useState(null);
@@ -75,7 +79,7 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
   const quick = [
     { label: 'Today', f: today, t: today },
     { label: 'Yesterday', f: addDays(today, -1), t: addDays(today, -1) },
-    ...[7, 30, maxDays].filter((n, i, all) => n <= maxDays && all.indexOf(n) === i)
+    ...(spans ?? [7, 30, maxDays]).filter((n, i, all) => n <= maxDays && all.indexOf(n) === i)
       .map(n => ({ label: `Last ${n} days`, f: addDays(today, -(n - 1)), t: today })),
   ];
 
@@ -83,6 +87,7 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
   const [lo, hi] = anchor != null ? rangeFromClicks(anchor, hover ?? anchor) : [from, to];
   const tooFar = (d) => anchor != null && daysBetween(...rangeFromClicks(anchor, d), maxDays + 1).length > maxDays;
   const canNext = month < today.slice(0, 7);
+  const canPrev = !minDay || month > minDay.slice(0, 7);
 
   return (
     <div className={`drp drp--${align}`} ref={rootRef}>
@@ -101,7 +106,7 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
 
       {open && (
         <div className="drp-pop" role="dialog" aria-label="Pick a day, or two days for a range">
-          <div className="drp-quick">
+          {quickPicks && <div className="drp-quick">
             {quick.map(q => (
               <button
                 key={q.label}
@@ -110,10 +115,10 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
                 onClick={() => { pick(q.f, q.t); setOpen(false); }}
               >{q.label}</button>
             ))}
-          </div>
+          </div>}
 
           <div className="drp-head">
-            <button type="button" className="drp-nav" onClick={() => setMonth(m => addMonths(m, -1))} aria-label="Previous month">
+            <button type="button" className="drp-nav" onClick={() => setMonth(m => addMonths(m, -1))} disabled={!canPrev} aria-label="Previous month">
               <i className="ti ti-chevron-left" aria-hidden="true" />
             </button>
             <span className="drp-month">{MONTH.format(at(`${month}-01`))}</span>
@@ -126,7 +131,7 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
             {WEEKDAYS.map(w => <span key={w} className="drp-wd" aria-hidden="true">{w}</span>)}
             {monthGrid(month).flat().map((d, i) => {
               if (!d) return <span key={`x${i}`} />;
-              const off = d > today || tooFar(d);
+              const off = d > today || (minDay != null && d < minDay) || tooFar(d);
               const inRange = d >= lo && d <= hi;
               const cls = ['drp-day',
                 inRange && 'drp-day--in',
