@@ -26,6 +26,7 @@ import {
 } from "../body/FleetMap";
 import RoutePlayback from "../body/RoutePlayback";
 import MapStatusBar from "../body/MapStatusBar";
+import StopSign from "./StopSign";
 import "./LogbookPlayback.css";
 
 const TZ = "Africa/Nairobi";
@@ -34,6 +35,12 @@ const HHMMSS = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-di
 const nf = (n, d = 1) => (n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-GB", { maximumFractionDigits: d, minimumFractionDigits: d }));
 const hm = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
 const BASE_MAP_KEY = "ft-map-base";
+
+/* One glyph per event kind, so the list reads at a glance without colour. */
+const KIND_ICON = {
+  speeding: "ti-gauge", refill: "ti-gas-station", theft: "ti-droplet-down", fault: "ti-plug-x",
+  zone: "ti-map-pin", dispatch: "ti-truck-delivery",
+};
 
 /* The live map's own replay geometry (FleetMap, "WHEN the unit was at a point"). */
 const TICK_MAX = 28;
@@ -253,7 +260,10 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
            onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         <div className="sp4-modal lbp" role="dialog" aria-modal="true" aria-labelledby="lbp-title">
           <div className="sp4-modal-head">
-            <span className="sp4-repair-title" id="lbp-title">Playback · {dayLabel}</span>
+            <div className="lbp-title">
+              <span className="lbp-title__k">Playback</span>
+              <span className="sp4-repair-title" id="lbp-title">{dayLabel}</span>
+            </div>
             <span className="lbp-unit">{unitLabel}</span>
             {GOOGLE_BASE_AVAILABLE && (
               <div className="urv-seg lbp-seg" role="group" aria-label="Base map">
@@ -301,35 +311,40 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
             <aside className="lbp-right">
               {/* 2 · the day's figures */}
               <section className="lbp-sec">
-                <h3 className="frv-card__t">Stats</h3>
-                <div className="lbp-stats">
-                  <div><b>{logDay ? nf(logDay.km, 1) : data?.distanceM != null ? nf(data.distanceM / 1000, 1) : "—"}<small> km</small></b><span>Distance</span></div>
-                  <div><b>{logDay?.driveH != null ? hm(logDay.driveH) : "—"}</b><span>Driving</span></div>
-                  <div><b>{logDay?.engineH != null ? hm(logDay.engineH) : "—"}</b><span>Engine on</span></div>
-                  <div><b>{topSpeed != null ? Math.round(topSpeed) : "—"}<small> km/h</small></b><span>Top speed</span></div>
-                  <div><b>{logDay?.firstMove ? HHMM.format(logDay.firstMove) : pb.t0 ? HHMM.format(pb.t0) : "—"}</b><span>First move</span></div>
-                  <div><b>{logDay?.lastMove ? HHMM.format(logDay.lastMove) : pb.t1 ? HHMM.format(pb.t1) : "—"}</b><span>Last move</span></div>
-                  <div><b>{counts.stop ?? 0}</b><span>Stops</span></div>
-                  <div><b>{(counts.theft ?? 0) + (counts.refill ?? 0)}</b><span>Fuel events</span></div>
-                  <div><b>{counts.speeding ?? 0}</b><span>Speeding</span></div>
-                </div>
+                <h3 className="lbp-h">Day</h3>
+                <dl className="lbp-stats">
+                  <div className="is-lead"><dt>Distance</dt><dd>{logDay ? nf(logDay.km, 1) : data?.distanceM != null ? nf(data.distanceM / 1000, 1) : "—"}<small>km</small></dd></div>
+                  <div><dt>Driving</dt><dd>{logDay?.driveH != null ? hm(logDay.driveH) : "—"}</dd></div>
+                  <div><dt>Engine on</dt><dd>{logDay?.engineH != null ? hm(logDay.engineH) : "—"}</dd></div>
+                  <div><dt>Top speed</dt><dd>{topSpeed != null ? Math.round(topSpeed) : "—"}<small>km/h</small></dd></div>
+                  <div><dt>First move</dt><dd>{logDay?.firstMove ? HHMM.format(logDay.firstMove) : pb.t0 ? HHMM.format(pb.t0) : "—"}</dd></div>
+                  <div><dt>Last move</dt><dd>{logDay?.lastMove ? HHMM.format(logDay.lastMove) : pb.t1 ? HHMM.format(pb.t1) : "—"}</dd></div>
+                  <div><dt>Stops</dt><dd>{counts.stop ?? 0}</dd></div>
+                  <div className={(counts.theft ?? 0) + (counts.refill ?? 0) ? "is-warn" : ""}><dt>Fuel events</dt><dd>{(counts.theft ?? 0) + (counts.refill ?? 0)}</dd></div>
+                  <div className={counts.speeding ? "is-crit" : ""}><dt>Speeding</dt><dd>{counts.speeding ?? 0}</dd></div>
+                </dl>
               </section>
 
               {/* 3 · what happened, revealed as the replay reaches it */}
               <section className="lbp-sec lbp-sec--events">
-                <h3 className="frv-card__t lbp-side__h">Events <span>{seen.length} of {events.length}</span></h3>
-                <div className="lbp-events" ref={listRef}>
+                <h3 className="lbp-h">Events <span>{seen.length} of {events.length}</span></h3>
+                <ol className="lbp-events" ref={listRef}>
                   {seen.map((e, i) => (
-                    <button type="button" key={`${e.t}-${i}`} className={`rp__event rp__event--${e.severity}`}
-                            onClick={() => pb.seek(e.t)} title="Jump the playback here">
-                      <span className={`rp__event-dot rp__event-dot--${e.kind}`} aria-hidden="true" />
-                      <span className="rp__event-time">{HHMMSS.format(e.t)}</span>
-                      <span className="rp__event-label">{e.label}</span>
-                      {e.detail && <span className="rp__event-detail">{e.detail}</span>}
-                    </button>
+                    <li key={`${e.t}-${i}`} className={i === seen.length - 1 ? "is-now" : ""}>
+                      <button type="button" className={`lbp-ev lbp-ev--${e.severity}`} onClick={() => pb.seek(e.t)} title="Jump the playback here">
+                        <span className={`lbp-ev__icon lbp-ev__icon--${e.kind}`} aria-hidden="true">
+                          {e.kind === "stop" ? <StopSign size={12} /> : <i className={`ti ${KIND_ICON[e.kind] ?? "ti-point-filled"}`} />}
+                        </span>
+                        <span className="lbp-ev__what">
+                          <b>{e.label}</b>
+                          {e.detail && <span>{e.detail}</span>}
+                        </span>
+                        <time className="lbp-ev__t">{HHMMSS.format(e.t)}</time>
+                      </button>
+                    </li>
                   ))}
-                  {!seen.length && <p className="lbp-empty">{events.length ? "Press play: events appear as the replay reaches them." : loading ? "" : "No events on this day."}</p>}
-                </div>
+                  {!seen.length && <li className="lbp-empty">{events.length ? "Press play. Events appear as the replay reaches them." : loading ? "" : "No events on this day."}</li>}
+                </ol>
               </section>
             </aside>
           </div>
