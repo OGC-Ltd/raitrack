@@ -220,13 +220,10 @@ export default function AnalyticsScreen() {
 
   const isPlantFleet = isPlant(activeCompanyId);
 
-  // Fleet-state donut, hidden for one org by request. SUKARI carries 313 units
-  // with no tracker against 597 on the books, so its coverage ring reads as a
-  // report on the tracker rollout rather than on the fleet — and the Probes &
-  // sensors gauge beside it already says that, with the fault breakdown. This
-  // is a presentation choice for one org, not a rule about the data, which is
-  // why it is a list and not a condition on the numbers.
-  const COVERAGE_HIDDEN = new Set(["sukari"]);
+  // Fleet-state donut. A list of orgs it is hidden for, by request — empty
+  // since 2026-10-08, when SUKARI asked for its Fleet coverage ring back.
+  // A presentation choice per org, not a rule about the data.
+  const COVERAGE_HIDDEN = new Set([]);
   const showFleetDonut =
     isPlantFleet ||
     !COVERAGE_HIDDEN.has(
