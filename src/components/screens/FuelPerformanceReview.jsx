@@ -211,6 +211,16 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
           <EmptyNote icon="ti-gas-station-off" title="No Refills in This Period">
             The fuel sensors confirmed no refills between these dates, so there is nothing to judge.
           </EmptyNote>
+        ) : !review.totals.unitsWithStandard ? (
+          // No unit has a standard rate (L/h or km/L) on record, so there is
+          // nothing to judge against — say so rather than listing every unit
+          // as "not assessed". Standards come from FactorySuite's machine
+          // register, which covers Kasulu only today.
+          <EmptyNote icon="ti-ruler-off" title="No Standards on Record">
+            Performance compares each unit's refills with its standard fuel rate (litres an hour or km a litre).
+            None of {orgName ? `${orgName}'s` : "this organisation's"} {review.totals.units} refuelled units has a standard yet.
+            Once standards are added to the machine register, this page fills in.
+          </EmptyNote>
         ) : (
           <>
             <TableToolbar
