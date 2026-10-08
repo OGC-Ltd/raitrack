@@ -2718,7 +2718,8 @@
   max-height: min(88vh, 900px);
   background: var(--sp4-surface);
   border: 1px solid var(--sp4-line-hi);
-  border-radius: 12px;
+  /* 6px, not 12 (operator, 2026-10-08: "the border radius are an overkill"). */
+  border-radius: 6px;
   /* No shadow on dialogs (operator, 2026-10-08): the scrim and the border
      already set it apart. */
   box-shadow: none;
@@ -2797,7 +2798,7 @@
   margin-left: auto;
   background: none;
   border: 0;
-  border-radius: 5px;
+  border-radius: 3px;
   color: var(--sp4-text-3);
   font-size: 20px;
   line-height: 1;
@@ -2838,7 +2839,7 @@
   gap: 2px;
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--sp4-line-hi);
-  border-radius: 6px;
+  border-radius: 4px;
   /* min-width: 0 so a long part name shrinks the input rather than pushing the
      caret off the end of a 10px-padded dialog at 375. */
   min-width: 0;
@@ -2910,7 +2911,7 @@
   padding: 0 4px 4px;
   background: var(--sp4-raised);
   border: 1px solid var(--sp4-line-hi);
-  border-radius: 8px;
+  border-radius: 4px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.5);
 }
 .sp4-pick-list--up { top: auto; bottom: calc(100% + 4px); }
@@ -2984,7 +2985,7 @@
 .sp4-danger-btn {
   padding: 5px 14px;
   border: 1px solid var(--sp4-crit);
-  border-radius: 5px;
+  border-radius: 4px;
   background: none;
   color: var(--sp4-crit);
   font-family: inherit;

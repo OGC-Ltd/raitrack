@@ -16,7 +16,6 @@
   width: min(880px, 100%);
   height: min(546px, 63vh);
   max-height: none;
-  border-radius: 6px; /* operator, 2026-10-08: the radii were overkill */
 }
 .lbp .sp4-modal-head { padding: 10px 14px; gap: 12px; flex-wrap: nowrap; }
 
@@ -46,7 +45,6 @@
 .lbp .sp4-modal-head .lbp-seg { margin-left: auto; flex: none; }
 .lbp .sp4-modal-head .lbp-seg + .sp4-modal-x { margin-left: 0; }
 .lbp .urv-seg { border-radius: 4px; }
-.lbp .sp4-modal-x { border-radius: 3px; }
 .lbp .urv-seg button { border-radius: 3px; }
 .lbp .urv-seg button.is-on { box-shadow: none; outline: 1px solid var(--sp4-line-hi); }
 .lbp .urv-seg button:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }

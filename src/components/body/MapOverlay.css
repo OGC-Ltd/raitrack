@@ -1073,6 +1073,8 @@
 
   width: min(680px, calc(calc(var(--vw) * 100) - 40px));
   max-width: none;
+  /* The dialogs' 6px, not the tooltips' --radius-lg (operator, 2026-10-08). */
+  border-radius: 6px;
   max-height: min(600px, calc(calc(var(--vh) * 100) - 40px));
 
   /* A window's padding belongs to its PARTS — the title bar, the body, the
