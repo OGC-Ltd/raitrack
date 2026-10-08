@@ -137,7 +137,7 @@ export function TripsView({ report: r, from, to, fmtNum, at, onHoverAt }) {
   return (
     <div className="frv frs">
       <section className="frv-card">
-        <h3 className="frv-card__t">When it moved</h3>
+        <h3 className="frv-card__t">When It Moved</h3>
         <Timeline
           from={from} to={to} segments={trips} tone="trip" hot={hot} picked={picked}
           onHot={hover} onPick={setPicked}
@@ -218,7 +218,7 @@ export function ParkingsView({ report: r, from, to, fmtNum, at, onHoverAt }) {
     <div className="frv frs">
       <div className="frs-grid">
         <section className="frv-card">
-          <h3 className="frv-card__t">When it stood</h3>
+          <h3 className="frv-card__t">When It Stood</h3>
           <Timeline
             from={from} to={to} segments={parkings} tone="park" hot={hot} picked={picked}
             onHot={hover} onPick={setPicked}
@@ -234,7 +234,7 @@ export function ParkingsView({ report: r, from, to, fmtNum, at, onHoverAt }) {
         </section>
 
         <section className="frv-card">
-          <h3 className="frv-card__t">How long it stood</h3>
+          <h3 className="frv-card__t">How Long It Stood</h3>
           <div className="frs-bins" role="group" aria-label="Parkings by length. Choose one to filter the table">
             {bins.map((b) => (
               <button key={b.key} type="button" aria-pressed={bin === b.key} disabled={b.count === 0}

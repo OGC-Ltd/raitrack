@@ -3,9 +3,9 @@
  * question ("what did the tank do?") into a list of numbers and a list of
  * rows, merged into one page that answers it at a glance first:
  *
- *   1. Three pictures — how full the tank ended (gauge), how much of the
- *      period the engine ran (gauge), and how the period divided between
- *      moving, parked and the rest (donut).
+ *   1. One band of three — how full the tank ended and how much of the
+ *      period the engine ran (flat meters on their own scales), and how the
+ *      period divided between moving, parked and the rest (one split bar).
  *   2. The fuel events — a rail of the kinds (Analytics > Fleet state's
  *      rail: one bar, each segment its share of the litres, and the segments
  *      filter the table under it), then every filling and drain.
@@ -43,62 +43,48 @@ function arcPath(cx, cy, r, a0, a1) {
   return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
 }
 
-// ── donut ──────────────────────────────────────────────────────────────────
+// ── meter and split ────────────────────────────────────────────────────────
+
+const share = (x) => `${Math.min(1, Math.max(0, x ?? 0)) * 100}%`;
 
 /**
- * Parts of one whole. Segments are separated by a 2px gap in the surface
- * colour; hovering a segment or its legend row puts that part in the centre.
- * Values and labels are always visible in the legend, so no part is read by
- * colour alone (and the light-mode aqua, under 3:1 on white, is never the only
- * thing carrying its slice).
+ * One ratio as a flat meter on its own scale: the figure, a track with the
+ * fill and an optional tick for a second reading (where the tank started),
+ * and the scale's two ends under it — so "88%" is read against "0 – 273.7 L",
+ * not against a dial's sweep.
  */
-function Donut({ parts, total, unit, centreLabel, centreValue, ariaLabel }) {
-  const [hot, setHot] = useState(null);
-  const size = 132; const r = 52; const stroke = 16; const c = size / 2;
-  const sum = parts.reduce((n, p) => n + p.value, 0);
-  const whole = total ?? sum;
-  // Degrees of gap between segments: 2px on the ring's circumference.
-  const gapDeg = (2 / (2 * Math.PI * r)) * 360;
-  const shown = parts.filter((p) => p.value > 0);
-  let a = 0;
-  const segs = shown.map((p) => {
-    const span = whole > 0 ? (p.value / whole) * 360 : 0;
-    const seg = { ...p, a0: a, a1: a + span };
-    a += span;
-    return seg;
-  });
-  const hp = hot != null ? parts.find((p) => p.key === hot) : null;
-  const pct = (v) => (whole > 0 ? Math.round((v / whole) * 100) : 0);
-
+function Meter({ ratio, tick, tone, value, unit, lo, hi, ariaLabel }) {
   return (
-    <div className="frv-donut">
-      <svg className="frv-donut__svg" viewBox={`0 0 ${size} ${size}`} width={size} height={size}
-           role="img" aria-label={ariaLabel}>
-        <circle cx={c} cy={c} r={r} fill="none" className="frv-track" strokeWidth={stroke} />
-        {segs.map((s) => {
-          const full = segs.length === 1;
-          const d = full ? null : arcPath(c, c, r, s.a0 + gapDeg / 2, Math.max(s.a0 + gapDeg / 2 + 0.01, s.a1 - gapDeg / 2));
-          return (
-            <g key={s.key} onMouseEnter={() => setHot(s.key)} onMouseLeave={() => setHot(null)}
-               className={`frv-seg${hot && hot !== s.key ? " frv-seg--dim" : ""}`}>
-              {full
-                ? <circle cx={c} cy={c} r={r} fill="none" stroke={s.color} strokeWidth={stroke} />
-                : <path d={d} fill="none" stroke={s.color} strokeWidth={stroke} />}
-              {/* A wider invisible ring, so the hover target is bigger than the mark. */}
-              {full
-                ? <circle cx={c} cy={c} r={r} fill="none" stroke="transparent" strokeWidth={stroke + 12} />
-                : <path d={d} fill="none" stroke="transparent" strokeWidth={stroke + 12} />}
-              <title>{`${s.label}: ${s.display ?? s.value} ${unit} · ${pct(s.value)}%`}</title>
-            </g>
-          );
-        })}
-        <text x={c} y={c - 3} textAnchor="middle" className="frv-donut__n">
-          {hp ? (hp.display ?? hp.value) : centreValue}
-        </text>
-        <text x={c} y={c + 14} textAnchor="middle" className="frv-donut__l">
-          {hp ? `${unit} · ${pct(hp.value)}%` : centreLabel}
-        </text>
-      </svg>
+    <div className="frv-meter" role="img" aria-label={ariaLabel}>
+      <p className="frv-meter__fig"><b>{value}</b> {unit}</p>
+      <div className="frv-meter__track">
+        <span className={`frv-meter__fill frv-meter__fill--${tone}`} style={{ width: share(ratio) }} />
+        {tick != null && <span className="frv-meter__tick" style={{ left: share(tick) }} />}
+      </div>
+      <p className="frv-meter__scale"><span>{lo}</span><span>{hi}</span></p>
+    </div>
+  );
+}
+
+/**
+ * Parts of one whole as a single bar, each part its share of the length, with
+ * the rows under it carrying every name and value — no part is read by colour
+ * alone. Hovering a part or its row lifts it and dims the rest.
+ */
+function Split({ parts, unit, ariaLabel }) {
+  const [hot, setHot] = useState(null);
+  const whole = parts.reduce((n, p) => n + p.value, 0);
+  const pct = (v) => (whole > 0 ? Math.round((v / whole) * 100) : 0);
+  return (
+    <div className="frv-split">
+      <div className="frv-split__bar" role="img" aria-label={ariaLabel}>
+        {parts.filter((p) => p.value > 0).map((p) => (
+          <span key={p.key} className={`frv-split__seg${hot && hot !== p.key ? " is-dim" : ""}`}
+                style={{ flexGrow: p.value, background: p.color }}
+                onMouseEnter={() => setHot(p.key)} onMouseLeave={() => setHot(null)}
+                title={`${p.label}: ${p.display ?? p.value} ${unit} · ${pct(p.value)}%`} />
+        ))}
+      </div>
       <ul className="frv-legend">
         {parts.map((p) => (
           <li key={p.key} className={hot && hot !== p.key ? "frv-legend--dim" : ""}
@@ -226,38 +212,46 @@ export default function FuelReportOverview({
 
   return (
     <div className="frv">
-      {/* ── 1 · The four pictures ── */}
-      <div className="frv-grid">
-        <Card title="Tank at the end"
-              note={!haveLevel ? null : capacity
-                ? `Of a ${n0(capacity)} L tank. The tick is where it started.`
-                : `No tank size on record, so this is against the period's highest reading, ${n1(peak)} L. The tick is where it started.`}>
+      {/* ── 1 · The period at a glance: one band, three cells ── */}
+      <section className="frv-band" aria-label="The period at a glance">
+        <div className="frv-band__cell">
+          <h3 className="frv-h">Tank at the End</h3>
           {endRatio != null
-            ? <Gauge ratio={endRatio} tick={startRatio} color="var(--frv-s3)"
+            ? <Meter ratio={endRatio} tick={startRatio} tone="tank"
                      value={`${Math.round(endRatio * 100)}%`} unit={capacity ? "of the tank" : "of the peak"}
+                     lo="0 L" hi={`${n1(scale)} L`}
                      ariaLabel={`Tank at ${Math.round(endRatio * 100)}% at the end of the period, ${n1(s.fuelEndL)} litres.`} />
             : <p className="frv-none">No fuel level to show.</p>}
-        </Card>
+          {haveLevel && (
+            <p className="frv-band__note">
+              <i className="frv-band__tick" aria-hidden="true" /> Started at {n1(s.fuelStartL)} L, ended at {n1(s.fuelEndL)} L
+              {capacity ? `, of a ${n0(capacity)} L tank.` : ". No tank size on record, so the scale is the period's highest reading."}
+            </p>
+          )}
+        </div>
 
-        <Card title="Engine running"
-              note={`${n1(s.engineHours)} h of the ${n1(periodH)} h in this period.`}>
+        <div className="frv-band__cell">
+          <h3 className="frv-h">Engine Running</h3>
           {engineRatio != null
-            ? <Gauge ratio={engineRatio} color="var(--frv-s1)"
+            ? <Meter ratio={engineRatio} tone="engine"
                      value={`${Math.round(Math.min(1, engineRatio) * 100)}%`} unit="of the period"
+                     lo="0 h" hi={`${n1(periodH)} h`}
                      ariaLabel={`Engine ran ${n1(s.engineHours)} of ${n1(periodH)} hours.`} />
             : <p className="frv-none">No period to measure.</p>}
-        </Card>
+          <p className="frv-band__note">{n1(s.engineHours)} h of the {n1(periodH)} h in this period.</p>
+        </div>
 
-        <Card title="How the time was spent" className="frv-card--wide">
-          <Donut parts={timeParts} unit="h" centreValue={n0(periodH)} centreLabel="h in period"
+        <div className="frv-band__cell frv-band__cell--wide">
+          <h3 className="frv-h">How the Time Was Spent <span>{n1(periodH)} h</span></h3>
+          <Split parts={timeParts} unit="h"
                  ariaLabel={`Of ${n1(periodH)} hours: moving ${n1(s.movingHours)}, parked ${n1(s.parkingHours)}, stopped or silent ${n1(otherH)}.`} />
-        </Card>
-      </div>
+        </div>
+      </section>
 
       {/* ── 2 · The fuel events ── */}
       <section className="frv-events">
         <h3 className="frv-sec">
-          Fuel events <span className="sp4-tab-n">{events.length}</span>
+          Fuel Events <span className="sp4-tab-n">{events.length}</span>
         </h3>
         {events.length === 0
           ? <div className="sp4-empty">No filling or drain in this period.</div>

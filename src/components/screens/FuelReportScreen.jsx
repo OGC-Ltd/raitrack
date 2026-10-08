@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch, useSelector, useStore } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -45,8 +45,9 @@ import FuelPerformanceReview from "./FuelPerformanceReview";
 import { useCompanies } from "../../context/AppContext";
 import { TripsView, ParkingsView } from "./FuelReportSegments";
 import { watchTableLabels } from "../../lib/tableLabels";
+import { pickDefaultUnit } from "../../lib/fuelReportDefault";
 import {
-  unitChosen, spanChosen, executed, tabChosen, headerToggled, layerToggled,
+  unitChosen, spanChosen, executed, autoPicked, tabChosen, headerToggled, layerToggled,
 } from "../../store/fuelReportSlice";
 
 const H = 3_600_000;
@@ -89,10 +90,12 @@ function preset(id) {
 }
 const PRESETS = [["today", "Today"], ["yesterday", "Yesterday"], ["week", "Week"], ["month", "Month"]];
 
+// The bands behind the graph take the theme's own tints (FuelReportScreen.css
+// --frp-band-*): the light pastels at 60% turned to mud on the dark canvas.
 const BACKGROUNDS = {
-  trip:    { label: "Trips",    color: "#fecaca" },
-  parking: { label: "Parkings", color: "#fef3c7" },
-  stop:    { label: "Stops",    color: "#dbeafe" },
+  trip:    { label: "Trips",    color: "var(--frp-band-trip)" },
+  parking: { label: "Parkings", color: "var(--frp-band-park)" },
+  stop:    { label: "Stops",    color: "var(--frp-band-stop)" },
 };
 const LINES = {
   fuelL:     { label: "Fuel level, L",    color: "#dc2626", axis: "fuel" },
@@ -435,7 +438,7 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
               ? report.segments.filter((s) => s.kind === kind && s.end >= view[0] && s.start <= view[1]).map((s) => (
                 <ReferenceArea key={`${kind}-${s.start}`} yAxisId="fuel"
                                x1={Math.max(s.start, view[0])} x2={Math.min(Math.max(s.end, s.start + 60_000), view[1])}
-                               fill={b.color} fillOpacity={0.6} strokeOpacity={0} ifOverflow="hidden" />
+                               fill={b.color} fillOpacity={1} strokeOpacity={0} ifOverflow="hidden" />
               ))
               : []))}
             {Object.entries(LINES).map(([key, l]) => lines[key] && (
@@ -573,7 +576,9 @@ function UnitFuelReport() {
   // layout for good, as this viewer's preference.
   const {
     unitByOrg, presetId, span: keptSpan, request, tab, bg, lines, marks, headerCollapsed: collapsed,
+    touched, autoPick,
   } = useSelector((st) => st.fuelReport);
+  const store = useStore();
   // Opening the page: the period preset last picked, as of today.
   const [defaultSpan] = useState(() => presetSpan(presetId));
   const span = keptSpan ?? defaultSpan;
@@ -629,6 +634,35 @@ function UnitFuelReport() {
     else dispatch(executed(next));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canRun, orgId, unit, from, to, live, queryClient, dispatch]);
+
+  // Opening the page with nothing picked or run this session: show the latest
+  // possible-theft case, or failing that the unit that covered the most ground
+  // today (lib/fuelReportDefault). A pick made while this looks wins: the
+  // reducer ignores the default once the organisation is touched.
+  const untouched = Boolean(orgId) && !touched[orgId];
+  const haveUnits = vehicles.length > 0;
+  const [picking, setPicking] = useState(false);
+  useEffect(() => {
+    if (!untouched || !haveUnits) return undefined;
+    let gone = false;
+    setPicking(true);
+    pickDefaultUnit({ orgId, vehicleIds: vehicles.map((v) => v.vehicleId) })
+      .then((pick) => {
+        if (gone || !pick || store.getState().fuelReport.touched[orgId]) return;
+        dispatch(autoPicked({ orgId, pick: { ...pick, fromInput: localInput(pick.from), toInput: localInput(pick.to) } }));
+      })
+      .catch(() => { /* the page simply waits for a pick, as before */ })
+      .finally(() => { if (!gone) setPicking(false); });
+    return () => { gone = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, untouched, haveUnits]);
+  const why = (() => {
+    const a = orgId ? autoPick[orgId] : null;
+    if (!a || !live || live.unitId !== a.unitId || live.from !== a.from || live.to !== a.to) return null;
+    return a.reason === "theft"
+      ? <> · <span className="frp-why frp-why--theft">Latest possible theft: {fmtNum(a.litres)} L at {clock.format(a.at)}</span></>
+      : <> · <span className="frp-why">Most ground covered today: {fmtNum(a.km, 0)} km</span></>;
+  })();
 
   const choose = (id) => { const [a, b] = preset(id); setSpan({ from: localInput(a), to: localInput(b), id }); };
 
@@ -702,7 +736,7 @@ function UnitFuelReport() {
   const dot = <span className="frp-kpi-none">—</span>;
 
   return (
-    <div className="sp4-root frp-root" ref={rootRef}>
+    <div className="sp4-root frp-root frp-unit" ref={rootRef}>
       {/* ── KPI strip and filter bar, which fold away to one line so the
            graph and the map get the screen. ── */}
       {!collapsed && (
@@ -759,7 +793,11 @@ function UnitFuelReport() {
       <div className="sp4-body frp-body">
         {collapsed && !ready && <FoldChevron collapsed onToggle={toggleHeader} className="frp-fold--float" />}
         {!ready && (
-          state.status === "loading" ? (
+          picking && untouched ? (
+            <EmptyNote icon="ti-loader-2" tone="busy" title="Finding a Unit to Show">
+              Looking for the latest possible theft, or else the unit that covered the most ground today.
+            </EmptyNote>
+          ) : state.status === "loading" ? (
             <EmptyNote icon="ti-loader-2" tone="busy" title="Building the Report"
                         progress={state.total ? state.done / state.total : 0}>
               Reading day {Math.min(state.done + 1, state.total)} of {state.total} — readings, fillings and drains.
@@ -799,6 +837,7 @@ function UnitFuelReport() {
               summary={<>
                 <b>{ready.unit.id}</b>{ready.unit.machineName || ready.unit.name ? ` · ${ready.unit.machineName || ready.unit.name}` : ""}
                 {" · "}{at(ready.from)} – {at(ready.to)}
+                {why}
                 {ready.failedDays > 0 && <span className="frp-warn"> · {ready.failedDays} day(s) failed to load</span>}
               </>}
               loading={false}
