@@ -898,7 +898,7 @@ export default function FuelReportScreen() {
   return (
     <div className="sp4-root frp-shell">
       <div className="frp-modes" role="tablist" aria-label="Fuel report view">
-        {[["review", "Fleet analytics"], ["unit", "Vehicle analytics"]].map(([k, label]) => (
+        {[["review", "Performance"], ["unit", "Vehicle analytics"]].map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={mode === k}
                   className={`frp-mode${mode === k ? " frp-mode--on" : ""}`} onClick={() => setMode(k)}>{label}</button>
         ))}
