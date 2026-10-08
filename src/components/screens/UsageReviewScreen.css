@@ -709,3 +709,113 @@
 .urv-playbtn:active { transform: translateY(1px); }
 .urv-playbtn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
 .urv-detail__head .urv-playbtn + .urv-seg { margin-left: 0; }
+
+/* ── Entries and exits (LogbookVisits.jsx) ───────────────────────────────── */
+.urv-grid--visits { grid-template-columns: minmax(0, 1fr); }
+.urv-visits { display: flex; flex-direction: column; }
+.urv-visits__t {
+  margin: 0;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.urv-muted { color: var(--sp4-text-3); }
+
+/* The journey: a day per row, 00–24 across. */
+.urv-journey { padding: 4px 14px 10px; }
+.urv-journey__axis,
+.urv-journey__row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+.urv-journey__axis > div { position: relative; height: 14px; }
+.urv-journey__axis > div span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--sp4-text-4);
+  font-variant-numeric: tabular-nums;
+}
+.urv-journey__axis > div span:first-child { transform: none; }
+.urv-journey__axis > div span:last-child { transform: translateX(-100%); }
+.urv-journey__rows { max-height: 330px; overflow-y: auto; }
+.urv-journey__row {
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.urv-journey__row:hover { background: var(--sp4-raised); }
+.urv-journey__row.is-on { background: color-mix(in srgb, var(--sp4-accent) 12%, transparent); }
+.urv-journey__row:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; }
+.urv-journey__day { font-size: var(--sp4-label); color: var(--sp4-text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.urv-journey__track {
+  position: relative;
+  height: 20px;
+  border-radius: 3px;
+  /* The road: a hairline through the day, under everything. */
+  background:
+    linear-gradient(var(--sp4-line-hi), var(--sp4-line-hi)) 0 50% / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--sp4-line) calc(25% - 1px) 25%);
+}
+.urv-journey__blk { position: absolute; border-radius: 2px; }
+.urv-journey__blk--premises { top: 2px; height: 11px; opacity: 0.85; }
+.urv-journey__blk--area { top: 14px; height: 5px; }
+.urv-journey__blk--stop { top: 5px; height: 10px; opacity: 0.8; }
+.urv-journey__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding-left: 94px;
+  font-size: 10.5px;
+  color: var(--sp4-text-3);
+}
+.urv-journey__key span { display: inline-flex; align-items: center; gap: 5px; }
+.urv-journey__key i, .urv-swatch { display: inline-block; width: 10px; height: 8px; border-radius: 2px; }
+.urv-swatch { margin-right: 6px; vertical-align: 0; }
+
+.urv-visits__lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--sp4-line);
+}
+.urv-visits__reg, .urv-visits__log { min-width: 0; padding-top: 10px; }
+.urv-visits__reg .urv-visits__t { margin-bottom: 6px; }
+.urv-visits__loghead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.urv-row--sub td:first-child { padding-left: 22px; }
+
+/* The day's log: entered, the areas inside, left, the road, the next place. */
+.urv-vlog { margin: 0; padding: 0; list-style: none; max-height: 360px; overflow-y: auto; font-size: var(--sp4-body); }
+.urv-vlog__item { padding: 6px 8px; border-left: 3px solid var(--frv-fence, #6b3361); border-radius: 2px; background: var(--sp4-raised); }
+.urv-vlog__item--stop { border-left-color: var(--frv-s2, #eb6834); }
+.urv-vlog__head { display: flex; align-items: baseline; gap: 8px; }
+.urv-vlog__head b { font-weight: 600; color: var(--sp4-text-1); overflow-wrap: anywhere; }
+.urv-vlog__head--out { margin-top: 3px; color: var(--sp4-text-2); }
+.urv-vlog__time { flex: none; min-width: 74px; color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+.urv-vlog__dur { margin-left: auto; color: var(--sp4-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.urv-vlog__area { display: flex; align-items: center; gap: 8px; margin: 3px 0 0 12px; color: var(--sp4-text-2); }
+.urv-vlog__area i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.urv-vlog__area .urv-vlog__time { min-width: 62px; }
+.urv-vlog__road { display: flex; align-items: center; gap: 6px; padding: 4px 0 4px 14px; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+
+@media (max-width: 1100px) {
+  .urv-visits__lower { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+  .urv-journey__axis, .urv-journey__row { grid-template-columns: 62px minmax(0, 1fr); gap: 6px; }
+  .urv-journey__key { padding-left: 0; }
+  .urv-vlog__time { min-width: 52px; }
+}
