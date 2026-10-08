@@ -1024,7 +1024,7 @@ export default function UsageReviewScreen() {
                               <td className="urv-mono">{clock.format(x.start)}–{clock.format(x.end)}</td>
                               <td>
                                 <span className={`urv-kind urv-kind--${kind === "trip" ? "drive" : x.overnight ? "night" : "stop"}`}>
-                                  <i className={`ti ${kind === "trip" ? "ti-route" : x.overnight ? "ti-moon" : "ti-player-stop"}`} aria-hidden="true" />
+                                  <i className={`ti ${kind === "trip" ? "ti-road" : x.overnight ? "ti-moon" : "ti-player-stop"}`} aria-hidden="true" />
                                   {kind === "trip" ? "Drive" : x.overnight ? "Overnight" : "Stop"}
                                 </span>
                               </td>
