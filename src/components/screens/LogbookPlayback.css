@@ -237,6 +237,22 @@
 .lbp-ev__t { font-size: var(--sp4-label); color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
 .lbp-ev--critical .lbp-ev__what b { color: var(--sp4-crit); }
 
+/* A stop area's badge: drawn once, counting up and growing as the replay
+   stops there again (LogbookPlayback, the stop-areas effect). */
+.lbp-badge {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.92;
+  transition: width 0.25s ease-out, height 0.25s ease-out, background-color 0.25s ease-out;
+}
+@media (prefers-reduced-motion: reduce) { .lbp-badge { transition: none; } }
+
 .lbp-empty { padding: 10px 14px; font-size: var(--sp4-body); color: var(--sp4-text-3); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -251,3 +267,7 @@
   .lbp-right { border-left: 0; border-top: 1px solid var(--sp4-line-hi); }
   .lbp-events { max-height: 260px; }
 }
+
+/* The names ride the trail's layer here (above it); they must not take the
+   clicks meant for the ticks and minute dots beside them. */
+.lbp .urv-names, .lbp .urv-name { pointer-events: none; }

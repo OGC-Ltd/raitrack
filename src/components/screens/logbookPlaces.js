@@ -40,13 +40,20 @@ const shortPlace = (name) => {
 };
 
 export class PlaceNames extends mapsNs.OverlayView {
-  constructor() { super(); this.items = []; this.div = null; }
+  /**
+   * @param {{pane?: string, zIndex?: number}} [opts] the layer to draw on. The
+   *   Logbook map uses the default; the day playback lifts the names onto the
+   *   layer its trail ticks use, above them (zIndex), so the route never
+   *   covers a name.
+   */
+  constructor({ pane = "overlayLayer", zIndex } = {}) { super(); this.items = []; this.div = null; this.pane = pane; this.z = zIndex; }
   /** items: { id, lat, lng, text, gap (px from the centre), dim, strong } */
   set(items) { this.items = items; this.render(); }
   onAdd() {
     this.div = document.createElement("div");
     this.div.className = "urv-names";
-    this.getPanes().overlayLayer.appendChild(this.div);
+    if (this.z != null) { this.div.style.position = "absolute"; this.div.style.left = "0"; this.div.style.top = "0"; this.div.style.zIndex = String(this.z); }
+    this.getPanes()[this.pane].appendChild(this.div);
     this.render();
   }
   onRemove() { this.div?.remove(); this.div = null; }

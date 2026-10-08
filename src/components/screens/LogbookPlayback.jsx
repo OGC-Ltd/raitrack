@@ -53,6 +53,9 @@ const TICK_MAX = 28;
 const TICK_MIN_M = 60;
 const TICK_Z = 3;
 const TICK_OPEN_Z = 9;
+/* Stop badges: over the trail's ticks (3), minute dots (2) and event pins (4);
+   under the vehicle, which sits on top of whatever it stops at. */
+const BADGE_Z = 5;
 
 /**
  * @param {object} props
@@ -138,7 +141,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
       position: { lat: points[0].lat, lng: points[0].lng },
       html: markerIconHtml(mstate, { heading: points[0].hdg ?? 0, sprite, name: unitLabel }),
       anchor: "bottom",
-      zIndex: 6,
+      zIndex: 8,
     });
     unit.setMap(map);
     unit._headingFrame = truckFrame(points[0].hdg ?? 0);
@@ -205,28 +208,70 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
   }, [ready, points, events]);
 
   /**
-   * The day's stop areas, drawn as the Logbook map draws its places: a circle
-   * sized by the hours spent there over the whole review, the base in its own
-   * colour, numbered as in the tables, the name beside it.
+   * The day's stop areas, revealed by the replay (operator, 2026-10-08). A
+   * place's badge is drawn once, at its first stop, with its name beside it;
+   * every later stop there counts it up and grows it, on the Logbook map's
+   * scale (7 → 16 px radius). The place stopped at most so far wears the
+   * base's green, the rest the place colour, as on the Logbook map.
    */
   useEffect(() => {
-    const map = mapRef.current, maps = mapsRef.current;
-    if (!ready || !map || !maps || !dayPlaces.length) return undefined;
-    const ref = Math.max(1, ...review.places.slice(0, 2).map((p) => p.hours));
-    const drawn = dayPlaces.map((p) => {
-      const scale = 7 + 9 * Math.sqrt(Math.min(1, p.hours / ref));
-      const marker = new maps.Marker({
-        map, position: { lat: p.lat, lng: p.lng }, zIndex: 1, title: `${p.id}. ${labelOf(p, gnames) || "Place"}`,
-        icon: { path: maps.SymbolPath.CIRCLE, scale, fillColor: p.id === 1 ? pal.base : pal.place, fillOpacity: 0.85, strokeColor: "#ffffff", strokeWeight: 2 },
-        label: { text: String(p.id), color: "#fff", fontSize: "10px", fontWeight: "700" },
-      });
-      return { p, marker, scale };
-    });
-    const names = new PlaceNames();
+    const map = mapRef.current, DomMarker = DomMarkerRef.current;
+    if (!ready || !map || !DomMarker || !dayPlaces.length) return undefined;
+    const byId = new Map(dayPlaces.map((p) => [p.id, p]));
+    const stops = review.stops
+      .filter((s) => dayKeyOf(s.start) === day && byId.has(s.place))
+      .sort((a, b) => a.start - b.start);
+    const most = {};
+    for (const s of stops) most[s.place] = (most[s.place] ?? 0) + 1;
+    const top = Math.max(1, ...Object.values(most));
+    const badges = new Map(); // place id → { marker, n, lead, scale }
+    const names = new PlaceNames({ pane: "overlayMouseTarget", zIndex: BADGE_Z - 1 });
     names.setMap(map);
-    names.set(drawn.map(({ p, scale }) => ({ id: p.id, lat: p.lat, lng: p.lng, text: labelOf(p, gnames) || `Place ${p.id}`, gap: scale + 5 })));
-    return () => { for (const d of drawn) d.marker.setMap(null); names.setMap(null); };
-  }, [ready, dayPlaces, review, pal, gnames]);
+    let shown = "";
+
+    // The badge is a DOM marker on the same layer as the trail's ticks and
+    // minute dots, stacked above all of them (operator: "the route path should
+    // not bury the badge whatsoever") and below only the vehicle.
+    const html = (p, n, lead, scale) => {
+      const d = Math.round(scale * 2);
+      const tip = `${labelOf(p, gnames) || `Place ${p.id}`} · ${n} stop${n === 1 ? "" : "s"}`.replace(/"/g, "&quot;");
+      return `<div class="lbp-badge${lead ? " is-lead" : ""}" title="${tip}" style="width:${d}px;height:${d}px;background:${lead ? pal.base : pal.place};font-size:${n > 9 ? 9 : 10}px">${n}</div>`;
+    };
+    const paint = (b, p, n, lead) => {
+      b.n = n; b.lead = lead;
+      b.scale = 7 + 9 * Math.sqrt(n / top);
+      b.marker.setHtml(html(p, n, lead, b.scale));
+      b.marker.setZIndex(lead ? BADGE_Z + 1 : BADGE_Z);
+    };
+
+    const unsub = pbSubscribe((t) => {
+      // Stops reached by the cursor, counted per place; first reached first.
+      const count = new Map();
+      for (const s of stops) { if (s.start > t) break; count.set(s.place, (count.get(s.place) ?? 0) + 1); }
+      let leadId = null, leadN = 0;
+      for (const [id, n] of count) if (n > leadN) { leadId = id; leadN = n; }
+      for (const [id, b] of badges) if (!count.has(id)) { b.marker.setMap(null); badges.delete(id); }
+      for (const [id, n] of count) {
+        const p = byId.get(id);
+        let b = badges.get(id);
+        if (!b) {
+          b = { marker: new DomMarker({ position: { lat: p.lat, lng: p.lng }, html: "", anchor: "center", zIndex: BADGE_Z }) };
+          b.marker.setMap(map);
+          badges.set(id, b);
+          paint(b, p, n, id === leadId);
+        } else if (b.n !== n || b.lead !== (id === leadId)) paint(b, p, n, id === leadId);
+      }
+      const key = [...badges].map(([id, b]) => `${id}:${b.scale.toFixed(1)}`).join(",");
+      if (key !== shown) {
+        shown = key;
+        names.set([...badges].map(([id, b]) => {
+          const p = byId.get(id);
+          return { id, lat: p.lat, lng: p.lng, text: labelOf(p, gnames) || `Place ${id}`, gap: b.scale + 5, strong: b.lead };
+        }));
+      }
+    });
+    return () => { unsub(); for (const b of badges.values()) b.marker.setMap(null); names.setMap(null); };
+  }, [ready, dayPlaces, review, day, pal, gnames, pbSubscribe]);
 
   /** MOVE: the trail, the reveal and the unit, on the clock's subscription. */
   useEffect(() => {
