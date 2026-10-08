@@ -95,7 +95,7 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
   const best = assessed.at(-1);
   return (
     <section className="fpr-ex">
-      <h4 className="fpr-ex__t">{group} <span>({units.length} unit{units.length === 1 ? "" : "s"})</span></h4>
+      <h4 className="fpr-ex__t">{group} <span>{units.length} unit{units.length === 1 ? "" : "s"}</span></h4>
       {suspect && <p className="fpr-ex__note">Every unit is far under standard: the standards look set too high to judge these machines.</p>}
       <ul className="fpr-ex__rows">
         {rows.map((u) => (
@@ -231,97 +231,132 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
               onPdf={exportPdf}
             />
 
+            {/* The verdict first, in a sentence, then the review in three
+                movements read top to bottom: where the fuel goes, who to act
+                on, and the exhibit. Hairline sections, not a wall of cards. */}
             <p className="fpr-lede">
               Fuel is going in at about <b>{litres(t.perMonth, { short: true })}</b> a month
               {p?.change != null && <> and {p.change >= 0 ? "rising" : "falling"} ({p.change >= 0 ? "+" : ""}{Math.round(p.change * 100)}% in {monthLabel(p.latest.month)})</>}.
-              {" "}Around <b>{litres(t.excessL, { short: true })}</b> went in above the expected rate
+              {" "}Around <em>{litres(t.excessL, { short: true })}</em> went in above the expected rate
               {read.attention.length > 0 && <>, and most of that traces back to {read.attention.length} named unit{read.attention.length === 1 ? "" : "s"}</>}.
             </p>
 
-            <div className="fpr-grid">
-              <section className="fpr-card">
-                <h3 className="fpr-card__t">Average litres put in per day</h3>
-                <MonthColumns months={review.months} />
-              </section>
-              <section className="fpr-card">
-                <h3 className="fpr-card__t">Share of all fuel, by equipment type</h3>
-                <Bars format={(v) => `${(v * 100).toFixed(1)}%`} tone="fleet"
-                      rows={[...read.topGroups.map((g) => ({ label: g.group, value: g.share })),
-                             ...(review.groups.length > 5 ? [{ label: "All other equipment", value: 1 - read.topShare, tone: "muted" }] : [])]} />
-              </section>
-              <section className="fpr-card">
-                <h3 className="fpr-card__t">Litres above standard, by equipment type</h3>
-                <Bars format={(v) => litres(v, { short: true })} tone="crit"
-                      rows={[...review.groups].filter((g) => g.excessL > 0).sort((a, b) => b.excessL - a.excessL).slice(0, 6)
-                        .map((g) => ({ label: g.group, value: g.excessL }))} />
-              </section>
-              <section className="fpr-card">
-                <h3 className="fpr-card__t">How reliable are the {read.recordsTotal.toLocaleString("en-KE")} refill records?</h3>
-                <Bars format={(v) => `${Math.round((v / Math.max(1, read.recordsTotal)) * 100)}%`} tone="fleet"
-                      rows={[
-                        { label: "At or near standard", value: review.records.near, tone: "ok" },
-                        { label: "Well over standard", value: review.records.over, tone: "crit" },
-                        { label: "Implausible", value: review.records.implausible, tone: "warn" },
-                        { label: "Data missing", value: review.records.missing, tone: "muted" },
-                      ]} />
-              </section>
-            </div>
+            <section className="fpr-sec" aria-labelledby="fpr-where">
+              <h3 className="fpr-sec__h" id="fpr-where">Where the Fuel Goes</h3>
+              <div className="fpr-strip">
+                <section className="fpr-panel fpr-panel--months">
+                  <h4 className="fpr-panel__t">Litres Put In per Day</h4>
+                  <MonthColumns months={review.months} />
+                </section>
+                <section className="fpr-panel">
+                  <h4 className="fpr-panel__t">Share of All Fuel</h4>
+                  <Bars format={(v) => `${(v * 100).toFixed(1)}%`} tone="fleet"
+                        rows={[...read.topGroups.map((g) => ({ label: g.group, value: g.share })),
+                               ...(review.groups.length > 5 ? [{ label: "All other equipment", value: 1 - read.topShare, tone: "muted" }] : [])]} />
+                </section>
+                <section className="fpr-panel">
+                  <h4 className="fpr-panel__t">Litres Above Standard</h4>
+                  <Bars format={(v) => litres(v, { short: true })} tone="crit"
+                        rows={[...review.groups].filter((g) => g.excessL > 0).sort((a, b) => b.excessL - a.excessL).slice(0, 6)
+                          .map((g) => ({ label: g.group, value: g.excessL }))} />
+                </section>
+                <section className="fpr-panel">
+                  <h4 className="fpr-panel__t">Refill Records <span>{read.recordsTotal.toLocaleString("en-KE")}</span></h4>
+                  <Bars format={(v) => `${Math.round((v / Math.max(1, read.recordsTotal)) * 100)}%`} tone="fleet"
+                        rows={[
+                          { label: "At or near standard", value: review.records.near, tone: "ok" },
+                          { label: "Well over standard", value: review.records.over, tone: "crit" },
+                          { label: "Implausible", value: review.records.implausible, tone: "warn" },
+                          { label: "Data missing", value: review.records.missing, tone: "muted" },
+                        ]} />
+                </section>
+              </div>
+            </section>
 
-            <div className="fpr-split">
-              <section className="fpr-box fpr-box--bad">
-                <h3>Units needing attention</h3>
-                {read.attention.length ? (
-                  <ul>
-                    {read.attention.slice(0, Math.max(6, Math.min(8, read.benchmarks.length))).map((u) => (
-                      <li key={u.id}><button type="button" onClick={() => onOpenUnit?.(u.id)}>{u.ref}</button>
-                        {" "}<span className="fpr-muted">{u.group.replace(/s$/, "").toLowerCase()}</span>: <b>{pct(u.ratio)}</b> of standard over {u.usableRefills} refills, {litres(u.excessL)} above.</li>
-                    ))}
-                  </ul>
-                ) : <p>No unit is 10% or more over standard.</p>}
-              </section>
-              <section className="fpr-box fpr-box--good">
-                <h3>Benchmark performers</h3>
-                {read.benchmarks.length ? (
-                  <ul>
-                    {read.benchmarks.slice(0, 8).map((b) => (
-                      <li key={b.group}><span className="fpr-muted">{b.group}:</span>{" "}
-                        {b.units.map((u, i) => (
-                          <span key={u.id}>{i > 0 && " and "}<button type="button" onClick={() => onOpenUnit?.(u.id)}>{u.ref}</button> ({pct(u.ratio)}){u.id === b.busiestId && " — the busiest"}</span>
+            <section className="fpr-sec" aria-labelledby="fpr-act">
+              <h3 className="fpr-sec__h" id="fpr-act">What to Act On</h3>
+              <div className="fpr-act">
+                <div className="fpr-act__main">
+                  <h4 className="fpr-panel__t">
+                    Units Needing Attention
+                    {read.attention.length > 0 && <span>{read.attention.length} at 10% or more over</span>}
+                  </h4>
+                  {read.attention.length ? (
+                    <table className="fpr-att">
+                      <thead><tr>
+                        <th>Unit</th><th>Against standard</th><th className="fpr-num">Refills</th><th className="fpr-num">Above</th>
+                      </tr></thead>
+                      <tbody>
+                        {read.attention.slice(0, Math.max(6, Math.min(8, read.benchmarks.length))).map((u) => (
+                          <tr key={u.id} onClick={() => onOpenUnit?.(u.id)} title={`Open ${u.name}'s vehicle analytics`}>
+                            <td>
+                              <button type="button" className="fpr-unit" onClick={(e) => { e.stopPropagation(); onOpenUnit?.(u.id); }}>{u.ref}</button>
+                              <small>{u.group.replace(/s$/, "")}</small>
+                            </td>
+                            <td>
+                              <span className="fpr-gauge" aria-hidden="true">
+                                <span className="fpr-gauge__std" style={{ left: `${100 / SCALE}%` }} />
+                                <span className={`fpr-gauge__fill fpr-gauge__fill--${band(u)}`} style={{ width: `${Math.min(u.ratio / SCALE, 1) * 100}%` }} />
+                              </span>
+                              <b className="fpr-gauge__v">{pct(u.ratio)}</b>
+                            </td>
+                            <td className="fpr-num">{u.usableRefills}</td>
+                            <td className="fpr-num fpr-num--crit">{litres(u.excessL)}</td>
+                          </tr>
                         ))}
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p>No unit is within standard yet.</p>}
-              </section>
-            </div>
+                      </tbody>
+                    </table>
+                  ) : <p className="fpr-quiet">No unit is 10% or more over standard.</p>}
+                </div>
 
-            {read.meterFixes.length > 0 && (
-              <p className="fpr-note"><i className="ti ti-gauge" aria-hidden="true" /> <b>Readings to check:</b> {listRefs(read.meterFixes.slice(0, 8))}: most refills were logged against next to no hours or km, usually a tracker meter that is not reporting.</p>
-            )}
+                <div className="fpr-act__side">
+                  <h4 className="fpr-panel__t">Benchmark Performers</h4>
+                  {read.benchmarks.length ? (
+                    <dl className="fpr-bench">
+                      {read.benchmarks.slice(0, 8).map((b) => (
+                        <div key={b.group}>
+                          <dt>{b.group}</dt>
+                          <dd>
+                            {b.units.map((u, i) => (
+                              <span key={u.id}>{i > 0 && " · "}<button type="button" className="fpr-unit" onClick={() => onOpenUnit?.(u.id)}>{u.ref}</button> {pct(u.ratio)}{u.id === b.busiestId && <i title="Largest fuel user in the group"> ★</i>}</span>
+                            ))}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : <p className="fpr-quiet">No unit is within standard yet.</p>}
+                </div>
+              </div>
 
-            {read.actions.length > 0 && (
-              <section className="fpr-means">
-                <h3>What this means</h3>
-                <p>About <b>{litres(read.excessPerMonth, { short: true })}</b> a month goes in above standard. Recommended actions:</p>
-                <ol>{read.actions.map((a) => <li key={a}>{a}</li>)}</ol>
-              </section>
-            )}
+              {read.actions.length > 0 && (
+                <div className="fpr-todo">
+                  <h4 className="fpr-panel__t">What to Do <span>about {litres(read.excessPerMonth, { short: true })} a month goes in above standard</span></h4>
+                  <ol>{read.actions.map((a) => <li key={a}>{a}</li>)}</ol>
+                  {read.meterFixes.length > 0 && (
+                    <p className="fpr-todo__note"><i className="ti ti-gauge" aria-hidden="true" /> <b>Readings to check:</b> {listRefs(read.meterFixes.slice(0, 8))}: most refills were logged against next to no hours or km, usually a tracker meter that is not reporting.</p>
+                  )}
+                </div>
+              )}
+            </section>
 
-            <h3 className="fpr-h">How each unit compares with its standard</h3>
-            <div className="fpr-legend">
-              <span><i className="fpr-sw fpr-sw--over" />10% or more above standard</span>
-              <span><i className="fpr-sw fpr-sw--slight" />Up to 10% above</span>
-              <span><i className="fpr-sw fpr-sw--within" />Within standard</span>
-              <span><i className="fpr-sw fpr-sw--none" />Cannot be assessed</span>
-              <span>★ Largest fuel user in group</span>
-            </div>
-            <div className="fpr-exhibits">
-              {review.groups.map((g) => (
-                <Exhibit key={g.group} group={g.group} units={read.byGroup.get(g.group) ?? []}
-                         busiestId={[...(read.byGroup.get(g.group) ?? [])].sort((a, b) => b.litres - a.litres)[0]?.id}
-                         suspect={read.suspectGroups.includes(g.group)} onOpen={onOpenUnit} />
-              ))}
-            </div>
+            <section className="fpr-sec" aria-labelledby="fpr-each">
+              <h3 className="fpr-sec__h" id="fpr-each">How Each Unit Compares with Its Standard</h3>
+              <div className="fpr-legend">
+                <span><i className="fpr-sw fpr-sw--over" />10% or more above</span>
+                <span><i className="fpr-sw fpr-sw--slight" />Up to 10% above</span>
+                <span><i className="fpr-sw fpr-sw--within" />Within standard</span>
+                <span><i className="fpr-sw fpr-sw--none" />Cannot be assessed</span>
+                <span><i className="fpr-sw fpr-sw--std" />Standard (100%)</span>
+                <span>★ Largest fuel user in group</span>
+              </div>
+              <div className="fpr-exhibits">
+                {review.groups.map((g) => (
+                  <Exhibit key={g.group} group={g.group} units={read.byGroup.get(g.group) ?? []}
+                           busiestId={[...(read.byGroup.get(g.group) ?? [])].sort((a, b) => b.litres - a.litres)[0]?.id}
+                           suspect={read.suspectGroups.includes(g.group)} onOpen={onOpenUnit} />
+                ))}
+              </div>
+            </section>
           </>
         )}
       </div>
