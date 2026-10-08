@@ -969,10 +969,9 @@ export default function UsageReviewScreen() {
 
             {playDay && live && (
               <LogbookPlayback
-                date={playDay} review={review} req={live} pal={pal}
+                date={playDay} review={review} req={live} vehicle={runUnit}
                 unitLabel={review.vehicle.plate}
-                placeName={(id) => (id == null ? "—" : `${id}. ${pname(id)}`)}
-                host={rootRef.current?.closest(".app-container") ?? undefined}
+                host={rootRef.current?.closest(".app-root") ?? rootRef.current?.closest(".app-container") ?? undefined}
                 onClose={() => setPlayDay(null)}
               />
             )}

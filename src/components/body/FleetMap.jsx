@@ -7304,3 +7304,11 @@ export default function FleetMap() {
     </div>
   );
 }
+
+// The replay's drawing pieces, shared with the Logbook's day playback
+// (screens/LogbookPlayback) so a day replays there exactly as it does here:
+// the unit's own sprite, the trail, event pins, time ticks and minute dots.
+export {
+  markerIconHtml, makeDomMarkerClass, eventMarkerHtml, playbackTickHtml, minuteMarker,
+  truckFrame, DRAWN_EVENT_KINDS, metresBetween,
+};
