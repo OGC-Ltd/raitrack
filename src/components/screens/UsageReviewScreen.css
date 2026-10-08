@@ -186,6 +186,27 @@
 }
 .urv-map__pick button:hover { background: #f1f5f9; color: #111827; }
 
+/* Place names beside their circles (PlaceNames in the .jsx). Light pills so
+   they read on OpenStreetMap and on satellite imagery alike. */
+.urv-names { position: absolute; left: 0; top: 0; }
+.urv-name {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #111827;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+.urv-name.is-dim { opacity: 0.45; }
+.urv-name.is-on { font-weight: 700; box-shadow: 0 0 0 1.5px #111827; }
+
 /* The hover card that follows the pointer over a place, route or stop. */
 .urv-tip {
   position: absolute;
