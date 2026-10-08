@@ -325,13 +325,13 @@
   padding: 2px;
   gap: 2px;
   border: 1px solid var(--sp4-line);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--sp4-raised);
 }
 .urv-seg button {
   padding: 4px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 3px;
   background: transparent;
   color: var(--sp4-text-2);
   font: inherit;
@@ -340,10 +340,140 @@
   cursor: pointer;
 }
 .urv-seg button:hover { color: var(--sp4-text-1, var(--sp4-text)); }
-.urv-seg button.is-on { background: var(--sp4-surface); color: var(--sp4-accent); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.urv-seg button.is-on { background: var(--sp4-surface); color: var(--sp4-accent); box-shadow: inset 0 0 0 1px var(--sp4-line-hi); }
+.urv-seg button:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
 .urv-seg__n { margin-left: 3px; color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
 
-.urv-detail td { vertical-align: middle; }
+/* Hallmark · component: table (timeline ledger) · genre: modern-minimal · theme: sp4 (project tokens)
+ * states: default · hover · focus · active · empty (hint) · paged
+ * A ledger read top to bottom (operator, 2026-10-08, "redesign the Day and
+ * place detail table"): a rail down the left joins one entry to the next —
+ * a drive is the road (accent line, road glyph), a stop the 🛑 on it, a night
+ * the moon — the start time leads with the end under it, and a bar shows how
+ * long each lasted against the longest on the page. In a place's list the
+ * entries sit under the day they happened, with that day's figures and Play.
+ */
+.urv-detail td { vertical-align: middle; padding-top: 7px; padding-bottom: 7px; border-bottom: 1px solid var(--sp4-line); }
+.urv-detail tbody tr:last-child td { border-bottom: 0; }
+
+/* The rail: one column, its line drawn per cell so it joins row to row. */
+.urv-detail .urv-tl {
+  position: relative;
+  width: 30px;
+  min-width: 30px;
+  padding: 0 !important;
+  padding-left: calc(var(--sp4-gutter) - 14px) !important;
+  border-bottom-color: transparent;
+}
+.urv-detail td.urv-tl::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sp4-gutter) - 14px + 15px);
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--sp4-line-hi);
+}
+.urv-detail td.urv-tl.is-first::before { top: 50%; }
+.urv-detail td.urv-tl.is-last::before { bottom: 50%; }
+.urv-detail td.urv-tl.is-first.is-last::before { display: none; }
+.urv-detail td.urv-tl--drive::before { width: 3px; background: var(--sp4-accent); }
+.urv-tl__node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 22px;
+}
+.urv-tl--drive .urv-tl__node .ti {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--sp4-accent);
+  color: #fff;
+  font-size: 12px;
+}
+.urv-tl--night .urv-tl__node .ti {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--sp4-warn);
+  border-radius: 50%;
+  background: var(--sp4-surface);
+  color: var(--sp4-warn);
+  font-size: 11px;
+}
+.urv-tl--stop .stop-sign { background: var(--sp4-surface); border-radius: 3px; }
+
+.urv-when { line-height: 1.15; font-variant-numeric: tabular-nums; }
+.urv-when b { display: block; color: var(--sp4-text-1); font-weight: 700; }
+.urv-when span { display: block; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.urv-what {
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.urv-what--drive { color: var(--sp4-accent); }
+.urv-what--night { color: var(--sp4-warn); }
+.urv-row--drive .urv-where { color: var(--sp4-text-2); }
+
+/* How long, against the longest on the page. */
+.urv-dur { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--sp4-text-1); }
+.urv-dur__bar {
+  display: inline-block;
+  width: 56px;
+  height: 4px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--bar) var(--w), var(--sp4-raised) var(--w));
+  --bar: var(--sp4-text-4);
+}
+.urv-dur__bar--drive { --bar: var(--sp4-accent); }
+.urv-dur__bar--night { --bar: var(--sp4-warn); }
+
+/* A day's header inside a place's list. */
+.urv-detail tr.urv-dayrow td {
+  padding: 6px var(--sp4-gutter) !important;
+  background: var(--sp4-raised);
+  border-top: 1px solid var(--sp4-line-hi);
+  border-bottom: 1px solid var(--sp4-line-hi);
+}
+.urv-detail tbody tr.urv-dayrow:first-child td { border-top: 0; }
+.urv-dayrow__in { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.urv-dayrow__in b { color: var(--sp4-text-1); font-size: var(--sp4-body); font-weight: 700; white-space: nowrap; }
+.urv-dayrow__in span { color: var(--sp4-text-3); font-size: var(--sp4-label); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.urv-dayplay {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 3px;
+  background: var(--sp4-surface);
+  color: var(--sp4-accent);
+  font: inherit;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.urv-dayplay:hover { border-color: var(--sp4-accent); }
+.urv-dayplay:active { transform: translateY(1px); }
+.urv-dayplay:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.urv-detail .urv-row:hover td.urv-tl { background: transparent; }
+.urv-link:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; border-radius: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .urv-dayplay:active, .urv-playbtn:active { transform: none; }
+}
 
 .urv-kind {
   display: inline-flex;
@@ -390,7 +520,7 @@
   margin-left: auto;
   padding: 5px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--sp4-accent);
   color: #fff;
   font: inherit;
@@ -399,4 +529,6 @@
   cursor: pointer;
 }
 .urv-playbtn:hover { filter: brightness(1.08); }
+.urv-playbtn:active { transform: translateY(1px); }
+.urv-playbtn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
 .urv-detail__head .urv-playbtn + .urv-seg { margin-left: 0; }
