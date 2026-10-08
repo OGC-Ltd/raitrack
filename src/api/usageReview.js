@@ -30,3 +30,13 @@ export async function downloadUsageReview({ orgId, vehicleId, from, to, kind, km
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
+
+/**
+ * One day's GPS fixes from the built review, for the Logbook's playback:
+ * `{ date, points: [t ms, lat, lng, km/h, course|null, ignition 1/0/null][] }`.
+ */
+export async function getUsageReviewDay({ orgId, vehicleId, from, to, date, signal }) {
+  const q = new URLSearchParams({ from, to, date })
+  const res = await apiFetch(`${base(orgId, vehicleId)}/day?${q}`, { signal })
+  return res.data
+}

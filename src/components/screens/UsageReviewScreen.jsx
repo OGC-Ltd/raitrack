@@ -21,6 +21,8 @@ import {
 import "../body/SensorPanel.css";
 import "./FuelReportScreen.css";
 import "./UsageReviewScreen.css";
+import StopSign, { stopSignIcon } from "./StopSign";
+import LogbookPlayback from "./LogbookPlayback";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { loadMapEngine, maps as mapsNs } from "../../lib/mapEngine";
@@ -389,7 +391,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
       stopMarks.current = st.map((s) => {
         const mk = new mapsNs.Marker({
           map: m, position: { lat: s.lat, lng: s.lng }, zIndex: 200,
-          icon: { path: mapsNs.SymbolPath.CIRCLE, scale: 4.5, fillColor: "#111827", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 1.5 },
+          icon: stopSignIcon(14),
         });
         mk.addListener("mouseover", (ev) => setHover({ kind: "stop", stop: s, pos: at(ev) }));
         mk.addListener("mouseout", () => setHover((h) => (h?.kind === "stop" ? null : h)));
@@ -649,6 +651,8 @@ export default function UsageReviewScreen() {
   const [kmplText, setKmplText] = useState("");
   const [request, setRequest] = useState(null);
   const [sel, setSel] = useState({ day: null, place: null });
+  // The day open in the playback modal, if any.
+  const [playDay, setPlayDay] = useState(null);
   const [busy, setBusy] = useState(null);
   const [dlError, setDlError] = useState(null);
   const freshRef = useRef(false);
@@ -685,7 +689,7 @@ export default function UsageReviewScreen() {
 
   // A new review opens with its first place (most time) picked, so the
   // detail table has something to show (operator, 2026-10-08).
-  useEffect(() => { setSel({ day: null, place: review?.places.length ? review.places[0].id : null }); }, [review]);
+  useEffect(() => { setSel({ day: null, place: review?.places.length ? review.places[0].id : null }); setPlayDay(null); }, [review]);
   // Google's exact names for the places on the map, filled in as they arrive;
   // the OpenStreetMap name stands until then, and wherever Google has none.
   const [gnames, setGnames] = useState(() => new Map());
@@ -963,6 +967,16 @@ export default function UsageReviewScreen() {
               </section>
             </div>
 
+            {playDay && live && (
+              <LogbookPlayback
+                date={playDay} review={review} req={live} pal={pal}
+                unitLabel={review.vehicle.plate}
+                placeName={(id) => (id == null ? "—" : `${id}. ${pname(id)}`)}
+                host={rootRef.current?.closest(".app-container") ?? undefined}
+                onClose={() => setPlayDay(null)}
+              />
+            )}
+
             <div className="urv-grid urv-grid--detail">
               <section className="frv-card urv-card urv-card--detail">
                 <div className="urv-detail__head">
@@ -974,6 +988,11 @@ export default function UsageReviewScreen() {
                       {!selDay && !selPlace && <span>Nothing picked yet</span>}
                     </p>
                   </div>
+                  {selDay && (
+                    <button type="button" className="urv-playbtn" onClick={() => setPlayDay(selDay.date)} title="Play this day on the map">
+                      <i className="ti ti-player-play-filled" aria-hidden="true" /> Play day
+                    </button>
+                  )}
                   {(selDay || selPlace) && (
                     <div className="urv-seg" role="group" aria-label="Show">
                       {[["all", "All", detailAll.length], ["stop", "Stops", detailStops.length], ["trip", "Drives", detailTrips.length]]
@@ -1007,7 +1026,7 @@ export default function UsageReviewScreen() {
                           // A row opens what it points at: in a place's list,
                           // the day it happened; in a day's list, a stop's place.
                           const go = !selDay
-                            ? { label: "Follow this day", run: () => setSel((v) => ({ ...v, day })) }
+                            ? { label: "Play this day", play: true, run: () => setPlayDay(day) }
                             : kind === "stop" && x.place != null
                               ? { label: sel.place === x.place ? "Show the whole day" : "This place only", run: () => setSel((v) => ({ ...v, place: v.place === x.place ? null : x.place })) }
                               : null;
@@ -1024,7 +1043,7 @@ export default function UsageReviewScreen() {
                               <td className="urv-mono">{clock.format(x.start)}–{clock.format(x.end)}</td>
                               <td>
                                 <span className={`urv-kind urv-kind--${kind === "trip" ? "drive" : x.overnight ? "night" : "stop"}`}>
-                                  <i className={`ti ${kind === "trip" ? "ti-road" : x.overnight ? "ti-moon" : "ti-player-stop"}`} aria-hidden="true" />
+                                  {kind === "stop" && !x.overnight ? <StopSign /> : <i className={`ti ${kind === "trip" ? "ti-road" : "ti-moon"}`} aria-hidden="true" />}
                                   {kind === "trip" ? "Drive" : x.overnight ? "Overnight" : "Stop"}
                                 </span>
                               </td>
@@ -1046,7 +1065,7 @@ export default function UsageReviewScreen() {
                               )}
                               {showKm && <td className="urv-num">{kind === "trip" ? nf(x.km, 1) : ""}</td>}
                               <td className="urv-num">{minutes(x.min)}</td>
-                              <td className="urv-go">{go && <i className="ti ti-chevron-right" aria-hidden="true" />}</td>
+                              <td className="urv-go">{go && <i className={`ti ${go.play ? "ti-player-play" : "ti-chevron-right"}`} aria-hidden="true" />}</td>
                             </tr>
                           );
                         })}
