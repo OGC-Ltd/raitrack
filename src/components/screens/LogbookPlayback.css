@@ -20,15 +20,6 @@
 .lbp .sp4-modal-head { padding: 10px 14px; gap: 12px; flex-wrap: nowrap; }
 
 /* ── head ── */
-.lbp-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.lbp-title__k {
-  font-size: var(--sp4-label);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--sp4-text-3);
-}
-.lbp-title .sp4-repair-title { white-space: nowrap; }
 .lbp-unit {
   padding: 2px 8px;
   border: 1px solid var(--sp4-line-hi);
@@ -111,8 +102,13 @@
 .lbp-left .rp__grip, .lbp-left .rp__min, .lbp-left .rp__close,
 .lbp-left .rp__events, .lbp-left .rp__plate { display: none; }
 .lbp-left .rp__head { cursor: default; }
+/* One day only (operator, 2026-10-08): no previous/next, and the calendar
+   shows the day without opening (the JSX makes it inert). */
+.lbp-left .rp__day > button:not(.rcal-btn) { display: none; }
+.lbp-left .rp__day { pointer-events: none; }
 .lbp-left .rp__day button,
 .lbp-left .rp__day input { border-radius: 3px; }
+.lbp-left .rp__day .rcal-btn { cursor: default; }
 .lbp-left .rp__play {
   width: 32px;
   height: 32px;

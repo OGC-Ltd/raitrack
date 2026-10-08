@@ -27,6 +27,7 @@ import {
 import RoutePlayback from "../body/RoutePlayback";
 import MapStatusBar from "../body/MapStatusBar";
 import StopSign from "./StopSign";
+import { labelOf, PlaceNames } from "./logbookPlaces";
 import "./LogbookPlayback.css";
 
 const TZ = "Africa/Nairobi";
@@ -37,6 +38,11 @@ const hm = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h
 const BASE_MAP_KEY = "ft-map-base";
 
 /* One glyph per event kind, so the list reads at a glance without colour. */
+/* Not pinned on this map: fuel (operator, 2026-10-08) and stops, which the
+   Logbook's stop areas show instead. They stay in the events list. */
+const PINLESS = new Set(["theft", "refill", "stop"]);
+const dayKeyOf = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
+
 const KIND_ICON = {
   speeding: "ti-gauge", refill: "ti-gas-station", theft: "ti-droplet-down", fault: "ti-plug-x",
   zone: "ti-map-pin", dispatch: "ti-truck-delivery",
@@ -57,13 +63,22 @@ const TICK_OPEN_Z = 9;
  * @param {string} props.unitLabel
  * @param {()=>void} props.onClose
  * @param {Element} [props.host]      where to mount (keeps the theme)
+ * @param {object} props.pal          the Logbook map's colours (route, place, base)
+ * @param {Map} [props.gnames]        Google's names for the places, by id
  */
-export default function LogbookPlayback({ date, review, req, vehicle, unitLabel, onClose, host }) {
-  const [day, setDay] = useState(date);
+export default function LogbookPlayback({ date, review, req, vehicle, unitLabel, onClose, host, pal, gnames }) {
+  // One day, the one picked in the Logbook: no stepping to others from here.
+  const day = date;
   const { data, points, events, loading, error } = useVehiclePlayback(req.orgId, req.vehicleId, day);
   const pb = useRoutePlayback(points);
   const pbSubscribe = pb.subscribe;
   const gapSpans = useMemo(() => gapsOf(points), [points]);
+
+  // The places it stopped at on this day, as the Logbook numbers them.
+  const dayPlaces = useMemo(() => {
+    const ids = new Set(review.stops.filter((s) => dayKeyOf(s.start) === day && s.place != null).map((s) => s.place));
+    return review.places.filter((p) => ids.has(p.id));
+  }, [review, day]);
 
   // ── map ──
   const el = useRef(null);
@@ -131,7 +146,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
 
     const lastT = points[points.length - 1]?.t ?? 0;
     for (const ev of events) {
-      if (!DRAWN_EVENT_KINDS.has(ev.kind)) continue;
+      if (!DRAWN_EVENT_KINDS.has(ev.kind) || PINLESS.has(ev.kind)) continue;
       const at = sampleAt(points, ev.t);
       if (!at || at.inGap) continue;
       const m = new DomMarker({ position: { lat: at.lat, lng: at.lng }, html: eventMarkerHtml(ev, lastT), anchor: "center", zIndex: 4 });
@@ -174,6 +189,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
 
     const bounds = new maps.LatLngBounds();
     for (const p of points) bounds.extend({ lat: p.lat, lng: p.lng });
+    for (const p of dayPlaces) bounds.extend({ lat: p.lat, lng: p.lng });
     map.fitBounds(bounds, 40);
     if (map.getZoom() > 16) map.setZoom(16);
 
@@ -187,6 +203,30 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
     // mstate/sprite/unitLabel dress the marker; a new day of points rebuilds it
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, points, events]);
+
+  /**
+   * The day's stop areas, drawn as the Logbook map draws its places: a circle
+   * sized by the hours spent there over the whole review, the base in its own
+   * colour, numbered as in the tables, the name beside it.
+   */
+  useEffect(() => {
+    const map = mapRef.current, maps = mapsRef.current;
+    if (!ready || !map || !maps || !dayPlaces.length) return undefined;
+    const ref = Math.max(1, ...review.places.slice(0, 2).map((p) => p.hours));
+    const drawn = dayPlaces.map((p) => {
+      const scale = 7 + 9 * Math.sqrt(Math.min(1, p.hours / ref));
+      const marker = new maps.Marker({
+        map, position: { lat: p.lat, lng: p.lng }, zIndex: 1, title: `${p.id}. ${labelOf(p, gnames) || "Place"}`,
+        icon: { path: maps.SymbolPath.CIRCLE, scale, fillColor: p.id === 1 ? pal.base : pal.place, fillOpacity: 0.85, strokeColor: "#ffffff", strokeWeight: 2 },
+        label: { text: String(p.id), color: "#fff", fontSize: "10px", fontWeight: "700" },
+      });
+      return { p, marker, scale };
+    });
+    const names = new PlaceNames();
+    names.setMap(map);
+    names.set(drawn.map(({ p, scale }) => ({ id: p.id, lat: p.lat, lng: p.lng, text: labelOf(p, gnames) || `Place ${p.id}`, gap: scale + 5 })));
+    return () => { for (const d of drawn) d.marker.setMap(null); names.setMap(null); };
+  }, [ready, dayPlaces, review, pal, gnames]);
 
   /** MOVE: the trail, the reveal and the unit, on the clock's subscription. */
   useEffect(() => {
@@ -225,6 +265,13 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pbSubscribe, points, ready]);
 
+  // The transport's calendar only shows the day here: no stepping, no picking.
+  const leftRef = useRef(null);
+  useEffect(() => {
+    const d = leftRef.current?.querySelector(".rp__day");
+    if (d) d.inert = true;
+  });
+
   // Esc closes, as the other dialogs do.
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -251,7 +298,6 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
     if (list) list.scrollTop = list.scrollHeight;
   }, [seen.length]);
 
-  const dayLabel = new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const empty = !loading && !error && points.length === 0;
 
   const body = (
@@ -260,10 +306,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
            onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         <div className="sp4-modal lbp" role="dialog" aria-modal="true" aria-labelledby="lbp-title">
           <div className="sp4-modal-head">
-            <div className="lbp-title">
-              <span className="lbp-title__k">Playback</span>
-              <span className="sp4-repair-title" id="lbp-title">{dayLabel}</span>
-            </div>
+            <span className="sp4-repair-title" id="lbp-title">Playback</span>
             <span className="lbp-unit">{unitLabel}</span>
             {GOOGLE_BASE_AVAILABLE && (
               <div className="urv-seg lbp-seg" role="group" aria-label="Base map">
@@ -277,7 +320,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
 
           <div className="lbp-cols">
             {/* 1 · the map and the live map's own transport under it */}
-            <section className="lbp-left">
+            <section className="lbp-left" ref={leftRef}>
               <div className="lbp-map">
                 <div ref={el} className="lbp-map__canvas" />
                 <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
@@ -288,7 +331,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
               <RoutePlayback
                 plate={unitLabel}
                 day={day}
-                onDay={(span) => setDay(span.split("..")[0])}
+                onDay={() => {}}
                 cursor={pb.cursor}
                 subscribe={pbSubscribe}
                 events={events}
