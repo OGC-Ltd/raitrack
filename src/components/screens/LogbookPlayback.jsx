@@ -209,9 +209,11 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
 
   /**
    * The day's stop areas, revealed by the replay (operator, 2026-10-08). A
-   * place's badge is drawn once, at its first stop, with its name beside it;
-   * every later stop there counts it up and grows it, on the Logbook map's
-   * scale (7 → 16 px radius). The place stopped at most so far wears the
+   * place's badge is drawn once, at its first stop, with its name beside it.
+   * The number on it counts the stops there; its SIZE is the time spent there
+   * so far, growing while the unit stands, on the Logbook map's scale (7 → 16
+   * px radius, against the day's longest-held place) — one long stop can
+   * outgrow three short ones. The place with the most time so far wears the
    * base's green, the rest the place colour, as on the Logbook map.
    */
   useEffect(() => {
@@ -221,10 +223,10 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
     const stops = review.stops
       .filter((s) => dayKeyOf(s.start) === day && byId.has(s.place))
       .sort((a, b) => a.start - b.start);
-    const most = {};
-    for (const s of stops) most[s.place] = (most[s.place] ?? 0) + 1;
-    const top = Math.max(1, ...Object.values(most));
-    const badges = new Map(); // place id → { marker, n, lead, scale }
+    const held = {};
+    for (const s of stops) held[s.place] = (held[s.place] ?? 0) + (s.end - s.start);
+    const top = Math.max(60_000, ...Object.values(held));
+    const badges = new Map(); // place id → { marker, n, lead, d }
     const names = new PlaceNames({ pane: "overlayMouseTarget", zIndex: BADGE_Z - 1 });
     names.setMap(map);
     let shown = "";
@@ -232,41 +234,45 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
     // The badge is a DOM marker on the same layer as the trail's ticks and
     // minute dots, stacked above all of them (operator: "the route path should
     // not bury the badge whatsoever") and below only the vehicle.
-    const html = (p, n, lead, scale) => {
-      const d = Math.round(scale * 2);
-      const tip = `${labelOf(p, gnames) || `Place ${p.id}`} · ${n} stop${n === 1 ? "" : "s"}`.replace(/"/g, "&quot;");
-      return `<div class="lbp-badge${lead ? " is-lead" : ""}" title="${tip}" style="width:${d}px;height:${d}px;background:${lead ? pal.base : pal.place};font-size:${n > 9 ? 9 : 10}px">${n}</div>`;
-    };
-    const paint = (b, p, n, lead) => {
-      b.n = n; b.lead = lead;
-      b.scale = 7 + 9 * Math.sqrt(n / top);
-      b.marker.setHtml(html(p, n, lead, b.scale));
+    const paint = (b, p, n, ms, lead, d) => {
+      b.n = n; b.lead = lead; b.d = d;
+      const mins = ms / 60_000;
+      const tip = `${labelOf(p, gnames) || `Place ${p.id}`} · ${n} stop${n === 1 ? "" : "s"} · ${mins < 60 ? `${Math.round(mins)} min` : hm(mins / 60)}`.replace(/"/g, "&quot;");
+      b.marker.setHtml(`<div class="lbp-badge${lead ? " is-lead" : ""}" title="${tip}" style="width:${d}px;height:${d}px;background:${lead ? pal.base : pal.place};font-size:${n > 9 ? 9 : 10}px">${n}</div>`);
       b.marker.setZIndex(lead ? BADGE_Z + 1 : BADGE_Z);
     };
 
     const unsub = pbSubscribe((t) => {
-      // Stops reached by the cursor, counted per place; first reached first.
-      const count = new Map();
-      for (const s of stops) { if (s.start > t) break; count.set(s.place, (count.get(s.place) ?? 0) + 1); }
-      let leadId = null, leadN = 0;
-      for (const [id, n] of count) if (n > leadN) { leadId = id; leadN = n; }
-      for (const [id, b] of badges) if (!count.has(id)) { b.marker.setMap(null); badges.delete(id); }
-      for (const [id, n] of count) {
+      // Stops the cursor has reached, per place: how many, and the time held
+      // so far (a stop in progress counts up to the cursor).
+      const sofar = new Map();
+      for (const s of stops) {
+        if (s.start > t) break;
+        const v = sofar.get(s.place) ?? { n: 0, ms: 0 };
+        v.n += 1;
+        v.ms += Math.min(t, s.end) - s.start;
+        sofar.set(s.place, v);
+      }
+      let leadId = null, leadMs = -1;
+      for (const [id, v] of sofar) if (v.ms > leadMs) { leadId = id; leadMs = v.ms; }
+      for (const [id, b] of badges) if (!sofar.has(id)) { b.marker.setMap(null); badges.delete(id); }
+      for (const [id, v] of sofar) {
         const p = byId.get(id);
+        const d = Math.round(2 * (7 + 9 * Math.sqrt(Math.min(1, v.ms / top))));
         let b = badges.get(id);
         if (!b) {
           b = { marker: new DomMarker({ position: { lat: p.lat, lng: p.lng }, html: "", anchor: "center", zIndex: BADGE_Z }) };
           b.marker.setMap(map);
           badges.set(id, b);
-          paint(b, p, n, id === leadId);
-        } else if (b.n !== n || b.lead !== (id === leadId)) paint(b, p, n, id === leadId);
+          paint(b, p, v.n, v.ms, id === leadId, d);
+        } else if (b.n !== v.n || b.d !== d || b.lead !== (id === leadId)) paint(b, p, v.n, v.ms, id === leadId, d);
       }
-      const key = [...badges].map(([id, b]) => `${id}:${b.scale.toFixed(1)}`).join(",");
+      const key = [...badges].map(([id, b]) => `${id}:${b.d}:${b.lead ? 1 : 0}`).join(",");
       if (key !== shown) {
         shown = key;
         names.set([...badges].map(([id, b]) => {
           const p = byId.get(id);
-          return { id, lat: p.lat, lng: p.lng, text: labelOf(p, gnames) || `Place ${id}`, gap: b.scale + 5, strong: b.lead };
+          return { id, lat: p.lat, lng: p.lng, text: labelOf(p, gnames) || `Place ${id}`, gap: b.d / 2 + 5, strong: b.lead };
         }));
       }
     });
