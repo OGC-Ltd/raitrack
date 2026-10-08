@@ -544,67 +544,65 @@
 }
 
 /* ── Mark + version, at the very bottom ──────────────────────
- * Hallmark · component: sidebar foot (mark + version) · genre: modern-minimal · theme: the app's own
- * states: default only — not interactive (a tooltip carries the build detail)
- * contrast: version #5f6e83 on white 4.8:1
+ * Hallmark · component: sidebar foot (mark + wordmark + version) · genre: modern-minimal · theme: the app's own
+ * states: default only, not interactive (a tooltip carries the build detail)
+ * contrast: wordmark, version and mark #5f6e83 on white 4.8:1
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
  *
- * The login page's fingerprint-tree mark, scaled down to a signature, with the
- * version beside it, its baseline level with the roots — no wordmark
- * (operator, 2026-10-02). Open, the pair sits side by side on the left; folded to
- * the 56px rail there is no room for that, so the version goes under the
- * trunk. Pushed to the foot when nothing else is (the folded rail
- * without fuel pages); after the folded fuel pair, that pair already holds the
- * auto margin. */
+ * Redesigned 2026-10-08 ("the logo looks too huge"): the mark was the login
+ * page's tree in solid black at 34px, its ink ~27px tall beside two lines of
+ * 10px muted text, so it outweighed everything it signed. Now a quiet
+ * centred lockup, the mark beside RAI GROUP with the version under it
+ * (operator, 2026-10-08), and the mark takes the text's own ink: the PNG is a
+ * mask filled with currentColor, not an <img> in black. The tree's ink is as
+ * tall as the two lines of text, no taller. Folded to the 56px rail there is
+ * no room for the wordmark, so the mark sits over the version and names the
+ * company. */
 .side-panel__meta {
-  --sp-mark: 34px;
+  --sp-mark: 28px;
   flex-shrink: 0;
   margin-top: auto;
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: 6px;
-  padding: 10px 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
   border-top: 1px solid var(--sp-rule);
-  line-height: 1.2;
+  color: var(--sp-icon);
+  line-height: 1;
   white-space: nowrap;
   cursor: default;
   user-select: text;
 }
-/* Fine line art inside generous transparent padding: the tree itself is about
-   half the box, so the box runs larger than an icon would. The trunk is
-   centred in the artwork, so centring the box puts it on the panel's axis. */
+/* Fine line art inside generous transparent padding: the canopy spans columns
+   ~390-1010 of 1402, so ~28% of the box is empty on either side. */
 .side-panel__meta-mark {
   width: var(--sp-mark);
   height: var(--sp-mark);
-  object-fit: contain;
   flex: 0 0 auto;
-}
-/* Open, the pair sits on the left (operator, 2026-10-03). The canopy starts
-   ~28% into the box (column ~390 of 1402), so pull the box out by that much
-   and the drawn tree, not its padding, lines up with the panel's 16px edge. */
-.side-panel:not(.side-panel--collapsed) .side-panel__meta-mark {
-  margin-left: calc(var(--sp-mark) * -0.28);
+  background: currentColor;
+  -webkit-mask: url(/logo-icon.png) center / contain no-repeat;
+          mask: url(/logo-icon.png) center / contain no-repeat;
 }
 .side-panel__meta-text {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 3px;
   min-width: 0;
-  /* The artwork ends 9% above its own bottom edge (roots at row 1270 of
-     1402); lift the version's baseline by that much so it stands on the
-     same ground as the roots. */
-  margin-bottom: calc(var(--sp-mark) * 0.09 - 2px);
-  /* The canopy spans columns ~390–1010, leaving 28% of the box empty on the
-     right; tuck the version in so the gap is measured from the tree. */
-  margin-left: calc(var(--sp-mark) * -0.28);
+  /* Measure the gap from the drawn tree, not from its empty right margin. */
+  margin-left: calc(var(--sp-mark) * -0.28 + 6px);
+}
+.side-panel__meta-word {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 .side-panel__meta-version {
   font-size: 10.5px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
   letter-spacing: 0.02em;
-  color: var(--sp-icon);
 }
 .side-panel__nav--foot + .side-panel__meta,
 .side-panel__body + .side-panel__meta,
@@ -616,35 +614,10 @@
    10px again (operator, 2026-10-07). */
 
 .side-panel--collapsed .side-panel__meta {
-  --sp-mark: 30px;
+  --sp-mark: 24px;
   flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 12px 0 12px;
+  gap: 4px;
+  padding: 10px 0;
 }
-.side-panel--collapsed .side-panel__meta-text {
-  margin-bottom: 0;
-  margin-left: 0;
-  margin-top: calc(var(--sp-mark) * -0.09 + 2px);
-}
+.side-panel--collapsed .side-panel__meta-text { margin-left: 0; }
 .side-panel--collapsed .side-panel__meta-version { font-size: 9.5px; letter-spacing: 0; }
-
-/* ── The wordmark is back ────────────────────────────────────────────────────
- * Hallmark · component: sidebar foot (mark + wordmark + version) · static
- * pre-emit critique: P4 H5 E5 S4 R5 V4
- * Operator, 2026-10-03: "return the text RAI GROUP on the logo", then "the
- * text to be small and dull, then we centre align". A small, quiet wordmark —
- * the version's own muted ink, 10px, tracked capitals — over the version, and
- * the mark + text pair centred in the panel rather than set on its left edge.
- * Open panel only; the folded rail keeps the mark alone. */
-.side-panel__meta { justify-content: center; }
-.side-panel:not(.side-panel--collapsed) .side-panel__meta-mark { margin-left: 0; }
-.side-panel__meta-text { align-items: center; gap: 3px; }
-.side-panel__meta-word {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  color: var(--sp-icon);
-}
