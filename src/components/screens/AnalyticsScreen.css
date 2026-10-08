@@ -827,7 +827,7 @@
      space under the bars — the bars now use it, and the two cards read as one
      row instead of one chart floating in a tall box. */
   flex: 1;
-  min-height: 150px;
+  min-height: 168px;
 }
 .an-weekbar { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; gap: 4px; }
 .an-weekbar__track { width: 100%; flex: 1; display: flex; align-items: flex-end; }
@@ -2968,4 +2968,45 @@
   .an-fuelrow { gap: 10px; }
   .an-card,
   .an-kpi { padding: 12px; }
+}
+
+/* ── Hours run today: radar ───────────────────────────────────────────────
+ * Hallmark · component: radar chart tile · genre: modern-minimal
+ * theme: in-project (an-* tokens) · pre-emit critique: P5 H5 E5 S5 R5 V4
+ * states: default · hover (vertex grows, its spoke lifts) · empty · loading
+ * redesign 2026-10-09: words cut to the figure, one sub line and six spokes.
+ * The plot takes the tile's spare height so the row stays level. */
+.an-ops--radar .an-ops__lines { flex: 1 1 auto; display: flex; flex-direction: column; }
+.an-hrr {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 172px;
+}
+.an-hrr__plot { flex: 1 1 auto; width: 100%; min-height: 0; aspect-ratio: auto; }
+.an-hrr__spoke {
+  font-size: 10px;
+  fill: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  transition: fill 120ms ease-out;
+}
+.an-hrr__spoke-n { font-weight: 700; fill: var(--ink); }
+.an-hrr__spoke.is-hot { fill: var(--ink); }
+.an-hrr__spoke.is-hot .an-hrr__spoke-n { fill: var(--chart-5); }
+.an-hrr__dot {
+  fill: var(--elevated);
+  stroke: var(--chart-5);
+  stroke-width: 1.5;
+  transition: r 120ms ease-out;
+}
+.an-hrr__note {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 10px;
+  color: var(--text-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .an-hrr__spoke, .an-hrr__dot { transition: none; }
 }
