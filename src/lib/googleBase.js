@@ -30,7 +30,7 @@ export const GOOGLE_BASE_AVAILABLE = GOOGLE_KEY.length > 0;
 let apiPromise = null;
 
 /** The Maps JavaScript API, once per page. Rejects on a refused key. */
-function loadGoogleApi() {
+export function loadGoogleApi() {
   if (window.google?.maps?.Map) return Promise.resolve();
   apiPromise ??= new Promise((resolve, reject) => {
     const cb = "__ftGoogleMapsReady";
