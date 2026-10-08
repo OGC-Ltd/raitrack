@@ -39,6 +39,7 @@ import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
 import { useLogbookFences } from "./LogbookFences";
 import LogbookVisits from "./LogbookVisits";
 import { boxOf } from "../../lib/fenceDraw";
+import { buildWeb, arc, bearing, edgeWidth } from "../../lib/movementWeb";
 
 export { placeCase };
 import { watchTableLabels } from "../../lib/tableLabels";
@@ -149,6 +150,8 @@ function readPalette(el) {
   };
 }
 const MAX_PLACES_ON_MAP = 30;
+/** Connections drawn on the map's web; the rest are in the table. */
+const MAX_WEB_EDGES = 40;
 
 /** The base map picked here and on the live map's Maps panel (one choice). */
 const BASE_MAP_KEY = "ft-map-base";
@@ -159,7 +162,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** A place's name: Google's exact name when it has one, else OpenStreetMap's. */
 const nameOf = (p, gnames) => (p ? gnames?.get(p.id) ?? placeCase(p.name) : null);
-function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecount }) {
+function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecount, mode, setMode, web, webEdge, setWebEdge }) {
   const el = useRef(null);
   const wrap = useRef(null);
   const map = useRef(null);
@@ -298,6 +301,9 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
     const on = (date) => (sel.day ? date === sel.day : daysOfPlace ? daysOfPlace.has(date) : true);
     const focused = sel.day != null || daysOfPlace != null;
     for (const t of tracks.current) {
+      // The web draws connections instead of the day-by-day route.
+      t.line.setVisible(mode !== "web");
+      t.hit.setVisible(mode !== "web");
       const lit = on(t.date);
       t.w = lit && focused ? 4 : 2.5;
       t.line.setOptions({
@@ -354,7 +360,46 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
         else m.panTo({ lat: p.lat, lng: p.lng });
       }
     }
-  }, [ready, sel, setSel, review, placeDays, fitTo, at, pal]);
+  }, [ready, sel, setSel, review, placeDays, fitTo, at, pal, mode]);
+
+  // ── the movement web: a bowed arrow per connection, width by trips ──
+  const webLayers = useRef([]);
+  useEffect(() => {
+    const m = map.current;
+    webLayers.current.forEach((l) => l.setMap(null));
+    webLayers.current = [];
+    if (!ready || !m || mode !== "web") return;
+    const byId = new Map(review.places.map((p) => [p.id, p]));
+    const edges = web.edges.filter((e) => byId.has(e.from) && byId.has(e.to)).slice(0, MAX_WEB_EDGES);
+    const max = Math.max(1, ...edges.map((e) => e.trips));
+    const focused = webEdge != null || sel.place != null;
+    const out = [];
+    // Quietest first, so the busy connections draw on top.
+    for (const e of [...edges].reverse()) {
+      const a = byId.get(e.from), b = byId.get(e.to);
+      const lit = webEdge ? webEdge === e.key : sel.place != null ? e.from === sel.place || e.to === sel.place : true;
+      const path = arc(a, b);
+      const w = edgeWidth(e.trips, max);
+      const color = webEdge === e.key ? pal.place : pal.route;
+      const line = new mapsNs.Polyline({ map: m, path, strokeColor: color, strokeOpacity: lit ? (focused ? 0.9 : 0.6) : 0.12, strokeWeight: w, zIndex: lit ? 4 : 2 });
+      const hit = new mapsNs.Polyline({ map: m, path, strokeColor: "#000", strokeOpacity: 0.01, strokeWeight: Math.max(14, w + 6), clickable: true, zIndex: 5 });
+      hit.addListener("mouseover", (ev) => { line.setOptions({ strokeOpacity: 1 }); setHover({ kind: "edge", edge: e, pos: at(ev) }); });
+      hit.addListener("mouseout", () => { line.setOptions({ strokeOpacity: lit ? (focused ? 0.9 : 0.6) : 0.12 }); setHover((h) => (h?.kind === "edge" ? null : h)); });
+      hit.addListener("click", () => setWebEdge((k) => (k === e.key ? null : e.key)));
+      // The arrowhead, two thirds of the way along, turned to the way it goes.
+      const i = Math.round(path.length * 0.62);
+      const deg = bearing(path[i - 1], path[i + 1] ?? path[i]);
+      const size = Math.round(15 + 1.5 * w);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20"><path d="M10 2 L17 17 L10 13 L3 17 Z" transform="rotate(${deg.toFixed(1)} 10 10)" fill="${color}" fill-opacity="${lit ? 0.95 : 0.2}" stroke="#fff" stroke-width="1.2"/></svg>`;
+      const head = new mapsNs.Marker({
+        map: m, position: path[i], clickable: false, zIndex: lit ? 60 : 20,
+        icon: { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, size: { width: size, height: size }, anchor: { x: size / 2, y: size / 2 } },
+      });
+      out.push(line, hit, head);
+    }
+    webLayers.current = out;
+    return () => out.forEach((l) => l.setMap(null));
+  }, [ready, mode, review, web, webEdge, sel.place, pal, at, setWebEdge]);
 
   // The names beside the circles: their own effect, so a Google name arriving
   // relabels the map without reframing it.
@@ -406,6 +451,16 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
           <em>{sel.day === d.date ? "Click to clear" : "Click to follow this day"}</em>
         </div>
       );
+    } else if (hover.kind === "edge") {
+      const e = hover.edge;
+      tip = (
+        <div className="urv-tip" style={style}>
+          <b>{placeName(e.from)} → {placeName(e.to)}</b>
+          <span>{plural(e.trips, "trip")} · about {minutes(e.avgMin)} and {nf(e.avgKm, 1)} km each</span>
+          <span>{nf(e.km, 0)} km in all · {dayLabel(dayKeyOf(e.first))}{e.trips > 1 ? ` – ${dayLabel(dayKeyOf(e.last))}` : ""}</span>
+          <em>{webEdge === e.key ? "Click to clear" : "Click to pick this connection"}</em>
+        </div>
+      );
     } else if (hover.kind === "stop") {
       const s = hover.stop;
       tip = (
@@ -423,10 +478,18 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
       <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
       <div className="urv-map__top">
         <div className="urv-map__legend" aria-hidden="true">
-          <span><i style={{ background: pal.route }} className="urv-line" />Route</span>
+          {mode === "web"
+            ? <span><i style={{ background: pal.route }} className="urv-line" />Connection · width = trips</span>
+            : <span><i style={{ background: pal.route }} className="urv-line" />Route</span>}
           <span><i style={{ background: pal.base }} />Base (most time)</span>
           <span><i style={{ background: pal.place }} />Other places · size = hours</span>
           <span><i style={{ background: pal.fence }} className="urv-line" />Site fence</span>
+        </div>
+        <div className="urv-map__base urv-map__mode" role="group" aria-label="Show on the map">
+          {[["route", "Route", "Each day's route"], ["web", "Web", "Movement web: which places it drives between, and how often"]].map(([id, label, t]) => (
+            <button key={id} type="button" className={mode === id ? "is-on" : ""} aria-pressed={mode === id} title={t}
+                    onClick={() => { setMode(id); if (id !== "web") setWebEdge(null); }}>{label}</button>
+          ))}
         </div>
         {fences.toolbar}
         {GOOGLE_BASE_AVAILABLE && (
@@ -591,6 +654,10 @@ export default function UsageReviewScreen() {
   const [kmplText, setKmplText] = useState("");
   const [request, setRequest] = useState(null);
   const [sel, setSel] = useState({ day: null, place: null });
+  // The map's view — each day's route, or the movement web — and the web's
+  // picked connection ("from>to").
+  const [mapMode, setMapMode] = useState("route");
+  const [webEdge, setWebEdge] = useState(null);
   // The day open in the playback modal, if any.
   const [playDay, setPlayDay] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -625,6 +692,8 @@ export default function UsageReviewScreen() {
   });
   const st = q.data;
   const review = st?.status === "ready" ? st.review : null;
+  const web = useMemo(() => buildWeb(review?.trips), [review]);
+  useEffect(() => { setWebEdge(null); }, [review]);
   const runUnit = useMemo(() => (live ? vehicles.find((v) => v.vehicleId === live.vehicleId) : null), [live, vehicles]);
 
   // A new review opens with its first place (most time) picked, so the
@@ -763,6 +832,14 @@ export default function UsageReviewScreen() {
     };
   }, [review]);
   const placePager = usePager(review?.places ?? [], review, PAGE_ROWS);
+  const webPager = usePager(web.edges, review, PAGE_ROWS);
+  const loopTrips = [...web.loops.values()].reduce((a, n) => a + n, 0);
+  /** Show a connection on the map's web, and bring the map into view. */
+  const showEdge = (key) => {
+    setMapMode("web");
+    setWebEdge((k) => (k === key ? null : key));
+    rootRef.current?.querySelector(".urv-map")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
   // Up to 15 rows a page, and the card grows to hold them.
   const dayIndex = useMemo(() => new Map((review?.days ?? []).map((d) => [d.date, d])), [review]);
   const detailPager = usePager(detailRows, `${sel.day}|${sel.place}|${detailKind}`, PAGE_STEP);
@@ -899,7 +976,8 @@ export default function UsageReviewScreen() {
 
             <div className="urv-grid urv-grid--top">
               <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames}
-                         orgId={live?.orgId ?? null} onRecount={recount} />
+                         orgId={live?.orgId ?? null} onRecount={recount}
+                         mode={mapMode} setMode={setMapMode} web={web} webEdge={webEdge} setWebEdge={setWebEdge} />
 
               <section className="frv-card urv-card urv-card--top">
                 <h3 className="frv-card__t">Distance per Day</h3>
@@ -948,6 +1026,48 @@ export default function UsageReviewScreen() {
                 </p>
               </section>
             </div>
+
+            {web.edges.length > 0 && (
+              <div className="urv-grid urv-grid--visits">
+                <section className="frv-card urv-card urv-web">
+                  <div className="urv-detail__head">
+                    <div>
+                      <h3 className="frv-card__t">Movement Web</h3>
+                      <p className="urv-card__sub">
+                        {web.edges.length} connections between {new Set(web.edges.flatMap((e) => [e.from, e.to])).size} places
+                        {loopTrips ? ` · ${plural(loopTrips, "round trip")} back to where it left` : ""} · click one to see it on the map
+                      </p>
+                    </div>
+                    <button type="button" className="urv-playbtn" onClick={() => { setMapMode((m) => (m === "web" ? "route" : "web")); setWebEdge(null); }}>
+                      <i className={`ti ti-${mapMode === "web" ? "route" : "chart-dots-3"}`} aria-hidden="true" /> {mapMode === "web" ? "Show routes" : "Show web on map"}
+                    </button>
+                  </div>
+                  <div className="sp4-table-scroll urv-table">
+                    <table className="sp4-table">
+                      <thead><tr><th>From</th><th aria-label="to" /><th>To</th><th className="urv-num">Trips</th><th className="urv-num">Avg drive</th><th className="urv-num">Avg km</th><th className="urv-num">Total km</th></tr></thead>
+                      <tbody>
+                        {webPager.pageRows.map((e) => (
+                          <tr key={e.key} className={`urv-row${webEdge === e.key ? " urv-row--on" : ""}`} onClick={() => showEdge(e.key)}
+                              title="Show this connection on the map">
+                            <td>{e.from}. {pname(e.from)}</td>
+                            <td className="urv-arrow" aria-hidden="true">→</td>
+                            <td>{e.to}. {pname(e.to)}</td>
+                            <td className="urv-num">
+                              <span className="urv-hbar" style={{ "--w": `${Math.min(100, (e.trips / web.edges[0].trips) * 100)}%` }} />
+                              {e.trips}
+                            </td>
+                            <td className="urv-num">{minutes(e.avgMin)}</td>
+                            <td className="urv-num">{nf(e.avgKm, 1)}</td>
+                            <td className="urv-num">{nf(e.km, 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <TablePager pager={webPager} label="Connection pages" />
+                </section>
+              </div>
+            )}
 
             <div className="urv-grid urv-grid--visits">
               <LogbookVisits review={review} pal={pal} gnames={gnames} sel={sel} setSel={setSel} onPlayDay={setPlayDay} />
