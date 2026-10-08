@@ -159,7 +159,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
               aria-expanded={allTypes}
               onClick={() => setAllTypes(v => !v)}
             >
-              {allTypes ? 'Fewer' : `${hiddenTypes} more`}
+              {allTypes ? 'Less' : `${hiddenTypes} more`}
             </button>
           )}
         </div>

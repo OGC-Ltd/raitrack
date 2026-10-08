@@ -2993,10 +2993,11 @@
 }
 .an-hrr__spoke-n { font-weight: 700; fill: var(--ink); }
 .an-hrr__spoke.is-hot { fill: var(--ink); }
-.an-hrr__spoke.is-hot .an-hrr__spoke-n { fill: var(--chart-5); }
+.an-hrr__spoke.is-hot .an-hrr__spoke-n { fill: var(--chart-1); }
+/* Fill comes from the palette per spoke (see SPOKE_TONES); the ring in the
+   tile's own colour keeps adjacent slots apart where they sit close in hue. */
 .an-hrr__dot {
-  fill: var(--elevated);
-  stroke: var(--chart-5);
+  stroke: var(--elevated);
   stroke-width: 1.5;
   transition: r 120ms ease-out;
 }

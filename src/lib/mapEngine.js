@@ -313,6 +313,8 @@ export class Map extends Evented {
     if (o.mapTypeId) this.setMapTypeId(o.mapTypeId);
     if (o.draggable === false) this._l.dragging.disable();
     if (o.draggable === true) this._l.dragging.enable();
+    if (o.disableDoubleClickZoom === true) this._l.doubleClickZoom.disable();
+    if (o.disableDoubleClickZoom === false) this._l.doubleClickZoom.enable();
   }
 
   /** Vector layers stack by zIndex; Leaflet's SVG stacks by insertion. */

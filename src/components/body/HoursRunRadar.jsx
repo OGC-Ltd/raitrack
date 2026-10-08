@@ -1,5 +1,5 @@
 /* Hallmark · component: radar chart · genre: modern-minimal
- * theme: in-project (an-* tokens, --chart-5 series)
+ * theme: in-project (an-* tokens, --chart-1..6 palette)
  * states: default · hover (vertex + tip) · empty · loading · unbanded note
  * pre-emit critique: P5 H5 E5 S5 R5 V4
  * contrast: pass — spoke text --text-3 / counts --ink on --elevated
@@ -27,6 +27,12 @@ import { ChartContainer } from "../ui/chart";
 const fmt = (n) => new Intl.NumberFormat("en-GB").format(n ?? 0);
 
 /* "<1 h" → "<1", "8 h+" → "8+". The unit is the tile's title. */
+/* The page's own categorical palette, one slot per spoke, in slot order — the
+   colours every other Analytics chart already uses, rather than a series hue
+   of this tile's own. The outline and wash take slot 1, the page's primary. */
+const SPOKE_TONES = [1, 2, 3, 4, 5, 6].map((i) => `var(--chart-${i})`);
+const LINE = "var(--chart-1)";
+
 const short = (label) => label.replace(/\s*h/, "");
 
 function Spoke({ x, y, cy, payload, textAnchor, data, hot }) {
@@ -88,8 +94,8 @@ export default function HoursRunRadar({ bands, unbanded = 0 }) {
         >
           <defs>
             <radialGradient id={`hrr-${gid}`} cx="50%" cy="50%" r="60%">
-              <stop offset="0%" style={{ stopColor: "var(--chart-5)", stopOpacity: 0.42 }} />
-              <stop offset="100%" style={{ stopColor: "var(--chart-5)", stopOpacity: 0.12 }} />
+              <stop offset="0%" style={{ stopColor: LINE, stopOpacity: 0.42 }} />
+              <stop offset="100%" style={{ stopColor: LINE, stopOpacity: 0.12 }} />
             </radialGradient>
           </defs>
 
@@ -106,7 +112,7 @@ export default function HoursRunRadar({ bands, unbanded = 0 }) {
           <PolarRadiusAxis domain={[0, peak]} tick={false} axisLine={false} tickCount={4} />
           <Radar
             dataKey="n"
-            stroke="var(--chart-5)"
+            stroke={LINE}
             strokeWidth={1.75}
             strokeLinejoin="round"
             fill={`url(#hrr-${gid})`}
@@ -117,7 +123,8 @@ export default function HoursRunRadar({ bands, unbanded = 0 }) {
                 key={p.index}
                 cx={p.cx}
                 cy={p.cy}
-                r={hot === p.index ? 4.5 : 2.5}
+                r={hot === p.index ? 5 : 3.5}
+                fill={SPOKE_TONES[p.index % SPOKE_TONES.length]}
                 className="an-hrr__dot"
               />
             )}
