@@ -566,23 +566,52 @@
 
    Blocks are sized to be COUNTABLE: 15px wide with a 3px gap holds its shape
    down to about a dozen, which is where the row starts counting instead. */
-.wbb-road { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Hallmark · component: road-to-mill panel · genre: modern-minimal · theme: the board's own
+ * states: default · empty yard (None out) · overdue (red block) · quiet feed (note) · not interactive (titles carry detail)
+ * pre-emit critique: P4 H5 E4 S5 R5 V4
+ * Redesigned 2026-10-08: the total is the headline figure, each yard's count
+ * is printed at the end of its line so nobody counts blocks, yard names are
+ * names ("Nyaondo", not "NYAONDO"), and the key moved to the foot, naming
+ * only the shapes on show. Rows are split by hairlines, the yard column is
+ * the board's secondary ink and the counts its primary. */
+.wbb-road-panel__total {
+  margin-left: auto;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.wbb-road { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .wbb-road__row {
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
+  min-height: 28px;
   padding: 4px 0;
-  font-size: 11px;
+  font-size: 11.5px;
+  border-top: 1px solid var(--border);
 }
+.wbb-road__row:first-child { border-top: 0; }
 .wbb-road__site {
-  color: var(--text-2);
+  color: var(--ink);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.wbb-road__row--none .wbb-road__site { color: var(--text-2); font-weight: 500; }
 .wbb-road__blocks { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; min-width: 0; }
+.wbb-road__count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.wbb-road__count b { min-width: 14px; text-align: right; font-size: 12.5px; font-weight: 800; color: var(--ink); }
+.wbb-road__row--none .wbb-road__count b { color: var(--text-3); font-weight: 600; }
 .wbb-block {
   width: 15px;
   height: 11px;
@@ -598,9 +627,20 @@
 .wbb-block__more { font-style: normal; font-size: 10px; font-weight: 700; color: var(--text-3); margin-left: 2px; }
 /* A yard that sent nothing. Said in words, because an empty row reads as a
    rendering fault and a zero reads as a measurement nobody asked for. */
-.wbb-road__none { color: var(--text-3); font-size: 10.5px; }
-.wbb-road__t { color: var(--text-2); font-weight: 700; font-size: 10.5px; margin-left: auto; white-space: nowrap; }
-.wbb-road__n { color: var(--chart-8); font-weight: 800; font-size: 12px; }
+.wbb-road__none { color: var(--text-3); font-size: 11px; }
+.wbb-road__t { color: var(--text-3); font-weight: 600; font-size: 10.5px; }
+/* The key, at the foot: the shapes in use, each beside its word. */
+.wbb-road__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.wbb-road__key span { display: inline-flex; align-items: center; gap: 5px; }
 
 /* The figure in a panel head — "≥ 4h 12m" — which is a reading rather than a
    count, so it is set apart from `.wbb-panel__n`. */
