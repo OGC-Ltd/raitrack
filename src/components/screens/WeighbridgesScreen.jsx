@@ -37,7 +37,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { useWeighments } from "../../hooks/useWeighments";
+import { useWeighments, MAX_DAYS } from "../../hooks/useWeighments";
 import { useDispatchedUnits } from "../../hooks/useDispatchedUnits";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { tonnes, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
@@ -45,6 +45,7 @@ import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
 import EmptyNote from "../shared/EmptyNote";
+import DateRangePicker from "../layout/DateRangePicker";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import "../body/SensorPanel.css";
 /* For its TOKENS, not for its layout: the `an-*` chart palette the board draws
@@ -55,17 +56,18 @@ import "./AnalyticsScreen.css";
 import "./WeighbridgesScreen.css";
 
 /**
- * The spans the filter bar offers as one click.
+ * The spans the filter bar offers as one click, as buttons beside the date
+ * field (operator, 2026-10-08: outside the calendar, not inside it).
  *
  * Deliberately short. The provider serves a rolling two days and cannot be
  * backfilled, so anything past a week is mostly days we hold nothing for —
- * these three are the ones that return tickets today, and the two date inputs
- * beside them reach everything else.
+ * these three are the ones that return tickets today, and the calendar beside
+ * them reaches everything else.
  */
 const SPANS = [
-  { label: "Today",     range: () => [fleetDayKey(), fleetDayKey()] },
-  { label: "Yesterday", range: () => { const d = backDays(1); return [d, d]; } },
-  { label: "Last 7d",   range: () => [backDays(6), fleetDayKey()] },
+  { label: "Today",       range: () => [fleetDayKey(), fleetDayKey()] },
+  { label: "Yesterday",   range: () => { const d = backDays(1); return [d, d]; } },
+  { label: "Last 7 days", range: () => [backDays(6), fleetDayKey()] },
 ];
 
 /** The fleet day N days before today. */
@@ -364,12 +366,6 @@ export default function WeighbridgesScreen() {
   // is up and its span reaches today: a closed day has nothing "out".
   const dispatched = useDispatchedUnits(orgId, { enabled: view === "analytics" && to >= fleetDayKey() });
 
-  // A tap anywhere on a date field opens the calendar: on a phone the field
-  // hides the browser's small glyph to leave the date its full width.
-  const openPicker = useCallback((e) => {
-    try { e.currentTarget.showPicker?.(); } catch { /* not allowed here: typing still works */ }
-  }, []);
-
   // Close the breakdown when the set behind it changes. Leaving it open across
   // a day or centre change left a ticket on screen that the grid behind it no
   // longer contained.
@@ -509,65 +505,26 @@ export default function WeighbridgesScreen() {
         {view === "tickets" && <div className="sp4-filter-divider" />}
 
         <div className="sp4-filter-group">
-          {/* Two ends, both inclusive.
-              A native range picker does not exist — <input type="date"> is one
-              day, and every "range picker" is a component somebody wrote. Two
-              date inputs ARE the range control here: they are the same native
-              widget an operator already uses on this screen, they are
-              keyboard-reachable and typeable, and on a phone they open the
-              platform's own calendar. What they need instead of cleverness is
-              for neither end to be settable past the other, which is what the
-              bounds below do — you cannot drag the start past the finish and
-              end up looking at nothing. */}
-          {/* Each end is label + field in ONE box. See the .wb-range-leg rule
-              in the stylesheet: `display: contents` above 768px, so the bar is
-              element-for-element what it was on a desktop, and a real box
-              below it, so a wrap can never put "to" at the end of one line and
-              the field it names at the start of the next. */}
-          <span className="wb-range-leg">
-          <span className="sp4-filter-label">From</span>
-          <input
-            type="date"
-            className="sp4-date-input"
-            onClick={openPicker}
-            value={from}
-            /* Bounded at both ends. No future days, because there is nothing
-               there and an empty grid reads as a fault rather than as
-               tomorrow; nothing before the first ticket we ever captured,
-               because the provider keeps about two days and everything earlier
-               is outside the record rather than quiet; and never past the
-               other end of the range. */
-            min={bounds.min}
-            max={to || bounds.max}
-            onChange={e => {
-              const v = e.target.value || fleetDayKey();
-              setFrom(v);
-              // Dragging the start past the finish is a reader moving the
-              // whole window, not asking for an empty one.
-              if (v > to) setTo(v);
-            }}
+          {/* One field, one calendar (operator, 2026-10-08: "one date picker
+              for single date selection to date ranges"), the same picker the
+              unit panel uses. A click picks a day; a second click makes the
+              range between the two, both ends inclusive. It cannot reach past
+              today, nor before the first day we hold tickets for (the
+              provider keeps about two days and everything earlier is outside
+              the record rather than quiet), nor further than the span the
+              hook will fetch. Today, Yesterday and Last 7 days are buttons
+              beside it rather than inside the calendar, so the common spans
+              stay one click away. */}
+          <DateRangePicker
+            from={from}
+            to={to}
+            today={fleetDayKey()}
+            minDay={bounds.min ?? null}
+            maxDays={MAX_DAYS}
+            quickPicks={false}
+            label="Ticket dates"
+            onChange={(f, t) => { setFrom(f); setTo(t); }}
           />
-          </span>
-          <span className="wb-range-leg">
-          <span className="sp4-filter-label">to</span>
-          <input
-            type="date"
-            className="sp4-date-input"
-            onClick={openPicker}
-            value={to}
-            min={from || bounds.min}
-            max={bounds.max}
-            onChange={e => {
-              const v = e.target.value || fleetDayKey();
-              setTo(v);
-              if (v < from) setFrom(v);
-            }}
-          />
-          </span>
-
-          {/* The three spans anybody actually asks for, so the common case is
-              one click rather than two calendars. "Today" is also the way back
-              from a range, which two date inputs on their own do not offer. */}
           {SPANS.map(sp => {
             const [a, b] = sp.range();
             const on = from === a && to === b;
