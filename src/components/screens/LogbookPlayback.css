@@ -1,24 +1,58 @@
+/* Hallmark · component: dialog (day playback) · genre: modern-minimal · theme: sp4 (project tokens)
+ * states: default · hover · focus · active · disabled · loading · error · empty
+ * no shadows anywhere; every colour is an --sp4-* token
+ */
+
 /* Logbook › day playback (LogbookPlayback.jsx). The shell is the shared
-   dialog — .sp4-modal-overlay / .sp4-modal / -head / -body (SensorPanel.css),
-   the theft-case and repair dialogs' size and look (operator, 2026-10-08:
-   "a medium to small modal like that for theft cases"). These rules are only
-   what playback adds: the map, the controls, the figures and the list. */
+   dialog: .sp4-modal-overlay / .sp4-modal / -head (SensorPanel.css). These
+   rules are what playback adds: the map, the docked transport, the day's
+   figures and the event list, all in the panel's own tokens. */
 
 /* The wrapper only carries the theme tokens; it takes no box of its own. */
 .lbp-scope { display: contents; }
 
-/* Two columns (operator, 2026-10-08): the map and its transport on the
-   left; the day's figures and its events on the right. */
 .lbp {
-  width: min(1008px, 100%); /* 10% under the first cut (operator, 2026-10-08) */
-  height: min(546px, 63vh); /* 30% under the first cut (operator, 2026-10-08) */
+  /* Narrowed again (operator, 2026-10-08): 1008 → 880, the right column 300 → 256. */
+  width: min(880px, 100%);
+  height: min(546px, 63vh);
   max-height: none;
 }
+.lbp .sp4-modal-head { padding: 10px 14px; gap: 12px; flex-wrap: nowrap; }
+
+/* ── head ── */
+.lbp-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lbp-title__k {
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.lbp-title .sp4-repair-title { white-space: nowrap; }
+.lbp-unit {
+  padding: 2px 8px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 999px;
+  background: var(--sp4-raised);
+  color: var(--sp4-text-2);
+  font-size: var(--sp4-label);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.lbp .sp4-modal-head .lbp-seg { margin-left: auto; flex: none; }
+.lbp .sp4-modal-head .lbp-seg + .sp4-modal-x { margin-left: 0; }
+.lbp .urv-seg button.is-on { box-shadow: none; outline: 1px solid var(--sp4-line-hi); }
+.lbp .urv-seg button:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+
+/* ── two columns ── */
 .lbp-cols {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 256px;
 }
 .lbp-left { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .lbp-right {
@@ -26,37 +60,8 @@
   flex-direction: column;
   min-height: 0;
   border-left: 1px solid var(--sp4-line-hi);
+  background: var(--sp4-bg);
 }
-.lbp-sec { padding: 12px 14px; }
-.lbp-sec + .lbp-sec { border-top: 1px solid var(--sp4-line-hi); }
-.lbp-sec .frv-card__t { margin: 0 0 8px; }
-.lbp-sec--events { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
-.lbp-events { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -14px; padding: 0 8px 10px; overscroll-behavior: contain; }
-.lbp-events .rp__event { width: 100%; }
-
-/* The live map's transport (RoutePlayback) docked under the map instead of
-   floating: no drag, no shadow, no window of its own. Its event list moves
-   to the right column; its close and minimise give way to the dialog's ×. */
-.lbp-left .rp {
-  position: static !important;
-  left: auto !important;
-  top: auto !important;
-  transform: none !important;
-  width: auto !important;
-  z-index: auto;
-  border: 0;
-  border-top: 1px solid var(--sp4-line-hi);
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  background: var(--sp4-surface);
-}
-.lbp-left .rp__grip, .lbp-left .rp__min, .lbp-left .rp__close, .lbp-left .rp__events { display: none; }
-.lbp-left .rp__head { cursor: default; }
-
-.lbp-unit { font-size: var(--sp4-label); color: var(--sp4-text-3); }
-.lbp .sp4-modal-head .lbp-seg { margin-left: auto; }
-.lbp .sp4-modal-head .lbp-seg + .sp4-modal-x { margin-left: 0; }
 
 .lbp-map { position: relative; flex: 1 1 auto; min-height: 180px; }
 .lbp-map__canvas { position: absolute; inset: 0; }
@@ -66,31 +71,182 @@
   z-index: 600;
   display: grid;
   place-items: center;
+  padding: 16px;
+  text-align: center;
   background: var(--sp4-surface);
   color: var(--sp4-text-3);
   font-size: var(--sp4-body);
 }
 
+/* ── the live map's transport, docked and re-dressed ──
+   RoutePlayback reads the app's generic tokens; inside the dialog they are
+   pointed at the panel's, so the same component speaks this theme. Its float,
+   drag, close, minimise, plate and event list give way to the dialog's own. */
+.lbp-left .rp {
+  --border: var(--sp4-line-hi);
+  --color-card: var(--sp4-surface);
+  --color-card-inner: var(--sp4-raised);
+  --text-primary: var(--sp4-text-1);
+  --text-secondary: var(--sp4-text-2);
+  --text-muted: var(--sp4-text-3);
+  --accent-info: var(--sp4-accent);
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  width: auto !important;
+  z-index: auto;
+  gap: 6px;
+  padding: 8px 14px 10px;
+  border: 0;
+  border-top: 1px solid var(--sp4-line-hi);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  background: var(--sp4-surface);
+  font-size: var(--sp4-label);
+}
+.lbp-left .rp__grip, .lbp-left .rp__min, .lbp-left .rp__close,
+.lbp-left .rp__events, .lbp-left .rp__plate { display: none; }
+.lbp-left .rp__head { cursor: default; }
+.lbp-left .rp__day button,
+.lbp-left .rp__day input { border-radius: 6px; }
+.lbp-left .rp__play {
+  width: 32px;
+  height: 32px;
+  border-color: var(--sp4-accent);
+  background: var(--sp4-accent);
+  color: #fff;
+}
+.lbp-left .rp__play:hover { filter: brightness(1.08); color: #fff; }
+.lbp-left .rp__play:active { transform: translateY(1px); }
+.lbp-left .rp__play:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.lbp-left .rp__clock { font-size: var(--sp4-strong); font-weight: 700; }
+.lbp-left .rp__rate { border-radius: 6px; font-size: var(--sp4-label); padding: 3px 6px; }
+.lbp-left .rp__ratelbl { font-size: 9px; color: var(--sp4-text-3); }
+
+/* ── right column ── */
+.lbp-sec { padding: 12px 14px; }
+.lbp-sec + .lbp-sec { border-top: 1px solid var(--sp4-line-hi); }
+.lbp-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.lbp-h span { text-transform: none; letter-spacing: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* The figures: the KPI strip's hairline grid (.sp4-header-kpis), not cards. */
 .lbp-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sp4-line-hi);
 }
 .lbp-stats > div {
-  padding: 6px 8px;
-  border: 1px solid var(--sp4-line-hi);
-  border-radius: 6px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  background: var(--sp4-surface);
 }
-.lbp-stats b { display: block; color: var(--sp4-text-1); font-size: var(--sp4-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lbp-stats small { font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-3); }
-.lbp-stats span { font-size: var(--sp4-label); color: var(--sp4-text-3); }
-.lbp-side__h { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0 0; }
-.lbp-side__h span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.lbp-stats dt {
+  font-size: var(--sp4-label);
+  font-weight: 500;
+  color: var(--sp4-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lbp-stats dd {
+  margin: 0;
+  font-size: var(--sp4-strong);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--sp4-text-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lbp-stats small { margin-left: 2px; font-size: 10px; font-weight: 600; letter-spacing: 0; color: var(--sp4-text-3); }
+.lbp-stats .is-lead dd { color: var(--sp4-accent); }
+.lbp-stats .is-warn dd { color: var(--sp4-warn); }
+.lbp-stats .is-crit dd { color: var(--sp4-crit); }
+
+/* The events: one hairline row each, newest at the bottom and marked. */
+.lbp-sec--events { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
+.lbp-events {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -14px;
+  padding: 0 0 8px;
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sp4-raised) transparent;
+}
+.lbp-events > li + li { border-top: 1px solid var(--sp4-line); }
+.lbp-ev {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 14px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--sp4-text-2);
+  font: inherit;
+  font-size: var(--sp4-body);
+  text-align: left;
+  cursor: pointer;
+}
+.lbp-ev:hover { background: var(--sp4-raised); }
+.lbp-ev:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; }
+.lbp-ev:active { background: var(--sp4-line-hi); }
+.lbp-events > li.is-now .lbp-ev { border-left-color: var(--sp4-accent); background: var(--sp4-surface); }
+.lbp-ev__icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--sp4-raised);
+  color: var(--sp4-text-3);
+  font-size: 13px;
+}
+.lbp-ev__icon--speeding, .lbp-ev__icon--theft { color: var(--sp4-crit); }
+.lbp-ev__icon--refill { color: var(--sp4-ok); }
+.lbp-ev__icon--fault { color: var(--sp4-warn); }
+.lbp-ev__icon--zone, .lbp-ev__icon--dispatch { color: var(--sp4-info); }
+.lbp-ev__what { display: flex; flex-direction: column; min-width: 0; }
+.lbp-ev__what b { font-weight: 600; color: var(--sp4-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbp-ev__what span { font-size: var(--sp4-label); color: var(--sp4-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbp-ev__t { font-size: var(--sp4-label); color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+.lbp-ev--critical .lbp-ev__what b { color: var(--sp4-crit); }
 
 .lbp-empty { padding: 10px 14px; font-size: var(--sp4-body); color: var(--sp4-text-3); }
 
+@media (prefers-reduced-motion: reduce) {
+  .lbp-left .rp__play:active { transform: none; }
+}
+
 @media (max-width: 900px) {
   .lbp { height: 100%; width: 100%; }
+  .lbp .sp4-modal-head { flex-wrap: wrap; }
   .lbp-cols { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; overflow-y: auto; }
   .lbp-map { min-height: 280px; }
   .lbp-right { border-left: 0; border-top: 1px solid var(--sp4-line-hi); }
