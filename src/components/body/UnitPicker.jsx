@@ -17,14 +17,44 @@
  * automatic: the switch is the operator's choice.
  */
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useCrossOrgUnits } from "../../hooks/useCrossOrgUnits";
 import { fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
 import "./UnitPicker.css";
 
 const MAX_SHOWN = 60;
+/** The theme tokens the floating list reads, copied from the box it belongs to. */
+const TOKENS = ["--sp4-surface", "--sp4-raised", "--sp4-line", "--sp4-line-hi", "--sp4-text-1", "--sp4-text-2",
+  "--sp4-text-3", "--sp4-text-4", "--sp4-accent", "--sp4-ok", "--sp4-body", "--sp4-label"];
 const key = (s) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
+
+/**
+ * What a row says under the plate: the unit's machine name or Wialon name
+ * WITHOUT what every unit of the fleet repeats ("WKS - Nzoia Sugar - …") and
+ * without the plate itself — so "WKS - Nzoia Sugar - KDJ 810Z" says nothing
+ * extra and shows nothing, and "WKS - Nzoia Sugar - KDJ 810Z - Low loader"
+ * shows "Low loader". Exported for tests.
+ */
+export function sharedPrefix(vehicles) {
+  const names = (vehicles ?? []).map((v) => String(v.machineName || v.name || "").split(/\s+-\s+/));
+  if (names.length < 3) return [];
+  const out = [];
+  for (let i = 0; ; i += 1) {
+    const seg = names[0]?.[i];
+    if (!seg) break;
+    const share = names.filter((n) => key(n[i]) === key(seg)).length / names.length;
+    if (share < 0.6) break;
+    out.push(key(seg));
+  }
+  return out;
+}
+export function rowLabel(v, prefix) {
+  const segs = String(v.machineName || v.name || "").split(/\s+-\s+/).filter(Boolean);
+  const plate = key(v.id);
+  return segs.filter((seg, i) => !(i < prefix.length && key(seg) === prefix[i]) && key(seg) !== plate && !key(seg).includes(plate)).join(" · ");
+}
 
 /** Units matching `q`, best first. Exported for tests. */
 export function matchUnits(vehicles, q) {
@@ -55,7 +85,33 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
   const [hi, setHi] = useState(0);
   const wrapRef = useRef(null);
   const listRef = useRef(null);
+  const panelRef = useRef(null);
   const listId = useId();
+  // Where the list floats: fixed to the viewport, in a portal on <body>, so no
+  // map pane, legend or panel can sit over it (operator, 2026-10-08: on the
+  // Logbook the map's legend covered it). Below the box, or above it when
+  // the box is near the bottom of the screen.
+  const [place, setPlace] = useState(null);
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const measure = () => {
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const width = Math.min(Math.max(r.width, 320), vw - 16);
+      const left = Math.max(8, Math.min(r.left, vw - width - 8));
+      const below = vh - r.bottom - 12, above = r.top - 12;
+      const up = below < 220 && above > below;
+      // The panel's tokens live on .sp4-root; on <body> it carries their values.
+      const cs = getComputedStyle(wrapRef.current);
+      const tokens = Object.fromEntries(TOKENS.map((t) => [t, cs.getPropertyValue(t)]).filter(([, v]) => v));
+      setPlace({ ...tokens, left, width, ...(up ? { bottom: vh - r.top + 4 } : { top: r.bottom + 4 }), maxHeight: Math.min(380, up ? above : below) });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
+  }, [open]);
 
   const selected = useMemo(() => (vehicles ?? []).find((v) => v.vehicleId === value) ?? null, [vehicles, value]);
   // The box shows the chosen plate until the operator starts typing again.
@@ -63,6 +119,7 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
 
   const matches = useMemo(() => matchUnits(vehicles, query), [vehicles, query]);
   const list = matches.slice(0, MAX_SHOWN);
+  const prefix = useMemo(() => sharedPrefix(vehicles), [vehicles]);
 
   // Elsewhere: only asked when this organisation has nothing for the query.
   const { companies: elsewhere, loading: lookingElsewhere } = useCrossOrgUnits({
@@ -85,7 +142,7 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
 
   useEffect(() => {
     if (!open) return undefined;
-    const down = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const down = (e) => { if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) setOpen(false); };
     document.addEventListener("pointerdown", down);
     return () => document.removeEventListener("pointerdown", down);
   }, [open]);
@@ -133,10 +190,10 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
                 onClick={() => { onChange(null); setQuery(""); setOpen(true); }}>✕</button>
       )}
 
-      {open && (
-        <div className="upk__panel">
+      {open && place && createPortal(
+        <div className="upk__panel" ref={panelRef} style={place}>
           <div className="upk__head">
-            {activeCompany?.short || activeCompany?.name || "This organisation"}
+            <b>{activeCompany?.name || activeCompany?.short || "This organisation"}</b>
             <span>{query ? `${matches.length} of ${vehicles?.length ?? 0}` : `${vehicles?.length ?? 0} units`}</span>
           </div>
           <ul className="upk__list" id={listId} role="listbox" ref={listRef}>
@@ -154,8 +211,9 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
               >
                 <span className={`upk__dot${v.online ? " upk__dot--on" : ""}`} title={v.online ? "Online" : "Offline"} />
                 <span className="upk__plate">{v.id}</span>
-                <span className="upk__name">{v.machineName || v.name || ""}</span>
+                <span className="upk__name">{rowLabel(v, prefix)}</span>
                 <span className="upk__type">{fleetTypeLabel(fleetType(v))}</span>
+                <span className="upk__check" aria-hidden="true">{v.vehicleId === value ? "✓" : ""}</span>
               </li>
             ))}
             {matches.length > MAX_SHOWN && (
@@ -191,7 +249,9 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
               </li>
             )}
           </ul>
-        </div>
+          <div className="upk__foot" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>Enter</kbd> pick · <kbd>Esc</kbd> close</div>
+        </div>,
+        document.body,
       )}
     </div>
   );
