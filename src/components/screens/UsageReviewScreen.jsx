@@ -704,6 +704,7 @@ export default function UsageReviewScreen() {
   }, [review]);
   const placePager = usePager(review?.places ?? [], review, PAGE_ROWS);
   // Up to 15 rows a page, and the card grows to hold them.
+  const dayIndex = useMemo(() => new Map((review?.days ?? []).map((d) => [d.date, d])), [review]);
   const detailPager = usePager(detailRows, `${sel.day}|${sel.place}|${detailKind}`, PAGE_STEP);
   // A place picked on the map opens the list on its page.
   const setPlacePage = placePager.setPage;
@@ -933,61 +934,92 @@ export default function UsageReviewScreen() {
                   <div className="sp4-table-scroll urv-table">
                     <table className="sp4-table urv-detail">
                       <thead><tr>
-                        {!selDay && <th>Date</th>}
+                        <th className="urv-tl" aria-label="Sequence" />
                         <th>Time</th><th>What</th>
                         {selDay ? <th className="urv-wide">Where</th> : <><th className="urv-wide">Came from</th><th className="urv-wide">Went to</th></>}
                         {showKm && <th className="urv-num">km</th>}
-                        <th className="urv-num">Duration</th><th aria-label="Open" />
+                        <th className="urv-num">Duration</th>
+                        {selDay && <th aria-label="Open" />}
                       </tr></thead>
                       <tbody>
-                        {detailPager.pageRows.map(({ kind, x }) => {
-                          const day = dayKeyOf(x.start);
-                          // A row opens what it points at: in a place's list,
-                          // the day it happened; in a day's list, a stop's place.
-                          const go = !selDay
-                            ? { label: "Play this day", play: true, run: () => setPlayDay(day) }
-                            : kind === "stop" && x.place != null
-                              ? { label: sel.place === x.place ? "Show the whole day" : "This place only", run: () => setSel((v) => ({ ...v, place: v.place === x.place ? null : x.place })) }
-                              : null;
-                          const placeLink = (id) => (
-                            <button type="button" className="urv-link" title="Pick this place"
-                                    onClick={(e) => { e.stopPropagation(); setSel((v) => ({ day: v.day, place: v.place === id ? null : id })); }}>
-                              {id}. {pname(id)}
-                            </button>
-                          );
-                          return (
-                            <tr key={`${kind}${x.id}`} className={`urv-row${kind === "trip" ? " urv-trip" : ""}`}
-                                onClick={go?.run} title={go?.label}>
-                              {!selDay && <td className="urv-mono">{dayLabel(day, true)}</td>}
-                              <td className="urv-mono">{clock.format(x.start)}–{clock.format(x.end)}</td>
-                              <td>
-                                <span className={`urv-kind urv-kind--${kind === "trip" ? "drive" : x.overnight ? "night" : "stop"}`}>
-                                  {kind === "stop" && !x.overnight ? <StopSign /> : <i className={`ti ${kind === "trip" ? "ti-road" : "ti-moon"}`} aria-hidden="true" />}
-                                  {kind === "trip" ? "Drive" : x.overnight ? "Overnight" : "Stop"}
-                                </span>
-                              </td>
-                              {!selDay && (() => {
-                                const l = kind === "stop" ? legs(x) : { from: null, to: null };
-                                return (
-                                  <>
-                                    <td className="urv-where">{l.from != null ? placeLink(l.from) : <span className="urv-none">—</span>}</td>
-                                    <td className="urv-where">{l.to != null ? placeLink(l.to) : <span className="urv-none">—</span>}</td>
-                                  </>
-                                );
-                              })()}
-                              {selDay && (
-                                <td className="urv-where">
-                                  {kind === "trip"
-                                    ? <>{placeLink(x.fromPlace)} <span className="urv-arrow">→</span> {placeLink(x.toPlace)}</>
-                                    : x.place != null ? placeLink(x.place) : "—"}
+                        {(() => {
+                          // A ledger, read top to bottom: a rail down the left
+                          // joins one entry to the next (a drive is the road,
+                          // a stop the sign on it), and in a place's list the
+                          // entries sit under the day they happened, each day
+                          // with its own figures and its own Play.
+                          const cols = (selDay ? 6 : 6) + (showKm ? 1 : 0);
+                          const page = detailPager.pageRows;
+                          const longest = Math.max(1, ...page.map((r) => r.x.min));
+                          const out = [];
+                          page.forEach(({ kind, x }, k) => {
+                            const day = dayKeyOf(x.start);
+                            const newDay = !selDay && (k === 0 || dayKeyOf(page[k - 1].x.start) !== day);
+                            const endsDay = selDay ? k === page.length - 1 : k === page.length - 1 || dayKeyOf(page[k + 1].x.start) !== day;
+                            if (newDay) {
+                              const d = dayIndex.get(day);
+                              out.push(
+                                <tr key={`d${day}`} className="urv-dayrow">
+                                  <td colSpan={cols}>
+                                    <div className="urv-dayrow__in">
+                                      <b>{dayLabel(day, true)}</b>
+                                      {d && <span>{nf(d.km, 1)} km · {hm(d.driveH)} driving{d.firstMove ? ` · ${clock.format(d.firstMove)}–${clock.format(d.lastMove)}` : ""}</span>}
+                                      <button type="button" className="urv-dayplay" onClick={() => setPlayDay(day)} title={`Play ${dayLabel(day, true)} on the map`}>
+                                        <i className="ti ti-player-play-filled" aria-hidden="true" /> Play
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>,
+                              );
+                            }
+                            // In a day's list a stop opens its place; in a
+                            // place's list a row plays the day it happened.
+                            const go = !selDay
+                              ? { label: "Play this day", run: () => setPlayDay(day) }
+                              : kind === "stop" && x.place != null
+                                ? { label: sel.place === x.place ? "Show the whole day" : "This place only", run: () => setSel((v) => ({ ...v, place: v.place === x.place ? null : x.place })) }
+                                : null;
+                            const placeLink = (id) => (
+                              <button type="button" className="urv-link" title="Pick this place"
+                                      onClick={(e) => { e.stopPropagation(); setSel((v) => ({ day: v.day, place: v.place === id ? null : id })); }}>
+                                {id}. {pname(id)}
+                              </button>
+                            );
+                            const tone = kind === "trip" ? "drive" : x.overnight ? "night" : "stop";
+                            const l = !selDay && kind === "stop" ? legs(x) : null;
+                            out.push(
+                              <tr key={`${kind}${x.id}`} className={`urv-row urv-row--${tone}`} onClick={go?.run} title={go?.label}>
+                                <td className={`urv-tl urv-tl--${tone}${newDay || (selDay && k === 0) ? " is-first" : ""}${endsDay ? " is-last" : ""}`}>
+                                  <span className="urv-tl__node">
+                                    {tone === "stop" ? <StopSign size={14} /> : <i className={`ti ${tone === "drive" ? "ti-road" : "ti-moon"}`} aria-hidden="true" />}
+                                  </span>
                                 </td>
-                              )}
-                              {showKm && <td className="urv-num">{kind === "trip" ? nf(x.km, 1) : ""}</td>}
-                              <td className="urv-num">{minutes(x.min)}</td>
-                              <td className="urv-go">{go && <i className={`ti ${go.play ? "ti-player-play" : "ti-chevron-right"}`} aria-hidden="true" />}</td>
-                            </tr>
-                          );
-                        })}
+                                <td className="urv-when"><b>{clock.format(x.start)}</b><span>{clock.format(x.end)}</span></td>
+                                <td className={`urv-what urv-what--${tone}`}>{tone === "drive" ? "Drive" : tone === "night" ? "Overnight" : "Stop"}</td>
+                                {!selDay && (
+                                  <>
+                                    <td className="urv-where">{l?.from != null ? placeLink(l.from) : kind === "trip" ? placeLink(x.fromPlace) : <span className="urv-none">—</span>}</td>
+                                    <td className="urv-where">{l?.to != null ? placeLink(l.to) : kind === "trip" ? placeLink(x.toPlace) : <span className="urv-none">—</span>}</td>
+                                  </>
+                                )}
+                                {selDay && (
+                                  <td className="urv-where">
+                                    {kind === "trip"
+                                      ? <>{placeLink(x.fromPlace)} <span className="urv-arrow">→</span> {placeLink(x.toPlace)}</>
+                                      : x.place != null ? placeLink(x.place) : <span className="urv-none">—</span>}
+                                  </td>
+                                )}
+                                {showKm && <td className="urv-num">{kind === "trip" ? nf(x.km, 1) : ""}</td>}
+                                <td className="urv-num urv-dur">
+                                  <span className={`urv-dur__bar urv-dur__bar--${tone}`} style={{ "--w": `${Math.max(4, Math.round((x.min / longest) * 100))}%` }} aria-hidden="true" />
+                                  {minutes(x.min)}
+                                </td>
+                                {selDay && <td className="urv-go">{go && <i className="ti ti-chevron-right" aria-hidden="true" />}</td>}
+                              </tr>,
+                            );
+                          });
+                          return out;
+                        })()}
                       </tbody>
                     </table>
                   </div>
