@@ -302,3 +302,91 @@
 /* "Where it spent its time": Google's exact name for the spot (operator,
    2026-10-08), the column the eye goes to first. */
 .urv-exact { font-weight: 600; white-space: nowrap; }
+
+/* ── Day and place detail ──────────────────────────────────────────────────
+   Grows with its rows, up to a page of 15 (operator, 2026-10-08); a pick
+   with fewer rows keeps the card short. */
+.urv-card--detail { padding-bottom: 0; display: flex; flex-direction: column; }
+.urv-card--detail .sp4-table-scroll { flex: 0 0 auto; margin: 0 -16px; padding-bottom: 0; overflow-x: auto; }
+.urv-card--detail .sp4-tpager { margin: 0 -16px; }
+.urv-card--detail > .urv-hint { padding-left: 0; }
+.urv-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.urv-detail__head .frv-card__t { margin-bottom: 6px; }
+
+.urv-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 8px;
+  background: var(--sp4-raised);
+}
+.urv-seg button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sp4-text-2);
+  font: inherit;
+  font-size: var(--sp4-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+.urv-seg button:hover { color: var(--sp4-text-1, var(--sp4-text)); }
+.urv-seg button.is-on { background: var(--sp4-surface); color: var(--sp4-accent); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.urv-seg__n { margin-left: 3px; color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+
+.urv-detail td { vertical-align: middle; }
+.urv-detail tfoot td {
+  border-top: 1px solid var(--sp4-line);
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  color: var(--sp4-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.urv-detail tfoot .urv-num { text-transform: none; letter-spacing: 0; font-size: var(--sp4-body); }
+
+.urv-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.urv-kind .ti { font-size: 12px; }
+.urv-kind--drive { background: rgba(59, 130, 246, 0.1); color: var(--sp4-accent); border-color: rgba(59, 130, 246, 0.22); }
+.urv-kind--stop { background: var(--sp4-raised); color: var(--sp4-text-2); border-color: var(--sp4-line); }
+.urv-kind--night { background: rgba(245, 158, 11, 0.1); color: var(--sp4-warn); border-color: rgba(245, 158, 11, 0.22); }
+
+.urv-where { white-space: nowrap; }
+.urv-arrow { color: var(--sp4-text-3); margin: 0 2px; }
+.urv-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sp4-text-1, inherit);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.urv-link:hover { color: var(--sp4-accent); text-decoration: underline; text-underline-offset: 2px; }
+.urv-go { width: 24px; color: var(--sp4-text-4); text-align: right; }
+.urv-row:hover .urv-go { color: var(--sp4-accent); }
+/* The place columns take the width the fixed ones leave, so the table fills
+   the card without gaps between the short columns. */
+.urv-detail th:not(.urv-wide), .urv-detail td:not(.urv-where) { width: 1%; white-space: nowrap; }
+.urv-none { color: var(--sp4-text-4); }
