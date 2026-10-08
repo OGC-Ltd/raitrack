@@ -502,13 +502,18 @@ export default function SidePanel() {
         </nav>
       )}
 
-      {/* The very bottom: the login page's mark, its RAI GROUP wordmark and
-          the version under it (wordmark back, operator 2026-10-03; the year
-          stays off — the login page keeps it). Folded to the rail there is no
-          room for the wordmark, so the mark names the company there. The
-          tooltip carries the build and its date. */}
+      {/* The very bottom: the login page's mark in the text's own muted ink,
+          beside the RAI GROUP wordmark with the version under it (the year
+          stays off; the login page keeps it). Folded to the rail there is no room
+          for the wordmark, so the mark names the company there. The tooltip
+          carries the build and its date. */}
       <div className="side-panel__meta" title={buildDetail()}>
-        <img className="side-panel__meta-mark" src="/logo-icon.png" alt={collapsed ? "RAI Group" : ""} width="34" height="34" />
+        {/* A mask filled with currentColor, so the mark is drawn in the
+            version's ink rather than the PNG's solid black. */}
+        <span
+          className="side-panel__meta-mark"
+          {...(collapsed ? { role: 'img', 'aria-label': 'RAI Group' } : { 'aria-hidden': true })}
+        />
         <span className="side-panel__meta-text">
           {!collapsed && <span className="side-panel__meta-word">RAI GROUP</span>}
           <span className="side-panel__meta-version">{versionLabel()}</span>
