@@ -18,8 +18,11 @@ export async function getUsageReview({ orgId, vehicleId, from, to, fresh = false
 }
 
 /** Save the review's workbook or PDF. `kmpl` overrides the vehicle's rate for the fuel estimate. */
-export async function downloadUsageReview({ orgId, vehicleId, from, to, kind, kmpl, fallbackName }) {
-  const q = new URLSearchParams({ from, to, ...(kmpl ? { kmpl: String(kmpl) } : {}) })
+export async function downloadUsageReview({ orgId, vehicleId, from, to, kind, kmpl, names, fallbackName }) {
+  // `names`: place id → Google's exact name, looked up by the page (the
+  // server has no Google key), printed in the PDF and the workbook.
+  const named = names && Object.keys(names).length ? { names: JSON.stringify(names) } : {}
+  const q = new URLSearchParams({ from, to, ...(kmpl ? { kmpl: String(kmpl) } : {}), ...named })
   const { blob, filename } = await apiFetchBlob(`${base(orgId, vehicleId)}/${kind}?${q}`)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

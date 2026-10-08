@@ -668,6 +668,7 @@ export default function UsageReviewScreen() {
       await downloadUsageReview({
         orgId: live.orgId, vehicleId: live.vehicleId, from: live.from, to: live.to, kind,
         kmpl: kmplText && kmplIn > 0 ? kmplIn : undefined,
+        names: Object.fromEntries(gnames),
         fallbackName: `${review.vehicle.plate.replace(/\s+/g, "")}_${live.from}_${live.to}_highlights.${kind}`,
       });
     } catch (e) { setDlError(e.message || "Download failed"); }
@@ -841,7 +842,7 @@ export default function UsageReviewScreen() {
               <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames} />
 
               <section className="frv-card urv-card urv-card--top">
-                <h3 className="frv-card__t">Distance per day</h3>
+                <h3 className="frv-card__t">Distance per Day</h3>
                 <DailyChart days={review.days} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
                 <p className="frv-card__note">Bars are km, dots are hours driving. Click a day to follow it on the map.</p>
               </section>
@@ -849,7 +850,7 @@ export default function UsageReviewScreen() {
 
             <div className="urv-grid urv-grid--lower">
               <section className="frv-card urv-card urv-card--table">
-                <h3 className="frv-card__t">Where it spent its time</h3>
+                <h3 className="frv-card__t">Where It Spent Its Time</h3>
                 <p className="urv-card__sub">{s.places} places · {nf(s.stoppedH, 0)} h stopped in stops of 10 min or more · click a place</p>
                 <div className="sp4-table-scroll urv-table">
                   <table className="sp4-table">
@@ -878,7 +879,7 @@ export default function UsageReviewScreen() {
               </section>
 
               <section className="frv-card urv-card urv-card--fixed">
-                <h3 className="frv-card__t">When it drives</h3>
+                <h3 className="frv-card__t">Driving by Hour</h3>
                 <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal} />
                 <p className="frv-card__note">
                   {sel.day ? `Minutes driving in each hour on ${dayLabel(sel.day, true)}, over the period's average.`
@@ -901,7 +902,7 @@ export default function UsageReviewScreen() {
               <section className="frv-card urv-card urv-card--detail">
                 <div className="urv-detail__head">
                   <div>
-                    <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and place detail"}</h3>
+                    <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and Place Detail"}</h3>
                     <p className="urv-card__sub">
                       {selDay && <span>{nf(selDay.km, 1)} km · {hm(selDay.driveH)} driving{selDay.engineH != null ? ` · ${hm(selDay.engineH)} engine` : ""}{kmpl ? ` · ~${nf(selDay.km / kmpl, 1)} L` : ""}{selPlace ? ` · stops at ${selPlace.id}. ${nameOf(selPlace, gnames)}` : ""}</span>}
                       {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days{selPlace.name && gnames.has(selPlace.id) ? ` · ${placeCase(selPlace.name)}` : ""}</span>}
