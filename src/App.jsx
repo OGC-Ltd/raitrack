@@ -52,6 +52,12 @@ function AppShell() {
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const { orgs } = useAuth();
 
+  // Tab title: "Rai Operations | <organisation>", plain "Rai Operations" on sign-out.
+  useEffect(() => {
+    document.title = activeCompany?.name ? `Rai Operations | ${activeCompany.name}` : 'Rai Operations';
+    return () => { document.title = 'Rai Operations'; };
+  }, [activeCompany?.name]);
+
   // Keep allowed-tab guard identical to original
   const allowedTabs = NAV_ITEMS.filter(t => can(t.permission));
   const tabAllowed  = allowedTabs.some(t => t.key === desktopActiveTab);
