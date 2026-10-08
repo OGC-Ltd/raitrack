@@ -100,6 +100,13 @@ const TYPE_WORD = { TRUCK: "Truck", TRACTOR: "Tractor" };
 
 /** One vehicle's block: round for a tractor, filled once a scale has weighed
  *  it loaded, red past its run. */
+/* Yard names arrive as the factory system stores them, in capitals
+   ("NYAONDO"). On the board they are names, so they read as names: "Nyaondo",
+   "Oyani", "Fields". Each word capitalised, the rest lower case. */
+function nameCase(name = "") {
+  return String(name).toLowerCase().replace(/(^|[\s\-/(])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase());
+}
+
 function blockClass(x) {
   return "wbb-block"
     + (x.type === "TRACTOR" ? " wbb-block--tractor" : "")
@@ -659,30 +666,34 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
   const fewSites = sites.length <= 2;
   const outstandingPanels = (
     <>
-      <section className="wbb-panel">
+      <section className="wbb-panel wbb-road-panel">
+        {/* The total is the headline: how many are out right now. The split by
+            kind sits under it, naming only the kinds there are. */}
         <h4 className="wbb-panel__h">
-          Vehicles on the road to the mill
-          <span className="wbb-panel__n">{units.length}</span>
+          Vehicles on the Road to the Mill
+          <span className="wbb-road-panel__total">{units.length}</span>
         </h4>
-        {/* Trucks and tractors, one block each, ranked by yard. FactorySuite's
+        <p className="wbb-panel__sub">
+          {[
+            unitCounts.trucks > 0 && `${unitCounts.trucks} truck${unitCounts.trucks === 1 ? "" : "s"}`,
+            unitCounts.tractors > 0 && `${unitCounts.tractors} tractor${unitCounts.tractors === 1 ? "" : "s"}`,
+            units.length - unitCounts.trucks - unitCounts.tractors > 0 && `${units.length - unitCounts.trucks - unitCounts.tractors} other`,
+          ].filter(Boolean).join(" · ") || "Nothing out"}
+        </p>
+        {/* Trucks and tractors, one block each, a line per yard. FactorySuite's
             dispatches (signed out, from the webhook) and the transfer
             tickets loaded at a yard, as one list — see `roadUnits`. A block
             is filled once a scale has weighed the vehicle loaded, hollow
-            while it is only signed out; a tractor is drawn round.
+            while it is only signed out; a tractor is drawn round. The yard's
+            count is printed at the end of its line, so nobody counts blocks.
 
             Every yard gets a line, including the ones with nothing out —
             "None out" is the reading somebody is looking for when the mill
             is short. */}
-        <p className="wbb-panel__sub">
-          {unitCounts.trucks} truck{unitCounts.trucks === 1 ? "" : "s"} · {unitCounts.tractors} tractor{unitCounts.tractors === 1 ? "" : "s"}
-          {units.length - unitCounts.trucks - unitCounts.tractors > 0 && <> · {units.length - unitCounts.trucks - unitCounts.tractors} other</>}
-          {" · "}<i className="wbb-key wbb-key--loaded" aria-hidden="true" /> loaded
-          {" "}<i className="wbb-key" aria-hidden="true" /> signed out
-        </p>
         <ul className="wbb-road">
           {roadBySite.map(r => (
-            <li key={r.code} className="wbb-road__row">
-              <span className="wbb-road__site">{r.name}</span>
+            <li key={r.code} className={"wbb-road__row" + (r.trucks.length ? "" : " wbb-road__row--none")}>
+              <span className="wbb-road__site" title={r.name}>{nameCase(r.name)}</span>
               {r.trucks.length === 0 ? (
                 <span className="wbb-road__none">None out</span>
               ) : (
@@ -693,12 +704,25 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
                   {r.trucks.length > MAX_BLOCKS && (
                     <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
                   )}
-                  {r.kg > 0 && <b className="wbb-road__t">{t1(r.kg)} t</b>}
                 </span>
               )}
+              <span className="wbb-road__count">
+                {r.kg > 0 && <span className="wbb-road__t">{t1(r.kg)} t</span>}
+                <b>{r.trucks.length || "—"}</b>
+              </span>
             </li>
           ))}
         </ul>
+        {/* The key names only what is drawn above: no tractor symbol on a
+            day with no tractor out. */}
+        {units.length > 0 && (
+          <p className="wbb-road__key">
+            {units.some(u => u.loaded) && <span><i className="wbb-block" aria-hidden="true" />Loaded</span>}
+            {units.some(u => !u.loaded) && <span><i className="wbb-block wbb-block--out" aria-hidden="true" />Signed out</span>}
+            {unitCounts.tractors > 0 && <span><i className="wbb-block wbb-block--tractor wbb-block--out" aria-hidden="true" />Tractor</span>}
+            {units.some(u => u.overdue) && <span><i className="wbb-block wbb-block--late" aria-hidden="true" />Past its run</span>}
+          </p>
+        )}
         {feedQuiet && (
           <p className="wbb-panel__note">
             No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
@@ -719,7 +743,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
           of these waits. */}
       <section className="wbb-panel">
         <h4 className="wbb-panel__h">
-          Out longer than a run takes
+          Out Longer Than a Run Takes
           <span className={"wbb-panel__fig" + (overdue.length ? " wbb-panel__fig--late" : "")}>
             {overdue.length ? <>≥ {gap(overdueFloor)}</> : "none"}
           </span>
@@ -759,7 +783,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
 
       <section className="wbb-panel">
         <h4 className="wbb-panel__h">
-          Live activity
+          Live Activity
           <span className="wbb-panel__n">{board.activityTotal}</span>
         </h4>
         <ul className="wbb-feed">
@@ -904,7 +928,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
           <section className="wbb-panel wbb-flow">
             <div className="wbb-flow__head">
               <h4 className="wbb-flow__h">
-            Cane flow{spanDays > 1 ? ` over ${spanDays} days` : closed ? "" : " so far today"}
+            Cane Flow{spanDays > 1 ? ` Over ${spanDays} Days` : closed ? "" : " So Far Today"}
           </h4>
               <span className="wbb-flow__keys">
                 <span className="wbb-flow__key"><i className="wbb-key wbb-key--in" />Received from fields</span>
