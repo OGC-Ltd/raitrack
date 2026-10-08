@@ -31,6 +31,7 @@ import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
 import TablePager, { usePager } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
+import { googlePlaceNames } from "../../lib/googlePlaceNames";
 import { watchTableLabels } from "../../lib/tableLabels";
 
 const TZ = "Africa/Nairobi";
@@ -167,6 +168,11 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
  * the direction that tells two same-named places apart stay in the hover card
  * and the table; on the map the number beside it already does that.
  */
+/** A place's name: Google's exact name when it has one, else OpenStreetMap's. */
+const nameOf = (p, gnames) => (p ? gnames?.get(p.id) ?? placeCase(p.name) : null);
+/** The map label: Google's name as it is, OpenStreetMap's shortened. */
+const labelOf = (p, gnames) => gnames?.get(p.id) ?? shortPlace(placeCase(p.name));
+
 const shortPlace = (name) => {
   if (!name) return name;
   const cut = name.indexOf(" (");
@@ -222,7 +228,7 @@ class PlaceNames extends mapsNs.OverlayView {
   }
 }
 
-function ReviewMap({ review, sel, setSel, placeDays, pal }) {
+function ReviewMap({ review, sel, setSel, placeDays, pal, gnames }) {
   const el = useRef(null);
   const wrap = useRef(null);
   const map = useRef(null);
@@ -367,17 +373,6 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
         label: p.id <= 15 ? { text: String(p.id), color: "#fff", fontSize: "10px", fontWeight: "700" } : undefined,
       });
     }
-    const byId = new Map(review.places.map((p) => [p.id, p]));
-    names.current?.set(placeMarks.current.map((pm) => {
-      const p = byId.get(pm.id);
-      const chosen = sel.place === pm.id;
-      return {
-        id: pm.id, lat: p.lat, lng: p.lng, text: shortPlace(placeCase(p.name)) || `Place ${p.id}`,
-        gap: (chosen ? pm.scale + 3 : pm.scale) + 5,
-        dim: (dayPlaces && !dayPlaces.has(pm.id)) || (sel.place != null && !chosen),
-        strong: chosen,
-      };
-    }));
     stopMarks.current.forEach((s) => s.setMap(null));
     stopMarks.current = [];
     if (sel.day) {
@@ -404,7 +399,25 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
     }
   }, [ready, sel, setSel, review, placeDays, fitTo, at, pal]);
 
-  const placeName = (id) => placeCase(review.places.find((p) => p.id === id)?.name) ?? `Place ${id}`;
+  // The names beside the circles: their own effect, so a Google name arriving
+  // relabels the map without reframing it.
+  useEffect(() => {
+    if (!ready) return;
+    const dayPlaces = sel.day ? new Set(review.stops.filter((s) => dayKeyOf(s.start) === sel.day).map((s) => s.place)) : null;
+    const byId = new Map(review.places.map((p) => [p.id, p]));
+    names.current?.set(placeMarks.current.map((pm) => {
+      const p = byId.get(pm.id);
+      const chosen = sel.place === pm.id;
+      return {
+        id: pm.id, lat: p.lat, lng: p.lng, text: labelOf(p, gnames) || `Place ${p.id}`,
+        gap: (chosen ? pm.scale + 3 : pm.scale) + 5,
+        dim: (dayPlaces && !dayPlaces.has(pm.id)) || (sel.place != null && !chosen),
+        strong: chosen,
+      };
+    }));
+  }, [ready, sel, review, gnames]);
+
+  const placeName = (id) => nameOf(review.places.find((p) => p.id === id), gnames) ?? `Place ${id}`;
   const picked = sel.place != null ? review.places.find((p) => p.id === sel.place) : null;
   const pickedDay = sel.day ? review.days.find((d) => d.date === sel.day) : null;
   const dayStops = sel.day ? review.stops.filter((s) => dayKeyOf(s.start) === sel.day).length : 0;
@@ -420,7 +433,8 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
       const p = hover.place;
       tip = (
         <div className="urv-tip" style={style}>
-          <b>{p.id}. {placeCase(p.name) ?? "Place"}</b>
+          <b>{p.id}. {nameOf(p, gnames) ?? "Place"}</b>
+          {gnames?.has(p.id) && p.name && <span>{placeCase(p.name)}</span>}
           <span>{nf(p.hours, 1)} h · {plural(p.visits, "stop")} · {plural(p.days, "day")}</span>
           {p.county && <span>{p.county}</span>}
           <em>{sel.place === p.id ? "Click to clear" : "Click to light up its days"}</em>
@@ -475,7 +489,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal }) {
               </>
             ) : (
               <>
-                <b>{picked.id}. {placeCase(picked.name) ?? "Place"}</b>
+                <b>{picked.id}. {nameOf(picked, gnames) ?? "Place"}</b>
                 <span>{nf(picked.hours, 1)} h · {plural(picked.visits, "stop")} · {plural(picked.days, "day")}{picked.county ? ` · ${picked.county}` : ""}</span>
               </>
             )}
@@ -651,6 +665,17 @@ export default function UsageReviewScreen() {
   const runUnit = useMemo(() => (live ? vehicles.find((v) => v.vehicleId === live.vehicleId) : null), [live, vehicles]);
 
   useEffect(() => { setSel({ day: null, place: null }); }, [review]);
+  // Google's exact names for the places on the map, filled in as they arrive;
+  // the OpenStreetMap name stands until then, and wherever Google has none.
+  const [gnames, setGnames] = useState(() => new Map());
+  useEffect(() => {
+    setGnames(new Map());
+    if (!review) return undefined;
+    const ac = new AbortController();
+    googlePlaceNames(review.places.slice(0, MAX_PLACES_ON_MAP),
+      (id, g) => setGnames((m) => new Map(m).set(id, g.name)), { signal: ac.signal });
+    return () => ac.abort();
+  }, [review]);
   // The theme's colours, read once the page is up and again on a theme switch.
   useEffect(() => {
     const read = () => setPal((old) => {
@@ -720,7 +745,7 @@ export default function UsageReviewScreen() {
   useEffect(() => {
     if (sel.place != null) setPlacePage(Math.floor((sel.place - 1) / PAGE_ROWS));
   }, [sel.place, setPlacePage]);
-  const pname = (id) => placeCase(review?.places.find((p) => p.id === id)?.name) ?? `Place ${id}`;
+  const pname = (id) => nameOf(review?.places.find((p) => p.id === id), gnames) ?? `Place ${id}`;
 
   const dash = <span className="frp-kpi-none">—</span>;
   const top = review?.places[0];
@@ -743,7 +768,7 @@ export default function UsageReviewScreen() {
           <Kpi n={s ? `${s.activeDays}/${s.calendarDays}` : dash} label="Days it moved" tone="fleet"
                sub={s?.longestDay ? `Longest ${nf(s.longestDay.km, 0)} km, ${dayLabel(s.longestDay.date)}` : null} />
           <Kpi n={top ? nf(top.hours, 0) : dash} unit={top ? " h" : ""} label="At its base" tone="stat"
-               sub={top ? placeCase(top.name) : null} title={top ? `${top.lat.toFixed(5)}, ${top.lng.toFixed(5)}` : undefined} />
+               sub={top ? nameOf(top, gnames) : null} title={top ? `${top.lat.toFixed(5)}, ${top.lng.toFixed(5)}` : undefined} />
         </div>
       </div>
 
@@ -847,7 +872,7 @@ export default function UsageReviewScreen() {
             )}
 
             <div className="urv-grid urv-grid--top">
-              <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
+              <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames} />
 
               <section className="frv-card urv-card urv-card--top">
                 <h3 className="frv-card__t">Distance per day</h3>
@@ -868,7 +893,7 @@ export default function UsageReviewScreen() {
                         <tr key={p.id} className={`urv-row${sel.place === p.id ? " urv-row--on" : ""}`}
                             onClick={() => setSel((x) => ({ ...x, place: x.place === p.id ? null : p.id }))}>
                           <td>{p.id}</td>
-                          <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
+                          <td title={[gnames.has(p.id) ? placeCase(p.name) : null, p.address].filter(Boolean).join(" · ") || undefined}>{nameOf(p, gnames) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
                           <td className="urv-num">
                             <span className="urv-hbar" style={{ "--w": `${Math.min(100, (p.hours / review.places[0].hours) * 100)}%` }} />
@@ -898,7 +923,7 @@ export default function UsageReviewScreen() {
 
             <div className="urv-grid urv-grid--detail">
               <section className="frv-card urv-card urv-card--table">
-                <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${placeCase(selPlace.name) ?? "Place"}` : "Day and place detail"}</h3>
+                <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and place detail"}</h3>
                 <p className="urv-card__sub">
                   {selDay && <span>{nf(selDay.km, 1)} km · {hm(selDay.driveH)} driving{selDay.engineH != null ? ` · ${hm(selDay.engineH)} engine` : ""}{kmpl ? ` · ~${nf(selDay.km / kmpl, 1)} L` : ""}</span>}
                   {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days</span>}
