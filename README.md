@@ -1,17 +1,15 @@
 # Rai Operations Fleet Dashboard
 
-The live fleet dashboard served at **logistics.raioperations.com**: live map,
-fuel and probe monitoring, route replay, weighbridges, maintenance and
-per-fleet analytics for every organisation on the fleet-server platform.
-React + Vite, Redux Toolkit for client state, TanStack Query for server data.
+The web dashboard served at **logistics.raioperations.com**. It shows the live
+map, fuel and probe monitoring, route replay, weighbridges, maintenance and
+analytics for every organisation on the fleet-server platform.
 
-Organisations (`src/data/companyData.jsx`): Sukari Industries, Mufindi Paper
-Mills (Kasulu), Menengai Oil Refineries, West Kenya Sugar, Kabras Sugar,
-Nzoia Sugar, Timsales and Aquamist.
+React + Vite, Redux Toolkit for client state, TanStack Query for server data,
+Leaflet with OpenStreetMap for the map, SSE for live updates.
 
-**Contents:** [Quick start](#quick-start) · [How dev works](#how-dev-works) ·
+**Contents:** [Quick start](#quick-start) · [How it fits together](#how-it-fits-together) ·
 [Configuration](#configuration) · [Scripts](#scripts) · [Code layout](#code-layout) ·
-[Deployment](#deployment) · [Troubleshooting](#troubleshooting)
+[Deployment](#deployment) · [Troubleshooting](#troubleshooting) · [Further docs](#further-docs)
 
 ---
 
@@ -22,46 +20,81 @@ npm install
 npm run dev
 ```
 
-Opens at `http://localhost:5174` and signs in against the production
-fleet-server, so use your normal account. Add a `.env` (see
-[Configuration](#configuration)) for live traffic; the map itself needs no key.
+Opens at `http://localhost:5174` and signs in against the production API, so
+use your normal account. The map needs no key; add a `.env` (see
+[Configuration](#configuration)) for live traffic.
 
-## How dev works
+> **Dev talks to the remote API, on purpose.** `vite.config.js` proxies `/api`
+> to the deployed fleet-server in af-south-1, because only that instance runs
+> the **poller**. Against a local API every unit reads OFFLINE and a moving
+> unit's card says "Parked" beside "ENGINE ON". Never start a second poller
+> locally: both would write to the same shared database.
 
-**Dev talks to the remote backend, on purpose.** `vite.config.js` proxies
-`/api/*` to the deployed fleet-server (af-south-1), not to localhost. Only the
-deployed instance runs the **poller**, which is the sole source of the
-provider's `connectionOnline` verdict and a current `movement.state`. Against a
-local API-only backend every vehicle reads OFFLINE and a moving unit's card
-says "Parked" beside an "ENGINE ON" tile.
-
-Do **not** start a second poller locally to work around that: both would write
-to the same shared database.
-
-The host has no Elastic IP, so its address changes on every stop/start.
+The box has no Elastic IP, so its address changes on every stop/start.
 Override it without editing the config:
 
 ```bash
 VITE_PROXY_TARGET=http://<host> npm run dev
 ```
 
-**Ports.** This app owns 5174, dash 5175, fleet-server 3000. `strictPort` is on,
-so a taken port fails loudly instead of drifting onto another app's port.
+Ports are strict: this app 5174, dash 5175, fleet-server 3000. A taken port
+fails loudly instead of drifting onto another app.
+
+## How it fits together
+
+**System**
+
+```
+Browser (this app)
+  │ /api/v1/…        ┌──────────────┐    ┌────────────────────────┐
+  ├─────────────────▶│ nginx        ├───▶│ fleet-server :3000     │
+  │ SSE /live        │ (TLS, /api)  │    │ poller, queues, rules  │
+  ◀──────────────────┤              │◀───┤                        │
+  │                  └──────────────┘    └───────────┬────────────┘
+  │                                                  ▼
+  │                                      PostgreSQL (RDS), Redis
+  │
+  ├──▶ OpenStreetMap tiles, Nominatim    base map, place search (no key)
+  ├──▶ TomTom                            traffic, trip ETAs
+  ├──▶ Google Maps                       optional second base map
+  └──▶ Open-Meteo                        weather card (no key)
+```
+
+**Data inside the app**
+
+```
+services/snapshot.js ──▶ GET /vehicles/snapshot ─┐
+services/api.js ───────▶ SSE /live?delta=1 ──────┤
+                                                 ▼
+                     hooks/useFleetLive ──▶ TanStack Query cache ◀── hooks/useApiData (api/*)
+                                                 │
+store/ (Redux: company, tabs, map, filters) ─────┤
+services/cache.js (last snapshot, first paint) ──┤
+                                                 ▼
+                     context/ selectors ──▶ components/ (map, panels, screens)
+```
+
+- **First paint** comes from the last snapshot kept in `localStorage`; the
+  fresh snapshot replaces it, then the SSE stream keeps positions current.
+- **Server data** lives in TanStack Query (`useApiData` wraps `useQuery`);
+  **client state** (active company, tabs, map, filters) lives in Redux.
+- **API modules** (`src/api/*`) resolve the organisation, then fetch
+  `/api/v1/organisations/:orgId/…`.
 
 ## Configuration
 
-All keys are read at build time from `.env` (gitignored; ask for the values,
-do not look for them in the repo). Browser map keys ship in the bundle and are
-public by design. What protects them is the domain or referrer restriction in
-each provider's console, not secrecy.
+Keys are read at build time from `.env` (gitignored; ask for the values, do
+not look for them in the repo). Browser map keys ship in the bundle and are
+public by design; the domain restriction in each provider's console protects
+them.
 
 | Variable | Needed for | Without it |
 |---|---|---|
-| `VITE_MYTOMTOM_API_KEY` | Live traffic layer and trip ETAs | Map works; traffic silently disappears |
-| `VITE_GOOGLE_MAPS_API_KEY` | Google as a second base map (Maps panel) | OpenStreetMap only; the choice is not offered |
-| `VITE_MAPBOX_API_KEY` | Mapbox base map, only if `MAPBOX_ENABLED` is switched on | Unused while the flag is off |
-| `VITE_API_URL` | Pointing the bundle at a non-same-origin API | Same-origin `/api` (the normal case) |
-| `VITE_PROXY_TARGET` | Dev only: where `/api` is proxied | The af-south-1 box in `vite.config.js` |
+| `VITE_MYTOMTOM_API_KEY` | Live traffic and trip ETAs | Map works, traffic disappears |
+| `VITE_GOOGLE_MAPS_API_KEY` | Google as a second base map | OpenStreetMap only |
+| `VITE_MAPBOX_API_KEY` | Mapbox base map when `MAPBOX_ENABLED` is on | Unused while the flag is off |
+| `VITE_API_URL` | An API on another origin | Same origin `/api` (normal) |
+| `VITE_PROXY_TARGET` | Dev only: where `/api` is proxied | The af-south-1 box |
 
 ## Scripts
 
@@ -77,93 +110,84 @@ each provider's console, not secrecy.
 
 ## Code layout
 
-```
-src/
-├── index.jsx              React entry
-├── App.jsx                app shell: tabs, organisation, tab title
-│
-├── api/                   one module per backend area; resolves orgId, then fetches
-├── services/              transport: fetch wrapper, SSE, snapshot cache
-├── store/                 Redux Toolkit slices (client state) and persistence
-├── context/               providers: auth, live fleet, app selectors and actions
-├── hooks/                 data hooks (useApiData wraps TanStack Query), live fleet,
-│                          playback, telemetry, fuel events, cross-org unit lookup
-├── lib/                   pure logic: vehicle state, map engine adapter (Leaflet),
-│                          playback paths, traffic, analytics filters
-├── utils/                 formatting and report generation
-├── data/                  static config; companyData.jsx holds the organisations
-│                          and their branding
-├── assets/                logos and images
-│
-└── components/
-    ├── layout/            side panel, header, vehicle detail panel, feeds
-    ├── body/              FleetMap, map tool rail, Units panel, overlays,
-    │                      RoutePlayback, SensorPanel, MaintenancePage
-    ├── screens/           full pages: Analytics, Fuel report, Weighbridges,
-    │                      Drivers, Maintenance, Audit, Logbook, admin
-    ├── cards/             detail cards
-    ├── charts/            donuts, histograms, rate series
-    ├── mobile/            small-screen variants
-    ├── header/            company switcher, user menu, stat cards, pickers
-    ├── footer/            bottom navigation
-    ├── warehouse/         storage views
-    ├── shared/            cross-area pieces
-    └── ui/                primitives
-```
+| Path | What lives there |
+|---|---|
+| `src/index.jsx`, `src/App.jsx` | Entry and app shell: tabs, organisation, tab title |
+| `src/api/` | One module per backend area |
+| `src/services/` | Transport: fetch wrapper, snapshot, first paint cache |
+| `src/store/` | Redux Toolkit slices, query client, persistence |
+| `src/context/` | Auth, live fleet, map layers, app selectors and actions |
+| `src/hooks/` | Data hooks, live fleet, playback, telemetry, cross org lookup |
+| `src/lib/` | Pure logic: vehicle state, Leaflet adapter, traffic, filters |
+| `src/utils/` | Formatting and report generation |
+| `src/data/` | Static config; `companyData.jsx` holds the organisations |
+| `src/assets/` | Logos and images |
+| `src/components/layout/` | Side panel, header, vehicle detail panel, feeds |
+| `src/components/body/` | FleetMap, tool rail, Units panel, playback, sensors |
+| `src/components/screens/` | Analytics, Fuel report, Weighbridges, Drivers, Maintenance, Audit, Logbook, admin |
+| `src/components/header/`, `footer/` | Company switcher, user menu, stat cards, bottom nav |
+| `src/components/mobile/` | Small screen variants |
+| `src/components/cards/`, `charts/`, `shared/`, `ui/` | Cards, charts, shared pieces, primitives |
 
-Tests sit beside the code they cover, as `*.test.js` / `*.test.jsx`.
-
-**External services:** OpenStreetMap tiles and Nominatim (base map, place
-search, no key), TomTom (traffic, ETAs), Google Maps (optional base map),
-Open-Meteo (weather card, no key). Everything else comes from fleet-server.
+Tests sit beside the code they cover, as `*.test.js` and `*.test.jsx`.
 
 ## Deployment
 
 **Every push to `main` deploys to production** via
-`.github/workflows/deploy.yml`. There is no staging step, so push to `main`
-only what should go live.
+`.github/workflows/deploy.yml`. There is no staging step.
 
-The bundle is built **on the runner and copied to the box**, never built on the
-box. Rebuilding in place once silently replaced a good bundle with one missing
-the sprite atlases and the estate-plan layer. The workflow:
+```
+push to main
+     │
+     ▼
+GitHub runner: npm ci ──▶ npm run build ──▶ check public/ in build/ ──▶ write DEPLOYED_COMMIT
+     │
+     ▼
+box: copy live bundle to build.bak-<stamp> (keeps 3) ──▶ rsync into ~/prod/dash/build
+     │
+     ▼
+check: site serves the new hashed entry script
+```
 
-1. checks every file in `public/` survived into `build/`;
-2. writes `build/DEPLOYED_COMMIT` (the commit being served);
-3. copies the live bundle aside as `build.bak-<stamp>` (the box keeps 3);
-4. copies the new bundle to `~/prod/dash/build`, which nginx serves straight
-   from disk;
-5. confirms the site serves the new hashed entry script.
+The bundle is built on the runner, never on the box: a rebuild in place once
+replaced a good bundle with one missing the sprite atlases.
 
-**Check what is live:**
+Check what is live:
 
 ```bash
 curl -s https://logistics.raioperations.com/DEPLOYED_COMMIT
 ```
 
-**Repository secrets** (`production` environment): `EC2_SSH_KEY`, `EC2_HOST`,
-`EC2_HOST_KEY` to reach the box (set up as in `fleet-server/docs/ci-deploy.md`;
-`EC2_HOST` must be re-entered when the address changes), plus
-`VITE_MYTOMTOM_API_KEY` (checked, the build refuses without it) and
-`VITE_GOOGLE_MAPS_API_KEY` (optional).
+Repository secrets (`production` environment): `EC2_SSH_KEY`, `EC2_HOST` and
+`EC2_HOST_KEY` reach the box (setup in `fleet-server/docs/ci-deploy.md`;
+update `EC2_HOST` when the address changes). `VITE_MYTOMTOM_API_KEY` is
+required; `VITE_GOOGLE_MAPS_API_KEY` is optional.
 
-**Roll back** by copying a backup over the served directory. Nothing to rebuild
-or reload:
+Roll back by copying a backup over the served directory; nginx serves it from
+disk, so nothing needs a rebuild or reload:
 
 ```bash
 ssh -i keys/ustawi.pem ubuntu@<host> 'cd ~/prod/dash && ls -d build.bak-* && cp -r build.bak-<stamp>/. build/'
 ```
 
-> The deploy directory is still named `dash` for historical reasons. A push of
+> The served directory is still named `dash` for historical reasons. A push of
 > the separate `dash` project to that box would overwrite this site.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| Every unit OFFLINE, moving units say "Parked" | Dev is pointed at a local backend; use the remote proxy target |
-| "Invalid email or password" in dev | Proxy points at an old host without the accounts; check `VITE_PROXY_TARGET` |
+| Every unit OFFLINE, moving units say "Parked" | Dev points at a local API; use the remote proxy target |
+| "Invalid email or password" in dev | Proxy points at an old host; check `VITE_PROXY_TARGET` |
 | `/api` calls time out in dev | The box's address changed; set `VITE_PROXY_TARGET` |
 | No traffic layer, no ETAs | `VITE_MYTOMTOM_API_KEY` missing at build time |
-| Page unstyled, no errors anywhere | Vite served empty CSS after a whole-file rewrite; touch the CSS file |
-| `npm run dev` exits: port in use | Another app holds 5174; ports are strict on purpose |
+| Page unstyled, no errors anywhere | Vite served empty CSS after a whole file rewrite; touch the CSS file |
+| `npm run dev` exits: port in use | Another app holds 5174 |
 | A deploy seems not to have landed | Compare `/DEPLOYED_COMMIT` with `git rev-parse origin/main` |
+
+## Further docs
+
+- `fleet-server/README.md`: the API, its data sources and its deploy
+- `fleet-server/docs/ci-deploy.md`: deploy secrets and box access
+- `fleet-server/docs/af-south-1-deployment.md`: the production box
+- `.github/workflows/deploy.yml`: the deploy pipeline, with its reasons inline
