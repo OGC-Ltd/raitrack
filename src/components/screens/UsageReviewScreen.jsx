@@ -34,6 +34,7 @@ import UnitPicker from "../body/UnitPicker";
 import TablePager, { usePager, PAGE_STEP } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
 import { googlePlaceNames } from "../../lib/googlePlaceNames";
+import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
 
 export { placeCase };
@@ -43,6 +44,11 @@ const TZ = "Africa/Nairobi";
 const DAY_MS = 86_400_000;
 const MAX_DAYS = 92;
 const UNIT_KEY = "ft-usage-review-unit:";
+/** Session flag per organisation: the operator picked or built something here
+ *  this session, so the default vehicle (lib/logbookDefault) no longer applies. */
+const PICKED_KEY = "ft-logbook-picked:";
+const picked = (orgId) => { try { return sessionStorage.getItem(PICKED_KEY + orgId) === "1"; } catch { return false; } };
+const markPicked = (orgId) => { try { if (orgId) sessionStorage.setItem(PICKED_KEY + orgId, "1"); } catch { /* session nicety only */ } };
 
 const nf = (n, d = 1) =>
   n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -563,6 +569,7 @@ export default function UsageReviewScreen() {
     try { setUnitIdState(orgId ? localStorage.getItem(UNIT_KEY + orgId) : null); } catch { setUnitIdState(null); }
   }, [orgId]);
   const setUnitId = (id) => {
+    markPicked(orgId);
     setUnitIdState(id);
     try { if (orgId) localStorage.setItem(UNIT_KEY + orgId, id ?? ""); } catch { /* per-viewer nicety only */ }
   };
@@ -635,8 +642,23 @@ export default function UsageReviewScreen() {
     return () => mo.disconnect();
   }, []);
 
+  // Opening the Logbook with nothing picked or built here this session: the
+  // organisation's default vehicle (lib/logbookDefault), built straight away
+  // over the default period. The operator's remembered unit is left as it is.
+  const defaultedRef = useRef(null);
+  useEffect(() => {
+    if (!orgId || !vehicles.length || defaultedRef.current === orgId || picked(orgId)) return;
+    defaultedRef.current = orgId;
+    const v = defaultLogbookUnit(vehicles);
+    if (!v) return;
+    setUnitIdState(v.vehicleId);
+    setRequest({ orgId, vehicleId: v.vehicleId, from: span.from, to: span.to });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, vehicles]);
+
   const build = () => {
     if (!canRun) return;
+    markPicked(orgId);
     const next = { orgId, vehicleId: unit.vehicleId, from: span.from, to: span.to };
     const same = live && live.vehicleId === next.vehicleId && live.from === next.from && live.to === next.to;
     if (same) {

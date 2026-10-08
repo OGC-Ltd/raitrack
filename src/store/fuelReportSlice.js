@@ -27,6 +27,12 @@ const initialState = {
   bg: { trip: true, parking: true, stop: true },
   lines: { fuelL: true, speedKmh: false, mileageKm: false },
   marks: { fill: true, drain: true, stop: true },
+  // Session only (not in FUEL_REPORT_PREFS). Per organisation: whether the
+  // operator has picked or run anything this session — until they have, the
+  // page opens on lib/fuelReportDefault's pick — and that pick, so the page
+  // can say why it is showing this unit.
+  touched: {},           // { [orgId]: true }
+  autoPick: {},          // { [orgId]: { unitId, from, to, reason, at?, litres?, km? } }
 };
 
 const fuelReportSlice = createSlice({
@@ -36,6 +42,7 @@ const fuelReportSlice = createSlice({
     unitChosen: {
       reducer(state, { payload: { orgId, unitId } }) {
         if (!orgId) return;
+        state.touched[orgId] = true;
         if (unitId) state.unitByOrg[orgId] = unitId;
         else delete state.unitByOrg[orgId];
       },
@@ -47,7 +54,19 @@ const fuelReportSlice = createSlice({
       // the page opens on next time.
       if (PERIOD_PRESETS.includes(payload?.id)) state.presetId = payload.id;
     },
-    executed(state, { payload }) { state.request = payload; },
+    executed(state, { payload }) {
+      state.request = payload;
+      if (payload?.orgId) state.touched[payload.orgId] = true;
+    },
+    /** The default pick, applied as a pick and a run, remembered with its reason. */
+    autoPicked(state, { payload: { orgId, pick } }) {
+      if (!orgId || state.touched[orgId]) return;
+      state.touched[orgId] = true;
+      state.unitByOrg[orgId] = pick.unitId;
+      state.autoPick[orgId] = pick;
+      state.span = { from: pick.fromInput, to: pick.toInput, id: null };
+      state.request = { orgId, unitId: pick.unitId, from: pick.from, to: pick.to };
+    },
     tabChosen(state, { payload }) { state.tab = payload; },
     headerToggled(state) { state.headerCollapsed = !state.headerCollapsed; },
     layerToggled(state, { payload: { group, key } }) {
@@ -56,5 +75,5 @@ const fuelReportSlice = createSlice({
   },
 });
 
-export const { unitChosen, spanChosen, executed, tabChosen, headerToggled, layerToggled } = fuelReportSlice.actions;
+export const { unitChosen, spanChosen, executed, autoPicked, tabChosen, headerToggled, layerToggled } = fuelReportSlice.actions;
 export default fuelReportSlice.reducer;

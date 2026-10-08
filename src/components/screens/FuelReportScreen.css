@@ -654,3 +654,142 @@
 .frp-mode:hover { color: var(--sp4-text-1, #0f172a); }
 .frp-mode--on { color: var(--sp4-text-1, #0f172a); border-bottom-color: var(--sp4-accent, #0369a1); }
 .frp-mode:focus-visible { outline: 2px solid var(--sp4-accent, #0369a1); outline-offset: -2px; }
+
+/* ── Vehicle analytics ───────────────────────────────────────────────────
+ * Hallmark · redesign 2026-10-08 · scope: Fuel › Report › Vehicle analytics (.frp-unit)
+ * genre: modern-minimal · theme: sp4 + --frv tokens · macrostructure: instrument ledger
+ * pre-emit critique: P4 H5 E4 S5 R5 V4
+ *
+ * One voice with the Performance tab beside it: hairline frames at 4px
+ * corners, Title Case titles in the body tier instead of grey uppercase
+ * captions, no dials. Statistics opens on one band of three cells — the tank
+ * and the engine as flat meters on their own scales (0 – peak L, 0 – period h),
+ * the period's time as one split bar — instead of two gauges and a donut in
+ * separate cards. Scoped to this page: Audit and Highlights share .frv-card.
+ */
+.frp-root {
+  --frp-band-trip: rgba(248, 113, 113, 0.14);
+  --frp-band-park: rgba(251, 191, 36, 0.12);
+  --frp-band-stop: rgba(96, 165, 250, 0.14);
+  --frp-r: 4px;
+}
+.app--light .frp-root {
+  --frp-band-trip: rgba(254, 202, 202, 0.6);
+  --frp-band-park: rgba(254, 243, 199, 0.6);
+  --frp-band-stop: rgba(219, 234, 254, 0.6);
+}
+
+/* Frames: the map stays square, everything else 4px. */
+.frp-unit .frp-graph,
+.frp-unit .frv-card,
+.frp-unit .frv-table { border-radius: var(--frp-r); }
+.frp-unit .frv-card { border-color: var(--sp4-line); }
+
+/* Titles: body tier, Title Case, never uppercase captions. */
+.frp-unit .frv-card__t,
+.frp-unit .frv-sec,
+.frp-unit .frv-h {
+  margin: 0;
+  font-size: var(--sp4-body);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sp4-text-1);
+}
+.frp-unit .frv-sec { padding-bottom: 8px; border-bottom: 1px solid var(--sp4-line-hi); font-size: var(--sp4-strong); }
+.frv-h { display: flex; align-items: baseline; gap: 8px; }
+.frv-h span { font-size: var(--sp4-label); font-weight: 500; color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+
+/* The graph's switches: the group names quiet, in sentence case. */
+.frp-unit .frp-graph__bar .sp4-filter-label {
+  font-size: var(--sp4-label);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sp4-text-3);
+}
+.frp-unit .frp-swatch { border-radius: 1px; }
+/* The band tints are faint by design; an edge keeps their chip swatch visible. */
+.frp-unit .frp-swatch:not(.frp-swatch--line) { box-shadow: inset 0 0 0 1px var(--sp4-text-4); }
+
+/* The band: three cells in one frame, split by hairlines. */
+.frv-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr);
+  border: 1px solid var(--sp4-line);
+  border-radius: var(--frp-r);
+  background: var(--sp4-surface);
+}
+.frv-band__cell { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 14px 16px 16px; }
+.frv-band__cell + .frv-band__cell { border-left: 1px solid var(--sp4-line); }
+.frv-band__note {
+  display: flex; align-items: baseline; gap: 6px;
+  margin: auto 0 0; font-size: var(--sp4-label); line-height: 1.45; color: var(--sp4-text-3);
+}
+.frv-band__tick { flex: none; width: 2px; height: 10px; background: var(--sp4-text-1); transform: translateY(1px); }
+
+/* Meter: figure, track, scale. */
+.frv-meter { display: grid; gap: 7px; }
+.frv-meter__fig { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-3); }
+.frv-meter__fig b {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+  color: var(--sp4-text-1); font-variant-numeric: tabular-nums;
+}
+.frv-meter__track { position: relative; height: 10px; border-radius: 1px; background: var(--frv-track); }
+.frv-meter__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 1px; }
+.frv-meter__fill--tank { background: var(--frv-s3); }
+.frv-meter__fill--engine { background: var(--frv-s1); }
+.frv-meter__tick { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--sp4-text-1); }
+.frv-meter__scale {
+  display: flex; justify-content: space-between; margin: 0;
+  font-size: var(--sp4-label); color: var(--sp4-text-4); font-variant-numeric: tabular-nums;
+}
+
+/* Split: one bar of parts over the rows that name them. */
+.frv-split { display: grid; gap: 14px; }
+.frv-split__bar { display: flex; gap: 2px; height: 10px; }
+.frv-split__seg { min-width: 3px; border-radius: 1px; cursor: default; transition: opacity 140ms cubic-bezier(0.2, 0, 0, 1); }
+.frv-split__seg.is-dim { opacity: 0.3; }
+.frp-unit .frv-legend i { border-radius: 1px; }
+
+/* Rail keys: names in sentence case like every other label on the page. */
+.frp-unit .frv-rail__k { font-size: var(--sp4-label); letter-spacing: 0; text-transform: none; font-weight: 600; }
+.frp-unit .frv-rail__bar { border-radius: 1px; }
+.frp-unit .frv-rail__key { border-radius: 3px; }
+
+/* Figures: in a frame of their own, cells split by hairlines. */
+.frp-unit .frv-figs {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--sp4-line);
+  border-radius: var(--frp-r);
+  background: var(--sp4-line);
+}
+.frp-unit .frv-figs > div { padding: 12px 16px; background: var(--sp4-surface); }
+
+/* Trips & parkings: the lane and its blocks square up with the rest. */
+.frp-unit .frs-tl__lane { border-radius: 2px; }
+.frp-unit .frs-tl__seg { border-radius: 1px; }
+.frp-unit .frs-bin { border-radius: 3px; }
+.frp-unit .frs-bin__bar, .frp-unit .frs-bin__bar b { border-radius: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .frv-split__seg { transition: none; }
+}
+@media (max-width: 1279px) {
+  .frv-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .frv-band__cell--wide { grid-column: 1 / -1; border-left: 0 !important; border-top: 1px solid var(--sp4-line); }
+}
+@media (max-width: 767px) {
+  .frv-band { grid-template-columns: minmax(0, 1fr); }
+  .frv-band__cell + .frv-band__cell { border-left: 0; border-top: 1px solid var(--sp4-line); }
+  .frv-band__cell { padding: 12px; }
+  .frp-unit .frv-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .frp-unit .frv-figs > div { padding: 10px 12px; }
+  .frp-unit .frv-figs > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* Why the page opened on this unit (lib/fuelReportDefault), beside its name. */
+.frp-why { color: var(--sp4-text-2); font-weight: 600; }
+.frp-why--theft { color: var(--sp4-crit); }
