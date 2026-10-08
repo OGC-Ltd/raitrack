@@ -1,4 +1,4 @@
-# Rai Operations — fleet dashboard (new-ui)
+# Rai Operations Fleet Dashboard
 
 The live fleet dashboard served at **logistics.raioperations.com**: live map,
 fuel and probe monitoring, route replay, weighbridges, maintenance and
@@ -45,7 +45,7 @@ Override it without editing the config:
 VITE_PROXY_TARGET=http://<host> npm run dev
 ```
 
-**Ports.** new-ui owns 5174, dash 5175, fleet-server 3000. `strictPort` is on,
+**Ports.** This app owns 5174, dash 5175, fleet-server 3000. `strictPort` is on,
 so a taken port fails loudly instead of drifting onto another app's port.
 
 ## Configuration
