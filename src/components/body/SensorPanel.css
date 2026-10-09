@@ -866,6 +866,11 @@
   scrollbar-width: thin;
   scrollbar-color: var(--sp4-raised) transparent;
   padding-bottom: calc(var(--app-footer-h, 64px) + 16px);
+  /* One surface, edge to edge. Only the head and an empty note painted their
+     own, so the panel's grey canvas showed through everything else — the
+     summary strip, the drain lists and, most visibly, this padding: an 80px
+     grey band under a white "No Fuel Events" note (operator, 2026-10-09). */
+  background: var(--sp4-surface);
 }
 /* ── Detail panel inset ───────────────────────────────────────────────────
    Everything in here reads --sp4-gutter, the same token the table above it
@@ -1863,7 +1868,7 @@
     bottom: 0;
     left: 0;
     z-index: 200;
-    background: var(--sp4-bg);
+    background: var(--sp4-surface);
   }
   /* Ensure header actions always visible on mobile */
   .sp4-detail-head {

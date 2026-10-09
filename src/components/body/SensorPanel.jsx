@@ -38,6 +38,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useOpenRepairs } from "../../hooks/useOpenRepairs";
 import { restoreChoice, persistChoice } from "../../lib/navMemory";
 import { watchTableLabels } from "../../lib/tableLabels";
+import EmptyNote from "../shared/EmptyNote";
 import "./SensorPanel.css";
 
 /* Every tab this build has, and where the choice is stored. The allow-list is
@@ -481,7 +482,7 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
             const plate = plateFor(row.vehicleId);
             const last5 = row.events.slice(-5);
             return (
-              <tr key={i} className={"sp4-tr sp4-tr--fuel" + (selectedId === row.vehicleId ? " sp4-tr--selected" : "")} onClick={() => onSelect({ vehicleId: row.vehicleId, vehicleName: plate, type: "fuel_anomaly", detail: row.pattern })}>
+              <tr key={i} className={"sp4-tr sp4-tr--fuel" + (selectedId === row.vehicleId ? " sp4-tr--selected" : "")} onClick={() => onSelect({ vehicleId: row.vehicleId, vehicleName: plate, type: "fuel_anomaly", detail: row.pattern, recordDay: day })}>
                 <td className="sp4-reg sp4-td--pin">{plate}</td>
                 <td className="sp4-tank">{tankFor(row.vehicleId)}</td>
                 <td className="sp4-tank">{currentFor(row.vehicleId)}</td>
@@ -1014,7 +1015,38 @@ function DrainEngineCheck({ vehicleId, orgId, event, rowKey, onLoadingChange }) 
   );
 }
 
-function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
+/** "Wed 8 Oct 2026" (or "Wed 8 Oct") for a fleet day key, or "Today". */
+function fuelDayName(day, { year = true } = {}) {
+  if (!day || day === fleetDayKey()) return "Today";
+  // Spelled out rather than toLocaleDateString, which puts a comma after the
+  // weekday only when the year is shown, and not in every engine alike. Noon
+  // UTC is the same calendar day everywhere, so no zone can shift it.
+  const d = new Date(`${day}T12:00:00Z`);
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()];
+  const mo = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()];
+  return `${wd} ${d.getUTCDate()} ${mo}` + (year ? ` ${d.getUTCFullYear()}` : "");
+}
+
+/**
+ * One unit's fuel events for the day picked above.
+ *
+ * The picker stays live while this is open, so the day can change under it —
+ * and a unit with events on one day very often has none on the next. `fuelRow`
+ * is therefore OPTIONAL: it was read unguarded, and stepping a unit back to a
+ * day it had no events on threw on `fuelRow.events` and took the whole
+ * Maintenance screen down to its error boundary.
+ *
+ * Three states besides the record itself, all inside the panel so the unit and
+ * the close button stay where they were:
+ *   pending   the new day is still being read — never the old day's rows
+ *   error     the read failed; Try again re-asks
+ *   no row    the unit recorded nothing that day, with the way back to the last
+ *             day it did (`recordDay`) and to every unit on this one
+ */
+export function FuelDrainDetail({
+  vehicleId, vehicleName, orgId, fuelRow, onClose,
+  day, pending = false, error = null, onReload, tank, recordDay, onPickDay,
+}) {
   const { can } = usePermissions();
   const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
   const pad = n => String(n).padStart(2, "0");
@@ -1025,8 +1057,23 @@ function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
   };
   const fmtLitres = ml => ml != null ? `${(ml / 1000).toFixed(1)} L` : "?L";
 
-  const drains  = fuelRow.events.filter(e => e.type === "drain");
-  const refills = fuelRow.events.filter(e => e.type === "refill");
+  const events  = fuelRow?.events ?? [];
+  const drains  = events.filter(e => e.type === "drain");
+  const refills = events.filter(e => e.type === "refill");
+  const dayName = fuelDayName(day);
+  const isToday = !day || day === fleetDayKey();
+
+  /* What the tank did on a day with no events, so the empty state is still an
+     answer about the unit: a quiet day and a day the unit sent nothing are not
+     the same thing. Only the parts the server actually has. */
+  const tankLine = (() => {
+    if (!tank || tank.initialMl == null || tank.currentMl == null) return null;
+    const L = ml => `${Math.round(ml / 1000)} L`;
+    const km = tank.distanceM != null ? `, over ${(tank.distanceM / 1000).toFixed(1)} km` : "";
+    return isToday
+      ? `The tank opened the day at ${L(tank.initialMl)} and stands at ${L(tank.currentMl)}${km}.`
+      : `The tank opened the day at ${L(tank.initialMl)} and closed it at ${L(tank.currentMl)}${km}.`;
+  })();
 
   /**
    * One spinner for the whole incident table, matching All Probes.
@@ -1071,7 +1118,10 @@ function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
         <div className="sp4-detail-titles">
           <div className="sp4-detail-reg">{vehicleName}</div>
           <div className="sp4-detail-sub">
-            Fuel events — last 24 hrs · {drains.length} drain{drains.length !== 1 ? "s" : ""} · {refills.length} refill{refills.length !== 1 ? "s" : ""}
+            Fuel events · {dayName}
+            {fuelRow && !pending && !error && (
+              <> · {drains.length} drain{drains.length !== 1 ? "s" : ""} · {refills.length} refill{refills.length !== 1 ? "s" : ""}</>
+            )}
           </div>
         </div>
         <div className="sp4-detail-actions">
@@ -1085,6 +1135,28 @@ function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
         </div>
       </div>
 
+      {pending ? (
+        <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Day's Fuel Events">
+          Refills and drains for {vehicleName} {isToday ? "today" : `on ${dayName}`}.
+        </EmptyNote>
+      ) : error ? (
+        <EmptyNote icon="ti-alert-triangle" tone="error" title="Fuel Events Could Not Be Loaded"
+                   action={onReload ? { label: "Try again", icon: "ti-refresh", onClick: onReload } : null}>
+          {error}
+        </EmptyNote>
+      ) : !fuelRow ? (
+        <EmptyNote icon="ti-calendar-off" tone="info"
+                   title={isToday ? "No Fuel Events Today" : `No Fuel Events on ${dayName}`}
+                   actions={[
+                     recordDay && recordDay !== day && onPickDay
+                       ? { label: `Back to ${fuelDayName(recordDay, { year: false })}`, icon: "ti-arrow-back-up", onClick: () => onPickDay(recordDay) }
+                       : null,
+                     { label: isToday ? "Every unit today" : `Every unit on ${fuelDayName(day, { year: false })}`, icon: "ti-list", onClick: onClose },
+                   ]}>
+          {vehicleName} recorded no refills or drains {isToday ? "today" : "that day"}.
+          {tankLine && <> {tankLine}</>}
+        </EmptyNote>
+      ) : (<>
       {/* Summary strip */}
       <div className="sp4-drain-summary">
         <div className="sp4-drain-summary__item">
@@ -1114,7 +1186,7 @@ function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
 
       {/* Drain events — unified incident table */}
       {drains.length === 0 ? (
-        <div className="sp4-empty-tab">No drain events for this vehicle in the last 24 hours.</div>
+        <div className="sp4-empty-tab">No drain events for this vehicle {isToday ? "today" : `on ${dayName}`}.</div>
       ) : (
         <div className="sp4-drain-list">
           <div className="sp4-drain-list__heading">Drain events — engine state check</div>
@@ -1175,6 +1247,7 @@ function FuelDrainDetail({ vehicleId, vehicleName, orgId, fuelRow, onClose }) {
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -1364,8 +1437,14 @@ export default function SensorPanel() {
    * matching how the server buckets them — see fleetDayKey.
    */
   const [fuelDay, setFuelDay] = useState(fleetDayKey());
-  const { flaggedVehicles, loading: fuelLoading, error: fuelError, tankState, reload: fuelReload } = useFuelEvents(orgId, fuelDay);
+  const { flaggedVehicles, loading: fuelLoading, error: fuelError, loadedDay: fuelLoadedDay, tankState, reload: fuelReload } = useFuelEvents(orgId, fuelDay);
   const fuelFlagged = flaggedVehicles();
+  /* Still reading — including the render right after the picker moves, when
+     the rows on hand are the PREVIOUS day's and `loading` has not caught up.
+     Every reader of the fuel rows waits on this, so none of them shows one
+     day's events under another day's date. A failed read is not pending: it
+     has its own state, with a retry. */
+  const fuelPending = fuelLoading || (!fuelError && fuelLoadedDay !== fuelDay);
   /**
    * The window the two incident reports read.
    *
@@ -1513,6 +1592,24 @@ export default function SensorPanel() {
     );
   }, []);
 
+  /*
+   * The open unit's row for the picked day, once that day has been read.
+   *
+   * Undefined while reading, and undefined on a day the unit recorded nothing —
+   * the detail panel draws both. `recordDay` follows the unit to the latest day
+   * it was seen WITH events, so the empty state's way back leads somewhere that
+   * has something to show rather than to wherever the panel was first opened.
+   */
+  const selectedFuelRow = selectedAnomaly?.type === "fuel_anomaly" && !fuelPending && !fuelError
+    ? fuelFlagged.find(r => r.vehicleId === selectedAnomaly.vehicleId)
+    : undefined;
+  const selectedFuelFound = !!selectedFuelRow;
+  useEffect(() => {
+    if (selectedFuelFound) {
+      setSelectedAnomaly(prev => (prev && prev.recordDay !== fuelDay ? { ...prev, recordDay: fuelDay } : prev));
+    }
+  }, [selectedFuelFound, fuelDay]);
+
   // A count of 0 mid-fetch is a wrong answer, not a neutral one: the badge sat
   // at 0 for the ~1.6 s the snapshot takes and then jumped to 8 and 407, which
   // is the other half of what reads as a rendering delay. "·" says "not yet".
@@ -1548,7 +1645,7 @@ export default function SensorPanel() {
       hint: null },
     // The tab reads /fuel/tank-state and /fuel/fillings, both on this slug.
     { key: "fuel",        allow: can("fuel_filling:read"),
-      label: "Fuel FSL",    count: fuelLoading ? pending : fuelFlagged.length,
+      label: "Fuel FSL",    count: fuelPending ? pending : fuelFlagged.length,
       hint: "Click any row to trace the day's fuel level and its events" },
     /* The badge counts the events the SERVER emitted over the window on screen,
        the way Fuel FSL's counts the fuel events for its day. It used to count
@@ -1789,10 +1886,21 @@ export default function SensorPanel() {
         {selectedAnomaly ? (
           selectedAnomaly.type === "fuel_anomaly" ? (
             <FuelDrainDetail
+              /* Keyed by day: each drain row owns a telemetry fetch and reports
+                 its loading up by index, and a fresh mount per day stops one
+                 day's half-finished rows holding the next day's spinner open. */
+              key={`${selectedAnomaly.vehicleId}|${fuelDay}`}
               vehicleId={selectedAnomaly.vehicleId}
               vehicleName={selectedAnomaly.vehicleName}
               orgId={orgId}
-              fuelRow={fuelFlagged.find(r => r.vehicleId === selectedAnomaly.vehicleId)}
+              fuelRow={selectedFuelRow}
+              day={fuelDay}
+              pending={fuelPending}
+              error={fuelError}
+              onReload={fuelReload}
+              tank={fuelPending ? undefined : tankState[selectedAnomaly.vehicleId]}
+              recordDay={selectedAnomaly.recordDay}
+              onPickDay={setFuelDay}
               onClose={() => setSelectedAnomaly(null)}
             />
           ) : (
@@ -1820,7 +1928,7 @@ export default function SensorPanel() {
             </div>
 
             {activeTab === "probes"      && <ProbeHealthPanel search={search} data={probeHealth.data} loading={probeHealth.loading} error={probeHealth.error} onReload={probeHealth.reload} onSelect={handleSelect} selectedId={selectedAnomaly?.vehicleId} canRepair={canRepairCreate} openByVehicle={openRepairs.byVehicle} onRepairFiled={openRepairs.reload} />}
-            {activeTab === "fuel" && can("fuel_filling:read") && <FuelTable        flagged={fuelFlagged} tankState={tankState} day={fuelDay} loading={fuelLoading} error={fuelError} onReload={fuelReload} {...filterProps} onSelect={handleSelect} selectedId={selectedAnomaly?.vehicleId} />}
+            {activeTab === "fuel" && can("fuel_filling:read") && <FuelTable        flagged={fuelFlagged} tankState={tankState} day={fuelDay} loading={fuelPending} error={fuelError} onReload={fuelReload} {...filterProps} onSelect={handleSelect} selectedId={selectedAnomaly?.vehicleId} />}
             {activeTab === "speed" && can("analytics:read") && (
               <IncidentReport
                 orgId={orgId}

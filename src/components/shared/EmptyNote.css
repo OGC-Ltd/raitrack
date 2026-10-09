@@ -29,6 +29,8 @@
 }
 .empty-note--error .empty-note__icon { background: #fef2f2; color: #b91c1c; box-shadow: 0 0 0 6px color-mix(in srgb, #fef2f2 55%, transparent); }
 .empty-note--warn  .empty-note__icon { background: #fffbeb; color: #b45309; box-shadow: 0 0 0 6px color-mix(in srgb, #fffbeb 55%, transparent); }
+/* Nothing recorded: neither good news (green) nor a problem (amber). */
+.empty-note--info  .empty-note__icon { background: color-mix(in srgb, var(--sp4-accent, #0369a1) 10%, transparent); color: var(--sp4-accent, #0369a1); box-shadow: 0 0 0 6px color-mix(in srgb, var(--sp4-accent, #0369a1) 5%, transparent); }
 .empty-note--busy  .empty-note__icon { background: color-mix(in srgb, var(--sp4-accent) 10%, transparent); color: var(--sp4-accent); box-shadow: none; }
 .empty-note--busy  .empty-note__icon i { animation: empty-note-spin 1s linear infinite; }
 @keyframes empty-note-spin { to { transform: rotate(360deg); } }
@@ -59,7 +61,22 @@
   background: var(--sp4-accent);
   transition: width .3s ease;
 }
-.empty-note__btn { margin-top: 10px; }
+.empty-note__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.empty-note__btn { display: inline-flex; align-items: center; gap: 6px; }
+.empty-note__btn .ti { font-size: 15px; }
+/* With two ways out, the one that undoes the step that led here leads. */
+.empty-note__btn--lead {
+  color: var(--sp4-accent);
+  border-color: color-mix(in srgb, var(--sp4-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--sp4-accent) 8%, transparent);
+}
+.empty-note__btn--lead:hover { color: var(--sp4-accent); border-color: var(--sp4-accent); }
 @media (prefers-reduced-motion: reduce) {
   .empty-note--busy .empty-note__icon i { animation: none; }
   .empty-note__bar > span { transition: none; }
