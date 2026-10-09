@@ -90,7 +90,7 @@ const ROUTE_TIMING_ENABLED = false;
 import { useTrafficRoute, routeTarget, positionFresh } from "../../hooks/useTrafficRoute";
 import { liveTrip } from "../../lib/tripProgress";
 
-import { ZONE_STYLE, ZONE_FALLBACK, legendFor } from "../../lib/zoneLegend";
+import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
   speeding: "#f59e0b",
@@ -2371,6 +2371,10 @@ export default function FleetMap() {
   // Base map. Google only where a key was built in; otherwise OSM, always.
   const [baseMap, setBaseMap] = useState(() =>
     GOOGLE_BASE_AVAILABLE && readCache(BASE_MAP_KEY) === "google" ? "google" : "osm");
+  // For the overlay style callbacks, which are built once and re-run on a base
+  // switch rather than rebuilt — the polygon colours depend on it (zoneColor).
+  const baseMapRef = useRef(baseMap);
+  baseMapRef.current = baseMap;
   const [baseNote, setBaseNote] = useState(null);
   const vehiclesRef    = useRef([]);   // latest fleet, for event handlers
   // The funnel's selection, for the same reason: handleFilter is handed to
@@ -3898,7 +3902,7 @@ export default function FleetMap() {
         // one on this map and the key has to name it. Same condition as the
         // style rule that decides whether the pin draws at all.
         legend: legendFor((siteCats[plan.id] ?? [])
-          .filter(c => !(c === "weighing" && hasBridges))),
+          .filter(c => !(c === "weighing" && hasBridges)), baseMap),
         hint: plan.guest
           ? "Another organisation's survey, shown while your units are inside it"
           : "Names appear as you zoom in · click a place for detail",
@@ -3918,7 +3922,7 @@ export default function FleetMap() {
           return !v;
         }),
         note: null,
-        legend: legendFor(zoneCategories),
+        legend: legendFor(zoneCategories, baseMap),
         hint: "Names appear as you zoom in — smaller zones need a closer look · click a zone for detail",
       });
     }
@@ -3957,7 +3961,7 @@ export default function FleetMap() {
   }, [showTraffic, showBridges, hasBridges, bridgesLoading, activeCompanyId,
       showZones, zonesAllowed, hasZones, zoneCategories,
       showPlan, planAllowed, planState,
-      sitePlans, siteOn, siteStatus, siteCats, canDo]);
+      sitePlans, siteOn, siteStatus, siteCats, canDo, baseMap]);
 
   /**
    * The units carrying an open fuel incident, for the alerts menu.
@@ -4447,6 +4451,9 @@ export default function FleetMap() {
 
     const shapes = [];
     const labels = [];
+    // Each shape with its category, so a base-map switch can recolour it in
+    // place (zoneColor) rather than rebuild the layer.
+    const tinted = [];
     const info   = new maps.InfoWindow();
     // Accumulated while building, so the shared camera fit can frame the layer.
     const bounds = new maps.LatLngBounds();
@@ -4459,7 +4466,11 @@ export default function FleetMap() {
       const key = zoneKey(p.name);
       if (ZONE_EXCLUDE.has(key)) continue;
 
-      const { color } = ZONE_STYLE[p.category] ?? ZONE_FALLBACK;
+      // The outline and fill follow the base map; the name plate does not. It
+      // sits on its own dark backing whatever is under it, which is what the
+      // satellite palette was chosen against.
+      const color = zoneColor(p.category, baseMapRef.current);
+      const plateColor = (ZONE_STYLE[p.category] ?? ZONE_FALLBACK).color;
       const geom  = f.geometry;
       const alias = ZONE_PLAN_ALIAS[key];
       let shape = null;
@@ -4534,7 +4545,7 @@ export default function FleetMap() {
         labels.push({
           marker: new DomMarker({
             position: labelAt,
-            html: zoneLabelHtml(p.name, color, labelSub, alias?.plan),
+            html: zoneLabelHtml(p.name, plateColor, labelSub, alias?.plan),
             anchor: "center",
             // Above the plan's linework and its plates — see the plan label
             // effect, which now yields to these.
@@ -4550,11 +4561,12 @@ export default function FleetMap() {
       }
 
       shapes.push(shape);
+      tinted.push({ shape, category: p.category, filled: geom.type === "Polygon" });
     }
 
     labels.sort((a, b) => b.priority - a.priority);
 
-    zoneLayerRef.current = { shapes, labels, info, bounds };
+    zoneLayerRef.current = { shapes, labels, info, bounds, tinted };
 
     // Built hidden; the visibility effect below puts it on the map if the
     // toggle is already on.
@@ -4923,7 +4935,10 @@ export default function FleetMap() {
       const category = feature.getProperty("category");
       const kind     = feature.getProperty("kind");
       const name     = feature.getProperty("name");
-      const { color } = ZONE_STYLE[category] ?? ZONE_FALLBACK;
+      // By base map: the site fence is white over satellite and orange over
+      // OpenStreetMap, where white vanishes into the pale land. Read through a
+      // ref so a base switch restyles the layer — see the effect below it.
+      const color    = zoneColor(category, baseMapRef.current);
 
       if (kind === "point") {
         /* The survey's own weighbridge is not drawn WHERE THE WEIGHBRIDGES
@@ -4997,6 +5012,9 @@ export default function FleetMap() {
       const name = feature.getProperty("name");
       const category = feature.getProperty("category");
       const style = ZONE_STYLE[category] ?? ZONE_FALLBACK;
+      const swatch = feature.getProperty("kind") === "point"
+        ? style.color                                   // pins keep one colour
+        : zoneColor(category, baseMapRef.current);      // shapes follow the base
       // Name, then class. The swatch repeats the marker's colour, which is how
       // you get from a pin you are pointing at back to the row in the layer key.
       //
@@ -5009,7 +5027,7 @@ export default function FleetMap() {
         `<article class="mapcard mapcard--site">` +
           `<header class="mapcard__head"><h3 class="mapcard__title">${esc(spokenSiteName(name))}</h3></header>` +
           `<p class="mapcard__class">` +
-            `<i class="mapcard__swatch" style="--swatch:${style.color}"></i>${esc(style.label)}` +
+            `<i class="mapcard__swatch" style="--swatch:${swatch}"></i>${esc(style.label)}` +
           `</p>` +
         `</article>`
       );
@@ -5099,13 +5117,22 @@ export default function FleetMap() {
 
   /* The weighbridge switch changes what the site layer draws — see the
    * `weighing` rule in the style above — so the style is re-run when it moves.
-   * Restyling is cheap; rebuilding the layer is not, and would lose the
-   * camera. */
+   * So does the base map, which decides the fence's colour. Restyling is
+   * cheap; rebuilding the layer is not, and would lose the camera. */
   useEffect(() => {
     for (const slot of Object.values(sitesRef.current)) {
       if (slot.data && slot.style) slot.data.setStyle(slot.style);
     }
-  }, [hasBridges]);
+  }, [hasBridges, baseMap]);
+
+  // The estate zones' outlines, recoloured in place on a base-map switch for
+  // the same reason. A layer built after the switch already read the new base.
+  useEffect(() => {
+    for (const t of zoneLayerRef.current?.tinted ?? []) {
+      const color = zoneColor(t.category, baseMap);
+      t.shape.setOptions(t.filled ? { strokeColor: color, fillColor: color } : { strokeColor: color });
+    }
+  }, [baseMap]);
 
   // Hide without discarding — same reasoning as the plan layer.
   useEffect(() => {

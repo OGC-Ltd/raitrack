@@ -54,12 +54,32 @@ export const ZONE_STYLE = {
    * geofence overlay already draws the same ground in: two near-identical
    * outlines in one colour read as one wobbly line rather than as two sources
    * that agree. White carries a boundary over satellite imagery without
-   * claiming a land use. */
-  perimeter:  { color: "#f1f5f9", label: "Site perimeter" },
+   * claiming a land use.
+   *
+   * On OpenStreetMap it carries nothing: the pastel land there is #eef0ed, and
+   * a white fence on it was invisible on every one of the eight site plans that
+   * draws one (operator, 2026-10-09). Orange there, a shade deeper than the
+   * fuel-station pins' #f97316, so the fence still reads as a line rather than
+   * as a big fuel station. */
+  perimeter:  { color: "#f1f5f9", osmColor: "#ea580c", label: "Site perimeter" },
 
   other:      { color: "#94a3b8", label: "Other"        },
 };
 export const ZONE_FALLBACK = ZONE_STYLE.other;
+
+/**
+ * The colour a category draws in over a given base map.
+ *
+ * `color` was chosen against Google's satellite imagery — dark, green, busy —
+ * and most of the palette is saturated enough to read on OpenStreetMap's pale
+ * tiles too. The exceptions are the near-whites, which vanish there; each
+ * carries an `osmColor` for every base that is not satellite. OSM is the
+ * default and the only base always available, so it is the fallback here.
+ */
+export function zoneColor(category, base = "osm") {
+  const s = ZONE_STYLE[category] ?? ZONE_FALLBACK;
+  return base === "google" ? s.color : (s.osmColor ?? s.color);
+}
 
 // Legend order — biggest/most meaningful first, so the eye lands on the
 // planting areas rather than on drains. Keep-outs lead: they are the only
@@ -85,13 +105,14 @@ export const ZONE_LEGEND = ["restricted", "gate", "perimeter", "farm", "nursery"
  * unranked appended alphabetically rather than dropped, so a category the
  * backend learns to emit before this list is updated still gets a swatch.
  */
-export function legendFor(categories) {
+export function legendFor(categories, base = "osm") {
   const present = new Set(categories);
   const ranked  = ZONE_LEGEND.filter((k) => present.has(k));
   const rest    = [...present].filter((k) => !ZONE_LEGEND.includes(k)).sort();
   return [...ranked, ...rest].map((key) => ({
     key,
-    color: (ZONE_STYLE[key] ?? ZONE_FALLBACK).color,
+    // The swatch is the colour on the map in front of you, so it follows the base.
+    color: zoneColor(key, base),
     label: (ZONE_STYLE[key] ?? ZONE_FALLBACK).label,
   }));
 }

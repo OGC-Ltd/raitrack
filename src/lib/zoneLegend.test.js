@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { legendFor, ZONE_STYLE, ZONE_LEGEND } from "./zoneLegend";
+import { legendFor, zoneColor, ZONE_STYLE, ZONE_LEGEND } from "./zoneLegend";
 
 const labels = (cats) => legendFor(cats).map((r) => r.label);
 const keys   = (cats) => legendFor(cats).map((r) => r.key);
@@ -70,5 +70,25 @@ describe("legendFor", () => {
   it("carries the site vocabulary a mill needs", () => {
     expect(labels(["yard", "parking", "workshop", "weighing", "gate"]))
       .toEqual(["Gate", "Yard", "Vehicle park", "Workshop", "Weighbridge"]);
+  });
+});
+
+/* The site fence was white for satellite imagery, and white on OpenStreetMap's
+ * pale land drew nothing at all (operator, 2026-10-09). */
+describe("zoneColor", () => {
+  it("draws the site perimeter orange on OpenStreetMap, white on satellite", () => {
+    expect(zoneColor("perimeter", "osm")).toBe("#ea580c");
+    expect(zoneColor("perimeter", "google")).toBe(ZONE_STYLE.perimeter.color);
+  });
+
+  it("leaves categories without an OSM colour alone on either base", () => {
+    expect(zoneColor("farm", "osm")).toBe(ZONE_STYLE.farm.color);
+    expect(zoneColor("farm", "google")).toBe(ZONE_STYLE.farm.color);
+    expect(zoneColor("quarry", "osm")).toBe(ZONE_STYLE.other.color);
+  });
+
+  it("keys the swatch to the map in front of you", () => {
+    expect(legendFor(["perimeter"], "osm")[0].color).toBe("#ea580c");
+    expect(legendFor(["perimeter"], "google")[0].color).toBe(ZONE_STYLE.perimeter.color);
   });
 });
