@@ -64,6 +64,16 @@ export function useFuelEvents(orgId, dayKey = fleetDayKey()) {
   const [tankState, setTankState] = useState({});
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
+  /**
+   * The day the rows in `events` belong to.
+   *
+   * A new day is asked for on the render AFTER the picker changes, and until it
+   * answers `events` still holds the previous day. `loading` cannot say so on
+   * that first render — the effect that sets it has not run yet — so a reader
+   * that must never show one day's rows under another day's date compares this
+   * with the day it asked for.
+   */
+  const [loadedDay, setLoadedDay] = useState(null);
   const abortRef = useRef(null);
   /**
    * Bumped by `reload`, and read as an effect dependency.
@@ -150,6 +160,7 @@ export function useFuelEvents(orgId, dayKey = fleetDayKey()) {
         // Merge and sort newest first
         const merged = [...fillings, ...thefts].sort((a, b) => b.at - a.at);
         setEvents(merged);
+        setLoadedDay(dayKey);
         setLoading(false);
       })
       .catch(err => {
@@ -249,5 +260,5 @@ export function useFuelEvents(orgId, dayKey = fleetDayKey()) {
     );
   };
 
-  return { events, loading, error, forVehicle, flaggedVehicles, tankState, reload };
+  return { events, loading, error, loadedDay, forVehicle, flaggedVehicles, tankState, reload };
 }
