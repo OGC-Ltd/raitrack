@@ -31,7 +31,7 @@ export const placeCase = (name) => {
  * and the table; on the map the number beside it already does that.
  */
 /** The map label: Google's name as it is, OpenStreetMap's shortened. */
-export const labelOf = (p, gnames) => gnames?.get(p.id) ?? shortPlace(placeCase(p.name));
+export const labelOf = (p, gnames) => gnames?.get(p.id) ?? p.exactName ?? shortPlace(placeCase(p.name));
 
 const shortPlace = (name) => {
   if (!name) return name;

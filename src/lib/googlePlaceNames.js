@@ -93,13 +93,19 @@ export async function googlePlaceName({ lat, lng }) {
   const hit = readCache(lat, lng);
   if (hit !== undefined) return hit;
   try {
-    const v = (await nearest(lat, lng, RADIUS_M)) ?? (await nearest(lat, lng, NEAR_M));
+    // One search, nearest first: the closest named place is the spot itself
+    // when within RADIUS_M, else the neighbour said with its distance. (Two
+    // searches a place ran the key's daily quota out, 2026-10-09.)
+    const v = await nearest(lat, lng, NEAR_M);
     writeCache(lat, lng, v);
     return v;
   } catch {
     return null; // not cached: next time asks again
   }
 }
+
+/** Whether a result is the spot itself, not a neighbour some way off. */
+export const googleIsSpot = (g) => !!g && g.m <= RADIUS_M;
 
 /** How a result is written: the place itself, or the nearest one with its distance. */
 export function googleLabel(g) {
