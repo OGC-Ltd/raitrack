@@ -722,47 +722,58 @@ export default function UsageReviewScreen() {
         if (g.activity) setGacts((m) => new Map(m).set(id, { activity: g.activity, kind: g.kind }));
       },
       { signal: ac.signal }).catch(() => {});
-    // Then OpenStreetMap for the places Google gave no name at the spot
-    // (none there, or its daily quota spent) and the server found none for.
-    namingRef.current = google.then(() => osmPlaceNames(
-      list.filter((p) => {
-        if (p.exactName) return false;
+    // What each named place is, read by the server's model from its exact
+    // name (operator, 2026-10-09): "Ka mwalimu jim", "Rodesa Filling Station",
+    // where Google types them only as a point of interest. Until it answers,
+    // or if it cannot, the reading of the name and Google's type stands.
+    const readActivities = (ids) => {
+      const named = list.filter((p) => ids.has(p.id)).map((p) => {
         const g = gnamesRef.current.get(p.id);
-        // A Google neighbour "0.6 km away" gives way to a business at the spot.
-        return g == null || (typeof g === "string" && / km away$/.test(g));
-      }),
-      (id, v) => {
-        if (ac.signal.aborted) return;
-        gnamesRef.current.set(id, v.activity ? { name: v.name, activity: v.activity } : v.name);
-        setGnames((m) => new Map(m).set(id, v.name));
-        if (v.activity) setGacts((m) => new Map(m).set(id, { activity: v.activity, kind: "OpenStreetMap" }));
-      },
-      { signal: ac.signal })).catch(() => {})
-      // Last, what each named place is, read by OpenAI from its exact name
-      // (operator, 2026-10-09): it reads "Ka mwalimu jim" or "Rodesa Filling
-      // Station" where Google types them only as a point of interest. Until it
-      // answers, or if it cannot, the reading of Google's type above stands.
-      .then(() => {
-        const named = list.map((p) => {
-          const g = gnamesRef.current.get(p.id);
-          // "…, 0.5 km away" too: the server reads the name without the distance.
-          const name = (typeof g === "string" ? g : g?.name) ?? p.exactName;
-          return name ? { id: p.id, name, hint: hints.get(p.id) ?? null } : null;
-        }).filter(Boolean);
-        if (!named.length || ac.signal.aborted || !orgId) return undefined;
-        return getPlaceActivities({ orgId, vehicleId: review.vehicle.vehicleId, places: named.map(({ name, hint }) => ({ name, hint })), signal: ac.signal })
-          .then(({ activities } = {}) => {
-            if (ac.signal.aborted || !activities) return;
-            for (const n of named) {
-              const a = activities[n.name];
-              if (!a) continue;
-              const g = gnamesRef.current.get(n.id);
-              if (g != null) gnamesRef.current.set(n.id, { name: typeof g === "string" ? g : g.name, activity: a });
-              setGacts((m) => new Map(m).set(n.id, { activity: a, kind: m.get(n.id)?.kind ? `${m.get(n.id).kind} · read from the name` : "Read from the name" }));
-            }
-          });
-      })
-      .catch(() => {});
+        // "…, 0.5 km away" too: the server reads the name without the distance.
+        const name = (typeof g === "string" ? g : g?.name) ?? p.exactName;
+        return name ? { id: p.id, name, hint: hints.get(p.id) ?? null } : null;
+      }).filter(Boolean);
+      if (!named.length || ac.signal.aborted || !orgId) return Promise.resolve();
+      return getPlaceActivities({ orgId, vehicleId: review.vehicle.vehicleId, places: named.map(({ name, hint }) => ({ name, hint })), signal: ac.signal })
+        .then(({ activities } = {}) => {
+          if (ac.signal.aborted || !activities) return;
+          for (const n of named) {
+            const a = activities[n.name];
+            if (!a) continue;
+            const g = gnamesRef.current.get(n.id);
+            if (g != null) gnamesRef.current.set(n.id, { name: typeof g === "string" ? g : g.name, activity: a });
+            setGacts((m) => new Map(m).set(n.id, { activity: a, kind: m.get(n.id)?.kind ? `${m.get(n.id).kind} · read from the name` : "Read from the name" }));
+          }
+        })
+        .catch(() => {});
+    };
+    // Once Google has answered, two things at once (2026-10-09: Build to PDF
+    // took three minutes, a minute of it this chain run one after another):
+    // the model reads the names there are, and OpenStreetMap is asked about
+    // the places nobody has named — only those the server has not already
+    // asked it about on the build (`poiTried`), which was 15 s a batch for the
+    // same answer. The model then reads what OpenStreetMap found.
+    namingRef.current = google.then(() => Promise.all([
+      readActivities(new Set(list.map((p) => p.id))),
+      (() => {
+        const found = new Set();
+        return osmPlaceNames(
+          list.filter((p) => {
+            if (p.exactName || p.poiTried) return false;
+            const g = gnamesRef.current.get(p.id);
+            // A Google neighbour "0.6 km away" gives way to a business at the spot.
+            return g == null || (typeof g === "string" && / km away$/.test(g));
+          }),
+          (id, v) => {
+            if (ac.signal.aborted) return;
+            found.add(id);
+            gnamesRef.current.set(id, v.activity ? { name: v.name, activity: v.activity } : v.name);
+            setGnames((m) => new Map(m).set(id, v.name));
+            if (v.activity) setGacts((m) => new Map(m).set(id, { activity: v.activity, kind: "OpenStreetMap" }));
+          },
+          { signal: ac.signal }).catch(() => {}).then(() => readActivities(found));
+      })(),
+    ])).catch(() => {});
     return () => ac.abort();
   }, [review, orgId]);
   // The theme's colours, read once the page is up and again on a theme switch.

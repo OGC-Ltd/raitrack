@@ -10,7 +10,9 @@
  * the smallest premises around it. Same groups as lib/placeActivity, read from
  * the OSM tags; the server's usage-review.poi does the same at build time.
  *
- * Kept in localStorage for 30 days (misses for 3) at ~11 m. Never throws.
+ * Kept in localStorage for 30 days (misses for 3) at ~11 m. A server gets 20 s
+ * to answer and the whole lookup 40 s, so a busy Overpass never holds the
+ * page. Never throws.
  */
 
 const SERVERS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
@@ -94,13 +96,20 @@ function query(pts) {
   return `[out:json][timeout:50];\n${within}\n(${areas})->.in;\n(\n${near}\nway(pivot.in);rel(pivot.in);\n);\nout tags center bb;`;
 }
 
-async function overpass(data, signal) {
+/** One server's answer may take this long before the next is tried. */
+const REQUEST_MS = 20_000;
+/** No batch is started after this long: the page has waited enough. */
+const BUDGET_MS = 40_000;
+
+const within = (signal, ms) => (AbortSignal.any && AbortSignal.timeout ? AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(ms)]) : signal);
+
+async function overpass(data, signal, deadline) {
   for (const wait of [0, 6_000]) {
     if (wait) await new Promise((r) => setTimeout(r, wait));
     for (const url of SERVERS) {
-      if (signal?.aborted) return null;
+      if (signal?.aborted || Date.now() > deadline) return null;
       try {
-        const res = await fetch(url, { method: "POST", body: new URLSearchParams({ data }), signal });
+        const res = await fetch(url, { method: "POST", body: new URLSearchParams({ data }), signal: within(signal, REQUEST_MS) });
         if (res.ok) return (await res.json()).elements ?? [];
       } catch { /* the next server */ }
     }
@@ -119,9 +128,10 @@ export async function osmPlaceNames(list, onName, { signal } = {}) {
     if (hit === undefined) ask.push(p);
     else if (hit) onName(p.id, hit);
   }
-  for (let i = 0; i < ask.length && !signal?.aborted; i += BATCH) {
+  const deadline = Date.now() + BUDGET_MS;
+  for (let i = 0; i < ask.length && !signal?.aborted && Date.now() < deadline; i += BATCH) {
     const part = ask.slice(i, i + BATCH);
-    const els = await overpass(query(part), signal);
+    const els = await overpass(query(part), signal, deadline);
     if (!els) continue; // not cached: next time asks again
     for (const p of part) {
       const v = pickPoi(p, els);
