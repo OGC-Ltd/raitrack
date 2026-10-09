@@ -12,6 +12,7 @@ import { usePermissions, accessIn } from './hooks/usePermissions';
 import { NAV_ITEMS } from './components/layout/SidePanel';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import TabEmptyState from './components/shared/TabEmptyState';
+import ProductTour from './components/shared/ProductTour';
 
 // New layout components
 import AppHeader          from './components/layout/AppHeader';
@@ -145,7 +146,7 @@ function AppShell() {
               div for an account that cannot open it. Not drawn is not the same
               as not there. */}
           {can('map:read') && (
-            <div className={`app-map-panel${!show('fleet') || overlayPageOpen ? ' app-tab-panel--hidden' : ''}`}>
+            <div className={`app-map-panel${!show('fleet') || overlayPageOpen ? ' app-tab-panel--hidden' : ''}`} data-tour="map">
               <ErrorBoundary label="Map" fullSection>
                 <FleetMap />
               </ErrorBoundary>
@@ -267,6 +268,8 @@ function AppShell() {
       {can('map:read') && <MobileLiveFeedSheet open={mobileFeedOpen} onClose={() => setMobileFeedOpen(false)} />}
       {/* Mobile company profile sheet */}
       <MobileCompanyProfile open={mobileProfileOpen} onClose={() => setMobileProfileOpen(false)} />
+      {/* The first-time tour: starts once per person, again from the account menu. */}
+      <ProductTour />
     </div>
   );
 }
