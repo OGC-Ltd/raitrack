@@ -100,3 +100,16 @@ export async function revokeAllSessions() {
   const res = await apiFetch("/api/v1/account/sessions/revoke-all", { method: "POST" });
   return res.data;
 }
+
+/**
+ * The first-time tour has been shown (lib/productTour). Kept on the account so
+ * the next machine this person signs in on does not show it again. Returns the
+ * version the account now holds.
+ */
+export async function recordTourSeen(version) {
+  const res = await apiFetch("/api/v1/account/tour", {
+    method: "POST",
+    body: JSON.stringify({ version }),
+  });
+  return res.data?.tourSeenVersion ?? null;
+}

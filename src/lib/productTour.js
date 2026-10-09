@@ -21,12 +21,17 @@
  * never describes a screen the account cannot open even where its control is
  * drawn disabled.
  *
- * ## Seen once, per person, per browser
+ * ## Seen once, per person, on any machine
  *
- * The server keeps no per-user preferences, so "has seen it" lives in this
- * browser under the user's id. A new device shows it once more, which for a
- * one-minute tour is the better mistake. Bump TOUR_VERSION when the app
- * changes enough that everybody should see it again.
+ * The account keeps the tour version the person has been shown (fleet-server
+ * users.tour_seen_version, on /auth/me as `user.tourSeenVersion`, written by
+ * POST /account/tour), so a person who has had it on one machine does not get
+ * it on the next (operator, 2026-10-09: "what if we have over 10 machines").
+ * The browser keeps its own record too, for a server that cannot answer and
+ * for the moment between opening the tour and the account hearing of it. Both
+ * are written when the tour first opens, not when it closes (claimFirstRun).
+ * Bump TOUR_VERSION when the app changes enough that everybody should see it
+ * again.
  *
  * Copy follows the app's empty-state rule: Title Case titles, no em dashes.
  */
@@ -35,13 +40,46 @@ export const TOUR_VERSION = 1;
 
 const keyFor = (userId) => `ft-tour:v${TOUR_VERSION}:${userId ?? "anon"}`;
 
-/** Has this person finished or closed this version of the tour here? */
+/** Has this person been shown this version of the tour in this browser? */
 export function tourSeen(userId) {
   try { return localStorage.getItem(keyFor(userId)) != null; } catch { return false; }
 }
 
 export function markTourSeen(userId) {
   try { localStorage.setItem(keyFor(userId), String(Date.now())); } catch { /* storage off: shown again next time */ }
+}
+
+/** Has the account been shown this version? `accountVersion` is
+ *  user.tourSeenVersion from /auth/me: null for never, undefined from a
+ *  server that does not keep it. */
+const seenOnAccount = (accountVersion) => (accountVersion ?? 0) >= TOUR_VERSION;
+
+/** Neither the account nor this browser has had this version of the tour. */
+export function tourDue(userId, accountVersion) {
+  return !seenOnAccount(accountVersion) && !tourSeen(userId);
+}
+
+/**
+ * Should the tour open by itself for this person? True once, and recorded in
+ * this browser at that moment rather than when the tour closes: driver.js
+ * reports only a close by ✕, Esc or Done, so a tour left by reloading,
+ * closing the tab or signing out was never recorded and came back at every
+ * sign-in (operator, 2026-10-09). The caller tells the account. The account
+ * menu has it for anyone who wants it again.
+ */
+export function claimFirstRun(userId, accountVersion) {
+  if (!tourDue(userId, accountVersion)) return false;
+  markTourSeen(userId);
+  return true;
+}
+
+/**
+ * This browser has seen it and the account has not heard: seen before the
+ * account kept it, or the save failed. The account should be told, or every
+ * other machine shows it again. Never for a server that does not keep it.
+ */
+export function accountBehind(userId, accountVersion) {
+  return accountVersion !== undefined && !seenOnAccount(accountVersion) && tourSeen(userId);
 }
 
 // ── replay ────────────────────────────────────────────────────────────────
