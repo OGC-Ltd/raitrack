@@ -23,8 +23,21 @@
 
 import { haversineM } from "./tripProgress";
 
+/**
+ * TomTom, switched off (operator, 2026-10-09: "we need to disable mytomtom").
+ *
+ * The one switch for all of it. Every TomTom call in the app is gated on
+ * TRAFFIC_AVAILABLE — the map's Live traffic layer and its rail button, the
+ * pinned unit's routed line, the unit panel's Arrives row, the delivery card's
+ * traffic ETA and the route-covered expected time — so with this false none of
+ * them renders and no request reaches api.tomtom.com, key or no key. A stored
+ * `traffic: true` map pref is ignored rather than rewritten, so flipping this
+ * back restores each viewer's own choice. Nothing below it was removed.
+ */
+export const TOMTOM_ENABLED = false;
+
 export const TOMTOM_KEY = (import.meta.env.VITE_MYTOMTOM_API_KEY ?? "").trim();
-export const TRAFFIC_AVAILABLE = TOMTOM_KEY.length > 0;
+export const TRAFFIC_AVAILABLE = TOMTOM_ENABLED && TOMTOM_KEY.length > 0;
 
 /** TomTom recomputes flow about once a minute; two is plenty for a map. */
 export const TILE_REFRESH_MS = 2 * 60_000;
