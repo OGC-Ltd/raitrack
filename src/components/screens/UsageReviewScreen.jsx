@@ -36,9 +36,6 @@ import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
 import { googlePlaceNames, googleLabel } from "../../lib/googlePlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
-import { useLogbookFences } from "./LogbookFences";
-import LogbookVisits from "./LogbookVisits";
-import { boxOf } from "../../lib/fenceDraw";
 import { buildWeb, arc, bearing, edgeWidth } from "../../lib/movementWeb";
 
 export { placeCase };
@@ -134,7 +131,7 @@ const STAGE_WORD = {
  * page so the map, whose markers are drawn outside CSS, and the charts wear
  * the same blue, orange and green as the Fuel Report, in either theme.
  */
-const PALETTE_FALLBACK = { route: "#2a78d6", place: "#eb6834", base: "#1baf7a", fence: "#6b3361", fade: "#94a3b8", faint: "#cbd5e1", ink: "#4b5563" };
+const PALETTE_FALLBACK = { route: "#2a78d6", place: "#eb6834", base: "#1baf7a", fade: "#94a3b8", faint: "#cbd5e1", ink: "#4b5563" };
 function readPalette(el) {
   if (!el) return PALETTE_FALLBACK;
   const cs = getComputedStyle(el);
@@ -143,7 +140,6 @@ function readPalette(el) {
     route: v("--frv-s1", PALETTE_FALLBACK.route),
     place: v("--frv-s2", PALETTE_FALLBACK.place),
     base: v("--frv-s3", PALETTE_FALLBACK.base),
-    fence: v("--frv-fence", PALETTE_FALLBACK.fence),
     fade: v("--frv-neutral", PALETTE_FALLBACK.fade),
     faint: v("--frv-neutral-2", PALETTE_FALLBACK.faint),
     ink: v("--sp4-text-3", PALETTE_FALLBACK.ink),
@@ -162,7 +158,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** A place's name: Google's exact name when it has one, else OpenStreetMap's. */
 const nameOf = (p, gnames) => (p ? gnames?.get(p.id) ?? placeCase(p.name) : null);
-function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecount, mode, setMode, web, webEdge, setWebEdge }) {
+function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, mode, setMode, web, webEdge, setWebEdge }) {
   const el = useRef(null);
   const wrap = useRef(null);
   const map = useRef(null);
@@ -185,12 +181,6 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
   const [baseNote, setBaseNote] = useState(null);
   // What the pointer is over (a place, a day's route or a stop) and where.
   const [hover, setHover] = useState(null);
-  // The site fences around the route, and the tool to draw more.
-  const area = useMemo(() => {
-    const pts = review.tracks.flatMap((t) => t.path).map(([lat, lng]) => ({ lat, lng }));
-    return pts.length ? boxOf(pts) : null;
-  }, [review]);
-  const fences = useLogbookFences({ map: mapObj, orgId, area, color: pal.fence, onRecount });
 
   useEffect(() => {
     let alive = true;
@@ -473,7 +463,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
   }
 
   return (
-    <div className={`urv-map${fences.drawing ? " is-drawing" : ""}`} ref={wrap}>
+    <div className="urv-map" ref={wrap}>
       <div ref={el} className="urv-map__canvas" />
       <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
       <div className="urv-map__top">
@@ -483,7 +473,6 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
             : <span><i style={{ background: pal.route }} className="urv-line" />Route</span>}
           <span><i style={{ background: pal.base }} />Base (most time)</span>
           <span><i style={{ background: pal.place }} />Other places · size = hours</span>
-          <span><i style={{ background: pal.fence }} className="urv-line" />Site fence</span>
         </div>
         <div className="urv-map__base urv-map__mode" role="group" aria-label="Show on the map">
           {[["route", "Route", "Each day's route"], ["web", "Web", "Movement web: which places it drives between, and how often"]].map(([id, label, t]) => (
@@ -491,7 +480,6 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
                     onClick={() => { setMode(id); if (id !== "web") setWebEdge(null); }}>{label}</button>
           ))}
         </div>
-        {fences.toolbar}
         {GOOGLE_BASE_AVAILABLE && (
           <div className="urv-map__base" role="group" aria-label="Base map">
             {[["osm", "OpenStreetMap"], ["google", "Satellite"]].map(([id, label]) => (
@@ -522,8 +510,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, orgId, onRecou
           </button>
         </div>
       )}
-      {!fences.drawing && tip}
-      {fences.overlay}
+      {tip}
       {failed && <div className="frp-map__msg">The map could not load: {failed}</div>}
     </div>
   );
@@ -702,12 +689,16 @@ export default function UsageReviewScreen() {
   // Google's exact names for the places on the map, filled in as they arrive;
   // the OpenStreetMap name stands until then, and wherever Google has none.
   const [gnames, setGnames] = useState(() => new Map());
+  // And what each is (Banking, Food and drink…), from Google's type for it:
+  // id → { activity, kind }, where kind is Google's own word ("Bank").
+  const [gacts, setGacts] = useState(() => new Map());
   // The lookup in flight, so a download can wait for the names to land; and
   // the names as they arrive, read by the download after that wait.
   const namingRef = useRef(Promise.resolve());
   const gnamesRef = useRef(new Map());
   useEffect(() => {
     setGnames(new Map());
+    setGacts(new Map());
     gnamesRef.current = new Map();
     if (!review) { namingRef.current = Promise.resolve(); return undefined; }
     const ac = new AbortController();
@@ -715,8 +706,9 @@ export default function UsageReviewScreen() {
       (id, g) => {
         const label = googleLabel(g);
         if (!label) return;
-        gnamesRef.current.set(id, label);
+        gnamesRef.current.set(id, g.activity ? { name: label, activity: g.activity } : label);
         setGnames((m) => new Map(m).set(id, label));
+        if (g.activity) setGacts((m) => new Map(m).set(id, { activity: g.activity, kind: g.kind }));
       },
       { signal: ac.signal }).catch(() => {});
     return () => ac.abort();
@@ -760,18 +752,23 @@ export default function UsageReviewScreen() {
     } else setRequest(next);
   };
 
-  // Build the same logbook again past the server's copy: after a fence is
-  // drawn, renamed or removed, so where the time went is counted against it.
-  const recount = useCallback(() => {
-    if (!live) return;
-    freshRef.current = true;
-    queryClient.refetchQueries({ queryKey: ["usage-review", live.orgId, live.vehicleId, live.from, live.to], exact: true });
-  }, [live, queryClient]);
-
   const kmplIn = Number(kmplText);
   const kmpl = kmplText && kmplIn > 0 && kmplIn < 100 ? kmplIn : review?.vehicle.kmpl ?? null;
   const s = review?.summary;
   const fuelTotal = s && kmpl ? s.km / kmpl : null;
+
+  // Hours and stops by what the places are (Banking, Food and drink…), most first.
+  const byActivity = useMemo(() => {
+    const m = new Map();
+    for (const p of review?.places ?? []) {
+      const a = gacts.get(p.id)?.activity;
+      if (!a) continue;
+      const r = m.get(a) ?? { activity: a, hours: 0, stops: 0 };
+      r.hours += p.hours; r.stops += p.visits;
+      m.set(a, r);
+    }
+    return [...m.values()].sort((x, y) => y.hours - x.hours);
+  }, [review, gacts]);
 
   // place → the days it was visited, for the linked highlights.
   const placeDays = useMemo(() => {
@@ -976,7 +973,6 @@ export default function UsageReviewScreen() {
 
             <div className="urv-grid urv-grid--top">
               <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames}
-                         orgId={live?.orgId ?? null} onRecount={recount}
                          mode={mapMode} setMode={setMapMode} web={web} webEdge={webEdge} setWebEdge={setWebEdge} />
 
               <section className="frv-card urv-card urv-card--top">
@@ -990,15 +986,21 @@ export default function UsageReviewScreen() {
               <section className="frv-card urv-card urv-card--table">
                 <h3 className="frv-card__t">Where It Spent Its Time</h3>
                 <p className="urv-card__sub">{s.places} places · {nf(s.stoppedH, 0)} h stopped in stops of 10 min or more · click a place</p>
+                {byActivity.length > 0 && (
+                  <p className="urv-card__sub urv-acts" title="What the places are, from Google Maps: hours stopped and stops at each kind">
+                    {byActivity.map((a) => <span key={a.activity}><b>{a.activity}</b> {nf(a.hours, 1)} h · {plural(a.stops, "stop")}</span>)}
+                  </p>
+                )}
                 <div className="sp4-table-scroll urv-table">
                   <table className="sp4-table">
-                    <thead><tr><th>#</th><th>Exact location</th><th>Area</th><th>County</th><th className="urv-num">Hours</th><th className="urv-num">Stops</th><th className="urv-num">Days</th><th>Coordinates</th></tr></thead>
+                    <thead><tr><th>#</th><th>Exact location</th><th>Activity</th><th>Area</th><th>County</th><th className="urv-num">Hours</th><th className="urv-num">Stops</th><th className="urv-num">Days</th><th>Coordinates</th></tr></thead>
                     <tbody>
                       {placePager.pageRows.map((p) => (
                         <tr key={p.id} className={`urv-row${sel.place === p.id ? " urv-row--on" : ""}`}
                             onClick={() => setSel((x) => ({ ...x, place: x.place === p.id ? null : p.id }))}>
                           <td>{p.id}</td>
                           <td className="urv-exact">{gnames.get(p.id) ?? <span className="frp-kpi-none" title="Google has no named place within 150 m">—</span>}</td>
+                          <td title={gacts.get(p.id)?.kind ?? undefined}>{gacts.get(p.id)?.activity ?? <span className="frp-kpi-none" title="Google says nothing about what this place is">—</span>}</td>
                           <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
                           <td className="urv-num">
@@ -1028,7 +1030,7 @@ export default function UsageReviewScreen() {
             </div>
 
             {web.edges.length > 0 && (
-              <div className="urv-grid urv-grid--visits">
+              <div className="urv-grid urv-grid--wide">
                 <section className="frv-card urv-card urv-web">
                   <div className="urv-detail__head">
                     <div>
@@ -1068,10 +1070,6 @@ export default function UsageReviewScreen() {
                 </section>
               </div>
             )}
-
-            <div className="urv-grid urv-grid--visits">
-              <LogbookVisits review={review} pal={pal} gnames={gnames} sel={sel} setSel={setSel} onPlayDay={setPlayDay} />
-            </div>
 
             {playDay && live && (
               <LogbookPlayback
