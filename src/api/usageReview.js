@@ -37,6 +37,16 @@ export async function downloadUsageReview({ orgId, vehicleId, from, to, kind, km
 }
 
 /**
+ * What each named place is, read by OpenAI on the server from its exact name
+ * (and Google's own type as a hint): `{ activities: { [name]: group | null } }`.
+ * Names the model could not read are absent; the caller keeps its own guess.
+ */
+export async function getPlaceActivities({ orgId, vehicleId, places, signal }) {
+  const res = await apiFetch(`${base(orgId, vehicleId)}/activities`, { method: 'POST', body: JSON.stringify({ places }), signal })
+  return res.data
+}
+
+/**
  * One day's GPS fixes from the built review, for the Logbook's playback:
  * `{ date, points: [t ms, lat, lng, km/h, course|null, ignition 1/0/null][] }`.
  */
