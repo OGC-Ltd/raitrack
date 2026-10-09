@@ -533,12 +533,9 @@
 .urv-playbtn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
 .urv-detail__head .urv-playbtn + .urv-seg { margin-left: 0; }
 
-/* One card the full width of the page. */
-.urv-grid--wide { grid-template-columns: minmax(0, 1fr); }
 
 /* ── Movement web: the map's Route / Web switch ── */
 .urv-map__mode { margin-left: auto; }
-.urv-web .urv-arrow { width: 18px; padding-left: 0; padding-right: 0; text-align: center; color: var(--sp4-text-3); }
 @media (max-width: 767px) {
   .urv-map__top { flex-wrap: wrap; justify-content: flex-end; }
 }
