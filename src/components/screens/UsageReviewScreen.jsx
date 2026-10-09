@@ -32,7 +32,7 @@ import MapStatusBar from "../body/MapStatusBar";
 import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
 import TablePager, { usePager, PAGE_STEP } from "../body/TablePager";
-import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
+import { getUsageReview, downloadUsageReview, getPlaceActivities } from "../../api/usageReview";
 import { googlePlaceNames, googleLabel, googleIsSpot } from "../../lib/googlePlaceNames";
 import { osmPlaceNames } from "../../lib/osmPlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
@@ -706,10 +706,14 @@ export default function UsageReviewScreen() {
     if (!review) { namingRef.current = Promise.resolve(); return undefined; }
     const ac = new AbortController();
     const list = review.places.slice(0, MAX_PLACES_ON_MAP);
+    // Google's own word for each place at the spot ("Gas station"): the hint
+    // OpenAI reads beside the name.
+    const hints = new Map();
     const google = googlePlaceNames(list,
       (id, g) => {
         const label = googleLabel(g);
         if (!label) return;
+        if (googleIsSpot(g) && g.kind) hints.set(id, g.kind);
         // A neighbour "0.6 km away" does not beat the business OpenStreetMap
         // has at the spot itself.
         if (!googleIsSpot(g) && review.places.find((p) => p.id === id)?.exactName) return;
@@ -733,9 +737,33 @@ export default function UsageReviewScreen() {
         setGnames((m) => new Map(m).set(id, v.name));
         if (v.activity) setGacts((m) => new Map(m).set(id, { activity: v.activity, kind: "OpenStreetMap" }));
       },
-      { signal: ac.signal })).catch(() => {});
+      { signal: ac.signal })).catch(() => {})
+      // Last, what each named place is, read by OpenAI from its exact name
+      // (operator, 2026-10-09): it reads "Ka mwalimu jim" or "Rodesa Filling
+      // Station" where Google types them only as a point of interest. Until it
+      // answers, or if it cannot, the reading of Google's type above stands.
+      .then(() => {
+        const named = list.map((p) => {
+          const g = gnamesRef.current.get(p.id);
+          const name = (typeof g === "string" ? g : g?.name) ?? p.exactName;
+          return name && !/ km away$/.test(name) ? { id: p.id, name, hint: hints.get(p.id) ?? null } : null;
+        }).filter(Boolean);
+        if (!named.length || ac.signal.aborted || !orgId) return undefined;
+        return getPlaceActivities({ orgId, vehicleId: review.vehicle.vehicleId, places: named.map(({ name, hint }) => ({ name, hint })), signal: ac.signal })
+          .then(({ activities } = {}) => {
+            if (ac.signal.aborted || !activities) return;
+            for (const n of named) {
+              const a = activities[n.name];
+              if (!a) continue;
+              const g = gnamesRef.current.get(n.id);
+              if (g != null) gnamesRef.current.set(n.id, { name: typeof g === "string" ? g : g.name, activity: a });
+              setGacts((m) => new Map(m).set(n.id, { activity: a, kind: m.get(n.id)?.kind ? `${m.get(n.id).kind} · read from the name` : "Read from the name" }));
+            }
+          });
+      })
+      .catch(() => {});
     return () => ac.abort();
-  }, [review]);
+  }, [review, orgId]);
   // The theme's colours, read once the page is up and again on a theme switch.
   useEffect(() => {
     const read = () => setPal((old) => {
