@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { buildTourSteps, esc } from "./productTour";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { accountBehind, buildTourSteps, claimFirstRun, esc, tourDue, tourSeen } from "./productTour";
+
+const store = new Map();
+vi.stubGlobal("localStorage", {
+  getItem: (k) => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => store.set(k, String(v)),
+  removeItem: (k) => store.delete(k),
+});
 
 // Stand-in elements: the test cares which steps survive, not what they point at.
 const on = (...marks) => (m) => (marks.includes(m) ? { mark: m } : null);
@@ -66,5 +73,54 @@ describe("buildTourSteps", () => {
   it("escapes names that reach the popover as HTML", () => {
     expect(esc('<img src=x onerror="1">')).toBe("&lt;img src=x onerror=&quot;1&quot;&gt;");
     expect(buildTourSteps({ firstName: "<b>", visible: DESKTOP })[0].popover.title).toBe("Welcome, &lt;b&gt;");
+  });
+});
+
+// Operator, 2026-10-09: the tour came back at every sign-in (recorded only when
+// closed by ✕, Esc or Done), and then on every other machine (recorded only in
+// the browser).
+describe("claimFirstRun", () => {
+  beforeEach(() => store.clear());
+
+  it("opens the tour once, and records it as it opens", () => {
+    expect(claimFirstRun("u1", null)).toBe(true);
+    // Never closed (a reload, a sign-out): still seen at the next sign-in.
+    expect(tourSeen("u1")).toBe(true);
+    expect(claimFirstRun("u1", null)).toBe(false);
+  });
+
+  it("is per person", () => {
+    claimFirstRun("u1", null);
+    expect(claimFirstRun("u2", null)).toBe(true);
+  });
+
+  it("does not open on a new machine once the account has had it", () => {
+    expect(tourDue("u1", 1)).toBe(false);
+    expect(claimFirstRun("u1", 1)).toBe(false);
+  });
+
+  it("opens again for everybody when the tour version is bumped past the account's", () => {
+    expect(tourDue("u1", 0)).toBe(true);
+  });
+
+  it("falls back to this browser's record on a server that does not keep it", () => {
+    expect(claimFirstRun("u1", undefined)).toBe(true);
+    expect(claimFirstRun("u1", undefined)).toBe(false);
+  });
+});
+
+describe("accountBehind", () => {
+  beforeEach(() => store.clear());
+
+  it("asks to tell the account about a tour this browser has seen and it has not", () => {
+    claimFirstRun("u1", null);
+    expect(accountBehind("u1", null)).toBe(true);
+    expect(accountBehind("u1", 1)).toBe(false);
+  });
+
+  it("has nothing to tell before this browser has seen it, or a server that does not keep it", () => {
+    expect(accountBehind("u1", null)).toBe(false);
+    claimFirstRun("u1", undefined);
+    expect(accountBehind("u1", undefined)).toBe(false);
   });
 });

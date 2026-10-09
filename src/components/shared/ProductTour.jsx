@@ -3,14 +3,16 @@
 // person who has not seen it, and runs it again from the account menu.
 
 import { useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import "./ProductTour.css";
 import { useAppFields, useAppActions, useAppSelector, useCompanies } from "../../context/AppContext";
-import { useAuth } from "../../context/AuthContext";
+import { authKeys, useAuth } from "../../context/AuthContext";
+import { recordTourSeen } from "../../api/account";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
-import { buildTourSteps, markTourSeen, onTourRequest, tourSeen, visibleMark } from "../../lib/productTour";
+import { TOUR_VERSION, accountBehind, buildTourSteps, claimFirstRun, onTourRequest, tourDue, visibleMark } from "../../lib/productTour";
 
 /** After the fleet has drawn, so the status cards show figures and not dashes;
  *  never longer than this, so a slow snapshot does not keep the tour away. */
@@ -53,7 +55,6 @@ export default function ProductTour() {
         multiOrg: (now.companies?.length ?? 0) > 1,
         visible: (mark) => visibleMark(mark),
       });
-      const userId = now.user?.id;
       const tour = driver({
         steps,
         popoverClass: "ft-tour",
@@ -72,28 +73,49 @@ export default function ProductTour() {
         // A stray click on the dimmed map must not end a first-timer's tour;
         // the close button and Esc still do.
         overlayClickBehavior: () => {},
-        onDestroyed: () => {
-          // Finished or closed, it is not offered again here — the account
-          // menu has it.
-          markTourSeen(userId);
-          tourRef.current = null;
-        },
+        onDestroyed: () => { tourRef.current = null; },
       });
       tourRef.current = tour;
       tour.drive();
     }, moving ? 350 : 60);
   }, []);
 
-  // First run: once per person, when the app has something to show.
+  // The tour version this person's account has been shown, from /auth/me:
+  // null for never, undefined from a server that does not keep it.
+  const accountVersion = user?.tourSeenVersion;
+  const queryClient = useQueryClient();
+  const tellAccount = useCallback(() => {
+    recordTourSeen(TOUR_VERSION)
+      .then((v) => queryClient.setQueryData(authKeys.me, (me) => (
+        me?.user ? { ...me, user: { ...me.user, tourSeenVersion: v } } : me
+      )))
+      // This browser's own record stands; accountBehind tries again at the
+      // next sign-in.
+      .catch(() => {});
+  }, [queryClient]);
+
+  // First run: once per person on any machine, when the app has something to
+  // show. Recorded as it opens, not as it closes (claimFirstRun).
   const startedFor = useRef(null);
   useEffect(() => {
     const id = user?.id;
-    if (!id || startedFor.current === id || tourSeen(id)) return undefined;
+    if (!id || startedFor.current === id || !tourDue(id, accountVersion)) return undefined;
     if (!activeCompany?.id || overlayOpen) return undefined;
     const ready = !canMap || !loading;
-    const t = setTimeout(() => { startedFor.current = id; start(); }, ready ? FIRST_RUN_SETTLE_MS : FIRST_RUN_MAX_WAIT_MS);
+    const t = setTimeout(() => {
+      startedFor.current = id;
+      if (!claimFirstRun(id, accountVersion)) return;
+      if (accountVersion !== undefined) tellAccount();
+      start();
+    }, ready ? FIRST_RUN_SETTLE_MS : FIRST_RUN_MAX_WAIT_MS);
     return () => clearTimeout(t);
-  }, [user?.id, activeCompany?.id, overlayOpen, canMap, loading, start]);
+  }, [user?.id, accountVersion, activeCompany?.id, overlayOpen, canMap, loading, start, tellAccount]);
+
+  // Seen in this browser before the account kept it, or the save failed: tell
+  // the account now, or every other machine shows it again.
+  useEffect(() => {
+    if (user?.id && accountBehind(user.id, accountVersion)) tellAccount();
+  }, [user?.id, accountVersion, tellAccount]);
 
   // Again, from the account menu.
   useEffect(() => onTourRequest(start), [start]);
