@@ -47,7 +47,9 @@
 //
 // Everything below reads this table: the fetch, the styling, the hover card,
 // the camera, the discard on org switch. A new survey is a row here and a file
-// in public/.
+// in public/ — and a copy of that file in fleet-server/assets/site-plans/,
+// where the Logbook names a stop inside a site after the site and the named
+// area in it (usage-review.siteplans, 2026-10-09).
 //
 //   id            what the map calls this layer internally, and the key its
 //                 built shapes are cached under
