@@ -86,17 +86,22 @@ async function nearest(lat, lng, radius) {
     placeId: best.id,
     m,
     // What it is: only when it is the spot itself — a bank 600 m off says
-    // nothing about why the unit stopped here.
-    activity: near ? placeActivity({ name: best.displayName, primaryType: best.primaryType, types: best.types }) : null,
+    // nothing about why the unit stopped here. Google's types are kept, not
+    // the group worked out from them, so better rules reach cached answers.
+    primaryType: near ? best.primaryType ?? null : null,
+    types: near ? best.types ?? [] : [],
     kind: near ? best.primaryTypeDisplayName ?? null : null,
   };
 }
+
+/** The answer with what the place is worked out now, from its kept types. */
+const withActivity = (v) => (v && v.types ? { ...v, activity: v.m <= RADIUS_M ? placeActivity({ name: v.name, primaryType: v.primaryType, types: v.types }) : null } : v);
 
 /** Google's name for the place nearest `{lat, lng}`, or null. */
 export async function googlePlaceName({ lat, lng }) {
   if (!GOOGLE_BASE_AVAILABLE) return null;
   const hit = readCache(lat, lng);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined) return withActivity(hit);
   if (Date.now() < pausedUntil) return null;
   try {
     // One search, nearest first: the closest named place is the spot itself
@@ -104,7 +109,7 @@ export async function googlePlaceName({ lat, lng }) {
     // searches a place ran the key's daily quota out, 2026-10-09.)
     const v = await nearest(lat, lng, NEAR_M);
     writeCache(lat, lng, v);
-    return v;
+    return withActivity(v);
   } catch (e) {
     // A spent quota or a refused key fails every place the same way: stop
     // asking for ten minutes, so the OpenStreetMap names come straight in
