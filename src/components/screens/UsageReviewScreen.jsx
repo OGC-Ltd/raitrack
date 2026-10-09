@@ -713,7 +713,7 @@ export default function UsageReviewScreen() {
       (id, g) => {
         const label = googleLabel(g);
         if (!label) return;
-        if (googleIsSpot(g) && g.kind) hints.set(id, g.kind);
+        if (g.kind) hints.set(id, g.kind);
         // A neighbour "0.6 km away" does not beat the business OpenStreetMap
         // has at the spot itself.
         if (!googleIsSpot(g) && review.places.find((p) => p.id === id)?.exactName) return;
@@ -745,8 +745,9 @@ export default function UsageReviewScreen() {
       .then(() => {
         const named = list.map((p) => {
           const g = gnamesRef.current.get(p.id);
+          // "…, 0.5 km away" too: the server reads the name without the distance.
           const name = (typeof g === "string" ? g : g?.name) ?? p.exactName;
-          return name && !/ km away$/.test(name) ? { id: p.id, name, hint: hints.get(p.id) ?? null } : null;
+          return name ? { id: p.id, name, hint: hints.get(p.id) ?? null } : null;
         }).filter(Boolean);
         if (!named.length || ac.signal.aborted || !orgId) return undefined;
         return getPlaceActivities({ orgId, vehicleId: review.vehicle.vehicleId, places: named.map(({ name, hint }) => ({ name, hint })), signal: ac.signal })

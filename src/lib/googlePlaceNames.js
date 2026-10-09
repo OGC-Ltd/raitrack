@@ -15,8 +15,8 @@
  * whose pin Google keeps at the gate still gets a name an operator knows.
  *
  * Each answer also says what the place is (lib/placeActivity: a bank is
- * Banking, a restaurant Food and drink), from Google's types — only for the
- * place itself, never for a neighbour in the second ring.
+ * Banking, a garage Mechanical), from its name and Google's types — for a
+ * neighbour in the second ring too.
  *
  * Answers are kept in localStorage for 30 days (Google's terms allow caching
  * Places content for that long), misses for 7, at ~11 m, so reopening a
@@ -80,22 +80,23 @@ async function nearest(lat, lng, radius) {
   const best = found.find((p) => p.displayName && !(p.types ?? []).every((t) => VAGUE.has(t)));
   if (!best) return null;
   const m = Math.round(metres({ lat, lng }, { lat: best.location.lat(), lng: best.location.lng() }));
-  const near = m <= RADIUS_M;
   return {
     name: best.displayName,
     placeId: best.id,
     m,
-    // What it is: only when it is the spot itself — a bank 600 m off says
-    // nothing about why the unit stopped here. Google's types are kept, not
-    // the group worked out from them, so better rules reach cached answers.
-    primaryType: near ? best.primaryType ?? null : null,
-    types: near ? best.types ?? [] : [],
-    kind: near ? best.primaryTypeDisplayName ?? null : null,
+    // What it is, for the nearest place some way off too (operator,
+    // 2026-10-09: "Diamond Motorcycle Spares, 0.5 km away — should have
+    // resolved to mechanical"): where a unit stops beside one named place,
+    // that place is the likeliest reason. Google's types are kept, not the
+    // group worked out from them, so better rules reach cached answers.
+    primaryType: best.primaryType ?? null,
+    types: best.types ?? [],
+    kind: best.primaryTypeDisplayName ?? null,
   };
 }
 
-/** The answer with what the place is worked out now, from its kept types. */
-const withActivity = (v) => (v && v.types ? { ...v, activity: v.m <= RADIUS_M ? placeActivity({ name: v.name, primaryType: v.primaryType, types: v.types }) : null } : v);
+/** The answer with what the place is worked out now, from its name and types. */
+const withActivity = (v) => (v && v.types ? { ...v, activity: placeActivity({ name: v.name, primaryType: v.primaryType, types: v.types }) } : v);
 
 /** Google's name for the place nearest `{lat, lng}`, or null. */
 export async function googlePlaceName({ lat, lng }) {
