@@ -14,12 +14,17 @@
  * away it is ("Nzoia Sugar Company, 0.6 km away") — a village stop or a yard
  * whose pin Google keeps at the gate still gets a name an operator knows.
  *
+ * Each answer also says what the place is (lib/placeActivity: a bank is
+ * Banking, a restaurant Food and drink), from Google's types — only for the
+ * place itself, never for a neighbour in the second ring.
+ *
  * Answers are kept in localStorage for 30 days (Google's terms allow caching
  * Places content for that long), misses for 7, at ~11 m, so reopening a
  * logbook asks Google nothing. Never throws: no key, a refused key, or no
  * place near enough all come back as null, and the caller keeps its own name.
  */
 import { GOOGLE_BASE_AVAILABLE, loadGoogleApi } from "./googleBase";
+import { placeActivity } from "./placeActivity";
 
 /** How far from a place's centre a named Google place may be. A stop cluster's
  *  centre sits within ~100 m of where the vehicle actually stood. */
@@ -28,7 +33,8 @@ const RADIUS_M = 150;
 const NEAR_M = 1_000;
 const HIT_TTL = 30 * 86_400_000;
 const MISS_TTL = 7 * 86_400_000;
-const CACHE_KEY = "ft-gplace2:";
+// v3: answers carry the place's type; v2 ones did not.
+const CACHE_KEY = "ft-gplace3:";
 
 /** Google's types that are not a place anyone would call by name. */
 const VAGUE = new Set(["route", "street_address", "locality", "sublocality", "political", "plus_code", "premise", "bus_stop", "transit_station"]);
@@ -61,17 +67,24 @@ const metres = (a, b) => {
 async function nearest(lat, lng, radius) {
   const { Place, SearchNearbyRankPreference } = await places();
   const { places: found } = await Place.searchNearby({
-    fields: ["id", "displayName", "location", "types"],
+    fields: ["id", "displayName", "location", "types", "primaryType", "primaryTypeDisplayName"],
     locationRestriction: { center: { lat, lng }, radius },
     maxResultCount: 10,
     rankPreference: SearchNearbyRankPreference.DISTANCE,
   });
   const best = found.find((p) => p.displayName && !(p.types ?? []).every((t) => VAGUE.has(t)));
-  return best ? {
+  if (!best) return null;
+  const m = Math.round(metres({ lat, lng }, { lat: best.location.lat(), lng: best.location.lng() }));
+  const near = m <= RADIUS_M;
+  return {
     name: best.displayName,
     placeId: best.id,
-    m: Math.round(metres({ lat, lng }, { lat: best.location.lat(), lng: best.location.lng() })),
-  } : null;
+    m,
+    // What it is: only when it is the spot itself — a bank 600 m off says
+    // nothing about why the unit stopped here.
+    activity: near ? placeActivity({ name: best.displayName, primaryType: best.primaryType, types: best.types }) : null,
+    kind: near ? best.primaryTypeDisplayName ?? null : null,
+  };
 }
 
 /** Google's name for the place nearest `{lat, lng}`, or null. */

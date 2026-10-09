@@ -19,7 +19,8 @@ export async function getUsageReview({ orgId, vehicleId, from, to, fresh = false
 
 /** Save the review's workbook or PDF. `kmpl` overrides the vehicle's rate for the fuel estimate. */
 export async function downloadUsageReview({ orgId, vehicleId, from, to, kind, kmpl, names, driver, fallbackName }) {
-  // `names`: place id → Google's exact name, looked up by the page (the
+  // `names`: place id → Google's exact name, or { name, activity } where
+  // Google says what the place is (Banking…), looked up by the page (the
   // server has no Google key), printed in the PDF and the workbook.
   const named = names && Object.keys(names).length ? { names: JSON.stringify(names) } : {}
   // `driver` names the PDF's subject; the workbook ignores it.
