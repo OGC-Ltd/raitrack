@@ -36,21 +36,6 @@ function loadZones(orgId) {
   return inflight.get(orgId)
 }
 
-// Every mounted hook, told when an org's zones are fetched afresh.
-const listeners = new Set()
-
-/**
- * Fetch an org's zones again, past the cache, and hand them to every mounted
- * useEstateZones — after a fence is drawn, renamed or removed on the Logbook
- * map, so the live map's overlay and the stranded-stop rule see it too.
- */
-export async function reloadEstateZones(orgId) {
-  inflight.delete(orgId)
-  const fc = await loadZones(orgId)
-  for (const fn of listeners) fn(orgId, fc)
-  return fc
-}
-
 /**
  * @returns {{ zones: object|null, loading: boolean, error: Error|null }}
  *          `zones` is a GeoJSON FeatureCollection, or null until it arrives.
@@ -77,9 +62,7 @@ export function useEstateZones(orgId) {
       .then((fc) => { if (!cancelled) { setZones(fc); setError(null); setLoading(false) } })
       .catch((err) => { if (!cancelled) { setError(err); setLoading(false) } })
 
-    const fresh = (id, fc) => { if (id === orgId && !cancelled) setZones(fc) }
-    listeners.add(fresh)
-    return () => { cancelled = true; listeners.delete(fresh) }
+    return () => { cancelled = true }
   }, [orgId])
 
   return { zones, loading, error }
