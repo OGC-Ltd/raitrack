@@ -705,7 +705,10 @@ export default function UsageReviewScreen() {
     gnamesRef.current = new Map();
     if (!review) { namingRef.current = Promise.resolve(); return undefined; }
     const ac = new AbortController();
-    const list = review.places.slice(0, MAX_PLACES_ON_MAP);
+    // Not the places the server named from a site plan or geofence (`nameFrom`,
+    // operator 2026-10-09): inside Raiply's fence is Raiply, and the nearest
+    // business Google finds there is the wrong name, not a better one.
+    const list = review.places.slice(0, MAX_PLACES_ON_MAP).filter((p) => !p.nameFrom);
     // Google's own word for each place at the spot ("Gas station"): the hint
     // OpenAI reads beside the name.
     const hints = new Map();
@@ -1055,7 +1058,9 @@ export default function UsageReviewScreen() {
                         <tr key={p.id} className={`urv-row${sel.place === p.id ? " urv-row--on" : ""}`}
                             onClick={() => setSel((x) => ({ ...x, place: x.place === p.id ? null : p.id }))}>
                           <td>{p.id}</td>
-                          <td className="urv-exact">{gnames.get(p.id) ?? p.exactName ?? <span className="frp-kpi-none" title="No named business on Google Maps or OpenStreetMap at this spot">—</span>}</td>
+                          <td className="urv-exact"
+                              title={p.nameFrom === "site-plan" ? `Inside the ${p.site} site plan` : p.nameFrom === "geofence" ? `Inside the ${p.site} geofence` : undefined}>
+                            {gnames.get(p.id) ?? p.exactName ?? <span className="frp-kpi-none" title="No named business on Google Maps or OpenStreetMap at this spot">—</span>}</td>
                           <td title={gacts.get(p.id)?.kind ?? undefined}>{gacts.get(p.id)?.activity ?? (gnames.has(p.id) ? null : p.activity) ?? <span className="frp-kpi-none" title="Nothing on Google Maps or OpenStreetMap says what this place is">—</span>}</td>
                           <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
