@@ -53,6 +53,11 @@ function writeCache(lat, lng, v) {
   try { localStorage.setItem(key(lat, lng), JSON.stringify({ v, t: Date.now() })); } catch { /* a cache only */ }
 }
 
+/** Errors that every place would get alike: the day's quota spent, a refused key. */
+const REFUSED = /RESOURCE_EXHAUSTED|quota|API key|PERMISSION_DENIED|REQUEST_DENIED/i;
+/** Google is not asked again until then, once it has refused (ms). */
+let pausedUntil = 0;
+
 let lib = null;
 const places = () => (lib ??= loadGoogleApi().then(() => window.google.maps.importLibrary("places")).catch((e) => { lib = null; throw e; }));
 
@@ -92,6 +97,7 @@ export async function googlePlaceName({ lat, lng }) {
   if (!GOOGLE_BASE_AVAILABLE) return null;
   const hit = readCache(lat, lng);
   if (hit !== undefined) return hit;
+  if (Date.now() < pausedUntil) return null;
   try {
     // One search, nearest first: the closest named place is the spot itself
     // when within RADIUS_M, else the neighbour said with its distance. (Two
@@ -99,7 +105,11 @@ export async function googlePlaceName({ lat, lng }) {
     const v = await nearest(lat, lng, NEAR_M);
     writeCache(lat, lng, v);
     return v;
-  } catch {
+  } catch (e) {
+    // A spent quota or a refused key fails every place the same way: stop
+    // asking for ten minutes, so the OpenStreetMap names come straight in
+    // rather than after thirty refusals.
+    if (REFUSED.test(String(e?.message ?? e))) pausedUntil = Date.now() + 10 * 60_000;
     return null; // not cached: next time asks again
   }
 }
