@@ -33,7 +33,7 @@ import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
 import TablePager, { usePager, PAGE_STEP } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
-import { googlePlaceNames, googleLabel } from "../../lib/googlePlaceNames";
+import { googlePlaceNames, googleLabel, googleIsSpot } from "../../lib/googlePlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
 import { buildWeb, arc, bearing, edgeWidth } from "../../lib/movementWeb";
@@ -157,7 +157,9 @@ const readBase = () => {
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** A place's name: Google's exact name when it has one, else OpenStreetMap's. */
-const nameOf = (p, gnames) => (p ? gnames?.get(p.id) ?? placeCase(p.name) : null);
+// Google's name, else the OpenStreetMap business the server found there, else the area.
+const nameOf = (p, gnames) => (p ? gnames?.get(p.id) ?? p.exactName ?? placeCase(p.name) : null);
+const hasExact = (p, gnames) => !!(gnames?.has(p.id) || p.exactName);
 function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, mode, setMode, web, webEdge, setWebEdge }) {
   const el = useRef(null);
   const wrap = useRef(null);
@@ -426,7 +428,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, mode, setMode,
       tip = (
         <div className="urv-tip" style={style}>
           <b>{p.id}. {nameOf(p, gnames) ?? "Place"}</b>
-          {gnames?.has(p.id) && p.name && <span>{placeCase(p.name)}</span>}
+          {hasExact(p, gnames) && p.name && <span>{placeCase(p.name)}</span>}
           <span>{nf(p.hours, 1)} h · {plural(p.visits, "stop")} · {plural(p.days, "day")}</span>
           {p.county && <span>{p.county}</span>}
           <em>{sel.place === p.id ? "Click to clear" : "Click to light up its days"}</em>
@@ -706,6 +708,9 @@ export default function UsageReviewScreen() {
       (id, g) => {
         const label = googleLabel(g);
         if (!label) return;
+        // A neighbour "0.6 km away" does not beat the business OpenStreetMap
+        // has at the spot itself.
+        if (!googleIsSpot(g) && review.places.find((p) => p.id === id)?.exactName) return;
         gnamesRef.current.set(id, g.activity ? { name: label, activity: g.activity } : label);
         setGnames((m) => new Map(m).set(id, label));
         if (g.activity) setGacts((m) => new Map(m).set(id, { activity: g.activity, kind: g.kind }));
@@ -761,14 +766,14 @@ export default function UsageReviewScreen() {
   const byActivity = useMemo(() => {
     const m = new Map();
     for (const p of review?.places ?? []) {
-      const a = gacts.get(p.id)?.activity;
+      const a = gacts.get(p.id)?.activity ?? (gnames.has(p.id) ? null : p.activity);
       if (!a) continue;
       const r = m.get(a) ?? { activity: a, hours: 0, stops: 0 };
       r.hours += p.hours; r.stops += p.visits;
       m.set(a, r);
     }
     return [...m.values()].sort((x, y) => y.hours - x.hours);
-  }, [review, gacts]);
+  }, [review, gnames, gacts]);
 
   // place → the days it was visited, for the linked highlights.
   const placeDays = useMemo(() => {
@@ -999,8 +1004,8 @@ export default function UsageReviewScreen() {
                         <tr key={p.id} className={`urv-row${sel.place === p.id ? " urv-row--on" : ""}`}
                             onClick={() => setSel((x) => ({ ...x, place: x.place === p.id ? null : p.id }))}>
                           <td>{p.id}</td>
-                          <td className="urv-exact">{gnames.get(p.id) ?? <span className="frp-kpi-none" title="Google has no named place within 150 m">—</span>}</td>
-                          <td title={gacts.get(p.id)?.kind ?? undefined}>{gacts.get(p.id)?.activity ?? <span className="frp-kpi-none" title="Google says nothing about what this place is">—</span>}</td>
+                          <td className="urv-exact">{gnames.get(p.id) ?? p.exactName ?? <span className="frp-kpi-none" title="No named business on Google Maps or OpenStreetMap at this spot">—</span>}</td>
+                          <td title={gacts.get(p.id)?.kind ?? undefined}>{gacts.get(p.id)?.activity ?? (gnames.has(p.id) ? null : p.activity) ?? <span className="frp-kpi-none" title="Nothing on Google Maps or OpenStreetMap says what this place is">—</span>}</td>
                           <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
                           <td className="urv-num">
@@ -1087,7 +1092,7 @@ export default function UsageReviewScreen() {
                     <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and Place Detail"}</h3>
                     <p className="urv-card__sub">
                       {selDay && <span>{nf(selDay.km, 1)} km · {hm(selDay.driveH)} driving{selDay.engineH != null ? ` · ${hm(selDay.engineH)} engine` : ""}{kmpl ? ` · ~${nf(selDay.km / kmpl, 1)} L` : ""}{selPlace ? ` · stops at ${selPlace.id}. ${nameOf(selPlace, gnames)}` : ""}</span>}
-                      {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days{selPlace.name && gnames.has(selPlace.id) ? ` · ${placeCase(selPlace.name)}` : ""}</span>}
+                      {!selDay && selPlace && <span>{nf(selPlace.hours, 1)} h · {selPlace.visits} stops · {selPlace.days} days{selPlace.name && hasExact(selPlace, gnames) ? ` · ${placeCase(selPlace.name)}` : ""}</span>}
                       {!selDay && !selPlace && <span>Nothing picked yet</span>}
                     </p>
                   </div>
