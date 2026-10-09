@@ -999,7 +999,7 @@ export default function UsageReviewScreen() {
                   <i className="ti ti-file-spreadsheet" aria-hidden="true" /> {busy === "xlsx" ? "Preparing…" : "Excel"}
                 </button>
                 <button type="button" className="sp4-ghost-btn" onClick={() => download("pdf")} disabled={busy != null}
-                        title="Vehicle tracking report: executive summary and key findings, where the time went, when it drives, routes, top sites with what each place is and its arrival and departure times, and the route map with the places named, in black and white">
+                        title="Vehicle tracking report: Executive Summary and key findings, where the vehicle spent its time, Daily Distance, Driving Patterns, Most Frequent Routes, Top Sites at a Glance, Overnight Locations, and the Route Map and Key Locations">
                   <i className="ti ti-file-type-pdf" aria-hidden="true" /> {busy === "pdf" ? "Preparing…" : "PDF"}
                 </button>
                 <button type="button" className="sp4-ghost-btn" onClick={build} title="Read the history again and rebuild">
