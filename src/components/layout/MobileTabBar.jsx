@@ -91,7 +91,7 @@ export default function MobileTabBar() {
   };
 
   return (
-    <nav className="mobile-tab-bar">
+    <nav className="mobile-tab-bar" data-tour="m-tabs">
       {barTabs(allowed).map(tab => {
         const isActive = desktopActiveTab === tab.key;
         const isOpen   = allowed(tab.key);

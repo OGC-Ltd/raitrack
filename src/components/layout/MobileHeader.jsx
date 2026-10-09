@@ -10,6 +10,7 @@ import './MobileHeader.css';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { usePermissions } from '../../hooks/usePermissions';
 import { initialsOf, avatarHue } from '../../lib/avatar';
+import { requestTour } from '../../lib/productTour';
 
 export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
@@ -59,6 +60,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
           <button
             type="button"
             className="mobile-header__company-switch"
+            data-tour="m-org"
             onClick={() => setDropdownOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={dropdownOpen}
@@ -113,12 +115,12 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
 
       {/* Right — search + bell + avatar */}
       <div className="mobile-header__actions">
-        <button className="mobile-header__icon-btn" onClick={onSearchOpen} aria-label="Search">
+        <button className="mobile-header__icon-btn" onClick={onSearchOpen} aria-label="Search" data-tour="m-search">
           <i className="ti ti-search" aria-hidden="true" />
         </button>
         {/* No bell without rights to the fleet (no map:read), as on the desktop. */}
         {can('map:read') && (
-          <button className="mobile-header__icon-btn" onClick={onFeedOpen} aria-label="Alerts">
+          <button className="mobile-header__icon-btn" onClick={onFeedOpen} aria-label="Alerts" data-tour="m-alerts">
             <i className="ti ti-bell" aria-hidden="true" />
             {unreadCount > 0 && <span className="mobile-header__alert-dot" />}
           </button>
@@ -130,6 +132,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
         <div className="mobile-header__user" ref={userRef}>
           <button
             className="mobile-header__avatar"
+            data-tour="m-account"
             onClick={() => setUserOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={userOpen}
@@ -182,6 +185,10 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-users" aria-hidden="true" /> User accounts
                 </button>
               )}
+              {/* The first-time tour, again (lib/productTour). */}
+              <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
+                <i className="ti ti-route-2" aria-hidden="true" /> Take the tour
+              </button>
               <div className="mobile-header__user-divider" />
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); logout(); }}>
                 <i className="ti ti-logout" aria-hidden="true" /> Sign out

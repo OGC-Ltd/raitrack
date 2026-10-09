@@ -294,7 +294,7 @@ export default function SidePanel() {
             const total = counts.all || 0;
             const onShare = !waiting && !locked && total ? counts.online / total : 0;
             return (
-              <div className={`sp-stats-grid${locked ? ' sp-stats-grid--locked' : ''}`}>
+              <div className={`sp-stats-grid${locked ? ' sp-stats-grid--locked' : ''}`} data-tour="status">
                 {order.map(key => {
                   const s = by[key];
                   const isActive = !locked && activeFilter === s.filterKey;
@@ -347,7 +347,7 @@ export default function SidePanel() {
           })()}
 
           {/* ── Navigation ── */}
-          <nav className="sp-nav-box">
+          <nav className="sp-nav-box" data-tour="nav">
             {NAV_ITEMS.filter(item => !item.section).map(item => {
               const allowed  = can(item.permission);
               const isActive = desktopActiveTab === item.key;
@@ -393,6 +393,7 @@ export default function SidePanel() {
               through a ref because React 18 does not pass the property through
               from JSX. */}
           <div
+            data-tour="fleets"
             className={`sp-trees${can('map:read') ? '' : ' sp-trees--locked'}`}
             ref={(el) => { if (el) el.inert = !can('map:read'); }}
           >
@@ -451,7 +452,7 @@ export default function SidePanel() {
 
       {/* Collapsed — icons only */}
       {collapsed && (
-        <nav className="side-panel__nav" aria-label="Main">
+        <nav className="side-panel__nav" aria-label="Main" data-tour="nav">
           {NAV_ITEMS.filter(item => !item.section).map(item => {
             const isActive = desktopActiveTab === item.key;
             const allowed  = can(item.permission);

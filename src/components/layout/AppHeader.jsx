@@ -11,6 +11,7 @@ import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { initialsOf, avatarHue } from '../../lib/avatar';
+import { requestTour } from '../../lib/productTour';
 
 // Never opened in this browser → count only the last 24 hours, so a first
 // visit isn't greeted with every alert in the replayed history.
@@ -198,6 +199,7 @@ export default function AppHeader() {
         {/* Org switcher */}
         <div className="app-header__org-wrap" ref={orgRef}>
           <button
+            data-tour="org"
             className="app-header__org-btn"
             onClick={() => setOrgOpen(o => !o)}
             aria-haspopup="listbox"
@@ -233,6 +235,7 @@ export default function AppHeader() {
         {/* Notification bell — not rendered without rights to the fleet. */}
         {!limited && (
         <button
+          data-tour="alerts"
           className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}${unreadCount > 0 ? ' app-header__bell--news' : ''}`}
           onClick={toggleFeed}
           // The count lives in the name: a label on the badge inside a labelled
@@ -263,6 +266,7 @@ export default function AppHeader() {
               old grey silhouette filled 30px solid and outweighed the bell's
               outline icon (operator, 2026-10-02). */}
           <button
+            data-tour="account"
             className={`app-header__avatar${userOpen ? ' app-header__avatar--open' : ''}`}
             onClick={() => setUserOpen(o => !o)}
             aria-label="User menu"
@@ -302,6 +306,11 @@ export default function AppHeader() {
                   User accounts
                 </button>
               )}
+              {/* The first-time tour, again (lib/productTour). */}
+              <button className="app-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
+                <i className="ti ti-route-2" aria-hidden="true" />
+                Take the tour
+              </button>
               <div className="app-header__user-divider" />
               <button className="app-header__user-item" onClick={logout}>
                 <i className="ti ti-logout" aria-hidden="true" />

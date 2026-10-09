@@ -20,11 +20,13 @@ import "./MapToolRail.css";
    per client, which the 600 ms debounce on typing respects. */
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
-function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn" }) {
+// `tour`: the first-time tour's mark for this button (lib/productTour).
+function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn", tour }) {
   return (
     <button
       type="button"
       className={`mtr-btn${on ? " mtr-btn--on" : ""}`}
+      data-tour={tour}
       onClick={onClick}
       disabled={disabled}
       aria-pressed={on}
@@ -261,10 +263,10 @@ export default function MapToolRail({
 
   return (
     <div className={`mtr${expanded ? " mtr--expanded" : ""}`} ref={wrapRef}>
-      <div className="mtr-card" role="toolbar" aria-label="Map tools" aria-orientation="vertical">
+      <div className="mtr-card" role="toolbar" aria-label="Map tools" aria-orientation="vertical" data-tour="map-tools">
         <div className="mtr-group">
           <RailButton
-            icon="ti-search" label="Search" title="Search for a plate, driver, place or road"
+            icon="ti-search" label="Search" title="Search for a plate, driver, place or road" tour="map-search"
             on={searchOpen} expanded={expanded} onClick={() => setSearchOpen((v) => !v)}
           />
           <RailButton
@@ -315,7 +317,7 @@ export default function MapToolRail({
               geofences. Opens the same window the sidebar row used to. */}
           {halted && (
             <RailButton
-              icon="ti-alert-triangle" label="Halted"
+              icon="ti-alert-triangle" label="Halted" tour="map-halted"
               title={halted.count
                 ? `Halted: ${halted.count} ${halted.count === 1 ? "unit" : "units"} stopped mid-journey, on the highway or outside their geofences`
                 : "Halted: no unit has stopped mid-journey — open the list anyway"}
@@ -325,7 +327,7 @@ export default function MapToolRail({
           {/* Fuel alerts, below Halted: open theft cases, in the alert red. */}
           {fuelAlerts && (
             <RailButton
-              icon="ti-gas-station" label="Fuel alerts"
+              icon="ti-gas-station" label="Fuel alerts" tour="map-fuel"
               title={fuelAlerts.count
                 ? `Fuel alerts: ${fuelAlerts.count} ${fuelAlerts.count === 1 ? "unit" : "units"} with an open fuel theft alert`
                 : "Fuel alerts: none open — open the list anyway"}
