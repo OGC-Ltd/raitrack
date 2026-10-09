@@ -7,7 +7,7 @@ describe("osmActivity", () => {
     expect(osmActivity({ amenity: "restaurant" })).toBe("Food and drink");
     expect(osmActivity({ healthcare: "hospital" })).toBe("Medical");
     expect(osmActivity({ amenity: "fuel", shop: "convenience" })).toBe("Fuel");
-    expect(osmActivity({ landuse: "industrial" })).toBe("Industrial / works");
+    expect(osmActivity({ landuse: "industrial" })).toBe("Work");
     expect(osmActivity({ name: "x" })).toBeNull();
   });
 });
@@ -20,7 +20,7 @@ describe("pickPoi", () => {
   const road = { type: "way", center: { lat: 0.5, lon: 34.5 }, tags: { name: "Kakamega Road", highway: "primary" } };
   it("takes the nearest named business, else the premises around it", () => {
     expect(pickPoi(p, [far, works, bank, road])).toEqual({ name: "Equity Bank", activity: "Banking" });
-    expect(pickPoi(p, [far, works, road])).toEqual({ name: "West Kenya Sugar Company", activity: "Industrial / works" });
+    expect(pickPoi(p, [far, works, road])).toEqual({ name: "West Kenya Sugar Company", activity: "Work" });
     expect(pickPoi(p, [far, road])).toBeNull();
   });
 });
