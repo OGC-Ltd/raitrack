@@ -34,6 +34,7 @@ import UnitPicker from "../body/UnitPicker";
 import TablePager, { usePager, PAGE_STEP } from "../body/TablePager";
 import { getUsageReview, downloadUsageReview } from "../../api/usageReview";
 import { googlePlaceNames, googleLabel, googleIsSpot } from "../../lib/googlePlaceNames";
+import { osmPlaceNames } from "../../lib/osmPlaceNames";
 import { defaultLogbookUnit } from "../../lib/logbookDefault";
 import { placeCase, labelOf, PlaceNames } from "./logbookPlaces";
 import { buildWeb, arc, bearing, edgeWidth } from "../../lib/movementWeb";
@@ -704,7 +705,8 @@ export default function UsageReviewScreen() {
     gnamesRef.current = new Map();
     if (!review) { namingRef.current = Promise.resolve(); return undefined; }
     const ac = new AbortController();
-    namingRef.current = googlePlaceNames(review.places.slice(0, MAX_PLACES_ON_MAP),
+    const list = review.places.slice(0, MAX_PLACES_ON_MAP);
+    const google = googlePlaceNames(list,
       (id, g) => {
         const label = googleLabel(g);
         if (!label) return;
@@ -716,6 +718,22 @@ export default function UsageReviewScreen() {
         if (g.activity) setGacts((m) => new Map(m).set(id, { activity: g.activity, kind: g.kind }));
       },
       { signal: ac.signal }).catch(() => {});
+    // Then OpenStreetMap for the places Google gave no name at the spot
+    // (none there, or its daily quota spent) and the server found none for.
+    namingRef.current = google.then(() => osmPlaceNames(
+      list.filter((p) => {
+        if (p.exactName) return false;
+        const g = gnamesRef.current.get(p.id);
+        // A Google neighbour "0.6 km away" gives way to a business at the spot.
+        return g == null || (typeof g === "string" && / km away$/.test(g));
+      }),
+      (id, v) => {
+        if (ac.signal.aborted) return;
+        gnamesRef.current.set(id, v.activity ? { name: v.name, activity: v.activity } : v.name);
+        setGnames((m) => new Map(m).set(id, v.name));
+        if (v.activity) setGacts((m) => new Map(m).set(id, { activity: v.activity, kind: "OpenStreetMap" }));
+      },
+      { signal: ac.signal })).catch(() => {});
     return () => ac.abort();
   }, [review]);
   // The theme's colours, read once the page is up and again on a theme switch.
@@ -790,9 +808,10 @@ export default function UsageReviewScreen() {
     if (!live || !review) return;
     setBusy(kind); setDlError(null);
     try {
-      // Google's names go into the file: wait for any still on their way,
-      // ten seconds at most — a name that has not come by then is left out.
-      await Promise.race([namingRef.current, new Promise((r) => setTimeout(r, 10_000))]);
+      // Google's and OpenStreetMap's names go into the file: wait for any
+      // still on their way, 25 seconds at most — a name that has not come by
+      // then is left out.
+      await Promise.race([namingRef.current, new Promise((r) => setTimeout(r, 25_000))]);
       await downloadUsageReview({
         orgId: live.orgId, vehicleId: live.vehicleId, from: live.from, to: live.to, kind,
         kmpl: kmplText && kmplIn > 0 ? kmplIn : undefined,
@@ -834,14 +853,6 @@ export default function UsageReviewScreen() {
     };
   }, [review]);
   const placePager = usePager(review?.places ?? [], review, PAGE_ROWS);
-  const webPager = usePager(web.edges, review, PAGE_ROWS);
-  const loopTrips = [...web.loops.values()].reduce((a, n) => a + n, 0);
-  /** Show a connection on the map's web, and bring the map into view. */
-  const showEdge = (key) => {
-    setMapMode("web");
-    setWebEdge((k) => (k === key ? null : key));
-    rootRef.current?.querySelector(".urv-map")?.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
   // Up to 15 rows a page, and the card grows to hold them.
   const dayIndex = useMemo(() => new Map((review?.days ?? []).map((d) => [d.date, d])), [review]);
   const detailPager = usePager(detailRows, `${sel.day}|${sel.place}|${detailKind}`, PAGE_STEP);
@@ -1033,48 +1044,6 @@ export default function UsageReviewScreen() {
                 </p>
               </section>
             </div>
-
-            {web.edges.length > 0 && (
-              <div className="urv-grid urv-grid--wide">
-                <section className="frv-card urv-card urv-web">
-                  <div className="urv-detail__head">
-                    <div>
-                      <h3 className="frv-card__t">Movement Web</h3>
-                      <p className="urv-card__sub">
-                        {web.edges.length} connections between {new Set(web.edges.flatMap((e) => [e.from, e.to])).size} places
-                        {loopTrips ? ` · ${plural(loopTrips, "round trip")} back to where it left` : ""} · click one to see it on the map
-                      </p>
-                    </div>
-                    <button type="button" className="urv-playbtn" onClick={() => { setMapMode((m) => (m === "web" ? "route" : "web")); setWebEdge(null); }}>
-                      <i className={`ti ti-${mapMode === "web" ? "route" : "chart-dots-3"}`} aria-hidden="true" /> {mapMode === "web" ? "Show routes" : "Show web on map"}
-                    </button>
-                  </div>
-                  <div className="sp4-table-scroll urv-table">
-                    <table className="sp4-table">
-                      <thead><tr><th>From</th><th aria-label="to" /><th>To</th><th className="urv-num">Trips</th><th className="urv-num">Avg drive</th><th className="urv-num">Avg km</th><th className="urv-num">Total km</th></tr></thead>
-                      <tbody>
-                        {webPager.pageRows.map((e) => (
-                          <tr key={e.key} className={`urv-row${webEdge === e.key ? " urv-row--on" : ""}`} onClick={() => showEdge(e.key)}
-                              title="Show this connection on the map">
-                            <td>{e.from}. {pname(e.from)}</td>
-                            <td className="urv-arrow" aria-hidden="true">→</td>
-                            <td>{e.to}. {pname(e.to)}</td>
-                            <td className="urv-num">
-                              <span className="urv-hbar" style={{ "--w": `${Math.min(100, (e.trips / web.edges[0].trips) * 100)}%` }} />
-                              {e.trips}
-                            </td>
-                            <td className="urv-num">{minutes(e.avgMin)}</td>
-                            <td className="urv-num">{nf(e.avgKm, 1)}</td>
-                            <td className="urv-num">{nf(e.km, 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <TablePager pager={webPager} label="Connection pages" />
-                </section>
-              </div>
-            )}
 
             {playDay && live && (
               <LogbookPlayback
