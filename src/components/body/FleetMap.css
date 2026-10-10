@@ -2943,6 +2943,9 @@ html[data-theme="light"] #root {
    actually decide the size, because a value kept in the other file drifted the
    first time this button's padding changed. The phone override is in the
    max-width: 767px block further down. */
+/* "Map" and "Satellite" measured 125px in Inter (2026-10-10). The toggle
+   shows below 1024px only (FleetMap's baseToggle); desktop picks the base map
+   in the tool rail's Maps panel. */
 :root { --map-type-w: 126px; --map-type-h: 28px; }
 
 .map-type-toggle {

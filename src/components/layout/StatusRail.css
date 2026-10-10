@@ -10,7 +10,9 @@
   .status-rail {
     display: block;
     position: absolute;
-    /* Inline with the Map/Satellite toggle, on its row rather than below it.
+    /* Inline with the Map/Satellite base-map toggle, on its row rather than
+       below it (put back there 2026-10-10, operator: "the map selector on top
+       where it was originally along the stats buttons").
        `left` clears that toggle: its width is published as --map-type-w from
        FleetMap.css, beside the padding rules that decide it, so the two cannot
        drift apart when the button is restyled. The 8px is the gap between them.
@@ -19,7 +21,9 @@
        chips are in view at once — which is why the scroller centres whichever
        chip is active (see the component) rather than relying on all six
        fitting. */
-    top: 12px;
+    /* 12px less the scroller's 3px top padding, so a chip's top lines up with
+       the toggle's: at 12px the chips sat 3px under its centre (2026-10-10). */
+    top: 9px;
     left: calc(12px + var(--map-type-w, 126px) + 8px);
     right: 12px;
     /* The map's other floating controls (.map-type-toggle, .map-cam-controls)
@@ -40,6 +44,9 @@
     align-items: center;
     min-height: var(--map-type-h, 28px);
   }
+
+  /* No toggle to clear (no Google key built in): the chips start at the edge. */
+  .status-rail.status-rail--alone { left: 12px; }
 
   .status-rail__scroller {
     display: flex;

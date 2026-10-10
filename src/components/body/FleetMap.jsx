@@ -61,7 +61,7 @@ import FuelAlertsMenu from "./FuelAlertsMenu";
 import { isTheftAlert } from "../../lib/fuelAlerts";
 import UnitsMenu from "./UnitsMenu";
 import { loadMapEngine } from "../../lib/mapEngine";
-import { installOsmBase, OSM_ENABLED, OSM_TYPE_ID, OSM_ATTRIBUTION, SHOW_GOOGLE_TYPES } from "../../lib/osmBase";
+import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from "../../lib/osmBase";
 import MapStatusBar from "./MapStatusBar";
 import StrandedWindow from "./StrandedWindow";
 import { SITE_PLANS, NO_PLANS } from "../../lib/sitePlans";
@@ -787,11 +787,12 @@ const FUEL_ALERTS_KEY = "ft-fuel-alerts-on";
 // and whether the rail shows its tools' names.
 const NAMES_KEY = "ft-map-names-on";
 const TOOLS_EXPANDED_KEY = "ft-map-tools-expanded";
-// The base map picked in the rail's Maps panel: "osm" or "google".
+// The base map picked in the rail's Maps panel, or on a phone or tablet the
+// toggle at the map's top left: "osm" or "google". `short` is the toggle's word.
 const BASE_MAP_KEY = "ft-map-base";
 const BASE_MAPS = [
-  { id: "osm",    label: "OpenStreetMap" },
-  { id: "google", label: "Google Satellite" },
+  { id: "osm",    label: "OpenStreetMap",    short: "Map" },
+  { id: "google", label: "Google Satellite", short: "Satellite" },
 ];
 
 // Pan/zoom limits. Deliberately wider than Kenya alone: Kasulu (TZ) sits at
@@ -2226,11 +2227,6 @@ export default function FleetMap() {
   const { setSelectedVehicleId, setFeedVehicleId, setDesktopActiveTab, setMobileActiveTab, setPendingFocusId, requestIncident, setSitePlanLinks, setTrackedIds, setInTransitOnly, markSelectionRestored } = useAppActions();
 
   const [mapReady, setMapReady]             = useState(false);
-  // Opens on OpenStreetMap (operator, 2026-10-04: "the openstreetmap the
-  // default"); Google's road map when OSM is switched off in lib/osmBase.
-  // Map and Satellite are one click away.
-  const [mapType,  setMapType]              = useState(OSM_ENABLED ? "osm" : "roadmap");
-
   // Hover tracks the ID, not a vehicle snapshot — the card re-renders with
   // each SSE frame while the cursor rests on a marker.
   const [hoveredId, setHoveredId]           = useState(null);
@@ -4413,6 +4409,10 @@ export default function FleetMap() {
     }
     return () => { dead = true; };
   }, [baseMap, mapReady]);
+
+  // The phone and tablet toggle (see the render). Only with a second base map
+  // to choose: no Google key built in, no toggle.
+  const baseToggle = isCompact && GOOGLE_BASE_AVAILABLE;
 
   const chooseBase = useCallback((id) => {
     writeCache(BASE_MAP_KEY, id);
@@ -6906,44 +6906,44 @@ export default function FleetMap() {
           className="map-status--live"
         />
 
-        {/* Map / OSM toggle (Satellite removed, operator 2026-10-04).
-            On a phone the two words ate the top-left corner, so there it is
-            Google's own pair of icons: a folded map, and a globe for satellite.
-            The labels stay on desktop, where there is room for them. */}
-        {SHOW_GOOGLE_TYPES && <div className="map-type-toggle">
-          <button
-            className={`map-type-btn${mapType === "roadmap" ? " map-type-btn--active" : ""}`}
-            onClick={() => {
-              setMapType("roadmap");
-              if (mapRef.current) mapRef.current.setMapTypeId("roadmap");
-            }}
-            title="Map view"
-            aria-label="Map view"
-          >
-            <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-              <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
-              <path d="M9 4v14M15 6v14" fill="none" stroke="currentColor" strokeWidth="1.6"/>
-            </svg>
-            <span className="map-type-txt">Map</span>
-          </button>
-          {OSM_ENABLED && (
-            <button
-              className={`map-type-btn${mapType === "osm" ? " map-type-btn--active" : ""}`}
-              onClick={() => {
-                setMapType("osm");
-                if (mapRef.current) mapRef.current.setMapTypeId(OSM_TYPE_ID);
-              }}
-              title="OpenStreetMap view"
-              aria-label="OpenStreetMap view"
-            >
-              <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
-                <circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.6"/>
-              </svg>
-              <span className="map-type-txt">OSM</span>
-            </button>
-          )}
-        </div>}
+        {/* The base map on a phone or tablet: top left, at the head of the
+            status chips' row, where the Map / Satellite toggle first stood
+            (operator, 2026-10-10: "on mobile devices we can have the map
+            selector on top where it was originally along the stats buttons").
+            Below 1024 there is no tool rail, so without it the base map could
+            not be changed at all. Google's own pair of icons on a phone, a
+            folded map and a globe; their words on a tablet. Desktop keeps the
+            choice in the rail's Maps panel. */}
+        {baseToggle && (
+          <div className="map-type-toggle" role="radiogroup" aria-label="Base map">
+            {BASE_MAPS.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                role="radio"
+                aria-checked={baseMap === b.id}
+                className={`map-type-btn${baseMap === b.id ? " map-type-btn--active" : ""}`}
+                onClick={() => chooseBase(b.id)}
+                // Why Google is not showing, when it could not be loaded.
+                title={b.id === "google" && baseNote ? baseNote : b.label}
+                aria-label={b.label}
+              >
+                {b.id === "osm" ? (
+                  <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                    <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                    <path d="M9 4v14M15 6v14" fill="none" stroke="currentColor" strokeWidth="1.6"/>
+                  </svg>
+                ) : (
+                  <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                    <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6"/>
+                    <path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5s1.2-6.1 3.5-8.5Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                <span className="map-type-txt">{b.short}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* The status filters, for screens with no room for the sidebar's
             stat grid. This was two chips — CRITICAL and WARNING — which left
@@ -7009,6 +7009,7 @@ export default function FleetMap() {
           loading={vehiclesLoading}
           activeFilter={activeFilter}
           onFilter={handleFilter}
+          afterToggle={baseToggle}
         />
 
         {mapLibError && (
