@@ -27,7 +27,7 @@ import { useRef, useEffect } from 'react';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
 import './StatusRail.css';
 
-export default function StatusRail({ vehicles = [], loading = false, activeFilter = 'all', onFilter }) {
+export default function StatusRail({ vehicles = [], loading = false, activeFilter = 'all', onFilter, afterToggle = false }) {
   const scrollerRef = useRef(null);
 
   const counts  = countStatuses(vehicles);
@@ -57,7 +57,9 @@ export default function StatusRail({ vehicles = [], loading = false, activeFilte
   }, [activeFilter]);
 
   return (
-    <div className="status-rail" role="group" aria-label="Filter the map by status">
+    // `afterToggle`: the base-map toggle holds the row's left end, so the
+    // chips start past it; without it they start at the map's edge.
+    <div className={`status-rail${afterToggle ? '' : ' status-rail--alone'}`} role="group" aria-label="Filter the map by status">
       <div className="status-rail__scroller" ref={scrollerRef}>
         {STATUS_STATS.map((s) => {
           const isActive = activeFilter === s.filterKey;
