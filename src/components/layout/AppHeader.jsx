@@ -309,7 +309,7 @@ export default function AppHeader() {
               {/* The first-time tour, again (lib/productTour). */}
               <button className="app-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
                 <i className="ti ti-route-2" aria-hidden="true" />
-                Take the tour
+                Guided tour
               </button>
               <div className="app-header__user-divider" />
               <button className="app-header__user-item" onClick={logout}>

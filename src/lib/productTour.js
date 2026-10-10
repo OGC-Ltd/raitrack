@@ -210,7 +210,7 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
 
   add(first("account", "m-account"), {
     title: "Your Account",
-    description: "Your profile and password are here, and so is <b>Take the tour</b>, whenever you want this again.",
+    description: "Your profile and password are here, and so is the <b>Guided tour</b>, whenever you want this again.",
     side: "bottom", align: "end",
   });
 

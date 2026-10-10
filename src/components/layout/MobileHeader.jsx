@@ -187,7 +187,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               )}
               {/* The first-time tour, again (lib/productTour). */}
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
-                <i className="ti ti-route-2" aria-hidden="true" /> Take the tour
+                <i className="ti ti-route-2" aria-hidden="true" /> Guided tour
               </button>
               <div className="mobile-header__user-divider" />
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); logout(); }}>
