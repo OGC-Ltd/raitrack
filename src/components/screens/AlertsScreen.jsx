@@ -32,12 +32,12 @@ import "./AlertsScreen.css";
 import { useAppActions, useAppSelector, useCompanies } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
-import { fetchAlertHistory, fetchAlerts, decideAlert } from "../../api/alerts";
+import { decideAlert, fetchAlertHistory, fetchAlerts, markAlertsRead, markAllAlertsRead } from "../../api/alerts";
 import { ALERT_SUMMARY_KEY } from "../../hooks/useAlertSummary";
 import { settleLimited } from "../../lib/settleLimited";
 import {
-  KINDS, OVER_BY, PERIODS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
-  daysBounds, daysWords, decisionWords, duration, fixDays, fleetDay, headline, kmh, litres, periodDays, periodOf,
+  KINDS, OVER_BY, PERIODS, READS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
+  daysBounds, daysWords, decisionWords, duration, fleetDay, headline, kmh, litres, periodDays,
   ruleWords, statusOf, unitQueues, when,
 } from "../../lib/alertsView";
 import { Card, Gauge } from "./FuelReportOverview";
@@ -56,6 +56,10 @@ const EMPTY = {
   escalated: { icon: "ti-alert-triangle", title: "Nothing Escalated", sub: "No alert in this period has been escalated." },
   deescalated: { icon: "ti-circle-check", title: "Nothing De-escalated", sub: "No alert in this period has been de-escalated." },
   all: { icon: "ti-bell", title: "No Alerts", sub: "No fuel or overspeeding alert in this period." },
+};
+const EMPTY_READ = {
+  unread: { icon: "ti-mail-opened", title: "Nothing Unread", sub: "You have opened every alert these filters list." },
+  read: { icon: "ti-mail", title: "Nothing Read Yet", sub: "Alerts you open, or mark read, are listed here." },
 };
 
 function useDebounced(value, ms) {
@@ -115,8 +119,7 @@ function DayField({ label, value, max, onPick }) {
         if (whole(e.target.value)) onPick(e.target.value);
       }}
       onBlur={() => {
-        // Cleared: Sensor Monitor's fallback (lib/alertsView fixDays). Half a
-        // year: put back.
+        // Cleared: back to the default week (pickDay). Half a date: put back.
         if (draft !== value && (draft === "" || whole(draft))) onPick(draft);
         setDraft(value);
       }}
@@ -610,6 +613,7 @@ export default function AlertsScreen() {
   const [period, setPeriod] = useState("7d");
   const [custom, setCustom] = useState(null);
   const [overBy, setOverBy] = useState(0);
+  const [readF, setReadF] = useState("all");
   const [search, setSearch] = useState("");
   const q = useDebounced(search.trim(), 300);
   const [open, setOpen] = useState(null); // { key, start }
@@ -623,15 +627,14 @@ export default function AlertsScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const { from, to } = useMemo(() => daysBounds(days), [days, epoch]);
   const today = fleetDay();
-  const pickDay = (end, value) => {
-    const next = fixDays(end === "from" ? { ...days, fromDay: value } : { ...days, toDay: value }, end);
-    const chip = periodOf(next);
-    setPeriod(chip ?? "custom");
-    setCustom(chip ? null : next);
+  // One day, or back to the default week when the field is cleared.
+  const pickDay = (day) => {
+    setPeriod(day ? "custom" : "7d");
+    setCustom(day ? { fromDay: day, toDay: day } : null);
   };
   const filters = useMemo(() => ({
-    kind, status, orgs, from, to, q, minOverKmh: kind === "fuel" ? 0 : overBy,
-  }), [kind, status, orgs, from, to, q, overBy]);
+    kind, status, orgs, from, to, q, minOverKmh: kind === "fuel" ? 0 : overBy, read: readF,
+  }), [kind, status, orgs, from, to, q, overBy, readF]);
   const key = JSON.stringify(filters);
 
   // Pages of PAGE_STEP (15), turned with the app's one pager (TablePager,
@@ -670,9 +673,16 @@ export default function AlertsScreen() {
   const [decided, setDecided] = useState(() => new Map());
   useEffect(() => { setDecided(new Map()); }, [page]);
 
+  // Alerts read here, likewise laid over the rows until the server's next answer.
+  const [readHere, setReadHere] = useState(() => new Set());
+  useEffect(() => { setReadHere(new Set()); }, [page]);
+
   const rows = useMemo(
-    () => (page?.data ?? []).map((r) => decided.get(rowKey(r)) ?? r),
-    [page, decided],
+    () => (page?.data ?? []).map((r) => {
+      const row = decided.get(rowKey(r)) ?? r;
+      return !row.read && readHere.has(rowKey(r)) ? { ...row, read: true } : row;
+    }),
+    [page, decided, readHere],
   );
 
   // The alerts picked for a batch, kept across pages for the filters they
@@ -690,7 +700,7 @@ export default function AlertsScreen() {
   const pickedAlerts = [...pickedMap].map(([k, a]) => rowsByKey.get(k) ?? decided.get(k) ?? a);
   useEffect(() => { if (pickedMap.size === 0) setBulk(null); }, [pickedMap.size]);
 
-  /** The badge counts open alerts: tell it a decision moved one. */
+  /** The badge counts open alerts not read: tell it a decision or a read moved one. */
   const recountBadge = () => queryClient.invalidateQueries({ queryKey: ALERT_SUMMARY_KEY });
 
   const goTo = (n) => {
@@ -741,9 +751,11 @@ export default function AlertsScreen() {
   });
 
   // Every chip's number under the OTHER filters (lib/alertsView countWhere).
-  const nStatus = (s) => countWhere(counts, { orgs, kind, status: s });
-  const nKind = (k) => countWhere(counts, { orgs, kind: k, status });
-  const nOrg = (id) => countWhere(counts, { orgs: [id], kind, status });
+  const nStatus = (s) => countWhere(counts, { orgs, kind, status: s, read: readF });
+  const nKind = (k) => countWhere(counts, { orgs, kind: k, status, read: readF });
+  const nOrg = (id) => countWhere(counts, { orgs: [id], kind, status, read: readF });
+  const nRead = (r) => countWhere(counts, { orgs, kind, status, read: r });
+  const unread = nRead("unread");
   const total = nStatus("all");
   const trend = useMemo(() => alertTrend(history.data ?? null, { orgs }), [history.data, orgs]);
   const pager = {
@@ -755,7 +767,8 @@ export default function AlertsScreen() {
     if (page && !first.stale && page.data.length === 0 && at.page > 0) goTo(at.page - 1);
   });
 
-  const activeCount = (kind !== "all") + (status !== "open") + (orgs.length > 0) + (period !== "7d") + (overBy > 0);
+  const activeCount = (kind !== "all") + (status !== "open") + (orgs.length > 0) + (period !== "7d") + (overBy > 0)
+    + (readF !== "all");
 
   // Selecting: the ones on this page this account may decide.
   const anyDecide = orgList.some((o) => o.canDecide);
@@ -776,6 +789,7 @@ export default function AlertsScreen() {
     const next = afterDecision(alert, choice, note, review);
     setDecided((m) => new Map(m).set(rowKey(alert), next));
     editPicks((m) => m.delete(rowKey(alert)));
+    markRead([alert]);
     setOpen(null);
     setToast({ tone: "ok", text: `${alert.plate}: ${decisionWords(alert.kind, next.decision).toLowerCase()}.` });
     first.revalidate();
@@ -794,6 +808,7 @@ export default function AlertsScreen() {
         return n;
       });
       editPicks((m) => { for (const d of good) m.delete(rowKey(d.alert)); });
+      markRead(good.map((d) => d.alert));
       first.revalidate();
       recount();
       recountBadge();
@@ -822,9 +837,34 @@ export default function AlertsScreen() {
     setDesktopActiveTab("fleet");
   };
 
+  /** Opened or decided here: read, for this person. A failed mark is not
+   *  worth a toast; the alert just stays bold until the next answer. */
+  const markRead = (alerts) => {
+    const fresh = alerts.filter((a) => !a.read && !readHere.has(rowKey(a)));
+    if (!fresh.length) return;
+    setReadHere((cur) => { const n = new Set(cur); for (const a of fresh) n.add(rowKey(a)); return n; });
+    markAlertsRead(fresh)
+      .then(() => { recountBadge(); recount(); if (readF !== "all") first.revalidate(); })
+      .catch(() => {});
+  };
+
+  const [markingAll, setMarkingAll] = useState(false);
+  const markAll = () => {
+    setMarkingAll(true);
+    markAllAlertsRead()
+      .then(() => {
+        setToast({ tone: "ok", text: "Every alert so far is marked read." });
+        first.revalidate();
+        recountBadge();
+      })
+      .catch((err) => setToast({ tone: "crit", text: `Could not mark them read: ${err.message}` }))
+      .finally(() => setMarkingAll(false));
+  };
+
   const toggle = (alert, start = null) => {
     const k = rowKey(alert);
     setOpen((o) => (o?.key === k && !start ? null : { key: k, start }));
+    markRead([alert]);
   };
 
   const pickOrg = (id) => setOrgs((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -857,11 +897,18 @@ export default function AlertsScreen() {
               <b>{pager.total}</b> alert{pager.total === 1 ? "" : "s"}
               {orgs.length > 0 && <> · {orgs.map((id) => shortName(orgById.get(id))).join(", ")}</>}
               {period === "custom" && <> · {daysWords(days)}</>}
+              {unread > 0 && <> · <b>{unread}</b> unread</>}
               {first.stale && <span className="sp4-muted"> · updating…</span>}
             </>
           }
           loading={first.loading}
           onReload={refresh}
+          actions={(
+            <button type="button" className="sp4-ghost-btn" onClick={markAll} disabled={markingAll || !page}
+                    title="Every alert that has arrived so far, in every organisation, read for you only">
+              <i className="ti ti-checks" aria-hidden="true" /> {markingAll ? "Marking…" : "Mark all read"}
+            </button>
+          )}
         />
 
         <FilterBar
@@ -904,22 +951,22 @@ export default function AlertsScreen() {
             ))}
           </div>
           <div className="sp4-filter-group">
+            <span className="sp4-filter-label">Read</span>
+            {READS.map((r) => (
+              <Chip key={r.id} on={readF === r.id} onClick={() => setReadF(r.id)} n={nRead(r.id)}>{r.label}</Chip>
+            ))}
+          </div>
+          <div className="sp4-filter-group">
             <span className="sp4-filter-label">Period</span>
             {PERIODS.map((p) => (
               <Chip key={p.id} on={period === p.id} onClick={() => { setPeriod(p.id); setCustom(null); }}>{p.label}</Chip>
             ))}
           </div>
-          {/* Sensor Monitor's day field, as a From / To pair; the chips above
-              fill both, and a pick no chip covers lights none of them. */}
-          <div className="sp4-filter-group alr-dates">
-            <span className="alr-day">
-              <span className="sp4-filter-label">From</span>
-              <DayField label="First day" value={days.fromDay} max={today} onPick={(v) => pickDay("from", v)} />
-            </span>
-            <span className="alr-day">
-              <span className="sp4-filter-label">To</span>
-              <DayField label="Last day" value={days.toDay} max={today} onPick={(v) => pickDay("to", v)} />
-            </span>
+          {/* Sensor Monitor's one Day field (operator, 2026-10-13: "just one
+              date picker"): one day's alerts; the chips above are the runs. */}
+          <div className="sp4-filter-group">
+            <span className="sp4-filter-label">Day</span>
+            <DayField label="One day" value={period === "custom" && custom ? custom.fromDay : ""} max={today} onPick={pickDay} />
           </div>
           {kind !== "fuel" && speedingHere && (
             <div className="sp4-filter-group">
@@ -945,8 +992,8 @@ export default function AlertsScreen() {
             Fuel alerts need fuel theft access, overspeeding needs analytics access, in an organisation you belong to.
           </EmptyNote>
         ) : rows.length === 0 && (
-          <EmptyNote icon={EMPTY[status].icon} title={EMPTY[status].title}>
-            {q ? `Nothing matches “${q}”.` : EMPTY[status].sub}
+          <EmptyNote icon={(EMPTY_READ[readF] ?? EMPTY[status]).icon} title={(EMPTY_READ[readF] ?? EMPTY[status]).title}>
+            {q ? `Nothing matches “${q}”.` : (EMPTY_READ[readF] ?? EMPTY[status]).sub}
           </EmptyNote>
         )}
 
@@ -1026,7 +1073,8 @@ export default function AlertsScreen() {
                   return (
                     <Fragment key={k}>
                       <tr
-                        className={"sp4-tr aud-tr" + (expanded ? " aud-tr--open" : "") + (pickedMap.has(k) ? " alr-tr--picked" : "")}
+                        className={"sp4-tr aud-tr" + (expanded ? " aud-tr--open" : "") + (pickedMap.has(k) ? " alr-tr--picked" : "")
+                          + (a.read ? "" : " alr-tr--unread")}
                         tabIndex={0}
                         aria-expanded={expanded}
                         onClick={() => toggle(a)}
@@ -1044,6 +1092,7 @@ export default function AlertsScreen() {
                               </span>
                             )}
                             <span>
+                              {!a.read && <span className="alr-unread-dot" role="img" aria-label="Unread" title="Unread" />}
                               <span className="sp4-reg">{a.plate}</span>
                               <span className="alr-org">{shortName(org)}</span>
                             </span>

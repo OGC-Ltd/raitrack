@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  alertPager, bulkPlan, bulkWords, canTake, choiceWords, companyForOrgCode, alertTrend, countWhere, dayWords, trendUnit, daysBounds, daysWords, decisionWords,
-  duration, fixDays, fleetDay, fleetMidnight, headline, periodDays, periodFrom, periodOf, statusOf, unitQueues,
+  alertPager, bulkPlan, bulkWords, canTake, choiceWords, companyForOrgCode, alertTrend, countWhere, trendUnit, daysBounds, daysWords, decisionWords,
+  duration, fleetDay, fleetMidnight, headline, periodDays, periodFrom, statusOf, unitQueues,
 } from "./alertsView";
 
 describe("alertPager", () => {
@@ -50,6 +50,13 @@ describe("countWhere", () => {
     expect(countWhere(counts, { orgs: ["a"], kind: "fuel" })).toBe(2);
   });
 
+  it("splits read from unread", () => {
+    const marked = [{ orgId: "a", kind: "fuel", status: "open", read: true, n: 3 }, { orgId: "a", kind: "fuel", status: "open", read: false, n: 4 }];
+    expect(countWhere(marked, { read: "unread" })).toBe(4);
+    expect(countWhere(marked, { read: "read" })).toBe(3);
+    expect(countWhere(marked, {})).toBe(7);
+  });
+
   it("has nothing to say before the counts arrive", () => {
     expect(countWhere(null, {})).toBeNull();
   });
@@ -94,7 +101,7 @@ describe("figures", () => {
   });
 });
 
-describe("the From / To picker", () => {
+describe("the days asked for", () => {
   // 01:30 in Nairobi on 12 Oct.
   const now = Date.parse("2026-10-11T22:30:00Z");
 
@@ -102,8 +109,6 @@ describe("the From / To picker", () => {
     expect(fleetDay(now)).toBe("2026-10-12");
     expect(periodDays("7d", now)).toEqual({ fromDay: "2026-10-06", toDay: "2026-10-12" });
     expect(periodDays("today", now)).toEqual({ fromDay: "2026-10-12", toDay: "2026-10-12" });
-    expect(periodOf({ fromDay: "2026-10-06", toDay: "2026-10-12" }, now)).toBe("7d");
-    expect(periodOf({ fromDay: "2026-10-06", toDay: "2026-10-11" }, now)).toBeNull();
   });
 
   it("asks from midnight to the last moment of the last day, and leaves an open end to the server", () => {
@@ -111,17 +116,6 @@ describe("the From / To picker", () => {
       .toEqual({ from: "2026-10-02T21:00:00.000Z", to: "2026-10-05T20:59:59.999Z" });
     expect(daysBounds({ fromDay: "2026-10-06", toDay: "2026-10-12" }, now))
       .toEqual({ from: "2026-10-05T21:00:00.000Z", to: null });
-  });
-
-  it("keeps a pick inside today and the server's longest span, moving the end not touched", () => {
-    expect(fixDays({ fromDay: "2026-10-09", toDay: "2026-10-04" }, "from", now)).toEqual({ fromDay: "2026-10-09", toDay: "2026-10-09" });
-    expect(fixDays({ fromDay: "2026-10-09", toDay: "2026-10-04" }, "to", now)).toEqual({ fromDay: "2026-10-04", toDay: "2026-10-04" });
-    expect(fixDays({ fromDay: "2026-10-20", toDay: "2026-10-30" }, "to", now)).toEqual({ fromDay: "2026-10-12", toDay: "2026-10-12" });
-    expect(fixDays({ fromDay: "", toDay: "2026-10-10" }, "from", now)).toEqual({ fromDay: "2026-10-10", toDay: "2026-10-10" });
-    expect(fixDays({ fromDay: "2024-01-01", toDay: "2026-10-12" }, "from", now))
-      .toEqual({ fromDay: "2024-01-01", toDay: "2024-12-31" });
-    expect(fixDays({ fromDay: "2024-01-01", toDay: "2026-10-12" }, "to", now))
-      .toEqual({ fromDay: "2025-10-12", toDay: "2026-10-12" });
   });
 
   it("words a span", () => {

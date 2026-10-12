@@ -22,6 +22,7 @@ import { reviewIncident } from "../lib/fuelReview";
  * @param {string}   [f.q]      plate or unit name
  * @param {number}   [f.minOverKmh]
  * @param {string}   [f.cursor]
+ * @param {"all"|"read"|"unread"} [f.read]  this person's read marks
  */
 export async function fetchAlerts(f, { signal } = {}) {
   const qs = new URLSearchParams();
@@ -32,6 +33,7 @@ export async function fetchAlerts(f, { signal } = {}) {
   if (f.to) qs.set("to", f.to);
   if (f.q) qs.set("q", f.q);
   if (f.minOverKmh) qs.set("minOverKmh", String(f.minOverKmh));
+  if (f.read && f.read !== "all") qs.set("read", f.read);
   if (f.cursor) qs.set("cursor", f.cursor);
   qs.set("limit", String(f.limit ?? 50));
   const res = await apiFetch(`/api/v1/alerts?${qs}`, { signal });
@@ -48,6 +50,21 @@ export async function fetchAlertSummary() {
 export async function fetchAlertHistory({ signal } = {}) {
   const res = await apiFetch("/api/v1/alerts/history", { signal });
   return res?.data?.days ?? null;
+}
+
+/** Mark alerts read, for this person only: [{ kind, id }]. */
+export async function markAlertsRead(alerts) {
+  const res = await apiFetch("/api/v1/alerts/read", {
+    method: "POST",
+    body: JSON.stringify({ items: alerts.map((a) => ({ kind: a.kind, id: a.id })) }),
+  });
+  return res?.data ?? null;
+}
+
+/** "Mark all read": every alert so far is read, for this person only. */
+export async function markAllAlertsRead() {
+  const res = await apiFetch("/api/v1/alerts/read-all", { method: "POST" });
+  return res?.data ?? null;
 }
 
 /**

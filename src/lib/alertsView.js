@@ -50,44 +50,10 @@ export const fleetDay = (ms = Date.now()) => new Date(ms + FLEET_OFFSET_MS).toIS
 /** The fleet midnight opening `day`, as epoch ms. */
 const dayStart = (day) => Date.parse(`${day}T00:00:00.000Z`) - FLEET_OFFSET_MS;
 
-/** The longest span the server reads (alerts.service MAX_SPAN_DAYS), in days. */
-export const MAX_DAYS = 366;
-
 /** The days a period chip covers, ending today. */
 export function periodDays(id, now = Date.now()) {
   const p = PERIODS.find((x) => x.id === id) ?? PERIODS[1];
   return { fromDay: fleetDay(fleetMidnight(now, p.days)), toDay: fleetDay(now) };
-}
-
-/** The chip whose days these are, or null for a span no chip covers. */
-export function periodOf(days, now = Date.now()) {
-  const p = PERIODS.find((x) => {
-    const d = periodDays(x.id, now);
-    return d.fromDay === days.fromDay && d.toDay === days.toDay;
-  });
-  return p?.id ?? null;
-}
-
-/**
- * A From / To pick put right: nothing after today, From not after To, and no
- * longer than the server reads. The end the reader just `moved` stays where
- * they put it; the other one gives way.
- */
-export function fixDays({ fromDay, toDay }, moved = "from", now = Date.now()) {
-  const today = fleetDay(now);
-  const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d ?? "") && Number.isFinite(dayStart(d));
-  // A cleared To is today (Sensor Monitor's rule); a cleared From is To's day.
-  let t = ok(toDay) && toDay <= today ? toDay : today;
-  let f = !ok(fromDay) ? t : fromDay <= today ? fromDay : today;
-  if (f > t) {
-    if (moved === "to") f = t;
-    else t = f;
-  }
-  if ((dayStart(t) - dayStart(f)) / DAY_MS + 1 > MAX_DAYS) {
-    if (moved === "to") f = fleetDay(dayStart(t) - (MAX_DAYS - 1) * DAY_MS);
-    else t = fleetDay(dayStart(f) + (MAX_DAYS - 1) * DAY_MS);
-  }
-  return { fromDay: f, toDay: t };
 }
 
 /**
@@ -126,17 +92,25 @@ export const STATUSES = [
   { id: "all", label: "All" },
 ];
 
+/** This person's read marks (per person, as in a mailbox). */
+export const READS = [
+  { id: "all", label: "All" },
+  { id: "unread", label: "Unread" },
+  { id: "read", label: "Read" },
+];
+
 /**
- * The sum of the counts that match: `orgs` (empty = every one), `kind` and
- * `status` ("all" = any). Null while there are no counts to sum.
+ * The sum of the counts that match: `orgs` (empty = every one), `kind`,
+ * `status` and `read` ("all" = any). Null while there are no counts to sum.
  */
-export function countWhere(counts, { orgs = [], kind = "all", status = "all" } = {}) {
+export function countWhere(counts, { orgs = [], kind = "all", status = "all", read = "all" } = {}) {
   if (!Array.isArray(counts)) return null;
   let n = 0;
   for (const c of counts) {
     if (orgs.length && !orgs.includes(c.orgId)) continue;
     if (kind !== "all" && c.kind !== kind) continue;
     if (status !== "all" && c.status !== status) continue;
+    if (read !== "all" && Boolean(c.read) !== (read === "read")) continue;
     n += c.n;
   }
   return n;
