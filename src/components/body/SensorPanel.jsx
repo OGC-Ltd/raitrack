@@ -25,7 +25,7 @@ import { useWindowTelemetry } from "../../hooks/useWindowTelemetry";
 import { readingCoverage } from "../../lib/vehicleReadings";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import TableToolbar from "./TableToolbar";
-import TablePager, { usePager } from "./TablePager";
+import TablePager, { usePager, PAGE_STEP } from "./TablePager";
 import FilterBar from "./FilterBar";
 // The HISTORICAL view of the same probes. The grid below renders the live
 // snapshot and structurally cannot say when a channel stopped — see the panel.
@@ -734,7 +734,8 @@ const FAULT_DETAIL_COLUMNS = [
      nobody reading a fault has a decision that turns on it. Removed. */
 ];
 
-const PAGE_SIZE = 10;
+// The readings history pages like every other table (TablePager): fifteen.
+const PAGE_SIZE = PAGE_STEP;
 
 // ── Fuel drain detail panel ────────────────────────────────────────────────────
 //
@@ -1386,21 +1387,17 @@ function SensorDetail({
           </table>
           </div>
           <div className="sp4-detail-footer">
-            <div className="sp4-pagination">
-              <button
-                className="sp4-page-btn"
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >← Prev</button>
-              <span className="sp4-page-info">
-                Page {page + 1} of {totalPages} · showing {pagePings.length} of {pings.length}
-              </span>
-              <button
-                className="sp4-page-btn"
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-              >Next →</button>
-            </div>
+            <TablePager
+              label="Reading pages"
+              pager={{
+                page,
+                pageCount: Math.max(1, totalPages),
+                total: pings.length,
+                from: pings.length ? page * PAGE_SIZE + 1 : 0,
+                to: page * PAGE_SIZE + pagePings.length,
+                setPage,
+              }}
+            />
             <span className="sp4-flag-hint">⚑ flagged cells indicate anomalous values</span>
           </div>
         </div>

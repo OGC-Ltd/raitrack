@@ -1,7 +1,29 @@
 import { describe, it, expect } from "vitest";
 import {
-  choiceWords, companyForOrgCode, countWhere, decisionWords, duration, fleetMidnight, headline, periodFrom, statusOf,
+  alertPager, bulkPlan, bulkWords, canTake, choiceWords, companyForOrgCode, alertTrend, countWhere, dayWords, trendUnit, daysBounds, daysWords, decisionWords,
+  duration, fixDays, fleetDay, fleetMidnight, headline, periodDays, periodFrom, periodOf, statusOf, unitQueues,
 } from "./alertsView";
+
+describe("alertPager", () => {
+  it("reads the whole from the counts while there are more pages", () => {
+    expect(alertPager({ page: 0, rows: 15, hasNext: true, listed: 40 }))
+      .toEqual({ page: 0, pageCount: 3, total: 40, from: 1, to: 15 });
+    expect(alertPager({ page: 1, rows: 15, hasNext: true, listed: 40 })).toMatchObject({ from: 16, to: 30, pageCount: 3 });
+  });
+
+  it("lets the rows win when the counts lag", () => {
+    // The last page holds 7: that is the whole, whatever the counts said.
+    expect(alertPager({ page: 2, rows: 7, hasNext: false, listed: 40 }))
+      .toEqual({ page: 2, pageCount: 3, total: 37, from: 31, to: 37 });
+    // More after this page: never drawn as the last one.
+    expect(alertPager({ page: 2, rows: 15, hasNext: true, listed: 30 })).toMatchObject({ pageCount: 4, total: 46 });
+    expect(alertPager({ page: 0, rows: 15, hasNext: true, listed: null })).toMatchObject({ pageCount: 2, total: 16 });
+  });
+
+  it("is one page, and no pager, when everything fits", () => {
+    expect(alertPager({ page: 0, rows: 4, hasNext: false, listed: 4 })).toMatchObject({ pageCount: 1, total: 4 });
+  });
+});
 
 describe("periods", () => {
   it("opens at midnight on the fleet's clock, not the browser's", () => {
@@ -69,5 +91,140 @@ describe("figures", () => {
   it("finds the dashboard's company for an organisation code", () => {
     expect(companyForOrgCode("WESTSUGAR")).toBe("westsugar");
     expect(companyForOrgCode("nowhere")).toBeNull();
+  });
+});
+
+describe("the From / To picker", () => {
+  // 01:30 in Nairobi on 12 Oct.
+  const now = Date.parse("2026-10-11T22:30:00Z");
+
+  it("reads days on the fleet's clock", () => {
+    expect(fleetDay(now)).toBe("2026-10-12");
+    expect(periodDays("7d", now)).toEqual({ fromDay: "2026-10-06", toDay: "2026-10-12" });
+    expect(periodDays("today", now)).toEqual({ fromDay: "2026-10-12", toDay: "2026-10-12" });
+    expect(periodOf({ fromDay: "2026-10-06", toDay: "2026-10-12" }, now)).toBe("7d");
+    expect(periodOf({ fromDay: "2026-10-06", toDay: "2026-10-11" }, now)).toBeNull();
+  });
+
+  it("asks from midnight to the last moment of the last day, and leaves an open end to the server", () => {
+    expect(daysBounds({ fromDay: "2026-10-03", toDay: "2026-10-05" }, now))
+      .toEqual({ from: "2026-10-02T21:00:00.000Z", to: "2026-10-05T20:59:59.999Z" });
+    expect(daysBounds({ fromDay: "2026-10-06", toDay: "2026-10-12" }, now))
+      .toEqual({ from: "2026-10-05T21:00:00.000Z", to: null });
+  });
+
+  it("keeps a pick inside today and the server's longest span, moving the end not touched", () => {
+    expect(fixDays({ fromDay: "2026-10-09", toDay: "2026-10-04" }, "from", now)).toEqual({ fromDay: "2026-10-09", toDay: "2026-10-09" });
+    expect(fixDays({ fromDay: "2026-10-09", toDay: "2026-10-04" }, "to", now)).toEqual({ fromDay: "2026-10-04", toDay: "2026-10-04" });
+    expect(fixDays({ fromDay: "2026-10-20", toDay: "2026-10-30" }, "to", now)).toEqual({ fromDay: "2026-10-12", toDay: "2026-10-12" });
+    expect(fixDays({ fromDay: "", toDay: "2026-10-10" }, "from", now)).toEqual({ fromDay: "2026-10-10", toDay: "2026-10-10" });
+    expect(fixDays({ fromDay: "2024-01-01", toDay: "2026-10-12" }, "from", now))
+      .toEqual({ fromDay: "2024-01-01", toDay: "2024-12-31" });
+    expect(fixDays({ fromDay: "2024-01-01", toDay: "2026-10-12" }, "to", now))
+      .toEqual({ fromDay: "2025-10-12", toDay: "2026-10-12" });
+  });
+
+  it("words a span", () => {
+    expect(daysWords({ fromDay: "2026-10-03", toDay: "2026-10-12" })).toBe("3 Oct – 12 Oct");
+    expect(daysWords({ fromDay: "2026-10-03", toDay: "2026-10-03" })).toBe("3 Oct");
+  });
+});
+
+describe("deciding many at once", () => {
+  const fuel = (id, over = {}) => ({
+    kind: "fuel", id, orgId: "a", vehicleId: "v1", plate: "KDA 1", at: "2026-10-10T08:00:00Z",
+    choices: [
+      { outcome: "ESCALATED", reason: "theft" }, { outcome: "ESCALATED", reason: "probe_fault" }, { outcome: "DEESCALATED", reason: null },
+    ],
+    ...over,
+  });
+  const speed = (id, over = {}) => ({
+    kind: "speeding", id, orgId: "b", vehicleId: "v9", plate: "KDB 9", at: "2026-10-10T08:00:00Z",
+    choices: [{ outcome: "ESCALATED", reason: null }, { outcome: "DEESCALATED", reason: null }],
+    ...over,
+  });
+  const keyOf = (a) => `${a.kind}:${a.id}`;
+
+  it("knows which decisions an alert can still take", () => {
+    const theft = fuel("f", { choices: [{ outcome: "ESCALATED", reason: "probe_fault" }, { outcome: "DEESCALATED", reason: null }] });
+    expect(canTake(theft, "ESCALATED", "theft")).toBe(false);
+    expect(canTake(theft, "ESCALATED", "probe_fault")).toBe(true);
+    expect(canTake(speed("s"), "ESCALATED")).toBe(true);
+  });
+
+  it("escalates some and de-escalates others in one batch, and says why the rest cannot", () => {
+    const already = fuel("f2", {
+      status: "escalated", decision: { outcome: "ESCALATED", reason: "theft" },
+      choices: [{ outcome: "ESCALATED", reason: "probe_fault" }, { outcome: "DEESCALATED", reason: null }],
+    });
+    const probe = fuel("f3", { status: "escalated", decision: { outcome: "ESCALATED", reason: "probe_fault" }, choices: [] });
+    const alerts = [fuel("f1"), already, probe, speed("s1"), speed("s2")];
+    const picks = { "fuel:f1": "ESCALATED", "fuel:f2": "ESCALATED", "fuel:f3": "DEESCALATED", "speeding:s1": "DEESCALATED", "speeding:s2": null };
+    const { run, skip } = bulkPlan(alerts, picks, "theft", keyOf);
+    expect(run.map((s) => [s.alert.id, s.outcome, s.reason])).toEqual([["f1", "ESCALATED", "theft"], ["s1", "DEESCALATED", null]]);
+    expect(skip.map((s) => [s.alert.id, s.why])).toEqual([
+      ["f2", "Already escalated as confirmed theft."],
+      ["f3", "Escalated as a faulty fuel probe: it closes in Fuel Audit."],
+    ]);
+    // As a faulty probe, the one already escalated as a theft can go too.
+    expect(bulkPlan(alerts, picks, "probe_fault", keyOf).run.map((s) => s.alert.id)).toEqual(["f1", "f2", "s1"]);
+  });
+
+  it("queues each unit's alerts oldest first, units side by side", () => {
+    const steps = [
+      { alert: fuel("late", { at: "2026-10-10T09:00:00Z" }) },
+      { alert: speed("s") },
+      { alert: fuel("early", { at: "2026-10-10T07:00:00Z" }) },
+    ];
+    expect(unitQueues(steps).map((q) => q.map((s) => s.alert.id))).toEqual([["early", "late"], ["s"]]);
+  });
+
+  it("sums a batch up in one line", () => {
+    expect(bulkWords([
+      { ok: true, outcome: "ESCALATED" }, { ok: true, outcome: "ESCALATED" }, { ok: true, outcome: "DEESCALATED" }, { ok: false },
+    ])).toBe("2 escalated, 1 de-escalated, 1 failed");
+    expect(bulkWords([])).toBe("Nothing decided");
+  });
+});
+
+describe("alerts over time", () => {
+  const NOW = Date.parse("2026-10-13T09:00:00Z");
+  const history = [
+    { orgId: "a", kind: "fuel", day: "2026-10-11", n: 2 },
+    { orgId: "a", kind: "speeding", day: "2026-10-11", n: 1 },
+    { orgId: "b", kind: "speeding", day: "2026-10-13", n: 4 },
+  ];
+
+  it("runs from the first alert to today, empty days at 0, both kinds apart", () => {
+    expect(alertTrend(history, {}, NOW)).toEqual({
+      unit: "day",
+      points: [
+        { start: "2026-10-11", words: "11 Oct", fuel: 2, speeding: 1 },
+        { start: "2026-10-12", words: "12 Oct", fuel: 0, speeding: 0 },
+        { start: "2026-10-13", words: "13 Oct", fuel: 0, speeding: 4 },
+      ],
+    });
+  });
+
+  it("follows the organisation filter", () => {
+    expect(alertTrend(history, { orgs: ["b"] }, NOW).points).toEqual([
+      { start: "2026-10-13", words: "13 Oct", fuel: 0, speeding: 4 },
+    ]);
+  });
+
+  it("groups a long history by week, then by month", () => {
+    expect(trendUnit("2026-08-01", "2026-10-13")).toBe("week");
+    expect(trendUnit("2024-01-01", "2026-10-13")).toBe("month");
+    const weeks = alertTrend([{ orgId: "a", kind: "fuel", day: "2026-08-05", n: 3 }, { orgId: "a", kind: "fuel", day: "2026-08-09", n: 1 }], {}, NOW);
+    expect(weeks.unit).toBe("week");
+    expect(weeks.points[0]).toEqual({ start: "2026-08-03", words: "Week of 3 Aug", fuel: 4, speeding: 0 });
+    expect(weeks.points.at(-1).start).toBe("2026-10-12");
+    const months = alertTrend([{ orgId: "a", kind: "speeding", day: "2024-06-30", n: 2 }], {}, NOW);
+    expect(months.points.slice(0, 2).map((p) => [p.words, p.speeding])).toEqual([["Jun 2024", 2], ["Jul 2024", 0]]);
+  });
+
+  it("waits for the history", () => {
+    expect(alertTrend(null)).toBeNull();
+    expect(alertTrend([], {}, NOW).points).toHaveLength(1);
   });
 });

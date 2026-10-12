@@ -23,6 +23,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import "../body/SensorPanel.css";
 import "./SystemScreen.css";
 import "./FuelReportScreen.css";
@@ -31,19 +32,24 @@ import "./AlertsScreen.css";
 import { useAppActions, useAppSelector, useCompanies } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
-import { fetchAlerts, decideAlert } from "../../api/alerts";
+import { fetchAlertHistory, fetchAlerts, decideAlert } from "../../api/alerts";
+import { ALERT_SUMMARY_KEY } from "../../hooks/useAlertSummary";
+import { settleLimited } from "../../lib/settleLimited";
 import {
-  KINDS, OVER_BY, PERIODS, STATUSES, choiceWords, companyForOrgCode, countWhere, decisionWords, duration,
-  headline, kmh, litres, periodFrom, ruleWords, statusOf, when,
+  KINDS, OVER_BY, PERIODS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
+  daysBounds, daysWords, decisionWords, duration, fixDays, fleetDay, headline, kmh, litres, periodDays, periodOf,
+  ruleWords, statusOf, unitQueues, when,
 } from "../../lib/alertsView";
 import { Card, Gauge } from "./FuelReportOverview";
 import TableToolbar from "../body/TableToolbar";
+import TablePager, { PAGE_STEP } from "../body/TablePager";
 import FilterBar from "../body/FilterBar";
 import EmptyNote from "../shared/EmptyNote";
 import { watchTableLabels } from "../../lib/tableLabels";
 
 const POLL_MS = 60_000;
 const rowKey = (a) => `${a.kind}:${a.id}`;
+const NO_PICKS = new Map();
 
 const EMPTY = {
   open: { icon: "ti-circle-check", title: "No Open Alerts", sub: "Every alert in this period has been escalated or de-escalated." },
@@ -73,6 +79,51 @@ function choicesAfter(alert, outcome, reason) {
   return all.filter((c) => !(c.outcome === outcome && c.reason === (outcome === "ESCALATED" ? reason : null)));
 }
 
+/** An alert as it stands after a decision made here, laid over its row until the server's next answer. */
+function afterDecision(alert, choice, note, review) {
+  const d = { outcome: choice.outcome, reason: choice.reason, note, by: review?.by ?? null, at: review?.at ?? new Date().toISOString() };
+  return {
+    ...alert,
+    status: choice.outcome === "ESCALATED" ? "escalated" : "deescalated",
+    decision: d,
+    history: [...alert.history, d],
+    choices: choicesAfter(alert, choice.outcome, choice.reason),
+    cleared: null,
+    ...(alert.kind === "fuel" ? { fuel: { ...alert.fuel, live: false } } : {}),
+  };
+}
+
+/**
+ * One end of the From / To pick: Sensor Monitor's day field. A typed year
+ * passes through "0002", "0020"… on its way to "2026", so the day is taken
+ * once it is whole, or when the field is left; the calendar's pick is whole
+ * at once.
+ */
+function DayField({ label, value, max, onPick }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  const whole = (v) => /^20\d\d-\d\d-\d\d$/.test(v);
+  return (
+    <input
+      type="date"
+      className="sp4-date-input"
+      aria-label={label}
+      value={draft}
+      max={max}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        if (whole(e.target.value)) onPick(e.target.value);
+      }}
+      onBlur={() => {
+        // Cleared: Sensor Monitor's fallback (lib/alertsView fixDays). Half a
+        // year: put back.
+        if (draft !== value && (draft === "" || whole(draft))) onPick(draft);
+        setDraft(value);
+      }}
+    />
+  );
+}
+
 /** One figure as a gauge against the period's whole, like the Fuel Audit's cards. */
 function StatCard({ title, n, of, color, note, loading }) {
   const shown = n == null ? "—" : n;
@@ -81,6 +132,88 @@ function StatCard({ title, n, of, color, note, loading }) {
     <Card title={title} note={note} className="aud-stat">
       <Gauge ratio={of > 0 && n != null ? n / of : 0} color={color} value={shown} unit={unit}
              ariaLabel={`${title}: ${shown} of ${of ?? 0} alerts.`} />
+    </Card>
+  );
+}
+
+const TREND_W = 240;
+const TREND_H = 100;
+const TREND_LINES = [
+  { key: "fuel", label: "Fuel", cls: "alr-trend__line--fuel" },
+  { key: "speeding", label: "Speed", cls: "alr-trend__line--speed" },
+];
+
+const UNIT_WORDS = { day: "a day", week: "a week", month: "a month" };
+
+/**
+ * Every alert ever received, one line for fuel and one for overspeeding, a
+ * day, week or month a point (alertsView alertTrend). Pointing at (or arrowing
+ * along) the chart reads out that point; otherwise the key holds the totals.
+ */
+function TrendCard({ trend, loading }) {
+  const [at, setAt] = useState(null);
+  const series = trend?.points ?? null;
+  const n = series?.length ?? 0;
+  const top = Math.max(1, ...(series ?? []).flatMap((d) => [d.fuel, d.speeding]));
+  const xPct = (i) => (n < 2 ? 50 : (i / (n - 1)) * 100);
+  // Room above the top line for its figure.
+  const y = (v) => 16 + (1 - v / top) * (TREND_H - 20);
+  const path = (k) => series.map((d, i) => `${i ? "L" : "M"}${((xPct(i) / 100) * TREND_W).toFixed(1)},${y(d[k]).toFixed(1)}`).join("");
+  const sum = (k) => (series ?? []).reduce((t, d) => t + d[k], 0);
+  const point = at != null && series?.[at] ? series[at] : null;
+
+  const pointAt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (!n || r.width <= 0) return;
+    setAt(Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width) * (n - 1)))));
+  };
+  const onKey = (e) => {
+    if (!n || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    setAt((i) => Math.max(0, Math.min(n - 1, (i ?? n) + (e.key === "ArrowLeft" ? -1 : 1))));
+  };
+  const readout = point ? point.words : n ? `Since ${series[0].words.replace(/^Week of /, "")}` : "";
+
+  return (
+    <Card title="Alerts over time" className="aud-stat alr-trend">
+      <ul className="alr-trend__key" aria-live="polite">
+        {TREND_LINES.map((l) => (
+          <li key={l.key} className={l.cls}>
+            <i aria-hidden="true" />{l.label}
+            <b>{series ? (point ? point[l.key] : sum(l.key)) : "—"}</b>
+          </li>
+        ))}
+        <li className="alr-trend__when">{series ? readout : loading ? "Reading…" : ""}</li>
+      </ul>
+      <div className="alr-trend__plot" tabIndex={n ? 0 : -1}
+           role="img"
+           aria-label={series
+             ? `Alerts ${UNIT_WORDS[trend.unit]}, ${readout.toLowerCase()}: ${sum("fuel")} fuel, ${sum("speeding")} overspeeding. Arrow keys read one point.`
+             : "Alerts over time: reading."}
+           onPointerMove={pointAt} onPointerDown={pointAt} onPointerLeave={() => setAt(null)}
+           onKeyDown={onKey} onBlur={() => setAt(null)}>
+        <svg viewBox={`0 0 ${TREND_W} ${TREND_H}`} preserveAspectRatio="none" aria-hidden="true">
+          {[0, 0.5, 1].map((f) => (
+            <line key={f} x1="0" x2={TREND_W} y1={y(top * f)} y2={y(top * f)} className="alr-trend__grid" />
+          ))}
+          {n > 1 && TREND_LINES.map((l) => (
+            <path key={l.key} d={path(l.key)} className={`alr-trend__line ${l.cls}`} />
+          ))}
+          {point && (
+            <line x1={(xPct(at) / 100) * TREND_W} x2={(xPct(at) / 100) * TREND_W} y1="0" y2={TREND_H}
+                  className="alr-trend__cursor" />
+          )}
+        </svg>
+        {/* Points in HTML, so they stay round however the chart stretches. */}
+        {series && (n === 1 || point) && TREND_LINES.map((l) => {
+          const i = point ? at : 0;
+          return (
+            <span key={l.key} className={`alr-trend__dot ${l.cls}`}
+                  style={{ left: `${xPct(i)}%`, top: `${(y(series[i][l.key]) / TREND_H) * 100}%` }} />
+          );
+        })}
+        <span className="alr-trend__top">{top} {series ? UNIT_WORDS[trend.unit] : ""}</span>
+      </div>
     </Card>
   );
 }
@@ -182,6 +315,181 @@ function DecisionPanel({ alert, start, onDecided, onCancel, onToast }) {
         </>
       )}
     </div>
+  );
+}
+
+const BULK_REQUESTS = 3;
+const FUEL_AS = ["theft", "probe_fault"];
+
+/**
+ * Escalate or de-escalate the selected alerts at once (operator, 2026-10-13:
+ * "escalate or deescalate or both escalate and deescalate multiple"). Each
+ * alert has its own pick, set at first from the button that opened the panel,
+ * so one batch can escalate some and de-escalate others. One reason for each
+ * side, as on a single alert, and one "as" for the fuel escalations.
+ *
+ * Sent a few units at a time, each unit's alerts one after another (see
+ * lib/alertsView unitQueues). An alert that fails stays selected with why, so
+ * the batch can be tried again; the rest are done.
+ */
+function BulkPanel({ alerts, start, failed, orgName, onRemove, onClose, onFinished }) {
+  const offered = (a, outcome) => a.choices.some((c) => c.outcome === outcome);
+  const [picks, setPicks] = useState({});
+  const pickOf = (a) => {
+    const k = rowKey(a);
+    if (k in picks) return picks[k];
+    return start && offered(a, start) ? start : null;
+  };
+  const [fuelReason, setFuelReason] = useState("theft");
+  const [notes, setNotes] = useState({ ESCALATED: "", DEESCALATED: "" });
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(0);
+
+  const pickMap = Object.fromEntries(alerts.map((a) => [rowKey(a), pickOf(a)]));
+  const { run, skip } = bulkPlan(alerts, pickMap, fuelReason, rowKey);
+  const skipWhy = new Map(skip.map((s) => [rowKey(s.alert), s.why]));
+  const esc = run.filter((s) => s.outcome === "ESCALATED");
+  const de = run.filter((s) => s.outcome === "DEESCALATED");
+  // A side shows while anything is picked for it, even if none of those can
+  // take it as things stand: the fuel "as" lives there, and switching it is
+  // how an alert already escalated as a theft goes on as a faulty probe.
+  const pickedFor = (outcome) => alerts.filter((a) => pickOf(a) === outcome);
+  const fuelEsc = pickedFor("ESCALATED").some((a) => a.kind === "fuel");
+  const sides = ["ESCALATED", "DEESCALATED"].filter((o) => pickedFor(o).length > 0);
+  const missing = [esc.length > 0 && "ESCALATED", de.length > 0 && "DEESCALATED"]
+    .filter(Boolean).filter((o) => notes[o].trim().length < 3);
+  const ok = run.length > 0 && missing.length === 0;
+
+  const setPick = (a, outcome) => setPicks((p) => ({ ...p, [rowKey(a)]: pickOf(a) === outcome ? null : outcome }));
+
+  const go = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    setSent(0);
+    const done = [];
+    await settleLimited(unitQueues(run), BULK_REQUESTS, async (queue) => {
+      for (const step of queue) {
+        const note = notes[step.outcome].trim();
+        try {
+          const review = await decideAlert(step.alert, step.outcome, note, step.reason);
+          done.push({ ...step, note, review, ok: true });
+        } catch (err) {
+          done.push({ ...step, note, ok: false, error: err?.message || "The decision could not be saved." });
+        }
+        setSent(done.length);
+      }
+    });
+    setBusy(false);
+    onFinished(done);
+  };
+
+  /** One side's reason box: the words of the kinds it holds. */
+  const side = (outcome, steps) => {
+    const kinds = [...new Set(pickedFor(outcome).map((a) => a.kind))];
+    const words = kinds.map((k) => choiceWords(k, { outcome, reason: k === "fuel" && outcome === "ESCALATED" ? fuelReason : null }));
+    const placeholder = words.length === 1 ? words[0].placeholder
+      : outcome === "ESCALATED" ? "Why are these escalated, and what happens next?" : "Why are none of these what they were flagged as?";
+    return (
+      <div className={`alr-bulk-side alr-bulk-side--${outcome === "ESCALATED" ? "esc" : "de"}`}>
+        <h4 className="alr-bulk-side-t">
+          <i className={`ti ${outcome === "ESCALATED" ? "ti-arrow-big-up-line" : "ti-arrow-big-down-line"}`} aria-hidden="true" />
+          {outcome === "ESCALATED" ? "Escalate" : "De-escalate"} {steps.length}
+          {pickedFor(outcome).length > steps.length && ` of ${pickedFor(outcome).length}`}
+        </h4>
+        {outcome === "ESCALATED" && fuelEsc && (
+          <div className="sp4-filter-group alr-as" role="radiogroup" aria-label="Escalate the fuel alerts as">
+            <span className="sp4-filter-label">Fuel as</span>
+            {FUEL_AS.map((r) => (
+              <button key={r} type="button" role="radio" aria-checked={fuelReason === r}
+                      className={"sp4-filter-chip" + (fuelReason === r ? " sp4-filter-chip--on" : "")}
+                      onClick={() => setFuelReason(r)} disabled={busy}>
+                {choiceWords("fuel", { outcome: "ESCALATED", reason: r }).label}
+              </button>
+            ))}
+          </div>
+        )}
+        <label className="sp4-field">
+          <span className="sp4-label">Reason{steps.length > 1 ? ", for all " + steps.length : ""}</span>
+          <textarea className="sp4-textarea alr-note" rows={2} maxLength={2000} value={notes[outcome]} disabled={busy}
+                    placeholder={placeholder} onChange={(e) => setNotes((n) => ({ ...n, [outcome]: e.target.value }))} />
+        </label>
+        {[...new Set(words.map((w) => w.hint))].map((h) => <p key={h} className="alr-hint">{h}</p>)}
+      </div>
+    );
+  };
+
+  const confirm = busy ? `Saving ${sent} of ${run.length}…`
+    : esc.length && de.length ? `Escalate ${esc.length}, de-escalate ${de.length}`
+    : esc.length ? `Escalate ${esc.length} alert${esc.length === 1 ? "" : "s"}`
+    : de.length ? `De-escalate ${de.length} alert${de.length === 1 ? "" : "s"}`
+    : "Nothing to decide";
+
+  return (
+    <section className="frv-card aud-card alr-bulk" aria-label="Decide the selected alerts">
+      <div className="aud-card__head">
+        <h3 className="frv-card__t">Decide {alerts.length} alert{alerts.length === 1 ? "" : "s"}</h3>
+        <button type="button" className="sp4-ghost-btn" onClick={onClose} disabled={busy}>Close</button>
+      </div>
+      <p className="alr-hint">Pick Escalate or De-escalate for each alert; one left unpicked stays as it is.</p>
+
+      <ul className="alr-bulk-list">
+        {alerts.map((a) => {
+          const k = rowKey(a);
+          const pick = pickOf(a);
+          const st = statusOf(a);
+          const h = headline(a);
+          const note = failed.get(k) ? `Not saved: ${failed.get(k)}` : skipWhy.get(k) ?? null;
+          return (
+            <li key={k} className={"alr-bulk-item" + (failed.has(k) ? " is-failed" : "") + (!pick ? " is-left" : "")}>
+              <span className="alr-bulk-unit">
+                <span className="sp4-reg">{a.plate}</span>
+                <span className="alr-org">{orgName(a)}</span>
+              </span>
+              <span className="alr-bulk-what">
+                <span className={`alr-kind alr-kind--${a.kind}`}>
+                  <i className={`ti ${a.kind === "fuel" ? "ti-droplet" : "ti-gauge"}`} aria-hidden="true" />
+                  {a.kind === "fuel" ? "Fuel" : "Speed"}
+                </span>
+                <span><b className="sys-num">{h.figure}</b> <span className="aud-unit">{h.words} · {when(a.at)}</span></span>
+              </span>
+              <span className={`sp4-pill sp4-pill--${st.tone}`} title={st.meaning}>{st.label}</span>
+              <span className="alr-bulk-pick" role="group" aria-label={`Decision for ${a.plate}`}>
+                <button type="button" aria-pressed={pick === "ESCALATED"} disabled={busy || !offered(a, "ESCALATED")}
+                        className={"sp4-ghost-btn alr-pick alr-pick--esc" + (pick === "ESCALATED" ? " is-on" : "")}
+                        onClick={() => setPick(a, "ESCALATED")}>Escalate</button>
+                <button type="button" aria-pressed={pick === "DEESCALATED"} disabled={busy || !offered(a, "DEESCALATED")}
+                        className={"sp4-ghost-btn alr-pick alr-pick--de" + (pick === "DEESCALATED" ? " is-on" : "")}
+                        onClick={() => setPick(a, "DEESCALATED")}>De-escalate</button>
+                <button type="button" className="sp4-ghost-btn alr-bulk-x" aria-label={`Take ${a.plate} out of the selection`}
+                        title="Take out of the selection" onClick={() => onRemove(a)} disabled={busy}>
+                  <i className="ti ti-x" aria-hidden="true" />
+                </button>
+              </span>
+              {note && <span className={"alr-bulk-why" + (failed.has(k) ? " is-crit" : "")}>{note}</span>}
+            </li>
+          );
+        })}
+      </ul>
+
+      {sides.length > 0 && (
+        <div className="alr-bulk-sides">
+          {sides.includes("ESCALATED") && side("ESCALATED", esc)}
+          {sides.includes("DEESCALATED") && side("DEESCALATED", de)}
+        </div>
+      )}
+
+      <div className="aud-raise-foot">
+        {run.length > 0 && missing.length > 0 && (
+          <span className="sp4-repair-pending">
+            {missing.length === 2 ? "Give a reason for each side" : `Give a reason to ${missing[0] === "ESCALATED" ? "escalate" : "de-escalate"}`}
+          </span>
+        )}
+        <button type="button" className="sp4-ghost-btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="button" className={"sp4-submit-btn" + (esc.length ? " alr-submit--esc" : "")} onClick={go} disabled={!ok || busy}>
+          {confirm}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -293,11 +601,14 @@ export default function AlertsScreen() {
     setActiveCompanyId, setDesktopActiveTab, setSelectedVehicleId, setPendingFocusId, setMobileActiveTab, requestIncident,
   } = useAppActions();
   const { canIn, can } = usePermissions();
+  const queryClient = useQueryClient();
 
   const [kind, setKind] = useState("all");
   const [status, setStatus] = useState("open");
   const [orgs, setOrgs] = useState([]);
+  // A chip's id, or "custom" for days picked in the From / To fields.
   const [period, setPeriod] = useState("7d");
+  const [custom, setCustom] = useState(null);
   const [overBy, setOverBy] = useState(0);
   const [search, setSearch] = useState("");
   const q = useDebounced(search.trim(), 300);
@@ -305,60 +616,103 @@ export default function AlertsScreen() {
   const [toast, setToast] = useState(null);
   const [epoch, setEpoch] = useState(0);
 
-  // The period starts at a fleet midnight; Refresh moves it on past one.
+  // Fleet days, first to last. A chip's run to today and Refresh moves them on
+  // past a midnight; picked days stay put.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const from = useMemo(() => periodFrom(period), [period, epoch]);
+  const days = useMemo(() => (period === "custom" && custom ? custom : periodDays(period)), [period, custom, epoch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { from, to } = useMemo(() => daysBounds(days), [days, epoch]);
+  const today = fleetDay();
+  const pickDay = (end, value) => {
+    const next = fixDays(end === "from" ? { ...days, fromDay: value } : { ...days, toDay: value }, end);
+    const chip = periodOf(next);
+    setPeriod(chip ?? "custom");
+    setCustom(chip ? null : next);
+  };
   const filters = useMemo(() => ({
-    kind, status, orgs, from, q, minOverKmh: kind === "fuel" ? 0 : overBy,
-  }), [kind, status, orgs, from, q, overBy]);
+    kind, status, orgs, from, to, q, minOverKmh: kind === "fuel" ? 0 : overBy,
+  }), [kind, status, orgs, from, to, q, overBy]);
   const key = JSON.stringify(filters);
 
-  // Further pages, for the filters they were read under. While any are
-  // loaded the first page stops polling: a refresh under them would shift the
-  // boundary between the pages.
-  const [more, setMore] = useState({ key: null, rows: [], cursor: null, hasNext: false, loading: false });
-  const paged = more.key === key && more.rows.length > 0;
-  const first = useApiData(() => fetchAlerts(filters), [key], { pollMs: paged ? 0 : POLL_MS, keepPreviousData: true });
+  // Pages of PAGE_STEP (15), turned with the app's one pager (TablePager,
+  // operator 2026-10-12: "pagination should be consistent across all pages").
+  // The server pages on a cursor, so the start of every page reached is kept:
+  // Prev goes back to one, Next to the cursor the current page ended on. A new
+  // filter starts again at page one.
+  const [nav, setNav] = useState({ key, page: 0, cursors: [null] });
+  const at = nav.key === key ? nav : { key, page: 0, cursors: [null] };
+  const cursor = at.cursors[at.page] ?? null;
+  const first = useApiData(
+    () => fetchAlerts({ ...filters, cursor, limit: PAGE_STEP }),
+    [key, at.page, cursor ?? ""],
+    { pollMs: POLL_MS, keepPreviousData: true },
+  );
   const page = first.data;
+
+  // Where the next page starts, once this one has said.
+  useEffect(() => {
+    if (!page?.hasNextPage || !page.cursor) return;
+    setNav((n) => {
+      const cur = n.key === key ? n : { key, page: 0, cursors: [null] };
+      if (cur.cursors[cur.page + 1] === page.cursor) return n;
+      const cursors = cur.cursors.slice(0, cur.page + 1);
+      cursors[cur.page + 1] = page.cursor;
+      return { ...cur, cursors };
+    });
+  }, [page, key]);
+
+  // The counts come with the first page only (they do not page); kept for
+  // the filters they were read under while later pages are open.
+  const [kept, setKept] = useState({ key: null, counts: null });
+  useEffect(() => { if (page?.counts) setKept({ key, counts: page.counts }); }, [page, key]);
 
   // Decisions made here, laid over the rows until the server's next answer.
   const [decided, setDecided] = useState(() => new Map());
   useEffect(() => { setDecided(new Map()); }, [page]);
 
-  const rows = useMemo(() => {
-    const seen = new Set();
-    const out = [];
-    for (const r of [...(page?.data ?? []), ...(more.key === key ? more.rows : [])]) {
-      const k = rowKey(r);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(decided.get(k) ?? r);
-    }
-    return out;
-  }, [page, more, key, decided]);
-  const hasNext = more.key === key ? more.hasNext : Boolean(page?.hasNextPage);
-  const cursor = more.key === key ? more.cursor : page?.cursor ?? null;
+  const rows = useMemo(
+    () => (page?.data ?? []).map((r) => decided.get(rowKey(r)) ?? r),
+    [page, decided],
+  );
 
-  const loadMore = async () => {
-    if (!cursor || more.loading) return;
-    setMore((m) => ({ ...(m.key === key ? m : { rows: [] }), key, cursor, hasNext: true, loading: true }));
-    try {
-      const next = await fetchAlerts({ ...filters, cursor });
-      setMore((m) => ({
-        key, rows: [...(m.key === key ? m.rows : []), ...(next?.data ?? [])],
-        cursor: next?.cursor ?? null, hasNext: Boolean(next?.hasNextPage), loading: false,
-      }));
-    } catch (err) {
-      setMore((m) => ({ ...m, loading: false }));
-      setToast({ tone: "crit", text: err?.message ? `Could not load more alerts: ${err.message}` : "Could not load more alerts." });
-    }
+  // The alerts picked for a batch, kept across pages for the filters they
+  // were picked under; a new filter starts an empty selection. Each is read
+  // from the row on screen when it has one, so a pick never holds a stale copy.
+  const [picked, setPicked] = useState({ key, map: NO_PICKS });
+  const pickedMap = picked.key === key ? picked.map : NO_PICKS;
+  const [bulk, setBulk] = useState(null); // { start, failed: Map(key -> why) }
+  const editPicks = (fn) => setPicked((p) => {
+    const m = new Map(p.key === key ? p.map : []);
+    fn(m);
+    return { key, map: m };
+  });
+  const rowsByKey = useMemo(() => new Map(rows.map((r) => [rowKey(r), r])), [rows]);
+  const pickedAlerts = [...pickedMap].map(([k, a]) => rowsByKey.get(k) ?? decided.get(k) ?? a);
+  useEffect(() => { if (pickedMap.size === 0) setBulk(null); }, [pickedMap.size]);
+
+  /** The badge counts open alerts: tell it a decision moved one. */
+  const recountBadge = () => queryClient.invalidateQueries({ queryKey: ALERT_SUMMARY_KEY });
+
+  const goTo = (n) => {
+    if (n < 0 || (n > at.page && !at.cursors[n])) return;
+    setNav({ ...at, page: n });
+    setOpen(null);
   };
 
   const refresh = useCallback(() => {
-    setMore({ key: null, rows: [], cursor: null, hasNext: false, loading: false });
+    setNav({ key: null, page: 0, cursors: [null] });
     setEpoch((n) => n + 1);
     first.revalidate();
-  }, [first]);
+    queryClient.invalidateQueries({ queryKey: ["alerts", "history"] });
+  }, [first, queryClient]);
+
+  /** Fresh counts after a decision made on a later page (page one brings its own). */
+  const recount = () => {
+    if (at.page === 0) return;
+    fetchAlerts({ ...filters, limit: 1 })
+      .then((res) => { if (res?.counts) setKept({ key, counts: res.counts }); })
+      .catch(() => { /* the chips keep their last figures */ });
+  };
 
   useEffect(() => {
     if (first.error) setToast({ tone: "crit", text: first.error.message ? `Could not load the alerts: ${first.error.message}` : "Could not load the alerts." });
@@ -369,6 +723,8 @@ export default function AlertsScreen() {
 
   const orgList = useMemo(() => page?.orgs ?? [], [page]);
   const orgById = useMemo(() => new Map(orgList.map((o) => [o.id, o])), [orgList]);
+  const decidable = (a) => Boolean(orgById.get(a.orgId)?.canDecide && a.choices.length > 0);
+  const togglePick = (a) => editPicks((m) => { const k = rowKey(a); if (m.has(k)) m.delete(k); else m.set(k, a); });
   const shortName = (o) => {
     const c = companies.find((x) => x.id === companyForOrgCode(o?.code));
     return c?.short || o?.name || "—";
@@ -376,31 +732,79 @@ export default function AlertsScreen() {
   const kindsHeld = new Set(orgList.flatMap((o) => o.kinds));
   // The speed filter only where overspeeding can be listed: Kasulu alone has none.
   const speedingHere = orgList.some((o) => (orgs.length === 0 || orgs.includes(o.id)) && o.kinds.includes("speeding"));
-  const counts = page?.counts ?? null;
+  const counts = page?.counts ?? (kept.key === key ? kept.counts : null);
+  // The chart's whole history: not the page's filters, so one read a visit.
+  const history = useQuery({
+    queryKey: ["alerts", "history"],
+    queryFn: ({ signal }) => fetchAlertHistory({ signal }),
+    staleTime: 60_000,
+  });
 
   // Every chip's number under the OTHER filters (lib/alertsView countWhere).
   const nStatus = (s) => countWhere(counts, { orgs, kind, status: s });
   const nKind = (k) => countWhere(counts, { orgs, kind: k, status });
   const nOrg = (id) => countWhere(counts, { orgs: [id], kind, status });
   const total = nStatus("all");
+  const trend = useMemo(() => alertTrend(history.data ?? null, { orgs }), [history.data, orgs]);
+  const pager = {
+    ...alertPager({ page: at.page, rows: rows.length, hasNext: Boolean(page?.hasNextPage), listed: nStatus(status), step: PAGE_STEP }),
+    setPage: goTo,
+  };
+  // The last alerts on a later page decided away: step back to one that has some.
+  useEffect(() => {
+    if (page && !first.stale && page.data.length === 0 && at.page > 0) goTo(at.page - 1);
+  });
 
   const activeCount = (kind !== "all") + (status !== "open") + (orgs.length > 0) + (period !== "7d") + (overBy > 0);
 
+  // Selecting: the ones on this page this account may decide.
+  const anyDecide = orgList.some((o) => o.canDecide);
+  const pageDecidable = rows.filter(decidable);
+  const pageAll = pageDecidable.length > 0 && pageDecidable.every((a) => pickedMap.has(rowKey(a)));
+  const pageSome = pageDecidable.some((a) => pickedMap.has(rowKey(a)));
+  const togglePage = () => editPicks((m) => {
+    for (const a of pageDecidable) {
+      if (pageAll) m.delete(rowKey(a));
+      else m.set(rowKey(a), a);
+    }
+  });
+  const offPage = [...pickedMap.keys()].filter((k) => !rowsByKey.has(k)).length;
+  const pageBox = useRef(null);
+  useEffect(() => { if (pageBox.current) pageBox.current.indeterminate = pageSome && !pageAll; });
+
   const onDecided = (alert, choice, note, review) => {
-    const next = {
-      ...alert,
-      status: choice.outcome === "ESCALATED" ? "escalated" : "deescalated",
-      decision: { outcome: choice.outcome, reason: choice.reason, note, by: review?.by ?? null, at: review?.at ?? new Date().toISOString() },
-      history: [...alert.history, { outcome: choice.outcome, reason: choice.reason, note, by: review?.by ?? null, at: review?.at ?? new Date().toISOString() }],
-      choices: choicesAfter(alert, choice.outcome, choice.reason),
-      cleared: null,
-      ...(alert.kind === "fuel" ? { fuel: { ...alert.fuel, live: false } } : {}),
-    };
+    const next = afterDecision(alert, choice, note, review);
     setDecided((m) => new Map(m).set(rowKey(alert), next));
-    setMore((m) => ({ ...m, rows: m.rows.map((r) => (rowKey(r) === rowKey(alert) ? next : r)) }));
+    editPicks((m) => m.delete(rowKey(alert)));
     setOpen(null);
     setToast({ tone: "ok", text: `${alert.plate}: ${decisionWords(alert.kind, next.decision).toLowerCase()}.` });
     first.revalidate();
+    recount();
+    recountBadge();
+  };
+
+  /** A batch is back: the decided ones leave the selection, the failed stay with why. */
+  const onBulkDone = (done) => {
+    const good = done.filter((d) => d.ok);
+    const bad = done.filter((d) => !d.ok);
+    if (good.length) {
+      setDecided((m) => {
+        const n = new Map(m);
+        for (const d of good) n.set(rowKey(d.alert), afterDecision(d.alert, d, d.note, d.review));
+        return n;
+      });
+      editPicks((m) => { for (const d of good) m.delete(rowKey(d.alert)); });
+      first.revalidate();
+      recount();
+      recountBadge();
+    }
+    if (bad.length) {
+      setBulk((b) => ({ ...b, failed: new Map(bad.map((d) => [rowKey(d.alert), d.error])) }));
+      setToast({ tone: "crit", text: `${bulkWords(done)}. The ${bad.length === 1 ? "one that failed is" : `${bad.length} that failed are`} still selected.` });
+    } else {
+      setBulk(null);
+      setToast({ tone: "ok", text: `${bulkWords(done)}.` });
+    }
   };
 
   const showOnMap = (alert) => {
@@ -443,14 +847,16 @@ export default function AlertsScreen() {
                   note="Confirmed: a theft, a faulty probe, or a real overspeed." />
         <StatCard title="De-escalated" n={nStatus("deescalated")} of={total} color="var(--frv-s3)" loading={first.loading}
                   note="Looked at and found not to be one." />
+        <TrendCard trend={trend} loading={history.isLoading} />
       </div>
 
       <div className="sp4-body">
         <TableToolbar
           summary={
             <>
-              <b>{rows.length}</b>{hasNext ? "+" : ""} alert{rows.length === 1 ? "" : "s"}
+              <b>{pager.total}</b> alert{pager.total === 1 ? "" : "s"}
               {orgs.length > 0 && <> · {orgs.map((id) => shortName(orgById.get(id))).join(", ")}</>}
+              {period === "custom" && <> · {daysWords(days)}</>}
               {first.stale && <span className="sp4-muted"> · updating…</span>}
             </>
           }
@@ -500,8 +906,20 @@ export default function AlertsScreen() {
           <div className="sp4-filter-group">
             <span className="sp4-filter-label">Period</span>
             {PERIODS.map((p) => (
-              <Chip key={p.id} on={period === p.id} onClick={() => setPeriod(p.id)}>{p.label}</Chip>
+              <Chip key={p.id} on={period === p.id} onClick={() => { setPeriod(p.id); setCustom(null); }}>{p.label}</Chip>
             ))}
+          </div>
+          {/* Sensor Monitor's day field, as a From / To pair; the chips above
+              fill both, and a pick no chip covers lights none of them. */}
+          <div className="sp4-filter-group alr-dates">
+            <span className="alr-day">
+              <span className="sp4-filter-label">From</span>
+              <DayField label="First day" value={days.fromDay} max={today} onPick={(v) => pickDay("from", v)} />
+            </span>
+            <span className="alr-day">
+              <span className="sp4-filter-label">To</span>
+              <DayField label="Last day" value={days.toDay} max={today} onPick={(v) => pickDay("to", v)} />
+            </span>
           </div>
           {kind !== "fuel" && speedingHere && (
             <div className="sp4-filter-group">
@@ -532,12 +950,62 @@ export default function AlertsScreen() {
           </EmptyNote>
         )}
 
+        {/* The selection: what is picked and what to do with it, then the
+            batch itself once Escalate, De-escalate or Decide each is pressed. */}
+        {pickedMap.size > 0 && !bulk && (
+          <div className="alr-bulkbar" role="region" aria-label="Selected alerts">
+            <label className="alr-tick alr-bulkbar-page">
+              <input type="checkbox" checked={pageAll} onChange={togglePage} disabled={pageDecidable.length === 0}
+                     ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll; }} />
+              <span>This page</span>
+            </label>
+            <span className="alr-bulkbar-n">
+              <b>{pickedMap.size}</b> selected{offPage > 0 && <span className="aud-unit"> · {offPage} on other pages</span>}
+            </span>
+            <span className="alr-bulkbar-actions">
+              <button type="button" className="sp4-ghost-btn sp4-ghost-btn--crit" onClick={() => setBulk({ start: "ESCALATED", failed: new Map() })}>
+                Escalate
+              </button>
+              <button type="button" className="sp4-ghost-btn" onClick={() => setBulk({ start: "DEESCALATED", failed: new Map() })}>
+                De-escalate
+              </button>
+              <button type="button" className="sp4-ghost-btn" title="Escalate some and de-escalate others"
+                      onClick={() => setBulk({ start: null, failed: new Map() })}>
+                Decide each
+              </button>
+              <button type="button" className="sp4-ghost-btn" onClick={() => editPicks((m) => m.clear())}>Clear</button>
+            </span>
+          </div>
+        )}
+        {pickedMap.size > 0 && bulk && (
+          <BulkPanel
+            alerts={pickedAlerts}
+            start={bulk.start}
+            failed={bulk.failed}
+            orgName={(a) => shortName(orgById.get(a.orgId))}
+            onRemove={togglePick}
+            onClose={() => setBulk(null)}
+            onFinished={onBulkDone}
+          />
+        )}
+
         {rows.length > 0 && (
           <div className={"sp4-table-scroll aud-units alr-table" + (first.stale ? " alr-table--stale" : "")}>
             <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
               <thead>
                 <tr>
-                  <th className="sp4-th--left sp4-th--pin">Unit</th>
+                  <th className="sp4-th--left sp4-th--pin">
+                    {anyDecide ? (
+                      <span className="alr-unit">
+                        <span className="alr-tick">
+                          <input type="checkbox" ref={pageBox} checked={pageAll} onChange={togglePage}
+                                 disabled={pageDecidable.length === 0}
+                                 aria-label="Select every alert on this page you can decide" />
+                        </span>
+                        Unit
+                      </span>
+                    ) : "Unit"}
+                  </th>
                   <th className="sp4-th--left">When</th>
                   <th className="sp4-th--left">Alert</th>
                   <th className="sp4-th--left">Details</th>
@@ -558,15 +1026,28 @@ export default function AlertsScreen() {
                   return (
                     <Fragment key={k}>
                       <tr
-                        className={"sp4-tr aud-tr" + (expanded ? " aud-tr--open" : "")}
+                        className={"sp4-tr aud-tr" + (expanded ? " aud-tr--open" : "") + (pickedMap.has(k) ? " alr-tr--picked" : "")}
                         tabIndex={0}
                         aria-expanded={expanded}
                         onClick={() => toggle(a)}
                         onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(a); } }}
                       >
                         <td className="sp4-td--left sp4-td--pin">
-                          <span className="sp4-reg">{a.plate}</span>
-                          <span className="alr-org">{shortName(org)}</span>
+                          <span className="alr-unit">
+                            {anyDecide && (
+                              // Its own target: a tick does not open the row.
+                              <span className="alr-tick" onClick={(e) => e.stopPropagation()}>
+                                {canDecide && (
+                                  <input type="checkbox" checked={pickedMap.has(k)} onChange={() => togglePick(a)}
+                                         aria-label={`Select ${a.plate}, ${a.kind === "fuel" ? "fuel" : "overspeeding"} alert ${when(a.at)}`} />
+                                )}
+                              </span>
+                            )}
+                            <span>
+                              <span className="sp4-reg">{a.plate}</span>
+                              <span className="alr-org">{shortName(org)}</span>
+                            </span>
+                          </span>
                         </td>
                         <td className="sp4-td--left sys-num">{when(a.at)}</td>
                         <td className="sp4-td--left">
@@ -633,13 +1114,7 @@ export default function AlertsScreen() {
                 })}
               </tbody>
             </table>
-            {hasNext && (
-              <div className="alr-more">
-                <button type="button" className="sp4-ghost-btn" onClick={loadMore} disabled={more.loading}>
-                  {more.loading ? "Loading…" : "Load more"}
-                </button>
-              </div>
-            )}
+            <TablePager pager={pager} label="Alert pages" />
           </div>
         )}
       </div>

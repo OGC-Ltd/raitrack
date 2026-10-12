@@ -358,92 +358,24 @@
 }
 
 /* ── The pager ────────────────────────────────────────── */
-/* The roster's pager, at a window's scale: same parts in the same order — the
-   range on the left, the steps and numbers on the right — so an operator who
-   has paged the accounts table is not learning a second control. It is smaller
-   because it has 300px rather than a page, and it has no "rows per page"
-   because there is nothing here to spend a choice on.
-
-   It WRAPS, which the table's does not need to. A worst-case window from
-   pageWindow is nine controls: two steps, first, last, three around the
-   current page and two gaps. That is about 200px of buttons beside a range
-   that reads "101–110 of 340", and rather than squeeze either one, the nav
-   drops to its own line on the rare day the fleet is that badly stuck. */
-.stranded-win__pager {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  flex: 0 0 auto;
+/* The app's one pager (TablePager: Prev · Page n of N · Next, operator
+   2026-10-12), at a window's scale: a hairline above it like the list's
+   rows, smaller buttons, and the "1–10 of 34" range left out, as on a
+   phone, so it fits 300px without wrapping. */
+.stranded-win .sp4-tpager {
+  gap: 8px;
   margin-top: 6px;
-  padding-top: 6px;
+  padding: 6px 0 0;
   border-top: 1px solid #f1f5f9;
 }
-
-.stranded-win__range {
-  margin-right: auto;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  color: #94a3b8;
-  white-space: nowrap;
-}
-
-.stranded-win__pagenav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.stranded-win__pagebtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Square and tabular: a pager whose buttons resize between 9 and 10 shuffles
-     every other button sideways as you step through it. */
-  min-width: 20px;
-  height: 20px;
-  padding: 0 4px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: none;
-  color: #64748b;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  cursor: pointer;
-  transition: background .13s, color .13s, border-color .13s;
-}
-.stranded-win__pagebtn:hover:not(:disabled) { background: #f1f5f9; color: #0f172a; }
-.stranded-win__pagebtn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
-/* Still readable, because it says where the ends of the list are. A step
-   button that vanished at the first page would move the numbers beside it. */
-.stranded-win__pagebtn:disabled { color: #cbd5e1; cursor: default; }
-
-/* Where you are. Bordered rather than filled: the blue fill is the TICK's, and
-   it means "the map is narrowed to this" — a page number wearing it would be
-   claiming to have done something to the map. */
-.stranded-win__pagebtn--on {
-  border-color: #cbd5e1;
-  background: #f8fafc;
-  color: #0f172a;
-}
-.stranded-win__pagebtn--on:hover { background: #f1f5f9; }
-
-.stranded-win__pagegap {
-  padding: 0 1px;
-  color: #cbd5e1;
-  font-size: 10.5px;
-  line-height: 1;
-}
+.stranded-win .sp4-tpager__btn { min-width: 0; padding: 3px 10px; font-size: 11.5px; }
+.stranded-win .sp4-tpager__info { font-size: 11.5px; }
+.stranded-win .sp4-tpager__range { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .stranded-win__row,
   .stranded-win__box,
   .stranded-win__all,
-  .stranded-win__pagebtn,
   .stranded-win__close { transition: none; }
 }
 

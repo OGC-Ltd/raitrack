@@ -11,6 +11,7 @@ import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { usePermissions } from '../../hooks/usePermissions';
 import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
+import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 
 export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
@@ -21,6 +22,10 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   // The sidebar's System section, for a phone, which has no sidebar.
   // Fuel Audit readers: the roles the operator named (fuel_audit:read).
   const canTriage = can('fuel_audit:read');
+  // Open alerts across every organisation held (the sidebar's badge): a dot
+  // on the avatar, the count beside Alerts in its menu.
+  const canAlerts = can(['fuel_theft:read', 'analytics:read']);
+  const openAlerts = useAlertSummary(canAlerts)?.open ?? 0;
   const { vehicles = [] } = useFleetLiveShared();
   const { focusVehicle } = useMapLayers();
 
@@ -136,7 +141,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
             onClick={() => setUserOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={userOpen}
-            aria-label="Account menu"
+            aria-label={openAlerts > 0 ? `Account menu, ${openAlerts} open alert${openAlerts === 1 ? '' : 's'}` : 'Account menu'}
           >
             {user ? (
               <span className="mobile-header__avatar-initials" style={{ '--ua': avatarHue(displayName || user.email) }}>
@@ -150,6 +155,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               </svg>
             )}
           </button>
+          {openAlerts > 0 && <span className="mobile-header__avatar-dot" aria-hidden="true" />}
 
           {userOpen && (
             <div className="mobile-header__user-menu" role="menu">
@@ -165,9 +171,14 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               <button className="mobile-header__user-item" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
                 <i className="ti ti-user-circle" aria-hidden="true" /> Account
               </button>
-              {can(['fuel_theft:read', 'analytics:read']) && (
+              {canAlerts && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('alerts'); setUserOpen(false); }}>
                   <i className="ti ti-bell-ringing" aria-hidden="true" /> Alerts
+                  {openAlerts > 0 && (
+                    <span className="mobile-header__user-badge" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} in the last 7 days`}>
+                      {badgeText(openAlerts)}
+                    </span>
+                  )}
                 </button>
               )}
               {canTriage && (

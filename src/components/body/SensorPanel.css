@@ -4170,6 +4170,11 @@
  * that stay put at either end (disabled, not removed) so clicking through
  * never moves the target under the pointer. Shown only when there is a
  * second page.
+ *
+ * Every table in the app pages with it (operator, 2026-10-12: "the
+ * pagination should be consistent across all pages"), including ones outside
+ * an .sp4-root — User accounts, the Service Status grid, the halted-units
+ * window — so each token carries the light theme's value as its fallback.
  */
 .sp4-tpager {
   flex: none;
@@ -4177,21 +4182,21 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 10px var(--sp4-gutter);
+  padding: 10px var(--sp4-gutter, 16px);
 }
 .sp4-tpager__info {
   font-size: 12.5px;
-  color: var(--sp4-text-3);
+  color: var(--sp4-text-3, #52606f);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .sp4-tpager__btn {
   min-width: 76px;
   padding: 5px 12px;
-  border: 1px solid var(--sp4-line);
+  border: 1px solid var(--sp4-line, #dde1e7);
   border-radius: 6px;
-  background: var(--sp4-surface);
-  color: var(--sp4-text-2);
+  background: var(--sp4-surface, #ffffff);
+  color: var(--sp4-text-2, #334155);
   font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 600;
@@ -4200,12 +4205,12 @@
   transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
 }
 .sp4-tpager__btn:hover:not(:disabled) {
-  background: var(--sp4-raised);
-  border-color: var(--sp4-line-hi);
-  color: var(--sp4-text-1);
+  background: var(--sp4-raised, #f5f7fa);
+  border-color: var(--sp4-line-hi, #cbd5e1);
+  color: var(--sp4-text-1, #0f172a);
 }
-.sp4-tpager__btn:active:not(:disabled) { transform: translateY(1px); background: var(--sp4-line); }
-.sp4-tpager__btn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; transition: none; }
+.sp4-tpager__btn:active:not(:disabled) { transform: translateY(1px); background: var(--sp4-line, #dde1e7); }
+.sp4-tpager__btn:focus-visible { outline: 2px solid var(--sp4-accent, #2563eb); outline-offset: 1px; transition: none; }
 .sp4-tpager__btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Probes and Repairs: the box IS the scroller and cleared the footer nav with

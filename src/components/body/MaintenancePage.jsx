@@ -21,6 +21,7 @@ import { createReport, addSectionTitle, addSummaryCards, addTable, downloadRepor
 import DownloadReportButton from '../shared/DownloadReportButton';
 import { downloadOrgReportPdf } from '../../api/reports';
 import MaintenanceCalendar from './MaintenanceCalendar';
+import TablePager, { PAGE_STEP } from './TablePager';
 import './MaintenancePage.css';
 
 // Filters describe what the fleet is REPORTING, not a service state we cannot
@@ -75,7 +76,8 @@ const HISTORY_CHARTS = [
   { field: 'avgSpeedKmh',            title: 'Average speed',            agg: 'avg', type: 'line', color: '#8b5cf6', unit: 'km/h', decimals: 1 },
 ];
 
-const PAGE_SIZE = 20;
+// Fifteen to a page, like every other table (TablePager).
+const PAGE_SIZE = PAGE_STEP;
 
 export default function MaintenancePage({ vehicles = [], selectedId, onSelectVehicle, orgId }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
@@ -348,15 +350,19 @@ export default function MaintenancePage({ vehicles = [], selectedId, onSelectVeh
                 </tbody>
               </table>
             </div>
-            {sorted.length > 0 && (
-              <Pagination
-                page={safePage}
-                pageCount={pageCount}
-                total={sorted.length}
-                pageSize={PAGE_SIZE}
-                onPage={setPage}
-              />
-            )}
+            {/* The app's one pager (TablePager). Its pages count from 0, this
+                grid's from 1. */}
+            <TablePager
+              label="Vehicle pages"
+              pager={{
+                page: safePage - 1,
+                pageCount,
+                total: sorted.length,
+                from: sorted.length ? (safePage - 1) * PAGE_SIZE + 1 : 0,
+                to: Math.min(safePage * PAGE_SIZE, sorted.length),
+                setPage: (n) => setPage(n + 1),
+              }}
+            />
           </div>
 
           <div className="maint-detail-col" ref={detailColRef}>
@@ -596,34 +602,6 @@ function SortableTh({ label, sortKey, activeKey, dir, onClick }) {
       {label}
       {active && <span className="maint-sort-arrow">{dir === 'asc' ? '▲' : '▼'}</span>}
     </th>
-  );
-}
-
-function Pagination({ page, pageCount, total, pageSize, onPage }) {
-  const from = (page - 1) * pageSize + 1;
-  const to   = Math.min(page * pageSize, total);
-  return (
-    <div className="maint-pagination">
-      <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{from}–{to} of {total}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <PageBtn disabled={page <= 1} onClick={() => onPage(page - 1)}>‹</PageBtn>
-        <span style={{ fontSize: 10.5, color: 'var(--text-1)', padding: '0 6px' }}>{page} / {pageCount}</span>
-        <PageBtn disabled={page >= pageCount} onClick={() => onPage(page + 1)}>›</PageBtn>
-      </div>
-    </div>
-  );
-}
-
-function PageBtn({ children, disabled, onClick }) {
-  return (
-    <button
-      disabled={disabled}
-      onClick={onClick}
-      className="maint-pagebtn"
-      style={{ color: disabled ? 'var(--text-3)' : 'var(--text-1)', cursor: disabled ? 'default' : 'pointer' }}
-    >
-      {children}
-    </button>
   );
 }
 

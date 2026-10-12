@@ -263,7 +263,7 @@
 }
 .mobile-header__user-item:hover, .mobile-header__user-item:active { background: #f8fafc; color: #0f172a; }
 .mobile-header__user-item i { font-size: 15px; color: #94a3b8; }
-/* Follow-ups waiting on this account: a dot on the avatar, the count in the menu. */
+/* Open alerts (hooks/useAlertSummary): a dot on the avatar, the count in the menu. */
 .mobile-header__avatar-dot {
   position: absolute;
   pointer-events: none;
@@ -289,14 +289,15 @@
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 20px;
+  margin-left: auto;
+  /* A pill, not a circle: "99+" must fit. */
+  min-width: 20px;
   height: 20px;
-  aspect-ratio: 1;
-  padding: 0;
+  padding: 0 6px;
   box-sizing: border-box;
-  border-radius: 50%;
-  background: #f1f5f9;
-  color: #475569;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #b45309;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px;
   font-weight: 700;

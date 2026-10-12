@@ -65,27 +65,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import { usePlaceName } from "../../hooks/usePlaceName";
-import { paginate, pageWindow } from "../../lib/rosterView";
+import { paginate } from "../../lib/rosterView";
+import TablePager from "./TablePager";
 import "./StrandedWindow.css";
 
-/** Ten. Not a choice the operator makes: the roster's pager offers 15/25/50/100
- *  because it is a full-width table with a page to spend, and this is a 320px
- *  window over a map. One number, and it is the number that fills the window
- *  without making it taller than the thing it is annotating. */
+/** Ten, where every full-width table pages fifteen (TablePager): this is a
+ *  320px window over a map. One number, and it is the number that fills the
+ *  window without making it taller than the thing it is annotating. */
 const PER_PAGE = 10;
-
-/** The pager's step arrow. Drawn rather than typed, for the reason the roster's
- *  pager states at length: a bare chevron in JSX text is a quotation glyph,
- *  hairline at this size and a pixel off centre. */
-function Chevron({ dir }) {
-  return (
-    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"
-         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-         style={dir === "left" ? { transform: "scaleX(-1)" } : undefined}>
-      <path d="M4.5 2.5L8 6l-3.5 3.5" />
-    </svg>
-  );
-}
 
 /** How long it has been standing. Same wording as the sidebar and the map's
  *  own flagged list — three copies of this sentence would be three chances to
@@ -379,54 +366,21 @@ export default function StrandedWindow({
         </div>
       )}
 
-      {/* Only when there is somewhere to go. One page of six units under a
-          pager reading "1–10 of 6, page 1 of 1" is chrome reporting on
-          itself. */}
-      {paged.pageCount > 1 && (
-        <nav className="stranded-win__pager" aria-label="Halted pages">
-          <span className="stranded-win__range">
-            {paged.from}{"\u2013"}{paged.to} of {paged.total}
-          </span>
-          <span className="stranded-win__pagenav">
-            <button
-              type="button"
-              className="stranded-win__pagebtn stranded-win__pagebtn--step"
-              aria-label="Previous page"
-              disabled={paged.page <= 1}
-              onClick={() => setPage((v) => Math.max(1, v - 1))}
-            >
-              <Chevron dir="left" />
-            </button>
-            {pageWindow(paged.page, paged.pageCount).map((slot, i) => (
-              slot === null ? (
-                // eslint-disable-next-line react/no-array-index-key
-                <span className="stranded-win__pagegap" key={`gap-${i}`} aria-hidden="true">{"\u2026"}</span>
-              ) : (
-                <button
-                  key={slot}
-                  type="button"
-                  className={"stranded-win__pagebtn"
-                    + (slot === paged.page ? " stranded-win__pagebtn--on" : "")}
-                  aria-current={slot === paged.page ? "page" : undefined}
-                  aria-label={`Page ${slot}`}
-                  onClick={() => setPage(slot)}
-                >
-                  {slot}
-                </button>
-              )
-            ))}
-            <button
-              type="button"
-              className="stranded-win__pagebtn stranded-win__pagebtn--step"
-              aria-label="Next page"
-              disabled={paged.page >= paged.pageCount}
-              onClick={() => setPage((v) => Math.min(paged.pageCount, v + 1))}
-            >
-              <Chevron dir="right" />
-            </button>
-          </span>
-        </nav>
-      )}
+      {/* The app's one pager (TablePager, operator 2026-10-12: "the
+          pagination should be consistent across all pages"), drawn only when
+          there is a second page. Ten to a page here, not fifteen: the window
+          is 320px over the map. It counts pages from 0, this list from 1. */}
+      <TablePager
+        label="Halted pages"
+        pager={{
+          page: paged.page - 1,
+          pageCount: paged.pageCount,
+          total: paged.total,
+          from: paged.from,
+          to: paged.to,
+          setPage: (n) => setPage(n + 1),
+        }}
+      />
     </div>
   );
 }

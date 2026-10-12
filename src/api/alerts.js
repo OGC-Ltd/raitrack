@@ -38,6 +38,18 @@ export async function fetchAlerts(f, { signal } = {}) {
   return res?.data ?? null;
 }
 
+/** The badge: open alerts over the page's default week, every organisation. */
+export async function fetchAlertSummary() {
+  const res = await apiFetch("/api/v1/alerts/summary");
+  return res?.data ?? null;
+}
+
+/** Every alert ever received, a fleet day at a time: [{ orgId, kind, day, n }]. */
+export async function fetchAlertHistory({ signal } = {}) {
+  const res = await apiFetch("/api/v1/alerts/history", { signal });
+  return res?.data?.days ?? null;
+}
+
 /**
  * Escalate or de-escalate one alert, in its own organisation.
  *

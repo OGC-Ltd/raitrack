@@ -12,6 +12,7 @@ import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
 import { TreeCountsMasked } from './SideTree';
 import FleetsTree from './FleetsTree';
 import { versionLabel, buildDetail } from '../../lib/version';
+import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
@@ -190,6 +191,9 @@ export default function SidePanel() {
   const { activeCompany } = useCompanies();
   const { can } = usePermissions();
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
+  // Open alerts across every organisation held (the Alerts page's default week).
+  const alertSummary = useAlertSummary(can(NAV_ITEMS.find(n => n.key === 'alerts')?.permission));
+  const openAlerts = alertSummary?.open ?? 0;
   // `activeFilter` comes from the map rather than from local state here.
   // The local copy could not see the map clearing the filter on its own — on a
   // company switch, or when focusing a single unit — so a card stayed lit over
@@ -369,6 +373,11 @@ export default function SidePanel() {
                   {isActive && <span className="sp-nav-bar" />}
                   <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
                   <span className="sp-nav-label">{item.label}</span>
+                  {item.key === 'alerts' && openAlerts > 0 && (
+                    <span className="sp-nav-count" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} in the last 7 days`}>
+                      {badgeText(openAlerts)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -479,6 +488,9 @@ export default function SidePanel() {
                 title={allowed ? item.label : `${item.label} — no access here`}
               >
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
+                {item.key === 'alerts' && openAlerts > 0 && (
+                  <span className="side-panel__nav-count" aria-hidden="true">{badgeText(openAlerts)}</span>
+                )}
               </button>
             );
           })}
