@@ -72,6 +72,26 @@
   .alr-trend__key b { font-size: 15px; }
 }
 
+/* Read marks, per person (as in a mailbox).
+ * Hallmark · component: unread alert row · genre: modern-minimal · theme: sp4
+ * states: unread (amber dot before the plate, plate and figure at full ink,
+ *         a 3px amber edge) · read (as before) · picked/open win the
+ *         background. The dot carries "Unread" for screen readers, so the
+ *         state is never told by weight or colour alone. */
+.alr-unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--alr-fuel);
+  vertical-align: 1px;
+}
+.alr-tr--unread > td:first-child { box-shadow: inset 3px 0 0 var(--alr-fuel); }
+.alr-tr--unread .sp4-reg,
+.alr-tr--unread .alr-figure b { font-weight: 800; color: var(--sp4-text-1); }
+.alr-tr--unread .alr-details { color: var(--sp4-text-1); }
+
 /* The organisation under the plate: a reader holding five tenants must see
    whose unit it is without opening the row. */
 .alr-org {
@@ -149,13 +169,7 @@
 /* Search sits before the chips, as on the Weighbridges and Sensor pages. */
 .alr-search { min-width: 220px; }
 
-/* From and To, each label held to its field. A phone's filter rows scroll
-   sideways, which left To past the edge; this one wraps instead, so both
-   days are always in view. */
-.alr-day { display: inline-flex; align-items: center; gap: 5px; }
-.alr-dates { column-gap: 12px; }
 @media (max-width: 767px) {
-  .sp4-filter-group.alr-dates { flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }
   /* The drawer took its widest row's width (the State and speed chips, ~460px
      on a 375px phone), so every row was cut at the screen's edge instead of
      scrolling: "30+ km/h" could not be reached. Held to the screen, each row

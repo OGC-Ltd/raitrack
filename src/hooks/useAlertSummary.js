@@ -1,6 +1,7 @@
-// The Alerts badge: open alerts over the page's default week, across every
-// organisation this account holds. One query shared by every badge (sidebar,
-// phone menu), polled each minute; the server holds the count a minute too.
+// The Alerts badge: open alerts this person has not read, over the page's
+// default week, across every organisation this account holds. One query
+// shared by every badge (sidebar, phone menu), polled each minute; the server
+// holds the count a minute too.
 // Dropped with every other query on sign-out (AuthContext).
 
 import { useQuery } from "@tanstack/react-query";
