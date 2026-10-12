@@ -165,6 +165,11 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               <button className="mobile-header__user-item" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
                 <i className="ti ti-user-circle" aria-hidden="true" /> Account
               </button>
+              {can(['fuel_theft:read', 'analytics:read']) && (
+                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('alerts'); setUserOpen(false); }}>
+                  <i className="ti ti-bell-ringing" aria-hidden="true" /> Alerts
+                </button>
+              )}
               {canTriage && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('audit'); setUserOpen(false); }}>
                   <i className="ti ti-clipboard-check" aria-hidden="true" /> Fuel audit

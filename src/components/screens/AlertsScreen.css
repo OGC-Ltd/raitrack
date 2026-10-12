@@ -1,0 +1,153 @@
+/* Alerts — only what SensorPanel.css, SystemScreen.css and AuditScreen.css do
+ * not own. The page borrows the Fuel Audit's frame (stat cards, the boxed
+ * table, the open row and its detail: .aud-*), so the fuel pages read alike;
+ * everything named .alr-* is this page's own.
+ *
+ * Hallmark · component: alerts list + decision panel · genre: modern-minimal
+ * theme: sp4 + the Fuel report's --frv tokens (preflight 2026-10-12)
+ * pre-emit critique: P4 H5 E4 S4 R5 V4
+ * states: row — default · hover · focus (keyboard, the row is a button) · open;
+ *         decision — none picked · picked (pressed) · reason missing (amber
+ *         prompt, confirm disabled) · saving ("Saving…") · failed (toast);
+ *         list — loading · empty per state · error · stale (dimmed while a new
+ *         filter loads) · more to load.
+ * palette: Open --sp4-warn (work waiting), Escalated --sp4-crit, De-escalated
+ *          --sp4-ok; each pill also says its word, so none is read by colour
+ *          alone. Fuel and speed tags in ink, told apart by icon and word. */
+
+/* Three cards, kept short: this page is a list to work through, and on a
+   laptop the Audit-sized meters left the table a third of the screen. */
+.alr-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); padding-block: 10px; }
+.alr-stats .aud-stat { padding: 10px 14px; gap: 4px; }
+.alr-stats .frv-gauge { max-width: 112px; }
+@media (max-width: 1023px) {
+  .alr-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-height: 860px) {
+  .alr-stats .frv-card__note { display: none; }
+  .alr-stats .frv-gauge { max-width: 96px; }
+}
+
+/* The organisation under the plate: a reader holding five tenants must see
+   whose unit it is without opening the row. */
+.alr-org {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--sp4-label);
+  font-weight: 500;
+  color: var(--sp4-text-3);
+  white-space: nowrap;
+}
+
+/* Fuel or speed, then the one figure that says what happened. */
+.alr-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.alr-kind .ti { font-size: 14px; }
+.alr-kind--fuel .ti { color: var(--frv-crit); }
+.alr-kind--speeding .ti { color: var(--sp4-warn); }
+.alr-figure { display: grid; min-width: 112px; }
+
+.alr-details { white-space: normal; min-width: 160px; max-width: 280px; color: var(--sp4-text-2); }
+
+.alr-state { display: inline-grid; justify-items: start; gap: 3px; }
+.alr-state-sub {
+  max-width: 220px;
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-3);
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.alr-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+
+/* A filter stale under a new one loading: still readable, visibly not the answer. */
+.alr-table--stale .sp4-table { opacity: 0.55; transition: opacity 120ms ease; }
+
+.alr-more { display: flex; justify-content: center; padding: 12px; border-top: 1px solid var(--sp4-line); }
+
+/* Search sits before the chips, as on the Weighbridges and Sensor pages. */
+.alr-search { min-width: 220px; }
+
+/* ── The open alert ──────────────────────────────────────────────────────── */
+
+/* Facts and the decision side by side on a desk, stacked when narrow. */
+.alr-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1099px) {
+  .alr-detail { grid-template-columns: minmax(0, 1fr); }
+}
+
+.alr-detail-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.alr-detail-actions .sp4-ghost-btn { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+
+.alr-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: var(--sp4-body);
+}
+.alr-facts dt { color: var(--sp4-text-3); font-weight: 600; }
+.alr-facts dd { margin: 0; color: var(--sp4-text-1); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+/* Every decision, newest first; the ones it replaced are kept and greyed. */
+.alr-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.alr-history li { padding-left: 10px; border-left: 2px solid var(--sp4-line-hi); }
+.alr-history li.is-current { border-left-color: var(--sp4-accent); }
+.alr-history li:not(.is-current) { opacity: 0.7; }
+.alr-history-what { font-weight: 700; color: var(--sp4-text-1); font-size: var(--sp4-body); }
+
+.alr-why { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-2); }
+
+/* The decision: Escalate / De-escalate, what as, the reason, then confirm. */
+.alr-decide { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--sp4-line); }
+.alr-decide-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.alr-pick { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 12px; }
+.alr-pick .ti { font-size: 15px; }
+.alr-pick--esc.is-on { border-color: var(--sp4-crit); color: var(--sp4-crit); background: rgba(239, 68, 68, 0.08); }
+.alr-pick--de.is-on { border-color: var(--sp4-ok); color: var(--sp4-ok); background: rgba(34, 197, 94, 0.08); }
+.alr-as { flex-wrap: wrap; }
+.alr-note { width: 100%; box-sizing: border-box; min-height: 72px; }
+.alr-hint { margin: 0; font-size: var(--sp4-label); line-height: 1.45; color: var(--sp4-text-3); }
+/* Escalating is the heavier act: the confirm button says so in red. */
+.sp4-submit-btn.alr-submit--esc { border-color: var(--sp4-crit); background: var(--sp4-crit); color: #fff; }
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .alr-stats { gap: 8px; }
+  /* Three across a phone: "De-escalated" must not break in two. */
+  .alr-stats .aud-stat { padding: 8px 8px 6px; }
+  .alr-stats .frv-card__t { font-size: 10px; letter-spacing: 0.02em; white-space: nowrap; }
+  .alr-stats .frv-gauge { max-width: 88px; }
+  .alr-search { min-width: 0; flex: 1 1 auto; }
+  .alr-actions .sp4-ghost-btn,
+  .alr-detail-actions .sp4-ghost-btn,
+  .alr-pick {
+    min-height: var(--m-ctl);
+    padding: 0 12px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .alr-decide .sp4-submit-btn { min-height: var(--m-action); padding: 0 16px; font-size: 13px; }
+  .alr-details, .alr-state-sub { max-width: none; }
+}
+
+/* Cards under 600px (SensorPanel): the actions take the card's last line. */
+@media (max-width: 599px) {
+  .alr-table .sp4-table > tbody > tr > td:last-child:not(:only-child) { grid-column: 1 / -1; align-items: flex-end; }
+  .alr-table .sp4-table > tbody > tr > td:last-child:not(:only-child)::before { content: none; }
+  .alr-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .alr-facts { grid-template-columns: minmax(84px, max-content) minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alr-table--stale .sp4-table { transition: none; }
+}

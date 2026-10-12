@@ -30,9 +30,17 @@ export function accessIn(orgs, companyId) {
   // hiding a control a super admin would find perfectly usable if they
   // guessed the URL — a mismatch between what is drawn and what is allowed is
   // its own kind of bug.
-  const can = (slug) => held.has("platform:admin") || held.has(slug);
+  const can = (slug) => held.has("platform:admin") || anyOf(slug).some((s) => held.has(s));
   return { org, can };
 }
+
+/**
+ * A slug, or a list of slugs any one of which will do. A screen reached by
+ * more than one grant (Alerts: fuel_theft:read for its fuel alerts,
+ * analytics:read for its overspeeding) names them all in NAV_ITEMS, and every
+ * place that grades a NAV_ITEMS permission gets the either-or for free.
+ */
+const anyOf = (slug) => (Array.isArray(slug) ? slug : [slug]);
 
 /**
  * The grader for one organisation BY ID, with no active company involved.
@@ -59,7 +67,7 @@ export function canInOrg(orgs, orgId, slug) {
   const org = (orgs ?? []).find((o) => o.id === orgId);
   if (!org) return false;
   const held = new Set(org.permissions ?? []);
-  return held.has("platform:admin") || held.has(slug);
+  return held.has("platform:admin") || anyOf(slug).some((s) => held.has(s));
 }
 
 export function usePermissions() {

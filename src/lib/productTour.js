@@ -103,6 +103,7 @@ const list = (rows) => `<ul class="ft-tour__list">${rows.map((r) => `<li>${r}</l
 /** One line per screen in the sidebar, for the screens step. */
 export const SCREEN_LINES = {
   fleet:        "<b>Live Map</b>: every unit, where it is now",
+  alerts:       "<b>Alerts</b>: fuel and overspeeding alerts from all your organisations, escalated or de-escalated in one place",
   drivers:      "<b>Drivers</b>: each driver's trips, tonnes, distance and incidents",
   analytics:    "<b>Analytics</b>: fuel use and cost, daily activity and sugar haulage over the days you pick",
   maintenance:  "<b>Maintenance</b>: probe health, fuel events, speeding, faults and repairs",
@@ -155,7 +156,9 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
     side: "right", align: "start",
   }, map);
 
-  const screens = Object.keys(SCREEN_LINES).filter((k) => can(PERMISSION_OF[k]));
+  // A screen naming several grants opens on any one of them (NAV_ITEMS).
+  const may = (p) => (Array.isArray(p) ? p.some((one) => can(one)) : can(p));
+  const screens = Object.keys(SCREEN_LINES).filter((k) => may(PERMISSION_OF[k]));
   add(first("nav", "m-tabs"), {
     title: "The Screens",
     description: screens.length
@@ -220,6 +223,7 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
 /** The permission each sidebar screen asks for (SidePanel NAV_ITEMS). */
 export const PERMISSION_OF = {
   fleet: "map:read",
+  alerts: ["fuel_theft:read", "analytics:read"],
   drivers: "driver:read",
   analytics: "analytics:read",
   maintenance: "sensor:read",
