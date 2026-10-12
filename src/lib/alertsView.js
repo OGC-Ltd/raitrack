@@ -38,6 +38,78 @@ export function periodFrom(id, now = Date.now()) {
   return new Date(fleetMidnight(now, p.days)).toISOString();
 }
 
+// ── Dates: the From / To picker ─────────────────────────────────────────────
+//
+// Sensor Monitor's day field (operator, 2026-10-13: "a date picker just like
+// that sensor monitor"), twice: the first and last fleet day, as the
+// "2026-10-12" keys an <input type="date"> holds. The period chips fill both.
+
+/** "2026-10-12": the fleet day holding `ms`. */
+export const fleetDay = (ms = Date.now()) => new Date(ms + FLEET_OFFSET_MS).toISOString().slice(0, 10);
+
+/** The fleet midnight opening `day`, as epoch ms. */
+const dayStart = (day) => Date.parse(`${day}T00:00:00.000Z`) - FLEET_OFFSET_MS;
+
+/** The longest span the server reads (alerts.service MAX_SPAN_DAYS), in days. */
+export const MAX_DAYS = 366;
+
+/** The days a period chip covers, ending today. */
+export function periodDays(id, now = Date.now()) {
+  const p = PERIODS.find((x) => x.id === id) ?? PERIODS[1];
+  return { fromDay: fleetDay(fleetMidnight(now, p.days)), toDay: fleetDay(now) };
+}
+
+/** The chip whose days these are, or null for a span no chip covers. */
+export function periodOf(days, now = Date.now()) {
+  const p = PERIODS.find((x) => {
+    const d = periodDays(x.id, now);
+    return d.fromDay === days.fromDay && d.toDay === days.toDay;
+  });
+  return p?.id ?? null;
+}
+
+/**
+ * A From / To pick put right: nothing after today, From not after To, and no
+ * longer than the server reads. The end the reader just `moved` stays where
+ * they put it; the other one gives way.
+ */
+export function fixDays({ fromDay, toDay }, moved = "from", now = Date.now()) {
+  const today = fleetDay(now);
+  const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d ?? "") && Number.isFinite(dayStart(d));
+  // A cleared To is today (Sensor Monitor's rule); a cleared From is To's day.
+  let t = ok(toDay) && toDay <= today ? toDay : today;
+  let f = !ok(fromDay) ? t : fromDay <= today ? fromDay : today;
+  if (f > t) {
+    if (moved === "to") f = t;
+    else t = f;
+  }
+  if ((dayStart(t) - dayStart(f)) / DAY_MS + 1 > MAX_DAYS) {
+    if (moved === "to") f = fleetDay(dayStart(t) - (MAX_DAYS - 1) * DAY_MS);
+    else t = fleetDay(dayStart(f) + (MAX_DAYS - 1) * DAY_MS);
+  }
+  return { fromDay: f, toDay: t };
+}
+
+/**
+ * The instants the server reads for a span of fleet days: from the midnight
+ * opening the first to the last moment of the last (its `to` is inclusive).
+ * A span that ends today leaves `to` to the server, so the list goes on
+ * catching the hour's alerts as it polls.
+ */
+export function daysBounds({ fromDay, toDay }, now = Date.now()) {
+  const from = new Date(dayStart(fromDay)).toISOString();
+  const to = toDay >= fleetDay(now) ? null : new Date(dayStart(toDay) + DAY_MS - 1).toISOString();
+  return { from, to };
+}
+
+const SPAN_FMT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/** "3 Oct – 12 Oct", or one day alone. For the summary line under a custom span. */
+export function daysWords({ fromDay, toDay }) {
+  const f = SPAN_FMT.format(Date.parse(`${fromDay}T00:00:00Z`));
+  return fromDay === toDay ? f : `${f} – ${SPAN_FMT.format(Date.parse(`${toDay}T00:00:00Z`))}`;
+}
+
 /** Speeding only: how far over the limit an episode must have gone to be listed. */
 export const OVER_BY = [0, 10, 20, 30];
 
@@ -68,6 +140,68 @@ export function countWhere(counts, { orgs = [], kind = "all", status = "all" } =
     n += c.n;
   }
   return n;
+}
+
+/** One day on, for "YYYY-MM-DD" keys. */
+const nextDay = (day) => new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+
+/** A fleet day as "12 Oct". */
+export const dayWords = (day) => SPAN_FMT.format(Date.parse(`${day}T00:00:00Z`));
+
+const MONTH_FMT = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
+
+/** The Monday on or before a day (weeks as the fleet's reports count them). */
+function mondayOf(day) {
+  const t = Date.parse(`${day}T00:00:00Z`);
+  return new Date(t - ((new Date(t).getUTCDay() + 6) % 7) * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** How the chart groups: days for two months, weeks for two years, then months. */
+export function trendUnit(firstDay, lastDay) {
+  const span = (Date.parse(`${lastDay}T00:00:00Z`) - Date.parse(`${firstDay}T00:00:00Z`)) / DAY_MS;
+  return span <= 62 ? "day" : span <= 730 ? "week" : "month";
+}
+
+const BUCKET = {
+  day: { of: (d) => d, next: nextDay, words: (d) => dayWords(d) },
+  week: {
+    of: mondayOf,
+    next: (d) => new Date(Date.parse(`${d}T00:00:00Z`) + 7 * DAY_MS).toISOString().slice(0, 10),
+    words: (d) => `Week of ${dayWords(d)}`,
+  },
+  month: {
+    of: (d) => `${d.slice(0, 7)}-01`,
+    next: (d) => {
+      const [y, m] = d.split("-").map(Number);
+      return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`;
+    },
+    words: (d) => MONTH_FMT.format(Date.parse(`${d}T00:00:00Z`)),
+  },
+};
+
+/**
+ * Every alert ever received, fuel and overspeeding apart, from the first day
+ * with one to today: days, weeks or months (trendUnit), empty ones at 0.
+ * Follows the Organisation filter only: it is the whole history, not the
+ * period or the state picked. null until the history is in.
+ *   → { unit, points: [{ start, words, fuel, speeding }] }
+ */
+export function alertTrend(history, { orgs = [] } = {}, now = Date.now()) {
+  if (!Array.isArray(history)) return null;
+  const rows = history.filter((r) => !orgs.length || orgs.includes(r.orgId));
+  const today = fleetDay(now);
+  const first = rows.reduce((m, r) => (r.day < m ? r.day : m), today);
+  const unit = trendUnit(first, today);
+  const b = BUCKET[unit];
+  const byStart = new Map();
+  for (let d = b.of(first); d <= today; d = b.next(d)) {
+    byStart.set(d, { start: d, words: b.words(d), fuel: 0, speeding: 0 });
+  }
+  for (const r of rows) {
+    const point = byStart.get(b.of(r.day));
+    if (point && (r.kind === "fuel" || r.kind === "speeding")) point[r.kind] += r.n;
+  }
+  return { unit, points: [...byStart.values()] };
 }
 
 // ── An alert's decision, in words ───────────────────────────────────────────
@@ -184,6 +318,97 @@ const RULE_WORDS = {
   "fell-after-refuel": "Fell after a refuel",
 };
 export const ruleWords = (slug) => (slug ? RULE_WORDS[slug] ?? slug.replace(/-/g, " ") : "Possible theft");
+
+// ── Pages ───────────────────────────────────────────────────────────────────
+
+/**
+ * The figures TablePager draws (Prev · Page n of N · a–b of N · Next), for a
+ * list the SERVER pages. It cannot slice an array it does not hold, so the
+ * whole is the count for the filters on screen (`listed`) and the page is
+ * whatever the server sent. The two can disagree for a moment (a decision
+ * moves an alert out of Open before the counts are read again), and the rows
+ * win: the last page reports what it holds, and a page with more after it
+ * never claims to be the last.
+ */
+export function alertPager({ page, rows, hasNext, listed, step = 15 }) {
+  const from = rows ? page * step + 1 : 0;
+  const to = page * step + rows;
+  if (!hasNext) return { page, pageCount: page + 1, total: to, from, to };
+  const total = Math.max(listed ?? 0, to + 1);
+  return { page, pageCount: Math.max(Math.ceil(total / step), page + 2), total, from, to };
+}
+
+// ── Many at once ────────────────────────────────────────────────────────────
+//
+// Operator, 2026-10-13: "consider a situation where we would like to escalate
+// or deescalate or both escalate and deescalate multiple". Each selected alert
+// carries its own pick, so one batch can escalate some and de-escalate others;
+// a fuel escalation takes the batch's one "as" (theft or a faulty probe).
+
+/** May this alert take `outcome` now (as `reason`, when it is a fuel escalation)? */
+export function canTake(alert, outcome, reason = null) {
+  const fuelEsc = alert.kind === "fuel" && outcome === "ESCALATED";
+  return (alert.choices ?? []).some((c) => c.outcome === outcome && (!fuelEsc || c.reason === reason));
+}
+
+/** Why an alert cannot take a pick, for the line under it. */
+function cannotWords(alert, outcome) {
+  if (!alert.choices?.length) {
+    return alert.kind === "fuel" && alert.decision?.reason === "probe_fault"
+      ? "Escalated as a faulty fuel probe: it closes in Fuel Audit."
+      : "Decided in its case: it cannot be changed here.";
+  }
+  if (alert.decision?.outcome === outcome) return `Already ${decisionWords(alert.kind, alert.decision).toLowerCase()}.`;
+  return "Cannot take this decision now.";
+}
+
+/**
+ * What a batch will do: `picks` maps an alert's key to the outcome picked for
+ * it (absent or null: left out of this batch), and `fuelReason` is what fuel
+ * escalations are escalated as. `run` is every step to send; `skip` the
+ * alerts that cannot take their pick, with why.
+ */
+export function bulkPlan(alerts, picks, fuelReason, keyOf) {
+  const run = [];
+  const skip = [];
+  for (const alert of alerts) {
+    const outcome = picks[keyOf(alert)] ?? null;
+    if (!outcome) continue;
+    const reason = alert.kind === "fuel" && outcome === "ESCALATED" ? fuelReason : null;
+    if (canTake(alert, outcome, reason)) run.push({ alert, outcome, reason });
+    else skip.push({ alert, outcome, why: cannotWords(alert, outcome) });
+  }
+  return { run, skip };
+}
+
+/**
+ * The steps in the order to send them: one queue per unit, its oldest alert
+ * first. Deciding a fuel alert that is on the map also clears the unit's
+ * older ones from it (fuel.repository sweepUnitSiblings), so two decisions on
+ * one unit sent together could refuse each other; one after another, each
+ * finds the other already settled. Different units go side by side.
+ */
+export function unitQueues(steps) {
+  const byUnit = new Map();
+  for (const s of steps) {
+    const k = `${s.alert.orgId}:${s.alert.vehicleId ?? s.alert.plate}`;
+    if (!byUnit.has(k)) byUnit.set(k, []);
+    byUnit.get(k).push(s);
+  }
+  return [...byUnit.values()].map((q) => q.sort((a, b) => Date.parse(a.alert.at) - Date.parse(b.alert.at)));
+}
+
+/** A batch's outcome in one line: "4 escalated, 2 de-escalated, 1 failed". */
+export function bulkWords(done) {
+  const esc = done.filter((d) => d.ok && d.outcome === "ESCALATED").length;
+  const de = done.filter((d) => d.ok && d.outcome === "DEESCALATED").length;
+  const failed = done.filter((d) => !d.ok).length;
+  const parts = [];
+  if (esc) parts.push(`${esc} escalated`);
+  if (de) parts.push(`${de} de-escalated`);
+  if (failed) parts.push(`${failed} failed`);
+  return parts.join(", ") || "Nothing decided";
+}
 
 // ── Where an alert's unit lives on this dashboard ───────────────────────────
 

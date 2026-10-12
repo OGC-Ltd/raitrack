@@ -45,9 +45,10 @@ import {
 } from "../../api/users";
 import { firstMessage, isMissingEndpoint } from "../../lib/formErrors";
 import {
-  sortRows, nextSort, paginate, pageWindow, PER_PAGE_CHOICES,
+  sortRows, nextSort, paginate,
   selectionState, toggleSelected, toggleAllVisible, pruneSelection,
 } from "../../lib/rosterView";
+import TablePager, { PAGE_STEP } from "./TablePager";
 import { toCsv, exportFilename, downloadCsv } from "../../lib/rosterExport";
 import { accountState } from "../../lib/accountState";
 import { companyMark } from "../../lib/companyLogos";
@@ -543,18 +544,6 @@ function ToastMark({ tone }) {
   );
 }
 
-/** The pager's step arrows. One path, mirrored, so the two are the same
- *  weight — which two opposed text glyphs are not guaranteed to be. */
-function Chevron({ dir }) {
-  return (
-    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"
-         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-         style={dir === "left" ? { transform: "scaleX(-1)" } : undefined}>
-      <path d="M4.5 2.5L8 6l-3.5 3.5" />
-    </svg>
-  );
-}
-
 /**
  * One organisation's mark, wherever an organisation is named.
  *
@@ -927,7 +916,8 @@ export default function UserAdminPanel() {
   const [view, setView] = useState("table");
   const [sort, setSort] = useState(null);
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(PER_PAGE_CHOICES[0]);
+  // Fifteen, like every table (TablePager); no per-table page size any more.
+  const perPage = PAGE_STEP;
   const [selected, setSelected] = useState(() => new Set());
 
   /**
@@ -2908,67 +2898,21 @@ export default function UserAdminPanel() {
             </div>
 
             {/* ── Pager ────────────────────────────────────────────────────
-                Only drawn when there is more than one page. A pager over
-                twelve rows is chrome reporting that nothing needs paging. */}
-            {paged.pageCount > 1 && (
-              <nav className="ua-pager" aria-label="Roster pages">
-                <span className="ua-pager__size">
-                  <label className="ua-pager__label" htmlFor="ua-perpage">Rows per page</label>
-                  <select
-                    id="ua-perpage"
-                    className="ua-pager__sel"
-                    value={perPage}
-                    onChange={(e) => setPerPage(Number(e.target.value))}
-                  >
-                    {PER_PAGE_CHOICES.map((size) => (
-                      <option key={size} value={size}>{size}</option>
-                    ))}
-                  </select>
-                </span>
-
-                <span className="ua-pager__range">
-                  {paged.from}{"\u2013"}{paged.to} of {paged.total}
-                </span>
-
-                <span className="ua-pager__nav">
-                  {/* Drawn, not typed. These two were a bare \u2039 and
-                      \u203a sitting in JSX TEXT, where a backslash escape is
-                      not an escape at all — the buttons were printing the
-                      six characters of their own source. A chevron is also
-                      the better mark: ‹ is a quotation glyph, hairline at
-                      12px in Inter, and it sat a pixel off centre. */}
-                  <button type="button" className="ua-pager__btn ua-pager__btn--step"
-                          aria-label="Previous page"
-                          disabled={paged.page <= 1}
-                          onClick={() => setPage((v) => Math.max(1, v - 1))}>
-                    <Chevron dir="left" />
-                  </button>
-                  {pageWindow(paged.page, paged.pageCount).map((slot, i) => (
-                    slot === null ? (
-                      // eslint-disable-next-line react/no-array-index-key
-                      <span className="ua-pager__gap" key={`gap-${i}`} aria-hidden="true">{"\u2026"}</span>
-                    ) : (
-                      <button
-                        key={slot}
-                        type="button"
-                        className={"ua-pager__btn" + (slot === paged.page ? " ua-pager__btn--on" : "")}
-                        aria-current={slot === paged.page ? "page" : undefined}
-                        aria-label={`Page ${slot}`}
-                        onClick={() => setPage(slot)}
-                      >
-                        {slot}
-                      </button>
-                    )
-                  ))}
-                  <button type="button" className="ua-pager__btn ua-pager__btn--step"
-                          aria-label="Next page"
-                          disabled={paged.page >= paged.pageCount}
-                          onClick={() => setPage((v) => Math.min(paged.pageCount, v + 1))}>
-                    <Chevron dir="right" />
-                  </button>
-                </span>
-              </nav>
-            )}
+                The app's one pager (TablePager, operator 2026-10-12: "the
+                pagination should be consistent across all pages"), fifteen
+                to a page, drawn only when there is a second page. It counts
+                pages from 0, the roster from 1. */}
+            <TablePager
+              label="Roster pages"
+              pager={{
+                page: paged.page - 1,
+                pageCount: paged.pageCount,
+                total: paged.total,
+                from: paged.from,
+                to: paged.to,
+                setPage: (n) => setPage(n + 1),
+              }}
+            />
           </section>
         )}
 

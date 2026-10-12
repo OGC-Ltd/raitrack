@@ -30,7 +30,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { whenLabel } from "../../api/incidents";
 import TableToolbar from "./TableToolbar";
-import TablePager, { usePager } from "./TablePager";
+import TablePager, { usePager, withMore } from "./TablePager";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import "./IncidentReport.css";
 
@@ -137,6 +137,11 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
   const plate = unit.plate ?? unit.vehicleId;
   const pager = usePager(rows, unit.vehicleId);
   const lastPage = pager.page === pager.pageCount - 1;
+  // The next batch is read when the last page loaded is reached, so the pager's
+  // Next carries on into it: one pager everywhere, no "Load more" (2026-10-12).
+  useEffect(() => {
+    if (lastPage && more && !loading && !error) void load(cursor);
+  }, [lastPage, more, loading, error, load, cursor]);
 
   return (
     <>
@@ -210,15 +215,7 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
             </tbody>
           </table>
           </div>
-          <TablePager pager={pager} label="Case pages" />
-
-          {more && lastPage && (
-            <div className="sp4-table-more">
-              <button type="button" className="sp4-page-btn" disabled={loading} onClick={() => void load(cursor)}>
-                {loading ? "Loading…" : "Load more"}
-              </button>
-            </div>
-          )}
+          <TablePager pager={withMore(pager, more)} label="Case pages" />
         </div>
       )}
     </>
@@ -282,6 +279,10 @@ export default function IncidentReport({
    */
   const pager = usePager(rows, `${orgId}|${range.from}|${range.to}|${sort}`);
   const lastPage = pager.page === pager.pageCount - 1;
+  // As in the unit's cases: the next batch is read when the last page is reached.
+  useEffect(() => {
+    if (!unit && lastPage && more && !loading && !error) void load(cursor);
+  }, [unit, lastPage, more, loading, error, load, cursor]);
 
   const startsBeforeCapture =
     captureStartedAt && Date.parse(range.from) < Date.parse(captureStartedAt);
@@ -370,15 +371,7 @@ export default function IncidentReport({
             </tbody>
           </table>
           </div>
-          <TablePager pager={pager} label="Unit pages" />
-
-          {more && lastPage && (
-            <div className="sp4-table-more">
-              <button type="button" className="sp4-page-btn" disabled={loading} onClick={() => void load(cursor)}>
-                {loading ? "Loading…" : "Load more"}
-              </button>
-            </div>
-          )}
+          <TablePager pager={withMore(pager, more)} label="Unit pages" />
         </>
       )}
     </div>

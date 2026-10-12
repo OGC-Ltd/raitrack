@@ -1,4 +1,6 @@
-// One pager for every Sensor Monitor table: Prev · Page n of N · a–b of N · Next.
+// One pager for every table in the app: Prev · Page n of N · a–b of N · Next
+// (operator, 2026-10-12: "the pagination should be consistent across all
+// pages"). Fifteen rows a page unless a table says otherwise.
 //
 // The Drivers roster's and the Weighbridges grid's pager (operator, 2026-10-03:
 // "add pagination for probes, fuel FSL, speed, malfunctions and repair"), so
@@ -6,6 +8,9 @@
 // of the rows the table already holds — exports still take every row.
 
 import { useEffect, useState } from "react";
+// The pager's styles live with the Sensor Monitor's; imported here so a
+// screen outside it (User accounts, the halted-units window) gets them too.
+import "./SensorPanel.css";
 
 /** Rows to a page, the roster's step. */
 export const PAGE_STEP = 15;
@@ -35,6 +40,13 @@ export function usePager(rows, resetKey, step = PAGE_STEP) {
     setPage,
   };
 }
+
+/**
+ * For rows the server sends a batch at a time: the whole reads "of 50+" while
+ * there are more to read. The caller reads the next batch when its last page
+ * is reached, so Next goes on working; there is no "Load more" button.
+ */
+export const withMore = (pager, more) => (more ? { ...pager, total: `${pager.total}+` } : pager);
 
 /** The bar. Renders nothing when everything fits on one page. */
 export default function TablePager({ pager, label = "Table pages" }) {
