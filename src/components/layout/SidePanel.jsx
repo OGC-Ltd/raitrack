@@ -16,6 +16,10 @@ import './SidePanel.css';
 
 export const NAV_ITEMS = [
   { key: 'fleet',        label: 'Live Map',     icon: 'map-2',     permission: 'map:read'         },
+  // Fuel and overspeeding alerts from every organisation the account holds,
+  // escalated and de-escalated in one place (operator, 2026-10-12). Either
+  // grant opens it: the page shows each kind only where it is held.
+  { key: 'alerts',       label: 'Alerts',       icon: 'bell-ringing', permission: ['fuel_theft:read', 'analytics:read'] },
   { key: 'drivers',      label: 'Drivers',      icon: 'users',     permission: 'driver:read'      },
   { key: 'analytics',    label: 'Analytics',    icon: 'chart-bar', permission: 'analytics:read'   },
   { key: 'maintenance',  label: 'Maintenance',  icon: 'tool',      permission: 'sensor:read'      },
