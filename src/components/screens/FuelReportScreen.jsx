@@ -22,7 +22,8 @@ import {
 import "../body/SensorPanel.css";
 import "./FuelReportScreen.css";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { loadDay } from "../../lib/vehicleDay";
+import { loadDay, decodeColumns } from "../../lib/vehicleDay";
+import { apiFetch } from "../../services/api";
 import { loadVehicleFuelEvents } from "../../hooks/useVehicleFuelEvents";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { fleetDaysBetween } from "../../lib/weighbridgeBoard";
@@ -510,11 +511,10 @@ function WhenField({ label, value, onChange, max, min }) {
 }
 
 /**
- * Read one unit's period: every fleet day's readings and fuel ledger, three
- * days at a time, cut to the period and worked into the report. A day that
- * fails is counted, not fatal — the report says how many are missing.
+ * A server older than the one-request route: every fleet day's readings and
+ * fuel ledger, three days at a time. A day that fails is counted, not fatal.
  */
-async function runReport({ orgId, unit, from, to }, onProgress) {
+async function readByDay({ orgId, unit, from, to }, onProgress) {
   const days = fleetDaysBetween(fleetDayKey(new Date(from)), fleetDayKey(new Date(to - 1)));
   let done = 0;
   onProgress({ done, total: days.length });
@@ -528,12 +528,49 @@ async function runReport({ orgId, unit, from, to }, onProgress) {
     return { pings: tel.pings, drains: fuel.drains, fillings: fuel.fillings };
   });
   const ok = parts.filter((p) => p.status === "fulfilled").map((p) => p.value);
-  const failedDays = parts.length - ok.length;
-  const pings = ok.flatMap((p) => p.pings).filter((p) => p.t >= from && p.t < to).sort((a, b) => a.t - b.t);
+  return {
+    pings: ok.flatMap((p) => p.pings),
+    drains: ok.flatMap((p) => p.drains),
+    fillings: ok.flatMap((p) => p.fillings),
+    failedDays: parts.length - ok.length,
+  };
+}
+
+/**
+ * Read one unit's period and work it into the report: ONE request for every
+ * fleet day's readings and the period's drains and fillings (server
+ * fuel-report-data, 2026-10-10). A month used to be 90 requests, nine at a
+ * time, each a query of its own; finished days now come from a cache the
+ * server keeps for everyone. A day the server could not read is counted, not
+ * fatal — the report says how many are missing.
+ */
+async function runReport({ orgId, unit, from, to }, onProgress) {
+  let got;
+  onProgress({ done: 0, total: 1 });
+  try {
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/report-data/vehicles/${unit.vehicleId}?from=${from}&to=${to}`);
+    const d = res?.data ?? {};
+    got = {
+      pings: (d.days ?? []).flatMap((day) => decodeColumns(day)),
+      drains: d.drains ?? [],
+      fillings: d.fillings ?? [],
+      failedDays: d.failedDays ?? 0,
+    };
+    onProgress({ done: 1, total: 1 });
+  } catch (err) {
+    // A server without the route answers 404: the old reading, a day at a time.
+    if (err?.status !== 404) throw err;
+    got = await readByDay({ orgId, unit, from, to }, onProgress);
+  }
+  const { failedDays } = got;
+  const seen = new Set();
+  const pings = got.pings
+    .filter((p) => p.t >= from && p.t < to && !seen.has(p.t) && seen.add(p.t))
+    .sort((a, b) => a.t - b.t);
   const inSpan = (iso) => { const t = Date.parse(iso); return t >= from && t < to; };
   const uniq = (xs) => [...new Map(xs.map((x) => [x.id, x])).values()];
-  const fillings = uniq(ok.flatMap((p) => p.fillings)).filter((f) => inSpan(f.filledAt));
-  const drains = uniq(ok.flatMap((p) => p.drains)).filter((d) => inSpan(d.beganAt));
+  const fillings = uniq(got.fillings).filter((f) => inSpan(f.filledAt));
+  const drains = uniq(got.drains).filter((d) => inSpan(d.beganAt));
   const report = buildFuelReport({ pings, fillings, drains, from, to });
   return { report, pings, series: chartSeries(pings), unit, from, to, failedDays };
 }
@@ -783,7 +820,7 @@ function UnitFuelReport() {
             </div>
             <button type="button" className="sp4-submit-btn frp-run" onClick={execute} disabled={!canRun || state.status === "loading"}
                     title={!unit ? "Choose a unit first" : tooLong ? `${MAX_DAYS} days at most` : "Build the report"}>
-              {state.status === "loading" ? `Reading ${state.done}/${state.total}…` : "Execute"}
+              {state.status === "loading" ? (state.total > 1 ? `Reading ${state.done}/${state.total}…` : "Reading…") : "Execute"}
             </button>
             <FoldChevron collapsed={false} onToggle={toggleHeader} className="frp-fold--bar" />
           </div>
@@ -799,8 +836,11 @@ function UnitFuelReport() {
             </EmptyNote>
           ) : state.status === "loading" ? (
             <EmptyNote icon="ti-loader-2" tone="busy" title="Building the Report"
-                        progress={state.total ? state.done / state.total : 0}>
-              Reading day {Math.min(state.done + 1, state.total)} of {state.total} — readings, fillings and drains.
+                        progress={state.total > 1 ? state.done / state.total : null}>
+              {/* One request for the whole period, or (an older server) a day at a time. */}
+              {state.total > 1
+                ? `Reading day ${Math.min(state.done + 1, state.total)} of ${state.total}: readings, fillings and drains.`
+                : "Reading the period's readings, fillings and drains."}
             </EmptyNote>
           ) : state.status === "error" ? (
             <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Built"
