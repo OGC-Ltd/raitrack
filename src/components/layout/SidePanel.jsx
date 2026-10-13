@@ -13,6 +13,7 @@ import { TreeCountsMasked } from './SideTree';
 import FleetsTree from './FleetsTree';
 import { versionLabel, buildDetail } from '../../lib/version';
 import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
+import { useFuelAlarm } from '../../hooks/useFuelAlarm';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
@@ -194,6 +195,8 @@ export default function SidePanel() {
   // Open alerts across every organisation held (the Alerts page's default week).
   const alertSummary = useAlertSummary(can(NAV_ITEMS.find(n => n.key === 'alerts')?.permission));
   const openAlerts = alertSummary?.open ?? 0;
+  // A new fuel theft alert: the Alerts button shakes in red until the page is opened.
+  const fuelAlarm = useFuelAlarm(alertSummary);
   // `activeFilter` comes from the map rather than from local state here.
   // The local copy could not see the map clearing the filter on its own — on a
   // company switch, or when focusing a single unit — so a card stayed lit over
@@ -366,6 +369,7 @@ export default function SidePanel() {
                     'sp-nav-item',
                     isActive  ? 'sp-nav-item--active'   : '',
                     !allowed  ? 'sp-nav-item--disabled' : '',
+                    item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
                   ].join(' ')}
                   onClick={() => handleNav(item.key)}
                   disabled={!allowed}
@@ -374,7 +378,7 @@ export default function SidePanel() {
                   <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
                   <span className="sp-nav-label">{item.label}</span>
                   {item.key === 'alerts' && openAlerts > 0 && (
-                    <span className="sp-nav-count" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} in the last 7 days`}>
+                    <span className="sp-nav-count" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} you have not read, last 7 days${fuelAlarm ? ' · a new fuel theft alert' : ''}`}>
                       {badgeText(openAlerts)}
                     </span>
                   )}
@@ -477,6 +481,7 @@ export default function SidePanel() {
                   'side-panel__nav-item',
                   isActive ? 'side-panel__nav-item--active'   : '',
                   !allowed ? 'side-panel__nav-item--disabled' : '',
+                  item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
                 ].filter(Boolean).join(' ')}
                 onClick={() => handleNav(item.key)}
                 disabled={!allowed}
@@ -484,7 +489,7 @@ export default function SidePanel() {
                 // The label is the only thing naming this button when the
                 // sidebar is a 56px icon rail, so it has to be readable to a
                 // screen reader and not only on hover.
-                aria-label={item.label}
+                aria-label={item.key === 'alerts' && fuelAlarm ? `${item.label}, new fuel theft alert` : item.label}
                 title={allowed ? item.label : `${item.label} — no access here`}
               >
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />

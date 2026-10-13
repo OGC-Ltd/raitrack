@@ -34,6 +34,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
 import { decideAlert, fetchAlertHistory, fetchAlerts, markAlertsRead, markAllAlertsRead } from "../../api/alerts";
 import { ALERT_SUMMARY_KEY } from "../../hooks/useAlertSummary";
+import { hushFuelAlarm, useFuelAlarm } from "../../hooks/useFuelAlarm";
 import { settleLimited } from "../../lib/settleLimited";
 import {
   KINDS, OVER_BY, PERIODS, READS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
@@ -744,6 +745,20 @@ export default function AlertsScreen() {
   const speedingHere = orgList.some((o) => (orgs.length === 0 || orgs.includes(o.id)) && o.kinds.includes("speeding"));
   const counts = page?.counts ?? (kept.key === key ? kept.counts : null);
   // The chart's whole history: not the page's filters, so one read a visit.
+  // A new fuel theft rang the Alerts button: opening the page hears it. One
+  // that arrives while the page is open shows in the list (read afresh) and
+  // lets the button shake a few seconds first, so it is seen to arrive.
+  const fuelAlarm = useFuelAlarm(null);
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!fuelAlarm) { opened.current = true; return undefined; }
+    if (!opened.current) { opened.current = true; hushFuelAlarm(); return undefined; }
+    first.revalidate();
+    const t = setTimeout(hushFuelAlarm, 6000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fuelAlarm]);
+
   const history = useQuery({
     queryKey: ["alerts", "history"],
     queryFn: ({ signal }) => fetchAlertHistory({ signal }),

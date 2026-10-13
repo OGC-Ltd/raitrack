@@ -658,3 +658,33 @@
 }
 .side-panel--collapsed .side-panel__meta-text { margin-left: 0; }
 .side-panel--collapsed .side-panel__meta-version { font-size: 9.5px; letter-spacing: 0; }
+
+/* A new fuel theft alert (hooks/useFuelAlarm): the Alerts button shakes in
+   red, a short burst every few seconds, until the Alerts page is opened. Red
+   is the app's colour for a loss; the badge turns red with it, and the
+   button's accessible name says why, so the state is not told by motion or
+   colour alone. No motion for people who ask for none: red only. */
+@keyframes sp-alarm-shake {
+  0%, 22%, 100% { transform: rotate(0); }
+  3%  { transform: rotate(-16deg); }
+  6%  { transform: rotate(14deg); }
+  9%  { transform: rotate(-12deg); }
+  12% { transform: rotate(10deg); }
+  15% { transform: rotate(-6deg); }
+  18% { transform: rotate(4deg); }
+}
+.nav-alarm .sp-nav-icon,
+.nav-alarm .side-panel__nav-icon {
+  color: #dc2626 !important;
+  transform-origin: 50% 10%;
+  animation: sp-alarm-shake 2.4s ease-in-out infinite;
+}
+.nav-alarm .sp-nav-label { color: #dc2626; }
+.nav-alarm .sp-nav-count { background: #fee2e2; color: #b91c1c; }
+.nav-alarm .side-panel__nav-count { background: #dc2626; }
+.nav-alarm.side-panel__nav-item,
+.nav-alarm.sp-nav-item { box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.35); }
+@media (prefers-reduced-motion: reduce) {
+  .nav-alarm .sp-nav-icon,
+  .nav-alarm .side-panel__nav-icon { animation: none; }
+}
