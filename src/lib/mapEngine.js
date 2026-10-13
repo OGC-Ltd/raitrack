@@ -279,6 +279,13 @@ export class Map extends Evented {
   getCenter() { return fromLL(this._l._animatingZoom ? this._l._animateToCenter : this._l.getCenter()); }
   setCenter(c) { this._l.setView(toLL(c), this._l.getZoom(), { animate: false }); }
   panTo(c) { this._l.panTo(toLL(c)); }
+  /**
+   * Centre AND zoom in one move. Never panTo then setZoom: Leaflet's setZoom
+   * stops a pan still under way and zooms about where the map was, so the
+   * pair landed beside the unit (operator, 2026-10-13: "we have to double do
+   * the process") and only a second try, starting nearer, arrived.
+   */
+  setView(c, z) { this._l.setView(toLL(c), z); }
   panBy(x, y) { this._l.panBy([x, y]); }
   getBounds() {
     const l = this._l;

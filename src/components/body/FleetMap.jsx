@@ -3471,9 +3471,19 @@ export default function FleetMap() {
    * to one unit, which is the opposite of what someone browsing a list of
    * tracked units is asking for.
    */
+  // frameUnits is built further down, beside fitTo; read through a ref here.
+  const frameUnitsRef = useRef(null);
   const handleOpenUnit = useCallback((id) => {
     setSelectedVehicleId(id);
     if (isCompactRef.current) setPinnedId(id);
+    // Found in Units, opened: on the map and zoomed to it, in the same press
+    // (operator, 2026-10-13). Not isolated - the rest of the fleet stays.
+    const v = vehiclesRef.current.find(x => x.id === id);
+    if (v && Number.isFinite(v.lat) && Number.isFinite(v.lng)) {
+      frameUnitsRef.current?.([v]);
+      setSearchedId(v.id);
+      setTimeout(() => setSearchedId(null), 6000);
+    }
   }, [setSelectedVehicleId]);
 
   /* Opening a fuel alert closes the unit's map card (operator, 28 Sep:
@@ -4190,10 +4200,20 @@ export default function FleetMap() {
 
   // Fit the map to a set of vehicles — to where the fleet WORKS, not to the
   // convex hull of every last fix. See FIT_CORE_SHARE and FIT_MAX_ZOOM.
+  // The zoom cap a fit leaves for the map's next settle. One at a time, and
+  // dropped by frameUnits: a cap left over from the opening fit used to pull a
+  // unit just framed at FOCUS_ZOOM back out to FIT_MAX_ZOOM.
+  const fitCapRef = useRef(null);
+  const dropFitCap = useCallback(() => {
+    mapsLibRef.current?.event.removeListener(fitCapRef.current);
+    fitCapRef.current = null;
+  }, []);
+
   const fitTo = useCallback((located, { animate = false } = {}) => {
     const map  = mapRef.current;
     const maps = mapsLibRef.current;
     if (!map || !maps || located.length === 0) return false;
+    dropFitCap();
 
     const bounds = new maps.LatLngBounds();
     for (const v of fleetCore(located)) bounds.extend({ lat: v.lat, lng: v.lng });
@@ -4205,12 +4225,50 @@ export default function FleetMap() {
     // is spread across a large area and the zoom is correct. This lets Kasulu
     // (spread across Tanzania) and Sukari (concentrated in one yard) both get
     // the right opening zoom automatically.
-    maps.event.addListenerOnce(map, "idle", () => {
+    fitCapRef.current = maps.event.addListenerOnce(map, "idle", () => {
+      fitCapRef.current = null;
       if (map.getZoom() > FIT_MAX_ZOOM) map.setZoom(FIT_MAX_ZOOM);
     });
     void animate;
     return true;
-  }, []);
+  }, [dropFitCap]);
+
+  /**
+   * Bring the camera to units the operator picked (operator, 2026-10-13: a
+   * unit found in Units should be "rendered on the map and zoomed in to the
+   * unit"; several picked "close to each other" are focused together, and
+   * ones far apart are clustered, for the operator to break up if they wish).
+   *
+   * One unit, or several on one spot: to it at FOCUS_ZOOM, as a search does.
+   * Several: every one of them framed - not fitTo's core, which drops a
+   * quarter of the fleet as tail; a picked unit is never tail - at no closer
+   * than FOCUS_ZOOM. Far apart, that frame is wide, and the cluster pass
+   * groups the ones near each other into badges; a badge click zooms in on
+   * its members (the existing cluster click), which is the "decluster".
+   */
+  const frameUnits = useCallback((located) => {
+    const map  = mapRef.current;
+    const maps = mapsLibRef.current;
+    if (!map || !maps || located.length === 0) return false;
+    dropFitCap();
+    fittedCompanyRef.current = activeCompanyId;   // the camera is the operator's now
+    pendingFitRef.current = false;
+
+    const bounds = new maps.LatLngBounds();
+    for (const v of located) bounds.extend({ lat: v.lat, lng: v.lng });
+    const ne = bounds.getNorthEast(), sw = bounds.getSouthWest();
+    if (located.length === 1 || metresBetween({ lat: ne.lat(), lng: ne.lng() }, { lat: sw.lat(), lng: sw.lng() }) < 30) {
+      map.setView({ lat: located[0].lat, lng: located[0].lng }, FOCUS_ZOOM);
+      return true;
+    }
+    map.fitBounds(bounds, { top: 80, right: 80, bottom: 80, left: 80 });
+    fitCapRef.current = maps.event.addListenerOnce(map, "idle", () => {
+      fitCapRef.current = null;
+      if (map.getZoom() > FOCUS_ZOOM) map.setZoom(FOCUS_ZOOM);
+    });
+    return true;
+  }, [activeCompanyId, dropFitCap]);
+  frameUnitsRef.current = frameUnits;
 
   /**
    * The company's opening view: its configured `defaultView` if it has one,
@@ -4255,8 +4313,7 @@ export default function FleetMap() {
         ? { lat: c.lat(), lng: c.lng(), zoom: map.getZoom() ?? FIT_MAX_ZOOM }
         : null;
     }
-    map.panTo({ lat: v.lat, lng: v.lng });
-    map.setZoom(FOCUS_ZOOM);
+    map.setView({ lat: v.lat, lng: v.lng }, FOCUS_ZOOM);
     setZoomedIn(true);
   }, [pinnedId]);
 
@@ -4264,8 +4321,7 @@ export default function FleetMap() {
     const map = mapRef.current;
     const view = preZoomViewRef.current;
     if (!map || !view) return;
-    map.panTo({ lat: view.lat, lng: view.lng });
-    map.setZoom(view.zoom);
+    map.setView({ lat: view.lat, lng: view.lng }, view.zoom);
     preZoomViewRef.current = null;
     setZoomedIn(false);
   }, []);
@@ -5241,8 +5297,7 @@ export default function FleetMap() {
       const targetId = new URLSearchParams(window.location.search).get("vehicle");
       const match = targetId && located.find(v => v.id === targetId);
       if (match) {
-        map.panTo({ lat: match.lat, lng: match.lng });
-        map.setZoom(13);
+        map.setView({ lat: match.lat, lng: match.lng }, 13);
         setSearchedId(match.id);
         setSelectedVehicleId(match.id);
         setTimeout(() => setSearchedId(null), 4000);
@@ -5576,8 +5631,7 @@ export default function FleetMap() {
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
     if (ne.equals(sw)) {
-      map.panTo(ne);
-      map.setZoom(Math.min((map.getZoom() ?? 0) + 3, CLUSTER_MAX_ZOOM));
+      map.setView(ne, Math.min((map.getZoom() ?? 0) + 3, CLUSTER_MAX_ZOOM));
       return;
     }
 
@@ -6334,8 +6388,7 @@ export default function FleetMap() {
       // A building-sized box would zoom past anything useful.
       if (map.getZoom() > 17) map.setZoom(17);
     } else {
-      map.panTo({ lat: place.lat, lng: place.lng });
-      map.setZoom(16);
+      map.setView({ lat: place.lat, lng: place.lng }, 16);
     }
     placePinRef.current?.setMap(null);
     if (DomMarker) {
@@ -6373,8 +6426,7 @@ export default function FleetMap() {
     fittedCompanyRef.current = activeCompanyId;
     pendingFitRef.current = false;
 
-    map.panTo({ lat: v.lat, lng: v.lng });
-    map.setZoom(FOCUS_ZOOM);
+    map.setView({ lat: v.lat, lng: v.lng }, FOCUS_ZOOM);
     setFocusedId(v.id);           // isolate: every other marker goes away
     setSearchedId(v.id);          // reuse the search halo so the subject is obvious
     setSelectedVehicleId(v.id);   // and open its detail panel
@@ -6418,8 +6470,7 @@ export default function FleetMap() {
       fittedCompanyRef.current = activeCompanyId;   // claim the camera from the fleet fit
       pendingFitRef.current = false;
       const move = () => {
-        map.panTo({ lat: v.lat, lng: v.lng });
-        map.setZoom(RESTORE_ZOOM);
+        map.setView({ lat: v.lat, lng: v.lng }, RESTORE_ZOOM);
       };
       move();
       maps?.event.addListenerOnce(map, "idle", move);
@@ -6476,8 +6527,7 @@ export default function FleetMap() {
     revealMap();
     fittedCompanyRef.current = activeCompanyId;
     pendingFitRef.current = false;
-    map.panTo({ lat: v.lat, lng: v.lng });
-    map.setZoom(FOCUS_ZOOM);
+    map.setView({ lat: v.lat, lng: v.lng }, FOCUS_ZOOM);
     panClearOfWindows(map, { lat: v.lat, lng: v.lng });
     setSearchedId(v.id);
     setSelectedVehicleId(null);
@@ -6520,8 +6570,7 @@ export default function FleetMap() {
 
     fittedCompanyRef.current = activeCompanyId;
     pendingFitRef.current = false;
-    map.panTo({ lat: bridge.lat, lng: bridge.lng });
-    map.setZoom(BRIDGE_FOCUS_ZOOM);
+    map.setView({ lat: bridge.lat, lng: bridge.lng }, BRIDGE_FOCUS_ZOOM);
   }, [activeCompanyId, showBridges, revealMap]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -6879,8 +6928,11 @@ export default function FleetMap() {
 
     if (trackedSet.size === 0 && !inTransitOnly) { resetCamera(located); return; }
     if (located.length === 0) return;   // nothing to frame — leave the view alone
-    fitTo(located, { animate: true });
-  }, [inTransitOnly, trackedSet, mapReady, fitTo, resetCamera]);
+    // Picked units: framed whole and close (frameUnits). "In transit" alone
+    // is a group, framed as the status chips frame theirs.
+    if (trackedSet.size > 0) frameUnits(located);
+    else fitTo(located, { animate: true });
+  }, [inTransitOnly, trackedSet, mapReady, fitTo, frameUnits, resetCamera]);
 
   /**
    * A route drawn on a unit the selection now hides would be a line over an
