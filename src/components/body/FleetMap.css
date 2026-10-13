@@ -1108,11 +1108,17 @@ html[data-theme="light"] #root {
   white-space: nowrap;
 }
 /* Figure and qualifier, right-aligned as one group: the qualifier explains the
-   figure, so it travels with it rather than sitting under the label. */
+   figure, so it travels with it rather than sitting under the label.
+   Never cropped (operator, 2026-10-13: "the burn rate info should be as
+   complete as the snapshot ... it should never be cropped out"): where the row
+   is too narrow for both, the qualifier wraps under the figure, still
+   right-aligned, rather than ending in an ellipsis. */
 .vt-tile-fig {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: baseline;
-  gap: 7px;
+  gap: 0 7px;
   min-width: 0;
   text-align: right;
 }
@@ -1133,9 +1139,7 @@ html[data-theme="light"] #root {
   font-size: var(--vt-fs-label);
   color: var(--text-secondary);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* Progress bars */

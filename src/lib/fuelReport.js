@@ -223,6 +223,14 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
   const unrecordedL = gap == null ? null : Math.max(0, -gap);
 
   const distanceKm = trips.reduce((n, s) => n + s.distanceKm, 0);
+  // Every reading, moving or not ("mileage in all messages"): what the
+  // tracker's position covered, jitter under JITTER_M left out as in trips.
+  let allM = 0;
+  for (let i = 1, prev = rows.find(hasFix); i < rows.length; i += 1) {
+    if (!hasFix(rows[i]) || !prev || rows[i] === prev) continue;
+    const d = haversineM(prev, rows[i]);
+    if (d >= JITTER_M) { allM += d; prev = rows[i]; }
+  }
   const engineHours = engineMs(rows) / 3_600_000;
   const movingMs = trips.reduce((n, s) => n + s.durationMs, 0);
   const maxSpeedKmh = rows.reduce((m, p) => Math.max(m, Number(p.speedKmh) || 0), 0);
@@ -248,6 +256,7 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
       drainCount: drops.length,
       consumedL,
       distanceKm,
+      allDistanceKm: allM / 1000,
       engineHours,
       movingHours: movingMs / 3_600_000,
       parkingHours: parkings.reduce((n, s) => n + s.durationMs, 0) / 3_600_000,
@@ -269,7 +278,7 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
  * The chart's line, thinned to about `max` points by keeping each bucket's
  * first, lowest and highest reading — a drop or a filling inside a bucket
  * survives the thinning, which a plain stride would cut out.
- * Each point: {t, fuelL, speedKmh, mileageKm}.
+ * Each point: {t, fuelL, fuelSmoothL, speedKmh, mileageKm, altitudeM, extVoltageV, intVoltageV}.
  */
 export function chartSeries(pings, max = 1500) {
   const out = [];
@@ -287,8 +296,12 @@ export function chartSeries(pings, max = 1500) {
       fuelL: readsFuel(p.fuelLevelMl) ? p.fuelLevelMl / 1000 : null,
       speedKmh: Number.isFinite(p.speedKmh) ? p.speedKmh : null,
       mileageKm: km,
+      altitudeM: Number.isFinite(p.altitudeM) ? p.altitudeM : null,
+      extVoltageV: Number.isFinite(p.extVoltageV) ? p.extVoltageV : null,
+      intVoltageV: Number.isFinite(p.intVoltageV) ? p.intVoltageV : null,
     });
   }
+  smoothFuel(all);
   if (all.length <= max) return all;
   const per = Math.ceil(all.length / (max / 3));
   for (let i = 0; i < all.length; i += per) {
@@ -302,6 +315,38 @@ export function chartSeries(pings, max = 1500) {
     out.push(...[...keep].sort((a, b2) => a.t - b2.t));
   }
   return out;
+}
+
+/** Half the window the processed fuel level takes its median over. */
+export const SMOOTH_HALF_MS = 150_000;
+
+/**
+ * The processed fuel level, `fuelSmoothL`: each reading's median over the
+ * readings within SMOOTH_HALF_MS either side — Wialon's "processed fuel level".
+ * A median, not a mean: slosh on a rough road is spikes either way, and a
+ * median drops them where a mean smears them into the line; a filling or a
+ * drain is a step, and a median keeps a step where it is.
+ */
+export function smoothFuel(points, halfMs = SMOOTH_HALF_MS) {
+  let lo = 0;
+  let hi = 0;
+  const win = [];
+  for (let i = 0; i < points.length; i += 1) {
+    const t = points[i].t;
+    while (hi < points.length && points[hi].t <= t + halfMs) {
+      if (points[hi].fuelL != null) win.push(points[hi]);
+      hi += 1;
+    }
+    while (lo < i && points[lo].t < t - halfMs) {
+      if (points[lo].fuelL != null) win.splice(win.indexOf(points[lo]), 1);
+      lo += 1;
+    }
+    if (points[i].fuelL == null || !win.length) { points[i].fuelSmoothL = null; continue; }
+    const v = win.map((x) => x.fuelL).sort((a, b) => a - b);
+    const m = v.length >> 1;
+    points[i].fuelSmoothL = v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  }
+  return points;
 }
 
 /** "2h 05m", "45m", "0m". */

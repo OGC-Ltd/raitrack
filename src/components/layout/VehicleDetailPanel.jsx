@@ -39,6 +39,7 @@ import './VehicleHeader.css';
 // tab's filter row, the Safety timeline, EmptyNote.
 import './AlertsFeed.css';
 import './VehicleDetailPanel.css';
+import { displayPlate } from '../../lib/plate';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 // KSh per litre, for the cost estimate: EPRA's Nairobi pump price as the
@@ -327,11 +328,11 @@ function unitSummary({ vehicle, readings, place, usedL }) {
   let lead;
   if (!vehicle.online) {
     const ago = timeAgo(readings.lastReportedAt);
-    lead = `${vehicle.id} is offline${ago ? `, last reported ${ago}` : ''}${where}.`;
+    lead = `${displayPlate(vehicle)} is offline${ago ? `, last reported ${ago}` : ''}${where}.`;
   } else if ((vehicle.speed ?? 0) > 0) {
-    lead = `${vehicle.id} is moving at ${vehicle.speed} km/h${where}.`;
+    lead = `${displayPlate(vehicle)} is moving at ${vehicle.speed} km/h${where}.`;
   } else {
-    lead = `${vehicle.id} is stationary${where}${vehicle.engine === 'on' ? ' with the engine running' : ''}.`;
+    lead = `${displayPlate(vehicle)} is stationary${where}${vehicle.engine === 'on' ? ' with the engine running' : ''}.`;
   }
 
   const items = [];
@@ -534,7 +535,7 @@ async function buildVehicleReport({ orgId, vehicle, readings, today, runs, place
   const doc = createReport({
     companyName: companyName || 'Fleet',
     reportTitle: 'Vehicle Report',
-    subtitle: `${vehicle.id} · ${fmtDay(fleetDayKey())}`,
+    subtitle: `${displayPlate(vehicle)} · ${fmtDay(fleetDayKey())}`,
   });
   addSummaryCards(doc, [
     { label: 'Fuel level',   value: readings.fuelPct != null ? `${readings.fuelPct}%` : '—' },
@@ -726,7 +727,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
       <header className="vdp-header vh">
         <div className="vh-top">
           <h2 className="vh-name" title={vehicle.name && vehicle.name !== vehicle.id ? `${vehicle.id} · ${vehicle.name}` : vehicle.id}>
-            {vehicle.id}
+            {displayPlate(vehicle)}
           </h2>
           <div className="vh-tools">
             {canNav && (

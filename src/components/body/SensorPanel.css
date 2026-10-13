@@ -4095,6 +4095,16 @@
 .sp4-root--framed .sp4-kpi { padding: 6px 14px; box-shadow: none; }
 .sp4-root--framed .sp4-kpi-n { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .sp4-root--framed .sp4-kpi-l { font-size: 10px; }
+/* One card size across the figure strips (operator, 2026-10-13: "fix the stats
+   card to be of the same size as those in the logbook", for Fuel Report,
+   Weighbridges and Maintenance). The Logbook's card measures 140 by 60: its
+   140px floor and the room for a third line under the label. The figure and
+   label centre in that height where there is no third line. Desktop and
+   tablet; the phone strip shares the width out equally (rule above). */
+@media (min-width: 600px) {
+  .sp4-root--framed .sp4-kpi,
+  .frp-root .sp4-kpi { min-width: 140px; min-height: 60px; justify-content: center; }
+}
 
 /* ── Repairs: the opened job, no accent edge ─────────────────────────────────
  * Hallmark · component: repair job detail row · states: open (n/a otherwise)

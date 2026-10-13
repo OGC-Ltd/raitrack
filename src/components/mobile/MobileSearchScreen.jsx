@@ -25,6 +25,7 @@ import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import { ONLINE_COLORS } from "../../lib/vehicleMap";
+import { displayPlate } from "../../lib/plate";
 
 /* The five states deriveStatus produces, not the four the mock had: 'idling'
    was missing, so every unit burning fuel at a standstill rendered green and
@@ -169,7 +170,7 @@ function SearchContent() {
             >
               <span className="mobile-search__dot" style={{ background: color }} />
               <span className="mobile-search__result-info">
-                <span className="mobile-search__result-reg">{v.id}</span>
+                <span className="mobile-search__result-reg">{displayPlate(v)}</span>
                 <span className="mobile-search__result-driver">{under}</span>
               </span>
               <span

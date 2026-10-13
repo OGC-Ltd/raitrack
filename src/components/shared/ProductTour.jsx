@@ -12,12 +12,17 @@ import { authKeys, useAuth } from "../../context/AuthContext";
 import { recordTourSeen } from "../../api/account";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
-import { TOUR_VERSION, accountBehind, buildTourSteps, claimFirstRun, onTourRequest, tourDue, visibleMark } from "../../lib/productTour";
+import {
+  PAGE_TOURS, TOUR_VERSION, accountBehind, buildPageTourSteps, buildTourSteps, claimFirstRun, coveredItems,
+  hasNewItems, markCovered, markPageTourSeen, onTourRequest, pageTourSeen, tourDue, visibleMark,
+} from "../../lib/productTour";
 
 /** After the fleet has drawn, so the status cards show figures and not dashes;
  *  never longer than this, so a slow snapshot does not keep the tour away. */
 const FIRST_RUN_MAX_WAIT_MS = 6000;
 const FIRST_RUN_SETTLE_MS = 900;
+/** A page's own tour waits this long after the page opens, for its figures. */
+const PAGE_SETTLE_MS = 1500;
 
 export default function ProductTour() {
   const { user } = useAuth();
@@ -35,9 +40,57 @@ export default function ProductTour() {
 
   const tourRef = useRef(null);
 
-  const start = useCallback(() => {
+  const drive = useCallback((steps) => {
+    if (!steps.length) return;
+    const tour = driver({
+      steps,
+      popoverClass: "ft-tour",
+      showProgress: true,
+      progressText: "{{current}} of {{total}}",
+      nextBtnText: "Next",
+      prevBtnText: "Back",
+      doneBtnText: "Done",
+      stagePadding: 6,
+      stageRadius: 10,
+      overlayOpacity: 0.5,
+      smoothScroll: true,
+      // The highlighted control is shown, not live: a click on a sidebar item
+      // mid-tour would change the screen out from under the next step.
+      disableActiveInteraction: true,
+      // A stray click on the dimmed page must not end a first-timer's tour;
+      // the close button and Esc still do.
+      overlayClickBehavior: () => {},
+      // Covered as it is shown, so another page does not explain it again
+      // (lib/productTour, items already covered).
+      onHighlighted: (_el, step) => markCovered(live.current.user?.id, step?.key),
+      onDestroyed: () => { tourRef.current = null; },
+    });
+    tourRef.current = tour;
+    tour.drive();
+  }, []);
+
+  /** The tour of the page on screen, where it has one (lib/productTour PAGE_TOURS).
+   *  By itself it shows only what no tour has covered yet, and nothing at all
+   *  when that leaves only the introduction; from Manual, all of it. */
+  const startPage = useCallback((page, { replay = false } = {}) => {
+    if (tourRef.current?.isActive()) return;
+    if (live.current.overlayOpen) return;
+    const id = live.current.user?.id;
+    markPageTourSeen(page, id);
+    const steps = buildPageTourSteps(page, {
+      visible: (mark) => visibleMark(mark),
+      covered: replay ? new Set() : coveredItems(id),
+    });
+    if (replay || hasNewItems(steps)) drive(steps);
+  }, [drive]);
+
+  const start = useCallback(({ replay = false } = {}) => {
     if (tourRef.current?.isActive()) return;
     const c = live.current;
+    // Manual on a page with a tour of its own runs that page's (operator,
+    // 2026-10-13: "have the driver.js run on different pages"); on the map,
+    // or a page without one, the app's tour.
+    if (PAGE_TOURS[c.desktopActiveTab] && !c.overlayOpen) { startPage(c.desktopActiveTab, { replay }); return; }
     // Most of the tour is about the map, so it runs on the map — and over
     // nothing: the Account and User accounts pages open on top of the app.
     const moving = c.canMap && c.desktopActiveTab !== "fleet";
@@ -54,31 +107,11 @@ export default function ProductTour() {
         orgName: now.activeCompany?.name ?? "",
         multiOrg: (now.companies?.length ?? 0) > 1,
         visible: (mark) => visibleMark(mark),
+        covered: replay ? new Set() : coveredItems(now.user?.id),
       });
-      const tour = driver({
-        steps,
-        popoverClass: "ft-tour",
-        showProgress: true,
-        progressText: "{{current}} of {{total}}",
-        nextBtnText: "Next",
-        prevBtnText: "Back",
-        doneBtnText: "Done",
-        stagePadding: 6,
-        stageRadius: 10,
-        overlayOpacity: 0.5,
-        smoothScroll: true,
-        // The highlighted control is shown, not live: a click on a sidebar item
-        // mid-tour would change the screen out from under the next step.
-        disableActiveInteraction: true,
-        // A stray click on the dimmed map must not end a first-timer's tour;
-        // the close button and Esc still do.
-        overlayClickBehavior: () => {},
-        onDestroyed: () => { tourRef.current = null; },
-      });
-      tourRef.current = tour;
-      tour.drive();
+      drive(steps);
     }, moving ? 350 : 60);
-  }, []);
+  }, [drive, startPage]);
 
   // The tour version this person's account has been shown, from /auth/me:
   // null for never, undefined from a server that does not keep it.
@@ -117,8 +150,20 @@ export default function ProductTour() {
     if (user?.id && accountBehind(user.id, accountVersion)) tellAccount();
   }, [user?.id, accountVersion, tellAccount]);
 
+  // A page's own tour, the first time this person opens that page here. Not
+  // while the app's first tour is still due: that one comes first.
+  useEffect(() => {
+    const id = user?.id;
+    const page = desktopActiveTab;
+    if (!id || !PAGE_TOURS[page] || overlayOpen || pageTourSeen(page, id) || tourDue(id, accountVersion)) return undefined;
+    const t = setTimeout(() => {
+      if (live.current.desktopActiveTab === page) startPage(page);
+    }, PAGE_SETTLE_MS);
+    return () => clearTimeout(t);
+  }, [user?.id, desktopActiveTab, overlayOpen, accountVersion, startPage]);
+
   // Again, from the account menu.
-  useEffect(() => onTourRequest(start), [start]);
+  useEffect(() => onTourRequest(() => start({ replay: true })), [start]);
 
   // Signed out or unmounted mid-tour: take the overlay with it.
   useEffect(() => () => { tourRef.current?.destroy(); }, []);

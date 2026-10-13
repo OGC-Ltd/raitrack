@@ -25,7 +25,7 @@ const initialState = {
   tab: "graph",
   headerCollapsed: false,
   bg: { trip: true, parking: true, stop: true },
-  lines: { fuelL: true, speedKmh: false, mileageKm: false },
+  lines: { fuelL: true, fuelSmoothL: false, speedKmh: false, mileageKm: false, altitudeM: false, extVoltageV: false, intVoltageV: false },
   marks: { fill: true, drain: true, stop: true },
   // Session only (not in FUEL_REPORT_PREFS). Per organisation: whether the
   // operator has picked or run anything this session — until they have, the
@@ -69,11 +69,23 @@ const fuelReportSlice = createSlice({
     },
     tabChosen(state, { payload }) { state.tab = payload; },
     headerToggled(state) { state.headerCollapsed = !state.headerCollapsed; },
+    // Keyed by the DEFAULTS, not the saved copy: a viewer whose preferences
+    // were saved before a line existed can still switch it on.
     layerToggled(state, { payload: { group, key } }) {
-      if (state[group] && key in state[group]) state[group][key] = !state[group][key];
+      const base = initialState[group];
+      if (!base || typeof base !== "object" || !(key in base)) return;
+      state[group] = { ...base, ...state[group] };
+      state[group][key] = !state[group][key];
+    },
+    /** "All lines": every graph line on, or every one off. */
+    allLinesSet(state, { payload: on }) {
+      state.lines = Object.fromEntries(Object.keys(initialState.lines).map((k) => [k, Boolean(on)]));
     },
   },
 });
 
-export const { unitChosen, spanChosen, executed, autoPicked, tabChosen, headerToggled, layerToggled } = fuelReportSlice.actions;
+export const { unitChosen, spanChosen, executed, autoPicked, tabChosen, headerToggled, layerToggled, allLinesSet } = fuelReportSlice.actions;
+
+/** The graph lines with their defaults filled in under what was saved. */
+export const linesWithDefaults = (saved) => ({ ...initialState.lines, ...saved });
 export default fuelReportSlice.reducer;

@@ -18,6 +18,7 @@ import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
 import { burnAgainst, overWords } from "../../lib/vehicleDay";
+import { displayPlate } from "../../lib/plate";
 
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
@@ -448,7 +449,7 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
       {/* ── Header ── */}
       <div className="vt-header">
         <div className="vt-header-left">
-          <span className="vt-reg">{vehicle.id}</span>
+          <span className="vt-reg" title={vehicle.name || vehicle.id}>{displayPlate(vehicle)}</span>
           <span className="vt-driver-sub">{vehicle.driver}</span>
           {/* What this machine actually is. KASULU units take the name off
               RaiFactorySuite's machine register ("CASE PUMA", "Bull Dozer");

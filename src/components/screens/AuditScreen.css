@@ -33,6 +33,30 @@
   .aud-stat .frv-card__note { display: none; }
 }
 
+/* ── The bands stop at the gutter ────────────────────────────────────────────
+ * Operator, 2026-10-13: the false-alerts bar and the State row ran under the
+ * sidebar and out to the right edge as white slabs. The Sensor Monitor's rule
+ * (`.sp4-root--framed`, SensorPanel.css): the bands sit on the panel ground
+ * and each closing hairline is drawn only between the gutters, so the cards
+ * and the boxed table set the edges. Phones keep their full-bleed bands. */
+@media (min-width: 768px) {
+  .app--light .aud-root .sp4-table-sub,
+  .app--light .aud-root .sp4-filterbar,
+  .aud-root .aud-stats,
+  .aud-root .sp4-table-sub,
+  .aud-root .sp4-filterbar {
+    border-bottom: 0;
+    background-color: transparent;
+    background-image: linear-gradient(var(--sp4-line), var(--sp4-line));
+    background-repeat: no-repeat;
+    background-size: calc(100% - 2 * var(--sp4-gutter)) 1px;
+    background-position: center bottom;
+  }
+  .app--light .aud-root .sp4-filter-chip:not(.sp4-filter-chip--on) { background: var(--sp4-surface); }
+  .app--light .aud-root .sp4-filter-chip:not(.sp4-filter-chip--on):hover { background: var(--sp4-raised); }
+  .app--light .aud-root .sp4-filter-chip:not(.sp4-filter-chip--on):active { background: var(--sp4-line-hi); }
+}
+
 /* ── Units and their detail ──────────────────────────────────────────────
  * Hallmark · component: audit units table + unit detail · genre: modern-minimal
  * theme: sp4 + the Fuel report's --frv tokens and frv-card (preflight 2026-09-21)

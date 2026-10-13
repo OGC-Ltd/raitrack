@@ -23,6 +23,7 @@ import { useAppSelector, useAppActions, useCompanies } from "../../context/AppCo
 import { useCrossOrgUnits } from "../../hooks/useCrossOrgUnits";
 import { fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
 import "./UnitPicker.css";
+import { displayPlate } from "../../lib/plate";
 
 const MAX_SHOWN = 60;
 /** The theme tokens the floating list reads, copied from the box it belongs to. */
@@ -161,7 +162,7 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
   };
 
   return (
-    <div className="sp4-search-wrap upk" ref={wrapRef}>
+    <div data-tour="page-unit" className="sp4-search-wrap upk" ref={wrapRef}>
       <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -210,7 +211,7 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
                 onClick={() => pick(v)}
               >
                 <span className={`upk__dot${v.online ? " upk__dot--on" : ""}`} title={v.online ? "Online" : "Offline"} />
-                <span className="upk__plate">{v.id}</span>
+                <span className="upk__plate">{displayPlate(v)}</span>
                 <span className="upk__name">{rowLabel(v, prefix)}</span>
                 <span className="upk__type">{fleetTypeLabel(fleetType(v))}</span>
                 <span className="upk__check" aria-hidden="true">{v.vehicleId === value ? "✓" : ""}</span>

@@ -24,6 +24,7 @@ import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useAppActions } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import './MobileSearchTray.css';
+import { displayPlate } from "../../lib/plate";
 
 const norm = (s) => String(s ?? '').toLowerCase();
 
@@ -104,12 +105,15 @@ export default function MobileSearchTray({ open, onClose }) {
             key={v.id}
             className={`mst-pill${v.status === 'speeding' ? ' mst-pill--alert' : ''}`}
             onClick={() => handleSelect(v)}
+            // The plate alone can be shared: a truck's own tracker and its fuel
+            // unit or camera both read "KCC 386Z". The full name tells them apart.
+            title={v.name || v.id}
           >
             <span
               className="mst-pill-dot"
               style={{ background: v.online ? (v.status === 'speeding' ? '#f43f5e' : '#10b981') : '#94a3b8' }}
             />
-            {v.id}
+            {displayPlate(v)}
           </button>
         ))}
       </div>

@@ -1701,7 +1701,7 @@ export default function SensorPanel() {
           repeating it named the same thing twice in adjacent rows. The KPI
           row is the header's content now. */}
       <div className="sp4-header">
-        <div className="sp4-header-kpis">
+        <div data-tour="page-kpis" className="sp4-header-kpis">
           <div
             className="sp4-kpi sp4-kpi--fleet"
             title={
@@ -1914,7 +1914,7 @@ export default function SensorPanel() {
           )
         ) : (
           <>
-            <div className="sp4-tabs">
+            <div data-tour="page-tabs" className="sp4-tabs">
               {tabs.map(t => (
                 <button key={t.key} className={"sp4-tab" + (activeTab === t.key ? " sp4-tab--on" : "")} onClick={() => handleTabChange(t.key)}>
                   {t.label}

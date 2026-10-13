@@ -539,3 +539,32 @@
 @media (max-width: 767px) {
   .urv-map__top { flex-wrap: wrap; justify-content: flex-end; }
 }
+
+/* A saved review of a period still running, built a while ago (2026-10-13). */
+.urv-bar__old { color: var(--sp4-text-3); font-weight: 400; }
+
+/* ── The bands stop at the gutter ────────────────────────────────────────────
+ * Operator, 2026-10-13 ("on logbooks do the same", after Fuel Audit and Fuel
+ * Report): the KPI header, the filter bar and the review's bar ran under the
+ * sidebar and out to the right edge as slabs. The Sensor Monitor's rule
+ * (`.sp4-root--framed`, SensorPanel.css): the bands sit on the panel ground
+ * and each closing hairline is drawn only between the gutters. Phones keep
+ * their full-bleed bands. */
+@media (min-width: 768px) {
+  .app--light .urv-root .sp4-header,
+  .app--light .urv-root .sp4-filterbar,
+  .urv-root .sp4-header,
+  .urv-root .sp4-filterbar,
+  .urv-root .urv-bar {
+    border-bottom: 0;
+    background-color: transparent;
+    background-image: linear-gradient(var(--sp4-line), var(--sp4-line));
+    background-repeat: no-repeat;
+    background-size: calc(100% - 2 * var(--sp4-gutter)) 1px;
+    background-position: center bottom;
+  }
+  .app--light .urv-root .sp4-search,
+  .app--light .urv-root .sp4-date-input,
+  .app--light .urv-root .sp4-filterbar .sp4-filter-chip:not(.sp4-filter-chip--on) { background: var(--sp4-surface); }
+  .app--light .urv-root .sp4-filterbar .sp4-filter-chip:not(.sp4-filter-chip--on):hover { background: var(--sp4-raised); }
+}

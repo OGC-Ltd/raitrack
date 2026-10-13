@@ -48,7 +48,7 @@ import { TripsView, ParkingsView } from "./FuelReportSegments";
 import { watchTableLabels } from "../../lib/tableLabels";
 import { pickDefaultUnit } from "../../lib/fuelReportDefault";
 import {
-  unitChosen, spanChosen, executed, autoPicked, tabChosen, headerToggled, layerToggled,
+  unitChosen, spanChosen, executed, autoPicked, tabChosen, layerToggled, allLinesSet, linesWithDefaults,
 } from "../../store/fuelReportSlice";
 
 const H = 3_600_000;
@@ -98,10 +98,21 @@ const BACKGROUNDS = {
   parking: { label: "Parkings", color: "var(--frp-band-park)" },
   stop:    { label: "Stops",    color: "var(--frp-band-stop)" },
 };
+// The graph's lines, listed down its left side to switch on and off (operator,
+// 2026-10-13, ControlTech's list as the model). Litres on the left axis; speed
+// and mileage share the right one; altitude, metres in the thousands, has an
+// axis of its own, unlabelled, so its shape shows and the tooltip gives the
+// figure. The two supply voltages share a volts axis of their own the same way
+// (stored from 2026-10-13; an older day is filled from Wialon by the server).
+// `dp` is the tooltip's decimals.
 const LINES = {
-  fuelL:     { label: "Fuel level, L",    color: "#dc2626", axis: "fuel" },
-  speedKmh:  { label: "Speed, km/h",      color: "#2563eb", axis: "right" },
-  mileageKm: { label: "Mileage in trips, km", color: "#16a34a", axis: "right" },
+  extVoltageV: { label: "External battery voltage, V", color: "#ea580c", axis: "volt", dp: 2 },
+  intVoltageV: { label: "Internal battery voltage, V", color: "#0d9488", axis: "volt", dp: 2 },
+  fuelL:       { label: "Fuel level, L",           color: "#dc2626", axis: "fuel",  dp: 1 },
+  fuelSmoothL: { label: "Processed fuel level, L", color: "#9333ea", axis: "fuel",  dp: 1 },
+  mileageKm:   { label: "Mileage in trips, km",    color: "#16a34a", axis: "right", dp: 1 },
+  speedKmh:    { label: "Speed, km/h",             color: "#2563eb", axis: "right", dp: 0 },
+  altitudeM:   { label: "Altitude, m",             color: "#f59e0b", axis: "alt",   dp: 0 },
 };
 
 // The event marks, drawn once: green pump = filling, red pump = drain, the
@@ -284,16 +295,94 @@ function TrackMap({ pings, report, cursor, marks, unit }) {
 
 // ── chart ──────────────────────────────────────────────────────────────────
 
-function ChartTip({ active, payload }) {
+/** What the unit was doing at a moment, from the report's own segments. */
+const SEGMENT_WORD = { trip: "On a trip", parking: "Parked", stop: "Stopped" };
+
+/**
+ * The graph's hover card. One row a line: a short swatch of the line's colour,
+ * its name, and the figure with its unit. The colour is carried by the swatch
+ * only; the figures are ink, because the lines' own hues (amber, green) on the
+ * card read at under 3:1 as text. Litres first, then the rest under a hairline.
+ */
+function ChartTip({ active, payload, lines, segments }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
+  const seg = segments?.find((x) => p.t >= x.start && p.t <= x.end);
+  const rows = Object.entries(LINES).filter(([k]) => lines[k] && p[k] != null).map(([k, l]) => {
+    const [name, unit] = l.label.split(/,\s*/);
+    return { k, name, unit, color: l.color, value: fmtNum(p[k], l.dp), litres: l.axis === "fuel" };
+  });
+  const groups = [rows.filter((r) => r.litres), rows.filter((r) => !r.litres)].filter((g) => g.length);
   return (
-    <div className="frp-tip">
-      <b>{at(p.t)}</b>
-      {p.fuelL != null && <span style={{ color: LINES.fuelL.color }}>Fuel {fmtNum(p.fuelL, 1)} L</span>}
-      {p.speedKmh != null && <span style={{ color: LINES.speedKmh.color }}>Speed {fmtNum(p.speedKmh, 0)} km/h</span>}
-      <span style={{ color: LINES.mileageKm.color }}>Mileage {fmtNum(p.mileageKm, 1)} km</span>
+    <div className="frp-tip" role="status">
+      <div className="frp-tip__head">
+        <span className="frp-tip__when">{at(p.t)}</span>
+        {seg && <span className={`frp-tip__state frp-tip__state--${seg.kind}`}>{SEGMENT_WORD[seg.kind] ?? seg.kind}</span>}
+      </div>
+      {groups.length === 0
+        ? <p className="frp-tip__none">No line has a reading here.</p>
+        : groups.map((g, i) => (
+          <dl key={i} className="frp-tip__rows">
+            {g.map((r) => (
+              <div key={r.k} className="frp-tip__row">
+                <dt><i className="frp-tip__sw" style={{ background: r.color }} aria-hidden="true" />{r.name}</dt>
+                <dd>{r.value}<span className="frp-tip__unit">{r.unit}</span></dd>
+              </div>
+            ))}
+          </dl>
+        ))}
     </div>
+  );
+}
+
+/**
+ * The period's fuel in a few lines, under the line list (operator, 2026-10-13,
+ * ControlTech's side summary as the model). "Drained" is every fall the
+ * server recorded except those that ended on a dead probe, which the report
+ * shows as dropouts, not as fuel lost.
+ */
+function SideSummary({ report }) {
+  const st = report.stats;
+  const drains = report.drains.filter((d) => !d.probeDropout);
+  const drained = drains.reduce((n, d) => n + (Number(d.volumeL) || 0), 0);
+  const rows = [
+    ["Total drained", L(drained)],
+    ["Total drains", fmtNum(drains.length, 0)],
+    ["Total filled", L(st.filledL)],
+    ["Total fillings", fmtNum(st.fillingCount, 0)],
+    ["Consumed", L(st.consumedL)],
+    ["Total distance", `${fmtNum(st.allDistanceKm, 2)} km`],
+    ["Engine hours", durationLabel(st.engineHours * 3_600_000)],
+  ];
+  return (
+    <dl className="frp-side-sum">
+      {rows.map(([k, v]) => (
+        <div key={k} className="frp-side-sum__row"><dt>{k}</dt><dd>{v}</dd></div>
+      ))}
+    </dl>
+  );
+}
+
+function LineList({ lines, onToggle, onAll }) {
+  const keys = Object.keys(LINES);
+  const on = keys.filter((k) => lines[k]).length;
+  return (
+    <fieldset className="frp-lines">
+      <legend className="frp-lines__legend">Lines</legend>
+      <label className="frp-lines__row frp-lines__row--all">
+        <input type="checkbox" checked={on === keys.length}
+               ref={(el) => { if (el) el.indeterminate = on > 0 && on < keys.length; }}
+               onChange={() => onAll(on !== keys.length)} />
+        All lines
+      </label>
+      {keys.map((k) => (
+        <label key={k} className="frp-lines__row">
+          <input type="checkbox" checked={Boolean(lines[k])} onChange={() => onToggle(k)} />
+          <i className="frp-lines__swatch" style={{ background: LINES[k].color }} aria-hidden="true" />
+          {LINES[k].label}
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
@@ -301,13 +390,25 @@ function ChartTip({ active, payload }) {
 // speed/mileage axis (or a margin) on the right.
 const PLOT_LEFT = 42;
 const plotRight = (right) => (right ? 44 : 16);
-const WHEEL_MIN_MS = 5 * 60_000;    // the narrowest the wheel zooms: ~20 readings
+const WHEEL_MIN_MS = 5 * 60_000;    // the narrowest the graph zooms: ~20 readings
+/** Pixels of drag for one press of + or −. */
+const DRAG_STEP_PX = 80;
+/** One press of +: the view to this share of itself. */
+const STEP = 0.6;
 
 /**
- * The fuel graph. The mouse wheel (or a trackball, or a trackpad pinch) zooms
- * about the pointer, Shift + wheel or a sideways swipe pans, a drag pans the
- * zoomed graph, double-click or "Whole period" zooms back out — the vehicle
- * panel's chart, with the same view arithmetic (lib/chartView).
+ * The fuel graph (operator, 2026-10-13):
+ *
+ *   · press and drag RIGHT zooms in, as + does, and LEFT zooms out, as −
+ *     does — DRAG_STEP_PX of drag for each press, about the point pressed,
+ *     so the stretch under the pointer stays under it;
+ *   · the wheel (or a sideways swipe) moves back and forth along the period
+ *     at the same zoom; at either end, or at the whole period, the page keeps
+ *     the scroll, so the graph never traps it;
+ *   · Ctrl/⌘ + wheel (and a trackpad pinch, which arrives as one) zooms;
+ *   · double-click or "Whole period" zooms back out.
+ *
+ * View arithmetic as the vehicle panel's chart (lib/chartView).
  */
 function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   const right = lines.speedKmh || lines.mileageKm;
@@ -332,7 +433,9 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
     ? `${dayMon.format(t)} ${clock.format(t)}` : clock.format(t));
   // The level's range is taken from what is in view, so a zoom on a small
   // fall makes it big enough to read.
-  const fuelVals = shown.filter((p) => !zoom || inView(p.t)).map((p) => p.fuelL).filter((v) => v != null);
+  const fuelVals = shown.filter((p) => !zoom || inView(p.t))
+    .flatMap((p) => [lines.fuelL || !lines.fuelSmoothL ? p.fuelL : null, lines.fuelSmoothL ? p.fuelSmoothL : null])
+    .filter((v) => v != null);
   const fuelMax = fuelVals.length ? Math.max(...fuelVals) : 100;
   const fuelMin = fuelVals.length ? Math.min(...fuelVals) : 0;
   // Zoomed to the range the level covered, as ControlTech draws it: from 0 a
@@ -365,9 +468,12 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
       const hit = fracAt(e.clientX);
       if (!hit || !(day[1] > day[0])) return;
       const px = wheelPixels(e);
-      const next = Math.abs(px.x) > Math.abs(px.y)
-        ? panView(v, day, (px.x / hit.w) * (v[1] - v[0]))
-        : zoomView(v, day, v[0] + hit.f * (v[1] - v[0]), zoomFactor(px.y), WHEEL_MIN_MS);
+      const along = Math.abs(px.x) > Math.abs(px.y) ? px.x : px.y;
+      const next = e.ctrlKey || e.metaKey
+        ? zoomView(v, day, v[0] + hit.f * (v[1] - v[0]), zoomFactor(px.y), WHEEL_MIN_MS)
+        : panView(v, day, (along / hit.w) * (v[1] - v[0]));
+      // Nowhere to go (an end of the period, or the whole of it): the page
+      // keeps the scroll.
       if (!next) return;
       e.preventDefault();
       setZoom(isWholeDay(next, day) ? null : next);
@@ -377,21 +483,31 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A drag slides the zoomed graph along the period.
+  // Press and drag: right zooms in, left zooms out, about the point pressed.
+  // Measured from where the drag began, so going back the way it came
+  // returns to the view it started from.
   const drag = useRef(null);
   const onPointerDown = (e) => {
-    if (!zoom || e.button !== 0) return;
+    if (e.button !== 0) return;
     const hit = fracAt(e.clientX);
     if (!hit) return;
-    drag.current = { x: e.clientX, view: zoom, w: hit.w };
+    drag.current = { x: e.clientX, view, at: view[0] + hit.f * (view[1] - view[0]), moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e) => {
     const d = drag.current;
     if (!d) return;
-    const next = panView(d.view, full, -((e.clientX - d.x) / d.w) * (d.view[1] - d.view[0]));
-    if (next) setZoom(next);
+    const dx = e.clientX - d.x;
+    if (!d.moved && Math.abs(dx) < 4) return;   // a click, not a drag
+    d.moved = true;
+    const next = zoomView(d.view, full, d.at, STEP ** (dx / DRAG_STEP_PX), WHEEL_MIN_MS);
+    if (next) setZoom(isWholeDay(next, full) ? null : next);
+    else if (dx < 0) setZoom(null);
   };
-  const endDrag = () => { drag.current = null; };
+  const endDrag = (e) => {
+    if (drag.current) e?.currentTarget?.releasePointerCapture?.(e.pointerId);
+    drag.current = null;
+  };
   const step = (factor) => {
     const next = zoomView(view, full, (view[0] + view[1]) / 2, factor, WHEEL_MIN_MS);
     if (next) setZoom(isWholeDay(next, full) ? null : next);
@@ -400,25 +516,25 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   return (
     <div className="frp-chart">
       <div className="frp-zoom" role="group" aria-label="Graph zoom">
-        <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(0.6)}
-                aria-label="Zoom in" title="Zoom in — or roll the wheel over the graph">+</button>
-        <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(1 / 0.6)} disabled={!zoom}
-                aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(STEP)}
+                aria-label="Zoom in" title="Zoom in — or drag right across the graph">+</button>
+        <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(1 / STEP)} disabled={!zoom}
+                aria-label="Zoom out" title="Zoom out — or drag left across the graph">−</button>
         {zoom && (
           <button type="button" className="sp4-ghost-btn" onClick={() => setZoom(null)}
                   title="Show the whole period — or double-click the graph">Whole period</button>
         )}
         <span className="frp-zoom__hint">
-          {zoom ? `${at(view[0])} – ${at(view[1])} · drag to move` : "Scroll over the graph to zoom"}
+          {zoom ? `${at(view[0])} – ${at(view[1])} · ` : ""}
+          {zoom ? "Drag right to zoom in, left to zoom out · scroll to move" : "Drag right across the graph to zoom in"}
         </span>
       </div>
       <div
-        className={`frp-chart__plot${zoom ? " frp-chart__plot--zoomed" : ""}`}
+        className="frp-chart__plot"
         ref={boxRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
-        onPointerLeave={endDrag}
         onPointerCancel={endDrag}
         onDoubleClick={() => setZoom(null)}
       >
@@ -435,6 +551,8 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
             <YAxis yAxisId="fuel" domain={[yLo, yHi]} tick={{ fontSize: 10 }} width={42} allowDataOverflow
                    label={{ value: "Litres", angle: -90, position: "insideLeft", fontSize: 10, offset: 10 }} />
             <YAxis yAxisId="right" orientation="right" hide={!right} tick={{ fontSize: 10 }} width={right ? 40 : 0} />
+            <YAxis yAxisId="alt" orientation="right" hide domain={["dataMin - 20", "dataMax + 20"]} />
+            <YAxis yAxisId="volt" orientation="right" hide domain={[0, "dataMax + 2"]} />
             {Object.entries(BACKGROUNDS).flatMap(([kind, b]) => (bg[kind]
               ? report.segments.filter((s) => s.kind === kind && s.end >= view[0] && s.start <= view[1]).map((s) => (
                 <ReferenceArea key={`${kind}-${s.start}`} yAxisId="fuel"
@@ -443,7 +561,7 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
               ))
               : []))}
             {Object.entries(LINES).map(([key, l]) => lines[key] && (
-              <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={key === "fuelL" ? 1.6 : 1.2}
+              <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={l.axis === "fuel" ? 1.6 : 1.2}
                     isAnimationActive={false} connectNulls={false} />
             ))}
             {marks.stop && report.stops.filter((st) => inView(st.start)).map((st) => (
@@ -458,11 +576,56 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
               <ReferenceDot key={`d-${d.id}`} yAxisId="fuel" x={d.at} y={eventRow} ifOverflow="hidden"
                             shape={iconShape(ICON.drain, `${dropWord(d)} ${at(d.at)} · ${L(d.volumeL)}`)} />
             ))}
-            <Tooltip content={<ChartTip />} isAnimationActive={false} />
+            <Tooltip content={<ChartTip lines={lines} segments={report.segments} />} isAnimationActive={false}
+                     cursor={{ stroke: "var(--sp4-text-3)", strokeWidth: 1, strokeDasharray: "3 3" }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+/**
+ * The fuel summary under the graph: the period in one row, ControlTech's
+ * summary table as the model (operator, 2026-10-13: "below the graph we can
+ * add the fuel summary"). Consumption is per 100 km where the unit travelled
+ * and per engine hour where it worked standing, as on the figures above;
+ * "Possible theft" is ControlTech's "Stolen", in this app's word for it.
+ */
+function FuelSummary({ unit, stats: st }) {
+  const km = (v) => (v == null ? "—" : `${fmtNum(v, 2)} km`);
+  const hm = (h) => (h == null ? "—" : durationLabel(h * 3_600_000));
+  const consumedPer = st.lPer100Km != null
+    ? `${fmtNum(st.lPer100Km, 1)} L/100 km`
+    : st.lPerHour != null ? `${fmtNum(st.lPerHour, 1)} L/h` : "—";
+  const kmPerL = st.consumedL > 0 && st.distanceKm >= 1 ? `${fmtNum(st.distanceKm / st.consumedL, 2)} km` : "—";
+  const cols = [
+    ["Unit", unit?.name ?? unit?.id ?? "—"],
+    ["Mileage in trips", km(st.distanceKm)],
+    ["Mileage in all readings", km(st.allDistanceKm)],
+    ["Avg speed", st.avgSpeedKmh == null ? "—" : `${fmtNum(st.avgSpeedKmh, 0)} km/h`],
+    ["Max speed", `${fmtNum(st.maxSpeedKmh, 0)} km/h`],
+    ["Time in trips", hm(st.movingHours)],
+    ["Engine hours", hm(st.engineHours)],
+    ["Consumed", L(st.consumedL)],
+    ["Avg consumption", consumedPer],
+    ["Km per litre", kmPerL],
+    ["Initial fuel level", L(st.fuelStartL)],
+    ["Final fuel level", L(st.fuelEndL)],
+    ["Filled", L(st.filledL)],
+    ["Possible theft", L(st.theftL)],
+  ];
+  return (
+    <section className="frp-sum" aria-label="Fuel summary">
+      <dl className="frp-sum__tiles">
+        {cols.map(([h, v]) => (
+          <div key={h} className={`frp-sum__tile${h === "Unit" ? " frp-sum__tile--unit" : ""}`}>
+            <dt>{h}</dt>
+            <dd className={h === "Possible theft" && st.theftL > 0 ? "frp-sum__theft" : undefined}>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -578,23 +741,6 @@ async function runReport({ orgId, unit, from, to }, onProgress) {
 /** A preset's dates as of now — worked out on each visit, never stored. */
 const presetSpan = (id) => { const [a, b] = preset(id); return { from: localInput(a), to: localInput(b), id }; };
 
-/** The header's fold: a bare chevron — up folds the figures and filters away, down brings them back. */
-function FoldChevron({ collapsed, onToggle, className = "" }) {
-  // Says what it does in words: a still chevron beside "Hide filters" /
-  // "Show filters", turning with the state rather than pulsing at rest.
-  const what = collapsed ? "Show the figures and filters" : "Hide the figures and filters";
-  return (
-    <button type="button" className={`frp-fold ${className}`} aria-expanded={!collapsed}
-            onClick={onToggle} aria-label={what} title={what}>
-      <svg className="frp-fold__chev" width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M6 15l6-6 6 6" />
-      </svg>
-      <span className="frp-fold__l" aria-hidden="true">{collapsed ? "Show filters" : "Hide filters"}</span>
-    </button>
-  );
-}
-
 function Kpi({ n, label, tone, title }) {
   return (
     <div className={`sp4-kpi${tone ? ` sp4-kpi--${tone}` : ""}`} title={title}>
@@ -612,9 +758,10 @@ function UnitFuelReport() {
   // selection for the session, so the page comes back as it was left; the
   // layout for good, as this viewer's preference.
   const {
-    unitByOrg, presetId, span: keptSpan, request, tab, bg, lines, marks, headerCollapsed: collapsed,
+    unitByOrg, presetId, span: keptSpan, request, tab, bg, lines: savedLines, marks, 
     touched, autoPick,
   } = useSelector((st) => st.fuelReport);
+  const lines = useMemo(() => linesWithDefaults(savedLines), [savedLines]);
   const store = useStore();
   // Opening the page: the period preset last picked, as of today.
   const [defaultSpan] = useState(() => presetSpan(presetId));
@@ -628,7 +775,6 @@ function UnitFuelReport() {
   // merged one.
   const activeTab = tab === "events" ? "stats" : tab;
   const toggle = (group) => (key) => dispatch(layerToggled({ group, key }));
-  const toggleHeader = () => dispatch(headerToggled());
   const [cursorT, setCursorT] = useState(null);
   const rootRef = useRef(null);
   // Labels for the tables' phone card layout, as on the other screens.
@@ -774,12 +920,12 @@ function UnitFuelReport() {
 
   return (
     <div className="sp4-root frp-root frp-unit" ref={rootRef}>
-      {/* ── KPI strip and filter bar, which fold away to one line so the
-           graph and the map get the screen. ── */}
-      {!collapsed && (
-        <>
+      {/* ── KPI strip and filter bar. They used to fold away behind a "Hide
+           filters" button, removed on request (operator, 2026-10-13); the
+           Graph & map tab fits the screen with them shown. ── */}
+      <>
           <div className="sp4-header">
-            <div className="sp4-header-kpis">
+            <div data-tour="page-kpis" className="sp4-header-kpis">
               {/* The tank's balance, read left to right as the sum it is:
                   start + filled − possible theft − consumed = end. Each term
                   is rounded before consumed is derived, so it closes exactly. */}
@@ -811,24 +957,21 @@ function UnitFuelReport() {
                         aria-pressed={span.id === id} onClick={() => choose(id)}>{label}</button>
               ))}
             </div>
-            <div className="frp-range">
+            <div data-tour="page-range" className="frp-range">
               <WhenField label="From" value={span.from} max={span.to}
                          onChange={(v) => setSpan((s) => ({ ...s, from: v, id: null }))} />
               <span className="frp-range__dash" aria-hidden="true">–</span>
               <WhenField label="To" value={span.to} min={span.from}
                          onChange={(v) => setSpan((s) => ({ ...s, to: v, id: null }))} />
             </div>
-            <button type="button" className="sp4-submit-btn frp-run" onClick={execute} disabled={!canRun || state.status === "loading"}
+            <button data-tour="page-run" type="button" className="sp4-submit-btn frp-run" onClick={execute} disabled={!canRun || state.status === "loading"}
                     title={!unit ? "Choose a unit first" : tooLong ? `${MAX_DAYS} days at most` : "Build the report"}>
               {state.status === "loading" ? (state.total > 1 ? `Reading ${state.done}/${state.total}…` : "Reading…") : "Execute"}
             </button>
-            <FoldChevron collapsed={false} onToggle={toggleHeader} className="frp-fold--bar" />
           </div>
-        </>
-      )}
+      </>
 
       <div className="sp4-body frp-body">
-        {collapsed && !ready && <FoldChevron collapsed onToggle={toggleHeader} className="frp-fold--float" />}
         {!ready && (
           picking && untouched ? (
             <EmptyNote icon="ti-loader-2" tone="busy" title="Finding a Unit to Show">
@@ -862,7 +1005,7 @@ function UnitFuelReport() {
 
         {ready && (
           <>
-            <div className="sp4-tabs" role="tablist">
+            <div data-tour="page-tabs" className="sp4-tabs" role="tablist">
               {TABS.map((t) => (
                 <button key={t.key} type="button" role="tab" aria-selected={activeTab === t.key}
                         className={`sp4-tab${activeTab === t.key ? " sp4-tab--on" : ""}`} onClick={() => setTab(t.key)}>
@@ -870,7 +1013,6 @@ function UnitFuelReport() {
                   {tabCount[t.key] != null && <span className="sp4-tab-n">{tabCount[t.key]}</span>}
                 </button>
               ))}
-              {collapsed && <FoldChevron collapsed onToggle={toggleHeader} className="frp-fold--tabs" />}
             </div>
 
             <TableToolbar
@@ -887,7 +1029,15 @@ function UnitFuelReport() {
             />
 
             {activeTab === "graph" && (
-              <div className="frp-graphmap">
+              <div className={`frp-graphmap${ready.series.length ? "" : " frp-graphmap--empty"}`}>
+                {/* The lines and the period's fuel, down the left of graph and
+                    map, so all of it reads at a glance (operator, 2026-10-13). */}
+                {ready.series.length > 0 && (
+                  <aside className="frp-rail" aria-label="Graph lines and fuel summary">
+                    <LineList lines={lines} onToggle={toggle("lines")} onAll={(on) => dispatch(allLinesSet(on))} />
+                    <SideSummary report={r} />
+                  </aside>
+                )}
                 <TrackMap pings={ready.pings} report={r} cursor={cursor} marks={marks} unit={ready.unit} />
                 <div className="frp-graph">
                   <div className="sp4-filterbar frp-graph__bar">
@@ -898,16 +1048,6 @@ function UnitFuelReport() {
                                 className={`sp4-filter-chip frp-chip${bg[k] ? " sp4-filter-chip--on" : ""}`}
                                 onClick={() => toggle("bg")(k)}>
                           <i className="frp-swatch" style={{ background: b.color }} aria-hidden="true" />{b.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="sp4-filter-group">
-                      <span className="sp4-filter-label">Lines</span>
-                      {Object.entries(LINES).map(([k, l]) => (
-                        <button key={k} type="button" aria-pressed={lines[k]}
-                                className={`sp4-filter-chip frp-chip${lines[k] ? " sp4-filter-chip--on" : ""}`}
-                                onClick={() => toggle("lines")(k)}>
-                          <i className="frp-swatch frp-swatch--line" style={{ background: l.color }} aria-hidden="true" />{l.label}
                         </button>
                       ))}
                     </div>
@@ -929,6 +1069,7 @@ function UnitFuelReport() {
                       </EmptyNote>
                     : <FuelGraph series={ready.series} report={r} bg={bg} lines={lines} marks={marks} onCursor={setCursorT} spanMs={ready.to - ready.from} />}
                 </div>
+                {ready.series.length > 0 && <FuelSummary unit={ready.unit} stats={r.stats} />}
               </div>
             )}
 
@@ -976,7 +1117,7 @@ export default function FuelReportScreen() {
   };
   return (
     <div className="sp4-root frp-shell">
-      <div className="frp-modes" role="tablist" aria-label="Fuel report view">
+      <div data-tour="page-modes" className="frp-modes" role="tablist" aria-label="Fuel report view">
         {[["review", "Performance"], ["unit", "Vehicle analytics"]].map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={mode === k}
                   className={`frp-mode${mode === k ? " frp-mode--on" : ""}`} onClick={() => setMode(k)}>{label}</button>

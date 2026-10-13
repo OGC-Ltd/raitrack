@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  segmentTrack, edgeLevels, engineMs, buildFuelReport, chartSeries, durationLabel, PARKING_MS,
+  segmentTrack, edgeLevels, engineMs, buildFuelReport, chartSeries, durationLabel, PARKING_MS, smoothFuel,
 } from './fuelReport';
 
 const MIN = 60_000;
@@ -140,5 +140,20 @@ describe('the balance', () => {
     const r = buildFuelReport({ pings: track([[10, 'off', 50], [10, 'off', 80]]) });
     expect(r.stats.consumedL).toBe(0);
     expect(r.stats.unrecordedL).toBe(30);
+  });
+});
+
+describe("smoothFuel (processed fuel level)", () => {
+  const pts = (vals) => vals.map((v, i) => ({ t: i * 30_000, fuelL: v }));
+  it("drops a one-reading spike and keeps a step where it is", () => {
+    const out = smoothFuel(pts([100, 100, 100, 160, 100, 100, 100, 50, 50, 50, 50, 50]));
+    expect(out[3].fuelSmoothL).toBe(100);
+    expect(out[1].fuelSmoothL).toBe(100);
+    expect(out[11].fuelSmoothL).toBe(50);
+  });
+  it("leaves a reading with no level empty", () => {
+    const out = smoothFuel(pts([100, null, 100]));
+    expect(out[1].fuelSmoothL).toBeNull();
+    expect(out[0].fuelSmoothL).toBe(100);
   });
 });

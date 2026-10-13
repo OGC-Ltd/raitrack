@@ -424,7 +424,7 @@ export default function WeighbridgesScreen() {
             <WeighbridgeIcon size={13} />
             <span>Weighbridges</span>
           </li>
-          <li className="wb-crumbs__item wb-crumbs__item--views">
+          <li data-tour="wb-views" className="wb-crumbs__item wb-crumbs__item--views">
             {VIEWS.map(v => (
               <button
                 key={v.key}
@@ -456,7 +456,7 @@ export default function WeighbridgesScreen() {
           bridge before the centre filter narrows the grid, so switching bridge
           tabs never moves them. */}
       <div className="sp4-header">
-        <div className="sp4-header-kpis">
+        <div data-tour="page-kpis" className="sp4-header-kpis">
           <div
             className="sp4-kpi sp4-kpi--fleet"
             title="Tickets raised across all four bridges on the day being viewed. A ticket is one token — the lorry crossing empty and laden — not one trip over a scale."
@@ -486,7 +486,7 @@ export default function WeighbridgesScreen() {
       </div>
 
       {/* ── Filter bar ─────────────────────────────────────── */}
-      <div className="sp4-filterbar">
+      <div data-tour="wb-filters" className="sp4-filterbar">
         {view === "tickets" && (
         <div className="sp4-search-wrap">
           <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -579,7 +579,7 @@ export default function WeighbridgesScreen() {
           <WeighmentDetail row={selectedRow} day={from === to ? from : null} onClose={() => setSelected(null)} />
         ) : (
           <>
-            <div className="sp4-tabs">
+            <div data-tour="page-tabs" className="sp4-tabs">
               {centres.map(c => (
                 <button
                   key={c.code}
@@ -674,7 +674,7 @@ export default function WeighbridgesScreen() {
                 {/* The Drivers roster's card: one rounded frame holding the
                     scroller and the pager (WeighbridgesScreen.css). */}
                 <div className="wb-grid-card">
-                <div className="sp4-table-scroll sp4-keep-table wb-grid">
+                <div data-tour="page-table" className="sp4-table-scroll sp4-keep-table wb-grid">
                   {/* `sp4-probe-table` is not decoration — the panel's cell
                       padding, alignment and density rules are scoped to it, so
                       claiming the class is what makes this grid sit at the

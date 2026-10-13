@@ -34,6 +34,7 @@ import { fleetPrefix, withoutPrefix } from "../../lib/plateLabel";
 import { isConfirmedTheft, isTheftAlert } from "../../lib/fuelAlerts";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { displayPlate } from "../../lib/plate";
 
 /** Where the sidebar opens this as a window — the same line FuelAlertsMenu.css
  *  hides the map button on. */
@@ -305,7 +306,7 @@ Show this unit and open its incident`}
                 >
                   <span className={`fuel-alerts__dot${theft ? " fuel-alerts__dot--theft" : ""}`} aria-hidden="true" />
                   <span className="fuel-alerts__plate">
-                    <span className="fuel-alerts__plate-full">{v.id}</span>
+                    <span className="fuel-alerts__plate-full">{displayPlate(v)}</span>
                     <span className="fuel-alerts__plate-short">{withoutPrefix(v.id, prefix)}</span>
                   </span>
                   <span className="fuel-alerts__vol">{L(inc?.volumeMl) ?? "—"}</span>

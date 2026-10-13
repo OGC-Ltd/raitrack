@@ -304,7 +304,7 @@ export default function AppHeader() {
               {can('user:create') && (
                 <button className="app-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" />
-                  User accounts
+                  Users
                 </button>
               )}
               {/* The Manual: the first-time tour, again (lib/productTour). */}

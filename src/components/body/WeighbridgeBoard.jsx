@@ -666,7 +666,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
   const fewSites = sites.length <= 2;
   const outstandingPanels = (
     <>
-      <section className="wbb-panel wbb-road-panel">
+      <section data-tour="wb-road" className="wbb-panel wbb-road-panel">
         {/* The total is the headline: how many are out right now. The split by
             kind sits under it, naming only the kinds there are. */}
         <h4 className="wbb-panel__h">
@@ -741,7 +741,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
           held to the fixed mark: loaded at a yard and not weighed at the
           factory after it. The header reads "≥" because it is the shortest
           of these waits. */}
-      <section className="wbb-panel">
+      <section data-tour="wb-late" className="wbb-panel">
         <h4 className="wbb-panel__h">
           Out Longer Than a Run Takes
           <span className={"wbb-panel__fig" + (overdue.length ? " wbb-panel__fig--late" : "")}>
@@ -781,7 +781,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
         )}
       </section>
 
-      <section className="wbb-panel">
+      <section data-tour="wb-feed" className="wbb-panel">
         <h4 className="wbb-panel__h">
           Live Activity
           <span className="wbb-panel__n">{board.activityTotal}</span>
@@ -889,7 +889,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
         />
       </div>
 
-      <div className="wbb-grid">
+      <div data-tour="wb-sites" className="wbb-grid">
         {/* ── Every bridge, its own card ───────────────────────────────── */}
         <div className={"wbb-sites" + (fewSites ? " wbb-sites--few" : "")}>
           {sites.map(s => (

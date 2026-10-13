@@ -35,6 +35,7 @@ import { useApiData } from "../../hooks/useApiData";
 import { decideAlert, fetchAlertHistory, fetchAlerts, markAlertsRead, markAllAlertsRead } from "../../api/alerts";
 import { ALERT_SUMMARY_KEY } from "../../hooks/useAlertSummary";
 import { hushFuelAlarm, useFuelAlarm } from "../../hooks/useFuelAlarm";
+import { plateIn } from "../../lib/plate";
 import { settleLimited } from "../../lib/settleLimited";
 import {
   KINDS, OVER_BY, PERIODS, READS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
@@ -446,7 +447,7 @@ function BulkPanel({ alerts, start, failed, orgName, onRemove, onClose, onFinish
           return (
             <li key={k} className={"alr-bulk-item" + (failed.has(k) ? " is-failed" : "") + (!pick ? " is-left" : "")}>
               <span className="alr-bulk-unit">
-                <span className="sp4-reg">{a.plate}</span>
+                <span className="sp4-reg" title={a.vehicleName || a.plate}>{plateIn(a.plate, a.vehicleName) ?? a.plate}</span>
                 <span className="alr-org">{orgName(a)}</span>
               </span>
               <span className="alr-bulk-what">
@@ -895,7 +896,7 @@ export default function AlertsScreen() {
       )}
 
       {/* Where the period stands, for the organisations and kind picked. */}
-      <div className="aud-stats alr-stats">
+      <div data-tour="alerts-stats" className="aud-stats alr-stats">
         <StatCard title="Open" n={nStatus("open")} of={total} color="var(--frv-s2)" loading={first.loading}
                   note="Waiting for somebody to escalate or de-escalate them." />
         <StatCard title="Escalated" n={nStatus("escalated")} of={total} color="var(--frv-crit)" loading={first.loading}
@@ -1052,7 +1053,7 @@ export default function AlertsScreen() {
         )}
 
         {rows.length > 0 && (
-          <div className={"sp4-table-scroll aud-units alr-table" + (first.stale ? " alr-table--stale" : "")}>
+          <div data-tour="page-table" className={"sp4-table-scroll aud-units alr-table" + (first.stale ? " alr-table--stale" : "")}>
             <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
               <thead>
                 <tr>
@@ -1108,7 +1109,7 @@ export default function AlertsScreen() {
                             )}
                             <span>
                               {!a.read && <span className="alr-unread-dot" role="img" aria-label="Unread" title="Unread" />}
-                              <span className="sp4-reg">{a.plate}</span>
+                              <span className="sp4-reg" title={a.vehicleName || a.plate}>{plateIn(a.plate, a.vehicleName) ?? a.plate}</span>
                               <span className="alr-org">{shortName(org)}</span>
                               {/* Reported for a fuel probe repair: the alert still
                                   comes (operator, 2026-10-13), marked so the reader

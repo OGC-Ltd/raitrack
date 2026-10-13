@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { accountBehind, buildTourSteps, claimFirstRun, esc, tourDue, tourSeen } from "./productTour";
+import { PAGE_TOURS, accountBehind, buildPageTourSteps, buildTourSteps, claimFirstRun, coveredItems, esc, hasNewItems, markCovered, markPageTourSeen, pageTourSeen, tourDue, tourSeen } from "./productTour";
 
 const store = new Map();
 vi.stubGlobal("localStorage", {
@@ -122,5 +122,74 @@ describe("accountBehind", () => {
     expect(accountBehind("u1", null)).toBe(false);
     claimFirstRun("u1", undefined);
     expect(accountBehind("u1", undefined)).toBe(false);
+  });
+});
+
+describe("page tours", () => {
+  const on = (...marks) => (m) => (marks.includes(m) ? { mark: m } : null);
+
+  it("walks the parts of the page that are on screen, then points at the Manual", () => {
+    const steps = buildPageTourSteps("alerts", { visible: on("alerts-stats", "page-table", "account") });
+    expect(steps.map((x) => x.popover.title)).toEqual(["Alerts", "Where Things Stand", "Decide", "The Manual"]);
+    expect(steps[0].element).toBeUndefined();
+    expect(steps[1].element).toEqual({ mark: "alerts-stats" });
+  });
+
+  it("words a section by what it shows, where two fleets show different things", () => {
+    const block = (text) => (m) => (m === "an-coverage" ? { textContent: text } : null);
+    const title = (text) => buildPageTourSteps("analytics", { visible: block(text) })[1].popover.title;
+    expect(title("Fleet coverage 594 FLEET Reporting now 154")).toBe("Fleet Coverage");
+    expect(title("Operational today 22 WORKING")).toBe("Operational Today");
+  });
+
+  it("has nothing for a page without a tour", () => {
+    expect(buildPageTourSteps("fleet", { visible: on("account") })).toEqual([]);
+  });
+
+  it("keeps every page's copy free of em dashes, and titles in Title Case", () => {
+    for (const t of Object.values(PAGE_TOURS)) {
+      for (const [, title, text, alt] of t.steps) {
+        if (alt?.description) expect(alt.description).not.toMatch(/—/);
+        expect(text).not.toMatch(/—/);
+        expect(title.split(" ").filter((w) => !["a", "and", "or", "the", "of", "at", "on", "per", "to", "by"].includes(w)).every((w) => /^[A-Z]/.test(w))).toBe(true);
+      }
+    }
+  });
+
+  it("never covers an item twice: a control another page explained is skipped", () => {
+    const vis = on("page-unit", "page-range", "page-run", "page-kpis", "logbook-map", "account");
+    const first = buildPageTourSteps("fuelReport", { visible: vis });
+    expect(first.map((x) => x.key)).toEqual(["fuelReport:intro", "unit-picker", "period", "run", "fuelReport:page-kpis", "manual"]);
+    // Shown on the Fuel Report; the Logbook then has only its own parts left.
+    const covered = new Set(first.map((x) => x.key));
+    const next = buildPageTourSteps("usageReview", { visible: vis, covered });
+    expect(next.map((x) => x.key)).toEqual(["usageReview:intro", "usageReview:page-kpis", "usageReview:logbook-map"]);
+  });
+
+  it("has nothing new to show once every part is covered", () => {
+    const vis = on("page-pager", "account");
+    const covered = new Set(["pager", "manual"]);
+    expect(hasNewItems(buildPageTourSteps("drivers", { visible: vis, covered }))).toBe(false);
+    expect(hasNewItems(buildPageTourSteps("drivers", { visible: vis }))).toBe(true);
+  });
+
+  it("skips the app tour's Manual step once a page tour has covered it", () => {
+    const t = buildTourSteps({ visible: DESKTOP, covered: new Set(["manual"]) }).map((x) => x.popover.title);
+    expect(t).not.toContain("Your Account");
+  });
+
+  it("records covered items per person", () => {
+    store.clear();
+    markCovered("u1", "pager");
+    expect(coveredItems("u1").has("pager")).toBe(true);
+    expect(coveredItems("u2").has("pager")).toBe(false);
+  });
+
+  it("remembers each page apart, per person", () => {
+    store.clear();
+    markPageTourSeen("alerts", "u1");
+    expect(pageTourSeen("alerts", "u1")).toBe(true);
+    expect(pageTourSeen("drivers", "u1")).toBe(false);
+    expect(pageTourSeen("alerts", "u2")).toBe(false);
   });
 });

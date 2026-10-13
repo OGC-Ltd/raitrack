@@ -59,6 +59,7 @@ import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import "./UnitsMenu.css";
+import { displayPlate } from "../../lib/plate";
 
 /* ── header glyphs ──────────────────────────────────────────────────────────
  * Drawn at the app's 1.9 stroke, sized to the 12px header row. Each is
@@ -587,7 +588,7 @@ export default function UnitsMenu({
                     />
 
                     <span className="units-menu__plate" role="cell" title={v.name || v.id}>
-                      <span className="units-menu__plate-text">{shortPlate(v.id)}</span>
+                      <span className="units-menu__plate-text">{shortPlate(displayPlate(v))}</span>
                       {/* Reported for a fuel probe repair. Its alerts still come
                           (operator, 2026-10-13: "do not put a unit on hold"). */}
                       {v.probeHold && (
