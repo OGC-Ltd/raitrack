@@ -11,8 +11,13 @@ import { apiFetch, apiFetchBlob } from '../services/api'
 
 const base = (orgId, vehicleId) => `/api/v1/organisations/${orgId}/vehicles/${vehicleId}/usage-review`
 
-export async function getUsageReview({ orgId, vehicleId, from, to, fresh = false, signal }) {
-  const q = new URLSearchParams({ from, to, ...(fresh ? { fresh: '1' } : {}) })
+/**
+ * `cached`: only what is already built or building — `{ status: "none" }`
+ * otherwise, and never a build started. A saved review of a period still open
+ * comes back `outdated: true`.
+ */
+export async function getUsageReview({ orgId, vehicleId, from, to, fresh = false, cached = false, signal }) {
+  const q = new URLSearchParams({ from, to, ...(fresh ? { fresh: '1' } : {}), ...(cached && !fresh ? { cached: '1' } : {}) })
   const res = await apiFetch(`${base(orgId, vehicleId)}?${q}`, { signal })
   return res.data
 }

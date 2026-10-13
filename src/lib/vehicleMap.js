@@ -5,6 +5,7 @@
 // so a live update grades the vehicle the same way the snapshot did.
 
 import { isTheftIncident } from './fuelAlerts'
+import { plateIn } from './plate';
 
 /**
  * The limit to use when the server did not send one.
@@ -1043,6 +1044,9 @@ export function mapSnapshotVehicle(v) {
   const identity = { id: v.plate ?? v.vehicleId, name: v.name ?? null, vehicleType: v.vehicleType ?? 'TRUCK' }
   return {
     id:            v.plate ?? v.vehicleId,
+    // The registration plate inside the name, for display (lib/plate):
+    // "KCC 386Z" for "CPO - Menengai - KCC 386Z - FMB140"; null with none.
+    regPlate:      plateIn(v.plate, v.name),
     vehicleId:     v.vehicleId,
     // The provider's descriptive name ("125F Bell 38 KHMA 858U", "Faw Prime
     // mover CA4181"). Carried because it is the only place the MACHINE is

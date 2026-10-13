@@ -160,7 +160,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
   return (
     <div className="sp4-root frp-root fpr-root">
       <div className="sp4-header">
-        <div className="sp4-header-kpis">
+        <div data-tour="fpr-kpis" className="sp4-header-kpis">
           <Kpi n={t ? litres(t.litres, { short: true }) : dot} label="Put in" tone="fleet"
                title={`Litres the fuel sensors saw go in over ${review?.days ?? "the"} days`} />
           <Kpi n={t ? litres(t.perMonth, { short: true }) : dot} label="Typical month" tone="stat"
@@ -173,7 +173,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
         </div>
       </div>
 
-      <div className="sp4-filterbar frp-filterbar">
+      <div data-tour="fpr-period" className="sp4-filterbar frp-filterbar">
         <div className="sp4-filter-group frp-period" role="group" aria-label="Period">
           {PRESETS.map(([n, label]) => (
             <button key={n} type="button" className={`sp4-filter-chip${span.id === n ? " sp4-filter-chip--on" : ""}`}
@@ -244,23 +244,23 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
             <section className="fpr-sec" aria-labelledby="fpr-where">
               <h3 className="fpr-sec__h" id="fpr-where">Where the Fuel Goes</h3>
               <div className="fpr-strip">
-                <section className="fpr-panel fpr-panel--months">
+                <section data-tour="fpr-perday" className="fpr-panel fpr-panel--months">
                   <h4 className="fpr-panel__t">Litres Put In per Day</h4>
                   <MonthColumns months={review.months} />
                 </section>
-                <section className="fpr-panel">
+                <section data-tour="fpr-share" className="fpr-panel">
                   <h4 className="fpr-panel__t">Share of All Fuel</h4>
                   <Bars format={(v) => `${(v * 100).toFixed(1)}%`} tone="fleet"
                         rows={[...read.topGroups.map((g) => ({ label: g.group, value: g.share })),
                                ...(review.groups.length > 5 ? [{ label: "All other equipment", value: 1 - read.topShare, tone: "muted" }] : [])]} />
                 </section>
-                <section className="fpr-panel">
+                <section data-tour="fpr-above" className="fpr-panel">
                   <h4 className="fpr-panel__t">Litres Above Standard</h4>
                   <Bars format={(v) => litres(v, { short: true })} tone="crit"
                         rows={[...review.groups].filter((g) => g.excessL > 0).sort((a, b) => b.excessL - a.excessL).slice(0, 6)
                           .map((g) => ({ label: g.group, value: g.excessL }))} />
                 </section>
-                <section className="fpr-panel">
+                <section data-tour="fpr-refills" className="fpr-panel">
                   <h4 className="fpr-panel__t">Refill Records <span>{read.recordsTotal.toLocaleString("en-KE")}</span></h4>
                   <Bars format={(v) => `${Math.round((v / Math.max(1, read.recordsTotal)) * 100)}%`} tone="fleet"
                         rows={[
@@ -276,7 +276,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
             <section className="fpr-sec" aria-labelledby="fpr-act">
               <h3 className="fpr-sec__h" id="fpr-act">What to Act On</h3>
               <div className="fpr-act">
-                <div className="fpr-act__main">
+                <div data-tour="fpr-attention" className="fpr-act__main">
                   <h4 className="fpr-panel__t">
                     Units Needing Attention
                     {read.attention.length > 0 && <span>{read.attention.length} at 10% or more over</span>}
@@ -309,7 +309,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                   ) : <p className="fpr-quiet">No unit is 10% or more over standard.</p>}
                 </div>
 
-                <div className="fpr-act__side">
+                <div data-tour="fpr-benchmark" className="fpr-act__side">
                   <h4 className="fpr-panel__t">Benchmark Performers</h4>
                   {read.benchmarks.length ? (
                     <dl className="fpr-bench">
@@ -329,7 +329,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
               </div>
 
               {read.actions.length > 0 && (
-                <div className="fpr-todo">
+                <div data-tour="fpr-todo" className="fpr-todo">
                   <h4 className="fpr-panel__t">What to Do <span>about {litres(read.excessPerMonth, { short: true })} a month goes in above standard</span></h4>
                   <ol>{read.actions.map((a) => <li key={a}>{a}</li>)}</ol>
                   {read.meterFixes.length > 0 && (
@@ -339,7 +339,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
               )}
             </section>
 
-            <section className="fpr-sec" aria-labelledby="fpr-each">
+            <section data-tour="fpr-each" className="fpr-sec" aria-labelledby="fpr-each">
               <h3 className="fpr-sec__h" id="fpr-each">How Each Unit Compares with Its Standard</h3>
               <div className="fpr-legend">
                 <span><i className="fpr-sw fpr-sw--over" />10% or more above</span>

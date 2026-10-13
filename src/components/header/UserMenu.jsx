@@ -131,7 +131,7 @@ export default function UserMenu() {
               role="menuitem"
               onClick={() => { setOpen(false); setUserAdminOpen(true); }}
             >
-              User accounts
+              Users
             </button>
           )}
 

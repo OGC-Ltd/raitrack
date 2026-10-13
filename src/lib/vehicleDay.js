@@ -54,6 +54,9 @@ export function decodeColumns(d) {
       engineOn: eng == null ? null : eng === 1,
       fuelLevelMl: d.fuelMl?.[i] ?? null,
       engineHoursMeter: d.hrs?.[i] ?? null,
+      altitudeM: d.alt?.[i] ?? null,
+      extVoltageV: d.vext?.[i] ?? null,
+      intVoltageV: d.vint?.[i] ?? null,
       // Only for an org whose limit depends on place (Kasulu: 60 in the
       // factory, 100 on the roads); null means the unit's one limit applies.
       limitKmh: d.lim?.[i] ?? null,

@@ -274,7 +274,7 @@ export default function MaintenancePage({ vehicles = [], selectedId, onSelectVeh
         </div>
 
         {/* Filters */}
-        <div className="maint-filters">
+        <div data-tour="page-filters" className="maint-filters">
           <FilterChip active={statusFilter === 'all'} onClick={() => updateFilter(() => setStatusFilter('all'))} label={`All (${rows.length})`} />
           {hasReadings && READING_FILTERS
             .filter(f => !f.hideWhenZero || filterCounts[f.key] > 0)
@@ -307,7 +307,7 @@ export default function MaintenancePage({ vehicles = [], selectedId, onSelectVeh
             the RIGHT (master-detail): click a row on the left, both statements
             on the right update immediately. */}
         <div className="maint-bottom-row">
-          <div className="maint-grid-card">
+          <div data-tour="page-table" className="maint-grid-card">
             <div className="maint-grid-scroll">
               <table className="maint-grid">
                 <thead>

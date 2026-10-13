@@ -54,7 +54,7 @@ export default function FuelStandardCard({ companyId, days, to, windowLabel, onO
   const best = read.benchmarks.slice(0, 4);
 
   return (
-    <div className="an-grid">
+    <div data-tour="an-standard" className="an-grid">
     <div className="an-card an-card--wide fsc">
       <div className="an-card__head">
         <span className="an-card__title">Fuel Against Standard</span>

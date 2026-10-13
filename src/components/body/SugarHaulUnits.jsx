@@ -220,7 +220,7 @@ export default function SugarHaulUnits({ hauls, loading }) {
   );
 
   return (
-    <div className="an-card an-card--wide an-fleet">
+    <div data-tour="an-hauls" className="an-card an-card--wide an-fleet">
       <div className="an-card__head">
         <span className="an-card__title">
           Units Ferrying Sugar{origin ? ` from ${origin}` : ""}

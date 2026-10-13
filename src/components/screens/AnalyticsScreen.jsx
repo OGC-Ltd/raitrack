@@ -1435,7 +1435,7 @@ export default function AnalyticsScreen() {
   return (
     <div className="analytics-page">
       <div className="analytics-page__inner">
-        <div className="an-head an-head--bare">
+        <div data-tour="page-filters" className="an-head an-head--bare">
           <AnalyticsFilterBar
             filter={filter}
             onChange={setFilter}
@@ -1509,7 +1509,7 @@ export default function AnalyticsScreen() {
             >
               {/* PLANT FLEET TOP ROW */}
               {isPlantFleet && (
-                <div className="an-top">
+                <div data-tour="an-summary" className="an-top">
                   <div className="an-card an-distance">
                     <div className="an-card__head">
                       <span className="an-card__title">
@@ -1607,7 +1607,7 @@ export default function AnalyticsScreen() {
                     </div>
                   </div>
 
-                  <div className="an-kpis">
+                  <div data-tour="page-kpis" className="an-kpis">
                     <StatCard
                       label="Distance covered"
                       value={fmtOrDash(
@@ -1722,7 +1722,7 @@ export default function AnalyticsScreen() {
                 explicit hint, instead of vanishing.
               */}
               {!isPlantFleet && (
-                  <div className="an-top">
+                  <div data-tour="an-summary" className="an-top">
                     <div className="an-card an-distance">
                       <div className="an-card__head">
                         <span className="an-card__title">
@@ -1791,7 +1791,7 @@ export default function AnalyticsScreen() {
                       </div>
                     </div>
 
-                    <div className="an-kpis">
+                    <div data-tour="page-kpis" className="an-kpis">
                       <StatCard
                         label="Completed trips"
                         value={fmt(
@@ -1872,7 +1872,7 @@ export default function AnalyticsScreen() {
               {/* TODAY ON THE GROUND */}
               {ops && (
                 <>
-                  <div className="an-today an-card an-card--wide">
+                  <div data-tour="an-today" className="an-today an-card an-card--wide">
                     <div className="an-card__head">
                       <span className="an-card__title">
                         Today on the ground
@@ -1918,6 +1918,7 @@ export default function AnalyticsScreen() {
 
                     <div className="an-today__grid">
                       <OpsBlock
+                        tour="an-mix"
                         accent="var(--chart-1)"
                         chartOnly
                         title="Fleet composition"
@@ -1945,6 +1946,7 @@ export default function AnalyticsScreen() {
 
                       {showFleetDonut && (
                         <OpsBlock
+                          tour="an-coverage"
                           accent="var(--chart-2)"
                           chartOnly
                           title={
@@ -1982,6 +1984,7 @@ export default function AnalyticsScreen() {
                         was also changed to.
                       */}
                       <OpsBlock
+                        tour="an-sensors"
                         accent="var(--chart-3)"
                         chartOnly
                         className="an-ops--gauge"
@@ -2012,6 +2015,7 @@ export default function AnalyticsScreen() {
                       */}
                       {!isPlantFleet && gateDeliveries && gateTractorFleet > 0 && (
                         <OpsBlock
+                          tour="an-early"
                           accent="var(--dawn-2)"
                           label="Tractors dispatched early"
                           value={fmt(
@@ -2056,6 +2060,7 @@ export default function AnalyticsScreen() {
                           runs and keeps its card. */}
                       {!isPlantFleet && gateDeliveries && (
                         <OpsBlock
+                          tour="an-trucks"
                           accent="var(--chart-4)"
                           label="Trucks dispatched"
                           value={fmt(
@@ -2171,6 +2176,7 @@ export default function AnalyticsScreen() {
                           radar over six engine-hour bands. */}
                       {showHoursRun && (
                         <OpsBlock
+                          tour="an-hours"
                           accent="var(--chart-5)"
                           className="an-ops--radar"
                           label="Hours run today"
@@ -2206,7 +2212,7 @@ export default function AnalyticsScreen() {
                         the stylesheet. The row itself goes only when BOTH have
                         nothing, rather than leaving an empty grid behind. */}
                     {isPlantFleet && (show("rates") || show("perHour")) && (
-                      <div className="an-fuelrow">
+                      <div data-tour="an-fuelrow" className="an-fuelrow">
                         {show("rates") && (
                           <FuelRateChart
                             series={fuelRates}
@@ -2253,7 +2259,7 @@ export default function AnalyticsScreen() {
                       well as the weight. See WEIGHBRIDGE_FLEETS above.
                     */}
                     {!isPlantFleet && (show("rates") || show("tonnage")) && (
-                      <div className="an-fuelrow">
+                      <div data-tour="an-haulrow" className="an-fuelrow">
                         {show("rates") && (
                           <FuelRateChart
                             series={fuelRates}
@@ -2316,6 +2322,7 @@ export default function AnalyticsScreen() {
                   // everything else so the withheld note can name it.
                   
                   <Card
+                    tour="an-fuelcost"
                     title="Fuel Consumption &amp; Cost"
                     hint={`${fmt(
                       fuelTotals.litresFilled,
@@ -2524,6 +2531,7 @@ export default function AnalyticsScreen() {
                     drawing. */}
                 {!isPlantFleet && show("daily") && (
                   <Card
+                    tour="an-daily"
                     title="Daily Activity"
                     hint={`${totals.activeDays ?? 0} of ${days} days active`}
                   >
@@ -2603,6 +2611,7 @@ export default function AnalyticsScreen() {
                     loading state. */}
                 {isPlantFleet && show("daily") && (
                     <Card
+                      tour="an-daily"
                       title="Daily Activity"
                       hint={
                         areaDays
@@ -2983,9 +2992,11 @@ function Card({
   hint,
   children,
   wide,
+  tour,
 }) {
   return (
     <div
+      data-tour={tour}
       className={`an-card${wide
         ? " an-card--wide"
         : ""
@@ -4828,10 +4839,12 @@ function OpsBlock({
   chartOnly,
   title,
   containerRef,
+  tour,
 }) {
   if (chartOnly) {
     return (
       <div
+        data-tour={tour}
         className={
           "an-ops an-ops--chart" +
           (className
@@ -4859,6 +4872,7 @@ function OpsBlock({
 
   return (
     <div
+      data-tour={tour}
       className={
         "an-ops" +
         (className

@@ -62,52 +62,7 @@
 .app--light .frp-when { background: var(--sp4-raised); border-color: var(--sp4-line); }
 
 .frp-run { height: 32px; min-width: 88px; border-radius: 8px; }
-/* ── Fold toggle ──────────────────────────────────────────────────────────
- * Hallmark · component: header fold toggle · genre: modern-minimal · theme: sp4 tokens
- * pre-emit critique: P4 H4 E5 S4 R5 V4
- * states: default · hover · focus · active · disabled · (loading/error/success: n/a —
- *         the toggle is instant and local; the page owns those states)
- * A ghost button that names its job. One chevron, pointing where the header
- * goes (up to hide, down to show), turned rather than redrawn. Nothing moves
- * at rest: an idle loop read as a spinner. Collapsed, it rides at the end of
- * the tab strip so the graph and map keep every pixel the header gave back. */
-.frp-fold {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  height: 28px;
-  padding: 0 10px 0 8px;
-  border: 1px solid var(--sp4-line);
-  border-radius: 999px;
-  background: var(--sp4-surface);
-  color: var(--sp4-text-3);
-  font: inherit;
-  font-size: var(--sp4-label);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 140ms cubic-bezier(0.2, 0, 0, 1), border-color 140ms cubic-bezier(0.2, 0, 0, 1), background-color 140ms cubic-bezier(0.2, 0, 0, 1);
-}
-.frp-fold:hover { color: var(--sp4-text-1); border-color: var(--sp4-line-hi); background: var(--frv-track, var(--sp4-raised)); }
-.frp-fold:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
-.frp-fold:active { transform: translateY(1px); }
-.frp-fold:disabled { opacity: 0.45; cursor: default; transform: none; }
-.frp-fold__chev { flex: none; transition: transform 200ms cubic-bezier(0.2, 0, 0, 1); }
-.frp-fold[aria-expanded="false"] .frp-fold__chev { transform: rotate(180deg); }
-.frp-fold:hover[aria-expanded="true"] .frp-fold__chev { transform: translateY(-1px); }
-.frp-fold:hover[aria-expanded="false"] .frp-fold__chev { transform: rotate(180deg) translateY(-1px); }
-@media (prefers-reduced-motion: reduce) {
-  .frp-fold, .frp-fold__chev { transition: none; }
-  .frp-fold:active { transform: none; }
-}
-.frp-fold--bar { margin-left: auto; }
-/* The tab strip is padded by the gutter minus a tab's 20px hit area, so 20px
-   more puts the button's right edge on the gutter, under the strip's last
-   KPI tile and the Execute row. */
-.frp-fold--tabs { align-self: center; margin-left: auto; margin-right: 20px; position: sticky; right: 20px; }
 .frp-body { position: relative; }
-.frp-fold--float { position: absolute; top: 6px; right: var(--sp4-gutter); z-index: 2; }
 .frp-warn { color: var(--sp4-crit); }
 
 
@@ -194,8 +149,8 @@
    sit in the 6px, clear of the border. */
 .frp-chart { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 10px 8px 6px; }
 .frp-chart__plot { flex: 1; min-height: 0; touch-action: pan-y; user-select: none; }
-.frp-chart__plot--zoomed { cursor: grab; }
-.frp-chart__plot--zoomed:active { cursor: grabbing; }
+/* Drag sideways to zoom: the cursor says the graph resizes left–right. */
+.frp-chart__plot { cursor: ew-resize; }
 .frp-zoom {
   display: flex;
   align-items: center;
@@ -207,17 +162,54 @@
 .frp-zoom__btn { width: 26px; padding: 2px 0; font-size: 14px; line-height: 1; }
 .frp-zoom__btn:disabled { opacity: 0.4; cursor: default; }
 .frp-zoom__hint { margin-left: 4px; font-variant-numeric: tabular-nums; }
+/* Hallmark · component: chart hover card · genre: modern-minimal · theme: sp4 tokens
+ * states: default · empty (no line has a reading) · n/a: hover / focus / active /
+ *   disabled / loading / error / success (not interactive: it follows the pointer)
+ * contrast: figures --sp4-text-1, names --sp4-text-2 on --sp4-surface (both themes)
+ * pre-emit critique: P4 H5 E5 S5 R5 V4
+ *
+ * Operator, 2026-10-13: "fix the hover tooltip on the graph". It was each line
+ * as a sentence in the line's own colour ("Mileage in trips 0.0 km" in green
+ * on white), so the figures were the faintest thing on the card and did not
+ * line up. Now a small table: swatch · name · figure, the figures right-
+ * aligned on tabular numerals so they read down as a column, the units a step
+ * quieter after them. The head says when, and what the unit was doing. */
 .frp-tip {
-  display: grid;
-  gap: 2px;
-  padding: 6px 9px;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 8px 10px 6px;
   border: 1px solid var(--sp4-line-hi);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--sp4-surface);
   color: var(--sp4-text-1);
-  font-size: var(--sp4-label);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: var(--sp4-body);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
+  pointer-events: none;
 }
+.app--light .frp-tip { border-color: var(--sp4-line); }
+.frp-tip__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--sp4-line);
+}
+.frp-tip__when { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.frp-tip__state {
+  font-size: var(--sp4-label);
+  font-weight: 600;
+  color: var(--sp4-text-2);
+  white-space: nowrap;
+}
+.frp-tip__rows { margin: 0; padding: 5px 0; display: grid; gap: 3px; }
+.frp-tip__rows + .frp-tip__rows { border-top: 1px solid var(--sp4-line); }
+.frp-tip__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 12px; }
+.frp-tip__row dt { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--sp4-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frp-tip__row dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.frp-tip__sw { width: 12px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.frp-tip__unit { margin-left: 3px; font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-3); }
+.frp-tip__none { margin: 6px 0 2px; color: var(--sp4-text-3); font-size: var(--sp4-label); }
 
 .frp-crit { color: var(--sp4-crit) !important; }
 
@@ -238,10 +230,6 @@
   .frp-when { gap: 5px; }
   .frp-run { flex: 1 1 0; height: var(--m-action); }
   .frp-run { flex: 1 1 0; }
-  .frp-fold { height: var(--m-action); }
-  /* In the tab strip the tabs need the width: the chevron alone, still named for readers. */
-  .frp-fold--tabs { width: var(--m-action); padding: 0; justify-content: center; }
-  .frp-fold--tabs .frp-fold__l { display: none; }
   .frp-zoom__hint { display: none; }
   /* Phones: the same frames on the same gutter as `.frv`; both panels keep
      their fixed phone heights below. */
@@ -793,3 +781,175 @@
 /* Why the page opened on this unit (lib/fuelReportDefault), beside its name. */
 .frp-why { color: var(--sp4-text-2); font-weight: 600; }
 .frp-why--theft { color: var(--sp4-crit); }
+
+/* ── The bands stop at the gutter ────────────────────────────────────────────
+ * Operator, 2026-10-13 ("do the same here for report", after Fuel Audit): the
+ * KPI header, the filter bar, the tab strip and the table's summary bar ran
+ * under the sidebar and out to the right edge as white slabs. The Sensor
+ * Monitor's rule (`.sp4-root--framed`, SensorPanel.css): the bands sit on the
+ * panel ground and each closing hairline is drawn only between the gutters.
+ * The graph's own bar sits inside its frame and keeps its fill. Phones keep
+ * their full-bleed bands. */
+@media (min-width: 768px) {
+  .app--light .frp-unit .sp4-header,
+  .app--light .frp-unit .sp4-filterbar:not(.frp-graph__bar),
+  .app--light .frp-unit .sp4-tabs,
+  .app--light .frp-unit .sp4-table-sub,
+  .app--light .fpr-root .sp4-header,
+  .app--light .fpr-root .sp4-filterbar,
+  .app--light .fpr-root .sp4-table-sub,
+  .frp-unit .sp4-header,
+  .frp-unit .sp4-filterbar:not(.frp-graph__bar),
+  .frp-unit .sp4-tabs,
+  .frp-unit .sp4-table-sub,
+  .fpr-root .sp4-header,
+  .fpr-root .sp4-filterbar,
+  .fpr-root .sp4-table-sub {
+    border-bottom: 0;
+    background-color: transparent;
+    background-image: linear-gradient(var(--sp4-line), var(--sp4-line));
+    background-repeat: no-repeat;
+    background-size: calc(100% - 2 * var(--sp4-gutter)) 1px;
+    background-position: center bottom;
+  }
+  .frp-unit .sp4-tab { margin-bottom: 0; }
+  .app--light .frp-unit .sp4-search,
+  .app--light .frp-unit .sp4-date-input,
+  .app--light .fpr-root .sp4-date-input,
+  .app--light :is(.frp-unit, .fpr-root) .sp4-filterbar:not(.frp-graph__bar) .sp4-filter-chip:not(.sp4-filter-chip--on) { background: var(--sp4-surface); }
+  .app--light :is(.frp-unit, .fpr-root) .sp4-filterbar:not(.frp-graph__bar) .sp4-filter-chip:not(.sp4-filter-chip--on):hover { background: var(--sp4-raised); }
+}
+
+/* ── Graph & map, at a glance ───────────────────────────────────────────────
+ * Hallmark · redesign 2026-10-13 · scope: Fuel Report › Graph & map tab
+ * genre: modern-minimal · theme: sp4 tokens (preserved)
+ * pre-emit critique: P4 H5 E4 S5 R5 V4
+ *
+ * Operator: "redesign the graph and the left side so that we do not have
+ * scrollbars and have everything displayed at a glance". It was map (360px)
+ * over graph (460px) over the summary, so the tab scrolled, and the line list
+ * and side summary scrolled inside the graph. Now, on a desk, one screen:
+ *
+ *   rail  | graph | map        the rail: the lines, then the period's fuel
+ *   strip ---------------      the summary as tiles that wrap, never sideways
+ *
+ * The graph takes the larger share (it is the report), the map sits beside it
+ * at the height the graph has, and nothing inside scrolls: the rail's rows are
+ * sized to fit, the tiles wrap. Under 1100px the tab stacks and scrolls as a
+ * page, as before; the order there is map, graph, lines, summary. */
+.frp-rail {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 10px;
+  background: var(--sp4-surface);
+  overflow: hidden;
+}
+.app--light .frp-rail { border-color: var(--sp4-line); }
+
+.frp-lines {
+  margin: 0;
+  padding: 8px 10px 6px 12px;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.frp-lines__legend,
+.frp-side-sum__title {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.frp-lines__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-2);
+  cursor: pointer;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.frp-lines__row:hover { background: var(--sp4-raised); color: var(--sp4-text-1); }
+.frp-lines__row:has(input:focus-visible) { outline: 2px solid var(--sp4-accent); outline-offset: -1px; }
+.frp-lines__row--all { font-weight: 700; color: var(--sp4-text-1); }
+.frp-lines__row input { margin: 0; width: 13px; height: 13px; accent-color: var(--sp4-accent); flex-shrink: 0; }
+.frp-lines__swatch { width: 16px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+
+.frp-side-sum { margin: 0; padding: 7px 12px 8px; border-top: 1px solid var(--sp4-line); display: grid; }
+.frp-side-sum__row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: var(--sp4-label); }
+.frp-side-sum dt { color: var(--sp4-text-2); white-space: nowrap; }
+.frp-side-sum dd { margin: 0; font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The period's summary: label over figure, tiles that wrap. */
+.frp-sum {
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 10px;
+  background: var(--sp4-surface);
+  min-height: max-content;
+}
+.app--light .frp-sum { border-color: var(--sp4-line); }
+.frp-sum__tiles {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  border-radius: 10px;
+  overflow: hidden;
+}
+/* Each row stretches its tiles to the full width, so a short last row leaves
+   no empty cell; the hairlines are drawn on each tile's top and left, and the
+   frame's own edge hides the outer ones. */
+.frp-sum__tile {
+  flex: 1 1 118px;
+  padding: 7px 12px;
+  min-width: 0;
+  box-shadow: -1px 0 0 var(--sp4-line), 0 -1px 0 var(--sp4-line);
+}
+.frp-sum__tile--unit { flex-basis: 200px; }
+.frp-sum__tile dt { font-size: var(--sp4-label); color: var(--sp4-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frp-sum__tile dd { margin: 2px 0 0; font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frp-sum__theft { color: var(--sp4-crit) !important; }
+
+/* Desk: one screen, no scrollbars. */
+@media (min-width: 1100px) {
+  .frp-graphmap {
+    grid-template-columns: 210px minmax(0, 2.2fr) minmax(0, 1fr);
+    grid-template-rows: minmax(300px, 1fr) auto;
+    grid-template-areas: "rail graph map" "sum sum sum";
+  }
+  .frp-graphmap--empty { grid-template-areas: "graph graph map" "sum sum sum"; }
+  .frp-rail { grid-area: rail; }
+  .frp-graphmap > .frp-graph { grid-area: graph; min-width: 0; }
+  .frp-graphmap > .frp-map { grid-area: map; min-width: 0; }
+  .frp-graphmap > .frp-sum { grid-area: sum; }
+  /* The graph's switches on one line: compact chips, the zoom row under them. */
+  .frp-graph .frp-graph__bar.sp4-filterbar { flex-wrap: wrap; gap: 4px 10px; padding: 7px 10px; }
+  .frp-graph__bar .sp4-filter-group { flex-wrap: nowrap; gap: 3px; }
+  .frp-graph__bar .sp4-filter-chip { padding: 2px 8px; min-height: 24px; font-size: var(--sp4-label); white-space: nowrap; }
+  /* The group words give way to a divider: the swatches (bands) and the pump
+     icons (marks) already say which group a chip is in. */
+  .frp-graph__bar .sp4-filter-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .frp-graph__bar .sp4-filter-group + .sp4-filter-group { padding-left: 10px; border-left: 1px solid var(--sp4-line); }
+  .frp-zoom { padding-block: 2px; }
+}
+/* Tablet and narrow desk: stacked, the tab scrolls as a page. */
+@media (max-width: 1099px) {
+  .frp-graphmap { grid-template-rows: none; grid-auto-rows: auto; }
+  .frp-graphmap > .frp-map { order: 1; height: 340px; }
+  .frp-graphmap > .frp-graph { order: 2; height: 440px; }
+  .frp-rail { order: 3; min-height: max-content; }
+  .frp-graphmap > .frp-sum { order: 4; }
+  .frp-lines { flex-direction: row; flex-wrap: wrap; gap: 2px 12px; }
+  .frp-lines__legend { width: 100%; }
+  .frp-side-sum { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); column-gap: 18px; }
+}

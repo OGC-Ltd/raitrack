@@ -7,6 +7,7 @@ import { useApiData } from "../../hooks/useApiData";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import { ONLINE_COLORS } from "../../lib/vehicleMap";
 import LoadError from "../shared/LoadError";
+import { displayPlate } from "../../lib/plate";
 
 // `idling` and `stationary` were absent, so the two commonest ONLINE states on
 // this fleet arrived here as undefined — no dot colour, no label. Stationary
@@ -42,7 +43,7 @@ function SheetContent({ vehicleId, onClose }) {
     <>
       <div className="mvs__header">
         <div className="mvs__title-row">
-          <span className="mvs__reg">{vehicle.id}</span>
+          <span className="mvs__reg">{displayPlate(vehicle)}</span>
           <span
             className="mvs__badge"
             style={{ color, background: color + "1a", borderColor: color + "44" }}

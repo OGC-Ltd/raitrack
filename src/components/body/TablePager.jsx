@@ -53,7 +53,7 @@ export default function TablePager({ pager, label = "Table pages" }) {
   const { page, pageCount, total, from, to, setPage } = pager;
   if (pageCount <= 1) return null;
   return (
-    <nav className="sp4-tpager" aria-label={label}>
+    <nav data-tour="page-pager" className="sp4-tpager" aria-label={label}>
       <button type="button" className="sp4-tpager__btn"
               disabled={page === 0} onClick={() => setPage(Math.max(0, page - 1))}>
         ← Prev

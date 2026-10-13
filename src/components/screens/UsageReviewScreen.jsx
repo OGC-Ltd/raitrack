@@ -46,11 +46,24 @@ const TZ = "Africa/Nairobi";
 const DAY_MS = 86_400_000;
 const MAX_DAYS = 92;
 const UNIT_KEY = "ft-usage-review-unit:";
+/** The period last built, per organisation: a preset id, or its two days. */
+const SPAN_KEY = "ft-usage-review-span:";
+function readSpan(orgId) {
+  try {
+    const s = orgId ? JSON.parse(localStorage.getItem(SPAN_KEY + orgId) ?? "null") : null;
+    if (s?.id) return preset(s.id);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s?.from ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(s?.to ?? "")) return { from: s.from, to: s.to, id: null };
+  } catch { /* per-viewer nicety only */ }
+  return null;
+}
 /** Session flag per organisation: the operator picked or built something here
  *  this session, so the default vehicle (lib/logbookDefault) no longer applies. */
 const PICKED_KEY = "ft-logbook-picked:";
 const picked = (orgId) => { try { return sessionStorage.getItem(PICKED_KEY + orgId) === "1"; } catch { return false; } };
 const markPicked = (orgId) => { try { if (orgId) sessionStorage.setItem(PICKED_KEY + orgId, "1"); } catch { /* session nicety only */ } };
+
+const BUILT_FMT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Nairobi" });
+const fmtBuilt = (ms) => BUILT_FMT.format(ms);
 
 const nf = (n, d = 1) =>
   n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -466,7 +479,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, mode, setMode,
   }
 
   return (
-    <div className="urv-map" ref={wrap}>
+    <div data-tour="logbook-map" className="urv-map" ref={wrap}>
       <div ref={el} className="urv-map__canvas" />
       <MapStatusBar map={mapObj} attribution={base === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION} className="map-status--panel" />
       <div className="urv-map__top">
@@ -641,6 +654,9 @@ export default function UsageReviewScreen() {
   };
   const unit = useMemo(() => vehicles.find((v) => v.vehicleId === unitId) ?? null, [vehicles, unitId]);
   const [span, setSpan] = useState(() => preset("last"));
+  // The period last built here comes back with the unit, so its saved review
+  // can be shown on arrival (below).
+  useEffect(() => { const s = readSpan(orgId); if (s) setSpan(s); }, [orgId]);
   const [kmplText, setKmplText] = useState("");
   const [request, setRequest] = useState(null);
   const [sel, setSel] = useState({ day: null, place: null });
@@ -680,6 +696,28 @@ export default function UsageReviewScreen() {
     staleTime: 5 * 60_000,
     retry: 0,
   });
+  // A review already built for the unit and period picked is shown at once,
+  // without Build (operator, 2026-10-13: "on the logbook we can render the
+  // cached data"). The server is asked only for what it holds or is building
+  // (`cached`), never to start one; what it has becomes the page's review.
+  const pick = canRun ? { orgId, vehicleId: unit.vehicleId, from: span.from, to: span.to } : null;
+  const showing = Boolean(live && pick && live.vehicleId === pick.vehicleId && live.from === pick.from && live.to === pick.to);
+  const peek = useQuery({
+    queryKey: ["usage-review-peek", pick?.orgId, pick?.vehicleId, pick?.from, pick?.to],
+    enabled: Boolean(pick) && !showing,
+    queryFn: ({ signal }) => getUsageReview({ ...pick, cached: true, signal }),
+    staleTime: 60_000,
+    retry: 0,
+  });
+  useEffect(() => {
+    const d = peek.data;
+    if (!pick || showing || (d?.status !== "ready" && d?.status !== "running")) return;
+    queryClient.setQueryData(["usage-review", pick.orgId, pick.vehicleId, pick.from, pick.to], d);
+    setRequest(pick);
+  // `pick` is rebuilt every render; its fields are in the peek's key
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peek.data, showing]);
+
   const st = q.data;
   const review = st?.status === "ready" ? st.review : null;
   const web = useMemo(() => buildWeb(review?.trips), [review]);
@@ -811,6 +849,7 @@ export default function UsageReviewScreen() {
     if (!canRun) return;
     markPicked(orgId);
     const next = { orgId, vehicleId: unit.vehicleId, from: span.from, to: span.to };
+    try { localStorage.setItem(SPAN_KEY + orgId, JSON.stringify(span.id ? { id: span.id } : { from: span.from, to: span.to })); } catch { /* per-viewer nicety only */ }
     const same = live && live.vehicleId === next.vehicleId && live.from === next.from && live.to === next.to;
     if (same) {
       freshRef.current = true;
@@ -912,7 +951,7 @@ export default function UsageReviewScreen() {
   return (
     <div className="sp4-root frp-root urv-root" ref={rootRef}>
       <div className="sp4-header">
-        <div className="sp4-header-kpis">
+        <div data-tour="page-kpis" className="sp4-header-kpis">
           <Kpi n={s ? nf(s.driveHPerDay, 2) : dash} unit={s ? " h" : ""} label="Drive time / day" tone="live"
                sub={s?.driveHPerActiveDay != null ? `${nf(s.driveHPerActiveDay, 2)} h per active day` : null}
                title="Time moving at 5 km/h or more, averaged over every calendar day of the period" />
@@ -941,18 +980,18 @@ export default function UsageReviewScreen() {
                     onClick={() => setSpan(preset(id))}>{label}</button>
           ))}
         </div>
-        <div className="frp-range">
+        <div data-tour="page-range" className="frp-range">
           <DateField label="From" value={span.from} max={span.to || today} onChange={(v) => setSpan((x) => ({ ...x, from: v, id: null }))} />
           <span className="frp-range__dash" aria-hidden="true">–</span>
           <DateField label="To" value={span.to} min={span.from} max={today} onChange={(v) => setSpan((x) => ({ ...x, to: v, id: null }))} />
         </div>
-        <label className="frp-when urv-kmpl" title="km per litre for the fuel estimate. Empty uses the vehicle's own rate.">
+        <label data-tour="logbook-kmpl" className="frp-when urv-kmpl" title="km per litre for the fuel estimate. Empty uses the vehicle's own rate.">
           <span className="frp-when__l">km/L</span>
           <input type="number" min="1" max="99" step="0.5" inputMode="decimal" value={kmplText}
                  placeholder={review?.vehicle.kmpl != null ? String(review.vehicle.kmpl) : "—"}
                  onChange={(e) => setKmplText(e.target.value)} aria-label="Kilometres per litre" />
         </label>
-        <button type="button" className="sp4-submit-btn frp-run" onClick={build}
+        <button data-tour="page-run" type="button" className="sp4-submit-btn frp-run" onClick={build}
                 disabled={!canRun || st?.status === "running"}
                 title={!unit ? "Choose a unit first" : tooLong ? `${MAX_DAYS} days at most` : backwards ? "The period ends before it starts" : "Build the review"}>
           {st?.status === "running" ? "Building…" : "Build"}
@@ -994,12 +1033,18 @@ export default function UsageReviewScreen() {
 
         {review && (
           <>
-            <div className="urv-bar">
+            <div data-tour="logbook-bar" className="urv-bar">
               <span className="urv-bar__what">
                 <b>{review.vehicle.plate}</b>
                 {review.vehicle.wialonName && review.vehicle.wialonName !== review.vehicle.plate ? ` · ${review.vehicle.wialonName}` : ""}
                 {" · "}{dayLabel(review.period.from)} {review.period.from.slice(0, 4)} – {dayLabel(review.period.to)} {review.period.to.slice(0, 4)}
                 {" · "}{review.period.days} days
+                {/* A saved review of a period still running, built a while ago */}
+                {st?.outdated && review.builtAt && (
+                  <span className="urv-bar__old" title="Saved earlier. The refresh button reads the history again.">
+                    {" · "}saved {fmtBuilt(review.builtAt)}, refresh for the latest
+                  </span>
+                )}
               </span>
               {(sel.day || sel.place != null) && (
                 <span className="urv-chips">
@@ -1007,7 +1052,7 @@ export default function UsageReviewScreen() {
                   {sel.place != null && <button type="button" className="urv-chip urv-chip--place" onClick={() => setSel((x) => ({ ...x, place: null }))}>{sel.place}. {pname(sel.place)} <i className="ti ti-x" aria-hidden="true" /></button>}
                 </span>
               )}
-              <span className="urv-bar__acts">
+              <span data-tour="logbook-downloads" className="urv-bar__acts">
                 {dlError && <span className="frp-warn">{dlError}</span>}
                 <button type="button" className="sp4-ghost-btn" onClick={() => download("xlsx")} disabled={busy != null}
                         title="Every row behind the review — daily, places, stops, trips, hourly, GPS points — ready for Power BI">
@@ -1034,7 +1079,7 @@ export default function UsageReviewScreen() {
               <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames}
                          mode={mapMode} setMode={setMapMode} web={web} webEdge={webEdge} setWebEdge={setWebEdge} />
 
-              <section className="frv-card urv-card urv-card--top">
+              <section data-tour="logbook-days" className="frv-card urv-card urv-card--top">
                 <h3 className="frv-card__t">Distance per Day</h3>
                 <DailyChart days={review.days} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
                 <p className="frv-card__note">Bars are km, dots are hours driving. Click a day to follow it on the map.</p>
@@ -1042,7 +1087,7 @@ export default function UsageReviewScreen() {
             </div>
 
             <div className="urv-grid urv-grid--lower">
-              <section className="frv-card urv-card urv-card--table">
+              <section data-tour="logbook-places" className="frv-card urv-card urv-card--table">
                 <h3 className="frv-card__t">Where It Spent Its Time</h3>
                 <p className="urv-card__sub">{s.places} places · {nf(s.stoppedH, 0)} h stopped in stops of 10 min or more · click a place</p>
                 {byActivity.length > 0 && (
@@ -1079,7 +1124,7 @@ export default function UsageReviewScreen() {
                 <TablePager pager={placePager} label="Places pages" />
               </section>
 
-              <section className="frv-card urv-card urv-card--fixed">
+              <section data-tour="logbook-hours" className="frv-card urv-card urv-card--fixed">
                 <h3 className="frv-card__t">Driving by Hour</h3>
                 <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal} />
                 <p className="frv-card__note">
@@ -1100,7 +1145,7 @@ export default function UsageReviewScreen() {
             )}
 
             <div className="urv-grid urv-grid--detail">
-              <section className="frv-card urv-card urv-card--detail">
+              <section data-tour="logbook-detail" className="frv-card urv-card urv-card--detail">
                 <div className="urv-detail__head">
                   <div>
                     <h3 className="frv-card__t">{selDay ? dayLabel(selDay.date, true) : selPlace ? `${selPlace.id}. ${nameOf(selPlace, gnames) ?? "Place"}` : "Day and Place Detail"}</h3>

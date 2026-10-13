@@ -206,7 +206,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               )}
               {can('user:create') && (
                 <button className="mobile-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
-                  <i className="ti ti-users" aria-hidden="true" /> User accounts
+                  <i className="ti ti-users" aria-hidden="true" /> Users
                 </button>
               )}
               {/* The Manual: the first-time tour, again (lib/productTour). */}

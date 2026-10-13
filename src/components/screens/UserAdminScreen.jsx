@@ -84,14 +84,14 @@ export default function UserAdminScreen() {
               </button>
             </li>
             <li className="uadm-crumbs__item uadm-crumbs__item--current" aria-current="page">
-              User accounts
+              Users
             </li>
           </ol>
         </nav>
       </header>
 
       <div className="uadm-page__body">
-        <ErrorBoundary label="User accounts" fullSection>
+        <ErrorBoundary label="Users" fullSection>
           <UserAdminPanel />
         </ErrorBoundary>
       </div>

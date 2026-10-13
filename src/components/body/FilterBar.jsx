@@ -46,7 +46,7 @@ export default function FilterBar({ peek = null, activeCount = 0, children, labe
   }
 
   return (
-    <div className="sp4-filterbar sp4-filterbar--collapsible">
+    <div data-tour="page-filters" className="sp4-filterbar sp4-filterbar--collapsible">
       {peek}
       <button
         type="button"

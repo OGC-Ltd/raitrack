@@ -1,11 +1,10 @@
 // Desktop Drivers tab — real driver analytics from the fleet-server DB
-// (/analytics/drivers). An analytics-focused roster on the left; the selected
-// driver (first row by default) is profiled in a four-cell strip — identity +
-// live meters, tonnes and mileage trends, incident summary. A
-// full-width leaderboard compares all drivers. Design mirrors the Analytics and
+// (/analytics/drivers). A four-cell strip reads the whole roster — drivers,
+// tonnes and mileage trends, incident summary; the full-width grid compares
+// the drivers, and a row opens one driver's figures in the side panel. Design mirrors the Analytics and
 // Maintenance pages (cards, KPI tiles, ranked bars, Inter, --color-* tokens).
 
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useRef, useCallback, useMemo } from "react";
 import "./DriversScreen.css";
 import { getDriversOverview } from "../../api/drivers";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
@@ -143,6 +142,55 @@ const DRIVER_STATUS = {
 };
 const statusMeta = (s) => DRIVER_STATUS[s] || { label: s || "—", tone: "unknown" };
 
+/**
+ * The whole roster in one reading, for the strip at the top of the page
+ * (operator, 2026-10-13: the strip covers all the drivers; one driver's
+ * figures live in the side panel). Everything is summed from the overview the
+ * page already holds — the roster rows for the window's totals, each driver's
+ * `byDay` for the daily series — so it costs no request and agrees with the
+ * grid below it to the unit.
+ */
+function fleetOf(drivers, details, liveVehicles) {
+  const days = new Map();
+  let drove = 0;
+  for (const d of drivers) {
+    const byDay = details?.[d.id]?.byDay ?? [];
+    if (byDay.length) drove += 1;
+    for (const x of byDay) {
+      const cur = days.get(x.day) ?? { day: x.day, tonnes: 0, mileageKm: 0 };
+      cur.tonnes += Number(x.tonnes) || 0;
+      cur.mileageKm += Number(x.mileageKm) || 0;
+      days.set(x.day, cur);
+    }
+  }
+  const byDay = [...days.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
+  const sum = (k) => drivers.reduce((n, d) => n + (Number(d[k]) || 0), 0);
+  const involved = (k) => drivers.filter((d) => Number(d[k]) > 0).length;
+  // On the road: a roster driver named on a unit whose engine is running now,
+  // matched the way the panel matches a driver to their unit.
+  const live = new Set(liveVehicles.filter((v) => v.driver && v.engine === "on").map((v) => v.driver));
+  const rated = drivers.filter((d) => Number(d.rating) > 0);
+  const mix = { good: 0, fair: 0, low: 0, new: 0 };
+  for (const d of drivers) {
+    const r = Number(d.rating) || 0;
+    mix[r === 0 ? "new" : r >= 4 ? "good" : r >= 3 ? "fair" : "low"] += 1;
+  }
+  return {
+    count: drivers.length,
+    active: drivers.filter((d) => d.status === "ACTIVE").length,
+    onRoad: drivers.filter((d) => live.has(d.fullName)).length,
+    drove,
+    avgRating: rated.length ? rated.reduce((n, d) => n + Number(d.rating), 0) / rated.length : null,
+    mix,
+    byDay,
+    totals: {
+      trips: sum("trips"), tonnes: sum("tonnes"), mileageKm: sum("mileageKm"),
+      fuelTheftCases: sum("fuelTheftCases"), overspeedingCases: sum("overspeedingCases"),
+    },
+    involved: { theft: involved("fuelTheftCases"), speed: involved("overspeedingCases") },
+  };
+}
+
 // Trend delta over a daily series — this half vs the previous half. Mirrors the
 // stat cards on the Analytics page so the driver trend charts read as siblings.
 function periodDelta(values) {
@@ -173,9 +221,15 @@ export default function DriversScreen() {
     [activeCompanyId],
     { cacheKey: `ft-drivers-ov:${activeCompanyId}` }
   );
-  const drivers = overview?.drivers ?? [];
+  const drivers = useMemo(() => overview?.drivers ?? [], [overview]);
 
   const [selectedId, setSelectedId] = useState(null);
+  // The driver panel: opened by picking a row (operator, 2026-10-13: "when we
+  // click the driver a sidebar should be populated with the details of the
+  // driver and all the stats"). The first-row default selection does not open it.
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openDriver = (id) => { setSelectedId(id); setPanelOpen(true); };
+  const closeDriver = useCallback(() => setPanelOpen(false), []);
   const [leaderView, setLeaderView] = useState("top"); // "top" | "bottom" 6 by tonnes
 
   // Default to the first driver in the table; keep a valid selection on refresh.
@@ -193,7 +247,6 @@ export default function DriversScreen() {
   }, [overview]);
 
   const detail = (selectedId && overview?.details?.[selectedId]) || null;
-  const detailLoading = loading;
 
   // The selected driver's vehicle in the live fleet — matched by driver name
   // (the telemetry stream carries the assigned driver on every vehicle).
@@ -208,11 +261,16 @@ export default function DriversScreen() {
   const leaderDrivers =
     leaderView === "bottom" ? drivers.slice(-ROSTER_PAGE_SIZE) : drivers.slice(0, ROSTER_PAGE_SIZE);
 
+  // The strip reads the whole roster, not the selected driver.
+  const fleet = useMemo(
+    () => fleetOf(drivers, overview?.details, liveVehicles),
+    [drivers, overview?.details, liveVehicles],
+  );
   // Sub caption for the trend stat charts — the delta pill's "this half vs
   // previous half" framing, matching the Analytics page.
-  const dayCount = detail?.byDay?.length ?? 0;
+  const dayCount = fleet.byDay.length;
   const dHalf = Math.max(1, Math.floor(dayCount / 2));
-  const detailSub = !detail ? "" : dayCount > 1 ? `last ${dHalf}d vs previous ${dHalf}d` : "single day";
+  const fleetSub = dayCount > 1 ? `last ${dHalf}d vs previous ${dHalf}d, all drivers` : dayCount ? "single day" : "";
 
   // ── PDF reports (utils/pdfReport.js — same builder as the Warehouse tab) ──
   const accent = activeCompany?.accentColor || "#22c55e";
@@ -311,38 +369,34 @@ export default function DriversScreen() {
         ) : (
           <ErrorBoundary label="Drivers">
             <div className="dr-layout">
-              {/* Selected-driver detail — the four KPI cards sit at the top as the
-                  main summary area; the full driver grid follows below. */}
-              {/* One strip, four cells — the selected driver read left to
-                  right: who and what they are driving now, what they hauled,
-                  how far, and what went wrong. Cells share hairlines rather
-                  than each carrying its own card, because they are four
-                  readings of one driver, not four things. */}
-              <section className="dr-strip" aria-label="Selected driver">
-                <DriverCard detail={detail} loading={detailLoading} liveVehicle={liveVehicle} />
+              {/* The whole roster in one strip (operator, 2026-10-13): who is on
+                  it, what they hauled, how far, and what went wrong. One
+                  driver's figures are in the panel a row opens. */}
+              <section className="dr-strip" aria-label="All drivers">
+                <FleetCard fleet={fleet} loading={loading} />
                 <TrendStat
                   title="Tonnes ferried"
-                  series={detail?.byDay ?? []}
+                  series={fleet.byDay}
                   valueKey="tonnes"
-                  value={detail ? fmt(detail.totals.tonnes, 1) : "—"}
+                  value={loading ? "—" : fmt(fleet.totals.tonnes, 1)}
                   unit="t"
                   tone="tonnes"
                   type="bar"
-                  sub={detailSub}
-                  loading={detailLoading}
+                  sub={fleetSub}
+                  loading={loading}
                 />
                 <TrendStat
                   title="Mileage covered"
-                  series={detail?.byDay ?? []}
+                  series={fleet.byDay}
                   valueKey="mileageKm"
-                  value={detail ? fmt(detail.totals.mileageKm) : "—"}
+                  value={loading ? "—" : fmt(fleet.totals.mileageKm)}
                   unit="km"
                   tone="mileage"
                   type="line"
-                  sub={detailSub}
-                  loading={detailLoading}
+                  sub={fleetSub}
+                  loading={loading}
                 />
-                <SummaryCard detail={detail} loading={detailLoading} />
+                <FleetSummary fleet={fleet} loading={loading} />
               </section>
             </div>
 
@@ -357,7 +411,7 @@ export default function DriversScreen() {
               drivers={drivers}
               details={overview?.details}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onSelect={openDriver}
               selectedName={selectedName}
               onDriverReport={detail?.driver ? handleDriverReport : null}
               onAllDriversReport={handleAllDriversReport}
@@ -365,24 +419,385 @@ export default function DriversScreen() {
           </ErrorBoundary>
         )}
       </div>
+      {panelOpen && detail?.driver && (
+        <DriverPanel
+          detail={detail}
+          row={drivers.find((d) => d.id === selectedId)}
+          liveVehicle={liveVehicle}
+          onReport={handleDriverReport}
+          onClose={closeDriver}
+        />
+      )}
     </div>
   );
 }
 
-function DriverCard({ detail, loading, liveVehicle }) {
-  if (!detail || !detail.driver) {
+/** A reverse-geocoded address cut to what a list row can hold: the road, and
+ *  the "n km from a place" part where there is one. The full text is the title. */
+const shortPlace = (where) => {
+  const parts = String(where).split(",").map((x) => x.trim()).filter(Boolean);
+  const near = parts.find((x) => / from /.test(x));
+  return near && near !== parts[0] ? `${parts[0]}, ${near}` : parts[0] ?? "";
+};
+
+// How many cases each list shows before "Show all".
+const PANEL_CASES = 6;
+
+/**
+ * The driver panel: everything the overview holds on one driver, down the
+ * right of the page. Who they are and what they are driving now, the window's
+ * figures and what they come to per trip, the heaviest load, the two daily
+ * charts, and every fuel and overspeeding case behind the counts. All of it is
+ * already in the overview payload, so opening it costs no request.
+ */
+function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
+  const { driver, totals, heaviestLoad, byDay = [], incidents } = detail;
+  const tier = ratingTier(driver.rating);
+  const st = statusMeta(row?.status ?? driver.status);
+  const w = activeWindow(detail);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // A new driver starts at the top of the panel, not where the last one was left.
+  useEffect(() => { ref.current?.scrollTo?.({ top: 0 }); }, [driver.id]);
+
+  const per = (n, d) => (d > 0 ? n / d : null);
+  const dash = (v, dec, unit) => (v == null ? "—" : `${fmt(v, dec)}${unit}`);
+  const windowDays = totals.windowDays ?? 90;
+  const headline = [
+    { label: "Trips", value: fmt(totals.trips) },
+    { label: "Tonnes", value: fmt(totals.tonnes, 1), unit: "t" },
+    { label: "Mileage", value: fmt(totals.mileageKm), unit: "km" },
+  ];
+  const rates = [
+    { label: "Hours on road", value: `${fmt(totals.hoursOnRoad, 1)} h` },
+    { label: "Tonnes per trip", value: dash(per(totals.tonnes, totals.trips), 1, " t") },
+    { label: "Km per trip", value: dash(per(totals.mileageKm, totals.trips), 0, " km") },
+    // Not km per hour on road: those hours run from trip start to trip end,
+    // waiting at the mill included, so the quotient read as 3 km/h.
+    { label: "Km per active day", value: dash(per(totals.mileageKm, w?.days ?? 0), 0, " km") },
+  ];
+  const thefts = incidents?.thefts ?? [];
+  const overspeeds = incidents?.overspeeds ?? [];
+  const daysSub = `${fmt(byDay.length)} active day${byDay.length === 1 ? "" : "s"}`;
+
+  return (
+    <aside className="dr-panel" role="dialog" aria-label={`${titleCase(driver.fullName)}, driver details`}>
+      <header className="dr-panel__head">
+        <span className="dr-panel__title">Driver</span>
+        <button type="button" className="dr-panel__x" onClick={onClose} aria-label="Close driver details">×</button>
+      </header>
+
+      <div className="dr-panel__body" ref={ref}>
+        <DriverIdCard driver={driver} tier={tier} st={st} row={row} w={w} liveVehicle={liveVehicle} />
+
+        <section className="dr-panel__sec">
+          <h3 className="dr-panel__h">Last {fmt(windowDays)} Days</h3>
+          <dl className="dr-window__lead">
+            {headline.map((x) => (
+              <div key={x.label}>
+                <dt>{x.label}</dt>
+                <dd>{x.value}{x.unit && <span className="dr-window__unit"> {x.unit}</span>}</dd>
+              </div>
+            ))}
+          </dl>
+          <ActivityStrip byDay={byDay} days={windowDays} />
+          <dl className="dr-window__rates">
+            {rates.map((x) => (
+              <div key={x.label}><dt>{x.label}</dt><dd>{x.value}</dd></div>
+            ))}
+            {heaviestLoad && (
+              <div className="dr-window__heavy">
+                <dt>Heaviest load</dt>
+                <dd>
+                  {fmt(heaviestLoad.tonnes, 1)} t
+                  <span className="dr-window__heavyon">
+                    {fmtDay(heaviestLoad.date)}{heaviestLoad.route ? ` · ${heaviestLoad.route}` : ""}
+                  </span>
+                </dd>
+              </div>
+            )}
+          </dl>
+        </section>
+
+        {byDay.length > 0 && (
+          <section className="dr-panel__sec dr-panel__charts">
+            <TrendStat title="Tonnes per day" series={byDay} valueKey="tonnes" unit="t" tone="tonnes" type="bar"
+                       value={fmt(totals.tonnes, 1)} sub={daysSub} />
+            <TrendStat title="Mileage per day" series={byDay} valueKey="mileageKm" unit="km" tone="mileage" type="line"
+                       value={fmt(totals.mileageKm)} sub={daysSub} />
+          </section>
+        )}
+
+        <TheftCases thefts={thefts} count={totals.fuelTheftCases} seen={totals.fuelEventsSeen ?? thefts.length} />
+        <SpeedCases overspeeds={overspeeds} trips={totals.overspeedingCases} />
+      </div>
+
+      <footer className="dr-panel__foot">
+        <DownloadReportButton onGenerate={onReport} permission="driver:export" label="Driver PDF" />
+      </footer>
+    </aside>
+  );
+}
+
+/** The day an incident happened, as a block: day number over month, the time
+ *  under it. Read down a list, the blocks are the timeline. */
+function DayBlock({ iso }) {
+  const d = new Date(iso);
+  return (
+    <span className="dr-dayblock" aria-hidden="true">
+      <span className="dr-dayblock__d">{d.getDate()}</span>
+      <span className="dr-dayblock__m">{d.toLocaleDateString("en-GB", { month: "short" })}</span>
+    </span>
+  );
+}
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const ymd = (d) => d.toISOString().slice(0, 10);
+
+/**
+ * The window as a row of days, one tick each, filled where the driver had a
+ * trip. "41 of 90" says how many; the strip says whether they were steady
+ * or all at the start, which the count cannot.
+ */
+function ActivityStrip({ byDay, days }) {
+  const on = new Set(byDay.map((x) => x.day));
+  const today = new Date();
+  const cells = Array.from({ length: days }, (_, i) => {
+    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (days - 1 - i)));
+    return ymd(d);
+  });
+  const active = cells.filter((c) => on.has(c)).length;
+  return (
+    <div className="dr-activity">
+      <div className="dr-activity__head">
+        <span>Active days</span>
+        <b>{fmt(active)} <span>of {fmt(days)}</span></b>
+      </div>
+      <div className="dr-activity__strip" role="img"
+           aria-label={`Active on ${active} of the last ${days} days`}
+           style={{ "--n": days }}>
+        {cells.map((c) => (
+          <span key={c} className={`dr-activity__day${on.has(c) ? " dr-activity__day--on" : ""}`} title={fmtDay(c)} />
+        ))}
+      </div>
+      <div className="dr-activity__ends" aria-hidden="true">
+        <span>{fmtDay(cells[0])}</span><span>Today</span>
+      </div>
+    </div>
+  );
+}
+
+/** Show the first PANEL_CASES, then all. */
+function useFold(items) {
+  const [all, setAll] = useState(false);
+  return {
+    shown: all ? items : items.slice(0, PANEL_CASES),
+    more: items.length > PANEL_CASES ? (
+      <button type="button" className="dr-panel__more" onClick={() => setAll((v) => !v)}>
+        {all ? "Show fewer" : `Show all ${fmt(items.length)}`}
+      </button>
+    ) : null,
+  };
+}
+
+/**
+ * Fuel theft: every fuel event on their units while they drove, with the ones
+ * that count against them (siphons) set apart from the ones that do not. The
+ * count in the head is the chargeable one; the switch narrows the list to it.
+ */
+function TheftCases({ thefts, count, seen }) {
+  const [only, setOnly] = useState(false);
+  const counted = thefts.filter((t) => t.countsAgainstDriver);
+  const list = only ? counted : thefts;
+  const { shown, more } = useFold(list);
+  const litres = counted.reduce((n, t) => n + (Number(t.litres) || 0), 0);
+  return (
+    <section className="dr-panel__sec dr-cases-sec dr-cases-sec--theft">
+      <h3 className="dr-panel__h">
+        Fuel Theft
+        <span className={`dr-panel__count${count ? " dr-panel__count--theft" : ""}`}>{fmt(count)}</span>
+      </h3>
+      {thefts.length === 0 ? (
+        <p className="dr-panel__note">No fuel events on their units.</p>
+      ) : (
+        <>
+          <p className="dr-panel__note">
+            {count
+              ? <><b>{fmt(litres, 1)} L</b> in {fmt(count)} counted case{count === 1 ? "" : "s"}</>
+              : "None counts against them"}
+            {seen > count ? ` · ${fmt(seen)} events on their units in all` : ""}
+          </p>
+          {counted.length > 0 && counted.length < thefts.length && (
+            <div className="dr-seg dr-cases__filter" role="group" aria-label="Show fuel events">
+              <button type="button" className={`dr-chip${!only ? " dr-chip--active" : ""}`}
+                      aria-pressed={!only} onClick={() => setOnly(false)}>All {fmt(thefts.length)}</button>
+              <button type="button" className={`dr-chip${only ? " dr-chip--active" : ""}`}
+                      aria-pressed={only} onClick={() => setOnly(true)}>Counted {fmt(counted.length)}</button>
+            </div>
+          )}
+          <ul className="dr-cases">
+            {shown.map((t) => (
+              <li key={t.id} className={`dr-case${t.countsAgainstDriver ? " dr-case--on" : ""}`}>
+                <DayBlock iso={t.at} />
+                <span className="dr-case__body">
+                  <span className="dr-case__line">
+                    <b className="dr-case__qty">−{fmt(t.litres, 1)} L</b>
+                    <span className="dr-case__plate">{t.plate ?? "Unit"}</span>
+                    <span className="dr-case__time">{fmtTime(t.at)}</span>
+                  </span>
+                  <span className="dr-case__sub" title={t.where ?? undefined}>
+                    {t.fromL != null && t.toL != null ? `${fmt(t.fromL)} → ${fmt(t.toL)} L` : ""}
+                    {t.fromL != null && t.toL != null && t.where ? " · " : ""}
+                    {t.where ? shortPlace(t.where) : ""}
+                  </span>
+                </span>
+                <span className={`dr-case__tag${t.countsAgainstDriver ? " dr-case__tag--on" : ""}`}
+                      title={t.causeReason ?? t.verdictReason ?? undefined}>
+                  {t.countsAgainstDriver ? "Counts" : "Not counted"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {more}
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Overspeeding: the alerts on their trips, a row per day and unit with each
+ * alert's time as a chip. The count in the head is TRIPS with an overspeed,
+ * which is what the roster ranks on; the note says how many alerts that was.
+ */
+function SpeedCases({ overspeeds, trips }) {
+  const groups = [];
+  const byKey = new Map();
+  for (const o of overspeeds) {
+    const key = `${new Date(o.at).toDateString()}|${o.plate ?? ""}|${o.route ?? ""}`;
+    let g = byKey.get(key);
+    if (!g) { g = { key, at: o.at, plate: o.plate, route: o.route, times: [] }; byKey.set(key, g); groups.push(g); }
+    g.times.push(o.at);
+  }
+  const { shown, more } = useFold(groups);
+  return (
+    <section className="dr-panel__sec dr-cases-sec dr-cases-sec--speed">
+      <h3 className="dr-panel__h">
+        Overspeeding
+        <span className={`dr-panel__count${trips ? " dr-panel__count--speed" : ""}`}>{fmt(trips)}</span>
+      </h3>
+      {overspeeds.length === 0 ? (
+        <p className="dr-panel__note">No overspeeding on their trips.</p>
+      ) : (
+        <>
+          <p className="dr-panel__note">
+            <b>{fmt(overspeeds.length)} alert{overspeeds.length === 1 ? "" : "s"}</b> on {fmt(trips)} trip{trips === 1 ? "" : "s"}
+          </p>
+          <ul className="dr-cases">
+            {shown.map((g) => (
+              <li key={g.key} className="dr-case dr-case--on">
+                <DayBlock iso={g.at} />
+                <span className="dr-case__body">
+                  <span className="dr-case__line">
+                    <span className="dr-case__plate">{g.plate ?? "Unit"}</span>
+                    {g.route && <span className="dr-case__route">{g.route}</span>}
+                  </span>
+                  <span className="dr-case__times">
+                    {g.times.slice().sort().map((t, i) => <span key={i} className="dr-case__chip">{fmtTime(t)}</span>)}
+                  </span>
+                </span>
+                <span className="dr-case__n">{fmt(g.times.length)}×</span>
+              </li>
+            ))}
+          </ul>
+          {more}
+        </>
+      )}
+    </section>
+  );
+}
+
+const MIX = [
+  { key: "good", label: "4+" },
+  { key: "fair", label: "3 to 4" },
+  { key: "low", label: "Under 3" },
+  { key: "new", label: "Unrated" },
+];
+
+/**
+ * The roster cell: how many drivers, how many are driving now and drove at
+ * all in the window, and how the ratings fall — a stacked bar rather than one
+ * average, because an average of 3.4 hides whether that is everyone at 3.4 or
+ * half the roster at 5 and half unrated.
+ */
+function FleetCard({ fleet, loading }) {
+  if (loading && !fleet.count) {
     return (
-      <div className="dr-cell dr-profile">
-        <div className="dr-cell__empty">{loading ? "Loading driver…" : "Select a driver to see their analytics."}</div>
+      <div className="dr-cell dr-fleet">
+        <div className="dr-cell__empty" aria-busy="true">Loading drivers…</div>
       </div>
     );
   }
-  const { driver } = detail;
-  const tier = ratingTier(driver.rating);
+  const facts = [
+    { label: "Driving now", value: fmt(fleet.onRoad), live: fleet.onRoad > 0 },
+    { label: "Drove in 90 days", value: fmt(fleet.drove) },
+    { label: "Average rating", value: fleet.avgRating == null ? "—" : `${fmt(fleet.avgRating, 1)} / 5` },
+  ];
+  return (
+    <div className="dr-cell dr-fleet">
+      <div className="dr-statchart__head">
+        <span className="dr-statchart__label">Drivers</span>
+      </div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{fmt(fleet.count)}</span>
+        <span className="dr-summary__caption">on the roster,<br />{fmt(fleet.active)} active</span>
+      </div>
+      <dl className="dr-fleet__facts">
+        {facts.map((f) => (
+          <div key={f.label} className={`dr-fleet__fact${f.live ? " dr-fleet__fact--live" : ""}`}>
+            <dt>{f.live && <span className="dr-live__dot" aria-hidden="true" />}{f.label}</dt>
+            <dd>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="dr-fleet__mix">
+        <span className="dr-fleet__mixlabel">Ratings</span>
+        <span className="dr-fleet__bar" role="img"
+              aria-label={MIX.map((m) => `${fleet.mix[m.key]} ${m.label}`).join(", ")}>
+          {MIX.map((m) => fleet.mix[m.key] > 0 && (
+            <span key={m.key} className={`dr-fleet__seg dr-fleet__seg--${m.key}`}
+                  style={{ flexGrow: fleet.mix[m.key] }}
+                  title={`${m.label}: ${fmt(fleet.mix[m.key])} driver${fleet.mix[m.key] === 1 ? "" : "s"}`} />
+          ))}
+        </span>
+        <ul className="dr-fleet__legend">
+          {MIX.map((m) => (
+            <li key={m.key} className={`dr-fleet__key dr-fleet__key--${m.key}`}>
+              <span className="dr-fleet__swatch" aria-hidden="true" />{m.label}<b>{fmt(fleet.mix[m.key])}</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
-  // Live telemetry off the shared SSE stream — the meters track the driver's
-  // vehicle in realtime. Engine off (or no vehicle of theirs in this fleet)
-  // empties the bars and says which of the two it is.
+/**
+ * The driver's ID card, at the top of the panel (operator, 2026-10-13: "we
+ * need the driver id card back, with the gauges for speed, fuel, load, temp
+ * and oil, and the radar"). Who they are, then their unit right now off the
+ * shared live stream: five ring gauges, each with its figure and unit, and the
+ * radar beside them giving the same five as one shape. The radar is the
+ * glance; the rings are the reading, which is why both are here.
+ *
+ * Engine off, or no unit of theirs in this fleet: the rings empty, the
+ * figures read "—", the radar greys, and the state line says which it is.
+ */
+function DriverIdCard({ driver, tier, st, row, w, liveVehicle }) {
   const v        = liveVehicle;
   const engineOn = v?.engine === "on";
   const speed    = v?.speed ?? 0;
@@ -391,35 +806,28 @@ function DriverCard({ detail, loading, liveVehicle }) {
   const temp     = v?.engineTemp ?? 0;
   const oil      = v?.oilLevel ?? 0;
 
-  // The same five readings the radar plotted, as five labelled bars. A radar
-  // spends a polygon on values that share no scale — km/h beside °C beside a
-  // percentage — and the reader has to find each spoke's label to read it.
-  // A bar per reading prints the figure and its unit, and colours only the
-  // ones with a threshold worth flagging.
-  const meters = [
-    { key: "speed", label: "Speed", value: speed,   unit: "km/h", max: 120,
+  const gauges = [
+    { key: "speed", label: "Speed", unit: "km/h", value: speed,   max: 120,
       tone: speed > (v?.speedLimit ?? 80) ? "crit" : "ok" },
-    { key: "fuel",  label: "Fuel",  value: fuel,    unit: "%",    max: 100,
+    { key: "fuel",  label: "Fuel",  unit: "%",    value: fuel,    max: 100,
       tone: fuel < 15 ? "crit" : fuel < 40 ? "warn" : "ok" },
-    { key: "load",  label: "Load",  value: loadPct, unit: "%",    max: 100,
+    { key: "load",  label: "Load",  unit: "%",    value: loadPct, max: 100,
       tone: loadPct > 95 ? "crit" : loadPct > 80 ? "warn" : "info" },
-    { key: "temp",  label: "Temp",  value: temp,    unit: "°C",   max: 120, tone: "plain" },
-    { key: "oil",   label: "Oil",   value: oil,     unit: "%",    max: 100, tone: "plain" },
+    { key: "temp",  label: "Temp",  unit: "°C",   value: temp,    max: 120,
+      tone: temp > 105 ? "crit" : temp > 95 ? "warn" : "info" },
+    { key: "oil",   label: "Oil",   unit: "%",    value: oil,     max: 100,
+      tone: oil < 20 ? "crit" : oil < 40 ? "warn" : "ok" },
   ];
   const liveState = !v ? "No vehicle on record" : engineOn ? "Live" : "Engine off";
 
   return (
-    <div className="dr-cell dr-profile">
-      <div className="dr-profile__head">
-        <span className={`dr-profile__avatar dr-tier--${tier.tone}`}>
-          {initialsOf(driver.fullName)}
-        </span>
-        <div className="dr-profile__ident">
+    <section className={`dr-idcard${engineOn ? " dr-idcard--on" : ""}`} aria-label="Driver ID card">
+      <div className="dr-idcard__who">
+        <span className={`dr-profile__avatar dr-idcard__avatar dr-tier--${tier.tone}`}>{initialsOf(driver.fullName)}</span>
+        <div className="dr-panel__ident">
           <div className="dr-profile__namerow">
-            <span className="dr-profile__name">{titleCase(driver.fullName)}</span>
-            {tier.label && (
-              <span className={`dr-profile__pill dr-tier--${tier.tone}`}>{tier.label}</span>
-            )}
+            <span className="dr-panel__name">{titleCase(driver.fullName)}</span>
+            {tier.label && <span className={`dr-profile__pill dr-tier--${tier.tone}`}>{tier.label}</span>}
           </div>
           <div className="dr-profile__meta">
             {driver.employeeId ? `#${driver.employeeId}` : "Driver"}
@@ -429,7 +837,26 @@ function DriverCard({ detail, loading, liveVehicle }) {
         </div>
       </div>
 
-      <div className={`dr-live${engineOn ? " dr-live--on" : ""}`}>
+      <dl className="dr-idcard__facts">
+        <div>
+          <dt>Status</dt>
+          <dd>
+            <span className={`dr-grid__badge dr-grid__badge--${st.tone}`}>
+              <span className="dr-grid__dot" aria-hidden="true" />{st.label}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>{row?.vehicleFrom === "assignment" ? "Assigned to" : "Last drove"}</dt>
+          <dd>{row?.vehicle ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>Active</dt>
+          <dd>{w ? w.label : "No activity"}</dd>
+        </div>
+      </dl>
+
+      <div className="dr-idcard__live">
         <div className="dr-live__head">
           <span className="dr-live__state">
             <span className="dr-live__dot" aria-hidden="true" />
@@ -437,27 +864,69 @@ function DriverCard({ detail, loading, liveVehicle }) {
           </span>
           {v && <span className="dr-live__unit">{v.id}</span>}
         </div>
-        <ul className="dr-meters">
-          {meters.map((m) => {
-            const share = engineOn ? Math.max(0, Math.min(m.value / m.max, 1)) : 0;
-            return (
-              <li key={m.key} className={`dr-meter dr-meter--${engineOn ? m.tone : "off"}`}>
-                {/* The unit rides with the label, not the figure: "86 km/h"
-                    at 15px is the full width of a fifth of the cell, and the
-                    figure is the part that has to stay whole. */}
-                <span className="dr-meter__label">
-                  {m.label}<span className="dr-meter__unit">{m.unit}</span>
-                </span>
-                <span className="dr-meter__value">{engineOn ? Math.round(m.value) : "—"}</span>
-                <span className="dr-meter__track" aria-hidden="true">
-                  <span className="dr-meter__fill" style={{ "--share": share }} />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="dr-idcard__instruments">
+          <DriverRadar gauges={gauges} off={!engineOn} />
+          <ul className="dr-gauges">
+            {gauges.map((g) => <DriverGauge key={g.key} g={g} off={!engineOn} />)}
+          </ul>
+        </div>
       </div>
-    </div>
+    </section>
+  );
+}
+
+/** One ring: the share of its scale filled, the figure in the middle, the
+ *  label and unit under it. Colour only where the reading has a threshold. */
+function DriverGauge({ g, off }) {
+  const r = 18, c = 22;
+  const circ = 2 * Math.PI * r;
+  const share = off ? 0 : Math.max(0, Math.min(g.value / g.max, 1));
+  return (
+    <li className={`dr-gauge dr-meter--${off ? "off" : g.tone}`}>
+      <span className="dr-gauge__ring">
+        <svg className="dr-gauge__svg" viewBox="0 0 44 44" aria-hidden="true">
+          <circle className="dr-gauge__track" cx={c} cy={c} r={r} />
+          <circle
+            className="dr-gauge__fill" cx={c} cy={c} r={r}
+            strokeDasharray={`${circ * share} ${circ}`}
+            transform={`rotate(-90 ${c} ${c})`}
+          />
+        </svg>
+        <span className="dr-gauge__val">{off ? "—" : Math.round(g.value)}</span>
+      </span>
+      <span className="dr-gauge__lbl">{g.label}<span className="dr-meter__unit">{g.unit}</span></span>
+    </li>
+  );
+}
+
+/** The same five readings as one shape, each spoke its share of its own scale. */
+function DriverRadar({ gauges, off }) {
+  const n = gauges.length;
+  const CX = 50, CY = 46, R = 30;
+  const step = (2 * Math.PI) / n;
+  const pt = (i, rr) => [CX + rr * Math.cos(-Math.PI / 2 + i * step), CY + rr * Math.sin(-Math.PI / 2 + i * step)];
+  const poly = (rr) => gauges.map((_, i) => pt(i, typeof rr === "function" ? rr(i) : rr))
+    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + "Z";
+  const vals = gauges.map((g) => (off ? 0 : Math.max(0, Math.min(g.value / g.max, 1))));
+  const label = off ? "No live readings" :
+    gauges.map((g) => `${g.label} ${Math.round(g.value)} ${g.unit}`).join(", ");
+  return (
+    <svg className={`dr-radar${off ? " dr-radar--off" : ""}`} viewBox="0 0 100 92" role="img" aria-label={label}>
+      {[0.33, 0.66, 1].map((lvl) => <path key={lvl} className="dr-radar__grid" d={poly(R * lvl)} />)}
+      {gauges.map((g, i) => {
+        const p = pt(i, R);
+        return <line key={g.key} className="dr-radar__grid" x1={CX} y1={CY} x2={p[0]} y2={p[1]} />;
+      })}
+      <path className="dr-radar__shape" d={poly((i) => R * Math.max(vals[i], 0.03))} />
+      {gauges.map((g, i) => {
+        const p = pt(i, R * Math.max(vals[i], 0.03));
+        return <circle key={g.key} className="dr-radar__pt" cx={p[0]} cy={p[1]} r="2" />;
+      })}
+      {gauges.map((g, i) => {
+        const p = pt(i, R + 10);
+        return <text key={g.key} className="dr-radar__axis" x={p[0]} y={p[1]} textAnchor="middle" dominantBaseline="middle">{g.label}</text>;
+      })}
+    </svg>
   );
 }
 
@@ -476,25 +945,21 @@ function StarRating({ value }) {
   );
 }
 
-// Summary card — total trips, fuel-theft and overspeeding cases for the selected
-// driver. Sits beside the mileage trend in the detail grid.
-function SummaryCard({ detail, loading }) {
-  if (!detail || !detail.driver) {
+// Summary — the roster's trips, and its fuel-theft and overspeeding cases with
+// how many drivers they fall on: ten cases on one driver and ten across ten
+// are different problems.
+function FleetSummary({ fleet, loading }) {
+  if (loading && !fleet.count) {
     return (
       <div className="dr-cell dr-summary">
-        <div className="dr-cell__empty">{loading ? "Loading…" : "Select a driver to see their summary."}</div>
+        <div className="dr-cell__empty" aria-busy="true">Loading…</div>
       </div>
     );
   }
-  const { totals } = detail;
-  // Trips is the scale of the window; the other two are exceptions to it. The
-  // version this replaces gave all three the same 20px figure in three
-  // different hues - purple for "Total trips", which means nothing, next to a
-  // red and an amber that mean a great deal. Colour is spent on the exceptions
-  // now, and only when there are any.
+  const { totals, involved } = fleet;
   const incidents = [
-    { name: "Fuel theft", n: totals.fuelTheftCases, tone: "theft" },
-    { name: "Overspeeding", n: totals.overspeedingCases, tone: "speed" },
+    { name: "Fuel theft", n: totals.fuelTheftCases, who: involved.theft, tone: "theft" },
+    { name: "Overspeeding", n: totals.overspeedingCases, who: involved.speed, tone: "speed" },
   ];
   const clean = incidents.every((i) => !i.n);
 
@@ -507,7 +972,7 @@ function SummaryCard({ detail, loading }) {
 
       <div className="dr-summary__lead">
         <span className="dr-summary__figure">{fmt(totals.trips)}</span>
-        <span className="dr-summary__caption">trips completed<br />in this window</span>
+        <span className="dr-summary__caption">trips completed<br />by all drivers</span>
       </div>
 
       <div className="dr-summary__incidents">
@@ -517,7 +982,10 @@ function SummaryCard({ detail, loading }) {
             className={`dr-summary__incident${i.n ? ` dr-summary__incident--${i.tone}` : ""}`}
           >
             <span className="dr-summary__dot" aria-hidden="true" />
-            <span className="dr-summary__name">{i.name}</span>
+            <span className="dr-summary__name">
+              {i.name}
+              {i.n > 0 && <span className="dr-summary__who"> · {fmt(i.who)} driver{i.who === 1 ? "" : "s"}</span>}
+            </span>
             <span className="dr-summary__count">{fmt(i.n)}</span>
           </div>
         ))}
@@ -603,7 +1071,7 @@ function AllDriversSection({
   return (
     <>
       {/* Filters — chips + search, full width above the row (like maint-filters). */}
-      <div className="dr-filters">
+      <div data-tour="page-filters" className="dr-filters">
         {/* `display: contents` at every width above 768px, so the chips still
             lay out as direct children of the wrapping flex row and the desktop
             bar is unchanged. Below 768 the wrapper becomes a real box and takes
@@ -660,7 +1128,7 @@ function AllDriversSection({
         </div>
       </div>
 
-      <div className="dr-grid-card">
+      <div data-tour="page-table" className="dr-grid-card">
         <div className="dr-grid-scroll">
           <table className="dr-grid">
             <thead>

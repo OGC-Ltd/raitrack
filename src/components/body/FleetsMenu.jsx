@@ -46,6 +46,7 @@ import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { useAppFields, useAppActions } from "../../context/AppContext";
 import { fleetTypeOptions } from "../../lib/vehicleMap";
 import "./FleetsMenu.css";
+import { displayPlate } from "../../lib/plate";
 
 /** A funnel. Drawn at the same 1.9 stroke as the rest of the app's icons. */
 function FunnelIcon() {
@@ -245,7 +246,7 @@ export default function FleetsMenu({
                     title="Show this unit on the map"
                   >
                     <span className="fleets-menu__flagdot" aria-hidden="true" />
-                    <span className="fleets-menu__flagplate">{vehicle.id}</span>
+                    <span className="fleets-menu__flagplate">{displayPlate(vehicle)}</span>
                     <span className="fleets-menu__flagfor">{stoppedFor(why.forMs)}</span>
                     <span className="fleets-menu__flagmeta">
                       {why.state === "idling" ? "engine running" : "engine off"}

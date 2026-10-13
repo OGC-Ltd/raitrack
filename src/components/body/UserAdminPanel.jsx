@@ -1971,7 +1971,7 @@ export default function UserAdminPanel() {
                 underneath was the page naming itself twice — but a screen
                 reader arriving here still needs one heading to land on, and a
                 page whose only title is a breadcrumb <li> has none. */}
-            <h1 className="ua-masthead__title">User accounts</h1>
+            <h1 className="ua-masthead__title">Users</h1>
 
             {/* Two badges instead of a total and a paragraph.
                 The total said how many rows there are, which is a fact you can
@@ -2533,7 +2533,7 @@ export default function UserAdminPanel() {
         )}
 
         {loadError ? (
-          <LoadError label="User accounts" onRetry={retry} fullSection />
+          <LoadError label="Users" onRetry={retry} fullSection />
         ) : !loading && users.length === 0 ? (
           <TabEmptyState
             icon={<DriversIcon size={44} />}

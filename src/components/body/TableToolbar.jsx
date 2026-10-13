@@ -46,7 +46,7 @@ export default function TableToolbar({
   summary, loading = false, onReload, onCsv, onPdf, disabled = false, actions,
 }) {
   return (
-    <div className="sp4-table-sub sp4-gridbar">
+    <div data-tour="page-toolbar" className="sp4-table-sub sp4-gridbar">
       <span>
         {summary}
       </span>

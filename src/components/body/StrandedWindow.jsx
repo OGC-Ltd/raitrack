@@ -68,6 +68,7 @@ import { usePlaceName } from "../../hooks/usePlaceName";
 import { paginate } from "../../lib/rosterView";
 import TablePager from "./TablePager";
 import "./StrandedWindow.css";
+import { displayPlate } from "../../lib/plate";
 
 /** Ten, where every full-width table pages fifteen (TablePager): this is a
  *  320px window over a map. One number, and it is the number that fills the
@@ -157,7 +158,7 @@ function StrandedRow({ vehicle, why, on, onToggle, onSelect }) {
       >
         <span className="stranded-win__unit">
           <span className="stranded-win__dot" aria-hidden="true" />
-          <span className="stranded-win__plate">{vehicle.id}</span>
+          <span className="stranded-win__plate">{displayPlate(vehicle)}</span>
           <span className="stranded-win__meta">
             {why.state === "idling" ? "engine running" : "engine off"}
             {/* Said out loud rather than assumed either way: we know where it

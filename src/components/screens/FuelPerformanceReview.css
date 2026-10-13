@@ -30,10 +30,17 @@
 }
 
 /* ── The verdict ─────────────────────────────────────────────────────────── */
+/* Hallmark · component: verdict line · genre: modern-minimal · theme: sp4 tokens
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ * Operator, 2026-10-13: "its too huge". At 17px / 500 it outranked every
+ * heading under it (the section heads are 14px), so the page opened on a
+ * paragraph rather than on its figures. Now the section heads' size at
+ * regular weight in the secondary ink: it reads as the review's summary line,
+ * and only the figures in it carry weight. */
 .fpr-lede {
-  max-width: 72ch;
-  margin-top: 22px; margin-bottom: 6px;
-  font-size: 17px; line-height: 1.5; font-weight: 500; color: var(--sp4-text-2);
+  max-width: 96ch;
+  margin-top: 16px; margin-bottom: 4px;
+  font-size: var(--sp4-strong); line-height: 1.6; font-weight: 400; color: var(--sp4-text-2);
   text-wrap: pretty;
 }
 .fpr-lede b, .fpr-lede em { font-style: normal; font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
@@ -246,7 +253,7 @@
   /* Worst is the top row and best the bottom: the tags do not fit a phone. */
   .fpr-ex__tag { display: none; }
   .fpr-source { margin-left: 0; }
-  .fpr-lede { font-size: 15px; }
+  .fpr-lede { font-size: 13px; margin-top: 12px; }
   .fpr-att td:nth-child(2) { width: auto; }
   .fpr-att th:nth-child(3), .fpr-att td:nth-child(3) { display: none; }
 }

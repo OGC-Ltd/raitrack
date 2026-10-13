@@ -43,8 +43,9 @@ import { fleetTypeOptions, isInTransit } from '../../lib/vehicleMap';
 import { TreeCountsMasked, MASKED_COUNT } from './SideTree';
 import './FleetsTree.css';
 
-/** Chips shown before "N more": about two rows at the sidebar's width. */
-const CHIP_FOLD = 6;
+/** Chips shown before "N more" (operator, 2026-10-13: "on the Fleets we only
+ *  show 3, the rest should be under more"). */
+const CHIP_FOLD = 3;
 
 /** A place this block opens: icon, label, count. No chevron — nothing
  *  unfolds beneath these rows, so an arrow promised children they lack. */
@@ -93,10 +94,9 @@ export default function FleetsTree({ audit = null, report = null, review = null 
   const showTypes = canFilter && options.length > 1;
   const filtered  = selected.size > 0 || Boolean(inTransitOnly);
 
-  /* Folded to about two rows of chips — but a ticked type is never hidden by
-     the fold: a filter you cannot see is a filter you cannot undo. Folding
-     away a single chip would save nothing, hence the +1. */
-  const folds = options.length > CHIP_FOLD + 1;
+  /* Folded to the first CHIP_FOLD chips — but a ticked type is never hidden
+     by the fold: a filter you cannot see is a filter you cannot undo. */
+  const folds = options.length > CHIP_FOLD;
   const shownTypes = allTypes || !folds
     ? options
     : options.filter((o, i) => i < CHIP_FOLD || selected.has(o.kind));

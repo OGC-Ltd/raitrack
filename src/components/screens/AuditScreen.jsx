@@ -369,7 +369,7 @@ export default function AuditScreen() {
           count in a gauge against what it is a share of. Probes to repair and
           Repaired split the same units; Failed repairs is the part of the
           first that needs a new job. */}
-      <div className="aud-stats">
+      <div data-tour="page-kpis" className="aud-stats">
         <StatCard title="Probes to repair" n={waiting.length} of={states.length} what="probe"
                   color="var(--frv-s2)" loading={s.loading}
                   note="Raised a false theft and not yet fixed." />
@@ -435,7 +435,7 @@ export default function AuditScreen() {
         {/* One card per unit on a phone: seven columns scrolled sideways put
             the repair state and the button off-screen. */}
         {rows.length > 0 && (
-          <div className="sp4-table-scroll aud-units">
+          <div data-tour="page-table" className="sp4-table-scroll aud-units">
             <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
               <thead>
                 <tr>
