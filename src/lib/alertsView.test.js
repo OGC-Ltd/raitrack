@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   alertPager, bulkPlan, bulkWords, canTake, choiceWords, companyForOrgCode, alertTrend, countWhere, trendUnit, daysBounds, daysWords, decisionWords,
-  duration, fleetDay, fleetMidnight, headline, periodDays, periodFrom, statusOf, unitQueues,
+  duration, fleetDay, fleetMidnight, headline, periodDays, periodFrom, reportedLate, statusOf, unitQueues,
 } from "./alertsView";
 
 describe("alertPager", () => {
@@ -220,5 +220,17 @@ describe("alerts over time", () => {
   it("waits for the history", () => {
     expect(alertTrend(null)).toBeNull();
     expect(alertTrend([], {}, NOW).points).toHaveLength(1);
+  });
+});
+
+describe("reportedLate", () => {
+  it("names when an alert was reported, when that was well after it began", () => {
+    expect(reportedLate({ at: "2026-10-12T18:00:00Z", arrivedAt: "2026-10-13T01:30:00Z" })).toBe("reported 13 Oct 04:30");
+    expect(reportedLate({ at: "2026-10-13T01:00:00Z", arrivedAt: "2026-10-13T01:30:00Z" })).toBe("reported 04:30");
+  });
+
+  it("says nothing when it was reported within minutes, or the time is missing", () => {
+    expect(reportedLate({ at: "2026-10-13T01:00:00Z", arrivedAt: "2026-10-13T01:05:00Z" })).toBeNull();
+    expect(reportedLate({ at: "2026-10-13T01:00:00Z" })).toBeNull();
   });
 });

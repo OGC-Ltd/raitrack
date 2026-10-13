@@ -1,5 +1,6 @@
 // A unit's journey so far today — where and when it set off, and the ground
-// covered since (lib/vehicleDay journeySoFar) — for the unit card.
+// covered since, and its burn rate (lib/vehicleDay journeySoFar) — for the
+// unit card.
 //
 // `load` is for a card somebody has clicked. It reads the fleet day through
 // loadDay, which the vehicle panel opening beside it shares — one request for
@@ -15,7 +16,7 @@ import { fleetDayKey } from './useFuelEvents';
 
 const REFRESH_MS = 60_000;
 
-export function useJourneySoFar(orgId, vehicleId, load = false) {
+export function useJourneySoFar(orgId, vehicleId, load = false, tankL = null) {
   const day = fleetDayKey();
   const held = () => (orgId && vehicleId ? cachedDay(orgId, vehicleId, day)?.pings ?? null : null);
   const [pings, setPings] = useState(held);
@@ -33,5 +34,5 @@ export function useJourneySoFar(orgId, vehicleId, load = false) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, vehicleId, day, load]);
 
-  return useMemo(() => (pings ? journeySoFar(pings) : null), [pings]);
+  return useMemo(() => (pings ? journeySoFar(pings, tankL) : null), [pings, tankL]);
 }

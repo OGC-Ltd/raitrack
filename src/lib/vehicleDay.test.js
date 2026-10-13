@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../services/api', () => ({ apiFetch: vi.fn() }));
 
 import { apiFetch } from '../services/api';
-import { _resetVehicleDay, cachedDay, decodeColumns, fuelFromLevel, journeySoFar, loadDay, mergeNewer, summariseDay, movingSpans } from './vehicleDay';
+import { _resetVehicleDay, burnAgainst, burnRate, overWords, cachedDay, decodeColumns, fuelFromLevel, journeySoFar, loadDay, mergeNewer, summariseDay, movingSpans } from './vehicleDay';
 
 const DAY = '2026-09-20'; // a finished day
 const FROM = Date.parse('2026-09-19T21:00:00.000Z');
@@ -172,14 +172,65 @@ describe('journeySoFar', () => {
   });
 
   it('has no start and no distance on a day the unit stood still', () => {
-    expect(journeySoFar(day(Array(6).fill(100), { speed: 0 }))).toEqual({ start: null, km: 0 });
+    expect(journeySoFar(day(Array(6).fill(100), { speed: 0 }))).toEqual({ start: null, km: 0, burn: null });
   });
 });
-
+
+
 describe('movingSpans', () => {
   const at = (min, speedKmh) => ({ t: min * 60_000, speedKmh });
   it('joins touching moving readings and breaks at a stop or a long silence', () => {
     const spans = movingSpans([at(0, 30), at(1, 40), at(2, 0), at(5, 20), at(6, 25), at(30, 25)]);
     expect(spans).toEqual([{ start: 0, end: 120_000 }, { start: 300_000, end: 360_000 }]);
+  });
+});
+
+describe('burnRate', () => {
+  const sum = (o) => ({ usedL: 40, engineHoursToday: null, engineOnMin: null, distanceKm: null, ...o });
+
+  it('is litres per engine hour off the meter, with km per litre once it has driven', () => {
+    const b = burnRate(sum({ engineHoursToday: 4, engineOnMin: 300, distanceKm: 120 }));
+    expect(b.lPerH).toBeCloseTo(10);
+    expect(b.kmPerL).toBeCloseTo(3);
+    expect(b.hoursFrom).toBe('meter');
+  });
+
+  it('falls back to the time the engine was on when the meter did not tick', () => {
+    const b = burnRate(sum({ engineOnMin: 240 }));
+    expect(b.lPerH).toBeCloseTo(10);
+    expect(b.kmPerL).toBeNull();
+    expect(b.hoursFrom).toBe('engine');
+  });
+
+  it('says nothing on a day too thin to support a rate', () => {
+    expect(burnRate(sum({ engineOnMin: 10, distanceKm: 2 }))).toBeNull();
+    expect(burnRate(sum({ usedL: null, engineHoursToday: 5 }))).toBeNull();
+    expect(burnRate(sum({ usedL: 0.4, engineHoursToday: 5 }))).toBeNull();
+  });
+});
+
+describe('burnAgainst', () => {
+  const burn = { lPerH: 12, kmPerL: 2, usedL: 48 };
+
+  it('is null for a unit the register does not rate', () => {
+    expect(burnAgainst(burn, null)).toBeNull();
+  });
+
+  it('reads an HOURS unit in L/h: more litres an hour is over', () => {
+    const v = burnAgainst(burn, { value: 10, basis: 'HOURS' });
+    expect(v).toMatchObject({ unit: 'L/h', std: 10, today: 12, high: true });
+    expect(v.over).toBeCloseTo(0.2);
+    expect(overWords(v.over)).toBe('20% over standard');
+  });
+
+  it('reads a DISTANCE unit in km/L: fewer km a litre is over', () => {
+    const v = burnAgainst(burn, { value: 2.5, basis: 'DISTANCE' });
+    expect(v).toMatchObject({ unit: 'km/L', today: 2 });
+    expect(v.over).toBeCloseTo(0.25);
+    expect(burnAgainst({ ...burn, kmPerL: 3 }, { value: 2.5, basis: 'DISTANCE' }).high).toBe(false);
+  });
+
+  it('keeps the standard when today cannot be measured yet', () => {
+    expect(burnAgainst(null, { value: 10, basis: 'HOURS' })).toMatchObject({ std: 10, today: null, over: null, high: false });
   });
 });

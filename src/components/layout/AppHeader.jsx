@@ -12,6 +12,7 @@ import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
+import ManualIcon from './ManualIcon';
 
 // Never opened in this browser → count only the last 24 hours, so a first
 // visit isn't greeted with every alert in the replayed history.
@@ -306,10 +307,10 @@ export default function AppHeader() {
                   User accounts
                 </button>
               )}
-              {/* The first-time tour, again (lib/productTour). */}
+              {/* The Manual: the first-time tour, again (lib/productTour). */}
               <button className="app-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
-                <i className="ti ti-route-2" aria-hidden="true" />
-                Guided tour
+                <ManualIcon />
+                Manual
               </button>
               <div className="app-header__user-divider" />
               <button className="app-header__user-item" onClick={logout}>

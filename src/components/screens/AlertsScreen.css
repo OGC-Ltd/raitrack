@@ -358,3 +358,34 @@
 @media (prefers-reduced-motion: reduce) {
   .alr-table--stale .sp4-table { transition: none; }
 }
+
+/* Under WHEN: when an alert began well before it was reported. The list runs
+   newest report first, so this says why an older time sits higher. */
+.alr-reported {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--sp4-text-3);
+  font-weight: 400;
+}
+
+/* A fuel alert on a unit already reported for a probe repair: amber, as the
+   Units list's Reported chip and the panel's probe note. */
+.alr-probe {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, #d97706 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #b45309;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.alr-probe .ti { font-size: 11px; }

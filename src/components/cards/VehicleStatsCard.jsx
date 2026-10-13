@@ -17,6 +17,7 @@ import { vehicleActivity, isInTransit, isOnline, equipmentLabel, ACTIVITY_LABELS
 import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
+import { burnAgainst, overWords } from "../../lib/vehicleDay";
 
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
@@ -359,7 +360,11 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
      same start the vehicle panel's "Departed" names), and OUTBOUND is the
      ground covered since then. */
   const { orgId } = useFleetLiveShared() ?? {};
-  const journey = useJourneySoFar(orgId, vehicle.vehicleId, withDay);
+  const journey = useJourneySoFar(orgId, vehicle.vehicleId, withDay, vehicle.tankCapacityL ?? null);
+  // Today's burn rate, off the same readings (lib/vehicleDay burnRate)
+  const burn = journey?.burn ?? null;
+  // Against the register's standard, where FactorySuite rates the unit
+  const vsStd = burnAgainst(burn, vehicle.ratedBurn);
   const start = journey?.start ?? null;
   const startName = usePlaceName(start?.lat ?? null, start?.lng ?? null);
   const dayPending = withDay && journey == null;
@@ -602,6 +607,32 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             unit={vehicle.engineHours != null ? " h" : ""}
             sub="total run time"
           />
+          {/* Litres per engine hour today, with km per litre once it has
+              driven far enough to say (lib/vehicleDay burnRate). A unit the
+              FactorySuite register rates is read in the register's unit and
+              set against its standard, amber when well over it. */}
+          {vsStd ? (
+            <Tile
+              label="BURN RATE"
+              value={vsStd.today != null ? vsStd.today.toFixed(1) : "—"}
+              unit={vsStd.today != null ? ` ${vsStd.unit}` : ""}
+              sub={vsStd.over != null
+                ? <>{vsStd.high && <WarnGlyph />}{` ${overWords(vsStd.over)} (${vsStd.std} ${vsStd.unit})`}</>
+                : `standard ${vsStd.std} ${vsStd.unit}`}
+              valColor={vsStd.high ? "var(--accent-warn)" : undefined}
+              subColor={vsStd.high ? "var(--accent-warn)" : undefined}
+            />
+          ) : (
+            <Tile
+              label="BURN RATE"
+              value={burn?.lPerH != null ? burn.lPerH.toFixed(1)
+                : burn?.kmPerL != null ? burn.kmPerL.toFixed(1) : "—"}
+              unit={burn?.lPerH != null ? " L/h" : burn?.kmPerL != null ? " km/L" : ""}
+              sub={burn?.lPerH != null && burn.kmPerL != null ? `${burn.kmPerL.toFixed(1)} km/L today`
+                : burn ? "today"
+                : dayPending ? "reading today…" : "not enough today"}
+            />
+          )}
           {/* Only once RaiFactorySuite has sent a serial for the unit
               (operator, 28 Sep: "remove the seal serial, this is to be
               dynamically populated when a webhook from FactorySuite sends us a

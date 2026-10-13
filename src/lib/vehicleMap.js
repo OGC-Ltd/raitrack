@@ -1085,6 +1085,10 @@ export function mapSnapshotVehicle(v) {
     tankCapacityL: v.tankCapacityLitres ?? null,
     // RaiFactorySuite machine register name (KASULU only) — see equipmentLabel.
     machineName:   v.machineName ?? null,
+    // The register's standard burn (KASULU only): L/h on an HOURS basis, km/L
+    // on DISTANCE. Null on unrated units — see lib/vehicleDay burnAgainst.
+    ratedBurn:     v.ratedConsumption != null && v.ratedConsumptionBasis
+      ? { value: v.ratedConsumption, basis: v.ratedConsumptionBasis } : null,
     // Why fuelLitres is null, when the reason is a broken probe rather than a
     // missing one — the server derives it from the unit's own sensor config.
     // See wialon.sensors readFuelProbeFault.

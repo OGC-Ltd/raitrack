@@ -266,6 +266,22 @@ export function when(iso) {
   return `${DAY_FMT.format(t)} ${TIME_FMT.format(t)}`;
 }
 
+const LATE_MS = 10 * 60_000;
+
+/**
+ * "reported 04:30" (or "reported 13 Oct 04:30" on a later day) when an alert
+ * reached the page well after it began, else null. The list is newest
+ * arrival first, so this is what explains a 01:15 fall sitting above a 04:14
+ * overspeed: it was only called at 04:30.
+ */
+export function reportedLate(alert) {
+  const at = Date.parse(alert?.at ?? "");
+  const arrived = Date.parse(alert?.arrivedAt ?? "");
+  if (!Number.isFinite(at) || !Number.isFinite(arrived) || arrived - at < LATE_MS) return null;
+  const sameDay = DAY_FMT.format(at) === DAY_FMT.format(arrived);
+  return `reported ${sameDay ? TIME_FMT.format(arrived) : when(alert.arrivedAt)}`;
+}
+
 /** "45 s", "3 min", "1 h 05 min". */
 export function duration(sec) {
   if (sec == null || !Number.isFinite(sec)) return "—";
