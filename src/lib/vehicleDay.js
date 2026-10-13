@@ -229,10 +229,34 @@ export function fuelFromLevel(pings, tankL) {
  * it moved, so the distance since it is the day's distance. `start` is null
  * on a day the unit has not moved.
  */
-export function journeySoFar(pings) {
-  const s = summariseDay(pings, null);
+export function journeySoFar(pings, tankL = null) {
+  const s = summariseDay(pings, tankL);
   const start = s.firstMove ? { t: s.firstMove.t, lat: s.firstMove.lat, lng: s.firstMove.lng } : null;
-  return { start, km: start ? s.distanceKm ?? 0 : 0 };
+  return { start, km: start ? s.distanceKm ?? 0 : 0, burn: burnRate(s) };
+}
+
+const MIN_BURN_HOURS = 0.5;   // less engine time than this gives a noisy rate
+const MIN_BURN_KM    = 5;
+const MIN_BURN_L     = 1;
+
+/**
+ * How fast the unit is burning fuel, from a day's summary (summariseDay):
+ * litres per engine hour and kilometres per litre. The unit card and the
+ * vehicle panel both show it, so they read the same figures.
+ *
+ * Engine time is the engine-hours meter where it ticked, else the time the
+ * readings say the engine was on. Used litres come from the tank level, so a
+ * theft that day shows as a higher burn. Each rate is null when the day is too
+ * thin to support it, and the whole is null when neither is.
+ */
+export function burnRate(sum) {
+  if (!sum || sum.usedL == null || sum.usedL < MIN_BURN_L) return null;
+  const meter = sum.engineHoursToday != null && sum.engineHoursToday >= MIN_BURN_HOURS ? sum.engineHoursToday : null;
+  const hours = meter ?? (sum.engineOnMin != null ? sum.engineOnMin / 60 : null);
+  const lPerH = hours != null && hours >= MIN_BURN_HOURS ? sum.usedL / hours : null;
+  const kmPerL = sum.distanceKm != null && sum.distanceKm >= MIN_BURN_KM ? sum.distanceKm / sum.usedL : null;
+  if (lPerH == null && kmPerL == null) return null;
+  return { lPerH, kmPerL, usedL: sum.usedL, hours: lPerH != null ? hours : null, hoursFrom: lPerH == null ? null : meter != null ? 'meter' : 'engine' };
 }
 
 /**
@@ -262,7 +286,7 @@ export function movingSpans(pings) {
 export function summariseDay(pings, tankL) {
   const empty = {
     series: [], unit: tankL ? '%' : 'L', usedL: null, usedSource: null, refilledL: null,
-    idleMin: null, movingMin: null, distanceKm: null, engineHoursToday: null, topSpeed: null, firstMove: null,
+    idleMin: null, movingMin: null, engineOnMin: null, distanceKm: null, engineHoursToday: null, topSpeed: null, firstMove: null,
   };
   if (!pings.length) return empty;
 
@@ -288,7 +312,7 @@ export function summariseDay(pings, tankL) {
   if (usedL == null && lvl.usedL != null) { usedL = lvl.usedL; usedSource = 'level'; }
   refilledL = lvl.refilledL;
 
-  let idleMs = 0, movingMs = 0, metres = 0;
+  let idleMs = 0, movingMs = 0, onMs = 0, metres = 0;
   let sawEngine = false, sawPosition = false, topSpeed = null, firstMove = null;
   for (let i = 0; i < pings.length; i++) {
     const p = pings[i];
@@ -300,6 +324,7 @@ export function summariseDay(pings, tankL) {
     const gap = p.t - prev.t;
     if (gap <= 0 || gap > MAX_GAP_MS) continue;
     const moving = (prev.speedKmh ?? 0) >= MOVING_KMH || (p.speedKmh ?? 0) >= MOVING_KMH;
+    if (prev.engineOn) onMs += gap;
     if (prev.engineOn && (prev.speedKmh ?? 0) < IDLE_SPEED_KMH) idleMs += gap;
     if ((prev.speedKmh ?? 0) >= MOVING_KMH) movingMs += gap;
     if (moving && Number.isFinite(prev.lat) && Number.isFinite(p.lat)) {
@@ -323,9 +348,38 @@ export function summariseDay(pings, tankL) {
     refilledL,
     idleMin: sawEngine ? idleMs / 60_000 : null,
     movingMin: anySpeed ? movingMs / 60_000 : null,
+    engineOnMin: sawEngine ? onMs / 60_000 : null,
     distanceKm: sawPosition || anySpeed ? metres / 1000 : null,
     engineHoursToday,
     topSpeed,
     firstMove,
   };
+}
+
+/** Over the standard by more than this reads as burning too much. */
+export const BURN_OVER_SHARE = 0.15;
+
+/**
+ * Today's burn against the unit's standard from the FactorySuite register
+ * (vehicleMap `ratedBurn`, KASULU only). On an HOURS basis it compares L/h;
+ * on DISTANCE, km/L. `over` is how much more fuel the unit used than the
+ * standard allows, as a share (0.2 = 20% more; negative = less), the same
+ * sense on either basis. Null when the unit is unrated; `today` and `over`
+ * null when today's rate in that unit cannot be measured yet.
+ */
+export function burnAgainst(burn, ratedBurn) {
+  if (!ratedBurn || !(ratedBurn.value > 0)) return null;
+  const hours = ratedBurn.basis === 'HOURS';
+  const unit = hours ? 'L/h' : 'km/L';
+  const today = (hours ? burn?.lPerH : burn?.kmPerL) ?? null;
+  const over = today == null || !(today > 0) ? null
+    : hours ? today / ratedBurn.value - 1 : ratedBurn.value / today - 1;
+  return { unit, std: ratedBurn.value, today, over, high: over != null && over > BURN_OVER_SHARE };
+}
+
+/** "18% over standard" / "6% under standard" / "on standard". */
+export function overWords(over) {
+  const pct = Math.round(Math.abs(over) * 100);
+  if (pct === 0) return 'on standard';
+  return `${pct}% ${over > 0 ? 'over' : 'under'} standard`;
 }

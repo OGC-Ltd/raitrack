@@ -20,7 +20,7 @@ import { createReport, addSectionTitle, addSummaryCards, addTable, downloadRepor
 import { usePlaceName } from '../../hooks/usePlaceName';
 import { fleetDayKey } from '../../hooks/useFuelEvents';
 import { vehicleReadings } from '../../lib/vehicleReadings';
-import { cachedDay, dayBounds, loadDay, summariseDay, movingSpans } from '../../lib/vehicleDay';
+import { burnAgainst, burnRate, cachedDay, dayBounds, loadDay, overWords, summariseDay, movingSpans } from '../../lib/vehicleDay';
 import { useFuelEpisodes, useVehicleFuelEventsRange } from '../../hooks/useVehicleFuelEvents';
 import { clampRange, daysBetween, joinDays, rangeWords } from '../../lib/dayRange';
 import { settleLimited } from '../../lib/settleLimited';
@@ -345,7 +345,7 @@ function unitSummary({ vehicle, readings, place, usedL }) {
     items.push({ icon: 'ti-gauge', tone: 'alert', text: `Over the ${vehicle.speedLimit} km/h limit.` });
   }
   if (vehicle.probeHold) {
-    items.push({ icon: 'ti-tool', tone: 'warn', text: 'On probe hold: fuel theft alerts are paused until the probe repair is signed off fixed.' });
+    items.push({ icon: 'ti-tool', tone: 'warn', text: 'Reported for a fuel probe repair: its fuel alerts still come, marked as reported.' });
   }
   if (readings.fuelPct != null) {
     const low = readings.fuelPct < RESERVE_PCT;
@@ -660,6 +660,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
     () => summariseDay(tele.pings, vehicle?.tankCapacityL),
     [tele.pings, vehicle?.tankCapacityL],
   );
+  const burn = useMemo(() => burnRate(today), [today]);
+  const vsStd = burnAgainst(burn, vehicle?.ratedBurn);
   // Where today's driving began, for the header when no trip is on record
   const startPlace = usePlaceName(
     vehicle?.departure ? null : today.firstMove?.lat ?? null,
@@ -698,7 +700,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
   // Faults: each part that reports, and how it is doing
   const checks = [
     vehicle.probeHold
-      ? { name: 'Fuel probe', icon: 'ti-gas-station', state: 'Probe hold', tone: 'warn', sub: 'Awaiting repair · fuel theft alerts paused' }
+      ? { name: 'Fuel probe', icon: 'ti-gas-station', state: 'Reported', tone: 'warn', sub: 'Awaiting repair · alerts still come' }
       : readings.fuelProbeFault
       ? { name: 'Fuel probe', icon: 'ti-gas-station', state: 'Fault', tone: 'alert', sub: 'Reporting a fault instead of a level' }
       : readings.fuelLitres != null
@@ -765,13 +767,14 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           </div>
         )}
 
-        {/* Probe hold (operator, 2026-10-01): flagged for a fuel probe repair,
-            so the server raises no fuel theft alert on it until the repair is
-            signed off fixed. Said here so a quiet unit is not read as clean. */}
+        {/* Reported for a fuel probe repair. Its fuel alerts are no longer
+            held back (operator, 2026-10-13: "do not put a unit on hold, but
+            we can highlight it was reported"), so this says why a fuel alert
+            on it may be the probe rather than a loss. */}
         {vehicle.probeHold && (
           <div className="vdp-hold" role="note">
             <i className="ti ti-tool" aria-hidden="true" />
-            <span><strong>Probe hold</strong> · Fuel theft alerts are paused until the probe repair is signed off fixed.</span>
+            <span><strong>Probe reported</strong> · Waiting on a fuel probe repair. Fuel alerts still come, marked as reported.</span>
           </div>
         )}
 
@@ -877,6 +880,20 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               { icon: 'ti-hourglass', label: 'Idle today', value: today.idleMin != null ? fmtMinutes(today.idleMin) : null,
                 sub: today.idleMin != null ? 'engine on, standing' : 'no engine state reported' },
               { icon: 'ti-satellite', label: 'GPS', value: gps.label, sub: gps.sub, tone: gps.tone },
+              // Litres per engine hour today, and km per litre once it has
+              // driven far enough (lib/vehicleDay burnRate, as the unit card)
+              // A unit the FactorySuite register rates: in the register's
+              // unit, against its standard, amber when well over it
+              vsStd
+                ? { icon: 'ti-flame', label: 'Burn rate', tone: vsStd.high ? 'warn' : null,
+                    value: vsStd.today != null ? `${num(vsStd.today, 1)} ${vsStd.unit}` : null,
+                    sub: vsStd.over != null ? `${overWords(vsStd.over)} (${num(vsStd.std, 1)} ${vsStd.unit})`
+                      : `standard ${num(vsStd.std, 1)} ${vsStd.unit}${tele.loading ? '' : ', not enough today'}` }
+                : { icon: 'ti-flame', label: 'Burn rate', value: burn?.lPerH != null ? `${num(burn.lPerH, 1)} L/h`
+                    : burn?.kmPerL != null ? `${num(burn.kmPerL, 1)} km/L` : null,
+                  sub: !burn ? (tele.loading ? 'reading today…' : 'not enough today')
+                    : burn.lPerH != null && burn.kmPerL != null ? `${num(burn.kmPerL, 1)} km/L · ${num(burn.usedL, 1)} L today`
+                    : `${num(burn.usedL, 1)} L used today` },
               { icon: 'ti-engine', label: 'Engine hours', value: readings.engineHours != null ? `${num(readings.engineHours)} h` : null,
                 sub: readings.engineHours != null ? `engine ${engineWord ? engineWord.toLowerCase() : 'state unknown'}` : NA },
               { icon: 'ti-road', label: 'Odometer', value: readings.odometerKm != null ? `${num(readings.odometerKm)} km` : null,

@@ -79,7 +79,7 @@ export function TankGauge({ pct, litres, capacityL, reservePct, probeFault, prob
   const fill = share != null ? Math.max(0, Math.min(100, share)) : null;
   const band = tankBand(fill, reservePct);
   const room = litres != null && capacityL ? Math.max(0, capacityL - litres) : null;
-  const probe = probeHold ? { word: 'Probe hold', tone: 'warn' }
+  const probe = probeHold ? { word: 'Probe reported', tone: 'warn' }
     : probeFault ? { word: 'Probe fault', tone: 'alert' }
     : litres != null || pct != null ? { word: 'Probe reporting', tone: 'ok' }
     : { word: 'No reading', tone: 'none' };

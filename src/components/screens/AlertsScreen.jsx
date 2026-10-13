@@ -39,7 +39,7 @@ import { settleLimited } from "../../lib/settleLimited";
 import {
   KINDS, OVER_BY, PERIODS, READS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
   daysBounds, daysWords, decisionWords, duration, fleetDay, headline, kmh, litres, periodDays,
-  ruleWords, statusOf, unitQueues, when,
+  reportedLate, ruleWords, statusOf, unitQueues, when,
 } from "../../lib/alertsView";
 import { Card, Gauge } from "./FuelReportOverview";
 import TableToolbar from "../body/TableToolbar";
@@ -508,7 +508,7 @@ function Facts({ alert, org }) {
     rows.push(["Began", when(alert.at)], ["Reported", when(f.detectedAt)]);
     if (f.location) rows.push(["Where", f.location]);
     if (f.driverName) rows.push(["Driver", f.driverName]);
-    if (f.probeHold) rows.push(["Probe", "Held for a probe repair: no alerts on the map until it is fixed"]);
+    if (f.probeHold) rows.push(["Probe", "Reported for a fuel probe repair, not yet fixed"]);
   } else {
     const s = alert.speeding;
     rows.push(["Peak", kmh(s.peakKmh)], ["Limit", `${kmh(s.limitKmh)}${s.limitSource === "zone" ? " (zone)" : s.limitSource === "road" ? " (road)" : ""}`]);
@@ -1110,10 +1110,21 @@ export default function AlertsScreen() {
                               {!a.read && <span className="alr-unread-dot" role="img" aria-label="Unread" title="Unread" />}
                               <span className="sp4-reg">{a.plate}</span>
                               <span className="alr-org">{shortName(org)}</span>
+                              {/* Reported for a fuel probe repair: the alert still
+                                  comes (operator, 2026-10-13), marked so the reader
+                                  knows the probe is already suspect. */}
+                              {a.fuel?.probeHold && (
+                                <span className="alr-probe" title="This unit is already reported for a fuel probe repair">
+                                  <i className="ti ti-tool" aria-hidden="true" />Probe reported
+                                </span>
+                              )}
                             </span>
                           </span>
                         </td>
-                        <td className="sp4-td--left sys-num">{when(a.at)}</td>
+                        <td className="sp4-td--left sys-num">
+                          {when(a.at)}
+                          {reportedLate(a) && <span className="alr-reported">{reportedLate(a)}</span>}
+                        </td>
                         <td className="sp4-td--left">
                           <span className={`alr-kind alr-kind--${a.kind}`}>
                             <i className={`ti ${a.kind === "fuel" ? "ti-droplet" : "ti-gauge"}`} aria-hidden="true" />

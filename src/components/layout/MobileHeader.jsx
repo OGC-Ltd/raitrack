@@ -13,6 +13,7 @@ import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
 import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
+import ManualIcon from './ManualIcon';
 
 export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
@@ -208,9 +209,9 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-users" aria-hidden="true" /> User accounts
                 </button>
               )}
-              {/* The first-time tour, again (lib/productTour). */}
+              {/* The Manual: the first-time tour, again (lib/productTour). */}
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
-                <i className="ti ti-route-2" aria-hidden="true" /> Guided tour
+                <ManualIcon /> Manual
               </button>
               <div className="mobile-header__user-divider" />
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); logout(); }}>

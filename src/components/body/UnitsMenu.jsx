@@ -588,10 +588,11 @@ export default function UnitsMenu({
 
                     <span className="units-menu__plate" role="cell" title={v.name || v.id}>
                       <span className="units-menu__plate-text">{shortPlate(v.id)}</span>
-                      {/* Probe hold: awaiting a fuel probe repair, fuel theft alerts paused. */}
+                      {/* Reported for a fuel probe repair. Its alerts still come
+                          (operator, 2026-10-13: "do not put a unit on hold"). */}
                       {v.probeHold && (
                         <span className="units-menu__hold"
-                              title="Probe hold: fuel theft alerts are paused until the probe repair is signed off fixed">Hold</span>
+                              title="Reported for a fuel probe repair. Its fuel alerts still come, marked as reported.">Reported</span>
                       )}
                     </span>
 

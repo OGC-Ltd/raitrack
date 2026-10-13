@@ -403,10 +403,10 @@
   text-overflow: ellipsis;
 }
 
-/* The plate ellipses, never the Hold chip beside it. */
+/* The plate ellipses, never the Reported chip beside it. */
 .units-menu__plate-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* Probe hold: the orange of the Warning status card and Stopped in transit
-   (operator, 2026-10-01). */
+/* Reported for a fuel probe repair: the orange of the Warning status card
+   and Stopped in transit (operator, 2026-10-01). */
 .units-menu__hold {
   flex-shrink: 0;
   padding: 0 5px;
