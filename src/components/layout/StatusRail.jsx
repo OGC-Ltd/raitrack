@@ -23,7 +23,7 @@
  * sidebar's CRITICAL card does, because it is the same function.
  */
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
 import './StatusRail.css';
 
@@ -56,32 +56,59 @@ export default function StatusRail({ vehicles = [], loading = false, activeFilte
     });
   }, [activeFilter]);
 
+  /* Which ends have segments scrolled out of sight. The bar fades on that
+   * side, so a phone that shows five of six says there is a sixth instead of
+   * slicing "Warn" in half at the edge. Measured on scroll, on resize, and
+   * after every render (a count growing a digit widens its segment); the
+   * guard keeps an unchanged answer from re-rendering. No ResizeObserver:
+   * window resize covers the rail, whose width follows the map's. */
+  const [more, setMore] = useState('');
+  const measure = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const left  = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    const next = [left && 'left', right && 'right'].filter(Boolean).join(' ');
+    setMore((prev) => (prev === next ? prev : next));
+  }, []);
+  useLayoutEffect(measure);
+  useEffect(() => {
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [measure]);
+
   return (
     // `afterToggle`: the base-map toggle holds the row's left end, so the
     // chips start past it; without it they start at the map's edge.
-    <div className={`status-rail${afterToggle ? '' : ' status-rail--alone'}`} role="group" aria-label="Filter the map by status">
-      <div className="status-rail__scroller" ref={scrollerRef}>
-        {STATUS_STATS.map((s) => {
-          const isActive = activeFilter === s.filterKey;
-          return (
-            <button
-              key={s.key}
-              type="button"
-              className={`status-rail__chip${isActive ? ' status-rail__chip--active' : ''}`}
-              style={{ '--chip-color': s.color }}
-              aria-pressed={isActive}
-              title={`Show ${s.label.toLowerCase()} on the map`}
-              // Tapping the lit chip clears back to the whole fleet, which is
-              // what ALL does — so it can never leave the map filtered with
-              // nothing on screen showing as filtered.
-              onClick={() => onFilter?.(isActive ? 'all' : s.filterKey)}
-            >
-              <span className="status-rail__dot" aria-hidden="true" />
-              <span className="status-rail__label">{s.short}</span>
-              <span className="status-rail__count">{waiting ? '–' : counts[s.key]}</span>
-            </button>
-          );
-        })}
+    <div className={`status-rail${afterToggle ? '' : ' status-rail--alone'}`} role="group" aria-label="Filter the map by status" aria-busy={waiting || undefined}>
+      <div className="status-rail__bar">
+        <div className="status-rail__scroller" ref={scrollerRef} data-more={more || undefined} onScroll={measure}>
+          {STATUS_STATS.map((s) => {
+            const isActive = activeFilter === s.filterKey;
+            const n = counts[s.key];
+            return (
+              <button
+                key={s.key}
+                type="button"
+                className={`status-rail__chip${isActive ? ' status-rail__chip--active' : ''}`}
+                style={{ '--chip-color': s.color }}
+                aria-pressed={isActive}
+                // Zero reads as quiet; an alert bucket with anything in it
+                // reads louder than the rest even while another is selected.
+                data-zero={!waiting && n === 0 ? '' : undefined}
+                data-alert={!waiting && n > 0 && (s.key === 'critical' || s.key === 'warning') ? '' : undefined}
+                title={`Show ${s.label.toLowerCase()} on the map`}
+                // Tapping the lit chip clears back to the whole fleet, which is
+                // what ALL does — so it can never leave the map filtered with
+                // nothing on screen showing as filtered.
+                onClick={() => onFilter?.(isActive ? 'all' : s.filterKey)}
+              >
+                <span className="status-rail__count">{waiting ? '–' : n}</span>
+                <span className="status-rail__label">{s.short}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
