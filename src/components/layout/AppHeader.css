@@ -141,6 +141,21 @@
 
 
 
+/* Live KPI carousel — fills the middle of the top bar */
+.app-header__carousel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  /* Clip the sides so chips fade cleanly at the edges */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
+/* On narrow screens, hide the carousel rather than squeeze it */
+@media (max-width: 900px) {
+  .app-header__carousel { display: none; }
+}
+
 /* Bell */
 /* Hallmark · component: header bell + badge · genre: modern-minimal · theme: the app's own header
  * states: default · hover · focus · active (pressed) · news (unread: darker icon, notched, + badge) · open (feed showing: filled blue bell) · arriving (one swing, badge pop)
@@ -180,7 +195,7 @@
   flex-shrink: 0;
   /* 16px inside the 26px disc, the same proportion as the avatar's initials. */
   font-size: 16px;
-  margin-left: auto; /* pushes bell + avatar to the right edge */
+  margin-left: auto; /* pushes bell + avatar to the right edge when carousel is absent */
   transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
 .app-header__bell:hover { background: #f8fafc; color: #1e293b; }
