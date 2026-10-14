@@ -106,6 +106,9 @@ export default function FleetsTree({ audit = null, report = null, review = null 
      screen from every page. Narrowing the map from Drivers and staying on
      Drivers shows nothing, so acting on one is taken as a request to see the
      map. */
+  /* None of them touches tracking (operator, 2026-10-15): tracked units stay
+     on the map through every one, and the group asked for is drawn beside
+     them (matchesMapFilters). */
   const toggleType = (kind) => {
     revealMap?.();
     setFleetTypes(selected.has(kind)

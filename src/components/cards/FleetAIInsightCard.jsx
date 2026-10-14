@@ -13,6 +13,12 @@
 //   · The local fallback says what it is. "Fleet summary", and an
 //     "AI unavailable" note where the time would be: it is the same counts
 //     in fixed sentences, written whenever the server has no brief.
+//
+// Icons back, 2026-10-15 (operator: "return the icons… apply them with
+// caution"). Four, each where it carries meaning a word alone does not: the
+// sparkles that mark an AI brief (and only an AI brief), a shape per risk
+// level so the badge reads without its colour, a clock on the time, and the
+// chevron that says which way Show more goes. Tabler, like the rest of the app.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./FleetAIInsightCard.css";
@@ -20,7 +26,8 @@ import { getFleetInsight } from "../../api/fleetInsight";
 import { useApiData } from "../../hooks/useApiData";
 import LoadError from "../shared/LoadError";
 
-const RISKS = new Set(["Low", "Medium", "High"]);
+// A different shape per level, so the badge reads without its colour.
+const RISK_ICON = { Low: "shield-check", Medium: "alert-triangle", High: "alert-octagon" };
 
 // The server regenerates each org's AI brief hourly in the background and
 // always answers from memory, so refreshing here is instant. Poll every
@@ -28,13 +35,11 @@ const RISKS = new Set(["Low", "Medium", "High"]);
 // means every render paints from the last-known brief with no flicker.
 const REFRESH_MS = 15 * 60_000;
 
-function Spark() {
-  return (
-    <svg className="fai-spark" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 1.5c.4 2.9 1.6 4.1 4.5 4.5-2.9.4-4.1 1.6-4.5 4.5-.4-2.9-1.6-4.1-4.5-4.5 2.9-.4 4.1-1.6 4.5-4.5Z" />
-      <path d="M12.5 10c.2 1.2.8 1.8 2 2-1.2.2-1.8.8-2 2-.2-1.2-.8-1.8-2-2 1.2-.2 1.8-.8 2-2Z" />
-    </svg>
-  );
+/* The head's mark. Sparkles only when the model wrote the brief; the
+   fixed-sentence summary gets a plain info mark, so the AI sign is never
+   worn by text no model touched. */
+function Mark({ ai }) {
+  return <i className={`ti ti-${ai ? "sparkles" : "info-circle"} fai-mark`} aria-hidden="true" />;
 }
 
 export default function FleetAIInsightCard({ companyId, className = "" }) {
@@ -87,7 +92,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
     return (
       <section className={cardClass} aria-busy="true" aria-label="Fleet AI insight, loading">
         <header className="fai-head">
-          <Spark />
+          <Mark ai />
           <h3 className="fai-title">Fleet AI Insight</h3>
         </header>
         <div className="fai-skeleton" aria-hidden="true">
@@ -97,18 +102,23 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
     );
   }
 
-  const risk = RISKS.has(insight.risk) ? insight.risk : null;
-  const title = insight.local ? "Fleet summary" : "Fleet AI Insight";
+  const risk = RISK_ICON[insight.risk] ? insight.risk : null;
+  // Not the model's: the browser's own summary (`local`), or the server's
+  // facts-only brief, which it sends whenever the model failed or its reply
+  // was rejected (`source: "facts"`).
+  const notAi = insight.local || insight.source === "facts";
+  const title = notAi ? "Fleet summary" : "Fleet AI Insight";
 
   return (
-    <section className={cardClass} data-local={insight.local ? "" : undefined} aria-label={title}>
+    <section className={cardClass} data-local={notAi ? "" : undefined} aria-label={title}>
       <header className="fai-head">
-        <Spark />
+        <Mark ai={!notAi} />
         {/* Only the server's brief is the model's. The local fallback is the
             same counts in fixed sentences, and is titled as what it is. */}
         <h3 className="fai-title">{title}</h3>
         {risk && (
           <span className="fai-risk" data-risk={risk.toLowerCase()} title={`Fleet risk: ${risk}`}>
+            <i className={`ti ti-${RISK_ICON[risk]}`} aria-hidden="true" />
             {risk}
           </span>
         )}
@@ -129,11 +139,10 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
 
       <footer className="fai-foot">
         <span className="fai-meta">
-          {insight.local
-            ? "AI unavailable"
-            : insight.generatedAt
-              ? `Updated ${new Date(insight.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-              : null}
+          {insight.generatedAt && <i className="ti ti-clock" aria-hidden="true" />}
+          {insight.generatedAt
+            ? `${notAi ? "AI unavailable · " : ""}Updated ${new Date(insight.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`
+            : notAi ? "AI unavailable" : null}
         </span>
         {(clamped || expanded) && (
           <button
@@ -144,6 +153,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? "Show less" : "Show more"}
+            <i className={`ti ti-chevron-${expanded ? "up" : "down"}`} aria-hidden="true" />
           </button>
         )}
       </footer>

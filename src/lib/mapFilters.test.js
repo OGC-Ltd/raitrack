@@ -32,19 +32,30 @@ describe("matchesMapFilters — the tracked selection", () => {
     expect(matchesMapFilters(excavator, { trackedSet: tracked })).toBe(false);
   });
 
-  it("is an INTERSECTION with the type filter, not an override", () => {
-    // A tracked excavator under a trucks-only funnel stays hidden. The
-    // alternative makes "tracked" a fourth thing that sometimes wins, and
-    // nobody can predict which.
+  it("keeps a tracked unit whatever the type filter says", () => {
+    // Operator, 2026-10-15: a sidebar click must not take tracked units off
+    // the map. A tracked excavator survives a trucks-only funnel.
     const tracked = new Set(["KDE 581S"]);
     expect(matchesMapFilters(excavator, { trackedSet: tracked, fleetTypes: ["ex"] })).toBe(true);
-    expect(matchesMapFilters(excavator, { trackedSet: tracked, fleetTypes: ["truck"] })).toBe(false);
+    expect(matchesMapFilters(excavator, { trackedSet: tracked, fleetTypes: ["truck"] })).toBe(true);
   });
 
-  it("is an intersection with the status filter too", () => {
+  it("keeps a tracked unit whatever the status filter says", () => {
     const tracked = new Set(["KCD 118P"]);
     expect(matchesMapFilters(offline, { trackedSet: tracked, filterKey: "offline" })).toBe(true);
-    expect(matchesMapFilters(offline, { trackedSet: tracked, filterKey: "ok" })).toBe(false);
+    expect(matchesMapFilters(offline, { trackedSet: tracked, filterKey: "ok" })).toBe(true);
+  });
+
+  it("draws the filter's matches alongside the tracked units", () => {
+    const tracked = new Set(["KCD 118P"]);
+    // No filter: the tracked units alone.
+    expect(matchesMapFilters(truck, { trackedSet: tracked })).toBe(false);
+    // A filter set: its matches join them, its non-matches stay hidden.
+    expect(matchesMapFilters(truck, { trackedSet: tracked, filterKey: "ok" })).toBe(true);
+    expect(matchesMapFilters(truck, { trackedSet: tracked, fleetTypes: ["truck"] })).toBe(true);
+    expect(matchesMapFilters(excavator, { trackedSet: tracked, fleetTypes: ["truck"] })).toBe(false);
+    expect(matchesMapFilters(truck, { trackedSet: tracked, inTransitOnly: true })).toBe(true);
+    expect(matchesMapFilters(excavator, { trackedSet: tracked, inTransitOnly: true })).toBe(false);
   });
 });
 
@@ -60,9 +71,11 @@ describe("matchesMapFilters — the in-transit lens", () => {
   });
 
   it("composes with the other two axes", () => {
-    const tracked = new Set(["KBH 123A", "KDE 581S"]);
-    expect(matchesMapFilters(truck, { trackedSet: tracked, inTransitOnly: true, fleetTypes: ["truck"] })).toBe(true);
-    expect(matchesMapFilters(excavator, { trackedSet: tracked, inTransitOnly: true, fleetTypes: ["truck", "ex"] })).toBe(false);
+    expect(matchesMapFilters(truck, { inTransitOnly: true, fleetTypes: ["truck"] })).toBe(true);
+    expect(matchesMapFilters(excavator, { inTransitOnly: true, fleetTypes: ["truck", "ex"] })).toBe(false);
+    // Tracked units are exempt from the lens like every other filter.
+    const watched = new Set(["KDE 581S"]);
+    expect(matchesMapFilters(excavator, { trackedSet: watched, inTransitOnly: true, fleetTypes: ["truck"] })).toBe(true);
   });
 });
 
