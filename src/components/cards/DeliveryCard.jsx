@@ -17,15 +17,15 @@
 import "./DeliveryCard.css";
 import { LEG_LABEL, fmtDuration } from "../../lib/tripProgress";
 import ShieldIcon from "../shared/ShieldIcon";
-import { useTrafficRoute, routeTarget } from "../../hooks/useTrafficRoute";
-import { delayCause, TRAFFIC_AVAILABLE } from "../../lib/tomtomTraffic";
+import { useTrafficRoute, routeTarget, useRoutingAvailable } from "../../hooks/useTrafficRoute";
+import { delayCause } from "../../lib/tomtomTraffic";
 
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 /**
  * Road distance and arrival with live traffic, and why it is late if it is.
  *
- * Replaces the straight-line ETA where a TomTom key is configured: road
+ * Replaces the straight-line ETA where a route provider is on (TomTom, or Google through the server): road
  * distance instead of great-circle, travel time from the provider's live
  * speeds instead of this second's km/h, and the traffic delay kept apart from
  * a stop that traffic does not explain. See lib/tomtomTraffic delayCause.
@@ -58,7 +58,7 @@ function TrafficEta({ traffic }) {
       {cause && <div className={`dc-cause dc-cause--${cause.kind}`}>{cause.text}</div>}
       <div className="dc-eta-src">
         Free flow {fmtDuration(Math.round(data.noTrafficS / 60))}
-        {" · "}TomTom live traffic · {ago < 1 ? "just now" : `${ago} m ago`}
+        {" · "}{data.source ?? "TomTom"} live traffic · {ago < 1 ? "just now" : `${ago} m ago`}
       </div>
     </div>
   );
@@ -74,6 +74,7 @@ const LEG_CLASS = {
 };
 
 export default function DeliveryCard({ delivery, pending }) {
+  const routing = useRoutingAvailable();
   if (!delivery) {
     return (
       <div className="dc-card">
@@ -98,7 +99,7 @@ export default function DeliveryCard({ delivery, pending }) {
   const { leg, legText, percent, from, to, departedAt, arrivedAt, arrived,
           serialNumber, eta, totalKm, distanceTodayKm, driver, status,
           destinationPlaced, awaitingSignIn, traffic } = delivery;
-  const routed = TRAFFIC_AVAILABLE && traffic && traffic.fresh && routeTarget(traffic.trip) != null;
+  const routed = routing && traffic && traffic.fresh && routeTarget(traffic.trip) != null;
 
   // Home, which is NOT the same as finished. A trip is completed by the
   // sign-in: once the guard signs the unit back in the run leaves the open set,
