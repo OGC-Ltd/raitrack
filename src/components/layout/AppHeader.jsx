@@ -1,12 +1,19 @@
-// AppHeader — light top bar: logo, org switcher, search, notifications, avatar.
+// AppHeader — light top bar: logo, org switcher, live KPI carousel, notifications, avatar.
 
 import { useState, useRef, useEffect } from 'react';
 import { useAppFields, useAppActions, useCompanies } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useDashboardSummary } from '../../hooks/useDashboardSummary';
+import { useApiData } from '../../hooks/useApiData';
+import { getDeliveryAnalytics } from '../../api/analytics';
+import { isInTransit, carriesCargo, equipmentLabel } from '../../lib/vehicleMap';
+import { statMeta, statValues, StatButton, productKey } from '../header/StatKpis';
+import StatCarousel from '../header/StatCarousel';
 import LiveFeed from './LiveFeed';
 import { FuelFollowUpHost } from '../body/FuelFollowUp';
+import FilterStrip from '../header/FilterStrip';
 import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
@@ -92,8 +99,14 @@ function CompanyMark({ company, size = 'md' }) {
   );
 }
 
+// FilterStrip chip status from the live vehicle's 4-state scheme.
+const CHIP_STATUS = { ok: "ok", speeding: "warn", theft: "crit", parked: "ok" };
+const SUKARI_PRODUCTS = /^(processed sugar|raw sugarcane)$/i;
+const ENROUTE = /^(TO_FARM|TO_INDUSTRY|TO_DEPOT|TO_PARKING|TO_GARAGE|FROM_GARAGE)$/;
+const OPERATIONAL_STOP = /^(LOADING|UNLOADING|OFFLOADING|AT_GARAGE)$/;
+
 export default function AppHeader() {
-  const { activeCompanyId, selectedVehicleId } = useAppFields("activeCompanyId", "selectedVehicleId");
+  const { activeCompanyId, selectedVehicleId, desktopActiveTab } = useAppFields("activeCompanyId", "selectedVehicleId", "desktopActiveTab");
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
   const { can } = usePermissions();
@@ -110,15 +123,115 @@ export default function AppHeader() {
    * can carry an empty string here, which `??` would happily render as a blank
    * line. */
   const displayName = user?.fullName?.trim() || user?.name?.trim() || '';
-  const { feed } = useFleetLiveShared();
+  const { feed, vehicles } = useFleetLiveShared();
 
   const [orgOpen,        setOrgOpen]        = useState(false);
   const [feedOpen,       setFeedOpen]       = useState(false);
   const [feedUnreadSince, setFeedUnreadSince] = useState(() => Date.now());
   const [userOpen,       setUserOpen]       = useState(false);
+  const [activeStat,     setActiveStat]     = useState(null);
 
   const orgRef  = useRef(null);
   const userRef = useRef(null);
+
+  // ── Fleet KPI data ──────────────────────────────────────────────────────────
+  const summary = useDashboardSummary(activeCompany?.id);
+
+  const { data: deliveryAnalytics } = useApiData(
+    () => getDeliveryAnalytics({ companyId: activeCompany?.id, days: 30 }),
+    [activeCompany?.id],
+    { cacheKey: `ft-header-products:${activeCompany?.id}` }
+  );
+
+  const products = (deliveryAnalytics?.products ?? []).filter(
+    (p) => activeCompany?.id !== "sukari" || SUKARI_PRODUCTS.test(p.product)
+  );
+
+  const bucketOf = (v) => {
+    if (!v.online) return null;
+    const noLoad = carriesCargo(v) ? "empty" : "plant";
+    const phase = v.phase ?? "";
+    if (OPERATIONAL_STOP.test(phase)) return noLoad;
+    if (ENROUTE.test(phase)) return v.weight > 0 ? "product" : noLoad;
+    if (!phase && isInTransit(v)) return v.weight > 0 ? "product" : noLoad;
+    return null;
+  };
+
+  const activeFleet = vehicles.flatMap((v) => {
+    const bucket = bucketOf(v);
+    if (!bucket) return [];
+    return [{
+      vehicleId: v.vehicleId ?? v.id,
+      plate: v.id,
+      driver: v.driver,
+      cargo: v.cargo,
+      machine: equipmentLabel(v),
+      phase: v.phase,
+      tonnes: v.weight,
+      bucket,
+      status: CHIP_STATUS[v.status] ?? "ok",
+    }];
+  });
+
+  const emptyFleet   = activeFleet.filter((c) => c.bucket === "empty");
+  const plantFleet   = activeFleet.filter((c) => c.bucket === "plant");
+  const ferrying     = activeFleet.filter((c) => c.bucket === "product");
+
+  const liveSummary = summary
+    ? {
+        ...summary,
+        emptyFleet,
+        plantFleet,
+        inTransit: {
+          vehicleCount: activeFleet.length,
+          sugarTonnes: +ferrying.reduce((sum, c) => sum + (c.tonnes ?? 0), 0).toFixed(1),
+          vehicles: activeFleet,
+        },
+      }
+    : summary;
+
+  const cargoWord = activeCompany?.id === "sukari" ? "sugar" : "cargo";
+
+  const liveByProduct = new Map();
+  for (const v of ferrying) {
+    if (!v.cargo) continue;
+    const k = productKey(v.cargo);
+    const entry = liveByProduct.get(k) ?? { name: v.cargo, liveTonnes: 0 };
+    entry.liveTonnes += v.tonnes;
+    liveByProduct.set(k, entry);
+  }
+  const activeProducts = [...liveByProduct.entries()]
+    .sort((a, b) => b[1].liveTonnes - a[1].liveTonnes)
+    .map(([k, { name }]) => products.find((p) => productKey(p.product) === k) ?? { product: name, tonnes: null });
+
+  const liveProductKeys = [...liveByProduct.keys()].sort().join(",");
+
+  useEffect(() => { setActiveStat(null); }, [activeCompany?.id]);
+  useEffect(() => { if (desktopActiveTab !== "fleet") setActiveStat(null); }, [desktopActiveTab]);
+  useEffect(() => {
+    if (activeStat?.startsWith("product:") && !liveProductKeys.split(",").includes(productKey(activeStat.slice("product:".length)))) {
+      setActiveStat(null);
+    }
+  }, [activeStat, liveProductKeys]);
+
+  const toggleStat = (key) => setActiveStat((prev) => (prev === key ? null : key));
+
+  const statButtons = statMeta(liveSummary, activeProducts).map(({ key, label, color, icon }) => {
+    const { value, unit, sub } = statValues(key, liveSummary, cargoWord, products);
+    return (
+      <StatButton
+        key={key}
+        label={label}
+        value={value}
+        unit={unit}
+        sub={sub}
+        color={color}
+        icon={icon}
+        active={activeStat === key}
+        onClick={() => toggleStat(key)}
+      />
+    );
+  });
 
   // Unread = feed items newer than the last time this operator opened the
   // feed, remembered per organisation in this browser.
@@ -233,6 +346,13 @@ export default function AppHeader() {
         {/* No search box here since 2026-10-07: vehicle, driver and place search
             live in the map's tool rail (MapToolRail), beside the sidebar. */}
 
+        {/* Live KPI carousel — fleet tab only, fills the middle gap */}
+        {desktopActiveTab === "fleet" && !limited && (
+          <div className="app-header__carousel">
+            <StatCarousel>{statButtons}</StatCarousel>
+          </div>
+        )}
+
         {/* Notification bell — not rendered without rights to the fleet. */}
         {!limited && (
         <button
@@ -322,6 +442,17 @@ export default function AppHeader() {
         </div>
 
       </header>
+
+      {/* FilterStrip — slides in below the header when a KPI button is active */}
+      {desktopActiveTab === "fleet" && activeStat && liveSummary && (
+        <FilterStrip
+          stat={activeStat}
+          summary={liveSummary}
+          cargoWord={cargoWord}
+          products={products}
+          onClose={() => setActiveStat(null)}
+        />
+      )}
 
       {/* Live feed panel — slides in from right */}
       {!limited && <LiveFeed open={feedOpen} onClose={() => setFeedOpen(false)} unreadSince={feedUnreadSince} />}
