@@ -11,6 +11,8 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
 import { TreeCountsMasked } from './SideTree';
 import FleetsTree from './FleetsTree';
+import FleetAIInsightCard from '../cards/FleetAIInsightCard';
+import ErrorBoundary from '../shared/ErrorBoundary';
 import { versionLabel, buildDetail } from '../../lib/version';
 import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
@@ -436,6 +438,21 @@ export default function SidePanel() {
             </TreeCountsMasked.Provider>
           </div>
 
+        </div>
+      )}
+
+      {/* ── The organisation's AI brief, at the foot ──
+          Back in the sidebar (operator, 2026-10-15), at the bottom (operator,
+          same day). It lived on the old right-hand map overlay, which
+          MapOverlay no longer renders, so it had been gone from every screen.
+          Outside the scrolling body like Fuel Audit below, so it stays put
+          however long the trees get; the two never share the foot, since this
+          needs map:read and that one is drawn only without it. */}
+      {!collapsed && can('map:read') && (
+        <div className="sp-foot">
+          <ErrorBoundary label="Fleet AI insight">
+            <FleetAIInsightCard companyId={activeCompany?.id} className="sp-ai-card" />
+          </ErrorBoundary>
         </div>
       )}
 
