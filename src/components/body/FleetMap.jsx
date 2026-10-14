@@ -2743,13 +2743,18 @@ export default function FleetMap() {
     placeholderData: (prev) => prev,
   });
 
-  /* A window opening on the map (Units, Stopped in transit, Fuel alerts)
-   * takes the card down with whatever window was open before it: one panel
-   * on the map at a time (operator, 2026-10-02). Only the opening edge — a
-   * row clicked inside the open window pins its unit's card beside it. */
+  /* Opening the Fuel alerts window takes the pinned card down: the alerts are
+   * what is being worked now (operator, 2026-10-15: "when I click to open the
+   * modal for fuel alerts the unit card is closed"). Only the opening edge —
+   * a row clicked inside the open window pins its unit's card beside it.
+   *
+   * Units and Stopped in transit no longer do (operator, same day: "whatever
+   * I do on the side panel cancels out the pinned items"). Both open from the
+   * side panel, and both are lists to browse beside the unit already pinned,
+   * not a replacement for it. They closed it from 2026-10-02 to 2026-10-15. */
   const openWindow = unitsOpen ? "units" : strandedOpen ? "stranded" : fuelAlertsOpen ? "fuel" : null;
   useEffect(() => {
-    if (openWindow) setPinnedId(null);
+    if (openWindow === "fuel") setPinnedId(null);
   }, [openWindow]);
 
   const [cardMinimized, setCardMinimized] = useState(false);
@@ -3499,10 +3504,14 @@ export default function FleetMap() {
     }
     setSelectedVehicleId(id);
     setFeedVehicleId(id);
-    // Pin the card where the click happened — phones and tablets only, where
-    // there is no side panel (see isCompactRef). It stops following the cursor
+    // Pin the card where the click happened. It stops following the cursor
     // from here, so the Replay button inside it can actually be reached.
-    if (isCompactRef.current) setPinnedId(id);
+    // On every screen since 2026-10-15 (operator: "when I click on the unit
+    // the unit card should be pinned"); it used to be phones and tablets only.
+    // One card at a time still holds: a second unit replaces this one, and a
+    // map window or the fuel alert window opening closes it (see openWindow
+    // and the windowOpen effect).
+    setPinnedId(id);
   }, [setActiveRoute, setSelectedVehicleId, setFeedVehicleId]);
 
   /**
@@ -5506,11 +5515,11 @@ export default function FleetMap() {
          Both isolation cases still outrank it, for the reason above: flying
          the camera to a vehicle the funnel then hides is worse than showing
          one row the filter would have excluded. */
-      /* Tracking is a THIRD axis and narrows the other two rather than
-         overriding them, for the same reason type does: "the four trucks I am
-         watching, of the ones still online" is one question. Both isolation
-         cases still outrank it. matchesMapFilters is the one place all of this
-         composes, so the chip counts in MapOverlay cannot drift from it. */
+      /* Tracking is a THIRD axis, and since 2026-10-15 it is never narrowed:
+         a tracked unit shows whatever the status, type or in-transit filter
+         says, and a filter adds its matches alongside (operator: side panel
+         clicks must not cancel tracked units). Both isolation cases still
+         outrank it. matchesMapFilters is the one place all of this composes. */
       marker.setVisible(
         playbackIdRef.current ? v.id === playbackIdRef.current
         : focusedId          ? v.id === focusedId
@@ -6972,22 +6981,30 @@ export default function FleetMap() {
     const located = vehiclesRef.current.filter(
       v => Number.isFinite(v.lat) && Number.isFinite(v.lng) && matchesMapFilters(v, {
         fleetTypes: fleetTypesRef.current,
-        trackedSet: trackedSetRef.current,
+        trackedSet: EMPTY_TRACKED,
         inTransitOnly: inTransitRef.current,
       }));
+    // Tracked units stay on the map through every chip (operator,
+    // 2026-10-15), so the camera frames them with the group, not the group
+    // alone, and ALL while tracking is "back to my tracked units".
+    const tracked = trackedSetRef.current;
+    const mine = tracked.size > 0
+      ? vehiclesRef.current.filter(v => tracked.has(v.id) && Number.isFinite(v.lat) && Number.isFinite(v.lng))
+      : [];
+    if (filterKey === "all" && mine.length > 0) { frameUnits(mine); return; }
     // ALL is "show me everything again", which is the same camera the map opens
     // on and the same one clearing a search returns to — not a bounds fit.
     if (filterKey === "all") { resetCamera(located); return; }
 
     // The SAME predicate the reconcile pass uses for marker visibility, so the
     // camera cannot frame a different set than the one left on screen.
-    const inFilter = located.filter(v => visibleUnderFilter(v, filterKey));
+    const inFilter = [...mine, ...located.filter(v => !tracked.has(v.id) && visibleUnderFilter(v, filterKey))];
     // A chip whose units have no fix — or none at all — leaves the camera
     // alone. Fitting an empty set would throw the view somewhere arbitrary,
     // which is worse than not moving.
     if (inFilter.length === 0) return;
     fitTo(inFilter, { animate: true });
-  }, [resetCamera, fitTo, setActiveFilter, revealMap]);
+  }, [resetCamera, fitTo, frameUnits, setActiveFilter, revealMap]);
 
   /* Hand the camera-moving handler to the shell, not the bare setter.
    *

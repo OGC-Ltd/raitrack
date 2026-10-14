@@ -698,12 +698,16 @@ export function matchesFilter(vehicle, filterKey) {
  * drifted — which is the failure the chip-count contract in MapOverlay exists
  * to prevent: a chip reading ONLINE 412 above a map showing three units.
  *
- * ## It is a CONJUNCTION, deliberately
+ * ## Tracked units always show (operator, 2026-10-15)
  *
- * Tracking narrows the fleet; it does not override the funnel. A tracked
- * excavator under a trucks-only filter stays hidden, because the alternative
- * makes "tracked" a fourth thing that sometimes wins and sometimes does not,
- * and nobody can predict which.
+ * It used to be a conjunction: tracking narrowed the fleet and every filter
+ * narrowed it further, so clicking ONLINE in the sidebar while an offline
+ * unit was tracked took that unit off the map, and reads as "the side panel
+ * cancels my pinned units". Now a tracked unit is drawn whatever the status,
+ * type or in-transit filter says — only Stop on the tracking pill releases
+ * it. The filters still mean what they say about everything else: with no
+ * filter set the map is the tracked units alone (as before); with one set,
+ * the units matching it are drawn ALONGSIDE the tracked ones.
  *
  * ISOLATION is not here. Playback and focus are statements about ONE unit and
  * outrank every filter, so FleetMap keeps those branches ahead of this call.
@@ -714,7 +718,12 @@ export function matchesFilter(vehicle, filterKey) {
 export function matchesMapFilters(vehicle, { filterKey = 'all', fleetTypes, trackedSet, inTransitOnly = false } = {}) {
   // An empty tracked set is "the whole fleet", the same rule matchesTypeFilter
   // states for an empty type selection.
-  if (trackedSet && trackedSet.size > 0 && !trackedSet.has(vehicle?.id)) return false
+  if (trackedSet && trackedSet.size > 0) {
+    if (trackedSet.has(vehicle?.id)) return true
+    // Untracked: hidden unless a filter is asking for its group.
+    const narrowed = filterKey !== 'all' || (fleetTypes?.length ?? 0) > 0 || inTransitOnly
+    if (!narrowed) return false
+  }
   if (inTransitOnly && !isInTransit(vehicle)) return false
   return matchesFilter(vehicle, filterKey) && matchesTypeFilter(vehicle, fleetTypes)
 }

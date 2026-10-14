@@ -7,6 +7,7 @@
                   docked loading / offloading / at the garage)
    Items render inline in a single row and auto-scroll in a continuous,
    non-interactive loop (like a news ticker). */
+import { useLayoutEffect, useRef, useState } from "react";
 import "./FilterStrip.css";
 import { productKey, vehiclesCarrying, emptyVehicles, plantVehicles } from "./StatKpis";
 
@@ -99,6 +100,10 @@ function AssetChip({ a }) {
       display: "flex", alignItems: "center", gap: 4,
       background: "var(--color-card)", border: "1px solid var(--color-border)",
       borderRadius: 6, padding: "3px 8px", flexShrink: 0,
+      // Spacing as a margin, not the track's gap: every chip then carries its
+      // own 5px, so two equal halves are exactly 50% of the track each and
+      // the loop's jump back to 0 lands on the same pixel.
+      marginRight: 5,
       cursor: "default", whiteSpace: "nowrap",
     }}>
       <div style={{ width: 5, height: 5, borderRadius: "50%", background: COLOR[a.status] ?? "#94a3b8", flexShrink: 0 }} />
@@ -110,11 +115,44 @@ function AssetChip({ a }) {
 }
 
 export default function FilterStrip({ stat, summary, cargoWord = "cargo", products = [], onClose }) {
-  if (!summary) return null;
-  const { title, items } = buildStrip(stat, summary, cargoWord, products);
+  const viewportRef = useRef(null);
+  const setRef = useRef(null);
+  // How many times the list is laid end to end in each half of the loop.
+  const [reps, setReps] = useState(1);
 
-  // Roughly constant per-item speed regardless of how many items there are.
-  const duration = Math.max(10, items.length * 2.2);
+  const strip = summary ? buildStrip(stat, summary, cargoWord, products) : null;
+  const items = strip?.items ?? [];
+  const itemKey = items.map((a) => a.id).join(",");
+
+  /* The strip is always full, end to end (operator, 2026-10-15). With the
+   * list drawn only twice, five units on a 1900px header left most of the row
+   * blank. Each half of the loop now repeats the list until it is at least as
+   * wide as the strip, so whatever point the loop has reached, chips fill the
+   * whole width. Measured on the first copy of the list; re-measured when the
+   * units change and when the window does. */
+  useLayoutEffect(() => {
+    const measure = () => {
+      const vw = viewportRef.current?.clientWidth ?? 0;
+      const one = setRef.current?.scrollWidth ?? 0;
+      if (!vw || !one) return;
+      const next = Math.max(1, Math.ceil(vw / one));
+      setReps((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [itemKey]);
+
+  if (!strip) return null;
+  const { title } = strip;
+
+  // Roughly constant per-chip speed, however many chips one half holds.
+  const duration = Math.max(10, items.length * reps * 2.2);
+  const half = (copy) => Array.from({ length: reps }, (_, r) => (
+    <div key={`${copy}-${r}`} ref={copy === "a" && r === 0 ? setRef : undefined} style={{ display: "flex", flexShrink: 0 }}>
+      {items.map((a) => <AssetChip key={a.id} a={a} />)}
+    </div>
+  ));
 
   return (
     <div style={{
@@ -135,11 +173,12 @@ export default function FilterStrip({ stat, summary, cargoWord = "cargo", produc
       {items.length === 0 ? (
         <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>No assets right now.</span>
       ) : (
-        <div className="filterstrip-viewport">
-          <div className="filterstrip-track" style={{ "--filterstrip-duration": `${duration}s`, gap: 5, paddingBottom: 2 }}>
-            {/* Rendered twice back-to-back so the loop (0 → -50%) is seamless. */}
-            {items.map((a) => <AssetChip key={`a-${a.id}`} a={a} />)}
-            {items.map((a) => <AssetChip key={`b-${a.id}`} a={a} />)}
+        <div className="filterstrip-viewport" ref={viewportRef}>
+          <div className="filterstrip-track" style={{ "--filterstrip-duration": `${duration}s`, paddingBottom: 2 }}>
+            {/* Two identical halves back-to-back, so the loop (0 → -50%) is
+                seamless; the second is decoration for screen readers. */}
+            {half("a")}
+            <div aria-hidden="true" style={{ display: "flex", flexShrink: 0 }}>{half("b")}</div>
           </div>
         </div>
       )}

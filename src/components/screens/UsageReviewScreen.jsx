@@ -545,10 +545,13 @@ function DailyTip({ active, payload }) {
   const d = payload[0].payload;
   return (
     <div className="frp-tip">
-      <b>{dayLabel(d.date, true)}</b>
-      <span>{nf(d.km, 1)} km · {hm(d.driveH)} driving</span>
-      {d.engineH != null && <span>{hm(d.engineH)} engine on</span>}
-      {d.firstMove && <span>{clock.format(d.firstMove)} – {clock.format(d.lastMove)}</span>}
+      <div className="frp-tip__head"><span className="frp-tip__when">{dayLabel(d.date, true)}</span></div>
+      <dl className="frp-tip__rows">
+        <div className="frp-tip__row"><dt>Distance</dt><dd>{nf(d.km, 1)}<span className="frp-tip__unit">km</span></dd></div>
+        <div className="frp-tip__row"><dt>Driving</dt><dd>{hm(d.driveH)}</dd></div>
+        {d.engineH != null && <div className="frp-tip__row"><dt>Engine on</dt><dd>{hm(d.engineH)}</dd></div>}
+        {d.firstMove && <div className="frp-tip__row"><dt>First to last move</dt><dd>{clock.format(d.firstMove)} – {clock.format(d.lastMove)}</dd></div>}
+      </dl>
     </div>
   );
 }
@@ -586,14 +589,36 @@ function DailyChart({ days, sel, setSel, placeDays, pal }) {
   );
 }
 
-function HourTip({ active, payload, focusLabel }) {
+/** Driving time in an hour slot: seconds under a minute, so a short move is
+ *  never shown as "0 min" beside a visible bar. */
+const slotTime = (m) => {
+  if (m == null || !Number.isFinite(m)) return "—";
+  if (m <= 0) return "None";
+  if (m < 1) return `${Math.max(1, Math.round(m * 60))} s`;
+  return `${nf(m, m < 10 ? 1 : 0)} min`;
+};
+
+function HourTip({ active, payload, focus, pal }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
     <div className="frp-tip">
-      <b>{hh(d.hour)}–{hh((d.hour + 1) % 24)}</b>
-      {focusLabel && <span>{focusLabel}: {nf(d.focus, 0)} min driving</span>}
-      <span>Period average: {nf(d.avg, 1)} min</span>
+      <div className="frp-tip__head">
+        <span className="frp-tip__when">{hh(d.hour)}–{hh((d.hour + 1) % 24)}</span>
+        <span className="frp-tip__state">Driving, average per day</span>
+      </div>
+      <dl className="frp-tip__rows">
+        {focus && (
+          <div className="frp-tip__row">
+            <dt><i className="frp-tip__sw" style={{ background: focus.color }} />{focus.label}</dt>
+            <dd>{slotTime(d.focus)}</dd>
+          </div>
+        )}
+        <div className="frp-tip__row">
+          <dt><i className="frp-tip__sw" style={{ background: focus ? pal.faint : pal.route }} />Whole period</dt>
+          <dd>{slotTime(d.avg)}</dd>
+        </div>
+      </dl>
     </div>
   );
 }
@@ -604,7 +629,7 @@ function HourTip({ active, payload, focusLabel }) {
  * average stays behind them, faint; with a place picked, the average over the
  * days it was there.
  */
-function HourChart({ days, hourly, sel, placeDays, pal }) {
+function HourChart({ days, hourly, sel, placeDays, pal, placeName }) {
   const data = useMemo(() => {
     const n = Math.max(1, days.length);
     const sum = (rows) => Array.from({ length: 24 }, (_, h) => rows.reduce((acc, r) => acc + (r?.[h] ?? 0), 0));
@@ -621,7 +646,12 @@ function HourChart({ days, hourly, sel, placeDays, pal }) {
     return avg.map((v, h) => ({ hour: h, avg: v, focus: focus ? focus[h] ?? 0 : null }));
   }, [days, hourly, sel.day, sel.place, placeDays]);
   const focused = data[0].focus != null;
-  const focusLabel = sel.day ? dayLabel(sel.day, true) : sel.place != null ? "Days at this place" : null;
+  // What the coloured bars are, in the tooltip: the picked day, or the days
+  // the unit stopped at the picked place, by its name and how many there were.
+  const nPlaceDays = sel.place != null ? placeDays.get(sel.place)?.size ?? 0 : 0;
+  const focus = !focused ? null
+    : sel.day ? { label: dayLabel(sel.day, true), color: pal.route }
+    : { label: `${placeName(sel.place)} (${nPlaceDays} ${nPlaceDays === 1 ? "day" : "days"})`, color: pal.place };
   return (
     <div className="urv-chart urv-chart--hours">
       <ResponsiveContainer width="100%" height="100%">
@@ -629,7 +659,7 @@ function HourChart({ days, hourly, sel, placeDays, pal }) {
           <CartesianGrid stroke="var(--sp4-line, #e2e8f0)" vertical={false} />
           <XAxis dataKey="hour" tickFormatter={(h) => String(h).padStart(2, "0")} tick={AXIS_TICK} tickLine={false} axisLine={false} interval={2} />
           <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={36} unit="m" />
-          <Tooltip content={<HourTip focusLabel={focusLabel} />} cursor={{ fill: "var(--sp4-raised)" }} isAnimationActive={false} />
+          <Tooltip content={<HourTip focus={focus} pal={pal} />} cursor={{ fill: "var(--sp4-raised)" }} isAnimationActive={false} />
           <Bar dataKey="avg" fill={focused ? pal.faint : pal.route} radius={[3, 3, 0, 0]} maxBarSize={10} isAnimationActive={false} />
           {focused && <Bar dataKey="focus" fill={sel.day ? pal.route : pal.place} radius={[3, 3, 0, 0]} maxBarSize={10} isAnimationActive={false} />}
         </ComposedChart>
@@ -1126,10 +1156,11 @@ export default function UsageReviewScreen() {
 
               <section data-tour="logbook-hours" className="frv-card urv-card urv-card--fixed">
                 <h3 className="frv-card__t">Driving by Hour</h3>
-                <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal} />
+                <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal}
+                           placeName={(id) => nameOf(review.places.find((p) => p.id === id), gnames) ?? `Place ${id}`} />
                 <p className="frv-card__note">
-                  {sel.day ? `Minutes driving in each hour on ${dayLabel(sel.day, true)}, over the period's average.`
-                    : sel.place != null ? "Minutes driving in each hour on the days it was at this place, over the period's average."
+                  {sel.day ? `Driving in each hour on ${dayLabel(sel.day, true)}, against the whole period's average.`
+                    : sel.place != null ? "Driving in each hour, averaged over the days it stopped at the picked place, against the whole period's average."
                     : "Average minutes driving in each hour of the day (EAT) over the period."}
                 </p>
               </section>

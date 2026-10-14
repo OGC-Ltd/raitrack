@@ -1,4 +1,5 @@
 /* Hallmark · component: brief card · genre: modern-minimal · theme: app tokens (index.css)
+ * icons: Tabler (the app's set) — sparkles (AI only) / info-circle, risk shape, clock, chevron
  * pre-emit critique: P4 H5 E4 S4 R5 V4
  * states: default · loading · error (LoadError) · empty (renders nothing) · local fallback ·
  *         risk low/medium/high · folded/open · toggle hover · focus · active · disabled
@@ -44,11 +45,11 @@
   gap: 6px;
   min-width: 0;
 }
-.fai-spark {
+.fai-mark {
   flex-shrink: 0;
-  width: 13px;
-  height: 13px;
-  fill: var(--fai-spark);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fai-spark);
 }
 .fai-title {
   flex: 1;
@@ -62,14 +63,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* The fallback is not the model's: the spark goes grey with it. */
-.fleet-ai-card[data-local] .fai-spark { fill: var(--fai-muted); }
+/* The fallback is not the model's: its mark is grey. */
+.fleet-ai-card[data-local] .fai-mark { color: var(--fai-muted); }
 
 /* Risk: a word on its own tint, read before the brief. The text is the status
    colour taken 72% toward black, so amber and green hold 4.5:1 on the tint. */
 .fai-risk {
   --risk: var(--fai-muted);
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 2px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--risk) 12%, #fff);
@@ -78,6 +82,7 @@
   font-weight: 600;
   line-height: 1.3;
 }
+.fai-risk .ti { font-size: 11px; line-height: 1; }
 .fai-risk[data-risk="low"]    { --risk: var(--fai-ok); }
 .fai-risk[data-risk="medium"] { --risk: var(--fai-warn); }
 .fai-risk[data-risk="high"]   { --risk: var(--fai-crit); }
@@ -115,13 +120,22 @@
   min-height: 18px;
 }
 .fai-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   font-size: 10.5px;
   font-weight: 500;
   color: var(--fai-muted);
   font-variant-numeric: tabular-nums;
 }
 
+.fai-meta .ti { font-size: 11px; line-height: 1; }
+
 .fai-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin: 0 -4px 0 auto;
   padding: 2px 4px;
   border: 0;
@@ -139,6 +153,7 @@
 @media (hover: hover) {
   .fai-more:hover { text-decoration: underline; text-underline-offset: 2px; }
 }
+.fai-more .ti { font-size: 12px; line-height: 1; }
 .fai-more:active { background: color-mix(in srgb, var(--fai-link) 10%, #fff); }
 /* Shown at once, never transitioned. */
 .fai-more:focus-visible { outline: 2px solid var(--fai-ink); outline-offset: 1px; }
