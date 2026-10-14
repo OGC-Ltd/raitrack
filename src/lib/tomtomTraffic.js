@@ -185,6 +185,15 @@ const DELAY_FLOOR_S = 60;
 export function delayCause(route, speedKmh) {
   if (!route) return null;
   const moving = Number.isFinite(speedKmh) && speedKmh >= MOVING_KMH;
+  // No traffic sections (Google's basic route, jams === null): the delay is
+  // known for the route as a whole but not WHERE it is, so nothing can be said
+  // about traffic at the unit, and a stopped unit gets no verdict at all.
+  if (route.jams == null) {
+    if (!moving) return null;
+    return route.delayS >= DELAY_FLOOR_S
+      ? { kind: "traffic-ahead", text: `Traffic on the route · +${Math.max(1, Math.round(route.delayS / 60))} m` }
+      : { kind: "clear", text: "No traffic delay on the route" };
+  }
   const first = route.jams[0] ?? null;
   const atJam = first != null && first.startM <= IN_JAM_M;
   const mins = (s) => Math.max(1, Math.round(s / 60));

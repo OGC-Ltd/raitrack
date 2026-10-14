@@ -1,18 +1,19 @@
 // The unit panel's "Arrives" stop: road distance and arrival with live traffic
-// (TomTom), and whether traffic explains the delay. Rendered inside the
+// (TomTom, or Google through the server), and whether traffic explains the delay. Rendered inside the
 // Departed → Destination list, so it reads as the third stop of the same trip.
 // Nothing renders unless the unit is on the road between the two ends of an
 // open dispatch — see hooks/useTrafficRoute routeTarget.
 
-import { useTrafficRoute, routeTarget, positionFresh } from "../../hooks/useTrafficRoute";
-import { delayCause, travelModeFor, TRAFFIC_AVAILABLE } from "../../lib/tomtomTraffic";
+import { useTrafficRoute, routeTarget, positionFresh, useRoutingAvailable } from "../../hooks/useTrafficRoute";
+import { delayCause, travelModeFor } from "../../lib/tomtomTraffic";
 import { liveTrip, fmtDuration } from "../../lib/tripProgress";
 
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 export default function TripTrafficEta({ vehicle }) {
   const trip = liveTrip(vehicle?.trip ?? null, vehicle?.lat, vehicle?.lng);
-  const target = TRAFFIC_AVAILABLE && positionFresh(vehicle) ? routeTarget(trip) : null;
+  const routing = useRoutingAvailable();
+  const target = routing && positionFresh(vehicle) ? routeTarget(trip) : null;
   const { data, isPending, isError } = useTrafficRoute({
     vehicleId: vehicle?.id ?? null,
     lat: vehicle?.lat,
@@ -43,7 +44,7 @@ export default function TripTrafficEta({ vehicle }) {
       </span>
       {cause && <span className={`vh-eta-cause vh-eta-cause--${cause.kind}`}>{cause.text}</span>}
       <span className="vh-eta-src">
-        Free flow {fmtDuration(Math.round(data.noTrafficS / 60))} · TomTom live traffic · {ago < 1 ? "just now" : `${ago} m ago`}
+        Free flow {fmtDuration(Math.round(data.noTrafficS / 60))} · {data.source ?? "TomTom"} live traffic · {ago < 1 ? "just now" : `${ago} m ago`}
       </span>
     </li>
   );

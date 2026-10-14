@@ -1,0 +1,23 @@
+/* Route ahead — the tracked unit's card, built on the Route covered card's
+   white theme (.rcov) and sitting beside it rather than over it. */
+.rcov.rah { left: 296px; }
+@media (max-width: 767px) {
+  .rcov.rah { left: 10px; bottom: 66px; }
+}
+.rah__to { color: #1e293b; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.rah__eta { margin-top: 3px; color: #1e293b; }
+.rah__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px solid #e2e8f0; }
+.rah__btn {
+  border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a;
+  font: inherit; font-size: 11px; font-weight: 600; padding: 3px 8px; cursor: pointer;
+}
+.rah__btn:hover:not(:disabled) { border-color: #2563eb; color: #2563eb; }
+.rah__btn:disabled { opacity: 0.5; cursor: default; }
+.rah__btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.rah__btn--on { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; }
+.rah__link { border: 0; background: none; padding: 0; color: #2563eb; font: inherit; font-size: 10.5px; cursor: pointer; text-decoration: underline; }
+.rah__hint { color: #2563eb; font-weight: 600; font-size: 10.5px; }
+.rah__legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 10.5px; }
+.rah__legend span { display: inline-flex; align-items: center; gap: 4px; }
+.rah__sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; opacity: 0.7; }
+.gmap-fill.rah-picking, .gmap-fill.rah-picking .leaflet-container { cursor: crosshair !important; }
