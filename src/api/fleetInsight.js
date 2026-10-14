@@ -52,5 +52,7 @@ async function buildLocalInsight({ companyId } = {}) {
 
   // No unit ratio: the card renders the text alone, and the server's brief
   // carries the same shape, so a field only this fallback sets would be dead.
-  return { msg: parts.join(" "), risk };
+  // `local` so the card can say it is a summary, not an AI brief: this runs
+  // whenever the server has none, including while OpenAI refuses the key.
+  return { msg: parts.join(" "), risk, local: true };
 }
