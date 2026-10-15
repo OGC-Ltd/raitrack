@@ -30,6 +30,7 @@ import { useQuery } from "@tanstack/react-query";
 import "./FleetMap.css";
 import MapOverlay, { FuelIncidentHost } from "./MapOverlay";
 import { useIncidentInvestigation, InvestigationWindow } from "./IncidentInvestigation";
+import { useHubArrivals, ArrivalsWindow } from "./HubArrivals";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -2513,6 +2514,14 @@ export default function FleetMap() {
   useEffect(() => { setInvestigateSubject(null); }, [orgId]);
   const investigation = useIncidentInvestigation({
     map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, subject: investigateSubject,
+  });
+  // Arrivals at a hub (operator, 2026-10-15): reverse isochrones and every
+  // unit's live drive time to it, in its own window (HubArrivals). Opened
+  // from the tool rail; closed by its own ×, or by changing organisation.
+  const [arrivalsOpen, setArrivalsOpen] = useState(false);
+  useEffect(() => { setArrivalsOpen(false); }, [orgId]);
+  const arrivals = useHubArrivals({
+    map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, open: arrivalsOpen,
   });
   const vehicles = _lv ?? [];
 
@@ -7141,6 +7150,7 @@ export default function FleetMap() {
         {/* The fuel alert's, halted unit's or picked unit's trip
             investigation, in its own floating window (IncidentInvestigation). */}
         <InvestigationWindow {...investigation} onClose={closeInvestigation} />
+        <ArrivalsWindow arrivals={arrivals} onSelectUnit={handleFocusVehicle} onClose={() => setArrivalsOpen(false)} />
         {trackedVehicle && (
           <RouteAheadCard
             plate={trackedVehicle.name || trackedVehicle.id}
@@ -7260,6 +7270,9 @@ export default function FleetMap() {
             fuelAlerts={canDo("map:fuel_alerts")
               ? { count: flaggedVehicles.filter(isTheftAlert).length, open: fuelAlertsOpen, onOpen: () => setFuelAlertsOpen(v => !v) }
               : null}
+            /* Arrivals at a hub, below Fuel alerts: only where the server's
+               Google routing is on, since every answer comes from it. */
+            arrivals={googleRouting ? { open: arrivalsOpen, onOpen: () => setArrivalsOpen(v => !v) } : null}
           />
         )}
 
