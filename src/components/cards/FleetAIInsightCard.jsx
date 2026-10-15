@@ -29,11 +29,12 @@ import LoadError from "../shared/LoadError";
 // A different shape per level, so the badge reads without its colour.
 const RISK_ICON = { Low: "shield-check", Medium: "alert-triangle", High: "alert-octagon" };
 
-// The server regenerates each org's AI brief hourly in the background and
+// The server regenerates each org's AI brief in the background and
 // always answers from memory, so refreshing here is instant. Poll every
-// 15 min to pick the new brief up soon after it lands; the SWR cacheKey
+// 5 min: the server rewrites each brief every 10 (2026-10-16), and asking is
+// also what keeps this org on its refresh list. The SWR cacheKey
 // means every render paints from the last-known brief with no flicker.
-const REFRESH_MS = 15 * 60_000;
+const REFRESH_MS = 5 * 60_000;
 
 /* The head's mark. Sparkles only when the model wrote the brief; the
    fixed-sentence summary gets a plain info mark, so the AI sign is never
