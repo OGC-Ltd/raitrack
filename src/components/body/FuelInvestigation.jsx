@@ -48,6 +48,13 @@ const offsetText = (s) => {
   const t = a < 60 ? `${a} s` : `${Math.round(a / 60)} min`;
   return s === 0 ? "at the start of the fall" : s < 0 ? `${t} before the fall began` : `${t} after the fall began`;
 };
+/** Great-circle metres between two fixes. */
+function metresBetween(a, b) {
+  const R = 6371000, r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 const metres = (m) => (m == null ? "—" : m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
 
 export default function FuelInvestigation({ orgId, theftId, plate, onClose }) {
@@ -111,15 +118,26 @@ export default function FuelInvestigation({ orgId, theftId, plate, onClose }) {
     const L = layers.current;
     const ll = (p) => ({ lat: p.lat, lng: p.lng });
 
-    for (const z of inv.zones.items) {
+    // Largest first, so the 5-minute zone is drawn on top of the others.
+    for (const z of [...inv.zones.items].sort((a, b) => b.minutes - a.minutes)) {
       const d = new maps.Data({ map: m });
       d.addGeoJson({ type: "Feature", properties: {}, geometry: z.geometry });
       const c = COLOR.zone[z.minutes] ?? "#64748b";
-      d.setStyle({ fillColor: c, fillOpacity: 0.1, strokeColor: c, strokeOpacity: 0.8, strokeWeight: 1.5, clickable: false });
+      d.setStyle({ fillColor: c, fillOpacity: 0.12, strokeColor: c, strokeOpacity: 0.95, strokeWeight: 2.5, clickable: false });
       L.zones[z.minutes] = d;
     }
-    L.track = runs.filter((r) => r.length > 1).map((r) =>
-      new maps.Polyline({ map: m, path: r.map(ll), strokeColor: COLOR.track, strokeOpacity: 0.95, strokeWeight: 4, zIndex: 3 }));
+    L.track = runs.filter((r) => r.length > 1).flatMap((r) => [
+      new maps.Polyline({ map: m, path: r.map(ll), strokeColor: "#ffffff", strokeOpacity: 0.9, strokeWeight: 8, zIndex: 3 }),
+      new maps.Polyline({ map: m, path: r.map(ll), strokeColor: COLOR.track, strokeOpacity: 1, strokeWeight: 5, zIndex: 4 }),
+    ]);
+    // Start and end of the window, so the direction of travel reads.
+    if (track.length > 1) {
+      const end = (p, title) => new maps.Marker({
+        map: m, position: ll(p), zIndex: 8, title,
+        icon: { path: maps.SymbolPath.CIRCLE, scale: 5, fillColor: COLOR.track, fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 },
+      });
+      L.ends = [end(track[0], `Window start ${HHMM.format(track[0].t)}`), end(track[track.length - 1], `Window end ${HHMM.format(track[track.length - 1].t)}`)];
+    }
     // A silence is drawn as dots, never as a road: nobody knows where it went.
     L.gaps = holes.map(([a, b]) => new maps.Polyline({
       map: m, path: [ll(a), ll(b)], strokeOpacity: 0, zIndex: 2,
@@ -147,22 +165,38 @@ export default function FuelInvestigation({ orgId, theftId, plate, onClose }) {
       icon: { path: maps.SymbolPath.CIRCLE, scale: 5, fillColor: COLOR.cursor, fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 },
     });
 
-    // Frame the point and the track; the zones can run far beyond both.
+    // Frame the track, the point and the 10-minute zone (else the largest
+    // there is), so the zones are on screen when the dialog opens: framed to
+    // the track alone, a parked unit opened at street level with the zones'
+    // edges kilometres off-screen.
     const b = new maps.LatLngBounds();
     let any = false;
     for (const p of track) { b.extend(ll(p)); any = true; }
     if (inv.point) { b.extend(ll(inv.point)); any = true; }
     if (inv.zones.from) b.extend(ll(inv.zones.from));
-    if (any) {
-      m.fitBounds(b, 40);
-      if (m.getZoom() > 15) m.setZoom(15);
-    }
+    const frameZone = inv.zones.items.find((z) => z.minutes === 10)
+      ?? [...inv.zones.items].sort((a, c) => c.minutes - a.minutes)[0];
+    const walk = (c) => { if (typeof c[0] === "number") { b.extend({ lat: c[1], lng: c[0] }); any = true; } else c.forEach(walk); };
+    if (frameZone?.geometry?.coordinates) walk(frameZone.geometry.coordinates);
+    // Measured again first, and once more after layout settles: the dialog
+    // can still be sizing itself when the data lands, and a fit against the
+    // old size opens the map far too wide or too close.
+    const frame = () => {
+      if (!any) return;
+      maps.event.trigger(m, "resize");
+      m.fitBounds(b, 30);
+      if (m.getZoom() > 16) m.setZoom(16);
+    };
+    frame();
+    const settle = setTimeout(frame, 250);
 
     return () => {
+      clearTimeout(settle);
       for (const d of Object.values(L.zones)) d.setMap(null);
       for (const x of [...L.track, ...L.gaps, ...L.snapped]) x.setMap(null);
       L.point?.setMap(null);
       L.zoneFrom?.setMap(null);
+      for (const x of L.ends ?? []) x.setMap(null);
       L.cursor?.setMap(null);
       layers.current = { track: [], gaps: [], snapped: [], zones: {}, point: null, cursor: null };
     };
@@ -173,7 +207,7 @@ export default function FuelInvestigation({ orgId, theftId, plate, onClose }) {
     const m = map.current;
     const L = layers.current;
     if (!m) return;
-    for (const x of [...L.track, ...L.gaps]) x.setMap(show.track ? m : null);
+    for (const x of [...L.track, ...L.gaps, ...(L.ends ?? [])]) x.setMap(show.track ? m : null);
     for (const x of L.snapped) x.setMap(show.snapped ? m : null);
     for (const [min, d] of Object.entries(L.zones)) d.setMap(show[min] ? m : null);
   }, [show, inv, maps]);
@@ -201,6 +235,12 @@ export default function FuelInvestigation({ orgId, theftId, plate, onClose }) {
   const detected = inv ? Date.parse(inv.detectedAt) : null;
   const relMin = here && began != null ? Math.round((here.t - began) / 60_000) : null;
   const toggle = (k) => setShow((s) => ({ ...s, [k]: !s[k] }));
+  // Distance along the recorded track, across no silence.
+  const travelledM = useMemo(() => {
+    let d = 0;
+    for (const r of runs) for (let i = 1; i < r.length; i++) d += metresBetween(r[i - 1], r[i]);
+    return Math.round(d);
+  }, [runs]);
   const zoneMins = inv?.zones.minutes ?? [5, 10, 15];
   const zoneHas = (m) => inv?.zones.items.some((z) => z.minutes === m);
 
@@ -231,6 +271,13 @@ export default function FuelInvestigation({ orgId, theftId, plate, onClose }) {
                 {!failed && q.isLoading && <div className="lbp-msg">Building the investigation…</div>}
                 {!failed && q.error && <div className="lbp-msg">The investigation could not load: {q.error.message}</div>}
                 {inv && !track.length && <div className="lbp-msg">No GPS fixes in the two hours around this alert.</div>}
+                {inv && track.length > 0 && (
+                  <div className="fiv-chip" role="status">
+                    {travelledM < 200
+                      ? <><i className="ti ti-parking" aria-hidden="true" /> Stood still the whole window ({metres(travelledM)} moved), so the track is under the pin</>
+                      : <><i className="ti ti-route" aria-hidden="true" /> Drove {metres(travelledM)} in the window</>}
+                  </div>
+                )}
               </div>
               {track.length > 1 && (
                 <div className="fiv-scrub">

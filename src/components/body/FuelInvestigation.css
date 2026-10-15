@@ -92,3 +92,34 @@
 /* The zones' start when the point is off-road: the map's hollow ring. */
 .fiv-note--from { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 6px; align-items: start; color: var(--sp4-text-2); }
 .fiv-ring { width: 10px; height: 10px; margin-top: 2px; border: 2px solid var(--sp4-text-1); border-radius: 50%; background: var(--sp4-surface); box-sizing: border-box; }
+
+/* What the track amounts to, over the map's top-left corner. */
+.fiv-chip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 56px;
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: calc(100% - 66px);
+  padding: 5px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+}
+.fiv-chip .ti { flex: none; font-size: 14px; color: #2563eb; }
+
+/* The slider and its reading never shrink under the map. */
+.fiv-scrub { flex: none; }
+@media (max-width: 900px) {
+  .fiv .lbp-cols { grid-template-rows: auto auto; }
+  .fiv .lbp-map { flex: none; height: 360px; }
+}
