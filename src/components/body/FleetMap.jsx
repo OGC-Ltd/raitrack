@@ -7356,7 +7356,7 @@ export default function FleetMap() {
                 Showing <strong>{focusedId}</strong> only
                 <span className="focus-pill-hint">zoom out to show the fleet</span>
               </button>
-            ) : (
+            ) : trackedIds.length > 0 ? (
               /* A tracked map is missing most of its fleet for exactly the same
                  reason an isolated one is, and needs the same sentence saying
                  so. Clicking clears the selection, as clicking the focus pill
@@ -7379,7 +7379,7 @@ export default function FleetMap() {
                   Stop <span aria-hidden="true">{"×"}</span>
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         )}
 

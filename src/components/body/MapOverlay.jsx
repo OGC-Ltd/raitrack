@@ -575,19 +575,23 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
   // 4000 still paints over the header and the footer nav at 1000.
   return (
     <div
-      className={`fi-overlay${pinned && asWindow ? ' fi-overlay--pinned' : ''}`}
+      // On a desktop the window never blocks the map (operator, 2026-10-15):
+      // the alert's route, zones and playback are drawn ON the map
+      // (IncidentInvestigation) and have to stay usable beside it. A phone
+      // sheet keeps its backdrop.
+      className={`fi-overlay${pinned && asWindow ? ' fi-overlay--pinned' : ''}${asWindow ? ' fi-overlay--open' : ''}`}
       role="presentation"
       // Only a click on the backdrop ITSELF closes, and only unpinned — a
       // click that started inside and drifted out on release must not. A sheet
       // is never pinned, so the backdrop above it always dismisses.
-      onMouseDown={(e) => { if ((!pinned || sheet) && e.target === e.currentTarget) onClose(); }}
+      onMouseDown={(e) => { if (sheet && e.target === e.currentTarget) onClose(); }}
     >
       <div
         ref={modalRef}
         className={`vehicle-tooltip vehicle-tooltip--rich fi-modal${theft ? '' : ' fi-modal--unexplained'}${collapsed ? ' fi-modal--collapsed' : ''}`}
         style={style}
         role="dialog"
-        aria-modal={pinned && asWindow ? undefined : 'true'}
+        aria-modal={asWindow ? undefined : 'true'}
         aria-label="Fuel incident"
       >
         {/* ON A PHONE: the Live Feed sheet's header, so the two sheets read as
