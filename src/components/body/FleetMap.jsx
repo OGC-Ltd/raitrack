@@ -94,7 +94,7 @@ import { useGoogleRoutingOn, fetchReach, polygonsOf } from "../../lib/googleRout
 import RouteAheadCard, { REACH_COLORS } from "./RouteAheadCard";
 
 /** Fleets whose picked unit draws its trip from its yard (IncidentInvestigation). */
-const TRIP_COMPANIES = new Set(["sukari", "westsugar", "kabras", "menengai"]);
+const TRIP_COMPANIES = new Set(["sukari", "westsugar", "kabras", "menengai", "nzoia"]);
 import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
@@ -2760,7 +2760,7 @@ export default function FleetMap() {
    * FactorySuite dispatch have a destination): the yard, the destination and
    * the planned road, its route since it left, stops and drive zones
    * (IncidentInvestigation). Every unit of the fleets that run from a yard
-   * of their own (Sukari; West Kenya, Kabras and Menengai from 2026-10-15,
+   * of their own (Sukari; West Kenya, Kabras, Menengai and Nzoia from 2026-10-15,
    * their yards being their own factory and yard geofences), and any unit on
    * a dispatch elsewhere. A fuel alert or a halt being looked at keeps the
    * map; the × puts this one away until another unit is picked. */
