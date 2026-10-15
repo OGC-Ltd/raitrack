@@ -247,6 +247,7 @@ export default function MapToolRail({
   zones,            // the "zones" map layer ({ on, onToggle, label }) or null
   halted,           // { count, open, onOpen } or null without map:filter
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
+  arrivals,         // { open, onOpen } or null while Google routing is off
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -332,6 +333,14 @@ export default function MapToolRail({
                 ? `Fuel alerts: ${fuelAlerts.count} ${fuelAlerts.count === 1 ? "unit" : "units"} with an open fuel theft alert`
                 : "Fuel alerts: none open — open the list anyway"}
               on={fuelAlerts.open} count={fuelAlerts.count} tone="alert" expanded={expanded} onClick={fuelAlerts.onOpen}
+            />
+          )}
+          {/* Arrivals at a hub: reverse isochrones and live drive times in. */}
+          {arrivals && (
+            <RailButton
+              icon="ti-target-arrow" label="Arrivals" tour="map-arrivals"
+              title="Arrivals: who can reach a hub, and when, with live traffic"
+              on={arrivals.open} expanded={expanded} onClick={arrivals.onOpen}
             />
           )}
         </div>
