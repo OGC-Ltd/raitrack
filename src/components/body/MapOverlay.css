@@ -1708,3 +1708,9 @@ html[data-theme="light"] .fi-icon:hover          { background: rgba(15,23,42,0.0
 }
 .fi-sheet-close:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 
+
+/* No tint behind a desktop window in either theme (operator, 2026-10-15).
+   The light-theme backdrop above is two selectors heavier than
+   `.fi-overlay--open`, so it kept a 38% slate wash over the map. */
+html[data-theme] .fi-overlay.fi-overlay--open,
+.fi-overlay.fi-overlay--open { background: transparent; }

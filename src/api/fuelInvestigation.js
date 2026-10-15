@@ -8,3 +8,13 @@ export async function getTheftInvestigation(orgId, theftId, { signal } = {}) {
   )
   return res.data
 }
+
+/** A halted unit's investigation — its stop, route and drive zones. */
+export async function getHaltInvestigation(orgId, dbVehicleId, sinceMs, { signal } = {}) {
+  const since = new Date(sinceMs).toISOString()
+  const res = await apiFetch(
+    `/api/v1/organisations/${orgId}/vehicles/${encodeURIComponent(dbVehicleId)}/halt-investigation?since=${encodeURIComponent(since)}`,
+    { signal },
+  )
+  return res.data
+}
