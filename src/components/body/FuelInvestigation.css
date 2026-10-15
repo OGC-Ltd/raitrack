@@ -1,0 +1,94 @@
+/* Hallmark · component: dialog (fuel alert investigation) · genre: modern-minimal · theme: sp4 (project tokens)
+ * states: default · hover · focus · disabled (layer unavailable) · loading · error · empty · provisional / saved
+ * shell is the Logbook playback dialog (LogbookPlayback.css); this adds the
+ * state chip, the scrubber, the facts list and the layer toggles.
+ */
+
+.fiv { width: min(1040px, 100%); height: min(640px, 82vh); }
+.fiv .lbp-cols { grid-template-columns: minmax(0, 1fr) 300px; }
+.fiv-right { overflow-y: auto; }
+
+/* ── provisional / saved ── */
+.fiv-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 999px;
+  color: var(--sp4-text-2);
+  font-size: var(--sp4-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fiv-state .ti { font-size: 12px; }
+.fiv-state--final { color: var(--sp4-ok, #15803d); border-color: color-mix(in srgb, var(--sp4-ok, #15803d) 40%, transparent); }
+.fiv .sp4-modal-head .fiv-state + .sp4-modal-x { margin-left: 0; }
+
+/* ── scrubber ── */
+.fiv-scrub {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--sp4-line-hi);
+  background: var(--sp4-surface);
+}
+.fiv-scrub input[type="range"] { width: 100%; accent-color: var(--sp4-accent); }
+.fiv-scrub input[type="range"]:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.fiv-scrub__read {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.fiv-scrub__read b { color: var(--sp4-text-1); }
+
+/* ── facts ── */
+.fiv-facts { display: grid; gap: 6px; margin: 0; }
+.fiv-facts > div { display: grid; gap: 1px; }
+.fiv-facts dt { font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.fiv-facts dd { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-1); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.fiv-note { margin: 6px 0 0; font-size: var(--sp4-label); line-height: 1.45; color: var(--sp4-text-3); }
+.fiv-note--warn { color: var(--sp4-warn); }
+
+/* ── layers ── */
+.fiv-layers { display: grid; gap: 2px; }
+.fiv-layer {
+  display: grid;
+  grid-template-columns: auto 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.fiv-layer:hover { background: var(--sp4-raised); }
+.fiv-layer input { margin: 2px 0 0; accent-color: var(--sp4-accent); }
+.fiv-layer input:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.fiv-layer span { display: grid; gap: 1px; min-width: 0; }
+.fiv-layer b { font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-1); }
+.fiv-layer small { font-size: var(--sp4-label); color: var(--sp4-text-3); line-height: 1.35; }
+.fiv-layer.is-off { cursor: default; }
+.fiv-layer.is-off:hover { background: transparent; }
+.fiv-layer.is-off b { color: var(--sp4-text-3); }
+
+.fiv-sw { display: block; width: 18px; height: 4px; margin-top: 7px; border-radius: 2px; }
+.fiv-sw--thin { height: 3px; }
+.fiv-sw--area { height: 12px; margin-top: 3px; border: 1.5px solid; opacity: 0.55; }
+
+@media (max-width: 900px) {
+  .fiv { height: 100%; width: 100%; }
+  .fiv .lbp-cols { grid-template-columns: minmax(0, 1fr); }
+  .fiv-right { overflow: visible; }
+}
+
+/* Opened from the fuel incident window (z 4000): sit above it. */
+.fiv-scope .sp4-modal-overlay { z-index: 4100; }
+
+/* The zones' start when the point is off-road: the map's hollow ring. */
+.fiv-note--from { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 6px; align-items: start; color: var(--sp4-text-2); }
+.fiv-ring { width: 10px; height: 10px; margin-top: 2px; border: 2px solid var(--sp4-text-1); border-radius: 50%; background: var(--sp4-surface); box-sizing: border-box; }

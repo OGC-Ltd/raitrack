@@ -1696,3 +1696,8 @@ html[data-theme="light"] .fi-icon:hover          { background: rgba(15,23,42,0.0
   display: flex; align-items: center; justify-content: center;
 }
 .fi-sheet-close:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+/* Opens the alert's investigation map (FuelInvestigation). First in the row,
+   away from Close. */
+.fi-btn--investigate { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; }
+.fi-btn--investigate .ti { font-size: 14px; }

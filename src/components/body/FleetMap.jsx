@@ -2424,6 +2424,17 @@ export default function FleetMap() {
    */
   const [pinnedId, setPinnedId] = useState(null);
 
+  /* A side-panel filter clears the map down to the group asked for: tracking
+   * stops and the pinned card closes (operator, 2026-10-15: "when I interact
+   * with the buttons on the side panel like critical, idling… the unit card
+   * is to close and disappear, the tracking should be stopped and clear the
+   * UI"). Called by the status chips (handleFilter) and when the Fleets
+   * block's types or In transit change (effect below). */
+  const endTracking = useCallback(() => {
+    setTrackedIds((prev) => (prev?.length ? [] : prev));
+    setPinnedId(null);
+  }, [setTrackedIds]);
+
   const fittedCompanyRef = useRef(null);
   const pendingFitRef  = useRef(false);
   const deepLinkedRef  = useRef(false);
@@ -2491,6 +2502,17 @@ export default function FleetMap() {
   fleetTypesRef.current = fleetTypes;
   trackedSetRef.current = trackedSet;
   inTransitRef.current = inTransitOnly;
+
+  // The Fleets block (types, In transit, Clear filters) ends tracking the
+  // same way a status chip does. Only on a change after mount, so arriving on
+  // the page with a saved type filter leaves a restored track alone.
+  const fleetFilterSig = `${[...(fleetTypes ?? [])].sort().join(",")}|${inTransitOnly ? 1 : 0}`;
+  const fleetFilterSigRef = useRef(fleetFilterSig);
+  useEffect(() => {
+    if (fleetFilterSigRef.current === fleetFilterSig) return;
+    fleetFilterSigRef.current = fleetFilterSig;
+    endTracking();
+  }, [fleetFilterSig, endTracking]);
 
   // Estate boundaries — fetched once per org, cached, never polled. Keyed on
   // orgId, so switching company swaps the geometry rather than mixing it.
@@ -2743,18 +2765,13 @@ export default function FleetMap() {
     placeholderData: (prev) => prev,
   });
 
-  /* Opening the Fuel alerts window takes the pinned card down: the alerts are
-   * what is being worked now (operator, 2026-10-15: "when I click to open the
-   * modal for fuel alerts the unit card is closed"). Only the opening edge —
-   * a row clicked inside the open window pins its unit's card beside it.
-   *
-   * Units and Stopped in transit no longer do (operator, same day: "whatever
-   * I do on the side panel cancels out the pinned items"). Both open from the
-   * side panel, and both are lists to browse beside the unit already pinned,
-   * not a replacement for it. They closed it from 2026-10-02 to 2026-10-15. */
+  /* Opening a side-panel window — Units, Stopped in transit, Fuel alerts —
+   * takes the pinned card down: what was opened is what is being worked now
+   * (operator, 2026-10-15). Only the opening edge — a row clicked inside the
+   * open window pins its unit's card beside it. */
   const openWindow = unitsOpen ? "units" : strandedOpen ? "stranded" : fuelAlertsOpen ? "fuel" : null;
   useEffect(() => {
-    if (openWindow === "fuel") setPinnedId(null);
+    if (openWindow) setPinnedId(null);
   }, [openWindow]);
 
   const [cardMinimized, setCardMinimized] = useState(false);
@@ -6973,6 +6990,11 @@ export default function FleetMap() {
     // panel's counts and nothing on the map. Picking a chip means "show me this
     // group", which supersedes "show me only this one".
     setFocusedId(null);
+    // A chip also ends tracking and takes the pinned card down: the operator
+    // has moved on to a group, so the map shows that group alone (operator,
+    // 2026-10-15: "the unit card to close… the tracking should be stopped and
+    // clear the ui"). Fleet types and In transit do the same, below.
+    endTracking();
 
     // The funnel narrows the candidate set BEFORE either branch, so both the
     // reset and the bounds fit frame what is actually drawn. Skipping it here
@@ -6984,27 +7006,19 @@ export default function FleetMap() {
         trackedSet: EMPTY_TRACKED,
         inTransitOnly: inTransitRef.current,
       }));
-    // Tracked units stay on the map through every chip (operator,
-    // 2026-10-15), so the camera frames them with the group, not the group
-    // alone, and ALL while tracking is "back to my tracked units".
-    const tracked = trackedSetRef.current;
-    const mine = tracked.size > 0
-      ? vehiclesRef.current.filter(v => tracked.has(v.id) && Number.isFinite(v.lat) && Number.isFinite(v.lng))
-      : [];
-    if (filterKey === "all" && mine.length > 0) { frameUnits(mine); return; }
     // ALL is "show me everything again", which is the same camera the map opens
     // on and the same one clearing a search returns to — not a bounds fit.
     if (filterKey === "all") { resetCamera(located); return; }
 
     // The SAME predicate the reconcile pass uses for marker visibility, so the
     // camera cannot frame a different set than the one left on screen.
-    const inFilter = [...mine, ...located.filter(v => !tracked.has(v.id) && visibleUnderFilter(v, filterKey))];
+    const inFilter = located.filter(v => visibleUnderFilter(v, filterKey));
     // A chip whose units have no fix — or none at all — leaves the camera
     // alone. Fitting an empty set would throw the view somewhere arbitrary,
     // which is worse than not moving.
     if (inFilter.length === 0) return;
     fitTo(inFilter, { animate: true });
-  }, [resetCamera, fitTo, frameUnits, setActiveFilter, revealMap]);
+  }, [resetCamera, fitTo, setActiveFilter, revealMap, endTracking]);
 
   /* Hand the camera-moving handler to the shell, not the bare setter.
    *
