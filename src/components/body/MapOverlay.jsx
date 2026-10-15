@@ -45,6 +45,7 @@ import { useDismissedIncidents } from "../../lib/fuelDismissals";
 import { usePrefetchFuelAlerts } from "../../lib/fuelPrefetch";
 import FuelDayBreakdown from "./FuelDayBreakdown";
 import FuelReview from "./FuelReview";
+import FuelInvestigation from "./FuelInvestigation";
 import { isConfirmedTheft } from "../../lib/fuelAlerts";
 
 const FEED_CLS = { info: "fi-info", warning: "fi-warning", critical: "fi-critical", success: "fi-success" };
@@ -401,6 +402,10 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
   );
   const drag = useRef(null);
   const modalRef = useRef(null);
+  const { orgId } = useFleetLiveShared();
+  // The alert's investigation map (FuelInvestigation), opened from the foot.
+  const [investigating, setInvestigating] = useState(false);
+  useEffect(() => { setInvestigating(false); }, [incident?.id]);
 
   /* On a phone this is a sheet, and a sheet is always a modal: it cannot be
      dragged (there is nowhere to put it), cannot be pinned (there is nothing
@@ -679,8 +684,18 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
               {sheet ? detailCol : [cardCol, detailCol]}
             </div>
             <div className="fi-actions">
+              {incident?.id && (
+                <button className="fi-btn fi-btn--investigate" onClick={() => setInvestigating(true)}
+                        title="The point, the recorded track an hour either side, and the drive zones">
+                  <i className="ti ti-map-search" aria-hidden="true" /> Investigate on map
+                </button>
+              )}
               <button className="fi-btn" onClick={onClose}>Close</button>
             </div>
+            {investigating && (
+              <FuelInvestigation orgId={orgId} theftId={incident.id} plate={plate}
+                                 onClose={() => setInvestigating(false)} />
+            )}
           </>
         )}
       </div>
