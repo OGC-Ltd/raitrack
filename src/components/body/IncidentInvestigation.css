@@ -109,3 +109,25 @@
 }
 .ivp__x:hover { background: #f1f5f9; }
 .ivp__x:focus-visible { outline: 2px solid #2563eb; }
+
+/* The key's own close: the layers outlive the window that opened them. */
+.ivk { position: relative; padding-right: 34px; }
+.ivk--msg { display: flex; align-items: center; }
+.ivk__x {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ivk__x:hover { background: #f1f5f9; color: #0f172a; }
+.ivk__x:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.ivk__x .ti { font-size: 15px; }

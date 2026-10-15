@@ -26,7 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getTheftInvestigation } from "../../api/fuelInvestigation";
+import { getTheftInvestigation, getHaltInvestigation } from "../../api/fuelInvestigation";
 import "./IncidentInvestigation.css";
 
 const TZ = "Africa/Nairobi";
@@ -160,12 +160,20 @@ const addresses = new Map();
  * Draws the alert's investigation on `map` while `theftId` is set.
  * Returns what the key and the playback bar need.
  */
-export function useIncidentInvestigation({ map, maps, ready, orgId, theftId }) {
+export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
+  // A fuel alert (`{ kind: "fuel", theftId }`) or a halted unit
+  // (`{ kind: "halt", vehicleId, sinceMs }`, its database id and when it
+  // stopped). Both answer in the same shape; `theftId` names the answer.
+  const theftId = !subject ? null
+    : subject.kind === "halt" ? `halt:${subject.vehicleId}:${subject.sinceMs}` : subject.theftId;
   const q = useQuery({
     queryKey: ["fuel-investigation", orgId, theftId],
-    queryFn: ({ signal }) => getTheftInvestigation(orgId, theftId, { signal }),
+    queryFn: ({ signal }) => (subject.kind === "halt"
+      ? getHaltInvestigation(orgId, subject.vehicleId, subject.sinceMs, { signal })
+      : getTheftInvestigation(orgId, subject.theftId, { signal })),
     enabled: Boolean(orgId && theftId),
-    staleTime: Infinity,
+    // A saved fuel investigation never changes; a halt is still going on.
+    staleTime: subject?.kind === "halt" ? 5 * 60_000 : Infinity,
     retry: 0,
   });
   const inv = theftId && q.data?.theftId === theftId ? q.data : null;
@@ -273,7 +281,10 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, theftId }) {
         icon: { path: maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#ffffff", fillOpacity: 1, strokeColor: C.point, strokeWeight: 2.5 },
       }));
     }
-    if (inv.point) add(new maps.Marker({ map, position: ll(inv.point), icon: PIN_SQUARE, zIndex: 62, title: `Fuel began to fall here, ${HHMM.format(Date.parse(inv.beganAt))}` }));
+    if (inv.point) add(new maps.Marker({
+      map, position: ll(inv.point), icon: PIN_SQUARE, zIndex: 62,
+      title: inv.kind === "halt" ? `Halted here since ${HHMM.format(Date.parse(inv.beganAt))}` : `Fuel began to fall here, ${HHMM.format(Date.parse(inv.beganAt))}`,
+    }));
 
     // Frame once per alert: the route, the point and the 10-minute zone.
     if (framed.current !== inv.theftId) {
@@ -326,18 +337,30 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, theftId }) {
 }
 
 /** The key and the playback bar, in the map's top-centre band. */
-export function InvestigationKey({ inv, shaped, loading, error, playback }) {
+export function InvestigationKey({ inv, shaped, loading, error, playback, onClose }) {
   if (!loading && !error && !inv) return null;
-  if (loading) return <div className="ivk" role="status"><span className="ivk__busy">Drawing the alert&apos;s route and drive zones…</span></div>;
-  if (error) return <div className="ivk" role="status"><span className="ivk__busy">The alert&apos;s route and zones could not load: {error.message}</span></div>;
+  // Its own close: the layers outlive the window that opened them.
+  const x = onClose && (
+    <button type="button" className="ivk__x" onClick={onClose} aria-label="Clear the route and drive zones from the map" title="Clear from the map">
+      <i className="ti ti-x" aria-hidden="true" />
+    </button>
+  );
+  if (loading) return <div className="ivk ivk--msg" role="status"><span className="ivk__busy">Drawing the route and drive zones…</span>{x}</div>;
+  if (error) return <div className="ivk ivk--msg" role="status"><span className="ivk__busy">The route and drive zones could not load: {error.message}</span>{x}</div>;
   const zones = inv.zones.items.map((z) => z.minutes).sort((a, b) => a - b);
   const still = (shaped?.travelledM ?? 0) < 200;
   const tr = inv.track;
   const p = playback;
   return (
-    <div className="ivk" aria-label="Fuel alert on the map">
+    <div className="ivk" aria-label={inv.kind === "halt" ? "Halted unit on the map" : "Fuel alert on the map"}>
+      {x}
       <div className="ivk__legend">
-        <span className="ivk__item"><i className="ivk__pin" aria-hidden="true" />Fuel fell {HHMM.format(Date.parse(inv.beganAt))}</span>
+        <span className="ivk__item">
+          <i className="ivk__pin" aria-hidden="true" />
+          {inv.kind === "halt"
+            ? <>{inv.plate ? <b>{inv.plate}</b> : null} halted {HHMM.format(Date.parse(inv.beganAt))}</>
+            : <>Fuel fell {HHMM.format(Date.parse(inv.beganAt))}</>}
+        </span>
         <span className="ivk__item">
           <i className="ivk__line" aria-hidden="true" />
           {tr.length === 0 ? "No GPS fixes" : still ? "Stood still" : `Route ${metres(shaped.travelledM)}`}

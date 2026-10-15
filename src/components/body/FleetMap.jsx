@@ -2495,8 +2495,21 @@ export default function FleetMap() {
 
   // The open fuel alert's route, drive zones and point, drawn on this map
   // while its incident window is open (IncidentInvestigation).
+  // …or a halted unit picked in the Halted window (operator, 2026-10-15):
+  // where it stopped, its route, stops and drive zones. A fuel alert's window
+  // takes precedence while it is open.
+  //
+  // What is drawn stays on the map after the window that opened it closes
+  // (operator, 2026-10-15: "when we close this modal it should not close the
+  // modal for Isochrones"); only the key's own × clears it, or picking
+  // another alert or halted unit, or changing organisation.
+  const [investigateSubject, setInvestigateSubject] = useState(null);
+  useEffect(() => {
+    if (openIncidentId) setInvestigateSubject({ kind: "fuel", theftId: openIncidentId });
+  }, [openIncidentId]);
+  useEffect(() => { setInvestigateSubject(null); }, [orgId]);
   const investigation = useIncidentInvestigation({
-    map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, theftId: openIncidentId,
+    map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, subject: investigateSubject,
   });
   const vehicles = _lv ?? [];
 
@@ -7279,7 +7292,14 @@ export default function FleetMap() {
             flagged={strandedVehicles}
             open={strandedOpen}
             onOpenChange={setStrandedOpen}
-            onSelect={handleFocusVehicle}
+            onSelect={(id) => {
+              handleFocusVehicle(id);
+              // Draw the halt's investigation: the row's own unit and the
+              // moment it stopped, as the window counts it.
+              const row = strandedVehicles.find((r) => r.vehicle.id === id);
+              const dbId = row?.vehicle?.vehicleId;
+              if (row && dbId) setInvestigateSubject({ kind: "halt", vehicleId: dbId, sinceMs: row.why.sinceMs });
+            }}
             /* The SAME tracking state the Units panel writes, not a second
                one: ticking a unit here and opening Units must show it already
                ticked, or the map is being narrowed by two lists that disagree
@@ -7341,10 +7361,10 @@ export default function FleetMap() {
             Says why the rest of the fleet is missing. Without it an isolated
             map is indistinguishable from a broken one. Clicking releases the
             isolation, same as zooming out. */}
-        {(focusedId || trackedIds.length > 0 || openIncidentId) && (
+        {(focusedId || trackedIds.length > 0 || investigateSubject) && (
           <div className="map-top-band">
             {/* The open fuel alert's key, above the pills (IncidentInvestigation). */}
-            <InvestigationKey {...investigation} />
+            <InvestigationKey {...investigation} onClose={() => setInvestigateSubject(null)} />
             {focusedId ? (
               <button
                 type="button"
