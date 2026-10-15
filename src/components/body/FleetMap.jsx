@@ -29,7 +29,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import "./FleetMap.css";
 import MapOverlay, { FuelIncidentHost } from "./MapOverlay";
-import { useIncidentInvestigation, InvestigationKey } from "./IncidentInvestigation";
+import { useIncidentInvestigation, InvestigationWindow } from "./IncidentInvestigation";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -7103,6 +7103,9 @@ export default function FleetMap() {
         {/* Scale (km over mi), the base map's credit, cursor coordinates.
             OSM's licence requires its attribution wherever its tiles show. */}
         <RouteCoveredCard covered={covered} onClose={() => setCovered(null)} />
+        {/* The fuel alert's or halted unit's investigation, in its own
+            floating window (IncidentInvestigation). */}
+        <InvestigationWindow {...investigation} onClose={() => setInvestigateSubject(null)} />
         {trackedVehicle && (
           <RouteAheadCard
             plate={trackedVehicle.name || trackedVehicle.id}
@@ -7361,10 +7364,8 @@ export default function FleetMap() {
             Says why the rest of the fleet is missing. Without it an isolated
             map is indistinguishable from a broken one. Clicking releases the
             isolation, same as zooming out. */}
-        {(focusedId || trackedIds.length > 0 || investigateSubject) && (
+        {(focusedId || trackedIds.length > 0) && (
           <div className="map-top-band">
-            {/* The open fuel alert's key, above the pills (IncidentInvestigation). */}
-            <InvestigationKey {...investigation} onClose={() => setInvestigateSubject(null)} />
             {focusedId ? (
               <button
                 type="button"

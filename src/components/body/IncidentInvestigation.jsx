@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTheftInvestigation, getHaltInvestigation } from "../../api/fuelInvestigation";
+import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import "./IncidentInvestigation.css";
 
 const TZ = "Africa/Nairobi";
@@ -95,13 +96,19 @@ const zoneChip = (minutes, color) => {
     w, 26, 0, 13);
 };
 
-/** The zone's outermost corner toward the north-east, where its chip sits. */
-function chipSpot(geometry) {
+/**
+ * Where a zone's chip sits: its outermost point in a direction of its own —
+ * east for 5 min, north-east for 10, north for 15 — so three chips never land
+ * on the same corner (they did, when all three took the north-east).
+ */
+const CHIP_DIR = { 5: [0, 1], 10: [1, 1], 15: [1, 0] };
+function chipSpot(geometry, minutes) {
+  const [wy, wx] = CHIP_DIR[minutes] ?? [1, 1];
   let best = null;
   let score = -Infinity;
   const walk = (c) => {
     if (typeof c[0] === "number") {
-      const s = c[1] + c[0];
+      const s = wy * c[1] + wx * c[0];
       if (s > score) { score = s; best = { lat: c[1], lng: c[0] }; }
     } else c.forEach(walk);
   };
@@ -234,7 +241,7 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
       const d = add(new maps.Data({ map }));
       d.addGeoJson({ type: "Feature", properties: {}, geometry: z.geometry });
       d.setStyle({ fillColor: c, fillOpacity: 0.12, strokeColor: c, strokeOpacity: 1, strokeWeight: 2.5, clickable: false });
-      const at = chipSpot(z.geometry);
+      const at = chipSpot(z.geometry, z.minutes);
       if (at) add(new maps.Marker({ map, position: at, icon: zoneChip(z.minutes, c), zIndex: 55, clickable: false, title: `Reachable by road within ${z.minutes} minutes` }));
     }
 
@@ -336,65 +343,148 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
   };
 }
 
-/** The key and the playback bar, in the map's top-centre band. */
-export function InvestigationKey({ inv, shaped, loading, error, playback, onClose }) {
-  if (!loading && !error && !inv) return null;
-  // Its own close: the layers outlive the window that opened them.
-  const x = onClose && (
-    <button type="button" className="ivk__x" onClick={onClose} aria-label="Clear the route and drive zones from the map" title="Clear from the map">
-      <i className="ti ti-x" aria-hidden="true" />
+const MIN_KEY = "ft-ivw-min";
+const readMin = () => { try { return localStorage.getItem(MIN_KEY) === "1"; } catch { return false; } };
+
+/** Where `t` falls along the window, 0–100, for the rail's marks. */
+const pct = (t, t0, t1) => (t1 > t0 ? Math.min(100, Math.max(0, ((t - t0) / (t1 - t0)) * 100)) : 0);
+
+/**
+ * The investigation's own floating window over the map (Hallmark redesign,
+ * operator 2026-10-15: draggable, minimisable, closable). Placed, dragged and
+ * remembered by useFloatingWindow, like the Halted and incident windows; it
+ * outlives the window that opened it and closes only by its own ×.
+ *
+ *   head       the drag handle: what it is, which unit, minimise, close
+ *   readout    the time at the cursor, its speed and the distance so far
+ *   transport  play and a scrubber whose rail marks the fall (or the halt)
+ *              in red and every stop in blue
+ *   legend     what is drawn on the map, and why the zones are missing
+ */
+export function InvestigationWindow({ inv, shaped, loading, error, playback, onClose }) {
+  const open = Boolean(loading || error || inv);
+  const { ref, onPointerDown } = useFloatingWindow({ id: "investigation", dock: "bottom-center", enabled: open });
+  const [min, setMin] = useState(readMin);
+  const toggleMin = () => setMin((m) => {
+    try { localStorage.setItem(MIN_KEY, m ? "0" : "1"); } catch { /* a remembered choice only */ }
+    return !m;
+  });
+  if (!open) return null;
+
+  const halt = inv?.kind === "halt";
+  const p = playback;
+  const tr = inv?.track ?? [];
+  const canPlay = tr.length > 1;
+  const eventT = inv ? Date.parse(inv.beganAt) : null;
+  const rel = p?.here && eventT != null ? Math.round((p.here.t - eventT) / 60_000) : null;
+  const relText = rel == null ? null : rel === 0 ? (halt ? "At the halt" : "At the fall")
+    : rel < 0 ? `${-rel} min before` : `${rel} min after`;
+  const zones = inv ? inv.zones.items.map((z) => z.minutes).sort((a, b) => a - b) : [];
+  const still = (shaped?.travelledM ?? 0) < 200;
+  const stop = (e) => e.stopPropagation();
+
+  const play = (
+    <button type="button" className="ivw__play" onClick={p?.toggle} onPointerDown={stop} disabled={!canPlay}
+            aria-label={p?.playing ? "Pause" : "Play"} title={canPlay ? (p?.playing ? "Pause" : "Play the route") : "No route to play"}>
+      <i className={`ti ti-player-${p?.playing ? "pause" : "play"}-filled`} aria-hidden="true" />
     </button>
   );
-  if (loading) return <div className="ivk ivk--msg" role="status"><span className="ivk__busy">Drawing the route and drive zones…</span>{x}</div>;
-  if (error) return <div className="ivk ivk--msg" role="status"><span className="ivk__busy">The route and drive zones could not load: {error.message}</span>{x}</div>;
-  const zones = inv.zones.items.map((z) => z.minutes).sort((a, b) => a - b);
-  const still = (shaped?.travelledM ?? 0) < 200;
-  const tr = inv.track;
-  const p = playback;
+
   return (
-    <div className="ivk" aria-label={inv.kind === "halt" ? "Halted unit on the map" : "Fuel alert on the map"}>
-      {x}
-      <div className="ivk__legend">
-        <span className="ivk__item">
-          <i className="ivk__pin" aria-hidden="true" />
-          {inv.kind === "halt"
-            ? <>{inv.plate ? <b>{inv.plate}</b> : null} halted {HHMM.format(Date.parse(inv.beganAt))}</>
-            : <>Fuel fell {HHMM.format(Date.parse(inv.beganAt))}</>}
-        </span>
-        <span className="ivk__item">
-          <i className="ivk__line" aria-hidden="true" />
-          {tr.length === 0 ? "No GPS fixes" : still ? "Stood still" : `Route ${metres(shaped.travelledM)}`}
-          {shaped?.stops.length ? <> · <b className="ivk__p">P</b> {shaped.stops.length} {shaped.stops.length === 1 ? "stop" : "stops"}</> : null}
-        </span>
-        {zones.length > 0 ? (
-          <span className="ivk__item">
-            <i className="ivk__zone" aria-hidden="true" />
-            Drive {zones.join(" / ")} min{inv.zones.from ? `, from a road ${metres(inv.zones.from.offsetM)} away` : ""}
+    <section ref={ref} className={`ivw${min ? " ivw--min" : ""}`} data-kind={halt ? "halt" : "fuel"}
+             aria-label={halt ? "Halted unit on the map" : "Fuel alert on the map"}>
+      <header className="ivw__head" onPointerDown={onPointerDown}>
+        <i className={`ti ti-${halt ? "hand-stop" : "gas-station"} ivw__kind`} aria-hidden="true" />
+        <span className="ivw__title">{halt ? "Halted" : "Fuel alert"}</span>
+        {inv?.plate && <span className="ivw__plate" title={inv.plate}>{inv.plate}</span>}
+        {min && inv && canPlay && (
+          <span className="ivw__mini">
+            {play}
+            <b>{p.here ? HHMMSS.format(p.here.t) : HHMM.format(eventT)}</b>
           </span>
-        ) : inv.zones.reason ? <span className="ivk__item ivk__item--muted">No drive zones: {inv.zones.reason}</span> : null}
-      </div>
-      {tr.length > 1 && (
-        <div className="ivk__play">
-          <button type="button" className="ivk__btn" onClick={p.toggle} aria-label={p.playing ? "Pause" : "Play"}>
-            <i className={`ti ti-player-${p.playing ? "pause" : "play"}-filled`} aria-hidden="true" />
-            {p.playing ? "Pause" : "Play"}
+        )}
+        <span className="ivw__tools">
+          <button type="button" className="ivw__tool" onClick={toggleMin} onPointerDown={stop}
+                  aria-expanded={!min} aria-label={min ? "Expand" : "Minimise"} title={min ? "Expand" : "Minimise"}>
+            <i className={`ti ti-${min ? "chevron-up" : "minus"}`} aria-hidden="true" />
           </button>
-          <input
-            type="range" className="ivk__range" min={p.t0} max={p.t1} step={1000}
-            value={p.cursor ?? p.t0} aria-label="Time along the route"
-            onChange={(e) => p.seek(Number(e.target.value))}
-          />
-          <span className="ivk__read" aria-live="off">
-            {p.here ? (
-              <>
-                <b>{HHMMSS.format(p.here.t)}</b>
-                <span>{p.here.spd != null ? `${p.here.spd.toFixed(1)} km/h` : "— km/h"}</span>
-                <span>{(p.km ?? 0).toFixed(2)} km</span>
-              </>
-            ) : <span>{HHMM.format(p.t0)}–{HHMM.format(p.t1)}</span>}
-          </span>
+          <button type="button" className="ivw__tool" onClick={onClose} onPointerDown={stop}
+                  aria-label="Close and clear the map" title="Close and clear the map">
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        </span>
+      </header>
+
+      {!min && (
+        <div className="ivw__body">
+          {loading && (
+            <div className="ivw__skel" aria-busy="true" aria-label="Loading the route and drive zones">
+              <span /><span /><span />
+            </div>
+          )}
+          {error && (
+            <p className="ivw__msg ivw__msg--error" role="alert">
+              <i className="ti ti-alert-circle" aria-hidden="true" />
+              The route and drive zones could not load: {error.message}
+            </p>
+          )}
+          {inv && (
+            <>
+              <dl className="ivw__read">
+                <div className="ivw__cell ivw__cell--time">
+                  <dt>{p.here ? relText : halt ? "Halted" : "Fuel fell"}</dt>
+                  <dd>{p.here ? HHMMSS.format(p.here.t) : HHMM.format(eventT)}</dd>
+                </div>
+                <div className="ivw__cell">
+                  <dt>Speed</dt>
+                  <dd>{p.here?.spd != null ? p.here.spd.toFixed(1) : "—"}<small>km/h</small></dd>
+                </div>
+                <div className="ivw__cell">
+                  <dt>Distance</dt>
+                  <dd>{p.here ? (p.km ?? 0).toFixed(2) : ((shaped?.travelledM ?? 0) / 1000).toFixed(2)}<small>km</small></dd>
+                </div>
+              </dl>
+
+              {canPlay ? (
+                <div className="ivw__transport">
+                  {play}
+                  <div className="ivw__scrub">
+                    <div className="ivw__rail" aria-hidden="true">
+                      {shaped.stops.map((s) => (
+                        <i key={s.came} className="ivw__mark ivw__mark--stop"
+                           style={{ left: `${pct(s.came, p.t0, p.t1)}%`, width: `${Math.max(0.8, pct(s.left, p.t0, p.t1) - pct(s.came, p.t0, p.t1))}%` }} />
+                      ))}
+                      <i className="ivw__mark ivw__mark--event" style={{ left: `${pct(eventT, p.t0, p.t1)}%` }} />
+                    </div>
+                    <input type="range" className="ivw__range" min={p.t0} max={p.t1} step={1000}
+                           value={p.cursor ?? p.t0} onPointerDown={stop}
+                           aria-label="Time along the route" aria-valuetext={p.here ? HHMMSS.format(p.here.t) : undefined}
+                           onChange={(e) => p.seek(Number(e.target.value))} />
+                    <div className="ivw__ends" aria-hidden="true">
+                      <span>{HHMM.format(p.t0)}</span><span>{HHMM.format(p.t1)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="ivw__msg">No GPS fixes around this {halt ? "halt" : "alert"} to play.</p>
+              )}
+
+              <ul className="ivw__legend">
+                <li><i className="ivw__sw ivw__sw--pin" aria-hidden="true" />{halt ? "Halt" : "Fuel fell"}</li>
+                <li><i className="ivw__sw ivw__sw--route" aria-hidden="true" />{tr.length === 0 ? "No route" : still ? "Stood still" : `Route ${metres(shaped.travelledM)}`}</li>
+                {shaped?.stops.length > 0 && <li><i className="ivw__sw ivw__sw--stop" aria-hidden="true">P</i>{shaped.stops.length} {shaped.stops.length === 1 ? "stop" : "stops"}</li>}
+                {zones.length > 0 && <li><i className="ivw__sw ivw__sw--zone" aria-hidden="true" />{zones.join(" / ")} min drive</li>}
+              </ul>
+              {zones.length > 0 && inv.zones.from && (
+                <p className="ivw__note">Zones start from a road {metres(inv.zones.from.offsetM)} away; the point is off-road.</p>
+              )}
+              {zones.length === 0 && inv.zones.reason && (
+                <p className="ivw__note"><i className="ti ti-info-circle" aria-hidden="true" />No drive zones. {inv.zones.reason}.</p>
+              )}
+            </>
+          )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
