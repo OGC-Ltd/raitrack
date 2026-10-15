@@ -2751,6 +2751,36 @@ export default function FleetMap() {
   const routedVehicle = trackedVehicle ?? pinnedVehicle
     ?? (selectedVehicleId ? vehicles.find(v => v.id === selectedVehicleId) ?? null : null);
   const pinnedTrip   = routedVehicle ? liveTrip(routedVehicle.trip, routedVehicle.lat, routedVehicle.lng) : null;
+
+  /* The picked unit's trip from its yard, drawn on its own (operator,
+   * 2026-10-15: Sukari's units start at Sukari Industries, and those on a
+   * FactorySuite dispatch have a destination): the yard, the destination and
+   * the planned road, its route since it left, stops and drive zones
+   * (IncidentInvestigation). Every Sukari unit, and any unit on a dispatch
+   * elsewhere. A fuel alert or a halt being looked at keeps the map; the ×
+   * puts this one away until another unit is picked. */
+  const tripVehicleId = routedVehicle && (activeCompanyId === "sukari" || routedVehicle.trip)
+    ? routedVehicle.vehicleId ?? null
+    : null;
+  const tripDismissedRef = useRef(null);
+  useEffect(() => {
+    if (!tripVehicleId) {
+      tripDismissedRef.current = null;
+      setInvestigateSubject((s) => (s?.kind === "trip" ? null : s));
+      return;
+    }
+    if (tripDismissedRef.current === tripVehicleId) return;
+    tripDismissedRef.current = null;
+    setInvestigateSubject((s) => (s && s.kind !== "trip") || s?.vehicleId === tripVehicleId
+      ? s
+      : { kind: "trip", vehicleId: tripVehicleId });
+  }, [tripVehicleId]);
+  const closeInvestigation = useCallback(() => {
+    setInvestigateSubject((s) => {
+      if (s?.kind === "trip") tripDismissedRef.current = s.vehicleId;
+      return null;
+    });
+  }, []);
   const routedFresh  = positionFresh(routedVehicle);
   const pickedTarget = pickedDest && routedVehicle && pickedDest.plate === routedVehicle.id
     ? { to: { lat: pickedDest.lat, lng: pickedDest.lng, name: "Picked point" }, towards: "picked" }
@@ -7103,9 +7133,9 @@ export default function FleetMap() {
         {/* Scale (km over mi), the base map's credit, cursor coordinates.
             OSM's licence requires its attribution wherever its tiles show. */}
         <RouteCoveredCard covered={covered} onClose={() => setCovered(null)} />
-        {/* The fuel alert's or halted unit's investigation, in its own
-            floating window (IncidentInvestigation). */}
-        <InvestigationWindow {...investigation} onClose={() => setInvestigateSubject(null)} />
+        {/* The fuel alert's, halted unit's or picked unit's trip
+            investigation, in its own floating window (IncidentInvestigation). */}
+        <InvestigationWindow {...investigation} onClose={closeInvestigation} />
         {trackedVehicle && (
           <RouteAheadCard
             plate={trackedVehicle.name || trackedVehicle.id}
