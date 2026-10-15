@@ -1,13 +1,13 @@
-/* The key for a fuel alert's route and drive zones on the live map
-   (IncidentInvestigation). Over the map tiles, so fixed light colours like the
-   map's other on-tile labels. */
+/* The key, playback bar and stop popup for a fuel alert's investigation on
+   the live map (IncidentInvestigation). Over the map tiles, so fixed light
+   colours like the map's other on-tile labels. */
 
 /* Sits in FleetMap's top-centre band, which places it. */
 .ivk {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   max-width: 100%;
-  padding: 7px 11px;
+  padding: 7px 10px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #ffffff;
@@ -16,11 +16,96 @@
   line-height: 1.35;
   pointer-events: none;
 }
-.ivk__row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ivk__row span { min-width: 0; overflow-wrap: anywhere; }
-.ivk__row--muted { color: #5f6e83; }
 .ivk__busy { color: #334155; }
-.ivk__pin { flex: none; width: 10px; height: 10px; border: 2px solid #ffffff; border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
+.ivk__legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.ivk__item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ivk__item--muted { color: #5f6e83; white-space: normal; }
+.ivk__pin {
+  flex: none; width: 12px; height: 12px; border: 1.5px solid #0f172a; border-radius: 2px; background: #ffffff;
+}
 .ivk__line { flex: none; width: 16px; height: 4px; border-radius: 2px; background: #2563eb; }
-.ivk__zone { flex: none; width: 10px; height: 10px; border: 2px solid; border-radius: 3px; }
-.ivk__zone + .ivk__zone { margin-left: -3px; }
+.ivk__zone { flex: none; width: 12px; height: 12px; border: 2px solid #6d28d9; border-radius: 3px; background: #ede9fe; }
+.ivk__p {
+  display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 3px;
+  background: #1d4ed8; color: #ffffff; font-size: 10px; font-weight: 700;
+}
+
+/* ── playback: the one part of the key that takes clicks ── */
+.ivk__play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+.ivk__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ivk__btn:hover { background: #1d4ed8; }
+.ivk__btn:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+.ivk__btn .ti { font-size: 13px; }
+.ivk__range { flex: 1 1 140px; min-width: 100px; accent-color: #2563eb; }
+.ivk__range:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.ivk__read {
+  display: inline-flex;
+  gap: 8px;
+  flex: none;
+  min-width: 190px;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ivk__read b { color: #0f172a; }
+
+@media (max-width: 767px) {
+  .ivk__play { flex-wrap: wrap; }
+  .ivk__read { min-width: 0; }
+}
+
+/* ── a stop's popup (in the map's InfoWindow) ── */
+.ivp {
+  position: relative;
+  min-width: 260px;
+  max-width: 320px;
+  margin-bottom: 10px;
+  padding: 10px 12px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+}
+.ivp dl { display: grid; gap: 3px; margin: 0; }
+.ivp dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
+.ivp dt { font-weight: 600; color: #334155; }
+.ivp dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.ivp__addr { color: #0f172a; }
+.ivp__x {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #334155;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ivp__x:hover { background: #f1f5f9; }
+.ivp__x:focus-visible { outline: 2px solid #2563eb; }
