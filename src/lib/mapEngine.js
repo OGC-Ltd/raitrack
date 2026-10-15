@@ -481,6 +481,21 @@ function pathStyle(o, closed) {
       fill: false,
     };
   }
+  // Google's dashed line: an invisible stroke repeating a short line symbol
+  // ("M 0,-1 0,1") — a Leaflet dash of the symbol's length.
+  const dash = o.icons?.find((i) => i.icon?.path && i.icon.path !== SymbolPath.CIRCLE);
+  if (dash && (o.strokeOpacity ?? 1) === 0) {
+    const ic = dash.icon;
+    const len = (ic.scale ?? 2) * 2;
+    return {
+      color: ic.strokeColor ?? o.strokeColor ?? "#000",
+      opacity: ic.strokeOpacity ?? 1,
+      weight: ic.strokeWeight ?? 2,
+      dashArray: `${len} ${Math.max(2, (parseFloat(dash.repeat) || 12) - len)}`,
+      lineCap: "butt",
+      fill: false,
+    };
+  }
   const s = {
     color: o.strokeColor ?? "#000",
     opacity: o.strokeOpacity ?? 1,
