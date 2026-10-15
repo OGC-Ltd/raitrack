@@ -20,8 +20,8 @@
  *               the list is that class only, and its drive times and rings
  *               are at the class's MEASURED speed, not Google's car's
  *   free only   leaves out units on a dispatch or without a recent position
- *   bands       a drive time past the 60-minute rings is counted as 1–2 h,
- *               2–4 h or 4 h+ (Menengai's long hauls)
+ *   bands       a drive time past the 60-minute rings reads 1–2 h, 2–4 h or
+ *               4 h+ in its row (Menengai's long hauls)
  *   a spot      "Pick a spot on the map…" makes any point the hub — suggest
  *               a unit for a farm, a breakdown, a load waiting by the road
  */
@@ -49,7 +49,6 @@ export const ARRIVAL_CLASSES = [
 ];
 const PICK = "__pick";
 const POINT = "__point";
-const CLASS_NOUN = { TRACTOR: "tractor", TRUCK: "lorry", CAR: "car" };
 const hubKeyOf = (orgId) => `ft-arr-hub:${orgId}`;
 const read = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* a remembered choice only */ } };
@@ -227,8 +226,6 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
   const p = Math.min(page, pages - 1);
   const shown = units.slice(p * PAGE, p * PAGE + PAGE);
   const inRing = (m) => units.filter((u) => u.withinMin != null && u.withinMin <= m).length;
-  const bands = ["1–2 h", "2–4 h", "4 h+"].map((b) => [b, units.filter((u) => u.band === b).length]).filter(([, n]) => n > 0);
-  const rf = data?.ringFactor;
   const hubName = target?.name ?? "the hub";
   const stop = (e) => e.stopPropagation();
   const toggleMin = () => setMin((v) => { write(MIN_KEY, v ? "0" : "1"); return !v; });
@@ -303,19 +300,6 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
                 ))}
                 <div className="arw__ring arw__ring--at"><dt>At {hubName}</dt><dd>{data.atHub.length}</dd></div>
               </dl>
-              {bands.length > 0 && (
-                <p className="arw__bands">
-                  Further out: {bands.map(([b, n]) => <span key={b}><b>{n}</b> in {b}</span>)}
-                </p>
-              )}
-              {rf && rf.cls !== "MOTORBIKE" && (
-                <p className="arw__cal">
-                  <i className="ti ti-gauge" aria-hidden="true" />
-                  {rf.runs > 0
-                    ? `Times and zones at ${CLASS_NOUN[rf.cls] ?? "vehicle"} speed: Google's car time ×${rf.factor.toFixed(1)}, measured from ${rf.runs} runs.`
-                    : `Times are Google's car times; not yet measured for ${CLASS_NOUN[rf.cls] ?? "this class"}s.`}
-                </p>
-              )}
               {data.ringsReason && (
                 <p className="arw__msg"><i className="ti ti-info-circle" aria-hidden="true" />No arrival zones. {data.ringsReason}.</p>
               )}
@@ -324,7 +308,6 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
                 <p className="arw__msg">{free ? "No free unit" : "No unit with a recent position"} is within 250 km of {hubName}.</p>
               ) : (
                 <>
-                <p className="arw__cap">Drive time to {hubName} from where each unit is now, soonest first</p>
                 <ol className="arw__list" start={p * PAGE + 1}>
                   {shown.map((u, i) => {
                     const best = point && p === 0 && i === 0 && u.status === "free";

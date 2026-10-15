@@ -101,10 +101,6 @@
 .arw__link { margin-left: auto; padding: 0; border: 0; background: none; color: var(--arw-text); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .arw__link:hover { color: var(--arw-ink); }
 .arw__link:focus-visible { outline: 2px solid var(--arw-accent); outline-offset: 2px; border-radius: 2px; }
-.arw__bands { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; color: var(--arw-muted); font-size: 11px; }
-.arw__bands b { color: var(--arw-ink); font-variant-numeric: tabular-nums; }
-.arw__cal { display: flex; gap: 5px; align-items: flex-start; margin: 0; color: var(--arw-muted); font-size: 11px; }
-.arw__cal .ti { flex: none; margin-top: 1px; font-size: 13px; }
 
 .arw__rings {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0;
@@ -116,7 +112,6 @@
 .arw__ring dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 600; color: var(--arw-muted); }
 .arw__ring dd { margin: 0; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-.arw__cap { margin: 0; color: var(--arw-muted); font-size: 11px; }
 .arw__list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .arw__row {
   display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; align-items: center; gap: 9px;
