@@ -29,6 +29,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import "./FleetMap.css";
 import MapOverlay, { FuelIncidentHost } from "./MapOverlay";
+import { useIncidentInvestigation, InvestigationKey } from "./IncidentInvestigation";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -2226,7 +2227,7 @@ export default function FleetMap() {
   const DomMarkerRef    = useRef(null); // overlay class bound to that namespace
   // Read before any state below, because several of those states are seeded
   // from THIS ORGANISATION's stored preferences (lib/mapPrefs).
-  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId");
+  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId, openIncidentId } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId", "openIncidentId");
   const { setSelectedVehicleId, setFeedVehicleId, setDesktopActiveTab, setMobileActiveTab, setPendingFocusId, requestIncident, setSitePlanLinks, setTrackedIds, setInTransitOnly, markSelectionRestored } = useAppActions();
 
   const [mapReady, setMapReady]             = useState(false);
@@ -2491,6 +2492,12 @@ export default function FleetMap() {
   isCompactRef.current = isCompact;
 
   const { vehicles: _lv, orgId, loading: vehiclesLoading, error: vehiclesError, retry } = useFleetLiveShared();
+
+  // The open fuel alert's route, drive zones and point, drawn on this map
+  // while its incident window is open (IncidentInvestigation).
+  const investigation = useIncidentInvestigation({
+    map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, theftId: openIncidentId,
+  });
   const vehicles = _lv ?? [];
 
   /* The map's own status counts used to be computed here, as two `.filter()`
@@ -7334,8 +7341,10 @@ export default function FleetMap() {
             Says why the rest of the fleet is missing. Without it an isolated
             map is indistinguishable from a broken one. Clicking releases the
             isolation, same as zooming out. */}
-        {(focusedId || trackedIds.length > 0) && (
+        {(focusedId || trackedIds.length > 0 || openIncidentId) && (
           <div className="map-top-band">
+            {/* The open fuel alert's key, above the pills (IncidentInvestigation). */}
+            <InvestigationKey {...investigation} />
             {focusedId ? (
               <button
                 type="button"

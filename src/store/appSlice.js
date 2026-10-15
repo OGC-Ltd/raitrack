@@ -96,6 +96,9 @@ const defaults = {
   windowOpen: false,
   // `{ id, n }`: asking twice for the same unit must be two requests.
   incidentRequest: null,
+  // The fuel alert whose incident window is open, so FleetMap can draw its
+  // route and drive zones (IncidentInvestigation). Null when none is.
+  openIncidentId: null,
   // The surveys and weighbridges the map offers (published by FleetMap, read
   // by the header), and a counted request to fly to one.
   sitePlanLinks: [],
@@ -150,7 +153,7 @@ export function loadAppState() {
 export const PLAIN_FIELDS = [
   "selectedVehicleId", "pendingFocusId", "feedVehicleId", "windowOpen", "sitePlanLinks",
   "desktopActiveTab", "maintenanceView", "activeRange", "analyticsView",
-  "accountOpen", "userAdminOpen", "inTransitOnly",
+  "accountOpen", "userAdminOpen", "inTransitOnly", "openIncidentId",
 ];
 
 const appSlice = createSlice({
