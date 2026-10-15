@@ -618,7 +618,10 @@ function TripFacts({ trip, fixes }) {
         <span className={`ivw__end ivw__end--to${to ? "" : " ivw__end--none"}`} title={to ?? undefined}>{to ?? "No dispatch"}</span>
       </p>
       <dl className="ivw__facts">
-        <div><dt>Left</dt><dd>{at(trip.departedAt) ?? (fixes === 0 ? (trip.dispatch ? "No GPS since dispatch" : "No recent GPS") : trip.atOrigin ? "Still in the yard" : "Not seen leaving")}</dd></div>
+        {trip.lastAtOriginAt && !trip.departedAt
+          ? <div><dt>Last in the yard</dt><dd>{at(trip.lastAtOriginAt)}</dd></div>
+          : <div><dt>Left</dt><dd>{at(trip.departedAt) ?? (fixes === 0 ? (d ? "No GPS since dispatch" : "No recent GPS")
+              : trip.atOrigin ? "Still in the yard" : d ? "Not seen leaving" : "Not there in 7 days")}</dd></div>}
         {d && <div><dt>Dispatched</dt><dd>{at(d.dispatchedAt)}<small>{d.kind === "SALES" ? "sale" : "cane"}</small></dd></div>}
         {trip.destination && <div><dt>Arrived</dt><dd>{at(trip.arrivedAt) ?? "Not yet"}</dd></div>}
         {trip.returnedAt && <div><dt>Back</dt><dd>{at(trip.returnedAt)}</dd></div>}

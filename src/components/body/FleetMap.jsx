@@ -92,6 +92,9 @@ const ROUTE_TIMING_ENABLED = false;
 import { useTrafficRoute, routeTarget, positionFresh } from "../../hooks/useTrafficRoute";
 import { useGoogleRoutingOn, fetchReach, polygonsOf } from "../../lib/googleRouting";
 import RouteAheadCard, { REACH_COLORS } from "./RouteAheadCard";
+
+/** Fleets whose picked unit draws its trip from its yard (IncidentInvestigation). */
+const TRIP_COMPANIES = new Set(["sukari", "westsugar", "kabras", "menengai"]);
 import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
@@ -2756,10 +2759,12 @@ export default function FleetMap() {
    * 2026-10-15: Sukari's units start at Sukari Industries, and those on a
    * FactorySuite dispatch have a destination): the yard, the destination and
    * the planned road, its route since it left, stops and drive zones
-   * (IncidentInvestigation). Every Sukari unit, and any unit on a dispatch
-   * elsewhere. A fuel alert or a halt being looked at keeps the map; the ×
-   * puts this one away until another unit is picked. */
-  const tripVehicleId = routedVehicle && (activeCompanyId === "sukari" || routedVehicle.trip)
+   * (IncidentInvestigation). Every unit of the fleets that run from a yard
+   * of their own (Sukari; West Kenya, Kabras and Menengai from 2026-10-15,
+   * their yards being their own factory and yard geofences), and any unit on
+   * a dispatch elsewhere. A fuel alert or a halt being looked at keeps the
+   * map; the × puts this one away until another unit is picked. */
+  const tripVehicleId = routedVehicle && (TRIP_COMPANIES.has(activeCompanyId) || routedVehicle.trip)
     ? routedVehicle.vehicleId ?? null
     : null;
   const tripDismissedRef = useRef(null);
