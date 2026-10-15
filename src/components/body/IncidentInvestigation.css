@@ -1,0 +1,26 @@
+/* The key for a fuel alert's route and drive zones on the live map
+   (IncidentInvestigation). Over the map tiles, so fixed light colours like the
+   map's other on-tile labels. */
+
+/* Sits in FleetMap's top-centre band, which places it. */
+.ivk {
+  display: grid;
+  gap: 4px;
+  max-width: 100%;
+  padding: 7px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+.ivk__row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ivk__row span { min-width: 0; overflow-wrap: anywhere; }
+.ivk__row--muted { color: #5f6e83; }
+.ivk__busy { color: #334155; }
+.ivk__pin { flex: none; width: 10px; height: 10px; border: 2px solid #ffffff; border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
+.ivk__line { flex: none; width: 16px; height: 4px; border-radius: 2px; background: #2563eb; }
+.ivk__zone { flex: none; width: 10px; height: 10px; border: 2px solid; border-radius: 3px; }
+.ivk__zone + .ivk__zone { margin-left: -3px; }
