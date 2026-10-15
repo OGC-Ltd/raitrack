@@ -166,6 +166,19 @@ const WHEEL_MAX_EVENT_PX = 120;   // a fast flick or trackball spin counts as on
 const WHEEL_MAX_AHEAD = 1;        // the camera never trails the wheel by more than a level
 const WHEEL_EASE = 0.3;           // share of the remaining distance covered per 60 fps frame
 const WHEEL_END_MS = 160;         // this long without a wheel event ends the gesture
+// A scroll begun OFF the map (a panel, a list) still owns the wheel when the
+// pointer then crosses onto the map — a trackball spun in a sidebar keeps
+// coasting. The map takes the wheel only after this long without any wheel
+// event elsewhere (operator, 2026-10-15).
+const WHEEL_FOREIGN_MS = 350;
+let lastForeignWheel = -Infinity;
+const wheelMaps = new Set();
+if (typeof document !== "undefined") {
+  document.addEventListener("wheel", (e) => {
+    for (const el of wheelMaps) if (el.contains(e.target)) return;
+    lastForeignWheel = e.timeStamp;
+  }, { capture: true, passive: true });
+}
 
 /**
  * Smooth wheel zoom about the pointer. Each frame moves the map with Leaflet's
@@ -175,12 +188,28 @@ const WHEEL_END_MS = 160;         // this long without a wheel event ends the ge
  * Zoom is fractional here — the map is built with zoomSnap 0.
  */
 const SmoothWheelZoom = L.Handler.extend({
-  addHooks() { L.DomEvent.on(this._map.getContainer(), "wheel", this._onWheel, this); },
-  removeHooks() { L.DomEvent.off(this._map.getContainer(), "wheel", this._onWheel, this); this._finish(); },
+  addHooks() {
+    const el = this._map.getContainer();
+    wheelMaps.add(el);
+    L.DomEvent.on(el, "wheel", this._onWheel, this);
+  },
+  removeHooks() {
+    const el = this._map.getContainer();
+    wheelMaps.delete(el);
+    L.DomEvent.off(el, "wheel", this._onWheel, this);
+    this._finish();
+  },
 
   _onWheel(e) {
     L.DomEvent.stop(e);
     const map = this._map;
+    // Still the tail of a scroll that began elsewhere: swallow it, and keep
+    // swallowing until the wheel pauses. Not mid-gesture: once the map has
+    // the wheel it keeps it.
+    if (!this._raf && e.timeStamp - lastForeignWheel < WHEEL_FOREIGN_MS) {
+      lastForeignWheel = e.timeStamp;
+      return;
+    }
     // A programmatic zoom animation owns the camera until it lands.
     if (map._animatingZoom) return;
     if (!this._raf) {
