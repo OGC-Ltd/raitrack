@@ -1008,6 +1008,17 @@
   background: transparent;
   pointer-events: none;
 }
+/* OPEN (every desktop window, pinned or not): no backdrop and no click
+   capture, so the alert's route, zones and playback drawn on the map behind it
+   stay usable (operator, 2026-10-15). Only the window takes the mouse. */
+.fi-overlay--open {
+  background: transparent;
+  pointer-events: none;
+}
+.fi-overlay--open .vehicle-tooltip.fi-modal {
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+}
 /* Two classes deep so it outranks `.vehicle-tooltip.fi-modal` below, which
    sets `position: relative` at equal specificity and later in the file. */
 .fi-overlay--pinned .vehicle-tooltip.fi-modal {
