@@ -18,6 +18,9 @@
 //     it starts. getZoom() during a zoom animation returns the target zoom.
 //   - Overlays get draw() on zoom, on the zoom animation's target frame and
 //     after every move — div pixels are stable while panning, as in Google.
+//   - Zoom is fractional (zoomSnap 0) so the wheel can stop between levels;
+//     fitBounds still lands on whole levels. A wheel gesture fires
+//     zoom_changed and idle once, when it ends.
 //   - No rotation or tilt. setHeading / setTilt do not exist (callers use ?.).
 
 import L from "leaflet";
@@ -154,6 +157,88 @@ const TypeLayer = L.GridLayer.extend({
   },
 });
 
+// Wheel zoom (operator, 2026-10-15): glide, follow the wheel only while it
+// turns, and stay calm on a trackball. Leaflet's own handler rounds every
+// wheel burst UP to a whole level (zoomSnap 1), so the smallest trackball nudge
+// was a full 2× jump, animated after the wheel had already stopped.
+const WHEEL_PX_PER_LEVEL = 240;   // one ~100 px mouse notch ≈ 0.4 of a level
+const WHEEL_MAX_EVENT_PX = 120;   // a fast flick or trackball spin counts as one notch per event at most
+const WHEEL_MAX_AHEAD = 1;        // the camera never trails the wheel by more than a level
+const WHEEL_EASE = 0.3;           // share of the remaining distance covered per 60 fps frame
+const WHEEL_END_MS = 160;         // this long without a wheel event ends the gesture
+
+/**
+ * Smooth wheel zoom about the pointer. Each frame moves the map with Leaflet's
+ * `_move` (the same primitive its pinch zoom uses), keeping the place under the
+ * pointer under the pointer; `zoom_changed` / `idle` fire once, when the
+ * gesture ends, so clustering and labels re-run once and not every frame.
+ * Zoom is fractional here — the map is built with zoomSnap 0.
+ */
+const SmoothWheelZoom = L.Handler.extend({
+  addHooks() { L.DomEvent.on(this._map.getContainer(), "wheel", this._onWheel, this); },
+  removeHooks() { L.DomEvent.off(this._map.getContainer(), "wheel", this._onWheel, this); this._finish(); },
+
+  _onWheel(e) {
+    L.DomEvent.stop(e);
+    const map = this._map;
+    // A programmatic zoom animation owns the camera until it lands.
+    if (map._animatingZoom) return;
+    if (!this._raf) {
+      map._stop();                       // the reader takes over from any pan in flight
+      this._zoom = map.getZoom();
+      this._target = this._zoom;
+      this._last = performance.now();
+      this._raf = requestAnimationFrame(this._frame);
+    }
+    let px = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 100 : 1);
+    if (e.ctrlKey) px *= 2;              // touchpad pinch: small deltas
+    px = Math.max(-WHEEL_MAX_EVENT_PX, Math.min(WHEEL_MAX_EVENT_PX, px));
+    const z = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), this._target - px / WHEEL_PX_PER_LEVEL));
+    this._target = Math.max(this._zoom - WHEEL_MAX_AHEAD, Math.min(this._zoom + WHEEL_MAX_AHEAD, z));
+    this._pt = map.mouseEventToContainerPoint(e);
+    this._anchor = map.containerPointToLatLng(this._pt);
+    this._quiet = false;
+    clearTimeout(this._endTimer);
+    this._endTimer = setTimeout(() => { this._quiet = true; }, WHEEL_END_MS);
+  },
+
+  _frame: null,
+  initialize(map) {
+    L.Handler.prototype.initialize.call(this, map);
+    this._frame = (now) => {
+      this._raf = 0;
+      const map = this._map;
+      // Someone else moved the camera mid-gesture (a drag, a fly-to): let them have it.
+      if (map._animatingZoom || map.dragging?._draggable?._moving || (this._moving && map.getZoom() !== this._zoom)) {
+        this._finish();
+        return;
+      }
+      const k = 1 - Math.pow(1 - WHEEL_EASE, Math.min(4, (now - this._last) / 16.7));
+      this._last = now;
+      let z = this._zoom + (this._target - this._zoom) * k;
+      if (Math.abs(this._target - z) < 0.002) z = this._target;
+      if (z !== this._zoom) {
+        if (!this._moving) { this._moving = true; this._startZoom = this._zoom; map._moveStart(true, false); }
+        const half = map.getSize().divideBy(2);
+        map._move(map.unproject(map.project(this._anchor, z).subtract(this._pt).add(half), z), z);
+        this._zoom = z;
+      }
+      if (this._quiet && z === this._target) this._finish();
+      else this._raf = requestAnimationFrame(this._frame);
+    };
+  },
+
+  _finish() {
+    cancelAnimationFrame(this._raf);
+    clearTimeout(this._endTimer);
+    this._raf = 0;
+    if (this._moving) {
+      this._moving = false;
+      this._map._moveEnd(this._map.getZoom() !== this._startZoom);
+    }
+  },
+});
+
 export class Map extends Evented {
   constructor(div, opts = {}) {
     super();
@@ -172,10 +257,14 @@ export class Map extends Evented {
       attributionControl: false,
       doubleClickZoom: !opts.disableDoubleClickZoom,
       keyboard: opts.keyboardShortcuts !== false,
-      scrollWheelZoom: opts.gestureHandling !== "none" && opts.scrollwheel !== false,
+      scrollWheelZoom: false,          // SmoothWheelZoom, below
       dragging: opts.gestureHandling !== "none" && opts.draggable !== false,
-      wheelPxPerZoomLevel: 90,
+      // Fractional zoom, so a wheel gesture can stop between levels and stay
+      // there. Fits still land on whole levels — see fitBounds.
+      zoomSnap: 0,
     });
+    l.addHandler("smoothWheelZoom", SmoothWheelZoom);
+    if (opts.gestureHandling !== "none" && opts.scrollwheel !== false) l.smoothWheelZoom.enable();
     this._l = l;
     this._overlays = new Set();
     this._vectors = new Set();
@@ -230,7 +319,20 @@ export class Map extends Evented {
     l.on("zoom viewreset", () => { this._anim = null; drawAll(); });
     // Idle first, so a listener that refreshes shared state (FleetMap's cull
     // rectangle) does it before the overlays redraw against it.
-    l.on("moveend", () => { this._anim = null; this._emit("idle"); drawAll(); });
+    //
+    // Emitted a microtask after moveend, as Google's idle is always async. A
+    // fit or setView that does not move the map makes Leaflet fire moveend
+    // synchronously, inside the call — before the `addListenerOnce("idle")`
+    // the caller attaches next (FleetMap's zoom caps). That listener then sat
+    // armed and clamped the reader's NEXT wheel zoom back to the cap: the
+    // "zoom resets by itself" reports.
+    let idleQueued = false;
+    l.on("moveend", () => {
+      this._anim = null;
+      if (idleQueued) return;
+      idleQueued = true;
+      queueMicrotask(() => { idleQueued = false; if (!this._l._loaded) return; this._emit("idle"); drawAll(); });
+    });
     requestAnimationFrame(() => this._emit("idle"));
 
     // Google re-measures its container by itself; Leaflet has to be told.
@@ -303,7 +405,14 @@ export class Map extends Evented {
       ? L.latLngBounds([bounds.south, bounds.west], [bounds.north, bounds.east]) : null;
     if (!b) return;
     const p = typeof padding === "number" ? { top: padding, right: padding, bottom: padding, left: padding } : { top: 0, right: 0, bottom: 0, left: 0, ...padding };
-    this._l.fitBounds(b, { paddingTopLeft: [p.left, p.top], paddingBottomRight: [p.right, p.bottom] });
+    // Whole levels for a fit, as before fractional zoom: tiles are sharpest there.
+    const o = this._l.options;
+    o.zoomSnap = 1;
+    try {
+      this._l.fitBounds(b, { paddingTopLeft: [p.left, p.top], paddingBottomRight: [p.right, p.bottom] });
+    } finally {
+      o.zoomSnap = 0;
+    }
   }
   getDiv() { return this._l.getContainer(); }
   getProjection() { return this._worldProj; }
