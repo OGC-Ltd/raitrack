@@ -14,6 +14,16 @@
  *
  * From /routing/hubs and /routing/hubs/:key/inbound (fleet-server
  * hub-arrivals). The answer is refreshed every two minutes while open.
+ *
+ * Phase 1 (operator, 2026-10-15):
+ *   class       "Truck or car" or "Tractors" (KT… plates, e.g. KTCB 358X):
+ *               the list is that class only, and its drive times and rings
+ *               are at the class's MEASURED speed, not Google's car's
+ *   free only   leaves out units on a dispatch or without a recent position
+ *   bands       a drive time past the 60-minute rings is counted as 1–2 h,
+ *               2–4 h or 4 h+ (Menengai's long hauls)
+ *   a spot      "Pick a spot on the map…" makes any point the hub — suggest
+ *               a unit for a farm, a breakdown, a load waiting by the road
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +40,16 @@ const HHMM = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digi
 export const ARRIVAL_COLOR = { 15: "#0f766e", 30: "#0d9488", 60: "#2dd4bf" };
 const MINUTES = [15, 30, 60];
 const PAGE = 8;
-const MODE_KEY = "ft-arr-mode";
+const CLS_KEY = "ft-arr-cls";
+const FREE_KEY = "ft-arr-free";
+/** What the drive times are for, as the window offers it. */
+export const ARRIVAL_CLASSES = [
+  ["VEHICLE", "ti-truck", "Truck or car"],
+  ["TRACTOR", "ti-tractor", "Tractors"],
+];
+const PICK = "__pick";
+const POINT = "__point";
+const CLASS_NOUN = { TRACTOR: "tractor", TRUCK: "lorry", CAR: "car" };
 const hubKeyOf = (orgId) => `ft-arr-hub:${orgId}`;
 const read = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* a remembered choice only */ } };
@@ -92,26 +111,61 @@ export function useHubArrivals({ map, maps, ready, orgId, open }) {
   useEffect(() => { setHubKeyState(orgId ? read(hubKeyOf(orgId), null) : null); }, [orgId]);
   const hub = hubs.find((h) => h.key === hubKey) ?? hubs[0] ?? null;
   const setHubKey = useCallback((k) => { setHubKeyState(k); if (orgId) write(hubKeyOf(orgId), k); }, [orgId]);
-  const [mode, setModeState] = useState(() => read(MODE_KEY, "DRIVE"));
-  const setMode = useCallback((m) => { setModeState(m); write(MODE_KEY, m); }, []);
+  const [cls, setClsState] = useState(() => {
+    const c = read(CLS_KEY, "VEHICLE");
+    return ARRIVAL_CLASSES.some(([k]) => k === c) ? c : "VEHICLE";
+  });
+  const setCls = useCallback((c) => { setClsState(c); write(CLS_KEY, c); }, []);
+  const [free, setFreeState] = useState(() => read(FREE_KEY, "0") === "1");
+  const toggleFree = useCallback(() => setFreeState((f) => { write(FREE_KEY, f ? "0" : "1"); return !f; }), []);
 
+  // A spot picked on the map stands in for the hub until a hub is chosen.
+  const [point, setPoint] = useState(null);
+  const [picking, setPicking] = useState(false);
+  useEffect(() => { setPoint(null); setPicking(false); }, [orgId]);
+  useEffect(() => { if (!open) setPicking(false); }, [open]);
+  const choose = useCallback((k) => {
+    if (k === PICK) { setPicking(true); return; }
+    if (k === POINT) return;
+    setPicking(false);
+    setPoint(null);
+    setHubKey(k);
+  }, [setHubKey]);
+  const target = point ?? hub;
+
+  const qs = `cls=${cls}&available=${free ? 1 : 0}&minutes=${MINUTES.join(",")}`;
   const q = useQuery({
-    queryKey: ["hub-inbound", orgId, hub?.key, mode],
+    queryKey: ["hub-inbound", orgId, point ? `${point.lat},${point.lng}` : hub?.key, cls, free],
     queryFn: ({ signal }) => apiFetch(
-      `/api/v1/organisations/${orgId}/routing/hubs/${encodeURIComponent(hub.key)}/inbound?mode=${mode}&minutes=${MINUTES.join(",")}`,
+      point
+        ? `/api/v1/organisations/${orgId}/routing/point/inbound?lat=${point.lat}&lng=${point.lng}&${qs}`
+        : `/api/v1/organisations/${orgId}/routing/hubs/${encodeURIComponent(hub.key)}/inbound?${qs}`,
       { signal },
     ).then((r) => r.data),
-    enabled: Boolean(open && orgId && hub && hubsQ.data?.enabled),
+    enabled: Boolean(open && orgId && target && hubsQ.data?.enabled),
     staleTime: 2 * 60_000,
     refetchInterval: open ? 2 * 60_000 : false,
     placeholderData: (prev) => prev,
     retry: 0,
   });
-  const data = q.data?.enabled && q.data.hub?.key === hub?.key && q.data.mode === mode ? q.data : null;
+  const d = q.data;
+  const data = d?.enabled && target && d.cls === cls && d.available === free
+    && Math.abs(d.hub.lat - target.lat) < 0.002 && Math.abs(d.hub.lng - target.lng) < 0.002 ? d : null;
+
+  // Picking: the next click on the map is the spot.
+  useEffect(() => {
+    if (!open || !picking || !ready || !map) return undefined;
+    const l = map.addListener("click", (e) => {
+      setPoint({ lat: Math.round(e.latLng.lat() * 1e5) / 1e5, lng: Math.round(e.latLng.lng() * 1e5) / 1e5, name: "Picked spot", key: "point" });
+      setPicking(false);
+    });
+    return () => l?.remove?.();
+  }, [open, picking, ready, map]);
 
   // ── the rings and the hub ──
   const framed = useRef(null);
   useEffect(() => {
+    const hub = target;
     if (!open || !ready || !map || !maps || !hub) return undefined;
     const drawn = [];
     const add = (x) => { drawn.push(x); return x; };
@@ -125,9 +179,10 @@ export function useHubArrivals({ map, maps, ready, orgId, open }) {
     }
     add(new maps.Marker({ map, position: { lat: hub.lat, lng: hub.lng }, icon: HUB_ICON, zIndex: 63, title: hub.name }));
 
-    // Frame once per hub, on its widest ring.
-    if (framed.current !== hub.key && data) {
-      framed.current = hub.key;
+    // Frame once per hub or spot, on its widest ring.
+    const fk = `${hub.lat},${hub.lng}`;
+    if (framed.current !== fk && data) {
+      framed.current = fk;
       const b = new maps.LatLngBounds();
       b.extend({ lat: hub.lat, lng: hub.lng });
       const widest = [...data.rings].sort((a, c) => c.minutes - a.minutes)[0];
@@ -137,12 +192,13 @@ export function useHubArrivals({ map, maps, ready, orgId, open }) {
       map.fitBounds(b, 60);
     }
     return () => { for (const x of drawn) x.setMap(null); };
-  }, [open, ready, map, maps, hub, data]);
+  }, [open, ready, map, maps, target, data]);
   useEffect(() => { if (!open) framed.current = null; }, [open]);
 
   return {
     open,
-    hubs, hub, setHubKey, mode, setMode,
+    hubs, hub, target, point, choose, picking, cancelPick: () => setPicking(false),
+    cls, setCls, free, toggleFree,
     enabled: hubsQ.data ? hubsQ.data.enabled : null,
     loading: (hubsQ.isLoading || q.isLoading || (q.isPlaceholderData && !data)) && open,
     refreshing: q.isFetching && Boolean(data),
@@ -159,11 +215,11 @@ const MIN_KEY = "ft-arr-min";
  * open while the camera moves, so working down the list is one click a unit.
  */
 export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
-  const { open, hubs, hub, setHubKey, mode, setMode, enabled, loading, refreshing, error, data } = arrivals;
+  const { open, hubs, target, point, choose, picking, cancelPick, cls, setCls, free, toggleFree, enabled, loading, refreshing, error, data } = arrivals;
   const { ref, onPointerDown } = useFloatingWindow({ id: "arrivals", dock: "bottom-right", enabled: open });
   const [min, setMin] = useState(() => read(MIN_KEY, "0") === "1");
   const [page, setPage] = useState(0);
-  useEffect(() => { setPage(0); }, [hub?.key, mode]);
+  useEffect(() => { setPage(0); }, [target?.lat, target?.lng, cls, free]);
   if (!open) return null;
 
   const units = data?.units ?? [];
@@ -171,6 +227,9 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
   const p = Math.min(page, pages - 1);
   const shown = units.slice(p * PAGE, p * PAGE + PAGE);
   const inRing = (m) => units.filter((u) => u.withinMin != null && u.withinMin <= m).length;
+  const bands = ["1–2 h", "2–4 h", "4 h+"].map((b) => [b, units.filter((u) => u.band === b).length]).filter(([, n]) => n > 0);
+  const rf = data?.ringFactor;
+  const hubName = target?.name ?? "the hub";
   const stop = (e) => e.stopPropagation();
   const toggleMin = () => setMin((v) => { write(MIN_KEY, v ? "0" : "1"); return !v; });
   const now = Date.now();
@@ -180,10 +239,12 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
       <header className="arw__head" onPointerDown={onPointerDown}>
         <i className="ti ti-target-arrow arw__kind" aria-hidden="true" />
         <span className="arw__title">Arrivals</span>
-        <select className="arw__hub" value={hub?.key ?? ""} onChange={(e) => setHubKey(e.target.value)}
+        <select className="arw__hub" value={point ? POINT : target?.key ?? ""} onChange={(e) => choose(e.target.value)}
                 onPointerDown={stop} aria-label="Hub" disabled={!hubs.length}>
           {!hubs.length && <option value="">{loading ? "Loading hubs…" : "No hubs"}</option>}
+          {point && <option value={POINT}>Picked spot</option>}
           {hubs.map((h) => <option key={h.key} value={h.key}>{h.name}</option>)}
+          {hubs.length > 0 && <option value={PICK}>Pick a spot on the map…</option>}
         </select>
         <span className="arw__tools">
           <button type="button" className="arw__tool" onClick={toggleMin} onPointerDown={stop}
@@ -199,15 +260,26 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
 
       {!min && (
         <div className="arw__body">
-          <div className="arw__modes" role="radiogroup" aria-label="Travel mode">
-            {[["DRIVE", "ti-truck", "Truck or car"], ["TWO_WHEELER", "ti-motorbike", "Motorbike"]].map(([m, icon, label]) => (
-              <button key={m} type="button" role="radio" aria-checked={mode === m} className="arw__mode"
-                      onClick={() => setMode(m)} onPointerDown={stop}>
+          <div className="arw__modes" role="radiogroup" aria-label="Which units">
+            {ARRIVAL_CLASSES.map(([c, icon, label]) => (
+              <button key={c} type="button" role="radio" aria-checked={cls === c} className="arw__mode"
+                      onClick={() => setCls(c)} onPointerDown={stop}>
                 <i className={`ti ${icon}`} aria-hidden="true" />{label}
               </button>
             ))}
-            {refreshing && <span className="arw__live" aria-live="polite">Updating…</span>}
+            <button type="button" className="arw__free" role="switch" aria-checked={free} onClick={toggleFree} onPointerDown={stop}
+                    title="Only units with a fresh position and no open dispatch">
+              <span className="arw__knob" aria-hidden="true" />Free only
+            </button>
           </div>
+          {refreshing && <span className="arw__live" aria-live="polite">Updating…</span>}
+
+          {picking && (
+            <p className="arw__pick" role="status">
+              <i className="ti ti-click" aria-hidden="true" />Click the map where a unit is needed.
+              <button type="button" className="arw__link" onClick={cancelPick} onPointerDown={stop}>Cancel</button>
+            </p>
+          )}
 
           {enabled === false && (
             <p className="arw__msg"><i className="ti ti-info-circle" aria-hidden="true" />Routing is switched off on this server.</p>
@@ -229,36 +301,51 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
                     <dt>Within {m} min</dt><dd>{inRing(m)}</dd>
                   </div>
                 ))}
-                <div className="arw__ring arw__ring--at"><dt>At {hub?.name}</dt><dd>{data.atHub.length}</dd></div>
+                <div className="arw__ring arw__ring--at"><dt>At {hubName}</dt><dd>{data.atHub.length}</dd></div>
               </dl>
+              {bands.length > 0 && (
+                <p className="arw__bands">
+                  Further out: {bands.map(([b, n]) => <span key={b}><b>{n}</b> in {b}</span>)}
+                </p>
+              )}
+              {rf && rf.cls !== "MOTORBIKE" && (
+                <p className="arw__cal">
+                  <i className="ti ti-gauge" aria-hidden="true" />
+                  {rf.runs > 0
+                    ? `Times and zones at ${CLASS_NOUN[rf.cls] ?? "vehicle"} speed: Google's car time ×${rf.factor.toFixed(1)}, measured from ${rf.runs} runs.`
+                    : `Times are Google's car times; not yet measured for ${CLASS_NOUN[rf.cls] ?? "this class"}s.`}
+                </p>
+              )}
               {data.ringsReason && (
                 <p className="arw__msg"><i className="ti ti-info-circle" aria-hidden="true" />No arrival zones. {data.ringsReason}.</p>
               )}
 
               {units.length === 0 ? (
-                <p className="arw__msg">No unit with a recent position is within 250 km of {hub?.name}.</p>
+                <p className="arw__msg">{free ? "No free unit" : "No unit with a recent position"} is within 250 km of {hubName}.</p>
               ) : (
                 <>
-                <p className="arw__cap">Drive time to {hub?.name} from where each unit is now, soonest first</p>
+                <p className="arw__cap">Drive time to {hubName} from where each unit is now, soonest first</p>
                 <ol className="arw__list" start={p * PAGE + 1}>
-                  {shown.map((u) => {
-                    const stale = now - Date.parse(u.fixAt) > 15 * 60_000;
+                  {shown.map((u, i) => {
+                    const best = point && p === 0 && i === 0 && u.status === "free";
                     return (
                       <li key={u.vehicleId}>
                         <button type="button" className="arw__row" onClick={() => onSelectUnit?.(u.vehicleId)}
                                 title={`Show ${u.plate ?? "this unit"} on the map`}>
                           <span className="arw__eta" style={{ "--ring": ARRIVAL_COLOR[u.withinMin] ?? "var(--arw-edge-hi)" }}>
-                            <b>{mins(u.etaS)}</b><small>{HHMM.format(Date.parse(u.arriveAt))}</small>
+                            <b>{mins(u.etaS)}</b><small>{u.band ?? HHMM.format(Date.parse(u.arriveAt))}</small>
                           </span>
                           <span className="arw__unit">
                             <span className="arw__plate">{u.plate ?? "Unnamed unit"}</span>
                             <span className="arw__meta">
                               {km(u.distanceM)} by road
                               {u.delayS >= 60 && <span className={`arw__delay${u.delayS >= 300 ? " arw__delay--hi" : ""}`}>+{mins(u.delayS)} traffic</span>}
-                              {stale && <span className="arw__stale">position {mins((now - Date.parse(u.fixAt)) / 1000)} old</span>}
+                              {u.factor !== 1 && <span title="Google's time for a car on the same road">car {mins(u.googleS)}</span>}
+                              {u.status === "busy" && !u.run && <span className="arw__busy">on a run{u.destination ? ` to ${u.destination}` : ""}</span>}
+                              {u.status === "stale" && <span className="arw__stale">position {mins((now - Date.parse(u.fixAt)) / 1000)} old</span>}
                             </span>
                           </span>
-                          {u.run && (
+                          {best ? <span className="arw__run arw__run--best">Best pick</span> : u.run && (
                             <span className={`arw__run arw__run--${u.run}`}>{u.run === "dispatched" ? "Dispatched here" : "Returning"}</span>
                           )}
                         </button>
@@ -284,6 +371,7 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
                 <span className="arw__note">
                   Live traffic, {HHMM.format(Date.parse(data.computedAt))}
                   {data.leftOut > 0 && ` · ${data.leftOut} further units not asked`}
+                  {data.filteredOut > 0 && ` · ${data.filteredOut} busy or without a recent position hidden`}
                   {data.noRoute > 0 && ` · ${data.noRoute} with no road`}
                 </span>
               </footer>
