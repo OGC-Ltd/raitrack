@@ -1,4 +1,6 @@
 /* Hallmark · component: brief card · genre: modern-minimal · theme: app tokens (index.css)
+ * 2026-10-15 pass 2: the original card's voice back, lightly — blue-to-green wash,
+ *   blue-tinted edge, title in the AI blue. Still no coloured side rule.
  * icons: Tabler (the app's set) — sparkles (AI only) / info-circle, risk shape, clock, chevron
  * pre-emit critique: P4 H5 E4 S4 R5 V4
  * states: default · loading · error (LoadError) · empty (renders nothing) · local fallback ·
@@ -9,9 +11,12 @@
 
 /* The organisation's brief, pinned at the foot of the left sidebar.
 
-   Drawn like its neighbours there (white, 1px slate edge, 6px corners, no
-   shadow, no coloured side rule — operator, 2026-10-15). What says "this is
-   a written brief" is the spark and the title, not a frame. */
+   Shaped like its neighbours there (1px edge, 6px corners, no shadow, no
+   coloured side rule — operator, 2026-10-15), but in the original card's
+   colours (operator, same day: "slightly like the original one"): a faint
+   blue-to-green wash over white, an edge tinted toward the blue, and the
+   title in the AI blue. The wash is laid over an opaque white, so the brief
+   never reads against the map. */
 
 .fleet-ai-card {
   --fai-ink:     var(--color-text-primary, #0f172a);
@@ -20,6 +25,7 @@
   --fai-edge:    var(--color-border, #e2e8f0);
   --fai-surface: var(--color-surface, #ffffff);
   --fai-spark:   #2563eb;
+  --fai-wash:    linear-gradient(135deg, rgba(59, 130, 246, 0.07), rgba(34, 197, 94, 0.045));
   --fai-link:    #1d4ed8;
   --fai-skel:    #eef1f5;
   --fai-ok:      #16a34a;
@@ -32,8 +38,8 @@
   gap: 6px;
   flex-shrink: 0;
   padding: 10px 12px 9px;
-  background: var(--fai-surface);
-  border: 1px solid var(--fai-edge);
+  background: var(--fai-wash), var(--fai-surface);
+  border: 1px solid color-mix(in srgb, var(--fai-spark) 22%, var(--fai-edge));
   border-radius: 6px;
   font-family: var(--font-body);
 }
@@ -56,15 +62,17 @@
   min-width: 0;
   margin: 0;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
-  color: var(--fai-ink);
+  color: var(--fai-link);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* The fallback is not the model's: its mark is grey. */
+/* The fallback is not the model's: grey mark, plain ink title, no wash. */
+.fleet-ai-card[data-local] { background: var(--fai-surface); border-color: var(--fai-edge); }
 .fleet-ai-card[data-local] .fai-mark { color: var(--fai-muted); }
+.fleet-ai-card[data-local] .fai-title { color: var(--fai-ink); }
 
 /* Risk: a word on its own tint, read before the brief. The text is the status
    colour taken 72% toward black, so amber and green hold 4.5:1 on the tint. */
@@ -77,6 +85,7 @@
   padding: 2px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--risk) 12%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--risk) 22%, transparent);
   color: color-mix(in srgb, var(--risk) 72%, #000);
   font-size: 10.5px;
   font-weight: 600;
