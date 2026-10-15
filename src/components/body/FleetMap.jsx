@@ -26,7 +26,6 @@ import { pointerXY, layoutViewport } from "../../lib/appZoom";
 import { panClearOfWindows } from "../../lib/clearView";
 import { apiFetch } from "../../services/api";
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import "./FleetMap.css";
 import MapOverlay, { FuelIncidentHost } from "./MapOverlay";
 import { useIncidentInvestigation, InvestigationWindow } from "./IncidentInvestigation";
@@ -91,8 +90,7 @@ import { pathLengthM, plainPoint, formatDistance } from "../../lib/measure";
  * ("disable the calculate route for now"); true brings it back unchanged. */
 const ROUTE_TIMING_ENABLED = false;
 import { useTrafficRoute, routeTarget, positionFresh } from "../../hooks/useTrafficRoute";
-import { useGoogleRoutingOn, fetchReach, polygonsOf } from "../../lib/googleRouting";
-import RouteAheadCard, { REACH_COLORS } from "./RouteAheadCard";
+import { useGoogleRoutingOn } from "../../lib/googleRouting";
 
 /** Fleets whose picked unit draws its trip from its yard (IncidentInvestigation). */
 const TRIP_COMPANIES = new Set(["sukari", "westsugar", "kabras", "menengai", "nzoia"]);
@@ -2745,20 +2743,16 @@ export default function FleetMap() {
    * leg, with live traffic. The same query the unit panel's Arrives row reads
    * (keyed per unit and target), so the line on the map and the ETA beside it
    * are one request and agree. */
-  /* Exactly ONE tracked unit gets the Route ahead card: its road and traffic
-   * ETA to wherever it is going, a destination the operator can pick on the
-   * map, and its 15/30/60-minute reach, all from its Wialon fix through the
-   * server's Google proxy (lib/googleRouting). It outranks the pinned or
-   * selected unit for the route line, since a single tracked unit is the only
-   * one on the map. */
+  /* Exactly ONE tracked unit gets its road and traffic ETA to wherever it
+   * is going, from its Wialon fix through the server's Google proxy
+   * (lib/googleRouting). It outranks the pinned or selected unit for the
+   * route line, since a single tracked unit is the only one on the map. (The
+   * Route ahead card that went with it — pick a destination, reach rings —
+   * was removed on request, 2026-10-15.) */
   const googleRouting  = useGoogleRoutingOn();
   const trackedVehicle = googleRouting && trackedIds.length === 1
     ? vehicles.find(v => v.id === trackedIds[0]) ?? null
     : null;
-  /** {plate, lat, lng}: a destination picked on the map for one unit. */
-  const [pickedDest, setPickedDest]   = useState(null);
-  const [pickingDest, setPickingDest] = useState(false);
-  const [reachOn, setReachOn]         = useState(false);
 
   const routedVehicle = trackedVehicle ?? pinnedVehicle
     ?? (selectedVehicleId ? vehicles.find(v => v.id === selectedVehicleId) ?? null : null);
@@ -2796,10 +2790,7 @@ export default function FleetMap() {
     });
   }, []);
   const routedFresh  = positionFresh(routedVehicle);
-  const pickedTarget = pickedDest && routedVehicle && pickedDest.plate === routedVehicle.id
-    ? { to: { lat: pickedDest.lat, lng: pickedDest.lng, name: "Picked point" }, towards: "picked" }
-    : null;
-  const pinnedTarget = routedFresh ? (pickedTarget ?? routeTarget(pinnedTrip)) : null;
+  const pinnedTarget = routedFresh ? routeTarget(pinnedTrip) : null;
   const trackedRouting = trackedVehicle != null && routedVehicle === trackedVehicle;
   const pinnedRouteQ = useTrafficRoute({
     vehicleId:  routedVehicle?.id ?? null,
@@ -2811,23 +2802,6 @@ export default function FleetMap() {
   });
   const pinnedRoute = pinnedRouteQ.data;
 
-  // A different tracked unit is a different question: drop the pick mode.
-  useEffect(() => { setPickingDest(false); }, [trackedVehicle?.id]);
-
-  /* Reach rings. Keyed on the position to ~2 km so a moving truck re-asks a
-   * few times an hour rather than on every fix; the server caches each spot. */
-  const reachQ = useQuery({
-    queryKey: ["reach", trackedVehicle?.vehicleId,
-      trackedVehicle ? Math.round(trackedVehicle.lat * 50) : null,
-      trackedVehicle ? Math.round(trackedVehicle.lng * 50) : null],
-    queryFn: ({ signal }) => fetchReach(orgId, trackedVehicle.vehicleId, { signal }),
-    enabled: reachOn && trackedVehicle != null && routedFresh && Number.isFinite(trackedVehicle?.lat) && orgId != null,
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
-    retry: 1,
-    refetchOnWindowFocus: false,
-    placeholderData: (prev) => prev,
-  });
 
   /* Opening a side-panel window — Units, Stopped in transit, Fuel alerts —
    * takes the pinned card down: what was opened is what is being worked now
@@ -6938,50 +6912,6 @@ export default function FleetMap() {
     // The target's coordinates, not the object, which is rebuilt every render.
   }, [mapReady, showTraffic, trackedRouting, pinnedRoute, pinnedTarget?.to.lat, pinnedTarget?.to.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Picking a destination on the map ──────────────────────────────────────
-  // One click sets it; Escape or Cancel backs out. The crosshair says the next
-  // click is not a normal one.
-  useEffect(() => {
-    const map  = mapRef.current;
-    const maps = mapsLibRef.current;
-    const plate = trackedVehicle?.id;
-    if (!mapReady || !map || !maps || !pickingDest || !plate) return undefined;
-    const el = mapContainerRef.current;
-    el?.classList.add("rah-picking");
-    const h = maps.event.addListenerOnce(map, "click", (e) => {
-      if (!e?.latLng) return;
-      setPickedDest({ plate, lat: e.latLng.lat(), lng: e.latLng.lng() });
-      setPickingDest(false);
-    });
-    const onKey = (e) => { if (e.key === "Escape") setPickingDest(false); };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      el?.classList.remove("rah-picking");
-      maps.event.removeListener(h);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mapReady, pickingDest, trackedVehicle?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Reach rings: 60 under 30 under 15, so the nearest reads on top ───────
-  useEffect(() => {
-    const map  = mapRef.current;
-    const maps = mapsLibRef.current;
-    const rings = reachOn && trackedVehicle ? reachQ.data?.rings : null;
-    if (!mapReady || !map || !maps || !rings?.length) return undefined;
-    const shapes = [];
-    for (const ring of [...rings].sort((a, b) => b.minutes - a.minutes)) {
-      const color = REACH_COLORS[ring.minutes] ?? ROUTE_COLOR;
-      for (const paths of polygonsOf(ring.geometry)) {
-        shapes.push(new maps.Polygon({
-          map, paths,
-          strokeColor: color, strokeOpacity: 0.8, strokeWeight: 1.5,
-          fillColor: color, fillOpacity: 0.1,
-          zIndex: 0,
-        }));
-      }
-    }
-    return () => { for (const sh of shapes) sh.setMap(null); };
-  }, [mapReady, reachOn, trackedVehicle?.id, reachQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Search resolves a query to one vehicle and then focuses it — the SAME
@@ -7151,24 +7081,6 @@ export default function FleetMap() {
             investigation, in its own floating window (IncidentInvestigation). */}
         <InvestigationWindow {...investigation} onClose={closeInvestigation} />
         <ArrivalsWindow arrivals={arrivals} onSelectUnit={handleFocusVehicle} onClose={() => setArrivalsOpen(false)} />
-        {trackedVehicle && (
-          <RouteAheadCard
-            plate={trackedVehicle.name || trackedVehicle.id}
-            target={pinnedTarget}
-            route={pinnedRouteQ}
-            stale={!routedFresh}
-            picking={pickingDest}
-            onPick={() => setPickingDest(true)}
-            onCancelPick={() => setPickingDest(false)}
-            onClearPicked={() => setPickedDest(null)}
-            reachOn={reachOn}
-            onToggleReach={() => setReachOn(v => !v)}
-            reach={{
-              status: !reachOn ? "idle" : reachQ.isError ? "error" : reachQ.isFetching ? "loading" : "ok",
-              error: reachQ.error?.message,
-            }}
-          />
-        )}
         <MapStatusBar
           map={mapReady ? mapRef.current : null}
           attribution={baseMap === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION}
