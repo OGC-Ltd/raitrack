@@ -14,10 +14,6 @@
  *               popup gives the address, position, came, left and duration
  *   playback    a pin that walks the route, with time, speed and mileage
  *
- * A unit's TRIP from its factory (operator, 2026-10-15, Sukari) adds the yard
- * it left, the dispatch's destination (FactorySuite) and Google's planned road
- * between them, dashed; its route runs from leaving the yard to now.
- *
  * The road-matched copy of the track is drawn only when the window's "Match
  * to roads" is on, and then the recorded fixes stay beneath it, faint.
  *
@@ -30,7 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getTheftInvestigation, getHaltInvestigation, getTripInvestigation } from "../../api/fuelInvestigation";
+import { getTheftInvestigation, getHaltInvestigation } from "../../api/fuelInvestigation";
 import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import "./IncidentInvestigation.css";
 
@@ -38,7 +34,6 @@ const TZ = "Africa/Nairobi";
 const HHMM = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 const HHMMSS = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: TZ });
 const STAMP = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: TZ });
-const WHEN = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 
 /* Fixed colours: drawn on map tiles, which do not follow the theme. */
 export const INVESTIGATION_COLOR = {
@@ -48,9 +43,6 @@ export const INVESTIGATION_COLOR = {
   stop: "#1d4ed8",
   start: "#16a34a",
   end: "#dc2626",
-  origin: "#047857",
-  dest: "#b91c1c",
-  planned: "#0f172a",
 };
 const C = INVESTIGATION_COLOR;
 
@@ -90,13 +82,6 @@ const letter = (ch, fill) => svgIcon(
 const STOP_ICON = letter("P", C.stop);
 const START_ICON = letter("A", C.start);
 const END_ICON = letter("B", C.end);
-/** A trip's two ends: the yard it left (a factory) and where it is going (a flag). */
-const ORIGIN_ICON = svgIcon(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><rect x="1" y="1" width="28" height="28" rx="5" fill="${C.origin}" stroke="#fff" stroke-width="2"/>` +
-  '<path d="M7.5 22.5V14l4.5 3v-3l4.5 3v-3l4.5 3V8h2.5v14.5Z" fill="#fff"/></svg>', 30, 30, 15, 15);
-const DEST_ICON = svgIcon(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><rect x="1" y="1" width="28" height="28" rx="5" fill="${C.dest}" stroke="#fff" stroke-width="2"/>` +
-  '<path d="M10 23V7.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><path d="M10.5 8h10l-2.6 3.6 2.6 3.6h-10Z" fill="#fff"/></svg>', 30, 30, 15, 15);
 /** The route's shape: stretches, silences, stops, and mileage at each fix. */
 function shape(track) {
   const runs = [];
@@ -152,39 +137,31 @@ const readRoads = () => { try { return localStorage.getItem(ROADS_KEY) === "1"; 
  * Returns what the key and the playback bar need.
  */
 export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
-  // A fuel alert (`{ kind: "fuel", theftId }`), a halted unit
+  // A fuel alert (`{ kind: "fuel", theftId }`) or a halted unit
   // (`{ kind: "halt", vehicleId, sinceMs }`, its database id and when it
-  // stopped) or a unit's trip from its yard (`{ kind: "trip", vehicleId }`).
-  // All answer in the same shape; `theftId` names the answer.
+  // stopped). Both answer in the same shape; `theftId` names the answer.
+  // (A unit's trip from its yard was removed on request, 2026-10-19.)
   const kind = subject?.kind ?? null;
   const theftId = !subject ? null
-    : kind === "halt" ? `halt:${subject.vehicleId}:${subject.sinceMs}`
-    : kind === "trip" ? `trip:${subject.vehicleId}` : subject.theftId;
-  // "Match to roads": a fuel alert carries its road match already; a trip's
-  // is asked for only while this is on (it is billed per hundred fixes).
+    : kind === "halt" ? `halt:${subject.vehicleId}:${subject.sinceMs}` : subject.theftId;
+  // "Match to roads": a fuel alert carries its road match already.
   const [roads, setRoads] = useState(readRoads);
   const toggleRoads = useCallback(() => setRoads((r) => {
     try { localStorage.setItem(ROADS_KEY, r ? "0" : "1"); } catch { /* a remembered choice only */ }
     return !r;
   }), []);
-  const snap = kind === "trip" && roads;
   const q = useQuery({
-    queryKey: ["fuel-investigation", orgId, theftId, snap ? "roads" : "raw"],
+    queryKey: ["fuel-investigation", orgId, theftId],
     queryFn: ({ signal }) => (kind === "halt"
       ? getHaltInvestigation(orgId, subject.vehicleId, subject.sinceMs, { signal })
-      : kind === "trip" ? getTripInvestigation(orgId, subject.vehicleId, { snap, signal })
       : getTheftInvestigation(orgId, subject.theftId, { signal })),
     enabled: Boolean(orgId && theftId),
-    // A saved fuel investigation never changes; a halt or a trip is still
-    // going on, and a trip follows the unit every two minutes.
-    staleTime: kind === "halt" ? 5 * 60_000 : kind === "trip" ? 2 * 60_000 : Infinity,
-    refetchInterval: kind === "trip" ? 2 * 60_000 : false,
-    // Turning the road match on keeps the drawing up while it loads.
-    placeholderData: (prev) => prev,
+    // A saved fuel investigation never changes; a halt is still going on.
+    staleTime: kind === "halt" ? 5 * 60_000 : Infinity,
     retry: 0,
   });
   const inv = theftId && q.data?.theftId === theftId ? q.data : null;
-  const canRoads = inv?.kind === "trip" || (inv?.snapped?.segments?.length ?? 0) > 0;
+  const canRoads = (inv?.snapped?.segments?.length ?? 0) > 0;
   const roadsOn = roads && canRoads && (inv?.snapped?.segments?.length ?? 0) > 0;
   const shaped = useMemo(() => (inv ? shape(inv.track) : null), [inv]);
   const framed = useRef(null);
@@ -237,16 +214,6 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
     const { runs, holes, stops } = shaped;
     const track = inv.track;
 
-    // A trip's planned road (Google, yard to destination), dashed, under all.
-    const trip = inv.trip ?? null;
-    if (trip?.planned?.path?.length > 1) {
-      const path = trip.planned.path.map(([lat, lng]) => ({ lat, lng }));
-      add(new maps.Polyline({
-        map, path, strokeOpacity: 0, zIndex: 38,
-        icons: [{ icon: { path: "M 0,-1 0,1", strokeColor: C.planned, strokeOpacity: 0.75, strokeWeight: 3, scale: 3 }, offset: "0", repeat: "14px" }],
-      }));
-    }
-
     // The route: white casing, then the line; silences dotted. Matched to
     // roads, the record stays beneath it, faint, so the two are never
     // mistaken for one another.
@@ -294,39 +261,23 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
       });
     }
 
-    if (trip) {
-      if (trip.origin) add(new maps.Marker({
-        map, position: ll(trip.origin), icon: ORIGIN_ICON, zIndex: 60,
-        title: `${trip.origin.name ?? "The yard"}${trip.departedAt ? `, left ${HHMM.format(Date.parse(trip.departedAt))}` : ""}`,
-      }));
-      if (trip.destination) add(new maps.Marker({
-        map, position: ll(trip.destination), icon: DEST_ICON, zIndex: 60,
-        title: `${trip.destination.name ?? "Destination"}${trip.arrivedAt ? `, arrived ${HHMM.format(Date.parse(trip.arrivedAt))}` : ""}`,
-      }));
-    } else if (track.length > 1) {
+    if (track.length > 1) {
       add(new maps.Marker({ map, position: ll(track[0]), icon: START_ICON, zIndex: 59, title: `Start of the window, ${HHMM.format(track[0].t)}` }));
       add(new maps.Marker({ map, position: ll(track[track.length - 1]), icon: END_ICON, zIndex: 59, title: `End of the window, ${HHMM.format(track[track.length - 1].t)}` }));
     }
     if (inv.point) add(new maps.Marker({
       map, position: ll(inv.point), icon: PIN_SQUARE, zIndex: 62,
       title: inv.kind === "halt" ? `Halted here since ${HHMM.format(Date.parse(inv.beganAt))}`
-        : trip ? `${inv.point.basis}, ${HHMM.format(Date.parse(inv.point.fixAt))}`
         : `Fuel began to fall here, ${HHMM.format(Date.parse(inv.beganAt))}`,
     }));
 
-    // Frame once per alert: the route and the point; a trip, from its yard
-    // to its destination by the planned road.
+    // Frame once per alert: the route and the point.
     if (framed.current !== inv.theftId) {
       framed.current = inv.theftId;
       const b = new maps.LatLngBounds();
       let any = false;
       for (const p of track) { b.extend(ll(p)); any = true; }
       if (inv.point) { b.extend(ll(inv.point)); any = true; }
-      if (trip) {
-        if (trip.origin) { b.extend(ll(trip.origin)); any = true; }
-        if (trip.destination) { b.extend(ll(trip.destination)); any = true; }
-        for (const [lat, lng] of trip.planned?.path ?? []) b.extend({ lat, lng });
-      }
       if (any) {
         // Measured first: a map whose box changed since it last looked fits
         // against the old size and lands far too wide.
@@ -357,8 +308,8 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
   useEffect(() => { if (!theftId) framed.current = null; }, [theftId]);
 
   return {
-    kind, inv, shaped, loading: Boolean(theftId) && !inv && (q.isLoading || q.isPlaceholderData), error: theftId ? q.error : null,
-    roads: { on: roads, available: canRoads, loading: snap && q.isPlaceholderData, toggle: toggleRoads },
+    kind, inv, shaped, loading: Boolean(theftId) && !inv && q.isLoading, error: theftId ? q.error : null,
+    roads: { on: roads, available: canRoads, loading: false, toggle: toggleRoads },
     playback: {
       t0, t1, cursor, playing, toggle, seek, here,
       km: hereIdx >= 0 ? shaped?.km[hereIdx] ?? 0 : null,
@@ -374,7 +325,6 @@ const span = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${St
 const KINDS = {
   fuel: { icon: "gas-station", title: "Fuel alert", label: "Fuel alert on the map", at: "At the fall", event: "Fuel fell", noun: "alert" },
   halt: { icon: "hand-stop", title: "Halted", label: "Halted unit on the map", at: "At the halt", event: "Halted", noun: "halt" },
-  trip: { icon: "route", title: "Trip", label: "Unit's trip on the map", at: "Leaving the yard", event: "Left the yard", noun: "trip" },
 };
 
 /** Where `t` falls along the window, 0–100, for the rail's marks. */
@@ -403,12 +353,7 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
   if (!open) return null;
 
   const kindKey = inv?.kind ?? subjectKind ?? "fuel";
-  const trip = inv?.trip ?? null;
-  // A trip's clock starts when it left the yard; one not seen leaving counts
-  // from its dispatch.
-  const K = trip && !trip.departedAt
-    ? { ...KINDS.trip, at: trip.dispatch ? "At the dispatch" : "Start", event: trip.dispatch ? "Dispatched" : "Start" }
-    : KINDS[kindKey] ?? KINDS.fuel;
+  const K = KINDS[kindKey] ?? KINDS.fuel;
   const p = playback;
   const tr = inv?.track ?? [];
   const canPlay = tr.length > 1;
@@ -467,7 +412,6 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
           )}
           {inv && (
             <>
-              {trip && <TripFacts trip={trip} fixes={tr.length} />}
               <dl className="ivw__read">
                 <div className="ivw__cell ivw__cell--time">
                   <dt>{p.here ? relText : K.event}</dt>
@@ -492,7 +436,7 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
                         <i key={s.came} className="ivw__mark ivw__mark--stop"
                            style={{ left: `${pct(s.came, p.t0, p.t1)}%`, width: `${Math.max(0.8, pct(s.left, p.t0, p.t1) - pct(s.came, p.t0, p.t1))}%` }} />
                       ))}
-                      <i className={`ivw__mark ivw__mark--${trip ? "depart" : "event"}`} style={{ left: `${pct(eventT, p.t0, p.t1)}%` }} />
+                      <i className="ivw__mark ivw__mark--event" style={{ left: `${pct(eventT, p.t0, p.t1)}%` }} />
                     </div>
                     <input type="range" className="ivw__range" min={p.t0} max={p.t1} step={1000}
                            value={p.cursor ?? p.t0} onPointerDown={stop}
@@ -504,14 +448,11 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
                   </div>
                 </div>
               ) : (
-                <p className="ivw__msg">No GPS fixes {trip ? "on this trip" : `around this ${K.noun}`} to play.</p>
+                <p className="ivw__msg">No GPS fixes around this {K.noun} to play.</p>
               )}
 
               <ul className="ivw__legend">
-                {trip?.origin && <li><i className="ivw__sw ivw__sw--origin" aria-hidden="true" />{trip.origin.name ?? "Yard"}</li>}
-                {trip?.destination && <li><i className="ivw__sw ivw__sw--dest" aria-hidden="true" />{trip.destination.name ?? "Destination"}</li>}
-                {trip?.planned && <li><i className="ivw__sw ivw__sw--planned" aria-hidden="true" />Planned road</li>}
-                {inv.point && <li><i className="ivw__sw ivw__sw--pin" aria-hidden="true" />{trip ? (trip.returnedAt ? "Back" : "Now") : kindKey === "halt" ? "Halt" : "Fuel fell"}</li>}
+                {inv.point && <li><i className="ivw__sw ivw__sw--pin" aria-hidden="true" />{kindKey === "halt" ? "Halt" : "Fuel fell"}</li>}
                 <li><i className="ivw__sw ivw__sw--route" aria-hidden="true" />{tr.length === 0 ? "No route" : still ? "Stood still" : `Route ${metres(shaped.travelledM)}`}</li>
                 {shaped?.stops.length > 0 && <li><i className="ivw__sw ivw__sw--stop" aria-hidden="true">P</i>{shaped.stops.length} {shaped.stops.length === 1 ? "stop" : "stops"}</li>}
               </ul>
@@ -536,40 +477,3 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
   );
 }
 
-/**
- * A trip's facts, above the readout: the yard it left and where the dispatch
- * sends it, then when it left, was dispatched, arrived or came back, and the
- * planned road's length and drive time. Every line is a fact from the record
- * or the dispatch; what is not known says so.
- */
-function TripFacts({ trip, fixes }) {
-  const at = (iso) => (iso ? WHEN.format(Date.parse(iso)) : null);
-  const d = trip.dispatch;
-  const to = trip.destination?.name ?? trip.destinationName;
-  return (
-    <div className="ivw__trip">
-      <p className="ivw__leg">
-        <span className="ivw__end ivw__end--from" title={trip.origin?.name ?? undefined}>{trip.origin?.name ?? "Yard not known"}</span>
-        <i className="ti ti-arrow-narrow-right" aria-hidden="true" />
-        <span className={`ivw__end ivw__end--to${to ? "" : " ivw__end--none"}`} title={to ?? undefined}>{to ?? "No dispatch"}</span>
-      </p>
-      <dl className="ivw__facts">
-        {trip.lastAtOriginAt && !trip.departedAt
-          ? <div><dt>Last in the yard</dt><dd>{at(trip.lastAtOriginAt)}</dd></div>
-          : <div><dt>Left</dt><dd>{at(trip.departedAt) ?? (fixes === 0 ? (d ? "No GPS since dispatch" : "No recent GPS")
-              : trip.atOrigin ? "Still in the yard" : d ? "Not seen leaving" : "Not there in 7 days")}</dd></div>}
-        {d && <div><dt>Dispatched</dt><dd>{at(d.dispatchedAt)}<small>{d.kind === "SALES" ? "sale" : "cane"}</small></dd></div>}
-        {trip.destination && <div><dt>Arrived</dt><dd>{at(trip.arrivedAt) ?? "Not yet"}</dd></div>}
-        {trip.returnedAt && <div><dt>Back</dt><dd>{at(trip.returnedAt)}</dd></div>}
-        {trip.planned && (
-          <div><dt>Planned</dt><dd title={`${metres(trip.planned.distanceM)}, about ${duration(trip.planned.durationS * 1000)} by road`}>{metres(trip.planned.distanceM)}<small>{duration(trip.planned.durationS * 1000)}</small></dd></div>
-        )}
-        {d?.driverName && <div><dt>Driver</dt><dd title={d.driverName}>{d.driverName}</dd></div>}
-        {d?.serialNumber && <div><dt>Serial</dt><dd>{d.serialNumber}</dd></div>}
-      </dl>
-      {!trip.planned && trip.plannedReason && trip.dispatch && (
-        <p className="ivw__note"><i className="ti ti-info-circle" aria-hidden="true" />No planned road. {trip.plannedReason}.</p>
-      )}
-    </div>
-  );
-}
