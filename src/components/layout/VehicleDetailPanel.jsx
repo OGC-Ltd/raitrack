@@ -345,9 +345,6 @@ function unitSummary({ vehicle, readings, place, usedL }) {
   if (vehicle.status === 'speeding' && vehicle.speedLimit) {
     items.push({ icon: 'ti-gauge', tone: 'alert', text: `Over the ${vehicle.speedLimit} km/h limit.` });
   }
-  if (vehicle.probeHold) {
-    items.push({ icon: 'ti-tool', tone: 'warn', text: 'Reported for a fuel probe repair: its fuel alerts still come, marked as reported.' });
-  }
   if (readings.fuelPct != null) {
     const low = readings.fuelPct < RESERVE_PCT;
     items.push({ icon: 'ti-gas-station', tone: low ? 'warn' : null, text: `Fuel at ${readings.fuelPct}%${low ? ', below reserve' : ''}.` });
