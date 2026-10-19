@@ -881,19 +881,19 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               { icon: 'ti-hourglass', label: 'Idle today', value: today.idleMin != null ? fmtMinutes(today.idleMin) : null,
                 sub: today.idleMin != null ? 'engine on, standing' : 'no engine state reported' },
               { icon: 'ti-satellite', label: 'GPS', value: gps.label, sub: gps.sub, tone: gps.tone },
-              // Litres per engine hour today, and km per litre once it has
+              // Litres per engine hour today, and litres per km once it has
               // driven far enough (lib/vehicleDay burnRate, as the unit card)
               // A unit the FactorySuite register rates: in the register's
               // unit, against its standard, amber when well over it
               vsStd
                 ? { icon: 'ti-flame', label: 'Burn rate', tone: vsStd.high ? 'warn' : null,
-                    value: vsStd.today != null ? `${num(vsStd.today, 1)} ${vsStd.unit}` : null,
-                    sub: vsStd.over != null ? `${overWords(vsStd.over)} (${num(vsStd.std, 1)} ${vsStd.unit})`
-                      : `standard ${num(vsStd.std, 1)} ${vsStd.unit}${tele.loading ? '' : ', not enough today'}` }
+                    value: vsStd.today != null ? `${num(vsStd.today, vsStd.digits)} ${vsStd.unit}` : null,
+                    sub: vsStd.over != null ? `${overWords(vsStd.over)} (${num(vsStd.std, vsStd.digits)} ${vsStd.unit})`
+                      : `standard ${num(vsStd.std, vsStd.digits)} ${vsStd.unit}${tele.loading ? '' : ', not enough today'}` }
                 : { icon: 'ti-flame', label: 'Burn rate', value: burn?.lPerH != null ? `${num(burn.lPerH, 1)} L/h`
-                    : burn?.kmPerL != null ? `${num(burn.kmPerL, 1)} km/L` : null,
+                    : burn?.lPerKm != null ? `${num(burn.lPerKm, 2)} L/km` : null,
                   sub: !burn ? (tele.loading ? 'reading today…' : 'not enough today')
-                    : burn.lPerH != null && burn.kmPerL != null ? `${num(burn.kmPerL, 1)} km/L · ${num(burn.usedL, 1)} L today`
+                    : burn.lPerH != null && burn.lPerKm != null ? `${num(burn.lPerKm, 2)} L/km · ${num(burn.usedL, 1)} L today`
                     : `${num(burn.usedL, 1)} L used today` },
               { icon: 'ti-engine', label: 'Engine hours', value: readings.engineHours != null ? `${num(readings.engineHours)} h` : null,
                 sub: readings.engineHours != null ? `engine ${engineWord ? engineWord.toLowerCase() : 'state unknown'}` : NA },
