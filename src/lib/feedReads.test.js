@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isUnread, withRead, allRead, MAX_READ_IDS } from './feedReads';
+import { isUnread, withRead, withOpened, allRead, mergeReads, MAX_READ_IDS } from './feedReads';
 import { summariseUnread } from '../components/layout/AppHeader';
 
 const SINCE = Date.parse('2026-10-19T06:00:00.000Z');
@@ -33,7 +33,7 @@ describe('feed read marks', () => {
   });
 
   it('"Mark all read" reads everything so far and drops the single marks', () => {
-    const r = allRead(Date.parse('2026-10-19T06:31:00.000Z'));
+    const r = allRead(fresh, Date.parse('2026-10-19T06:31:00.000Z'));
     expect(summariseUnread([a, b, c], r).unreadCount).toBe(0);
     expect(r.ids.size).toBe(0);
     expect(isUnread(line('next', '2026-10-19T06:40:00.000Z'), r)).toBe(true);
@@ -45,5 +45,40 @@ describe('feed read marks', () => {
     expect(r.ids.size).toBe(MAX_READ_IDS);
     expect(r.ids.has('n0')).toBe(false);
     expect(r.ids.has(`n${MAX_READ_IDS + 4}`)).toBe(true);
+  });
+});
+
+describe('the bell badge', () => {
+  const opened = Date.parse('2026-10-19T06:25:00.000Z');
+
+  it('counts only unread lines that arrived since the bell was last opened', () => {
+    const r = { since: SINCE, ids: new Set(), opened };
+    // a and b are older than the last opening: still unread in the panel, off the badge.
+    expect([a, b, c].map((x) => isUnread(x, r))).toEqual([true, true, true]);
+    expect(summariseUnread([a, b, c], r).unreadCount).toBe(1);
+  });
+
+  it('opening the bell empties the badge and reads nothing', () => {
+    const r = withOpened(fresh, Date.parse('2026-10-19T06:31:00.000Z'));
+    expect(summariseUnread([a, b, c], r).unreadCount).toBe(0);
+    expect([a, b, c].every((x) => isUnread(x, r))).toBe(true);
+  });
+});
+
+describe('two tabs', () => {
+  it('keeps the lines each tab read', () => {
+    const tabA = withRead(fresh, [a]);
+    const tabB = withRead(fresh, [c]);
+    const both = mergeReads(tabB, tabA);
+    expect([a, b, c].map((x) => isUnread(x, both))).toEqual([false, true, false]);
+  });
+
+  it('a "Mark all read" in one tab is not undone by the other', () => {
+    const later = allRead(fresh, Date.parse('2026-10-19T06:31:00.000Z'));
+    const stale = withRead(fresh, [a]);
+    const both = mergeReads(stale, later);
+    expect(both.since).toBe(later.since);
+    expect(both.ids.size).toBe(0);
+    expect(summariseUnread([a, b, c], both).unreadCount).toBe(0);
   });
 });
