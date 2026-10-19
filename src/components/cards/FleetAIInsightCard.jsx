@@ -25,8 +25,13 @@
 // is that unit's brief (fleet-server vehicles/:id/brief, measured facts the
 // model only phrases); with none it is the fleet's. The title stays "Fleet AI
 // Insight" either way (operator: "the title should remain as it was").
+//
+// Computed per click (operator, same day): each pick asks the server for a
+// fresh brief, measured anew, and shows it at once; the model's wording is
+// asked for at the same time and lands a few seconds later, so the card reads
+// again every few seconds for a minute until it does.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./FleetAIInsightCard.css";
 import { getFleetInsight } from "../../api/fleetInsight";
 import { getVehicleBrief } from "../../api/vehicleBrief";
@@ -43,6 +48,10 @@ const RISK_ICON = { Low: "shield-check", Medium: "alert-triangle", High: "alert-
 // means every render paints from the last-known brief with no flicker.
 const REFRESH_MS = 5 * 60_000;
 
+/* After a click, how often and how long to look for the model's wording. */
+const MODEL_LOOK_MS = 4_000;
+const MODEL_WAIT_MS = 60_000;
+
 /* The head's mark. Sparkles only when the model wrote the brief; the
    fixed-sentence summary gets a plain info mark, so the AI sign is never
    worn by text no model touched. */
@@ -53,11 +62,32 @@ function Mark({ ai }) {
 /** `unit`: the picked unit ({ orgId, vehicleId, plate }), or null for the fleet. */
 export default function FleetAIInsightCard({ companyId, unit = null, className = "" }) {
   const unitId = unit?.orgId && unit?.vehicleId ? unit.vehicleId : null;
+  // One per click: a new pick is a new question, never last pick's answer.
+  const pickedAt = useMemo(() => Date.now(), [unitId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const askedFresh = useRef(null);
   const { data: insight, loading, error, retry } = useApiData(
-    () => (unitId ? getVehicleBrief({ orgId: unit.orgId, vehicleId: unitId }) : getFleetInsight({ companyId })),
-    [companyId, unitId],
-    { cacheKey: unitId ? `ft-ai-brief:${unitId}` : `ft-ai-insight:${companyId}` }
+    () => {
+      if (!unitId) return getFleetInsight({ companyId });
+      const fresh = askedFresh.current !== pickedAt;
+      askedFresh.current = pickedAt;
+      return getVehicleBrief({ orgId: unit.orgId, vehicleId: unitId, fresh });
+    },
+    [companyId, unitId, pickedAt],
+    { cacheKey: unitId ? null : `ft-ai-insight:${companyId}` }
   );
+
+  // Until the model's wording lands, read again every few seconds.
+  const waitingOnModel = unitId != null && insight != null && insight.source !== "model";
+  // An interval, not a timeout per answer: an unchanged answer comes back as
+  // the same object, so nothing would re-arm a timeout.
+  useEffect(() => {
+    if (!waitingOnModel) return undefined;
+    const t = setInterval(() => {
+      if (Date.now() - pickedAt > MODEL_WAIT_MS) clearInterval(t);
+      else retry();
+    }, MODEL_LOOK_MS);
+    return () => clearInterval(t);
+  }, [waitingOnModel, pickedAt, retry]);
 
   useEffect(() => {
     const t = setInterval(retry, REFRESH_MS);
