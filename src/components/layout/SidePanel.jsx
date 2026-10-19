@@ -205,7 +205,11 @@ export default function SidePanel() {
   // a map showing the whole fleet again.
   const { applyFilter, activeFilter } = useMapLayers();
 
-  const { vehicles = [], loading } = useFleetLiveShared();
+  const { vehicles = [], loading, orgId } = useFleetLiveShared();
+  // The unit picked on the map: the AI card at the foot speaks for it alone.
+  const selectedVehicleId = useAppSelector((a) => a.selectedVehicleId);
+  const picked = selectedVehicleId != null ? vehicles.find((x) => x.id === selectedVehicleId) : null;
+  const aiUnit = picked?.vehicleId && orgId ? { orgId, vehicleId: picked.vehicleId, plate: picked.id } : null;
 
   // Counted with the SAME predicate the map filter uses, so clicking a card
   // always shows exactly the number printed on it. One pass over the fleet for
@@ -451,7 +455,7 @@ export default function SidePanel() {
       {!collapsed && can('map:read') && (
         <div className="sp-foot">
           <ErrorBoundary label="Fleet AI insight">
-            <FleetAIInsightCard companyId={activeCompany?.id} className="sp-ai-card" />
+            <FleetAIInsightCard companyId={activeCompany?.id} unit={aiUnit} className="sp-ai-card" />
           </ErrorBoundary>
         </div>
       )}
