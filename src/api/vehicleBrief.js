@@ -11,10 +11,11 @@
 import { apiFetch } from "../services/api";
 
 /** @returns {Promise<{msg: string, source: 'model'|'facts', generatedAt: string, facts: object}|null>} */
-export async function getVehicleBrief({ orgId, vehicleId }) {
+/** `fresh`: measure and phrase it anew, past the server's ten-minute cache (one per click). */
+export async function getVehicleBrief({ orgId, vehicleId, fresh = false }) {
   if (!orgId || !vehicleId) return null;
   const res = await apiFetch(
-    `/api/v1/organisations/${orgId}/vehicles/${encodeURIComponent(vehicleId)}/brief`
+    `/api/v1/organisations/${orgId}/vehicles/${encodeURIComponent(vehicleId)}/brief${fresh ? "?fresh=1" : ""}`
   );
   return res.data ?? null;
 }
