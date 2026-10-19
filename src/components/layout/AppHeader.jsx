@@ -20,7 +20,7 @@ import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
 import ManualIcon from './ManualIcon';
-import { isBadged, useFeedReads } from '../../lib/feedReads';
+import { isUnread, useFeedReads } from '../../lib/feedReads';
 
 /**
  * How many feed items this operator has not seen, and whether any of them is
@@ -48,15 +48,16 @@ import { isBadged, useFeedReads } from '../../lib/feedReads';
  * the same reason groupLayers is exported from MapLayersTree.
  */
 export function summariseUnread(feed, reads) {
-  // `reads` is lib/feedReads' marks; a bare time reads as "nothing opened since".
-  // Only lines new since the bell was last opened count (isBadged): the panel
-  // keeps older unread lines marked, the badge does not keep counting them.
-  const r = typeof reads === 'number' ? { since: reads, ids: new Set(), opened: reads } : reads;
+  // `reads` is lib/feedReads' marks; a bare time reads as a cut-off with no
+  // single lines read. Every unread line counts, so the badge only goes once
+  // nothing is left to read (operator 2026-10-19: opening and closing the bell
+  // used to empty it while the panel still held unread lines).
+  const r = typeof reads === 'number' ? { since: reads, ids: new Set() } : reads;
   let unreadCount = 0;
   // A malformed or missing timestamp cannot be placed against the cut-off,
   // and counting it would make the badge tick up on every reconnect that
-  // replays it. isBadged reads it as not-new, the safe reading.
-  for (const f of feed ?? []) if (isBadged(f, r)) unreadCount += 1;
+  // replays it. isUnread reads it as read, the safe reading.
+  for (const f of feed ?? []) if (isUnread(f, r)) unreadCount += 1;
   return { unreadCount };
 }
 
@@ -227,7 +228,7 @@ export default function AppHeader() {
   // Unread = feed lines this operator has not opened, remembered per
   // organisation in this browser (lib/feedReads). Opening the panel reads
   // nothing; a row is read when it is opened, or by "Mark all read". The
-  // badge counts only what arrived since the bell was last opened.
+  // badge counts every unread line.
   const feedReads = useFeedReads(activeCompanyId);
   // No rights to the fleet (no map:read, operator 2026-10-01): no bell and no
   // feed at all. The feed is the fleet's events, which such an account is not
@@ -236,7 +237,7 @@ export default function AppHeader() {
   const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, feedReads.reads);
   const badge = bellBadgeLabel(unreadCount);
   // The bell swings once when the count goes up — news arrived — and not when
-  // it falls (opening the feed) or on a re-render with the same count.
+  // it falls (lines read) or on a re-render with the same count.
   const prevUnread = useRef(unreadCount);
   const [swing, setSwing] = useState(0);
   useEffect(() => {
@@ -259,9 +260,8 @@ export default function AppHeader() {
       setSelectedVehicleId(null);
     }
     // Opening or closing the feed reads nothing: each line stays unread until
-    // it is opened (operator 2026-10-19 — one read used to clear them all).
-    // It only restarts the badge's count.
-    feedReads.markOpened();
+    // it is opened (operator 2026-10-19 — one read used to clear them all),
+    // and the badge keeps counting it.
     setFeedOpen(!feedOpen);
   };
 
