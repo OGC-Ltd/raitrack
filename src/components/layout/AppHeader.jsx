@@ -20,14 +20,7 @@ import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
 import ManualIcon from './ManualIcon';
-
-// Never opened in this browser → count only the last 24 hours, so a first
-// visit isn't greeted with every alert in the replayed history.
-function readSeen(key) {
-  let v = 0;
-  try { v = Number(localStorage.getItem(key)) || 0; } catch { /* storage off */ }
-  return v || Date.now() - 24 * 3600_000;
-}
+import { isBadged, useFeedReads } from '../../lib/feedReads';
 
 /**
  * How many feed items this operator has not seen, and whether any of them is
@@ -54,16 +47,16 @@ function readSeen(key) {
  * Exported because it is the whole of the rule and none of the rendering,
  * the same reason groupLayers is exported from MapLayersTree.
  */
-export function summariseUnread(feed, lastSeen) {
+export function summariseUnread(feed, reads) {
+  // `reads` is lib/feedReads' marks; a bare time reads as "nothing opened since".
+  // Only lines new since the bell was last opened count (isBadged): the panel
+  // keeps older unread lines marked, the badge does not keep counting them.
+  const r = typeof reads === 'number' ? { since: reads, ids: new Set(), opened: reads } : reads;
   let unreadCount = 0;
-  for (const f of feed ?? []) {
-    const t = Date.parse(f?.ts);
-    // A malformed or missing timestamp cannot be placed against `lastSeen`,
-    // and counting it would make the badge tick up on every reconnect that
-    // replays it. Silently not-new is the safe reading.
-    if (!Number.isFinite(t) || t <= lastSeen) continue;
-    unreadCount += 1;
-  }
+  // A malformed or missing timestamp cannot be placed against the cut-off,
+  // and counting it would make the badge tick up on every reconnect that
+  // replays it. isBadged reads it as not-new, the safe reading.
+  for (const f of feed ?? []) if (isBadged(f, r)) unreadCount += 1;
   return { unreadCount };
 }
 
@@ -127,7 +120,6 @@ export default function AppHeader() {
 
   const [orgOpen,        setOrgOpen]        = useState(false);
   const [feedOpen,       setFeedOpen]       = useState(false);
-  const [feedUnreadSince, setFeedUnreadSince] = useState(() => Date.now());
   const [userOpen,       setUserOpen]       = useState(false);
   const [activeStat,     setActiveStat]     = useState(null);
 
@@ -233,21 +225,16 @@ export default function AppHeader() {
     );
   });
 
-  // Unread = feed items newer than the last time this operator opened the
-  // feed, remembered per organisation in this browser.
-  const seenKey = `ft-feed-seen:${activeCompanyId}`;
-  const [lastSeen, setLastSeen] = useState(() => readSeen(seenKey));
-  useEffect(() => { setLastSeen(readSeen(seenKey)); }, [seenKey]);
-  const markSeen = () => {
-    const now = Date.now();
-    setLastSeen(now);
-    try { localStorage.setItem(seenKey, String(now)); } catch { /* storage off */ }
-  };
+  // Unread = feed lines this operator has not opened, remembered per
+  // organisation in this browser (lib/feedReads). Opening the panel reads
+  // nothing; a row is read when it is opened, or by "Mark all read". The
+  // badge counts only what arrived since the bell was last opened.
+  const feedReads = useFeedReads(activeCompanyId);
   // No rights to the fleet (no map:read, operator 2026-10-01): no bell and no
   // feed at all. The feed is the fleet's events, which such an account is not
   // shown anywhere else (the sidebar dashes its counts).
   const limited = !can('map:read');
-  const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, lastSeen);
+  const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, feedReads.reads);
   const badge = bellBadgeLabel(unreadCount);
   // The bell swings once when the count goes up — news arrived — and not when
   // it falls (opening the feed) or on a re-render with the same count.
@@ -271,13 +258,11 @@ export default function AppHeader() {
   const toggleFeed = () => {
     if (!feedOpen) {
       setSelectedVehicleId(null);
-      // What was unread at the moment of opening: the panel marks those (and
-      // anything arriving while it is open) as new. Captured BEFORE markSeen,
-      // which would otherwise leave the panel nothing to mark.
-      setFeedUnreadSince(lastSeen);
     }
-    // Opening or closing the feed counts as having seen everything in it.
-    markSeen();
+    // Opening or closing the feed reads nothing: each line stays unread until
+    // it is opened (operator 2026-10-19 — one read used to clear them all).
+    // It only restarts the badge's count.
+    feedReads.markOpened();
     setFeedOpen(!feedOpen);
   };
 
@@ -455,7 +440,7 @@ export default function AppHeader() {
       )}
 
       {/* Live feed panel — slides in from right */}
-      {!limited && <LiveFeed open={feedOpen} onClose={() => setFeedOpen(false)} unreadSince={feedUnreadSince} />}
+      {!limited && <LiveFeed open={feedOpen} onClose={() => setFeedOpen(false)} reads={feedReads} />}
       {/* The fuel follow-up case window. Here rather than on the map because
           it opens from the Live Feed too, and technicians have no map. */}
       <FuelFollowUpHost />
