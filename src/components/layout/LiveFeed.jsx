@@ -5,10 +5,11 @@
 //
 // Redesigned 2026-10-02 (Hallmark, component scope):
 //
-//   · Unread is real. AppHeader passes `unreadSince` — when the feed was last
-//     looked at, captured before opening marks it seen — and everything newer
-//     reads as new: tinted, an accent edge, a dot, under a "New" heading, with
-//     "Earlier today" below. "Mark all read" clears the marks in place.
+//   · Unread is real, line by line (lib/feedReads, AppHeader passes `reads`).
+//     Everything newer than the last "Mark all read" sits under a "New"
+//     heading, with "Earlier today" below; a line not yet opened is tinted,
+//     with an accent edge and a dot. Opening a line reads THAT line only
+//     (operator 2026-10-19: one read used to clear the lot).
 //   · Rows: an icon for what happened (arrived, left, refuelled, alert), the
 //     plate with its clock time beside it, the sentence under. The date is
 //     gone from every row: this feed is one fleet day.
@@ -25,6 +26,7 @@ import { feedClock } from '../../lib/feedTime';
 import { driverIndex, driverFor } from '../../lib/feedDriver';
 import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
 import { useVehicleFeed } from '../../hooks/useVehicleFeed';
+import { isUnread } from '../../lib/feedReads';
 import { nearBottom } from '../shared/FeedFooter';
 import './LiveFeed.css';
 
@@ -61,18 +63,21 @@ function SkeletonRows({ n }) {
   ));
 }
 
-export default function LiveFeed({ open, onClose, unreadSince = Date.now() }) {
+const NO_READS = { reads: { since: Date.now(), ids: new Set() }, markRead: () => {}, markAllRead: () => {} };
+
+export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
   const { feed: liveFeed = [], vehicles = [], orgId } = useFleetLiveShared();
   const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed);
   const { focusVehicle } = useMapLayers();
   const drivers = useMemo(() => driverIndex(vehicles), [vehicles]);
   const alerts  = feed.filter(f => ALERT_TYPES.has(f.type)).length;
 
-  // "Mark all read" moves the line without closing the panel.
-  const [readAt, setReadAt] = useState(unreadSince);
-  useEffect(() => { setReadAt(unreadSince); }, [unreadSince]);
-  const isNew = (item) => { const t = tsOf(item); return t != null && t > readAt; };
-  const newCount = feed.filter(isNew).length;
+  // "New" is everything since the last "Mark all read"; within it, each line
+  // is unread until it is opened.
+  const { reads, markRead, markAllRead } = marks;
+  const isNew = (item) => { const t = tsOf(item); return t != null && t > reads.since; };
+  const unread = (item) => isUnread(item, reads);
+  const newCount = feed.filter(unread).length;
   const firstOld = feed.findIndex((it) => !isNew(it));
 
   /* ── How each row entered ─────────────────────────────────────────────────
@@ -128,6 +133,7 @@ export default function LiveFeed({ open, onClose, unreadSince = Date.now() }) {
   };
 
   const activate = (item) => {
+    markRead(item);
     const followUp = feedItemFollowUp(item);
     if (typeof followUp === 'string') openFollowUp(followUp);
     else if (item.vehicleId) focusVehicle?.(item.vehicleId);
@@ -151,7 +157,7 @@ export default function LiveFeed({ open, onClose, unreadSince = Date.now() }) {
         </div>
         <div className="live-feed__top-actions">
           {newCount > 0 && (
-            <button type="button" className="live-feed__mark-read" onClick={() => setReadAt(Date.now())}>
+            <button type="button" className="live-feed__mark-read" onClick={markAllRead}>
               Mark all read
             </button>
           )}
@@ -180,23 +186,25 @@ export default function LiveFeed({ open, onClose, unreadSince = Date.now() }) {
             ))}
 
           {feed.map((item, i) => {
-            const fresh = isNew(item);
+            const fresh = unread(item);
             const { icon, tone } = feedKind(item);
             const followUp = feedItemFollowUp(item);
-            const clickable = typeof followUp === 'string' || Boolean(item.vehicleId);
+            const link = typeof followUp === 'string' || Boolean(item.vehicleId);
+            // An unread line with nowhere to go still opens: to read it.
+            const clickable = link || fresh;
             const e = entry.get(item.id);
-            const heading = i === 0 && fresh
-              ? `New · ${newCount}`
+            const heading = i === 0 && isNew(item)
+              ? (newCount > 0 ? `New · ${newCount}` : 'New')
               : i === firstOld && firstOld > 0 ? 'Earlier today' : null;
             return (
               <div key={item.id ?? i} role="article" aria-label={`${item.plate ?? 'Fleet'}, ${feedClock(item)}`}>
-                {heading && <div className={`live-feed__group${fresh ? ' live-feed__group--new' : ''}`}>{heading}</div>}
+                {heading && <div className={`live-feed__group${i === 0 && isNew(item) ? ' live-feed__group--new' : ''}`}>{heading}</div>}
                 <div
                   className={[
                     'live-feed__item',
                     `live-feed__item--${tone}`,
                     fresh ? 'live-feed__item--unread' : '',
-                    clickable ? 'live-feed__item--link' : '',
+                    link ? 'live-feed__item--link' : '',
                     e?.kind === 'arrive' ? 'live-feed__item--enter-top' : '',
                     e?.kind === 'append' ? 'live-feed__item--enter-page' : '',
                   ].filter(Boolean).join(' ')}
