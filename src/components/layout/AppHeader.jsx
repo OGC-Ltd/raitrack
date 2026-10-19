@@ -37,7 +37,7 @@ import { isUnread, useFeedReads } from '../../lib/feedReads';
  *
  * The bell OPENS the feed, so its badge has to count what the feed holds.
  * Bounded twice over: pruneFeed caps the panel at MAX_FEED_ITEMS across a
- * 12-hour horizon, and bellBadgeLabel caps the glyph at "20".
+ * 12-hour horizon; the badge itself is a dot and shows no figure.
  *
  * It returns a COUNT and nothing else. There was an `alarming` flag beside it,
  * colouring the badge red only when a warning or a critical was among the
@@ -59,22 +59,6 @@ export function summariseUnread(feed, reads) {
   // replays it. isUnread reads it as read, the safe reading.
   for (const f of feed ?? []) if (isUnread(f, r)) unreadCount += 1;
   return { unreadCount };
-}
-
-/**
- * What the bell's badge says: the exact count up to 20, then "20+".
- *
- * The badge answers "is there news, and roughly how much" — past twenty the
- * operator is going to open the feed either way, and a number still climbing
- * in the corner of the header is noise, not information.
- *
- * The "+" is back (issue #2): a bare "20" over 150 unread lines read as a
- * wrong count. The ring keeps its size; a three-glyph label is set in smaller
- * type to fit inside it (AppHeader.css, `[data-len="3"]`).
- */
-export const BELL_CAP = 20;
-export function bellBadgeLabel(count) {
-  return count > BELL_CAP ? `${BELL_CAP}+` : String(count);
 }
 
 // Company logo, or its coloured letter when there's no logo on file.
@@ -235,7 +219,6 @@ export default function AppHeader() {
   // shown anywhere else (the sidebar dashes its counts).
   const limited = !can('map:read');
   const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, feedReads.reads);
-  const badge = bellBadgeLabel(unreadCount);
   // The bell swings once when the count goes up — news arrived — and not when
   // it falls (lines read) or on a re-render with the same count.
   const prevUnread = useRef(unreadCount);
@@ -245,8 +228,7 @@ export default function AppHeader() {
     prevUnread.current = unreadCount;
   }, [unreadCount]);
   const bellWords = unreadCount === 0 ? 'Notifications'
-    : unreadCount >= BELL_CAP ? `Notifications, ${BELL_CAP} or more new events`
-    : `Notifications, ${unreadCount} new event${unreadCount === 1 ? '' : 's'}`;
+    : `Notifications, ${unreadCount} unread event${unreadCount === 1 ? '' : 's'}`;
 
   // The live feed and the vehicle detail panel share the right edge — only one
   // may be open. Selecting a vehicle (map pin, search, feed row) closes the feed…
@@ -357,8 +339,10 @@ export default function AppHeader() {
             />
           </span>
           {unreadCount > 0 && (
-            // Keyed on the figure so it pops when the figure changes
-            <span key={`count-${badge}`} className="app-header__bell-count" data-len={badge.length} aria-hidden="true">{badge}</span>
+            // A dot, no figure (operator 2026-10-19): it says "something to
+            // read" and goes once everything is read. Keyed on the swing so it
+            // pops when news arrives.
+            <span key={`dot-${swing}`} className="app-header__bell-count" aria-hidden="true" />
           )}
         </button>
         )}
