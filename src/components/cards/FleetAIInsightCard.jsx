@@ -27,9 +27,10 @@
 // Insight" either way (operator: "the title should remain as it was").
 //
 // Computed per click (operator, same day): each pick asks the server for a
-// fresh brief, measured anew, and shows it at once; the model's wording is
-// asked for at the same time and lands a few seconds later, so the card reads
-// again every few seconds for a minute until it does.
+// fresh brief, measured anew. The server waits a few seconds for the model's
+// wording (about one at minimal reasoning, 2026-10-20) and usually answers
+// with it; when the model is slower the measured brief shows first and the
+// card reads again every 1.5 s for a minute until the wording lands.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./FleetAIInsightCard.css";
@@ -49,7 +50,7 @@ const RISK_ICON = { Low: "shield-check", Medium: "alert-triangle", High: "alert-
 const REFRESH_MS = 5 * 60_000;
 
 /* After a click, how often and how long to look for the model's wording. */
-const MODEL_LOOK_MS = 4_000;
+const MODEL_LOOK_MS = 1_500;
 const MODEL_WAIT_MS = 60_000;
 
 /* The head's mark. Sparkles only when the model wrote the brief; the
