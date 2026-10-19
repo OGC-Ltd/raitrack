@@ -22,7 +22,6 @@
   --ivw-event:   #dc2626;
   --ivw-stop:    #1d4ed8;
   --ivw-zone:    #6d28d9;
-  --ivw-zone-bg: #ede9fe;
   --ivw-skel:    #eef1f5;
   --ivw-origin:  #047857;
   --ivw-dest:    #b91c1c;
@@ -189,7 +188,6 @@
 .ivw__sw--pin { width: 11px; height: 11px; border: 1.5px solid var(--ivw-ink); border-radius: 2px; background: var(--ivw-surface); }
 .ivw__sw--route { width: 16px; height: 4px; border-radius: 2px; background: var(--ivw-route); }
 .ivw__sw--stop { width: 14px; height: 14px; border-radius: 3px; background: var(--ivw-stop); color: var(--ivw-surface); font-size: 9.5px; font-style: normal; font-weight: 700; }
-.ivw__sw--zone { width: 12px; height: 12px; border: 2px solid var(--ivw-zone); border-radius: 3px; background: var(--ivw-zone-bg); }
 .ivw__sw--origin, .ivw__sw--dest { width: 12px; height: 12px; border-radius: 3px; background: var(--ivw-origin); }
 .ivw__sw--dest { background: var(--ivw-dest); }
 .ivw__sw--planned { width: 16px; height: 0; border-top: 3px dashed var(--ivw-planned); opacity: 0.75; }

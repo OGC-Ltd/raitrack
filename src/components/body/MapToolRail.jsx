@@ -335,7 +335,7 @@ export default function MapToolRail({
               on={fuelAlerts.open} count={fuelAlerts.count} tone="alert" expanded={expanded} onClick={fuelAlerts.onOpen}
             />
           )}
-          {/* Arrivals at a hub: reverse isochrones and live drive times in. */}
+          {/* Arrivals at a hub: every unit's live drive time in. */}
           {arrivals && (
             <RailButton
               icon="ti-target-arrow" label="Arrivals" tour="map-arrivals"

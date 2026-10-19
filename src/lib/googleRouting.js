@@ -1,6 +1,7 @@
-// Route ahead and reach, from the server's Google Routes / Isochrones proxy
-// (fleet-server modules/route-ahead). Both are computed from the unit's own
-// Wialon fix on the server, so nothing here sends a position.
+// Route ahead, from the server's Google Routes proxy (fleet-server
+// modules/route-ahead). Computed from the unit's own Wialon fix on the
+// server, so nothing here sends a position. (Reach rings, from Google
+// Isochrones, were removed on request, 2026-10-19.)
 //
 // Two switches, like every other map provider here: GOOGLE_ROUTING_ENABLED
 // below turns the client side off outright, and the server's
@@ -12,11 +13,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../services/api";
 import { useFleetLiveShared } from "../context/FleetLiveContext";
 
-/** Client kill switch. False hides route ahead and reach whatever the server says. */
+/** Client kill switch. False hides route ahead whatever the server says. */
 export const GOOGLE_ROUTING_ENABLED = true;
-
-/** The reach rings, smallest first. Google caps a drive at 60 minutes. */
-export const REACH_MINUTES = [15, 30, 60];
 
 /** Is the server's Google routing on for this organisation? False while unknown. */
 export function useGoogleRoutingOn() {
@@ -65,27 +63,4 @@ export function toTrafficRoute(d) {
     source: "Google",
     fixAt: d.origin?.fixAt ?? null,
   };
-}
-
-/** The 15/30/60-minute reach polygons from where the unit is. */
-export async function fetchReach(orgId, dbVehicleId, { signal } = {}) {
-  const res = await apiFetch(
-    `/api/v1/organisations/${orgId}/vehicles/${dbVehicleId}/reach?minutes=${REACH_MINUTES.join(",")}`,
-    { signal },
-  );
-  const d = res.data;
-  if (!d?.enabled) throw new Error("Reach is switched off");
-  return { origin: d.origin, rings: d.rings ?? [], fetchedAt: Date.now() };
-}
-
-/**
- * GeoJSON Polygon / MultiPolygon → one entry per polygon, each a list of rings
- * of {lat,lng} — the `paths` lib/mapEngine Polygon takes (outer ring, holes).
- */
-export function polygonsOf(geometry) {
-  if (!geometry) return [];
-  const ring = (r) => r.map(([lng, lat]) => ({ lat, lng }));
-  if (geometry.type === "Polygon") return [geometry.coordinates.map(ring)];
-  if (geometry.type === "MultiPolygon") return geometry.coordinates.map((poly) => poly.map(ring));
-  return [];
 }

@@ -2,15 +2,12 @@
  * A fuel alert's investigation, drawn on the live map while its incident
  * window is open (operator, 2026-10-15: "it should run automatically on the
  * map, hence no need for extra modals"), in the style the operator showed
- * (isochrone with a "⏱ XX minutes" chip; route with P stops and their
- * came / left / duration; a playback bar with time, speed and mileage).
+ * (route with P stops and their came / left / duration; a playback bar with
+ * time, speed and mileage).
  * From /fuel/thefts/:id/investigation:
  *
  *   the point   where the unit stood as the fuel began to fall: a pin in a
  *               white square
- *   zones       where a vehicle could drive from the point in 5 / 10 / 15
- *               minutes, each outlined with its minutes on a chip — search
- *               areas, not evidence
  *   the route   the RECORDED fixes an hour either side; silences dotted, never
  *               drawn as a road; A at the start, B at the end
  *   stops       every halt of 3 min or more on that route, a P marker whose
@@ -24,8 +21,11 @@
  * The road-matched copy of the track is drawn only when the window's "Match
  * to roads" is on, and then the recorded fixes stay beneath it, faint.
  *
- * Opening an alert frames the route, the point and the 10-minute zone once;
- * after that the camera is the operator's. Closing the window clears it all.
+ * The 5/10/15-minute drive zones (Google Isochrones) were removed on request,
+ * 2026-10-19.
+ *
+ * Opening an alert frames the route and the point once; after that the
+ * camera is the operator's. Closing the window clears it all.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -40,8 +40,7 @@ const HHMMSS = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-di
 const STAMP = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: TZ });
 const WHEN = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 
-/* Fixed colours: drawn on map tiles, which do not follow the theme. One hue
-   for the zones, as in the operator's example, deepest for the nearest. */
+/* Fixed colours: drawn on map tiles, which do not follow the theme. */
 export const INVESTIGATION_COLOR = {
   track: "#2563eb",
   gap: "#94a3b8",
@@ -52,7 +51,6 @@ export const INVESTIGATION_COLOR = {
   origin: "#047857",
   dest: "#b91c1c",
   planned: "#0f172a",
-  zone: { 5: "#6d28d9", 10: "#8b5cf6", 15: "#a78bfa" },
 };
 const C = INVESTIGATION_COLOR;
 
@@ -99,38 +97,6 @@ const ORIGIN_ICON = svgIcon(
 const DEST_ICON = svgIcon(
   `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><rect x="1" y="1" width="28" height="28" rx="5" fill="${C.dest}" stroke="#fff" stroke-width="2"/>` +
   '<path d="M10 23V7.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><path d="M10.5 8h10l-2.6 3.6 2.6 3.6h-10Z" fill="#fff"/></svg>', 30, 30, 15, 15);
-/** "⏱ 5 min" on the zone's edge, as in the operator's example. */
-const zoneChip = (minutes, color) => {
-  const text = `${minutes} min`;
-  const w = 30 + text.length * 7.6;
-  return svgIcon(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="26" viewBox="0 0 ${w} 26">` +
-    `<rect x="1" y="1" width="${w - 2}" height="24" rx="5" fill="#f5f3ff" stroke="${color}" stroke-width="1.6"/>` +
-    `<circle cx="13" cy="13" r="5.6" fill="none" stroke="#1e1b4b" stroke-width="1.6"/><path d="M13 10v3.2l2 1.4" fill="none" stroke="#1e1b4b" stroke-width="1.6" stroke-linecap="round"/>` +
-    `<text x="24" y="17.4" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" fill="#1e1b4b">${text}</text></svg>`,
-    w, 26, 0, 13);
-};
-
-/**
- * Where a zone's chip sits: its outermost point in a direction of its own —
- * east for 5 min, north-east for 10, north for 15 — so three chips never land
- * on the same corner (they did, when all three took the north-east).
- */
-const CHIP_DIR = { 5: [0, 1], 10: [1, 1], 15: [1, 0] };
-function chipSpot(geometry, minutes) {
-  const [wy, wx] = CHIP_DIR[minutes] ?? [1, 1];
-  let best = null;
-  let score = -Infinity;
-  const walk = (c) => {
-    if (typeof c[0] === "number") {
-      const s = wy * c[1] + wx * c[0];
-      if (s > score) { score = s; best = { lat: c[1], lng: c[0] }; }
-    } else c.forEach(walk);
-  };
-  if (geometry?.coordinates) walk(geometry.coordinates);
-  return best;
-}
-
 /** The route's shape: stretches, silences, stops, and mileage at each fix. */
 function shape(track) {
   const runs = [];
@@ -271,16 +237,6 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
     const { runs, holes, stops } = shaped;
     const track = inv.track;
 
-    // Zones, largest first so the nearest sits on top, each with its chip.
-    for (const z of [...inv.zones.items].sort((a, b) => b.minutes - a.minutes)) {
-      const c = C.zone[z.minutes] ?? "#7c3aed";
-      const d = add(new maps.Data({ map }));
-      d.addGeoJson({ type: "Feature", properties: {}, geometry: z.geometry });
-      d.setStyle({ fillColor: c, fillOpacity: 0.12, strokeColor: c, strokeOpacity: 1, strokeWeight: 2.5, clickable: false });
-      const at = chipSpot(z.geometry, z.minutes);
-      if (at) add(new maps.Marker({ map, position: at, icon: zoneChip(z.minutes, c), zIndex: 55, clickable: false, title: `Reachable by road within ${z.minutes} minutes` }));
-    }
-
     // A trip's planned road (Google, yard to destination), dashed, under all.
     const trip = inv.trip ?? null;
     if (trip?.planned?.path?.length > 1) {
@@ -351,12 +307,6 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
       add(new maps.Marker({ map, position: ll(track[0]), icon: START_ICON, zIndex: 59, title: `Start of the window, ${HHMM.format(track[0].t)}` }));
       add(new maps.Marker({ map, position: ll(track[track.length - 1]), icon: END_ICON, zIndex: 59, title: `End of the window, ${HHMM.format(track[track.length - 1].t)}` }));
     }
-    if (inv.zones.from) {
-      add(new maps.Marker({
-        map, position: ll(inv.zones.from), zIndex: 61, title: "Drive zones measured from here (the point is off-road)",
-        icon: { path: maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#ffffff", fillOpacity: 1, strokeColor: C.point, strokeWeight: 2.5 },
-      }));
-    }
     if (inv.point) add(new maps.Marker({
       map, position: ll(inv.point), icon: PIN_SQUARE, zIndex: 62,
       title: inv.kind === "halt" ? `Halted here since ${HHMM.format(Date.parse(inv.beganAt))}`
@@ -364,24 +314,18 @@ export function useIncidentInvestigation({ map, maps, ready, orgId, subject }) {
         : `Fuel began to fall here, ${HHMM.format(Date.parse(inv.beganAt))}`,
     }));
 
-    // Frame once per alert: the route, the point and the 10-minute zone; a
-    // trip, from its yard to its destination by the planned road.
+    // Frame once per alert: the route and the point; a trip, from its yard
+    // to its destination by the planned road.
     if (framed.current !== inv.theftId) {
       framed.current = inv.theftId;
       const b = new maps.LatLngBounds();
       let any = false;
       for (const p of track) { b.extend(ll(p)); any = true; }
       if (inv.point) { b.extend(ll(inv.point)); any = true; }
-      if (inv.zones.from) b.extend(ll(inv.zones.from));
-      const walk = (c) => { if (typeof c[0] === "number") { b.extend({ lat: c[1], lng: c[0] }); any = true; } else c.forEach(walk); };
       if (trip) {
         if (trip.origin) { b.extend(ll(trip.origin)); any = true; }
         if (trip.destination) { b.extend(ll(trip.destination)); any = true; }
         for (const [lat, lng] of trip.planned?.path ?? []) b.extend({ lat, lng });
-      } else {
-        const zone = inv.zones.items.find((z) => z.minutes === 10)
-          ?? [...inv.zones.items].sort((a, c) => c.minutes - a.minutes)[0];
-        if (zone?.geometry?.coordinates) walk(zone.geometry.coordinates);
       }
       if (any) {
         // Measured first: a map whose box changed since it last looked fits
@@ -446,7 +390,7 @@ const pct = (t, t0, t1) => (t1 > t0 ? Math.min(100, Math.max(0, ((t - t0) / (t1 
  *   readout    the time at the cursor, its speed and the distance so far
  *   transport  play and a scrubber whose rail marks the fall (or the halt)
  *              in red and every stop in blue
- *   legend     what is drawn on the map, and why the zones are missing
+ *   legend     what is drawn on the map
  */
 export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, error, playback, roads, onClose }) {
   const open = Boolean(loading || error || inv);
@@ -474,7 +418,6 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
     : rel < 0 ? `${span(-rel)} before` : `${span(rel)} after`;
   const snapNote = roads?.on && inv && !roads.loading && inv.snapped?.reason
     && !/^(Asked for separately|The unit did not move)/.test(inv.snapped.reason) ? inv.snapped.reason : null;
-  const zones = inv ? inv.zones.items.map((z) => z.minutes).sort((a, b) => a - b) : [];
   const still = (shaped?.travelledM ?? 0) < 200;
   const stop = (e) => e.stopPropagation();
 
@@ -512,14 +455,14 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
       {!min && (
         <div className="ivw__body">
           {loading && (
-            <div className="ivw__skel" aria-busy="true" aria-label="Loading the route and drive zones">
+            <div className="ivw__skel" aria-busy="true" aria-label="Loading the route">
               <span /><span /><span />
             </div>
           )}
           {error && (
             <p className="ivw__msg ivw__msg--error" role="alert">
               <i className="ti ti-alert-circle" aria-hidden="true" />
-              The route and drive zones could not load: {error.message}
+              The route could not load: {error.message}
             </p>
           )}
           {inv && (
@@ -571,14 +514,7 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
                 {inv.point && <li><i className="ivw__sw ivw__sw--pin" aria-hidden="true" />{trip ? (trip.returnedAt ? "Back" : "Now") : kindKey === "halt" ? "Halt" : "Fuel fell"}</li>}
                 <li><i className="ivw__sw ivw__sw--route" aria-hidden="true" />{tr.length === 0 ? "No route" : still ? "Stood still" : `Route ${metres(shaped.travelledM)}`}</li>
                 {shaped?.stops.length > 0 && <li><i className="ivw__sw ivw__sw--stop" aria-hidden="true">P</i>{shaped.stops.length} {shaped.stops.length === 1 ? "stop" : "stops"}</li>}
-                {zones.length > 0 && <li><i className="ivw__sw ivw__sw--zone" aria-hidden="true" />{zones.join(" / ")} min drive</li>}
               </ul>
-              {zones.length > 0 && inv.zones.from && (
-                <p className="ivw__note">Zones start from a road {metres(inv.zones.from.offsetM)} away; the point is off-road.</p>
-              )}
-              {zones.length === 0 && inv.zones.reason && (
-                <p className="ivw__note"><i className="ti ti-info-circle" aria-hidden="true" />No drive zones. {inv.zones.reason}.</p>
-              )}
               {roads?.available && tr.length > 1 && !still && (
                 <div className="ivw__opt">
                   <button type="button" className="ivw__switch" role="switch" aria-checked={roads.on}
