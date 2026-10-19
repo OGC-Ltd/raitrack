@@ -22,25 +22,27 @@
 //
 // One unit at a time, 2026-10-19 (operator: "the fleet ai insight should be
 // for individual car, that i click on the map"). With a unit picked the card
-// is that unit's brief (fleet-server vehicles/:id/brief, measured facts the
-// model only phrases); with none it is the fleet's. The title stays "Fleet AI
+// speaks for that unit; with none it is the fleet's. The title stays "Fleet AI
 // Insight" either way (operator: "the title should remain as it was").
 //
-// Computed per click (operator, same day): each pick asks the server for a
-// fresh brief, measured anew. The server waits a few seconds for the model's
-// wording (about one at minimal reasoning, 2026-10-20) and usually answers
-// with it; when the model is slower the measured brief shows first and the
-// card reads again every 1.5 s for a minute until the wording lands.
+// The unit's insight, 2026-10-20 (operator: "make it smart by giving it memory
+// and access to data … it should run on the background and when a unit is
+// clicked it should be instantaneous"). The server writes each unit's insight
+// in the background from fourteen days of its records and its own earlier
+// insights (fleet-server vehicles/vehicle-insight); a pick reads the stored
+// one at once: the headline, up to three findings and one action. The day's
+// sentence (vehicles/:id/brief, fresh per pick) follows underneath as "Today".
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./FleetAIInsightCard.css";
 import { getFleetInsight } from "../../api/fleetInsight";
-import { getVehicleBrief } from "../../api/vehicleBrief";
+import { getVehicleBrief, getVehicleInsight } from "../../api/vehicleBrief";
 import { useApiData } from "../../hooks/useApiData";
 import LoadError from "../shared/LoadError";
 
 // A different shape per level, so the badge reads without its colour.
 const RISK_ICON = { Low: "shield-check", Medium: "alert-triangle", High: "alert-octagon" };
+const riskWord = (r) => (r ? r.charAt(0).toUpperCase() + r.slice(1).toLowerCase() : null);
 
 // The server regenerates each org's AI brief in the background and
 // always answers from memory, so refreshing here is instant. Poll every
@@ -49,9 +51,12 @@ const RISK_ICON = { Low: "shield-check", Medium: "alert-triangle", High: "alert-
 // means every render paints from the last-known brief with no flicker.
 const REFRESH_MS = 5 * 60_000;
 
-/* After a click, how often and how long to look for the model's wording. */
-const MODEL_LOOK_MS = 1_500;
-const MODEL_WAIT_MS = 60_000;
+/* A unit the sweep had not reached is written from facts on the click and
+   its AI version a few seconds later: look again for half a minute. */
+const MODEL_LOOK_MS = 3_000;
+const MODEL_WAIT_MS = 30_000;
+
+const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
 /* The head's mark. Sparkles only when the model wrote the brief; the
    fixed-sentence summary gets a plain info mark, so the AI sign is never
@@ -60,55 +65,48 @@ function Mark({ ai }) {
   return <i className={`ti ti-${ai ? "sparkles" : "info-circle"} fai-mark`} aria-hidden="true" />;
 }
 
-/** `unit`: the picked unit ({ orgId, vehicleId, plate }), or null for the fleet. */
-export default function FleetAIInsightCard({ companyId, unit = null, className = "" }) {
-  const unitId = unit?.orgId && unit?.vehicleId ? unit.vehicleId : null;
-  // One per click: a new pick is a new question, never last pick's answer.
-  const pickedAt = useMemo(() => Date.now(), [unitId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const askedFresh = useRef(null);
-  const { data: insight, loading, error, retry } = useApiData(
-    () => {
-      if (!unitId) return getFleetInsight({ companyId });
-      const fresh = askedFresh.current !== pickedAt;
-      askedFresh.current = pickedAt;
-      return getVehicleBrief({ orgId: unit.orgId, vehicleId: unitId, fresh });
-    },
-    [companyId, unitId, pickedAt],
-    { cacheKey: unitId ? null : `ft-ai-insight:${companyId}` }
+function Head({ ai, risk, title }) {
+  const r = RISK_ICON[risk] ? risk : null;
+  return (
+    <header className="fai-head">
+      <Mark ai={ai} />
+      {/* Only the server's brief is the model's. The local fallback is the
+          same counts in fixed sentences, and is titled as what it is. */}
+      <h3 className="fai-title">{title}</h3>
+      {r && (
+        <span className="fai-risk" data-risk={r.toLowerCase()} title={`Risk: ${r}`}>
+          <i className={`ti ti-${RISK_ICON[r]}`} aria-hidden="true" />
+          {r}
+        </span>
+      )}
+    </header>
   );
+}
 
-  // Until the model's wording lands, read again every few seconds.
-  const waitingOnModel = unitId != null && insight != null && insight.source !== "model";
-  // An interval, not a timeout per answer: an unchanged answer comes back as
-  // the same object, so nothing would re-arm a timeout.
-  useEffect(() => {
-    if (!waitingOnModel) return undefined;
-    const t = setInterval(() => {
-      if (Date.now() - pickedAt > MODEL_WAIT_MS) clearInterval(t);
-      else retry();
-    }, MODEL_LOOK_MS);
-    return () => clearInterval(t);
-  }, [waitingOnModel, pickedAt, retry]);
+function Skeleton({ cardClass }) {
+  return (
+    <section className={cardClass} aria-busy="true" aria-label="Fleet AI insight, loading">
+      <Head ai title="Fleet AI Insight" />
+      <div className="fai-skeleton" aria-hidden="true">
+        <span /><span /><span />
+      </div>
+    </section>
+  );
+}
 
-  useEffect(() => {
-    const t = setInterval(retry, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [retry]);
-
-  const msg = insight?.msg ?? "";
-  const bodyRef = useRef(null);
+/** Folded to a few lines with Show more, measured rather than guessed. */
+function useFold(deps) {
+  const ref = useRef(null);
   const [expanded, setExpanded] = useState(false);
   const [clamped, setClamped] = useState(false);
-
   // A new brief starts folded again.
-  useEffect(() => { setExpanded(false); }, [msg]);
-
+  useEffect(() => { setExpanded(false); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   // "Show more" only when the fold actually hides something. Measured folded,
-  // when the text changes (hourly) and when the window does (the sidebar's
-  // width follows it). No ResizeObserver, as elsewhere in this app.
+  // when the text changes and when the window does (the sidebar's width
+  // follows it). No ResizeObserver, as elsewhere in this app.
   useLayoutEffect(() => {
     const measure = () => {
-      const el = bodyRef.current;
+      const el = ref.current;
       if (!el || el.classList.contains("fai-body--open")) return;
       const next = el.scrollHeight > el.clientHeight + 1;
       setClamped((prev) => (prev === next ? prev : next));
@@ -116,9 +114,55 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [msg, expanded, loading]);
+  }, [...deps, expanded]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { ref, expanded, setExpanded, clamped };
+}
 
+function Foot({ meta, fold, bodyId }) {
+  return (
+    <footer className="fai-foot">
+      <span className="fai-meta">{meta}</span>
+      {(fold.clamped || fold.expanded) && (
+        <button
+          type="button"
+          className="fai-more"
+          aria-expanded={fold.expanded}
+          aria-controls={bodyId}
+          onClick={() => fold.setExpanded((v) => !v)}
+        >
+          {fold.expanded ? "Show less" : "Show more"}
+          <i className={`ti ti-chevron-${fold.expanded ? "up" : "down"}`} aria-hidden="true" />
+        </button>
+      )}
+    </footer>
+  );
+}
+
+/** `unit`: the picked unit ({ orgId, vehicleId, plate }), or null for the fleet. */
+export default function FleetAIInsightCard({ companyId, unit = null, className = "" }) {
   const cardClass = `fleet-ai-card${className ? ` ${className}` : ""}`;
+  return unit?.orgId && unit?.vehicleId
+    ? <UnitInsight key={unit.vehicleId} unit={unit} cardClass={cardClass} />
+    : <FleetBrief companyId={companyId} cardClass={cardClass} />;
+}
+
+/* ── the fleet's brief ───────────────────────────────────────────────────── */
+
+function FleetBrief({ companyId, cardClass }) {
+  const { data: insight, loading, error, retry } = useApiData(
+    () => getFleetInsight({ companyId }),
+    [companyId],
+    { cacheKey: `ft-ai-insight:${companyId}` }
+  );
+
+  useEffect(() => {
+    const t = setInterval(retry, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [retry]);
+
+  const msg = insight?.msg ?? "";
+  const fold = useFold([msg, loading]);
+  const bodyId = `fai-body-${companyId ?? "org"}`;
 
   if (error) {
     return (
@@ -128,22 +172,8 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
     );
   }
   if (!loading && !insight) return null;
+  if (loading || !insight) return <Skeleton cardClass={cardClass} />;
 
-  if (loading || !insight) {
-    return (
-      <section className={cardClass} aria-busy="true" aria-label="Fleet AI insight, loading">
-        <header className="fai-head">
-          <Mark ai />
-          <h3 className="fai-title">Fleet AI Insight</h3>
-        </header>
-        <div className="fai-skeleton" aria-hidden="true">
-          <span /><span /><span />
-        </div>
-      </section>
-    );
-  }
-
-  const risk = RISK_ICON[insight.risk] ? insight.risk : null;
   // Not the model's: the browser's own summary (`local`), or the server's
   // facts-only brief, which it sends whenever the model failed or its reply
   // was rejected (`source: "facts"`).
@@ -152,52 +182,121 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
 
   return (
     <section className={cardClass} data-local={notAi ? "" : undefined} aria-label={title}>
-      <header className="fai-head">
-        <Mark ai={!notAi} />
-        {/* Only the server's brief is the model's. The local fallback is the
-            same counts in fixed sentences, and is titled as what it is. */}
-        <h3 className="fai-title">{title}</h3>
-        {risk && (
-          <span className="fai-risk" data-risk={risk.toLowerCase()} title={`Fleet risk: ${risk}`}>
-            <i className={`ti ti-${RISK_ICON[risk]}`} aria-hidden="true" />
-            {risk}
-          </span>
-        )}
-      </header>
+      <Head ai={!notAi} risk={riskWord(insight.risk)} title={title} />
 
       {/* The brief alone. The card used to open with an "N/M active:" ratio
           (engines on over the fleet that reports), but the first sentence of
           the brief already says how the fleet is running — online, in transit,
           idling, parked — and those are the counts an operator acts on. The
           ratio only invited the question of which of the two numbers to trust. */}
-      <p
-        ref={bodyRef}
-        id={`fai-body-${unitId ?? companyId ?? "org"}`}
-        className={`fai-body${expanded ? " fai-body--open" : ""}`}
-      >
+      <p ref={fold.ref} id={bodyId} className={`fai-body${fold.expanded ? " fai-body--open" : ""}`}>
         {msg}
       </p>
 
-      <footer className="fai-foot">
-        <span className="fai-meta">
-          {insight.generatedAt && <i className="ti ti-clock" aria-hidden="true" />}
-          {insight.generatedAt
-            ? `${notAi ? "AI unavailable · " : ""}Updated ${new Date(insight.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`
-            : notAi ? "AI unavailable" : null}
-        </span>
-        {(clamped || expanded) && (
-          <button
-            type="button"
-            className="fai-more"
-            aria-expanded={expanded}
-            aria-controls={`fai-body-${unitId ?? companyId ?? "org"}`}
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? "Show less" : "Show more"}
-            <i className={`ti ti-chevron-${expanded ? "up" : "down"}`} aria-hidden="true" />
-          </button>
+      <Foot
+        fold={fold}
+        bodyId={bodyId}
+        meta={insight.generatedAt
+          ? <><i className="ti ti-clock" aria-hidden="true" />{`${notAi ? "AI unavailable · " : ""}Updated ${clock(insight.generatedAt)}`}</>
+          : notAi ? "AI unavailable" : null}
+      />
+    </section>
+  );
+}
+
+/* ── the picked unit's insight ───────────────────────────────────────────── */
+
+function UnitInsight({ unit, cardClass }) {
+  const { orgId, vehicleId } = unit;
+  const pickedAt = useMemo(() => Date.now(), []);
+
+  // The stored insight: instant, no model on the click.
+  const { data: insight, loading, error, retry } = useApiData(
+    () => getVehicleInsight({ orgId, vehicleId }),
+    [orgId, vehicleId],
+  );
+  // The day's sentence, measured fresh for this pick; it may take a second.
+  const askedFresh = useRef(false);
+  const { data: today } = useApiData(
+    () => {
+      const fresh = !askedFresh.current;
+      askedFresh.current = true;
+      return getVehicleBrief({ orgId, vehicleId, fresh });
+    },
+    [orgId, vehicleId],
+  );
+
+  // A unit the sweep had not reached: its AI version lands a few seconds
+  // after the click. An interval, not a timeout per answer: an unchanged
+  // answer comes back as the same object, so nothing would re-arm a timeout.
+  const waiting = insight != null && insight.source !== "model" && insight.findings?.length > 0;
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const t = setInterval(() => {
+      if (Date.now() - pickedAt > MODEL_WAIT_MS) clearInterval(t);
+      else retry();
+    }, MODEL_LOOK_MS);
+    return () => clearInterval(t);
+  }, [waiting, pickedAt, retry]);
+
+  useEffect(() => {
+    const t = setInterval(retry, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [retry]);
+
+  const fold = useFold([insight?.headline, today?.msg, loading]);
+  const bodyId = `fai-body-${vehicleId}`;
+
+  if (error) {
+    return (
+      <div className={cardClass}>
+        <LoadError label="Fleet AI insight" onRetry={retry} />
+      </div>
+    );
+  }
+  if (loading && !insight) return <Skeleton cardClass={cardClass} />;
+  // No insight and nothing to write one from: the day's sentence alone.
+  if (!insight && !today?.msg) return null;
+
+  const ai = insight?.source === "model";
+  const title = ai || !insight ? "Fleet AI Insight" : "Fleet summary";
+
+  return (
+    <section className={cardClass} data-local={ai ? undefined : ""} aria-label={title}>
+      <Head ai={ai} risk={riskWord(insight?.risk)} title={title} />
+
+      <div
+        ref={fold.ref}
+        id={bodyId}
+        className={`fai-body fai-unit${fold.expanded ? " fai-body--open" : ""}`}
+        data-clamped={fold.clamped && !fold.expanded ? "" : undefined}
+      >
+        {insight && <p className="fai-headline">{insight.headline}</p>}
+        {/* The action straight under the headline: it is what the operator
+            came for, and the fold must never hide it. */}
+        {insight?.action && (
+          <p className="fai-action">
+            <i className="ti ti-arrow-right" aria-hidden="true" />
+            <span>{insight.action}</span>
+          </p>
         )}
-      </footer>
+        {insight?.findings?.length > 0 && (
+          <ul className="fai-findings">
+            {insight.findings.map((f) => <li key={f.kind}>{f.text}</li>)}
+          </ul>
+        )}
+        {today?.msg && (
+          <p className="fai-today"><span className="fai-today-label">Today</span>{today.msg}</p>
+        )}
+      </div>
+
+      <Foot
+        fold={fold}
+        bodyId={bodyId}
+        meta={insight?.generatedAt
+          ? <><i className="ti ti-clock" aria-hidden="true" />{`${ai ? "" : "AI unavailable · "}Updated ${clock(insight.generatedAt)}`}</>
+          : null}
+      />
     </section>
   );
 }

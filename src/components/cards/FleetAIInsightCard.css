@@ -192,3 +192,51 @@
   .fai-skeleton span { animation: none; }
   .fai-more { transition: none; }
 }
+
+/* ── A picked unit's insight (2026-10-20) ───────────────────────────────── */
+/* Headline, findings, action and the day's sentence: block children, so the
+   fold is a height rather than a line clamp. About six lines folded. */
+.fai-unit {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+  max-height: 9.2em;
+}
+.fai-unit.fai-body--open { max-height: 40vh; }
+/* Folded with more below: the last line fades rather than being cut through. */
+.fai-unit[data-clamped] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
+}
+.fai-unit p { margin: 0; }
+.fai-headline {
+  font-weight: 600;
+  color: var(--fai-ink);
+}
+.fai-findings {
+  margin: 0;
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fai-findings li::marker { color: var(--fai-muted); }
+.fai-action {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  font-weight: 600;
+  color: var(--fai-link);
+}
+.fai-action .ti { flex-shrink: 0; font-size: 12px; position: relative; top: 1px; }
+.fai-today { color: var(--fai-muted); }
+.fai-today-label {
+  margin-right: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--fai-muted);
+}
