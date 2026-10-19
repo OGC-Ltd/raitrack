@@ -19,10 +19,16 @@
 // sparkles that mark an AI brief (and only an AI brief), a shape per risk
 // level so the badge reads without its colour, a clock on the time, and the
 // chevron that says which way Show more goes. Tabler, like the rest of the app.
+//
+// One unit at a time, 2026-10-19 (operator: "the fleet ai insight should be
+// for individual car, that i click on the map"). With a unit picked the card
+// is that unit's brief (fleet-server vehicles/:id/brief, measured facts the
+// model only phrases), titled with its plate; with none it is the fleet's.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./FleetAIInsightCard.css";
 import { getFleetInsight } from "../../api/fleetInsight";
+import { getVehicleBrief } from "../../api/vehicleBrief";
 import { useApiData } from "../../hooks/useApiData";
 import LoadError from "../shared/LoadError";
 
@@ -43,12 +49,15 @@ function Mark({ ai }) {
   return <i className={`ti ti-${ai ? "sparkles" : "info-circle"} fai-mark`} aria-hidden="true" />;
 }
 
-export default function FleetAIInsightCard({ companyId, className = "" }) {
+/** `unit`: the picked unit ({ orgId, vehicleId, plate }), or null for the fleet. */
+export default function FleetAIInsightCard({ companyId, unit = null, className = "" }) {
+  const unitId = unit?.orgId && unit?.vehicleId ? unit.vehicleId : null;
   const { data: insight, loading, error, retry } = useApiData(
-    () => getFleetInsight({ companyId }),
-    [companyId],
-    { cacheKey: `ft-ai-insight:${companyId}` }
+    () => (unitId ? getVehicleBrief({ orgId: unit.orgId, vehicleId: unitId }) : getFleetInsight({ companyId })),
+    [companyId, unitId],
+    { cacheKey: unitId ? `ft-ai-brief:${unitId}` : `ft-ai-insight:${companyId}` }
   );
+  const name = unitId ? unit.plate ?? "Unit" : "Fleet";
 
   useEffect(() => {
     const t = setInterval(retry, REFRESH_MS);
@@ -83,7 +92,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
   if (error) {
     return (
       <div className={cardClass}>
-        <LoadError label="Fleet AI insight" onRetry={retry} />
+        <LoadError label={`${name} AI insight`} onRetry={retry} />
       </div>
     );
   }
@@ -91,10 +100,10 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
 
   if (loading || !insight) {
     return (
-      <section className={cardClass} aria-busy="true" aria-label="Fleet AI insight, loading">
+      <section className={cardClass} aria-busy="true" aria-label={`${name} AI insight, loading`}>
         <header className="fai-head">
           <Mark ai />
-          <h3 className="fai-title">Fleet AI Insight</h3>
+          <h3 className="fai-title">{name} AI Insight</h3>
         </header>
         <div className="fai-skeleton" aria-hidden="true">
           <span /><span /><span />
@@ -108,7 +117,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
   // facts-only brief, which it sends whenever the model failed or its reply
   // was rejected (`source: "facts"`).
   const notAi = insight.local || insight.source === "facts";
-  const title = notAi ? "Fleet summary" : "Fleet AI Insight";
+  const title = notAi ? `${name} summary` : `${name} AI Insight`;
 
   return (
     <section className={cardClass} data-local={notAi ? "" : undefined} aria-label={title}>
@@ -118,7 +127,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
             same counts in fixed sentences, and is titled as what it is. */}
         <h3 className="fai-title">{title}</h3>
         {risk && (
-          <span className="fai-risk" data-risk={risk.toLowerCase()} title={`Fleet risk: ${risk}`}>
+          <span className="fai-risk" data-risk={risk.toLowerCase()} title={`${name} risk: ${risk}`}>
             <i className={`ti ti-${RISK_ICON[risk]}`} aria-hidden="true" />
             {risk}
           </span>
@@ -132,7 +141,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
           ratio only invited the question of which of the two numbers to trust. */}
       <p
         ref={bodyRef}
-        id={`fai-body-${companyId ?? "org"}`}
+        id={`fai-body-${unitId ?? companyId ?? "org"}`}
         className={`fai-body${expanded ? " fai-body--open" : ""}`}
       >
         {msg}
@@ -150,7 +159,7 @@ export default function FleetAIInsightCard({ companyId, className = "" }) {
             type="button"
             className="fai-more"
             aria-expanded={expanded}
-            aria-controls={`fai-body-${companyId ?? "org"}`}
+            aria-controls={`fai-body-${unitId ?? companyId ?? "org"}`}
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? "Show less" : "Show more"}
