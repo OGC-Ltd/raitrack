@@ -92,8 +92,6 @@ const ROUTE_TIMING_ENABLED = false;
 import { useTrafficRoute, routeTarget, positionFresh } from "../../hooks/useTrafficRoute";
 import { useGoogleRoutingOn } from "../../lib/googleRouting";
 
-/** Fleets whose picked unit draws its trip from its yard (IncidentInvestigation). */
-const TRIP_COMPANIES = new Set(["sukari", "westsugar", "kabras", "menengai", "nzoia"]);
 import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
@@ -2758,37 +2756,7 @@ export default function FleetMap() {
     ?? (selectedVehicleId ? vehicles.find(v => v.id === selectedVehicleId) ?? null : null);
   const pinnedTrip   = routedVehicle ? liveTrip(routedVehicle.trip, routedVehicle.lat, routedVehicle.lng) : null;
 
-  /* The picked unit's trip from its yard, drawn on its own (operator,
-   * 2026-10-15: Sukari's units start at Sukari Industries, and those on a
-   * FactorySuite dispatch have a destination): the yard, the destination and
-   * the planned road, its route since it left, stops and drive zones
-   * (IncidentInvestigation). Every unit of the fleets that run from a yard
-   * of their own (Sukari; West Kenya, Kabras, Menengai and Nzoia from 2026-10-15,
-   * their yards being their own factory and yard geofences), and any unit on
-   * a dispatch elsewhere. A fuel alert or a halt being looked at keeps the
-   * map; the × puts this one away until another unit is picked. */
-  const tripVehicleId = routedVehicle && (TRIP_COMPANIES.has(activeCompanyId) || routedVehicle.trip)
-    ? routedVehicle.vehicleId ?? null
-    : null;
-  const tripDismissedRef = useRef(null);
-  useEffect(() => {
-    if (!tripVehicleId) {
-      tripDismissedRef.current = null;
-      setInvestigateSubject((s) => (s?.kind === "trip" ? null : s));
-      return;
-    }
-    if (tripDismissedRef.current === tripVehicleId) return;
-    tripDismissedRef.current = null;
-    setInvestigateSubject((s) => (s && s.kind !== "trip") || s?.vehicleId === tripVehicleId
-      ? s
-      : { kind: "trip", vehicleId: tripVehicleId });
-  }, [tripVehicleId]);
-  const closeInvestigation = useCallback(() => {
-    setInvestigateSubject((s) => {
-      if (s?.kind === "trip") tripDismissedRef.current = s.vehicleId;
-      return null;
-    });
-  }, []);
+  const closeInvestigation = useCallback(() => setInvestigateSubject(null), []);
   const routedFresh  = positionFresh(routedVehicle);
   const pinnedTarget = routedFresh ? routeTarget(pinnedTrip) : null;
   const trackedRouting = trackedVehicle != null && routedVehicle === trackedVehicle;

@@ -4,7 +4,7 @@
  * contrast: ink #0f172a / text #334155 / muted #5f6e83 on #fff (≥ 4.9:1); accent #1d4ed8 on #fff 6.7:1; white on accent 6.7:1
  */
 
-/* A fuel alert's, a halted unit's or a unit's trip investigation, in its own window over the
+/* A fuel alert's or a halted unit's investigation, in its own window over the
    map (IncidentInvestigation). It sits on the map tiles, not on the panels,
    so like the Halted window it is always light. Every colour is a token here. */
 
@@ -23,9 +23,6 @@
   --ivw-stop:    #1d4ed8;
   --ivw-zone:    #6d28d9;
   --ivw-skel:    #eef1f5;
-  --ivw-origin:  #047857;
-  --ivw-dest:    #b91c1c;
-  --ivw-planned: #0f172a;
   --ivw-ease:    cubic-bezier(0.16, 1, 0.3, 1);
 
   position: fixed;
@@ -61,7 +58,6 @@
 .ivw__head:active { cursor: grabbing; }
 .ivw__kind { flex: none; font-size: 15px; color: var(--ivw-event); }
 .ivw[data-kind="halt"] .ivw__kind { color: var(--ivw-zone); }
-.ivw[data-kind="trip"] .ivw__kind { color: var(--ivw-origin); }
 .ivw__title { flex: none; font-size: 12px; font-weight: 700; color: var(--ivw-ink); }
 .ivw__plate {
   min-width: 0;
@@ -152,8 +148,7 @@
 }
 .ivw__mark { position: absolute; top: 0; bottom: 0; }
 .ivw__mark--stop { background: var(--ivw-stop); opacity: 0.45; border-radius: 2px; }
-.ivw__mark--event, .ivw__mark--depart { width: 3px; top: -4px; bottom: -4px; margin-left: -1.5px; border-radius: 2px; background: var(--ivw-event); }
-.ivw__mark--depart { background: var(--ivw-origin); }
+.ivw__mark--event { width: 3px; top: -4px; bottom: -4px; margin-left: -1.5px; border-radius: 2px; background: var(--ivw-event); }
 .ivw__range {
   position: relative;
   display: block;
@@ -188,23 +183,6 @@
 .ivw__sw--pin { width: 11px; height: 11px; border: 1.5px solid var(--ivw-ink); border-radius: 2px; background: var(--ivw-surface); }
 .ivw__sw--route { width: 16px; height: 4px; border-radius: 2px; background: var(--ivw-route); }
 .ivw__sw--stop { width: 14px; height: 14px; border-radius: 3px; background: var(--ivw-stop); color: var(--ivw-surface); font-size: 9.5px; font-style: normal; font-weight: 700; }
-.ivw__sw--origin, .ivw__sw--dest { width: 12px; height: 12px; border-radius: 3px; background: var(--ivw-origin); }
-.ivw__sw--dest { background: var(--ivw-dest); }
-.ivw__sw--planned { width: 16px; height: 0; border-top: 3px dashed var(--ivw-planned); opacity: 0.75; }
-
-/* ── a trip: where from, where to, and the facts of the run ── */
-.ivw__trip { display: grid; gap: 7px; }
-.ivw__leg { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 13px; font-weight: 700; color: var(--ivw-ink); }
-.ivw__leg .ti { flex: none; font-size: 15px; color: var(--ivw-muted); }
-.ivw__end { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ivw__end--from { flex: 0 1 auto; color: var(--ivw-origin); }
-.ivw__end--to { flex: 1 1 auto; color: var(--ivw-dest); }
-.ivw__end--none { color: var(--ivw-muted); font-weight: 600; }
-.ivw__facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 5px 12px; margin: 0; }
-.ivw__facts > div { display: flex; flex-direction: column-reverse; min-width: 0; }
-.ivw__facts dt { font-size: 10.5px; font-weight: 600; color: var(--ivw-muted); }
-.ivw__facts dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--ivw-text); font-variant-numeric: tabular-nums; }
-.ivw__facts dd small { margin-left: 4px; font-size: 10.5px; font-weight: 600; color: var(--ivw-muted); }
 
 /* ── "Match to roads": recorded fixes, or Google's road match ── */
 .ivw__opt { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
