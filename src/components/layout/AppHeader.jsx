@@ -123,12 +123,13 @@ export default function AppHeader() {
     (p) => activeCompany?.id !== "sukari" || SUKARI_PRODUCTS.test(p.product)
   );
 
-  // An organisation with a machine register (KASULU) has its plant named for
-  // it: the hour-rated units in transit, and nothing else (operator
-  // 2026-10-19). Elsewhere plant is still read off the unit — a non-carrier.
+  // Only an organisation with a machine register (KASULU) has a Plant button:
+  // its hour-rated units in transit, and nothing else (operator 2026-10-19).
+  // Elsewhere nothing names a unit's type for certain, so there is no plant —
+  // every unit out with no load counts as empty.
   const hasRegister = vehicles.some((v) => registerRole(v) != null);
   const noLoadOf = (v) => {
-    if (!hasRegister) return carriesCargo(v) ? "empty" : "plant";
+    if (!hasRegister) return "empty";
     const role = registerRole(v);
     if (role === "plant") return "plant";
     // Not plant by the register. A carrier is empty; a non-carrier the
