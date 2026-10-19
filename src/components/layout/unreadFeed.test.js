@@ -62,9 +62,9 @@ describe('bellBadgeLabel', () => {
     expect(bellBadgeLabel(19)).toBe('19');
   });
 
-  it('stops at "20" and never climbs past it', () => {
+  it('shows "20" at exactly twenty and "20+" past it, never a bigger number', () => {
     expect(bellBadgeLabel(20)).toBe('20');
-    expect(bellBadgeLabel(21)).toBe('20');
-    expect(bellBadgeLabel(150)).toBe('20');
+    expect(bellBadgeLabel(21)).toBe('20+');
+    expect(bellBadgeLabel(150)).toBe('20+');
   });
 });
