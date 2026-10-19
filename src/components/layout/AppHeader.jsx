@@ -68,20 +68,19 @@ export function summariseUnread(feed, lastSeen) {
 }
 
 /**
- * What the bell's badge says: the exact count, stopping at 20.
+ * What the bell's badge says: the exact count up to 20, then "20+".
  *
  * The badge answers "is there news, and roughly how much" — past twenty the
  * operator is going to open the feed either way, and a number still climbing
  * in the corner of the header is noise, not information.
  *
- * No "+" on the capped figure. "20+" was tried: it needs a third glyph in a
- * ring sized for two, and every way of fitting it — a bigger ring, smaller
- * type, a shrunken plus — made the badge worse to look at. The accessible
- * label still says "20 or more", so the cap is not hidden from anyone.
+ * The "+" is back (issue #2): a bare "20" over 150 unread lines read as a
+ * wrong count. The ring keeps its size; a three-glyph label is set in smaller
+ * type to fit inside it (AppHeader.css, `[data-len="3"]`).
  */
 export const BELL_CAP = 20;
 export function bellBadgeLabel(count) {
-  return String(Math.min(count, BELL_CAP));
+  return count > BELL_CAP ? `${BELL_CAP}+` : String(count);
 }
 
 // Company logo, or its coloured letter when there's no logo on file.
