@@ -38,7 +38,7 @@ function buildStrip(stat, summary, cargoWord, products) {
     const liveTonnes = +live.reduce((s, v) => s + (v.tonnes ?? 0), 0).toFixed(1);
     const catalog = products.find((p) => productKey(p.product) === productKey(name));
     return {
-      title: `${name.toUpperCase()} — ${fmt(catalog?.tonnes ?? liveTonnes)} t FERRIED (30D) · ${fmt(liveTonnes)} t IN TRANSIT`,
+      title: `${name.toUpperCase()}: ${fmt(catalog?.tonnes ?? liveTonnes)} t FERRIED IN 30 DAYS, ${fmt(liveTonnes)} t IN TRANSIT`,
       items: live.map((v) => ({
         id: v.vehicleId, primary: v.plate, secondary: `${v.driver} · ${v.cargo}`,
         value: loadValue(v), status: v.status,
@@ -48,7 +48,7 @@ function buildStrip(stat, summary, cargoWord, products) {
   if (stat === "plant") {
     const plant = plantVehicles(summary);
     return {
-      title: `PLANT — ${plant.length} MACHINE${plant.length === 1 ? "" : "S"} WORKING · CARRIES NO LOAD`,
+      title: `PLANT: ${plant.length} MACHINE${plant.length === 1 ? "" : "S"} WORKING`,
       items: plant.map((v) => ({
         id: v.vehicleId, primary: v.plate,
         // The machine, not the cargo: "Dozer" is the useful fact here, and
@@ -63,7 +63,7 @@ function buildStrip(stat, summary, cargoWord, products) {
     // Why the vehicle is empty right now — its operational stop, or en route.
     const PHASE_WORD = { LOADING: "loading", UNLOADING: "offloading", OFFLOADING: "offloading", AT_GARAGE: "at garage" };
     return {
-      title: `EMPTY — ${empty.length} VEHICLE${empty.length === 1 ? "" : "S"} MID-CYCLE WITHOUT CARGO`,
+      title: `EMPTY: ${empty.length} VEHICLE${empty.length === 1 ? "" : "S"} WITHOUT CARGO`,
       items: empty.map((v) => ({
         id: v.vehicleId, primary: v.plate,
         secondary: `${v.driver} · ${PHASE_WORD[v.phase] ?? "en route"}`,
@@ -83,8 +83,8 @@ function buildStrip(stat, summary, cargoWord, products) {
     ? `${fmt(s.sugarTonnes)} t ${cargoWord.toUpperCase()}`
     : "CARGO NOT REPORTED";
   return {
-    title: `IN TRANSIT — ${s.vehicleCount} VEHICLES · ${load}`
-         + (plantCount > 0 ? ` · ${plantCount} PLANT` : ""),
+    title: `IN TRANSIT: ${s.vehicleCount} VEHICLES, ${load}`
+         + (plantCount > 0 ? `, ${plantCount} PLANT` : ""),
     items: s.vehicles.map((v) => ({
       id: v.vehicleId, primary: v.plate,
       // Plant says what it is; a carrier says what it holds.
@@ -162,7 +162,7 @@ export default function FilterStrip({ stat, summary, cargoWord = "cargo", produc
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-sec)", letterSpacing: "0.1em" }}>
-          {title} — {items.length} ASSET{items.length === 1 ? "" : "S"}
+          {title}
         </span>
         <button onClick={onClose} style={{
           background: "none", border: "none", cursor: "pointer",
