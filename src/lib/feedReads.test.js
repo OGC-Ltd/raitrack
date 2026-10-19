@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isUnread, withRead, withOpened, allRead, mergeReads, MAX_READ_IDS } from './feedReads';
+import { isUnread, withRead, allRead, mergeReads, MAX_READ_IDS } from './feedReads';
 import { summariseUnread } from '../components/layout/AppHeader';
 
 const SINCE = Date.parse('2026-10-19T06:00:00.000Z');
@@ -49,19 +49,14 @@ describe('feed read marks', () => {
 });
 
 describe('the bell badge', () => {
-  const opened = Date.parse('2026-10-19T06:25:00.000Z');
-
-  it('counts only unread lines that arrived since the bell was last opened', () => {
-    const r = { since: SINCE, ids: new Set(), opened };
-    // a and b are older than the last opening: still unread in the panel, off the badge.
-    expect([a, b, c].map((x) => isUnread(x, r))).toEqual([true, true, true]);
-    expect(summariseUnread([a, b, c], r).unreadCount).toBe(1);
+  it('counts every unread line, however old', () => {
+    expect(summariseUnread([a, b, c], fresh).unreadCount).toBe(3);
+    expect(summariseUnread([a, b, c], withRead(fresh, [a, c])).unreadCount).toBe(1);
   });
 
-  it('opening the bell empties the badge and reads nothing', () => {
-    const r = withOpened(fresh, Date.parse('2026-10-19T06:31:00.000Z'));
+  it('goes only when nothing is left to read', () => {
+    const r = withRead(withRead(fresh, [a, b]), [c]);
     expect(summariseUnread([a, b, c], r).unreadCount).toBe(0);
-    expect([a, b, c].every((x) => isUnread(x, r))).toBe(true);
   });
 });
 
