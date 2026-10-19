@@ -2513,8 +2513,8 @@ export default function FleetMap() {
   const investigation = useIncidentInvestigation({
     map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, subject: investigateSubject,
   });
-  // Arrivals at a hub (operator, 2026-10-15): reverse isochrones and every
-  // unit's live drive time to it, in its own window (HubArrivals). Opened
+  // Arrivals at a hub (operator, 2026-10-15): every unit's live drive time
+  // to it, in its own window (HubArrivals). Opened
   // from the tool rail; closed by its own ×, or by changing organisation.
   const [arrivalsOpen, setArrivalsOpen] = useState(false);
   useEffect(() => { setArrivalsOpen(false); }, [orgId]);

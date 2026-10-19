@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toTrafficRoute, polygonsOf } from "./googleRouting";
+import { toTrafficRoute } from "./googleRouting";
 import { delayCause } from "./tomtomTraffic";
 
 const answer = {
@@ -38,16 +38,5 @@ describe("delayCause without traffic sections", () => {
   });
   it("says nothing about a stopped unit, since it cannot know why", () => {
     expect(delayCause(r, 0)).toBeNull();
-  });
-});
-
-describe("polygonsOf", () => {
-  const ring = [[34.38, -0.82], [34.4, -0.82], [34.4, -0.84], [34.38, -0.82]];
-  it("flips GeoJSON [lng, lat] into {lat, lng} rings", () => {
-    expect(polygonsOf({ type: "Polygon", coordinates: [ring] })[0][0][0]).toEqual({ lat: -0.82, lng: 34.38 });
-  });
-  it("gives one polygon per MultiPolygon part", () => {
-    expect(polygonsOf({ type: "MultiPolygon", coordinates: [[ring], [ring]] })).toHaveLength(2);
-    expect(polygonsOf(null)).toEqual([]);
   });
 });
