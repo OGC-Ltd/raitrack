@@ -159,7 +159,7 @@
 /* Bell */
 /* Hallmark · component: header bell + badge · genre: modern-minimal · theme: the app's own header
  * states: default · hover · focus · active (pressed) · news (unread: darker icon, notched, + badge) · open (feed showing: filled blue bell) · arriving (one swing, badge pop)
- * contrast: icon #64748b 4.8:1, with news #1e293b 14:1; badge #fff on #dc2626 4.8:1
+ * contrast: icon #64748b 4.8:1, with news #1e293b 14:1; unread dot #dc2626 on the disc
  * motion: swing 600ms once per rise in the count; badge pop 180ms; none under reduced motion
  * redesign 2026-10-08: the badge's 2px white ring is gone; the bell is notched instead (see .app-header__bell-glyph)
  * aligned 2026-10-08: the bell is a 26px disc built like the avatar face, so the pair share top, bottom and centre lines
@@ -168,10 +168,9 @@
   /* Badge geometry, measured from the button's centre so a 40px tablet target
      keeps it on the same shoulder. The notch reads these too. */
   --bell-badge: #dc2626;
-  --bell-badge-ink: #fff;
-  --bell-badge-size: 18px;
-  --bell-badge-dx: 12px;   /* badge centre, right of the button centre */
-  --bell-badge-dy: -10px;  /* badge centre, above the button centre */
+  --bell-badge-size: 8px;  /* a dot, no figure (operator 2026-10-19) */
+  --bell-badge-dx: 9px;    /* dot centre, right of the button centre */
+  --bell-badge-dy: -9px;   /* dot centre, above the button centre */
   --bell-notch: 1.5px;     /* clear gap between the badge and the bell */
   /* The bell is built like the avatar beside it (operator, 2026-10-08): a 26px
      disc in a 34px target, so the two share a top line, a bottom line and a
@@ -410,16 +409,10 @@
 }
 
 /*
- * Unread alert count on the bell (replaces the red dot).
+ * Unread dot on the bell (operator 2026-10-19): no figure, just red while any
+ * feed line is unread, gone once everything is read.
  *
- * A PERFECT circle at every count (operator, 2026-10-08): one fixed 18px
- * square, radius 50%, no side padding. bellBadgeLabel stops at "20", and two
- * digits at 10px bold (~12px) fit inside 18px with room to spare.
- * Flex centring with line-height 1, and NO `text-box` trim: the trim was
- * applied to a grid container, where browsers disagree about it, and that is
- * what pushed the figure off-centre (operator, 2026-10-08).
- *
- * It sits on the bell's top-right shoulder, in a notch cut from the bell
+ * It sits on the disc's top-right shoulder, in a notch cut from the bell
  * (.app-header__bell-glyph), placed by --bell-badge-dx/-dy from the button's
  * centre so it stays put when the target grows to 40px on a tablet.
  */
@@ -429,38 +422,11 @@
   left: calc(50% + var(--bell-badge-dx) - var(--bell-badge-size) / 2);
   width: var(--bell-badge-size);
   height: var(--bell-badge-size);
-  min-width: var(--bell-badge-size);
-  aspect-ratio: 1;
-  flex: none;
-  padding: 0;
   border-radius: 50%;
-  /* Always red: an unread count on a bell is a summons whatever it is made
-     of, and one colour is one less thing to decode at a glance. */
   background: var(--bell-badge);
-  color: var(--bell-badge-ink);
-  /* No ring: the bell is notched round the badge instead. */
-  /* A <button> does not inherit the page font, so without this the figure
-     was Arial, whose digits sit 0.5px above centre in a flex line box.
-     Inter's measure dead centre (headless Edge, 2026-10-08). */
-  font-family: var(--font-body);
-  /* 9px, down from 10 (operator, 2026-10-08): the figure filled the disc. */
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
   pointer-events: none;
   animation: app-bell-pop 180ms cubic-bezier(0.2, 0, 0, 1);
 }
-.app-header__bell-count[data-len="2"] { letter-spacing: -0.02em; }
-/* "20+" (issue #2): three glyphs in the same 18px ring, so smaller type and a
-   tighter set rather than a bigger ring. */
-.app-header__bell-count[data-len="3"] { font-size: 7px; letter-spacing: -0.04em; }
 @keyframes app-bell-pop { from { transform: scale(0.6); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {

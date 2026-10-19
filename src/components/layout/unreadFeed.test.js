@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { summariseUnread, bellBadgeLabel } from './AppHeader';
+import { summariseUnread } from './AppHeader';
 
 const SEEN = Date.parse('2026-09-22T03:00:00.000Z');
 const at = (iso, type = 'info') => ({ id: iso, ts: iso, type });
@@ -53,18 +53,5 @@ describe('summariseUnread', () => {
   it('reads an absent feed as nothing new rather than throwing', () => {
     expect(summariseUnread(undefined, SEEN)).toEqual({ unreadCount: 0 });
     expect(summariseUnread([], SEEN)).toEqual({ unreadCount: 0 });
-  });
-});
-
-describe('bellBadgeLabel', () => {
-  it('shows the exact count below twenty', () => {
-    expect(bellBadgeLabel(1)).toBe('1');
-    expect(bellBadgeLabel(19)).toBe('19');
-  });
-
-  it('shows "20" at exactly twenty and "20+" past it, never a bigger number', () => {
-    expect(bellBadgeLabel(20)).toBe('20');
-    expect(bellBadgeLabel(21)).toBe('20+');
-    expect(bellBadgeLabel(150)).toBe('20+');
   });
 });
