@@ -997,6 +997,20 @@ const NON_CARRIER_TEXT  = /\b(GRADER|CRANE|HYDRACRANE|HYDRAUKLIC)\b/
  * conservative answer, since it lands the vehicle in the bucket whose label
  * ("cargo not reported") already admits we do not know.
  */
+/**
+ * What the machine register says a unit is: 'plant' when it is rated in litres
+ * per engine-hour, 'carrier' when rated in km per litre, null when the register
+ * does not rate it (or the organisation has no register — only KASULU does).
+ *
+ * The register is the operator's own record, so where it speaks it decides the
+ * Plant button outright (operator 2026-10-19: "plant should be strictly plant
+ * units"), ahead of the name and sprite guesses carriesCargo makes.
+ */
+export function registerRole(vehicle) {
+  const basis = vehicle?.ratedBurn?.basis
+  return basis === 'HOURS' ? 'plant' : basis === 'DISTANCE' ? 'carrier' : null
+}
+
 export function carriesCargo(vehicle) {
   if (NON_CARRIER_KINDS.has(spriteKind(vehicle))) return false
   const code = equipmentCode(vehicle)

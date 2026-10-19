@@ -8,7 +8,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useDashboardSummary } from '../../hooks/useDashboardSummary';
 import { useApiData } from '../../hooks/useApiData';
 import { getDeliveryAnalytics } from '../../api/analytics';
-import { isInTransit, carriesCargo, equipmentLabel } from '../../lib/vehicleMap';
+import { isInTransit, carriesCargo, equipmentLabel, registerRole } from '../../lib/vehicleMap';
 import { statMeta, statValues, StatButton, productKey } from '../header/StatKpis';
 import StatCarousel from '../header/StatCarousel';
 import LiveFeed from './LiveFeed';
@@ -123,9 +123,22 @@ export default function AppHeader() {
     (p) => activeCompany?.id !== "sukari" || SUKARI_PRODUCTS.test(p.product)
   );
 
+  // An organisation with a machine register (KASULU) has its plant named for
+  // it: the hour-rated units in transit, and nothing else (operator
+  // 2026-10-19). Elsewhere plant is still read off the unit — a non-carrier.
+  const hasRegister = vehicles.some((v) => registerRole(v) != null);
+  const noLoadOf = (v) => {
+    if (!hasRegister) return carriesCargo(v) ? "empty" : "plant";
+    const role = registerRole(v);
+    if (role === "plant") return "plant";
+    // Not plant by the register. A carrier is empty; a non-carrier the
+    // register does not rate is still out working, just in no sub-count.
+    return role === "carrier" || carriesCargo(v) ? "empty" : "other";
+  };
+
   const bucketOf = (v) => {
     if (!v.online) return null;
-    const noLoad = carriesCargo(v) ? "empty" : "plant";
+    const noLoad = noLoadOf(v);
     const phase = v.phase ?? "";
     if (OPERATIONAL_STOP.test(phase)) return noLoad;
     if (ENROUTE.test(phase)) return v.weight > 0 ? "product" : noLoad;
