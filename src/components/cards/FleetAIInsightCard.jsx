@@ -23,7 +23,8 @@
 // One unit at a time, 2026-10-19 (operator: "the fleet ai insight should be
 // for individual car, that i click on the map"). With a unit picked the card
 // is that unit's brief (fleet-server vehicles/:id/brief, measured facts the
-// model only phrases), titled with its plate; with none it is the fleet's.
+// model only phrases); with none it is the fleet's. The title stays "Fleet AI
+// Insight" either way (operator: "the title should remain as it was").
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./FleetAIInsightCard.css";
@@ -57,7 +58,6 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
     [companyId, unitId],
     { cacheKey: unitId ? `ft-ai-brief:${unitId}` : `ft-ai-insight:${companyId}` }
   );
-  const name = unitId ? unit.plate ?? "Unit" : "Fleet";
 
   useEffect(() => {
     const t = setInterval(retry, REFRESH_MS);
@@ -92,7 +92,7 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
   if (error) {
     return (
       <div className={cardClass}>
-        <LoadError label={`${name} AI insight`} onRetry={retry} />
+        <LoadError label="Fleet AI insight" onRetry={retry} />
       </div>
     );
   }
@@ -100,10 +100,10 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
 
   if (loading || !insight) {
     return (
-      <section className={cardClass} aria-busy="true" aria-label={`${name} AI insight, loading`}>
+      <section className={cardClass} aria-busy="true" aria-label="Fleet AI insight, loading">
         <header className="fai-head">
           <Mark ai />
-          <h3 className="fai-title">{name} AI Insight</h3>
+          <h3 className="fai-title">Fleet AI Insight</h3>
         </header>
         <div className="fai-skeleton" aria-hidden="true">
           <span /><span /><span />
@@ -117,7 +117,7 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
   // facts-only brief, which it sends whenever the model failed or its reply
   // was rejected (`source: "facts"`).
   const notAi = insight.local || insight.source === "facts";
-  const title = notAi ? `${name} summary` : `${name} AI Insight`;
+  const title = notAi ? "Fleet summary" : "Fleet AI Insight";
 
   return (
     <section className={cardClass} data-local={notAi ? "" : undefined} aria-label={title}>
@@ -127,7 +127,7 @@ export default function FleetAIInsightCard({ companyId, unit = null, className =
             same counts in fixed sentences, and is titled as what it is. */}
         <h3 className="fai-title">{title}</h3>
         {risk && (
-          <span className="fai-risk" data-risk={risk.toLowerCase()} title={`${name} risk: ${risk}`}>
+          <span className="fai-risk" data-risk={risk.toLowerCase()} title={`Fleet risk: ${risk}`}>
             <i className={`ti ti-${RISK_ICON[risk]}`} aria-hidden="true" />
             {risk}
           </span>
