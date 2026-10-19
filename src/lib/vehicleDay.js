@@ -244,7 +244,8 @@ const MIN_BURN_L     = 1;
 
 /**
  * How fast the unit is burning fuel, from a day's summary (summariseDay):
- * litres per engine hour and kilometres per litre. The unit card and the
+ * litres per engine hour and litres per kilometre — always litres first
+ * (operator 2026-10-19: "always state L/h or L/km"). The unit card and the
  * vehicle panel both show it, so they read the same figures.
  *
  * Engine time is the engine-hours meter where it ticked, else the time the
@@ -257,9 +258,9 @@ export function burnRate(sum) {
   const meter = sum.engineHoursToday != null && sum.engineHoursToday >= MIN_BURN_HOURS ? sum.engineHoursToday : null;
   const hours = meter ?? (sum.engineOnMin != null ? sum.engineOnMin / 60 : null);
   const lPerH = hours != null && hours >= MIN_BURN_HOURS ? sum.usedL / hours : null;
-  const kmPerL = sum.distanceKm != null && sum.distanceKm >= MIN_BURN_KM ? sum.distanceKm / sum.usedL : null;
-  if (lPerH == null && kmPerL == null) return null;
-  return { lPerH, kmPerL, usedL: sum.usedL, hours: lPerH != null ? hours : null, hoursFrom: lPerH == null ? null : meter != null ? 'meter' : 'engine' };
+  const lPerKm = sum.distanceKm != null && sum.distanceKm >= MIN_BURN_KM ? sum.usedL / sum.distanceKm : null;
+  if (lPerH == null && lPerKm == null) return null;
+  return { lPerH, lPerKm, usedL: sum.usedL, hours: lPerH != null ? hours : null, hoursFrom: lPerH == null ? null : meter != null ? 'meter' : 'engine' };
 }
 
 /**
@@ -365,19 +366,20 @@ export const BURN_OVER_SHARE = 0.15;
 /**
  * Today's burn against the unit's standard from the FactorySuite register
  * (vehicleMap `ratedBurn`, KASULU only). On an HOURS basis it compares L/h;
- * on DISTANCE, km/L. `over` is how much more fuel the unit used than the
- * standard allows, as a share (0.2 = 20% more; negative = less), the same
- * sense on either basis. Null when the unit is unrated; `today` and `over`
+ * on DISTANCE, L/km — the register states km/L, turned round here so the
+ * card always reads litres first. `over` is how much more fuel the unit used
+ * than the standard allows, as a share (0.2 = 20% more; negative = less).
+ * `digits` is how many decimals the rate is shown to (L/km sits near 0.4). Null when the unit is unrated; `today` and `over`
  * null when today's rate in that unit cannot be measured yet.
  */
 export function burnAgainst(burn, ratedBurn) {
   if (!ratedBurn || !(ratedBurn.value > 0)) return null;
   const hours = ratedBurn.basis === 'HOURS';
-  const unit = hours ? 'L/h' : 'km/L';
-  const today = (hours ? burn?.lPerH : burn?.kmPerL) ?? null;
-  const over = today == null || !(today > 0) ? null
-    : hours ? today / ratedBurn.value - 1 : ratedBurn.value / today - 1;
-  return { unit, std: ratedBurn.value, today, over, high: over != null && over > BURN_OVER_SHARE };
+  const unit = hours ? 'L/h' : 'L/km';
+  const std = hours ? ratedBurn.value : 1 / ratedBurn.value;
+  const today = (hours ? burn?.lPerH : burn?.lPerKm) ?? null;
+  const over = today == null || !(today > 0) ? null : today / std - 1;
+  return { unit, digits: hours ? 1 : 2, std, today, over, high: over != null && over > BURN_OVER_SHARE };
 }
 
 /** "18% over standard" / "6% under standard" / "on standard". */

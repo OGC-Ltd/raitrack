@@ -608,18 +608,19 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             unit={vehicle.engineHours != null ? " h" : ""}
             sub="total run time"
           />
-          {/* Litres per engine hour today, with km per litre once it has
-              driven far enough to say (lib/vehicleDay burnRate). A unit the
-              FactorySuite register rates is read in the register's unit and
-              set against its standard, amber when well over it. */}
+          {/* Litres per engine hour today, with litres per km once it has
+              driven far enough to say (lib/vehicleDay burnRate): always L/h or
+              L/km. A unit the FactorySuite register rates is read on the
+              register's basis and set against its standard, amber when well
+              over it. */}
           {vsStd ? (
             <Tile
               label="BURN RATE"
-              value={vsStd.today != null ? vsStd.today.toFixed(1) : "—"}
-              unit={vsStd.today != null ? ` ${vsStd.unit}` : ""}
+              value={vsStd.today != null ? vsStd.today.toFixed(vsStd.digits) : "—"}
+              unit={` ${vsStd.unit}`}
               sub={vsStd.over != null
-                ? <>{vsStd.high && <WarnGlyph />}{` ${overWords(vsStd.over)} (${vsStd.std} ${vsStd.unit})`}</>
-                : `standard ${vsStd.std} ${vsStd.unit}`}
+                ? <>{vsStd.high && <WarnGlyph />}{` ${overWords(vsStd.over)} (${vsStd.std.toFixed(vsStd.digits)} ${vsStd.unit})`}</>
+                : `standard ${vsStd.std.toFixed(vsStd.digits)} ${vsStd.unit}`}
               valColor={vsStd.high ? "var(--accent-warn)" : undefined}
               subColor={vsStd.high ? "var(--accent-warn)" : undefined}
             />
@@ -627,9 +628,9 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             <Tile
               label="BURN RATE"
               value={burn?.lPerH != null ? burn.lPerH.toFixed(1)
-                : burn?.kmPerL != null ? burn.kmPerL.toFixed(1) : "—"}
-              unit={burn?.lPerH != null ? " L/h" : burn?.kmPerL != null ? " km/L" : ""}
-              sub={burn?.lPerH != null && burn.kmPerL != null ? `${burn.kmPerL.toFixed(1)} km/L today`
+                : burn?.lPerKm != null ? burn.lPerKm.toFixed(2) : "—"}
+              unit={burn?.lPerKm != null && burn.lPerH == null ? " L/km" : " L/h"}
+              sub={burn?.lPerH != null && burn.lPerKm != null ? `${burn.lPerKm.toFixed(2)} L/km today`
                 : burn ? "today"
                 : dayPending ? "reading today…" : "not enough today"}
             />

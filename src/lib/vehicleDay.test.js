@@ -188,17 +188,17 @@ describe('movingSpans', () => {
 describe('burnRate', () => {
   const sum = (o) => ({ usedL: 40, engineHoursToday: null, engineOnMin: null, distanceKm: null, ...o });
 
-  it('is litres per engine hour off the meter, with km per litre once it has driven', () => {
+  it('is litres per engine hour off the meter, with litres per km once it has driven', () => {
     const b = burnRate(sum({ engineHoursToday: 4, engineOnMin: 300, distanceKm: 120 }));
     expect(b.lPerH).toBeCloseTo(10);
-    expect(b.kmPerL).toBeCloseTo(3);
+    expect(b.lPerKm).toBeCloseTo(1 / 3);
     expect(b.hoursFrom).toBe('meter');
   });
 
   it('falls back to the time the engine was on when the meter did not tick', () => {
     const b = burnRate(sum({ engineOnMin: 240 }));
     expect(b.lPerH).toBeCloseTo(10);
-    expect(b.kmPerL).toBeNull();
+    expect(b.lPerKm).toBeNull();
     expect(b.hoursFrom).toBe('engine');
   });
 
@@ -210,7 +210,7 @@ describe('burnRate', () => {
 });
 
 describe('burnAgainst', () => {
-  const burn = { lPerH: 12, kmPerL: 2, usedL: 48 };
+  const burn = { lPerH: 12, lPerKm: 0.5, usedL: 48 };
 
   it('is null for a unit the register does not rate', () => {
     expect(burnAgainst(burn, null)).toBeNull();
@@ -218,16 +218,17 @@ describe('burnAgainst', () => {
 
   it('reads an HOURS unit in L/h: more litres an hour is over', () => {
     const v = burnAgainst(burn, { value: 10, basis: 'HOURS' });
-    expect(v).toMatchObject({ unit: 'L/h', std: 10, today: 12, high: true });
+    expect(v).toMatchObject({ unit: 'L/h', digits: 1, std: 10, today: 12, high: true });
     expect(v.over).toBeCloseTo(0.2);
     expect(overWords(v.over)).toBe('20% over standard');
   });
 
-  it('reads a DISTANCE unit in km/L: fewer km a litre is over', () => {
+  it('reads a DISTANCE unit in L/km, the register\'s km/L turned round: more litres a km is over', () => {
     const v = burnAgainst(burn, { value: 2.5, basis: 'DISTANCE' });
-    expect(v).toMatchObject({ unit: 'km/L', today: 2 });
+    expect(v).toMatchObject({ unit: 'L/km', digits: 2, today: 0.5 });
+    expect(v.std).toBeCloseTo(0.4);
     expect(v.over).toBeCloseTo(0.25);
-    expect(burnAgainst({ ...burn, kmPerL: 3 }, { value: 2.5, basis: 'DISTANCE' }).high).toBe(false);
+    expect(burnAgainst({ ...burn, lPerKm: 1 / 3 }, { value: 2.5, basis: 'DISTANCE' }).high).toBe(false);
   });
 
   it('keeps the standard when today cannot be measured yet', () => {
