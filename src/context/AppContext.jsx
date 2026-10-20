@@ -23,7 +23,7 @@ import { ORG_CODE_BY_COMPANY } from "../api/org";
 import { useAuth } from "./AuthContext";
 import { persistChoice } from "../lib/navMemory";
 import {
-  PLAIN_FIELDS, fieldSet, companyChosen, mobileTabChosen, fleetTypesSet, trackedIdsSet,
+  PLAIN_FIELDS, fieldSet, companyChosen, tabChosen, mobileTabChosen, fleetTypesSet, trackedIdsSet,
   incidentRequested, sitePlanRequested, selectionRestored,
 } from "../store/appSlice";
 import { mirrorCompany } from "../store/appPersist";
@@ -126,6 +126,8 @@ export function useAppActions() {
     return {
       ...plain,
       setActiveCompanyId: (v) => dispatch(companyChosen(resolve("activeCompanyId", v))),
+      // Not a plain set: leaving the map clears it (appSlice tabChosen).
+      setDesktopActiveTab: (v) => dispatch(tabChosen(resolve("desktopActiveTab", v))),
       setMobileActiveTab: (v) => dispatch(mobileTabChosen(resolve("mobileActiveTab", v))),
       setFleetTypes: (v) => dispatch(fleetTypesSet(resolve("fleetTypes", v))),
       setTrackedIds: (v) => dispatch(trackedIdsSet(resolve("trackedIds", v))),

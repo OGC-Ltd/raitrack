@@ -41,6 +41,7 @@ import SetPasswordScreen from './components/screens/SetPasswordScreen';
 import AccountScreen     from './components/screens/AccountScreen';
 import UserAdminScreen   from './components/screens/UserAdminScreen';
 import { readSetupToken } from './lib/setupLink';
+import { claimSidePanel, onSidePanelClaim } from './lib/sidePanels';
 
 function AppShell() {
   const { activeCompanyId, previousCompanyId, desktopActiveTab, selectedVehicleId } = useAppFields("activeCompanyId", "previousCompanyId", "desktopActiveTab", "selectedVehicleId");
@@ -50,6 +51,8 @@ function AppShell() {
   const { can } = usePermissions();
   const { vehicles: _liveVehicles = [] } = useFleetLiveShared();
   const [mobileFeedOpen,    setMobileFeedOpen]    = useState(false);
+  // The phone's notifications sheet closes when anything else opens (lib/sidePanels).
+  useEffect(() => onSidePanelClaim('feed', () => setMobileFeedOpen(false)), []);
   const [mobileSearchOpen,  setMobileSearchOpen]  = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const { orgs } = useAuth();
@@ -111,7 +114,7 @@ function AppShell() {
       {/* Mobile header — shown only on mobile (< 768px) */}
       <MobileHeader
         onSearchOpen={() => setMobileSearchOpen(o => !o)}
-        onFeedOpen={() => setMobileFeedOpen(true)}
+        onFeedOpen={() => { claimSidePanel('feed'); setMobileFeedOpen(true); }}
         onProfileOpen={() => setMobileProfileOpen(true)}
       />
       {/* Mobile search tray */}

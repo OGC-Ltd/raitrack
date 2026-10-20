@@ -47,6 +47,7 @@ import TableToolbar from "../body/TableToolbar";
 import TablePager, { PAGE_STEP } from "../body/TablePager";
 import FilterBar from "../body/FilterBar";
 import EmptyNote from "../shared/EmptyNote";
+import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
 
 const POLL_MS = 60_000;
@@ -533,8 +534,17 @@ function Facts({ alert, org }) {
   );
 }
 
-function AlertDetail({ alert, org, start, canMap, onDecided, onToast, onShowOnMap, onOpenAudit }) {
+/**
+ * The open alert, in the app's detail sidebar (shared/DetailSidebar: the
+ * Drivers page's panel). Picking a row opens it under the header; another row
+ * swaps the alert in place; × or Esc closes it. The table stays usable beside
+ * it. Everything in it is already on the page's rows, so opening it costs no
+ * request.
+ */
+function AlertPanel({ alert, org, start, canMap, onClose, onDecided, onToast, onShowOnMap, onOpenAudit }) {
+  const k = rowKey(alert);
   const st = statusOf(alert);
+  const h = headline(alert);
   const canDecide = org?.canDecide && alert.choices.length > 0;
   const why = !org?.canDecide
     ? `Only an administrator of ${org?.name ?? "this organisation"} can escalate or de-escalate this alert.`
@@ -544,33 +554,59 @@ function AlertDetail({ alert, org, start, canMap, onDecided, onToast, onShowOnMa
   const place = alert.kind === "speeding" && alert.speeding.lat != null
     ? `https://www.openstreetmap.org/?mlat=${alert.speeding.lat}&mlon=${alert.speeding.lng}#map=15/${alert.speeding.lat}/${alert.speeding.lng}`
     : null;
-  return (
-    <div className="aud-detail alr-detail">
-      <section className="frv-card aud-card">
-        <div className="aud-card__head">
-          <h3 className="frv-card__t">{alert.kind === "fuel" ? "Fuel alert" : "Overspeeding"} · {alert.plate}</h3>
-          <span className="alr-detail-actions">
-            {canMap && (
-              <button type="button" className="sp4-ghost-btn" onClick={() => onShowOnMap(alert)}>
-                <i className="ti ti-map-pin" aria-hidden="true" />
-                {alert.kind === "fuel" && alert.fuel.live ? " Open on the map" : " Show unit on the map"}
-              </button>
-            )}
-            {place && (
-              <a className="sp4-ghost-btn" href={place} target="_blank" rel="noreferrer noopener">
-                <i className="ti ti-external-link" aria-hidden="true" /> Where it happened
-              </a>
-            )}
-          </span>
-        </div>
-        <Facts alert={alert} org={org} />
-      </section>
+  const title = alert.kind === "fuel" ? "Fuel alert" : "Overspeeding alert";
 
-      <section className="frv-card aud-card">
-        <div className="aud-card__head">
-          <h3 className="frv-card__t">Decision</h3>
-          <span className={`sp4-pill sp4-pill--${st.tone}`} title={st.meaning}>{st.label}</span>
-        </div>
+  return (
+    <DetailSidebar
+      title={title}
+      label={`${title}, ${alert.plate}`}
+      itemKey={k}
+      onClose={onClose}
+      footer={(canMap || place) ? (
+        <>
+          {place && (
+            <a className="sp4-ghost-btn" href={place} target="_blank" rel="noreferrer noopener">
+              <i className="ti ti-external-link" aria-hidden="true" /> Where it happened
+            </a>
+          )}
+          {canMap && (
+            <button type="button" className="sp4-ghost-btn" onClick={() => onShowOnMap(alert)}>
+              <i className="ti ti-map-pin" aria-hidden="true" />
+              {alert.kind === "fuel" && alert.fuel.live ? " Open on the map" : " Show unit on the map"}
+            </button>
+          )}
+        </>
+      ) : null}
+    >
+      <DetailSidebarIdent
+        kind={(
+          <span className={`alr-kind alr-kind--${alert.kind}`}>
+            <i className={`ti ${alert.kind === "fuel" ? "ti-droplet" : "ti-gauge"}`} aria-hidden="true" />
+            {alert.kind === "fuel" ? "Fuel" : "Speed"}
+          </span>
+        )}
+        name={plateIn(alert.plate, alert.vehicleName) ?? alert.plate}
+        nameTitle={alert.vehicleName || alert.plate}
+        sub={org?.name ?? "—"}
+      >
+        {alert.fuel?.probeHold && (
+          <span className="alr-probe" title="This unit is already reported for a fuel probe repair">
+            <i className="ti ti-tool" aria-hidden="true" />Probe reported
+          </span>
+        )}
+      </DetailSidebarIdent>
+
+      <DetailSidebarFacts facts={[
+        { label: alert.kind === "fuel" ? "Lost" : "Over by", value: h.figure },
+        { label: "When", value: when(alert.at) },
+        { label: "State", value: <span className={`sp4-pill sp4-pill--${st.tone}`} title={st.meaning}>{st.label}</span> },
+      ]} />
+
+      <DetailSidebarSection title="What Happened">
+        <Facts alert={alert} org={org} />
+      </DetailSidebarSection>
+
+      <DetailSidebarSection title="Decision">
         {alert.history.length > 0 ? (
           <ol className="alr-history">
             {[...alert.history].reverse().map((d, i) => (
@@ -582,10 +618,10 @@ function AlertDetail({ alert, org, start, canMap, onDecided, onToast, onShowOnMa
             ))}
           </ol>
         ) : (
-          <p className="frv-none">Not decided yet{alert.cleared ? `: ${st.meaning}` : ""}.</p>
+          <p className="dsb__note">Not decided yet{alert.cleared ? `: ${st.meaning}` : ""}.</p>
         )}
         {canDecide ? (
-          <DecisionPanel alert={alert} start={start} onDecided={onDecided} onToast={onToast} />
+          <DecisionPanel key={`${k}:${start ?? ""}`} alert={alert} start={start} onDecided={onDecided} onToast={onToast} />
         ) : (
           <p className="alr-why">
             {why}
@@ -594,8 +630,8 @@ function AlertDetail({ alert, org, start, canMap, onDecided, onToast, onShowOnMa
             )}
           </p>
         )}
-      </section>
-    </div>
+      </DetailSidebarSection>
+    </DetailSidebar>
   );
 }
 
@@ -883,6 +919,23 @@ export default function AlertsScreen() {
     markRead([alert]);
   };
 
+  // The open alert, read from the page on screen: gone from it (decided away
+  // under a filter, or a new page), the panel closes with it.
+  const openAlert = open ? rows.find((r) => rowKey(r) === open.key) ?? null : null;
+  const openKey = open?.key ?? null;
+  // Closed, the focus goes back to the row it was opened from, so the
+  // keyboard keeps its place (once the panel holding it has gone).
+  const returnTo = useRef(null);
+  const closePanel = useCallback(() => {
+    returnTo.current = openKey;
+    setOpen(null);
+  }, [openKey]);
+  useEffect(() => {
+    if (open || !returnTo.current) return;
+    rootRef.current?.querySelector(`tr[data-alert="${CSS.escape(returnTo.current)}"]`)?.focus({ preventScroll: true });
+    returnTo.current = null;
+  }, [open]);
+
   const pickOrg = (id) => setOrgs((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   const maxFigure = Math.max(1, ...rows.map((r) => (r.kind === "fuel" ? r.fuel.litres : r.speeding.overByKmh)));
 
@@ -1092,7 +1145,9 @@ export default function AlertsScreen() {
                         className={"sp4-tr aud-tr" + (expanded ? " aud-tr--open" : "") + (pickedMap.has(k) ? " alr-tr--picked" : "")
                           + (a.read ? "" : " alr-tr--unread")}
                         tabIndex={0}
+                        data-alert={k}
                         aria-expanded={expanded}
+                        aria-controls={expanded ? "alr-panel" : undefined}
                         onClick={() => toggle(a)}
                         onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(a); } }}
                       >
@@ -1167,24 +1222,6 @@ export default function AlertsScreen() {
                           </span>
                         </td>
                       </tr>
-                      {expanded && (
-                        <tr className="aud-detail-row">
-                          <td colSpan={6}>
-                            <AlertDetail
-                              key={`${k}:${open.start ?? ""}`}
-                              alert={a}
-                              org={org}
-                              start={open.start}
-                              canMap={canIn(a.orgId, "map:read")}
-                              onDecided={onDecided}
-                              onToast={setToast}
-                              onShowOnMap={showOnMap}
-                              onOpenAudit={can("fuel_audit:read") && companyForOrgCode(org?.code) === activeCompanyId
-                                ? () => setDesktopActiveTab("audit") : null}
-                            />
-                          </td>
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 })}
@@ -1194,6 +1231,20 @@ export default function AlertsScreen() {
           </div>
         )}
       </div>
+      {openAlert && (
+        <AlertPanel
+          alert={openAlert}
+          org={orgById.get(openAlert.orgId)}
+          start={open.start}
+          canMap={canIn(openAlert.orgId, "map:read")}
+          onClose={closePanel}
+          onDecided={onDecided}
+          onToast={setToast}
+          onShowOnMap={showOnMap}
+          onOpenAudit={can("fuel_audit:read") && companyForOrgCode(orgById.get(openAlert.orgId)?.code) === activeCompanyId
+            ? () => setDesktopActiveTab("audit") : null}
+        />
+      )}
     </div>
   );
 }

@@ -180,14 +180,8 @@
 
 /* ── The open alert ──────────────────────────────────────────────────────── */
 
-/* Facts and the decision side by side on a desk, stacked when narrow. */
-.alr-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-@media (max-width: 1099px) {
-  .alr-detail { grid-template-columns: minmax(0, 1fr); }
-}
-
-.alr-detail-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
-.alr-detail-actions .sp4-ghost-btn { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+/* The open alert opens in the app's detail sidebar (shared/DetailSidebar.css). */
+.dsb__sec .alr-decide { margin-top: 12px; }
 
 .alr-facts {
   display: grid;
@@ -336,7 +330,6 @@
   .alr-bulk .sp4-submit-btn { min-height: var(--m-action); padding: 0 16px; font-size: 13px; }
   .alr-search { min-width: 0; flex: 1 1 auto; }
   .alr-actions .sp4-ghost-btn,
-  .alr-detail-actions .sp4-ghost-btn,
   .alr-pick {
     min-height: var(--m-ctl);
     padding: 0 12px;

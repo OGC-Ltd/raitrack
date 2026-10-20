@@ -16,7 +16,7 @@
  * Built from the Sensor Monitor's parts, like Cases and Repairs.
  */
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "../body/SensorPanel.css";
 import "./SystemScreen.css";
 import "./FuelReportScreen.css";
@@ -34,6 +34,7 @@ import { Card, Gauge } from "./FuelReportOverview";
 import TableToolbar from "../body/TableToolbar";
 import FilterBar from "../body/FilterBar";
 import EmptyNote from "../shared/EmptyNote";
+import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
 
 const STATES = [
@@ -163,64 +164,68 @@ function RaiseJob({ orgId, c, onDone, onToast }) {
   );
 }
 
-function UnitDetail({ u, orgId, canTriage, canRepairs, canWork: canResolve, canWorkAny, userId, canAssign, ctx, onChanged, onToast }) {
-  const st = unitState(u);
+/**
+ * One unit, in the detail sidebar (operator, 2026-10-20: "design the side
+ * panel for the audit page just like the other pages"): the shared
+ * DetailSidebar the Alerts, Drivers and Maintenance pages open, wide for the
+ * overhaul's parts and checklist. Identity and three facts head it; then the
+ * alerts this probe raised on the time-ordered rail (a filled amber node is a
+ * case still waiting on its repair), the current repair, its overhaul, and the
+ * probe's record as cards rather than a table scrolling sideways in a panel.
+ */
+function UnitDetail({ u, st, orgId, canTriage, canWork: canResolve, canWorkAny, userId, canAssign, onChanged, onToast }) {
   // A technician works only an accepted job of their own (mayWorkJob).
   const canWork = mayWorkJob(st.job, { canResolve, canWorkAny, userId });
   const failedCase = st.key === "failed" ? u.cases.find((c) => c.status === "PROBE_FAULT") : null;
-  const maxMl = Math.max(1, ...u.cases.map((c) => c.incident.volumeMl ?? 0));
+  const vol = u.cases.reduce((m, c) => m + (c.incident.volumeMl ?? 0), 0);
   return (
-    <div className="aud-detail">
-        <section className="frv-card aud-card">
-          <div className="aud-card__head">
-            <h3 className="frv-card__t">Alerts raised by this probe <span className="sp4-tab-n">{u.cases.length}</span></h3>
-          </div>
-          <ul className="aud-cases">
-            {u.cases.map((c) => {
-              const f = finding(c);
-              const fixed = c.status === "PROBE_FIXED";
-              return (
-                // One line per alert, its columns shared with the rows under it
-                // (subgrid): when, how much, what the reviewer found, where the
-                // case stands, and the way into it. A full-width card with the
-                // note on a second line left the middle of the row empty.
-                <li key={c.id} className="aud-case">
-                  <span className="aud-case-when sys-num">{when(c.incident.beganAt)}</span>
-                  <CellBar ratio={(c.incident.volumeMl ?? 0) / maxMl} tone="alert">
-                    <b className="sys-num">{litres(c.incident.volumeMl)}</b> <span className="aud-unit">reported lost</span>
-                  </CellBar>
-                  <p className="aud-case-note">
-                    {f ? <><strong>{f.actor?.fullName ?? "The reviewer"}</strong> <span className="aud-unit">{when(f.at)}</span> · {f.note}</>
-                       : <span className="aud-unit">No finding recorded.</span>}
-                  </p>
+    <>
+      <DetailSidebarIdent
+        name={u.plate ?? "—"}
+        sub={`${u.cases.length} false alert${u.cases.length === 1 ? "" : "s"} · ${litres(vol)} reported lost`}
+      />
+      <DetailSidebarFacts facts={[
+        { label: "Repair", value: <span className={"sp4-pill sp4-pill--" + st.pill}>{st.label}</span> },
+        { label: "Technician", value: st.job?.assignedTo?.fullName ?? "Nobody yet" },
+        { label: "Last alert", value: when(u.lastAlertAt) },
+      ]} />
+
+      <DetailSidebarSection title="Alerts Raised" aside={<span className="sp4-tab-n">{u.cases.length}</span>}>
+        <ul className="dsb__cards dsb__cards--timeline">
+          {u.cases.map((c) => {
+            const f = finding(c);
+            const fixed = c.status === "PROBE_FIXED";
+            return (
+              <li key={c.id} className={"dsb__card" + (fixed ? "" : " dsb__card--open")}>
+                <div className="dsb__card-head aud-card-head">
+                  <span className="sys-num">{when(c.incident.beganAt)}</span>
                   <span className={"sp4-pill sp4-pill--" + (fixed ? "con" : "warn")}>
                     {fixed ? "Closed · repaired" : "Open · waiting on repair"}
                   </span>
-                  {canTriage ? (
-                    <button type="button" className="sp4-ghost-btn aud-case-open" onClick={() => openFollowUp(c.id)}>
-                      Open case
-                    </button>
-                  ) : <span />}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+                </div>
+                <dl>
+                  <dt>Reported lost</dt><dd className="sys-num">{litres(c.incident.volumeMl)}</dd>
+                  <dt>Finding</dt>
+                  <dd>{f ? <><strong>{f.actor?.fullName ?? "The reviewer"}</strong> <span className="aud-unit">{when(f.at)}</span> · {f.note}</>
+                         : <span className="aud-unit">No finding recorded.</span>}</dd>
+                </dl>
+                {canTriage && (
+                  <button type="button" className="sp4-ghost-btn aud-case-open" onClick={() => openFollowUp(c.id)}>
+                    Open case
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </DetailSidebarSection>
 
-        <section className="frv-card aud-card aud-card--repair">
-          <div className="aud-card__head">
-            <h3 className="frv-card__t">Current repair</h3>
-            {canRepairs && (
-              <button type="button" className="sp4-ghost-btn" onClick={() => openInRepairs(ctx)}>
-                Open in Maintenance › Repairs
-              </button>
-            )}
-          </div>
+      <DetailSidebarSection title="Current Repair">
+        <div className="aud-card--repair">
           {st.job ? (
             <>
-              {/* No facts above the ladder: it carries the fix date in its own
-                  head and each rung's date and who moved it; the technician
-                  is set in the overhaul below. */}
+              {/* The ladder carries the fix date in its own head and each
+                  rung's date and who moved it. */}
               <RepairTrackingLine
                 item={st.job}
                 orgId={orgId}
@@ -232,63 +237,51 @@ function UnitDetail({ u, orgId, canTriage, canRepairs, canWork: canResolve, canW
               {st.job.fixNote && <p className="aud-case-note"><strong>Sign-off:</strong> {st.job.fixNote}</p>}
             </>
           ) : (
-            <p className="frv-none">No repair job is linked to this unit&rsquo;s open case.</p>
+            <p className="dsb__note">No repair job is linked to this unit&rsquo;s open case.</p>
           )}
           {canTriage && failedCase && <RaiseJob orgId={orgId} c={failedCase} onDone={onChanged} onToast={onToast} />}
-        </section>
+        </div>
+      </DetailSidebarSection>
 
       {st.job && (
-        <AuditOverhaul
-          orgId={orgId}
-          job={st.job}
-          overhaul={u.overhaul?.[st.job.id]}
-          plate={u.plate}
-          suppliers={[...new Set(Object.values(u.overhaul ?? {}).flatMap((o) => o.parts.map((x) => x.supplier)).filter(Boolean))]}
-          canWork={canWork && !st.job.resolvedAt}
-          canAssign={canAssign && !st.job.resolvedAt}
-          onToast={onToast}
-          onChanged={onChanged}
-        />
+        <DetailSidebarSection title="Overhaul Audit">
+          <AuditOverhaul
+            orgId={orgId}
+            job={st.job}
+            overhaul={u.overhaul?.[st.job.id]}
+            plate={u.plate}
+            suppliers={[...new Set(Object.values(u.overhaul ?? {}).flatMap((o) => o.parts.map((x) => x.supplier)).filter(Boolean))]}
+            canWork={canWork && !st.job.resolvedAt}
+            canAssign={canAssign && !st.job.resolvedAt}
+            onToast={onToast}
+            onChanged={onChanged}
+            inPanel
+          />
+        </DetailSidebarSection>
       )}
 
-      <section className="frv-card aud-card">
-        <h3 className="frv-card__t">Probe record</h3>
+      <DetailSidebarSection title="Probe Record" aside={u.repairs.length > 0 ? <span className="sp4-tab-n">{u.repairs.length}</span> : null}>
         {u.repairs.length === 0 && u.probeFaults.length === 0 && (
-          <p className="frv-none">Nothing else on record for this probe.</p>
+          <p className="dsb__note">Nothing else on record for this probe.</p>
         )}
-        {/* Cards on a phone (SensorPanel's ≤599px table layout), not a grid
-            scrolling sideways inside the unit's detail. */}
         {u.repairs.length > 0 && (
-          <div className="sp4-table-scroll">
-            <table className="sp4-table sp4-probe-table">
-              <thead>
-                <tr>
-                  <th className="sp4-th--left">Raised</th>
-                  <th className="sp4-th--left">By</th>
-                  <th className="sp4-th--left">Source</th>
-                  <th className="sp4-th--left">Stage</th>
-                  <th className="sp4-th--left">What was found / done</th>
-                  <th className="sp4-th--right">Closed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {u.repairs.map((r) => (
-                  <tr key={r.id} className="sp4-tr">
-                    <td className="sp4-td--left sys-num">{day(r.createdAt)}</td>
-                    <td className="sp4-td--left">{r.report?.reportedBy?.fullName ?? "—"}</td>
-                    <td className="sp4-td--left">{OUTCOME_LABEL[r.outcome] ?? r.outcome}</td>
-                    <td className="sp4-td--left">
-                      <span className={"sp4-pill sp4-pill--" + (REPAIR_PILL[r.stage] ?? "none")}>{REPAIR_STAGE[r.stage] ?? r.stage}</span>
-                    </td>
-                    <td className="sp4-td--left aud-wrap">
-                      {[r.problemNote, r.sparePart && `Spare: ${r.sparePart}`, r.fixNote && `Fix: ${r.fixNote}`].filter(Boolean).join(" · ") || "—"}
-                    </td>
-                    <td className="sp4-td--right sys-num">{r.resolvedAt ? day(r.resolvedAt) : "open"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="dsb__cards">
+            {u.repairs.map((r) => (
+              <li key={r.id} className="dsb__card">
+                <div className="dsb__card-head aud-card-head">
+                  <span className="sys-num">Raised {day(r.createdAt)}</span>
+                  <span className={"sp4-pill sp4-pill--" + (REPAIR_PILL[r.stage] ?? "none")}>{REPAIR_STAGE[r.stage] ?? r.stage}</span>
+                </div>
+                <dl>
+                  <dt>By</dt><dd>{r.report?.reportedBy?.fullName ?? "—"}</dd>
+                  <dt>Source</dt><dd>{OUTCOME_LABEL[r.outcome] ?? r.outcome}</dd>
+                  <dt>Found / done</dt>
+                  <dd>{[r.problemNote, r.sparePart && `Spare: ${r.sparePart}`, r.fixNote && `Fix: ${r.fixNote}`].filter(Boolean).join(" · ") || "—"}</dd>
+                  <dt>Closed</dt><dd className="sys-num">{r.resolvedAt ? day(r.resolvedAt) : "Open"}</dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
         )}
         {u.probeFaults.length > 0 && (
           <p className="aud-dead">
@@ -297,8 +290,8 @@ function UnitDetail({ u, orgId, canTriage, canRepairs, canWork: canResolve, canW
             {u.probeFaults.length > 6 && ", …"}
           </p>
         )}
-      </section>
-    </div>
+      </DetailSidebarSection>
+    </>
   );
 }
 
@@ -319,6 +312,17 @@ export default function AuditScreen() {
   const [state, setState] = useState("open");
   const [openId, setOpenId] = useState(null);
   const [toast, setToast] = useState(null);
+  // Focus goes back to the unit's row when its sidebar closes, as on Alerts.
+  const returnTo = useRef(null);
+  const closeUnit = useCallback(() => {
+    setOpenId((id) => { returnTo.current = id; return null; });
+  }, []);
+  useEffect(() => {
+    if (openId || !returnTo.current) return;
+    const id = returnTo.current;
+    returnTo.current = null;
+    document.querySelector(`tr[data-unit="${CSS.escape(id)}"]`)?.focus();
+  }, [openId]);
 
   const read = useCallback(() => {
     if (!orgId || !canRead) return;
@@ -356,6 +360,9 @@ export default function AuditScreen() {
   const totalCases = s.units.reduce((n, u) => n + u.cases.length, 0);
   const unitsWithOpen = s.units.filter((u) => u.openCases > 0).length;
   const falseLitres = rows.reduce((n, x) => n + x.u.cases.reduce((m, c) => m + (c.incident.volumeMl ?? 0), 0), 0);
+  // Looked up in every unit, not the filtered rows: a unit repaired while open
+  // keeps its sidebar under the Waiting filter until it is closed.
+  const openUnit = openId ? states.find((x) => x.u.vehicleId === openId) ?? null : null;
 
   return (
     <div className="sp4-root sys-root aud-root" ref={rootRef}>
@@ -452,14 +459,16 @@ export default function AuditScreen() {
                 {rows.map(({ u, st }) => {
                   const maxVol = Math.max(1, ...rows.map((x) => x.u.cases.reduce((m, c) => m + (c.incident.volumeMl ?? 0), 0)));
                   const expanded = openId === u.vehicleId;
-                  const toggle = () => setOpenId(expanded ? null : u.vehicleId);
+                  const toggle = () => (expanded ? closeUnit() : setOpenId(u.vehicleId));
                   const vol = u.cases.reduce((m, c) => m + (c.incident.volumeMl ?? 0), 0);
                   return (
-                    <Fragment key={u.vehicleId}>
                       <tr
+                        key={u.vehicleId}
+                        data-unit={u.vehicleId}
                         className={"sp4-tr sp4-tr--incident aud-tr" + (expanded ? " aud-tr--open" : "")}
                         tabIndex={0}
                         aria-expanded={expanded}
+                        aria-controls={expanded ? "aud-unit-panel" : undefined}
                         onClick={toggle}
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
                       >
@@ -483,18 +492,10 @@ export default function AuditScreen() {
                         </td>
                         <td className="sp4-td--right">
                           <button type="button" className="sp4-ghost-btn" onClick={(e) => { e.stopPropagation(); toggle(); }}>
-                            {expanded ? "Hide" : st.key === "failed" ? "Raise job" : st.key === "open" ? "Overhaul" : "Details"}
+                            {expanded ? "Close" : st.key === "failed" ? "Raise job" : st.key === "open" ? "Overhaul" : "Details"}
                           </button>
                         </td>
                       </tr>
-                      {expanded && (
-                        <tr className="aud-detail-row">
-                          <td colSpan={7}>
-                            <UnitDetail u={u} orgId={orgId} canTriage={canTriage} canRepairs={canRepairs} canWork={canWork} canWorkAny={canWorkAny} userId={user?.id ?? null} canAssign={canAssign} ctx={ctx} onChanged={read} onToast={setToast} />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
                   );
                 })}
               </tbody>
@@ -502,6 +503,25 @@ export default function AuditScreen() {
           </div>
         )}
       </div>
+
+      {openUnit && (
+        <DetailSidebar
+          title="Faulty probe"
+          label={`Faulty probe, ${openUnit.u.plate ?? "unit"}`}
+          itemKey={openUnit.u.vehicleId}
+          onClose={closeUnit}
+          wide
+          footer={canRepairs ? (
+            <button type="button" className="sp4-ghost-btn" onClick={() => openInRepairs(ctx)}>
+              <i className="ti ti-tool" aria-hidden="true" /> Open in Repairs
+            </button>
+          ) : null}
+        >
+          <div id="aud-unit-panel" className="aud-panel">
+            <UnitDetail u={openUnit.u} st={openUnit.st} orgId={orgId} canTriage={canTriage} canWork={canWork} canWorkAny={canWorkAny} userId={user?.id ?? null} canAssign={canAssign} onChanged={read} onToast={setToast} />
+          </div>
+        </DetailSidebar>
+      )}
     </div>
   );
 }

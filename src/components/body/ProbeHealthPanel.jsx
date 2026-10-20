@@ -116,11 +116,11 @@ const Pill = ({ state, label }) => (
  *
  * ## Everything it takes is a primitive, except two objects
  *
- * That is the whole design constraint. `checked`, `reported` and `isSelected`
+ * That is the whole design constraint. `reported` and `isSelected`
  * are booleans the parent computes, rather than the Set and the id being
  * handed down to be searched here — a Set prop changes identity on every
- * selection and would defeat the memo for every row at once. `onToggle` and
- * `onOpen` are useCallback-stable, and `onOpen` takes the row so the parent
+ * selection and would defeat the memo for every row at once. `onOpen` is
+ * useCallback-stable, and `onOpen` takes the row so the parent
  * builds the payload without a closure per row.
  *
  * `r` is stable between fetches. `live` is NOT — `vehicleReadings` builds a
@@ -128,7 +128,7 @@ const Pill = ({ state, label }) => (
  * actually renders instead of trusting identity.
  */
 const ProbeRow = memo(
-  function ProbeRow({ r, live, canRepair, checked, reported, isSelected, onToggle, onOpen }) {
+  function ProbeRow({ r, live, reported, isSelected, onOpen }) {
     return (
       <tr
         className={"sp4-tr sp4-tr--probe" + (isSelected ? " sp4-tr--selected" : "")}
@@ -138,23 +138,6 @@ const ProbeRow = memo(
         // the individual pings behind a verdict.
         onClick={() => onOpen(r)}
       >
-        {canRepair && (
-          /* stopPropagation on the CELL, not just the input:
-             the whole <tr> is the drill-in target, so a click
-             landing on this cell's padding would open the
-             detail view instead of ticking the box. */
-          <td className="sp4-td--check" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="checkbox"
-              className="sp4-check"
-              aria-label={`Select ${r.plate}`}
-              checked={checked}
-              disabled={reported}
-              title={reported ? "A repair is already open for this unit" : undefined}
-              onChange={() => onToggle(r.vehicleId)}
-            />
-          </td>
-        )}
         <td className="sp4-td--left sp4-td--pin">
           <span className="sp4-reg">{r.plate}</span>
           <div className="sp4-muted">{r.deviceId ?? "—"}</div>
@@ -229,11 +212,8 @@ const ProbeRow = memo(
    */
   (a, b) =>
     a.r === b.r &&
-    a.canRepair === b.canRepair &&
-    a.checked === b.checked &&
     a.reported === b.reported &&
     a.isSelected === b.isSelected &&
-    a.onToggle === b.onToggle &&
     a.onOpen === b.onOpen &&
     a.live?.fuelLitres === b.live?.fuelLitres &&
     a.live?.fuelPct === b.live?.fuelPct,
@@ -241,15 +221,15 @@ const ProbeRow = memo(
 
 export default function ProbeHealthPanel({
   search = "", data, loading, error, onReload, onSelect, selectedId,
-  // Repair reporting, off unless the account may file one. Everyone else gets
-  // exactly the table they had before — no column, no bar, no behaviour change.
-  canRepair = false, openByVehicle, onRepairFiled,
+  // Which units already have a repair open, for the Reported mark. Filing one
+  // happens in the unit's sidebar (ProbeReportActions, below).
+  openByVehicle,
 }) {
   // The live snapshot, merged in per row. Health answers "is it working"; the
   // snapshot answers "what does it read right now", and the merged tab has to
   // carry both or it is not a merge — it is a replacement that lost half the
   // screen it replaced.
-  const { vehicles, orgId } = useFleetLiveShared();
+  const { vehicles } = useFleetLiveShared();
   // Keyed by PLATE, and read through vehicleReadings.
   //
   // Both were wrong first time round and both are worth naming. The snapshot's
@@ -273,16 +253,6 @@ export default function ProbeHealthPanel({
   // they stop reaching for.
   const [status,  setStatus]  = useState("faulty");
 
-  /* ── Repair selection ───────────────────────────────────────────────────
-     Keyed on vehicleId, the row's own key. A Set rather than an array because
-     the header checkbox and every row ask "is this one in?" on every render. */
-  const [picked,     setPicked]     = useState(() => new Set());
-  const [formOpen,   setFormOpen]   = useState(false);
-  const [seedOutcome, setSeedOutcome] = useState("fixing");
-  const [busy,       setBusy]       = useState(false);
-  const [formError,  setFormError]  = useState("");
-  const [banner,     setBanner]     = useState(null);
-
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
     const q = search.trim().toLowerCase();
@@ -300,33 +270,6 @@ export default function ProbeHealthPanel({
   }, [data, search, channel, status]);
   const pager = usePager(rows, `${search}|${channel}|${status}`);
 
-  /*
-   * What SUBMIT sends. Derived from `rows`, never from `picked` directly, so a
-   * unit ticked under one filter and then filtered out by a search cannot ride
-   * along into a report the technician never saw. This is the correctness half.
-   */
-  const selectedRows = useMemo(
-    () => rows.filter((r) => picked.has(r.vehicleId)),
-    [rows, picked],
-  );
-
-  /*
-   * And prune `picked` itself, which is the HONESTY half. Without it the header
-   * checkbox sits at "mixed" over a table where everything visible is ticked,
-   * and the count in the action bar names units that are not on screen.
-   *
-   * Returning the previous Set when nothing was removed keeps the identity
-   * stable, so this cannot drive itself in a loop.
-   */
-  useEffect(() => {
-    setPicked((prev) => {
-      if (prev.size === 0) return prev;
-      const visible = new Set(rows.map((r) => r.vehicleId));
-      const next = new Set([...prev].filter((id) => visible.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [rows]);
-
   /* Stable, so the memoised row does not see a new function every render.
      Takes the ROW rather than a pre-built payload for the same reason: a
      closure per row would change identity on every pass. */
@@ -336,79 +279,6 @@ export default function ProbeHealthPanel({
       type: "probe_row", detail: "Probes",
     });
   }, [onSelect]);
-
-  const toggleRow = useCallback((id) => {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const handleFile = useCallback(async ({ items, note }) => {
-    setBusy(true);
-    setFormError("");
-    try {
-      const res = await submitRepairReport({ orgId, items, note });
-      setBanner(emailBanner(res?.email));
-      setPicked(new Set());
-      setFormOpen(false);
-      onRepairFiled?.();
-      onReload?.();
-    } catch (e) {
-      setFormError(e?.message ?? "Could not file the report");
-    } finally {
-      setBusy(false);
-    }
-  }, [orgId, onRepairFiled, onReload]);
-
-  /*
-   * The tick clears itself; the warnings do not.
-   *
-   * "Report filed. Emailed to 2 handlers." is a receipt — it has been read by
-   * the time it fades, and leaving it costs a click for nothing. Every other
-   * outcome is an INSTRUCTION ("no email was sent … tell an administrator"),
-   * and an instruction that removes itself after six seconds is worse than
-   * none: it gets half-read and the technician carries on believing somebody
-   * was told.
-   */
-  useEffect(() => {
-    if (banner?.tone !== "ok") return undefined;
-    const t = setTimeout(() => setBanner(null), 6000);
-    return () => clearTimeout(t);
-  }, [banner]);
-
-  /* The three buttons SEED the form rather than submitting. See the header on
-     RepairReportForm for why there is one form and not two paths. */
-  const openForm = useCallback((outcome) => {
-    setSeedOutcome(outcome);
-    setFormError("");
-    setBanner(null);
-    setFormOpen(true);
-  }, []);
-
-  const formItems = useMemo(() => selectedRows.map((r) => ({
-    key:        r.vehicleId,
-    targetKind: "probe",
-    vehicleId:  r.vehicleId,
-    plate:      r.plate,
-    label:      faultAction(r) || humanKind(null),
-    /*
-     * Which channels are actually failing on this unit, so the form can put
-     * the parts that serve them at the top of its dropdown.
-     *
-     * Read from CHANNELS rather than from a second list of my own — these are
-     * the same predicates the filter bar above the table runs, so a unit the
-     * operator filtered to "Ignition" cannot arrive at the form ranked by
-     * anything else. `all` is skipped: it is a view, not a channel, and its
-     * `bad` is the union of every other one.
-     *
-     * An empty array is a legitimate answer (a unit ticked under "Working",
-     * which a technician may do after replacing something pre-emptively), and
-     * the form renders one ungrouped list for it.
-     */
-    channels:   CHANNELS.filter((c) => c.id !== "all" && c.bad(r)).map((c) => c.id),
-  })), [selectedRows]);
 
   const filterNote = useMemo(() => {
     const chan = CHANNELS.find(c => c.id === channel)?.label ?? "All";
@@ -452,42 +322,7 @@ export default function ProbeHealthPanel({
           companyName: "Fleet Tracking", rows, filterNote, filenameSlug,
         })}
         disabled={!rows.length}
-        actions={canRepair && selectedRows.length > 0 ? (
-          <span className="sp4-selbar">
-            <span className="sp4-selbar-n">{selectedRows.length} selected</span>
-            <button type="button" className="sp4-act-btn"
-                    onClick={() => openForm("fixing")}>{OUTCOME_ACTION.fixing}</button>
-            <button type="button" className="sp4-act-btn sp4-act-btn--warn"
-                    onClick={() => openForm("needs_spare")}>{OUTCOME_ACTION.needs_spare}</button>
-            <button type="button" className="sp4-act-btn sp4-act-btn--crit"
-                    onClick={() => openForm("cannot_fix")}>{OUTCOME_ACTION.cannot_fix}</button>
-          </span>
-        ) : null}
       />
-
-      {banner && (
-        /* A toast, not the full-bleed banner this was. See the .sp4-toast block
-           in SensorPanel.css for why, and for why only the tick goes away by
-           itself. `role="status"` and aria-live=polite rather than "alert":
-           the report is filed either way, so this is never an interruption. */
-        <div className={"sp4-toast sp4-toast--" + banner.tone} role="status" aria-live="polite">
-          <span className="sp4-toast-text">{banner.text}</span>
-          <button type="button" className="sp4-toast-x" aria-label="Dismiss"
-                  onClick={() => setBanner(null)}>×</button>
-        </div>
-      )}
-
-      {canRepair && (
-        <RepairReportForm
-          open={formOpen}
-          items={formItems}
-          defaultOutcome={seedOutcome}
-          busy={busy}
-          error={formError}
-          onCancel={() => setFormOpen(false)}
-          onSubmit={handleFile}
-        />
-      )}
 
       {/* Channel "all" and State "faulty" are where this panel starts, so
           neither counts as a narrowing the reader needs warning about. */}
@@ -554,31 +389,6 @@ export default function ProbeHealthPanel({
                 <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
                   <thead>
                     <tr>
-                      {canRepair && (
-                        <th className="sp4-th--check">
-                          {/* A NATIVE checkbox, unlike UserAdminPanel's ARIA
-                              buttons. That idiom is right there, where the
-                              control wraps a whole labelled row; here the cell
-                              is a bare box in a table, and native brings
-                              keyboard focus, Space, accent-color and — the
-                              deciding one — a real `indeterminate`. The ARIA
-                              button would need aria-checked="mixed" plus a
-                              hand-painted third visual state. */}
-                          <input
-                            type="checkbox"
-                            className="sp4-check"
-                            aria-label="Select every unit shown"
-                            checked={selectedRows.length > 0 && selectedRows.length === rows.length}
-                            ref={(el) => {
-                              if (el) el.indeterminate =
-                                selectedRows.length > 0 && selectedRows.length < rows.length;
-                            }}
-                            onChange={(e) => setPicked(
-                              e.target.checked ? new Set(rows.map((r) => r.vehicleId)) : new Set()
-                            )}
-                          />
-                        </th>
-                      )}
                       <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
                       <th className="sp4-th--left sp4-td--action">Action</th>
                       <th className="sp4-th--right">Last report</th>
@@ -599,11 +409,8 @@ export default function ProbeHealthPanel({
                         key={r.vehicleId}
                         r={r}
                         live={liveByPlate.get(r.plate)}
-                        canRepair={canRepair}
-                        checked={picked.has(r.vehicleId)}
                         reported={openByVehicle?.has(r.vehicleId) ?? false}
                         isSelected={selectedId === r.vehicleId}
-                        onToggle={toggleRow}
                         onOpen={openRow}
                       />
                     ))}
@@ -614,5 +421,92 @@ export default function ProbeHealthPanel({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Reporting a repair on ONE unit, from its sidebar (operator, 2026-10-20:
+ * "whenever we select the probe the options of either fixing, cannot be fixed
+ * or fixing are to be in the side panel"). The three buttons used to sit in
+ * the table's toolbar over a ticked batch; they are here now, beside the unit
+ * they are about, and the table has no checkboxes. Each button seeds the one
+ * form (RepairReportForm) rather than submitting, as before.
+ *
+ * `row` is the unit's probe-health row: its fault label and failing channels
+ * go into the form so the spare parts list leads with the right parts.
+ */
+export function ProbeReportActions({ row, orgId, onFiled }) {
+  const [formOpen,    setFormOpen]    = useState(false);
+  const [seedOutcome, setSeedOutcome] = useState("fixing");
+  const [busy,        setBusy]        = useState(false);
+  const [formError,   setFormError]   = useState("");
+  const [banner,      setBanner]      = useState(null);
+
+  const items = useMemo(() => (row ? [{
+    key:        row.vehicleId,
+    targetKind: "probe",
+    vehicleId:  row.vehicleId,
+    plate:      row.plate,
+    label:      faultAction(row) || humanKind(null),
+    channels:   CHANNELS.filter((c) => c.id !== "all" && c.bad(row)).map((c) => c.id),
+  }] : []), [row]);
+
+  const openForm = useCallback((outcome) => {
+    setSeedOutcome(outcome);
+    setFormError("");
+    setBanner(null);
+    setFormOpen(true);
+  }, []);
+
+  const handleFile = useCallback(async ({ items: filed, note }) => {
+    setBusy(true);
+    setFormError("");
+    try {
+      const res = await submitRepairReport({ orgId, items: filed, note });
+      setBanner(emailBanner(res?.email));
+      setFormOpen(false);
+      onFiled?.();
+    } catch (e) {
+      setFormError(e?.message ?? "Could not file the report");
+    } finally {
+      setBusy(false);
+    }
+  }, [orgId, onFiled]);
+
+  // The receipt clears itself; an instruction ("no email was sent") stays.
+  useEffect(() => {
+    if (banner?.tone !== "ok") return undefined;
+    const t = setTimeout(() => setBanner(null), 6000);
+    return () => clearTimeout(t);
+  }, [banner]);
+
+  if (!row) return null;
+  return (
+    <>
+      <div className="sp4-probe-report">
+        <button type="button" className="sp4-act-btn"
+                onClick={() => openForm("fixing")}>{OUTCOME_ACTION.fixing}</button>
+        <button type="button" className="sp4-act-btn sp4-act-btn--warn"
+                onClick={() => openForm("needs_spare")}>{OUTCOME_ACTION.needs_spare}</button>
+        <button type="button" className="sp4-act-btn sp4-act-btn--crit"
+                onClick={() => openForm("cannot_fix")}>{OUTCOME_ACTION.cannot_fix}</button>
+      </div>
+      {banner && (
+        <div className={"sp4-toast sp4-toast--" + banner.tone} role="status" aria-live="polite">
+          <span className="sp4-toast-text">{banner.text}</span>
+          <button type="button" className="sp4-toast-x" aria-label="Dismiss"
+                  onClick={() => setBanner(null)}>×</button>
+        </div>
+      )}
+      <RepairReportForm
+        open={formOpen}
+        items={items}
+        defaultOutcome={seedOutcome}
+        busy={busy}
+        error={formError}
+        onCancel={() => setFormOpen(false)}
+        onSubmit={handleFile}
+      />
+    </>
   );
 }

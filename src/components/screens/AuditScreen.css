@@ -542,3 +542,34 @@
     width: calc(100cqw - 28px);
   }
 }
+
+/* ── The unit's detail sidebar ─────────────────────────────────────────────
+ * Hallmark · component: detail sidebar (Audit) · genre: modern-minimal · theme: sp4
+ * pre-emit critique: P4 H5 E4 S4 R5 V4
+ * states: closed · open · swapped · row hover · row open · × hover/focus/active
+ *         (DetailSidebar.css) · phone (full-width sheet).
+ * The shared DetailSidebar (Alerts, Drivers, Maintenance), wide. What used to
+ * open under the row as stacked cards is sections under hairlines here: the
+ * alerts on the timeline rail, the repair ladder flat, the overhaul in one
+ * column, the probe record as cards. */
+.aud-panel { display: contents; }
+.aud-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dsb .aud-case-open { justify-self: start; margin: 2px 0 0; }
+.dsb .aud-case-note { margin: 8px 0 0; color: var(--sp4-text-2); }
+.dsb .aud-card--repair { display: grid; gap: 10px; }
+.dsb .aud-raise { max-width: none; }
+.dsb .aud-dead { margin-top: 10px; }
+/* The overhaul's two columns become one: the work, then the parts under a hairline. */
+.aud-ov--panel { display: grid; gap: 14px; }
+.aud-ov--panel .aud-ov-grid { grid-template-columns: minmax(0, 1fr); }
+.aud-ov--panel .aud-ov-col--parts {
+  padding-left: 0; padding-top: 14px;
+  border-left: 0; border-top: 1px solid var(--sp4-line-hi);
+}
+.app--light .aud-ov--panel .aud-ov-col--parts { border-top-color: #e6e9ee; }
+@media (max-width: 767px) {
+  .dsb .aud-case-open, .dsb .aud-card--repair .sp4-ghost-btn {
+    display: inline-flex; align-items: center; min-height: var(--m-ctl); padding: 0 12px; border-radius: 6px; font-size: 12px;
+  }
+  .dsb .sp4-submit-btn { min-height: var(--m-action); padding: 0 16px; font-size: 13px; }
+}

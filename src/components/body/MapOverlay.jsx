@@ -28,6 +28,7 @@ import VehicleBriefCard     from "../cards/VehicleBriefCard";
 import FleetCargoCard       from "../cards/FleetCargoCard";
 
 import { useAppFields, useCompanies, useAppSelector, useAppActions } from "../../context/AppContext";
+import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -1514,6 +1515,22 @@ function RightPanel() {
   // window state is cleared of it too — a close that left `pinned: true` in
   // localStorage brought the window back pinned on the next reload, which is
   // not what "close" means.
+  // The feed and the incident window take turns (lib/sidePanels): the window
+  // shares the map's owner, so it can sit beside that unit's card.
+  useEffect(() => { if (incidentOpen) claimSidePanel("map"); }, [incidentOpen]);
+  useEffect(() => onSidePanelClaim("map", () => { setIncidentOpen(false); setHeld(null); }), []);
+
+  // Leaving the map for another page closes the window (appSlice tabChosen);
+  // it is back only when an alert is opened again.
+  const mapClearN = useAppSelector((a) => a.mapClearN);
+  const clearedN = useRef(mapClearN);
+  useEffect(() => {
+    if (clearedN.current === mapClearN) return;
+    clearedN.current = mapClearN;
+    setIncidentOpen(false);
+    setHeld(null);
+  }, [mapClearN]);
+
   const closeIncident = () => {
     setIncidentOpen(false);
     setPinned(false);
@@ -1629,6 +1646,22 @@ export function FuelIncidentHost() {
       setHeld(null);
     }
   }, [heldId, dismissed]);
+
+  // The feed and the incident window take turns (lib/sidePanels): the window
+  // shares the map's owner, so it can sit beside that unit's card.
+  useEffect(() => { if (incidentOpen) claimSidePanel("map"); }, [incidentOpen]);
+  useEffect(() => onSidePanelClaim("map", () => { setIncidentOpen(false); setHeld(null); }), []);
+
+  // Leaving the map for another page closes the window (appSlice tabChosen);
+  // it is back only when an alert is opened again.
+  const mapClearN = useAppSelector((a) => a.mapClearN);
+  const clearedN = useRef(mapClearN);
+  useEffect(() => {
+    if (clearedN.current === mapClearN) return;
+    clearedN.current = mapClearN;
+    setIncidentOpen(false);
+    setHeld(null);
+  }, [mapClearN]);
 
   const closeIncident = () => {
     setIncidentOpen(false);

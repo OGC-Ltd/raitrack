@@ -380,12 +380,16 @@ export function SpareParts({ orgId, job, plate, parts, suppliers, canWork, onToa
   );
 }
 
-export default function AuditOverhaul({ orgId, job, plate, overhaul, suppliers = [], canWork, canAssign, onToast, onChanged }) {
+/**
+ * `inPanel`: inside the Audit page's detail sidebar, whose section already
+ * heads it "Overhaul Audit". No card frame, no title, one column.
+ */
+export default function AuditOverhaul({ orgId, job, plate, overhaul, suppliers = [], canWork, canAssign, onToast, onChanged, inPanel = false }) {
   const parts = overhaul?.parts ?? [];
   const inspections = overhaul?.inspections ?? [];
   return (
-    <div className="frv-card aud-ov">
-      <h3 className="frv-card__t">Overhaul audit</h3>
+    <div className={inPanel ? "aud-ov aud-ov--panel" : "frv-card aud-ov"}>
+      {!inPanel && <h3 className="frv-card__t">Overhaul audit</h3>}
       <div className="aud-ov-grid">
         {/* Left: the work on the unit. Right: the parts it needs. */}
         <div className="aud-ov-col">

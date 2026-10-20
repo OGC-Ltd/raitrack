@@ -12,6 +12,7 @@
 // one value and change it through the map's applyFilter, never directly.
 
 import { createSlice } from "@reduxjs/toolkit";
+import { tabChosen } from "./appSlice";
 
 /** Windows that sit on the map but are opened from elsewhere (the sidebar). */
 export const MAP_WINDOWS = ["unitsOpen", "strandedOpen", "fuelAlertsOpen"];
@@ -38,6 +39,12 @@ const mapSlice = createSlice({
       },
       prepare: (name, open) => ({ payload: { name, open } }),
     },
+  },
+  extraReducers: (builder) => {
+    // Leaving the map for another page closes its windows (appSlice tabChosen).
+    builder.addCase(tabChosen, (state, { payload }) => {
+      if (payload && payload !== "fleet") for (const w of MAP_WINDOWS) state[w] = false;
+    });
   },
 });
 

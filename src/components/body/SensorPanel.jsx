@@ -29,7 +29,7 @@ import TablePager, { usePager, PAGE_STEP } from "./TablePager";
 import FilterBar from "./FilterBar";
 // The HISTORICAL view of the same probes. The grid below renders the live
 // snapshot and structurally cannot say when a channel stopped — see the panel.
-import ProbeHealthPanel from "./ProbeHealthPanel";
+import ProbeHealthPanel, { ProbeReportActions } from "./ProbeHealthPanel";
 import RepairJobsPanel from "./RepairJobsPanel";
 import RepairTrackingLine from "./RepairTrackingLine";
 import { latestRepairForVehicle, mayWorkJob } from "../../api/repairs";
@@ -39,6 +39,7 @@ import { useOpenRepairs } from "../../hooks/useOpenRepairs";
 import { restoreChoice, persistChoice } from "../../lib/navMemory";
 import { watchTableLabels } from "../../lib/tableLabels";
 import EmptyNote from "../shared/EmptyNote";
+import DetailSidebar, { DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import "./SensorPanel.css";
 
 /* Every tab this build has, and where the choice is stored. The allow-list is
@@ -1046,7 +1047,7 @@ function fuelDayName(day, { year = true } = {}) {
  */
 export function FuelDrainDetail({
   vehicleId, vehicleName, orgId, fuelRow, onClose,
-  day, pending = false, error = null, onReload, tank, recordDay, onPickDay,
+  day, pending = false, error = null, onReload, tank, recordDay, onPickDay, inPanel = false,
 }) {
   const { can } = usePermissions();
   const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
@@ -1109,8 +1110,22 @@ export function FuelDrainDetail({
     PENDING:        { text: "Settling…",        cls: "sp4-verdict--none"    },
   })[v] ?? { text: v ?? "Unknown", cls: "sp4-verdict--none" };
 
+  const subLine = (
+    <>
+      Fuel events · {dayName}
+      {fuelRow && !pending && !error && (
+        <> · {drains.length} drain{drains.length !== 1 ? "s" : ""} · {refills.length} refill{refills.length !== 1 ? "s" : ""}</>
+      )}
+    </>
+  );
+
   return (
-    <div className="sp4-detail">
+    <div className={"sp4-detail" + (inPanel ? " sp4-detail--panel" : "")}>
+      {inPanel ? (
+        /* In the detail sidebar: the unit heads the panel, its × closes it and
+           View on Map sits in the panel's foot (SensorPanel). */
+        <DetailSidebarIdent name={vehicleName} sub={subLine} />
+      ) : (
       <div className="sp4-detail-head">
         {/* Classed so the stylesheet can give it a floor. As a bare <div> it
             carried min-width:auto, and the actions beside it are shrink:0, so
@@ -1118,12 +1133,7 @@ export function FuelDrainDetail({
             it gave all the way down to its longest word. */}
         <div className="sp4-detail-titles">
           <div className="sp4-detail-reg">{vehicleName}</div>
-          <div className="sp4-detail-sub">
-            Fuel events · {dayName}
-            {fuelRow && !pending && !error && (
-              <> · {drains.length} drain{drains.length !== 1 ? "s" : ""} · {refills.length} refill{refills.length !== 1 ? "s" : ""}</>
-            )}
-          </div>
+          <div className="sp4-detail-sub">{subLine}</div>
         </div>
         <div className="sp4-detail-actions">
           {can("map:read") && (
@@ -1135,6 +1145,7 @@ export function FuelDrainDetail({
           <button className="sp4-detail-close" onClick={onClose}>✕</button>
         </div>
       </div>
+      )}
 
       {pending ? (
         <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Day's Fuel Events">
@@ -1253,9 +1264,22 @@ export function FuelDrainDetail({
   );
 }
 
+/** When a unit was last heard from, in words: "3 h ago", "4 days ago", "never". */
+function lastHeard(iso) {
+  if (!iso) return "never";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "unknown";
+  const h = ms / 3600000;
+  if (h < 48) return `${Math.max(1, Math.round(h))} h ago`;
+  return `${Math.round(h / 24)} days ago`;
+}
+
 function SensorDetail({
   vehicleId, vehicleName, orgId, onClose,
-  canSeeRepairs = false, canResolveRepairs = false, faulty = false, repairNonce = 0,
+  canSeeRepairs = false, canResolveRepairs = false, faulty = false, repairNonce = 0, inPanel = false,
+  // In the sidebar: the Fixing / Needs a spare part / Cannot be fixed buttons
+  // (ProbeReportActions), and when the unit last reported, for the empty state.
+  reportActions = null, lastReportedAt = null,
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -1309,7 +1333,17 @@ function SensorDetail({
   };
 
   return (
-    <div className="sp4-detail">
+    <div className={"sp4-detail" + (inPanel ? " sp4-detail--panel" : "")}>
+      {inPanel ? (
+        /* In the detail sidebar: the unit heads the panel, its × closes it and
+           View on Map sits in the panel's foot (SensorPanel). */
+        <DetailSidebarIdent name={vehicleName} sub={`Sensor readings, past 1 hour · ${pings.length} pings`}>
+          <span className="sp4-detail-panel-actions">
+            <button className="sp4-ghost-btn" onClick={handlePDF} title="Download as text file">Export</button>
+            <button className="sp4-ghost-btn" onClick={handlePrint} title="Print this table">Print</button>
+          </span>
+        </DetailSidebarIdent>
+      ) : (
       <div className="sp4-detail-head">
         {/* Classed so the stylesheet can give it a floor. As a bare <div> it
             carried min-width:auto, and the actions beside it are shrink:0, so
@@ -1335,6 +1369,7 @@ function SensorDetail({
           <button className="sp4-detail-close" onClick={onClose}>✕</button>
         </div>
       </div>
+      )}
       {/* Above the readings, not below them. The question "what is being done
           about this unit" is why somebody opened this panel on a faulty one;
           fifty rows of telemetry is the evidence, and evidence sits under the
@@ -1350,13 +1385,24 @@ function SensorDetail({
           onChanged={() => setRepairTick((n) => n + 1)}
         />
       )}
+      {reportActions && (
+        <DetailSidebarSection title="Report a Repair">{reportActions}</DetailSidebarSection>
+      )}
 
       {loading ? (
         <div className="sp4-loading"><div className="sp4-spinner" />Loading sensor readings…</div>
       ) : error ? (
         <div className="sp4-error">⚠ {error}</div>
       ) : !pings.length ? (
-        <div className="sp4-empty-tab">No telemetry in the past hour</div>
+        /* An icon over the words (operator, 2026-10-20), so a silent unit
+           reads as a state at a glance, with when it was last heard from. */
+        <div className="sp4-empty-tab sp4-empty-tab--silent">
+          <i className="ti ti-wifi-off sp4-silent-icon" aria-hidden="true" />
+          <span>No telemetry in the past hour</span>
+          {lastReportedAt !== null && (
+            <span className="sp4-muted">Last report {lastHeard(lastReportedAt)}</span>
+          )}
+        </div>
       ) : (
         <div className="sp4-detail-table-wrap">
           {/* The table needs its own scroller.
@@ -1508,6 +1554,10 @@ export default function SensorPanel() {
    * ladder at all, because a ladder on a working probe is four greyed-out
    * stages answering a question nobody asked.
    */
+  const selectedProbeRow = useMemo(() => {
+    const id = selectedAnomaly?.vehicleId;
+    return id ? probeHealth.data?.rows?.find((r) => r.vehicleId === id) ?? null : null;
+  }, [selectedAnomaly, probeHealth.data]);
   const selectedIsFaulty = useMemo(() => {
     const id = selectedAnomaly?.vehicleId;
     if (!id) return false;
@@ -1577,6 +1627,8 @@ export default function SensorPanel() {
   const handleTabChange = (key) => {
     setActiveTab(key);
     if (key !== "fuel") setFuelFilter("all");
+    // A unit open in the sidebar belongs to the tab that opened it.
+    setSelectedAnomaly(null);
     // Leaving both incident tabs drops their ordering the way leaving fuel
     // drops its drain filter — a filter that survives out of sight is a filter
     // the reader is not told about on the way back in.
@@ -1588,6 +1640,12 @@ export default function SensorPanel() {
       prev?.vehicleId === anomaly.vehicleId && prev?.type === anomaly.type ? null : anomaly
     );
   }, []);
+  const closeSelected = useCallback(() => setSelectedAnomaly(null), []);
+  // A Fuel FSL unit opens beside the list, and only while that tab shows it.
+  const fuelOpen = selectedAnomaly?.type === "fuel_anomaly" && activeTab === "fuel";
+  // Any other unit (a probe row) opens beside the list while Probes shows it.
+  const sensorOpen = !!selectedAnomaly && selectedAnomaly.type !== "fuel_anomaly" && activeTab === "probes";
+  const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
 
   /*
    * The open unit's row for the picked day, once that day has been read.
@@ -1880,8 +1938,25 @@ export default function SensorPanel() {
 
       {/* ── Body ─────────────────────────────────────────────── */}
       <div className="sp4-body">
-        {selectedAnomaly ? (
-          selectedAnomaly.type === "fuel_anomaly" ? (
+        {/* A Fuel FSL unit opens in the app's detail sidebar (operator,
+            2026-10-20: the Drivers page's panel, as on Alerts, Repairs, Speed
+            and Malfunction), so the day's list stays beside it and another row
+            swaps the unit in place. Wide: its drain table and summary strip
+            are drawn to a chart's width. Probes still open in place. */}
+        {fuelOpen && (
+          <DetailSidebar
+            title="Fuel events"
+            label={`Fuel events, ${selectedAnomaly.vehicleName}`}
+            itemKey={`${selectedAnomaly.vehicleId}|${fuelDay}`}
+            onClose={closeSelected}
+            wide
+            footer={can("map:read") ? (
+              <button type="button" className="sp4-ghost-btn"
+                      onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>
+                <i className="ti ti-map-pin" aria-hidden="true" /> View on Map
+              </button>
+            ) : null}
+          >
             <FuelDrainDetail
               /* Keyed by day: each drain row owns a telemetry fetch and reports
                  its loading up by index, and a fresh mount per day stops one
@@ -1898,21 +1973,53 @@ export default function SensorPanel() {
               tank={fuelPending ? undefined : tankState[selectedAnomaly.vehicleId]}
               recordDay={selectedAnomaly.recordDay}
               onPickDay={setFuelDay}
-              onClose={() => setSelectedAnomaly(null)}
+              onClose={closeSelected}
+              inPanel
             />
-          ) : (
-          <SensorDetail
-            vehicleId={selectedAnomaly.vehicleId}
-            vehicleName={selectedAnomaly.vehicleName}
-            orgId={orgId}
-            canSeeRepairs={can("repair:read")}
-            canResolveRepairs={can("repair:resolve")}
-            faulty={selectedIsFaulty}
-            repairNonce={openRepairs.rows.length}
-            onClose={() => setSelectedAnomaly(null)}
-          />
-          )
-        ) : (
+          </DetailSidebar>
+        )}
+        {/* A probe unit opens in the same sidebar (operator, 2026-10-20: "the
+            probes to also be on the sidebar"): its repair line and the past
+            hour's readings beside the list, wide for the readings table. */}
+        {sensorOpen && (
+          <DetailSidebar
+            title="Sensor readings"
+            label={`Sensor readings, ${selectedAnomaly.vehicleName}`}
+            itemKey={selectedAnomaly.vehicleId}
+            onClose={closeSelected}
+            wide
+            footer={can("map:read") ? (
+              <button type="button" className="sp4-ghost-btn"
+                      onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>
+                <i className="ti ti-map-pin" aria-hidden="true" /> View on Map
+              </button>
+            ) : null}
+          >
+            <SensorDetail
+              key={selectedAnomaly.vehicleId}
+              vehicleId={selectedAnomaly.vehicleId}
+              vehicleName={selectedAnomaly.vehicleName}
+              orgId={orgId}
+              canSeeRepairs={can("repair:read")}
+              canResolveRepairs={can("repair:resolve")}
+              faulty={selectedIsFaulty}
+              repairNonce={openRepairs.rows.length}
+              onClose={closeSelected}
+              inPanel
+              lastReportedAt={selectedProbeRow ? selectedProbeRow.lastReportedAt ?? "" : null}
+              // A unit with a repair already open moves through that job's
+              // own controls, above; filing a second is refused anyway.
+              reportActions={canRepairCreate && selectedProbeRow && !openRepairs.byVehicle?.has(selectedProbeRow.vehicleId) ? (
+                <ProbeReportActions
+                  row={selectedProbeRow}
+                  orgId={orgId}
+                  onFiled={() => { openRepairs.reload(); probeHealth.reload(); }}
+                />
+              ) : null}
+            />
+          </DetailSidebar>
+        )}
+        {(
           <>
             <div data-tour="page-tabs" className="sp4-tabs">
               {tabs.map(t => (
@@ -1924,7 +2031,7 @@ export default function SensorPanel() {
               <div className="sp4-tabs-hint">{tabs.find(t => t.key === activeTab)?.hint}</div>
             </div>
 
-            {activeTab === "probes"      && <ProbeHealthPanel search={search} data={probeHealth.data} loading={probeHealth.loading} error={probeHealth.error} onReload={probeHealth.reload} onSelect={handleSelect} selectedId={selectedAnomaly?.vehicleId} canRepair={canRepairCreate} openByVehicle={openRepairs.byVehicle} onRepairFiled={openRepairs.reload} />}
+            {activeTab === "probes"      && <ProbeHealthPanel search={search} data={probeHealth.data} loading={probeHealth.loading} error={probeHealth.error} onReload={probeHealth.reload} onSelect={handleSelect} selectedId={selectedAnomaly?.vehicleId} openByVehicle={openRepairs.byVehicle} />}
             {activeTab === "fuel" && can("fuel_filling:read") && <FuelTable        flagged={fuelFlagged} tankState={tankState} day={fuelDay} loading={fuelPending} error={fuelError} onReload={fuelReload} {...filterProps} onSelect={handleSelect} selectedId={selectedAnomaly?.vehicleId} />}
             {activeTab === "speed" && can("analytics:read") && (
               <IncidentReport
@@ -1939,6 +2046,7 @@ export default function SensorPanel() {
                 caption={`Overspeeding incidents for ${incidentDayLabel}`}
                 loadingLabel="Loading overspeeding incidents…"
                 reportTitle="Sensor Monitor — Speed"
+                panelTitle="Overspeeding cases"
                 exportSlug={`speed-${incidentDay}-${incidentSort}`}
                 selectedId={selectedAnomaly?.vehicleId}
                 emptyLabel="No overspeeding recorded on this day."
@@ -1957,6 +2065,8 @@ export default function SensorPanel() {
                 caption={`Sensor fault episodes for ${incidentDayLabel}`}
                 loadingLabel="Loading sensor faults…"
                 reportTitle="Sensor Monitor — Malfunction"
+                panelTitle="Fault episodes"
+                timeline
                 exportSlug={`malfunction-${incidentDay}-${incidentSort}`}
                 selectedId={selectedAnomaly?.vehicleId}
                 emptyLabel="No sensor faults recorded on this day."

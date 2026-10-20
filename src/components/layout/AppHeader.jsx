@@ -21,6 +21,7 @@ import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
 import ManualIcon from './ManualIcon';
 import { isUnread, useFeedReads } from '../../lib/feedReads';
+import { claimSidePanel, onSidePanelClaim } from '../../lib/sidePanels';
 
 /**
  * How many feed items this operator has not seen, and whether any of them is
@@ -254,12 +255,19 @@ export default function AppHeader() {
   const toggleFeed = () => {
     if (!feedOpen) {
       setSelectedVehicleId(null);
+      // …and every other side panel, card and window (lib/sidePanels): the
+      // feed takes the space rather than stacking over what was open.
+      claimSidePanel('feed');
     }
     // Opening or closing the feed reads nothing: each line stays unread until
     // it is opened (operator 2026-10-19 — one read used to clear them all),
     // and the badge keeps counting it.
     setFeedOpen(!feedOpen);
   };
+
+  // Anything else opening (a page's sidebar, a map card or window, an
+  // incident) closes the feed in turn.
+  useEffect(() => onSidePanelClaim('feed', () => setFeedOpen(false)), []);
 
   // Close dropdowns on outside click
   useEffect(() => {

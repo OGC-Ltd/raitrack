@@ -32,7 +32,8 @@ import {
   escalationOf, escalationPhrase, listRepairAssignees,
 } from "../../api/repairs";
 import RepairSignOffDialog from "./RepairSignOffDialog";
-import RepairJobDetail from "./RepairJobDetail";
+import RepairJobDetail, { jobSubject } from "./RepairJobDetail";
+import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent } from "../shared/DetailSidebar";
 import { useRepairJobs } from "../../hooks/useRepairJobs";
 import FilterBar from "./FilterBar";
 import TablePager, { usePager } from "./TablePager";
@@ -118,15 +119,16 @@ export default function RepairJobsPanel({
   // Per job: a technician works only an accepted job of their own (mayWorkJob).
   const mayWork = (r) => mayWorkJob(r, { canResolve, canWorkAny, userId: currentUserId });
   // A click on the row opens it, but not a click on a control inside it.
-  /* Opening a job FOCUSES it (operator, 2026-10-01): every other row goes,
-     leaving the one picked and its detail, so the page is short enough to
-     read to the bottom. "All jobs" brings the list back. */
+  /* The job opens in the app's detail sidebar (operator, 2026-10-20: the
+     Drivers page's panel, for Repairs as for Alerts). It used to FOCUS the
+     list on the one job; with the job beside the list, every row stays and
+     another row swaps the job in place. */
   const sectionRef = useRef(null);
   const toggleRow = (e, id) => {
     if (e.target.closest("button, select, input, a, textarea, label")) return;
     setOpenId((cur) => (cur === id ? null : id));
-    requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ block: "start" }));
   };
+  const closeJob = useCallback(() => setOpenId(null), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,7 +177,7 @@ export default function RepairJobsPanel({
   }, [rows, state]);
   // The job opened, if it is still in the list (a sign-off can take it out of
   // "Open"; then the list simply comes back).
-  const focused = openId ? (rows.find((r) => r.id === openId) ?? null) : null;
+  const openJob = openId ? (rows.find((r) => r.id === openId) ?? null) : null;
   const pager = usePager(shown, state);
 
   const summary = useMemo(() => {
@@ -273,24 +275,12 @@ export default function RepairJobsPanel({
           <button type="button" className="sp4-toast-x" aria-label="Dismiss notification" onClick={() => setToast(null)}>×</button>
         </div>
       )}
-      {focused ? (
-        <div className="rj-focus-bar">
-          <button type="button" className="sp4-ghost-btn rj-back" onClick={() => setOpenId(null)}>
-            <i className="ti ti-arrow-left" aria-hidden="true" /> All jobs
-          </button>
-          <span className="rj-focus-title">
-            <span className="sp4-reg">{focused.vehicle?.registrationPlate ?? "—"}</span>
-            <span className="sp4-muted"> · one of {shown.length} job{shown.length === 1 ? "" : "s"}</span>
-          </span>
-        </div>
-      ) : null}
-
       {/* Open jobs are what this panel is for, so that is not a narrowing.
           The count and Refresh used to be their own grey band above this row
           (TableToolbar); operator 2026-10-03 asked for that band gone, so they
           ride at the right end of the State row instead. Passed as `peek` so a
           phone keeps them out of the Filters drawer. */}
-      {!focused && <FilterBar label="State" activeCount={state !== "open" ? 1 : 0}
+      <FilterBar label="State" activeCount={state !== "open" ? 1 : 0}
         peek={
           <span className="rj-sum">
             <span className="rj-sum__text">{summary}</span>
@@ -311,7 +301,7 @@ export default function RepairJobsPanel({
             >{label}</button>
           ))}
         </div>
-      </FilterBar>}
+      </FilterBar>
 
       {error && <div className="sp4-banner sp4-banner--crit">{error}</div>}
       {/* A second crit banner stood here, fed by a `err` state that every
@@ -359,7 +349,7 @@ export default function RepairJobsPanel({
               </tr>
             </thead>
             <tbody>
-              {(focused ? [focused] : pager.pageRows).map((r) => (
+              {pager.pageRows.map((r) => (
                 /* The row, and under it the job opened (RepairJobDetail). A
                    click anywhere on the row that is not a control opens it. */
                 <Fragment key={r.id}>
@@ -548,28 +538,42 @@ export default function RepairJobsPanel({
                           : <span className="sp4-pill sp4-pill--warn">Open</span>}
                     </td>
                 </tr>
-                {openId === r.id && (
-                  <tr className="aud-detail-row">
-                    <td colSpan={10}>
-                      <div className="aud-detail">
-                        <RepairJobDetail
-                          orgId={orgId}
-                          job={r}
-                          canResolve={mayWork(r)}
-                          onToast={setToast}
-                          onChanged={reloadAll}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                )}
                 </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {!focused && <TablePager pager={pager} label="Repair job pages" />}
+      <TablePager pager={pager} label="Repair job pages" />
+
+      {openJob && (
+        <DetailSidebar
+          title="Repair job"
+          label={`Repair job, ${openJob.vehicle?.registrationPlate ?? "unit"}`}
+          itemKey={openJob.id}
+          onClose={closeJob}
+        >
+          <DetailSidebarIdent
+            kind={<span className="rjd-kind">{humanKind(openJob.faultKind)}</span>}
+            name={openJob.vehicle?.registrationPlate ?? "—"}
+            sub={jobSubject(openJob)}
+          />
+          <DetailSidebarFacts facts={[
+            { label: "Stage", value: openJob.resolvedAt ? "Resolved" : (STAGE_LABEL[openJob.stage] ?? openJob.stage ?? "Open") },
+            { label: "Assigned", value: openJob.assignedTo?.fullName ?? "Nobody yet" },
+            { label: "Fix date", value: estimateState(openJob).text },
+          ]} />
+          <RepairJobDetail
+            key={openJob.id}
+            orgId={orgId}
+            job={openJob}
+            canResolve={mayWork(openJob)}
+            onToast={setToast}
+            onChanged={reloadAll}
+            inPanel
+          />
+        </DetailSidebar>
+      )}
 
       <RepairSignOffDialog
         open={signOff !== null}

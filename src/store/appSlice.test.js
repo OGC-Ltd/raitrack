@@ -14,7 +14,7 @@ const { makeStore } = await import('./index');
 const { DESKTOP_TABS, loadAppState } = await import('./appSlice');
 const { readFileSync } = await import('node:fs');
 const {
-  fieldSet, companyChosen, mobileTabChosen, fleetTypesSet, trackedIdsSet, incidentRequested,
+  fieldSet, companyChosen, tabChosen, mobileTabChosen, fleetTypesSet, trackedIdsSet, incidentRequested,
   selectionRestored,
 } = await import('./appSlice');
 
@@ -133,5 +133,23 @@ describe('app slice', () => {
     const store = fresh({ selectedVehicleId: 'X', restoredVehicleId: 'X' });
     store.dispatch(companyChosen('kasulu'));
     expect(store.getState().app).toMatchObject({ selectedVehicleId: null, restoredVehicleId: null });
+  });
+});
+
+describe('leaving the map clears it', () => {
+  const fresh = (app = {}) => makeStore({ app: { activeCompanyId: 'sukari', ...app } });
+  it('drops the selection, feed scope, incident and side-panel windows on leaving the map', () => {
+    const store = fresh({ desktopActiveTab: 'fleet', selectedVehicleId: 'KCB 200A', feedVehicleId: 'KCB 200A', openIncidentId: 'i1', pendingFocusId: 'KCB 200A' });
+    store.dispatch({ type: 'map/windowSet', payload: { name: 'unitsOpen', open: true } });
+    store.dispatch(tabChosen('drivers'));
+    const st = store.getState();
+    expect(st.app).toMatchObject({ desktopActiveTab: 'drivers', selectedVehicleId: null, feedVehicleId: null, openIncidentId: null, pendingFocusId: null, mapClearN: 1 });
+    expect(st.map.unitsOpen).toBe(false);
+  });
+
+  it('keeps what a page asked the map to show when going TO the map', () => {
+    const store = fresh({ desktopActiveTab: 'alerts', pendingFocusId: 'KCB 200A' });
+    store.dispatch(tabChosen('fleet'));
+    expect(store.getState().app).toMatchObject({ desktopActiveTab: 'fleet', pendingFocusId: 'KCB 200A', mapClearN: 0 });
   });
 });
