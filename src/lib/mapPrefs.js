@@ -69,20 +69,9 @@ export const DEFAULT_FILTER = "all";
  * answered is "what is the map of this place".
  */
 export const LAYER_DEFAULTS = {
-  // The surveyed boundaries, offered as "Estate areas". This org has TWO
-  // drawings of the same ground — the boundaries and the surveyor's planting
-  // plan — and exactly one of them opens.
-  //
-  // Which one has now been asked both ways. It was the planting plan, on the
-  // argument that the drawing is the map of the place and the boundaries are
-  // a question you ask of it. Asked for 2026-09-14: the areas, with the
-  // planting plan off until it is wanted. Both are still offered, and a
-  // stored preference still beats this line either way.
-  //
-  // The reason only one opens has not changed and is the thing to preserve
-  // here: two dense layers over the same ground, both on by default, is how
-  // one came to be mistaken for the other.
-  kasulu:    { zones: true },
+  // The surveyor's planting plan. The "Estate areas" layer was removed
+  // 2026-10-20, so the plan is the one map of the place and opens on.
+  kasulu:    { plan: true },
   // Each mill opens on its own survey, as Sukari does on its plant. They were
   // one org until 2026-10-07, when only Kabras could open on (two default-on
   // surveys 29 km apart would race for the camera); as organisations of their

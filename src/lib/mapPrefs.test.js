@@ -27,18 +27,11 @@ globalThis.localStorage = {
 beforeEach(() => localStorage.clear());
 
 describe("defaults", () => {
-  it("opens Mufindi on its estate areas", () => {
-    // It is the map of that place.
-    expect(defaultPrefs("kasulu").layers.zones).toBe(true);
-    expect(LAYER_DEFAULTS.kasulu.zones).toBe(true);
-  });
-
-  it("leaves Mufindi's planting plan off until it is asked for", () => {
-    // The pair with the one above, and the point of both: this org has two
-    // drawings of the same ground and exactly one of them opens, or they get
-    // mistaken for each other. Asked for 2026-09-14 — it used to be this one.
-    expect(defaultPrefs("kasulu").layers.plan).toBe(false);
-    expect(LAYER_DEFAULTS.kasulu.plan).toBeUndefined();
+  it("opens Mufindi on its planting plan", () => {
+    // The Estate areas layer was removed 2026-10-20; the plan is what is left.
+    expect(defaultPrefs("kasulu").layers.plan).toBe(true);
+    expect(LAYER_DEFAULTS.kasulu.plan).toBe(true);
+    expect(LAYER_DEFAULTS.kasulu.zones).toBeUndefined();
   });
 
   it("leaves the estate areas off for every other company", () => {
