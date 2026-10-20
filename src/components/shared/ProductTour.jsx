@@ -13,16 +13,14 @@ import { recordTourSeen } from "../../api/account";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import {
-  PAGE_TOURS, TOUR_VERSION, accountBehind, buildPageTourSteps, buildTourSteps, claimFirstRun, coveredItems,
-  hasNewItems, markCovered, markPageTourSeen, onTourRequest, pageTourSeen, tourDue, visibleMark,
+  TOUR_VERSION, accountBehind, buildTourSteps, claimFirstRun, coveredItems,
+  markCovered, onTourRequest, tourDue, visibleMark,
 } from "../../lib/productTour";
 
 /** After the fleet has drawn, so the status cards show figures and not dashes;
  *  never longer than this, so a slow snapshot does not keep the tour away. */
 const FIRST_RUN_MAX_WAIT_MS = 6000;
 const FIRST_RUN_SETTLE_MS = 900;
-/** A page's own tour waits this long after the page opens, for its figures. */
-const PAGE_SETTLE_MS = 1500;
 
 export default function ProductTour() {
   const { user } = useAuth();
@@ -69,28 +67,13 @@ export default function ProductTour() {
     tour.drive();
   }, []);
 
-  /** The tour of the page on screen, where it has one (lib/productTour PAGE_TOURS).
-   *  By itself it shows only what no tour has covered yet, and nothing at all
-   *  when that leaves only the introduction; from Manual, all of it. */
-  const startPage = useCallback((page, { replay = false } = {}) => {
-    if (tourRef.current?.isActive()) return;
-    if (live.current.overlayOpen) return;
-    const id = live.current.user?.id;
-    markPageTourSeen(page, id);
-    const steps = buildPageTourSteps(page, {
-      visible: (mark) => visibleMark(mark),
-      covered: replay ? new Set() : coveredItems(id),
-    });
-    if (replay || hasNewItems(steps)) drive(steps);
-  }, [drive]);
-
   const start = useCallback(({ replay = false } = {}) => {
     if (tourRef.current?.isActive()) return;
     const c = live.current;
-    // Manual on a page with a tour of its own runs that page's (operator,
-    // 2026-10-13: "have the driver.js run on different pages"); on the map,
-    // or a page without one, the app's tour.
-    if (PAGE_TOURS[c.desktopActiveTab] && !c.overlayOpen) { startPage(c.desktopActiveTab, { replay }); return; }
+    // The tour runs on the home page alone (operator, 2026-10-20: "remove
+    // driver.js from all other pages except the home page"). The pages'
+    // own tours (lib/productTour PAGE_TOURS) are no longer started; Manual
+    // from any page takes the person to the map and runs it there.
     // Most of the tour is about the map, so it runs on the map — and over
     // nothing: the Account and User accounts pages open on top of the app.
     const moving = c.canMap && c.desktopActiveTab !== "fleet";
@@ -111,7 +94,7 @@ export default function ProductTour() {
       });
       drive(steps);
     }, moving ? 350 : 60);
-  }, [drive, startPage]);
+  }, [drive]);
 
   // The tour version this person's account has been shown, from /auth/me:
   // null for never, undefined from a server that does not keep it.
@@ -149,18 +132,6 @@ export default function ProductTour() {
   useEffect(() => {
     if (user?.id && accountBehind(user.id, accountVersion)) tellAccount();
   }, [user?.id, accountVersion, tellAccount]);
-
-  // A page's own tour, the first time this person opens that page here. Not
-  // while the app's first tour is still due: that one comes first.
-  useEffect(() => {
-    const id = user?.id;
-    const page = desktopActiveTab;
-    if (!id || !PAGE_TOURS[page] || overlayOpen || pageTourSeen(page, id) || tourDue(id, accountVersion)) return undefined;
-    const t = setTimeout(() => {
-      if (live.current.desktopActiveTab === page) startPage(page);
-    }, PAGE_SETTLE_MS);
-    return () => clearTimeout(t);
-  }, [user?.id, desktopActiveTab, overlayOpen, accountVersion, startPage]);
 
   // Again, from the account menu.
   useEffect(() => onTourRequest(() => start({ replay: true })), [start]);

@@ -67,3 +67,34 @@
 @media (max-width: 599px) {
   .rj-sum { order: 0; margin-left: 0; flex: 1 1 auto; justify-content: space-between; }
 }
+
+/* ── In the detail sidebar (shared/DetailSidebar) ─────────────────────────────
+ * Operator, 2026-10-20: the job opens beside the list in the Drivers page's
+ * panel. The panel is the frame, so this draws none: one column, each part
+ * (the job, its progress, its spare parts) under the panel's own hairline. */
+.rjd-kind {
+  font-size: var(--sp4-label, 11px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.rjd--panel { padding: 0; border: 0; border-radius: 0; background: none; }
+.rjd--panel .rjd-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.rjd--panel .rjd-col { gap: 0; }
+.rjd--panel .rjd-col > *,
+.rjd--panel .rjd-grid > .aud-ov-col--parts {
+  padding: 14px 0 0;
+  margin-top: 14px;
+  border-left: 0;
+  border-top: 1px solid var(--sp4-line-hi);
+}
+.app--light .rjd--panel .rjd-col > *,
+.app--light .rjd--panel .rjd-grid > .aud-ov-col--parts { border-top-color: #e6e9ee; }
+.rjd--panel .rjd-col > :first-child { margin-top: 0; }
+.rjd--panel .aud-h {
+  margin: 0 0 4px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.rjd--panel .rjd-fact { grid-template-columns: 110px minmax(0, 1fr); }

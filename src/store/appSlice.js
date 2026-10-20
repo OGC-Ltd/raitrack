@@ -120,7 +120,28 @@ const defaults = {
   trackedIds: [],
   // A momentary lens — deliberately never persisted.
   inTransitOnly: false,
+  // Counts each time the person left the map for another page (tabChosen).
+  // FleetMap clears what it holds itself (pinned card, trip path, playback,
+  // investigation, arrivals, camera, measuring) when this changes.
+  mapClearN: 0,
 };
+
+/**
+ * Leaving the map for another page clears it (operator, 2026-10-20: "we need
+ * to make sure that we clear the map from any modals cards or components
+ * whenever we navigate from page to page"): coming back shows a bare map, and
+ * a card or window is there again only when it is opened again. Clears the
+ * selection, the Live Feed's scope, the incident window and any focus still
+ * waiting. The fleet filters and tracked units are lenses, not cards, and stay.
+ */
+function clearMapSurfaces(state) {
+  state.selectedVehicleId = null;
+  state.restoredVehicleId = null;
+  state.pendingFocusId = null;
+  state.feedVehicleId = null;
+  state.openIncidentId = null;
+  state.mapClearN += 1;
+}
 
 /**
  * The state a page load starts from: an explicit ?company= link wins, then the
@@ -178,6 +199,13 @@ const appSlice = createSlice({
       // action is made so the reducer stays pure.
       prepare: (id) => ({ payload: { id, lists: restoreOrgLists(id) } }),
     },
+    /** A page picked. Any page but the map clears the map first; going TO
+     *  the map keeps what the caller asked it to show (a focus, an incident). */
+    tabChosen(state, { payload }) {
+      if (!payload || payload === state.desktopActiveTab) return;
+      if (payload !== "fleet") clearMapSurfaces(state);
+      state.desktopActiveTab = payload;
+    },
     mobileTabChosen(state, { payload }) {
       if (payload === "map") state.mapEverMounted = true;
       state.mobileActiveTab = payload;
@@ -204,7 +232,7 @@ const appSlice = createSlice({
 });
 
 export const {
-  fieldSet, companyChosen, mobileTabChosen, fleetTypesSet, trackedIdsSet,
+  fieldSet, companyChosen, tabChosen, mobileTabChosen, fleetTypesSet, trackedIdsSet,
   incidentRequested, sitePlanRequested, selectionRestored,
 } = appSlice.actions;
 export default appSlice.reducer;

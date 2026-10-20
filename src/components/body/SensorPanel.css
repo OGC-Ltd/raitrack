@@ -4366,3 +4366,42 @@
 @media (prefers-reduced-motion: reduce) {
   .sp4-root--framed:not(.wb-root) .sp4-keep-table .sp4-table > tbody > tr > td { transition: none; }
 }
+
+/* ── Fuel FSL's day, in the detail sidebar (shared/DetailSidebar) ────────────
+ * Operator, 2026-10-20: a Fuel FSL unit opens beside the list in the Drivers
+ * page's panel. The panel scrolls and frames it, so the detail draws no frame,
+ * no scroller and no phone sheet of its own (the rule above makes it a fixed
+ * sheet under 768px; the panel already is one there), and its blocks take the
+ * panel's inset instead of the page gutter. */
+.sp4-detail.sp4-detail--panel {
+  --sp4-gutter: 0px;
+  position: static;
+  flex: none;
+  min-height: 0;
+  overflow: visible;
+  padding-bottom: 0;
+  background: none;
+  z-index: auto;
+}
+.sp4-detail--panel .sp4-drain-summary { margin-top: 14px; }
+/* A probe unit's readings in the sidebar: Export and Print under the unit,
+   the table scrolling sideways inside the panel, never the panel itself. */
+.sp4-detail-panel-actions { display: inline-flex; gap: 6px; margin-top: 8px; }
+.sp4-detail--panel .sp4-detail-table-wrap { flex: none; margin-top: 14px; border-radius: 10px; }
+.sp4-detail--panel .sp4-detail-scroll { flex: none; }
+.sp4-detail--panel > .rtl, .sp4-detail--panel > [class*="tracking"] { margin-top: 14px; }
+
+/* Reporting a repair from the unit's sidebar (ProbeReportActions): the three
+   outcome buttons that used to sit over a ticked batch in the toolbar. */
+.sp4-probe-report { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 767px) {
+  .sp4-probe-report .sp4-act-btn { min-height: var(--m-ctl, 40px); flex: 1 1 auto; }
+}
+
+/* No telemetry in the past hour: an icon first, so a silent unit reads as a
+   state, then the words and when it was last heard from. */
+.sp4-empty-tab.sp4-empty-tab--silent {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+}
+.sp4-detail--panel .sp4-empty-tab--silent { flex: none; min-height: 140px; padding: 24px 0; }
+.sp4-silent-icon { font-size: 28px; line-height: 1; color: var(--sp4-crit, #ef4444); }

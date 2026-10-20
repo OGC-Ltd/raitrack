@@ -19,6 +19,7 @@ import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { DriversIcon } from "../footer/NavIcons";
+import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 
 // Report-only. The on-screen charts take their colour from --tone-tonnes /
 // --tone-mileage on .drivers-page; jsPDF cannot resolve a CSS variable, so the
@@ -464,6 +465,14 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
   }, [onClose]);
   // A new driver starts at the top of the panel, not where the last one was left.
   useEffect(() => { ref.current?.scrollTo?.({ top: 0 }); }, [driver.id]);
+  // One side panel at a time (lib/sidePanels): this closes the notifications
+  // feed, and the feed opening closes this.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    claimSidePanel("driver");
+    return onSidePanelClaim("driver", () => closeRef.current?.());
+  }, []);
 
   const per = (n, d) => (d > 0 ? n / d : null);
   const dash = (v, dec, unit) => (v == null ? "—" : `${fmt(v, dec)}${unit}`);

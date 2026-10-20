@@ -54,7 +54,11 @@ function Fact({ label, children }) {
   );
 }
 
-export default function RepairJobDetail({ orgId, job, canResolve = false, onToast, onChanged }) {
+/**
+ * `inPanel`: inside the detail sidebar (RepairJobsPanel), where the unit and
+ * the fault already head the panel. One column, under hairlines, no frame.
+ */
+export default function RepairJobDetail({ orgId, job, canResolve = false, onToast, onChanged, inPanel = false }) {
   const [parts, setParts] = useState(null);
   const plate = job.vehicle?.registrationPlate ?? "this unit";
 
@@ -74,11 +78,11 @@ export default function RepairJobDetail({ orgId, job, canResolve = false, onToas
   const suppliers = [...new Set((parts ?? []).map((p) => p.supplier).filter(Boolean))];
 
   return (
-    <div className="rjd">
+    <div className={"rjd" + (inPanel ? " rjd--panel" : "")}>
       <div className="rjd-grid">
         <div className="rjd-col">
           <section className="rjd-facts" aria-label="The job">
-            <h3 className="aud-h">{jobSubject(job)} · {plate}</h3>
+            <h3 className="aud-h">{inPanel ? "The Job" : `${jobSubject(job)} · ${plate}`}</h3>
             <Fact label="Outcome">{OUTCOME_LABEL[job.outcome] ?? job.outcome}</Fact>
             <Fact label="Problem">{job.problemNote}</Fact>
             <Fact label="Filed">

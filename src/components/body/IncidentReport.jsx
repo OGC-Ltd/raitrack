@@ -27,11 +27,12 @@
  *   quiet zero that looks like a clean day.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { whenLabel } from "../../api/incidents";
 import TableToolbar from "./TableToolbar";
 import TablePager, { usePager, withMore } from "./TablePager";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
+import DetailSidebar, { DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import "./IncidentReport.css";
 
 /* Rendered by the panel that owns this report, not by the report itself — the
@@ -109,7 +110,7 @@ const tableFor = (columns, rows) => {
  * list must not re-fetch the list, and paging its cases must not disturb the
  * page behind it.
  */
-function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportSlug, caption }) {
+function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, caption, timeline = false }) {
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [more, setMore] = useState(false);
@@ -145,20 +146,12 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
 
   return (
     <>
-      {/* The panel's detail head, the same one the fuel drain detail opens
-          with: registration in mono at title size, one line of context under
-          it, and the ✕ at the far end. It replaces a plate-and-name pair with
-          an "← All units" text button — a second way of saying "go back" on a
-          panel that already has one. */}
-      <div className="sp4-detail-head">
-        <div>
-          <div className="sp4-detail-reg">{plate}</div>
-          <div className="sp4-detail-sub">
-            {unit.name ? `${unit.name} · ` : ""}every case in the window
-          </div>
-        </div>
-        <button type="button" className="sp4-detail-close" onClick={onClose} aria-label="Back to the list">✕</button>
-      </div>
+      {/* The unit heads the sidebar it opens in (shared/DetailSidebar); the
+          panel's own × closes it. */}
+      <DetailSidebarIdent
+        name={plate}
+        sub={`${unit.name ? `${unit.name} · ` : ""}every case in the window`}
+      />
 
       {/* The same three buttons the list behind it carries, over this unit's
           cases rather than the fleet's units — somebody who opened a unit to
@@ -192,31 +185,29 @@ function Detail({ unit, columns, fetchPage, range, onClose, reportTitle, exportS
       {!error && loading && rows.length === 0 && <Loading label="Loading cases…" />}
       {!error && !loading && rows.length === 0 && <Empty>No cases for this unit in the window.</Empty>}
 
+      {/* One card a case: in a sidebar's width the case table's eight or nine
+          columns would scroll sideways, so the first column heads the card and
+          the rest read down it as label and value. The CSV and PDF above still
+          carry every column as a table. */}
       {rows.length > 0 && (
-        <div className="sp4-table-scroll">
-          {/* Its own sideways scroller on a phone, so the bar above stays put. */}
-          <div className="sp4-keep-table">
-          <table className="sp4-table">
-            <thead>
-              <tr>
-                {columns.map((c, i) => (
-                  <th key={c.key} title={c.title} className={headClass(c, i === 0)}>{c.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pager.pageRows.map((r) => (
-                <tr key={r.id} className="sp4-tr sp4-tr--static">
-                  {columns.map((c, i) => (
-                    <td key={c.key} className={cellClass(c, i === 0)}>{c.render(r)}</td>
+        <DetailSidebarSection title={`${rows.length} case${rows.length === 1 ? "" : "s"}${more ? " so far" : ""}`}>
+          <ul className={"dsb__cards" + (timeline ? " dsb__cards--timeline" : "")}>
+            {pager.pageRows.map((r) => (
+              <li key={r.id} className={"dsb__card" + (timeline && !r.recoveredAt ? " dsb__card--open" : "")}>
+                <div className="dsb__card-head">{columns[0].render(r)}</div>
+                <dl>
+                  {columns.slice(1).map((c) => (
+                    <Fragment key={c.key}>
+                      <dt title={c.title}>{c.label}</dt>
+                      <dd>{c.render(r) ?? "—"}</dd>
+                    </Fragment>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+                </dl>
+              </li>
+            ))}
+          </ul>
           <TablePager pager={withMore(pager, more)} label="Case pages" />
-        </div>
+        </DetailSidebarSection>
       )}
     </>
   );
@@ -237,6 +228,8 @@ export default function IncidentReport({
   captureStartedAt,
   reportTitle,        // names the PDF — "Sensor Monitor — Speed"
   exportSlug,         // names the file, so Speed and Malfunction don't collide
+  panelTitle = "Cases", // heads the sidebar a unit opens in: "Overspeeding cases"
+  timeline = false,   // the unit's cases as a -O-O- rail, newest first (Malfunction)
 }) {
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
@@ -281,29 +274,43 @@ export default function IncidentReport({
   const lastPage = pager.page === pager.pageCount - 1;
   // As in the unit's cases: the next batch is read when the last page is reached.
   useEffect(() => {
-    if (!unit && lastPage && more && !loading && !error) void load(cursor);
-  }, [unit, lastPage, more, loading, error, load, cursor]);
+    if (lastPage && more && !loading && !error) void load(cursor);
+  }, [lastPage, more, loading, error, load, cursor]);
+  const closeUnit = useCallback(() => setUnit(null), []);
+  // Stable per tab, so the open unit's cases are not read again on a re-render.
+  const fetchUnitPage = useCallback((args) => fetchDetail({ orgId, ...args }), [fetchDetail, orgId]);
 
   const startsBeforeCapture =
     captureStartedAt && Date.parse(range.from) < Date.parse(captureStartedAt);
 
-  if (unit) {
-    return (
+  /* A unit's cases open in the app's detail sidebar (operator, 2026-10-20:
+     the Drivers page's panel, for Speed and Malfunction as for Alerts). They
+     used to replace the list; now the list stays and another row swaps the
+     unit in place. */
+  const sidebar = unit && (
+    <DetailSidebar
+      title={panelTitle}
+      label={`${panelTitle}, ${unit.plate ?? unit.vehicleId}`}
+      itemKey={unit.vehicleId}
+      onClose={closeUnit}
+    >
       <Detail
+        key={unit.vehicleId}
         unit={unit}
         columns={detailColumns}
-        fetchPage={(args) => fetchDetail({ orgId, ...args })}
+        fetchPage={fetchUnitPage}
         range={range}
-        onClose={() => setUnit(null)}
         reportTitle={reportTitle}
         exportSlug={exportSlug}
         caption={caption}
+        timeline={timeline}
       />
-    );
-  }
+    </DetailSidebar>
+  );
 
   return (
     <div className="sp4-table-scroll">
+      {sidebar}
       {/* The caption line and the export bar are the same row now.
           The caption was already the fuel table's own slot — one sentence
           naming what these rows are and which day they cover — and the three
@@ -356,7 +363,7 @@ export default function IncidentReport({
                      used to end each row is gone: the fuel table carries no such
                      affordance and the tab strip already says "Click any row to
                      inspect", so it was a thirteenth column restating the hint. */
-                  className={"sp4-tr sp4-tr--incident" + (selectedId === r.vehicleId ? " sp4-tr--selected" : "")}
+                  className={"sp4-tr sp4-tr--incident" + ((unit?.vehicleId ?? selectedId) === r.vehicleId ? " sp4-tr--selected" : "")}
                   tabIndex={0}
                   role="button"
                   aria-label={`Every case for ${r.plate ?? r.vehicleId}`}

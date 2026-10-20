@@ -18,7 +18,10 @@
  * Phase 1 (operator, 2026-10-15):
  *   class       "Truck or car" or "Tractors" (KT… plates, e.g. KTCB 358X):
  *               the list is that class only, and its drive times are at
- *               the class's MEASURED speed, not Google's car's
+ *               the class's MEASURED speed, not Google's car's. "Plant"
+ *               (excavators, dozers, loaders) is offered where the fleet
+ *               has plant: Kasulu, typed by RaiFactorySuite's machine
+ *               register (2026-10-20); generators are in no class
  *   free only   leaves out units on a dispatch or without a recent position
  *   bands       a drive time past an hour reads 1–2 h, 2–4 h or
  *               4 h+ in its row (Menengai's long hauls)
@@ -45,7 +48,20 @@ const FREE_KEY = "ft-arr-free";
 export const ARRIVAL_CLASSES = [
   ["VEHICLE", "ti-truck", "Truck or car"],
   ["TRACTOR", "ti-tractor", "Tractors"],
+  ["PLANT", "ti-backhoe", "Plant"],
 ];
+const BASE_CLASSES = ["VEHICLE", "TRACTOR"];
+/**
+ * The classes the window offers: those the fleet has units in, by the
+ * server's counts (`/routing/hubs` → classes), "Truck or car" always.
+ * Without counts (an older server), the two it always offered.
+ */
+export function offeredClasses(counts) {
+  if (!counts) return ARRIVAL_CLASSES.filter(([k]) => BASE_CLASSES.includes(k));
+  return ARRIVAL_CLASSES.filter(([k]) => k === "VEHICLE" || (counts[k] ?? 0) > 0);
+}
+/** The remembered class where it is offered, else "Truck or car". */
+export const offeredClass = (c, offered) => (offered.some(([k]) => k === c) ? c : "VEHICLE");
 const PICK = "__pick";
 const POINT = "__point";
 const hubKeyOf = (orgId) => `ft-arr-hub:${orgId}`;
@@ -81,10 +97,13 @@ export function useHubArrivals({ map, maps, ready, orgId, open }) {
   useEffect(() => { setHubKeyState(orgId ? read(hubKeyOf(orgId), null) : null); }, [orgId]);
   const hub = hubs.find((h) => h.key === hubKey) ?? hubs[0] ?? null;
   const setHubKey = useCallback((k) => { setHubKeyState(k); if (orgId) write(hubKeyOf(orgId), k); }, [orgId]);
-  const [cls, setClsState] = useState(() => {
+  const [wanted, setClsState] = useState(() => {
     const c = read(CLS_KEY, "VEHICLE");
     return ARRIVAL_CLASSES.some(([k]) => k === c) ? c : "VEHICLE";
   });
+  const classes = useMemo(() => offeredClasses(hubsQ.data?.classes), [hubsQ.data]);
+  // Plant remembered from Kasulu reads as "Truck or car" at Sukari.
+  const cls = offeredClass(wanted, classes);
   const setCls = useCallback((c) => { setClsState(c); write(CLS_KEY, c); }, []);
   const [free, setFreeState] = useState(() => read(FREE_KEY, "0") === "1");
   const toggleFree = useCallback(() => setFreeState((f) => { write(FREE_KEY, f ? "0" : "1"); return !f; }), []);
@@ -159,7 +178,7 @@ export function useHubArrivals({ map, maps, ready, orgId, open }) {
   return {
     open,
     hubs, hub, target, point, choose, picking, cancelPick: () => setPicking(false),
-    cls, setCls, free, toggleFree,
+    classes, cls, setCls, free, toggleFree,
     enabled: hubsQ.data ? hubsQ.data.enabled : null,
     loading: (hubsQ.isLoading || q.isLoading || (q.isPlaceholderData && !data)) && open,
     refreshing: q.isFetching && Boolean(data),
@@ -176,7 +195,7 @@ const MIN_KEY = "ft-arr-min";
  * open while the camera moves, so working down the list is one click a unit.
  */
 export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
-  const { open, hubs, target, point, choose, picking, cancelPick, cls, setCls, free, toggleFree, enabled, loading, refreshing, error, data } = arrivals;
+  const { open, hubs, target, point, choose, picking, cancelPick, classes, cls, setCls, free, toggleFree, enabled, loading, refreshing, error, data } = arrivals;
   const { ref, onPointerDown } = useFloatingWindow({ id: "arrivals", dock: "bottom-right", enabled: open });
   const [min, setMin] = useState(() => read(MIN_KEY, "0") === "1");
   const [page, setPage] = useState(0);
@@ -220,7 +239,7 @@ export function ArrivalsWindow({ arrivals, onSelectUnit, onClose }) {
       {!min && (
         <div className="arw__body">
           <div className="arw__modes" role="radiogroup" aria-label="Which units">
-            {ARRIVAL_CLASSES.map(([c, icon, label]) => (
+            {classes.map(([c, icon, label]) => (
               <button key={c} type="button" role="radio" aria-checked={cls === c} className="arw__mode"
                       onClick={() => setCls(c)} onPointerDown={stop}>
                 <i className={`ti ${icon}`} aria-hidden="true" />{label}

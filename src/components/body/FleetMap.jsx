@@ -95,6 +95,7 @@ import { useGoogleRoutingOn } from "../../lib/googleRouting";
 import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
+import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
   speeding: "#f59e0b",
@@ -2210,7 +2211,7 @@ export default function FleetMap() {
   const DomMarkerRef    = useRef(null); // overlay class bound to that namespace
   // Read before any state below, because several of those states are seeded
   // from THIS ORGANISATION's stored preferences (lib/mapPrefs).
-  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId, openIncidentId } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId", "openIncidentId");
+  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId, openIncidentId, mapClearN } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId", "openIncidentId", "mapClearN");
   const { setSelectedVehicleId, setFeedVehicleId, setDesktopActiveTab, setMobileActiveTab, setPendingFocusId, requestIncident, setSitePlanLinks, setTrackedIds, setInTransitOnly, markSelectionRestored } = useAppActions();
 
   const [mapReady, setMapReady]             = useState(false);
@@ -2762,6 +2763,21 @@ export default function FleetMap() {
   useEffect(() => {
     if (openWindow) setPinnedId(null);
   }, [openWindow]);
+
+  /* One side panel at a time (lib/sidePanels; operator, 2026-10-20: "no
+   * cards or modal are to be stacked over the other"). The map's card and its
+   * windows are one owner, so a row in an open window still pins its card
+   * beside it; opening either closes the notifications feed, and the feed
+   * opening takes both down. */
+  useEffect(() => {
+    if (pinnedId || openWindow) claimSidePanel("map");
+  }, [pinnedId, openWindow]);
+  useEffect(() => onSidePanelClaim("map", () => {
+    setPinnedId(null);
+    setUnitsOpen(false);
+    setStrandedOpen(false);
+    setFuelAlertsOpen(false);
+  }), [setUnitsOpen, setStrandedOpen, setFuelAlertsOpen]);
 
   const [cardMinimized, setCardMinimized] = useState(false);
   /** Which unit's camera window is open, if any. */
@@ -6911,6 +6927,36 @@ export default function FleetMap() {
       resetCamera(located);
     }
   }, [hideRoute, reIcon, setSelectedVehicleId, setFeedVehicleId, focusedId, resetCamera]);
+
+  /* Leaving the map for another page clears it (appSlice tabChosen; operator,
+   * 2026-10-20: "when we navigate back we should not see those components
+   * until when invoked again"). The store has already dropped the selection,
+   * the feed scope, the incident and the side-panel windows; this takes down
+   * what the map holds itself. The camera stays where it was. */
+  const clearedN = useRef(mapClearN);
+  useEffect(() => {
+    if (clearedN.current === mapClearN) return;
+    clearedN.current = mapClearN;
+    const prevId = activeRouteRef.current;
+    if (prevId) {
+      hideRoute(prevId);
+      reIcon(prevId, {});
+      activeRouteRef.current = null;
+    }
+    setRouteId(null);
+    clearHover();
+    clearTripPath();
+    setPinnedId(null);
+    setCardMinimized(false);
+    setSearchedId(null);
+    setFocusedId(null);
+    setPlaybackId(null);
+    setInvestigateSubject(null);
+    setArrivalsOpen(false);
+    setCameraId(null);
+    setMeasuring(false);
+    setMeasurePts([]);
+  }, [mapClearN, hideRoute, reIcon, clearHover, clearTripPath]);
 
   // Visibility is applied inside the reconcile pass (it depends on activeFilter).
   //
