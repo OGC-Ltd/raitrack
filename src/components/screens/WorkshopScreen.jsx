@@ -25,6 +25,7 @@ import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
 import {
   listWorkflowJobs, fetchQueue, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
+  takeWorkshopHandoff, WORKSHOP_OPEN,
 } from "../../api/repairWorkflow";
 import RepairWorkflowJob, { PhaseLadder, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
@@ -486,7 +487,7 @@ export default function WorkshopScreen() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [toast, setToast] = useState(null);
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState(() => takeWorkshopHandoff());
   const [openCase, setOpenCase] = useState(null);
 
   const tabs = useMemo(() => [
@@ -497,6 +498,13 @@ export default function WorkshopScreen() {
   ].filter((t) => t.allow), [can]);
   const [tab, setTab] = useState("jobs");
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
+
+  // "Open in Workshop" from Maintenance or Fuel Audit while this screen is mounted.
+  useEffect(() => {
+    const onOpen = (e) => { takeWorkshopHandoff(); setTab("jobs"); setOpenCase(null); setOpenId(e.detail); };
+    window.addEventListener(WORKSHOP_OPEN, onOpen);
+    return () => window.removeEventListener(WORKSHOP_OPEN, onOpen);
+  }, []);
 
   const rootRef = useRef(null);
   useEffect(() => watchTableLabels(rootRef.current), []);

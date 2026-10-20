@@ -32,6 +32,7 @@ import {
   escalationOf, escalationPhrase, listRepairAssignees,
 } from "../../api/repairs";
 import RepairSignOffDialog from "./RepairSignOffDialog";
+import OpenInWorkshop from "./OpenInWorkshop";
 import RepairJobDetail, { jobSubject } from "./RepairJobDetail";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent } from "../shared/DetailSidebar";
 import { useRepairJobs } from "../../hooks/useRepairJobs";
@@ -387,7 +388,7 @@ export default function RepairJobsPanel({
                       </span>
                     </td>
                     <td className="sp4-td--left">
-                      {r.resolvedAt || !mayWork(r)
+                      {r.resolvedAt || !mayWork(r) || r.queue
                         ? (
                           <span className={"sp4-pill sp4-pill--" + (STAGE_PILL[r.stage] ?? "none")}>
                             {STAGE_LABEL[r.stage] ?? r.stage ?? "—"}
@@ -528,7 +529,9 @@ export default function RepairJobsPanel({
                     <td className="sp4-td--right">
                       {r.resolvedAt
                         ? <span className="sp4-pill sp4-pill--con">Resolved</span>
-                        : mayWork(r)
+                        : r.queue
+                          ? <OpenInWorkshop itemId={r.id} />
+                          : mayWork(r)
                           ? (
                             <button type="button" className="sp4-ghost-btn"
                                     onClick={() => { setSignOff(r); }}>

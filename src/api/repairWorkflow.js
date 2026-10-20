@@ -153,11 +153,36 @@ export const voidJob        = (orgId, id, reason) => post(item(orgId, id, "void"
 export const requestPart    = (orgId, id, p) => post(item(orgId, id, "parts"), clean({
   name: p.name, quantity: Number(p.quantity) || 1, source: p.source, itemCode: p.itemCode, store: p.store, note: p.note,
 }));
+/** Fixed on the spot, nothing from stores: one completed, ticketed job per unit, waiting for verification. */
+export const spotFix        = (orgId, f) => post(`${base(orgId)}/spot-fixes`, clean({
+  vehicleIds: f.vehicleIds, faultCategory: f.faultCategory, suspectedFault: f.suspectedFault, fixNote: f.fixNote,
+  testNote: f.testNote, labourMinutes: f.labourMinutes === "" ? undefined : Number(f.labourMinutes) || undefined,
+  storePartTaken: f.storePartTaken,
+}));
 export const sourcePart     = (orgId, id, partId, s) => post(`${item(orgId, id, "parts")}/${partId}/source`, clean(s));
 export const issuePart      = (orgId, id, partId, s) => post(`${item(orgId, id, "parts")}/${partId}/issue`, clean(s));
 export const fitPart        = (orgId, id, partId) => post(`${item(orgId, id, "parts")}/${partId}`, { status: "fitted" });
+/** An ordered part has arrived; the fix is planned for today, the workshop's (Nairobi) day. */
+export const receivePart    = (orgId, id, partId) => post(`${item(orgId, id, "parts")}/${partId}`, { status: "received", fixDate: nairobiDay() });
+const nairobiDay = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 export const updateInvestigation = (orgId, invId, u) => post(`${base(orgId)}/security-investigations/${invId}`, clean(u));
 export const updateWorkshop = (orgId, workshopId, w) => post(`${base(orgId)}/workshops/${workshopId}`, clean(w));
 
 /** YYYY-MM-DD, the way the booking strip and the server name a day. */
 export const isoDay = (d) => new Date(d).toISOString().slice(0, 10);
+
+// ── Opening a job in Workshop from another screen ─────────────────────────
+// The screen may not be mounted yet: the id waits here for it to take on
+// mount, and a mounted screen hears the event.
+
+export const WORKSHOP_OPEN = "workshop:open";
+let handoff = null;
+export function openInWorkshop(itemId) {
+  handoff = itemId;
+  window.dispatchEvent(new CustomEvent(WORKSHOP_OPEN, { detail: itemId }));
+}
+export function takeWorkshopHandoff() {
+  const id = handoff;
+  handoff = null;
+  return id;
+}

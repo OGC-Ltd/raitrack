@@ -37,6 +37,7 @@ import {
   trackingLine, STAGE_LABEL, SETTABLE_STAGES, estimateState, setRepairStage, stageChipState, STAGE_CHIP_CLASS,
 } from "../../api/repairs";
 import RepairSignOffDialog from "./RepairSignOffDialog";
+import OpenInWorkshop from "./OpenInWorkshop";
 
 /** `16 Sep · 14:02`. Local, because the technician reading it is standing in
  *  the yard the unit is in. */
@@ -121,7 +122,8 @@ export default function RepairTrackingLine({
    * was skipped is not drawn on the ladder any more (see trackingLine), and a
    * reader who now DOES need a part must still be able to say so.
    */
-  const canMove = canMark;
+  // A Workshop job moves by its own steps there (repairs.workflow).
+  const canMove = canMark && !item?.queue;
 
   /*
    * The history only appears when the rails cannot tell the truth alone.
@@ -244,10 +246,8 @@ export default function RepairTrackingLine({
            the product rather than one per doorway. */
         <div className="sp4-track-mark">
           <span className="sp4-track-mark-label">Close this job</span>
-          <button type="button" className="sp4-ghost-btn"
-                  onClick={() => setMarking("fixed")}>
-            Mark fixed
-          </button>
+          {/* Fixed is the Control Room's to say after verification, in Workshop. */}
+          <OpenInWorkshop itemId={item.id} />
           <button type="button" className="sp4-ghost-btn sp4-ghost-btn--crit"
                   onClick={() => setMarking("failed")}>
             Mark unsuccessful
