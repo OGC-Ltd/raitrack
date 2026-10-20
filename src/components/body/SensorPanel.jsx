@@ -1981,14 +1981,14 @@ export default function SensorPanel() {
         )}
         {/* A probe unit opens in the same sidebar (operator, 2026-10-20: "the
             probes to also be on the sidebar"): its repair line and the past
-            hour's readings beside the list, wide for the readings table. */}
+            hour's readings beside the list, at the shared sidebar width now
+            that the readings table is four columns. */}
         {sensorOpen && (
           <DetailSidebar
             title="Sensor readings"
             label={`Sensor readings, ${selectedAnomaly.vehicleName}`}
             itemKey={selectedAnomaly.vehicleId}
             onClose={closeSelected}
-            wide
             footer={can("map:read") ? (
               <button type="button" className="sp4-ghost-btn"
                       onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>
