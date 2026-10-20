@@ -128,9 +128,9 @@ describe("accountBehind", () => {
 describe("page tours", () => {
   const on = (...marks) => (m) => (marks.includes(m) ? { mark: m } : null);
 
-  it("walks the parts of the page that are on screen, then points at the Manual", () => {
+  it("walks the parts of the page that are on screen, then points at the Guide", () => {
     const steps = buildPageTourSteps("alerts", { visible: on("alerts-stats", "page-table", "account") });
-    expect(steps.map((x) => x.popover.title)).toEqual(["Alerts", "Where Things Stand", "Decide", "The Manual"]);
+    expect(steps.map((x) => x.popover.title)).toEqual(["Alerts", "Where Things Stand", "Decide", "The Guide"]);
     expect(steps[0].element).toBeUndefined();
     expect(steps[1].element).toEqual({ mark: "alerts-stats" });
   });
@@ -173,7 +173,7 @@ describe("page tours", () => {
     expect(hasNewItems(buildPageTourSteps("drivers", { visible: vis }))).toBe(true);
   });
 
-  it("skips the app tour's Manual step once a page tour has covered it", () => {
+  it("skips the app tour's Guide step once a page tour has covered it", () => {
     const t = buildTourSteps({ visible: DESKTOP, covered: new Set(["manual"]) }).map((x) => x.popover.title);
     expect(t).not.toContain("Your Account");
   });

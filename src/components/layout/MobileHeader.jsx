@@ -209,9 +209,9 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-users" aria-hidden="true" /> Users
                 </button>
               )}
-              {/* The Manual: the first-time tour, again (lib/productTour). */}
+              {/* The Guide: the first-time tour, again (lib/productTour). */}
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
-                <ManualIcon /> Manual
+                <ManualIcon /> Guide
               </button>
               <div className="mobile-header__user-divider" />
               <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); logout(); }}>
