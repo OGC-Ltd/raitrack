@@ -27,7 +27,7 @@ import {
   claimJob, updateInvestigation, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
   takeWorkshopHandoff, WORKSHOP_OPEN,
 } from "../../api/repairWorkflow";
-import RepairWorkflowJob, { PhaseLadder, jobLabel, at } from "../body/RepairWorkflowJob";
+import RepairWorkflowJob, { PhaseLadder, TrailList, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
 import TableToolbar from "../body/TableToolbar";
 import FilterBar from "../body/FilterBar";
@@ -255,6 +255,81 @@ function QueueTab({ orgId, userId, onOpen, onToast }) {
 
 // ── Workshop day board ──────────────────────────────────────────────────────
 
+const dayShift = (date, n) => isoDay(new Date(`${date}T00:00:00Z`).getTime() + n * 86_400_000);
+
+/** Workshop days, cached per workshop and date so stepping back and forth is
+ *  instant. Each answer lands under its own key, so a slow reply for a day the
+ *  user already left can never paint over the day on screen. Once a day is in,
+ *  the day either side is read ahead. A repair change re-reads the day on
+ *  screen in place (old rows stay until the new ones arrive) and drops the rest. */
+function useWorkshopDay(orgId, wid, date) {
+  const cache = useRef(new Map());
+  const pending = useRef(new Map());
+  const [, repaint] = useState(0);
+  const key = wid ? `${orgId}|${wid}|${date}` : null;
+
+  const load = useCallback((k, force = false) => {
+    if (!k || pending.current.has(k) || (!force && cache.current.has(k))) return pending.current.get(k) ?? Promise.resolve();
+    const [o, w, d] = k.split("|");
+    const p = Promise.resolve(fetchWorkshopDay(o, w, d))
+      .then((data) => cache.current.set(k, { data, error: null }))
+      .catch((e) => { if (!cache.current.get(k)?.data) cache.current.set(k, { data: null, error: e?.message || "Could not load" }); })
+      .finally(() => { pending.current.delete(k); repaint((n) => n + 1); });
+    pending.current.set(k, p);
+    return p;
+  }, []);
+
+  useEffect(() => {
+    if (!key) return;
+    load(key).then(() => {
+      load(`${orgId}|${wid}|${dayShift(date, 1)}`);
+      load(`${orgId}|${wid}|${dayShift(date, -1)}`);
+    });
+  }, [key, load, orgId, wid, date]);
+
+  useEffect(() => {
+    const changed = () => {
+      for (const k of cache.current.keys()) if (k !== key) cache.current.delete(k);
+      load(key, true);
+    };
+    window.addEventListener(REPAIRS_CHANGED, changed);
+    return () => window.removeEventListener(REPAIRS_CHANGED, changed);
+  }, [key, load]);
+
+  const hit = key ? cache.current.get(key) : null;
+  return {
+    data: hit?.data ?? null,
+    error: hit?.error ?? null,
+    loading: !!key && !hit,
+    retry: () => { cache.current.delete(key); repaint((n) => n + 1); load(key); },
+  };
+}
+
+/** The day's shape while it loads: capacity line and three rows, so the page
+ *  holds its height and nothing jumps when the bookings arrive. */
+function DaySkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Reading the day">
+      <div className="wf-capacity" aria-hidden="true">
+        <span className="sp4-skel-cell wf-skel wf-skel--n" />
+        <span className="sp4-skel-cell wf-skel wf-skel--bar" />
+        <span className="sp4-skel-cell wf-skel wf-skel--txt" />
+      </div>
+      <ol className="wf-board wf-board--skel" aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <li key={i} className="wf-board__row">
+            <span className="sp4-skel-cell" />
+            <span className="sp4-skel-cell" />
+            <span className="sp4-skel-cell" />
+            <span className="sp4-skel-cell" />
+            <span className="sp4-skel-cell wf-skel--pill" />
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function DayTab({ orgId, onOpen }) {
   const [workshops, setWorkshops] = useState(null);
   const [wid, setWid] = useState(null);
@@ -262,8 +337,8 @@ function DayTab({ orgId, onOpen }) {
   useEffect(() => {
     fetchWorkshops(orgId).then((w) => { setWorkshops(w); setWid(w[0]?.id ?? null); }).catch(() => setWorkshops([]));
   }, [orgId]);
-  const day = useLive(() => (wid ? fetchWorkshopDay(orgId, wid, date) : null), [orgId, wid, date]);
-  const shift = (n) => setDate(isoDay(new Date(`${date}T00:00:00Z`).getTime() + n * 86_400_000));
+  const day = useWorkshopDay(orgId, wid, date);
+  const shift = (n) => setDate(dayShift(date, n));
   const d = day.data;
   const live = (d?.bookings ?? []).filter((b) => b.status === "booked" || b.status === "arrived");
   const other = (d?.bookings ?? []).filter((b) => b.status === "no_show");
@@ -298,8 +373,12 @@ function DayTab({ orgId, onOpen }) {
         </p>
       )}
 
-      {day.loading && !d ? (
-        <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Day">Bookings and arrivals.</EmptyNote>
+      {workshops === null || day.loading ? (
+        <DaySkeleton />
+      ) : workshops.length === 0 ? (
+        <EmptyNote icon="ti-building-warehouse" title="No Workshop Yet">This organisation has no workshop set up, so there is no day board.</EmptyNote>
+      ) : day.error ? (
+        <EmptyNote icon="ti-alert-triangle" tone="error" title="The Day Could Not Be Loaded" action={{ label: "Try again", onClick: day.retry }}>{day.error}</EmptyNote>
       ) : live.length === 0 && (d?.unbookedArrivals?.length ?? 0) === 0 ? (
         <EmptyNote icon="ti-calendar" title="Nothing Booked">No unit is booked into the workshop on this day.</EmptyNote>
       ) : (
@@ -464,16 +543,7 @@ function CaseDetail({ orgId, c, canUpdate, onToast, onSaved }) {
       )}
       {history.length > 0 && (
         <DetailSidebarSection title="Trail">
-          <ol className="wf-log wf-log--trail">
-            {history.map((h, i) => (
-              <li key={i} className="wf-log__e">
-                <span className="wf-log__when">{at(h.at)}</span>
-                <span className="wf-log__kind">{INVESTIGATION_LABEL[h.status] ?? h.status}</span>
-                <span className="wf-log__text">{h.note ?? ""}</span>
-                <span className="wf-log__by">{h.byName ?? ""}</span>
-              </li>
-            ))}
-          </ol>
+          <TrailList items={history.map((h) => ({ at: h.at, label: INVESTIGATION_LABEL[h.status] ?? h.status, note: h.note ?? "", by: h.byName ?? "" }))} />
         </DetailSidebarSection>
       )}
     </>

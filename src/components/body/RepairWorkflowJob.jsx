@@ -32,6 +32,8 @@ const WHEN = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Africa/Nairobi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
 });
 const DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+const NAIROBI_DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", weekday: "short", day: "numeric", month: "short" });
+const CLOCK = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false });
 export const at = (iso) => (iso ? WHEN.format(new Date(iso)) : "-");
 const dayLabel = (iso) => (iso ? DAY.format(new Date(`${String(iso).slice(0, 10)}T00:00:00Z`)) : "-");
 
@@ -545,23 +547,48 @@ function DamageRecord({ orgId, job, act, busy, canWork, canSecurity }) {
 function Trail({ job }) {
   const events = (Array.isArray(job.stageHistory) ? job.stageHistory : []).filter((e) => e?.stage || e?.kind);
   if (events.length === 0) return null;
+  const items = [...events].reverse().map((e) => ({
+    at: e.at,
+    label: e.stage ? STAGE_LABEL[e.stage] ?? e.stage
+      : e.kind === "assignment" ? "Assigned" : e.kind === "assignment_response" ? (e.status === "accepted" ? "Accepted" : "Declined")
+        : e.kind === "escalation" ? "Escalated" : e.kind,
+    note: e.note ?? (e.assignedToName ? `to ${e.assignedToName}` : ""),
+    by: e.byName ?? (e.auto ? "Automatic" : ""),
+  }));
   return (
-    <Section title="Trail">
-      <ol className="wf-log wf-log--trail">
-        {[...events].reverse().map((e, i) => (
-          <li key={i} className="wf-log__e">
-            <span className="wf-log__when">{at(e.at)}</span>
-            <span className="wf-log__kind">
-              {e.stage ? STAGE_LABEL[e.stage] ?? e.stage
-                : e.kind === "assignment" ? "Assigned" : e.kind === "assignment_response" ? (e.status === "accepted" ? "Accepted" : "Declined")
-                  : e.kind === "escalation" ? "Escalated" : e.kind}
-            </span>
-            <span className="wf-log__text">{e.note ?? (e.assignedToName ? `to ${e.assignedToName}` : "")}</span>
-            <span className="wf-log__by">{e.byName ?? (e.auto ? "Automatic" : "")}</span>
-          </li>
-        ))}
-      </ol>
+    <Section title="Trail" aside={`${items.length} steps`}>
+      <TrailList items={items} />
     </Section>
+  );
+}
+
+/** The trail as a timeline, newest first: a heading per day (Nairobi), then
+ *  time, step and who on one line with the note beneath. The newest step's
+ *  dot is filled; a rail joins the rest. `items` are { at, label, note, by }. */
+export function TrailList({ items }) {
+  let day = null;
+  return (
+    <ol className="wf-trail">
+      {items.map((e, i) => {
+        const d = e.at ? NAIROBI_DAY.format(new Date(e.at)) : "-";
+        const head = d !== day;
+        day = d;
+        return (
+          <li key={i} className={`wf-trail__e${i === 0 ? " wf-trail__e--now" : ""}${head ? " wf-trail__e--day" : ""}`}>
+            {head && <span className="wf-trail__day">{d}</span>}
+            <span className="wf-trail__time">{e.at ? CLOCK.format(new Date(e.at)) : "-"}</span>
+            <span className="wf-trail__dot" aria-hidden="true" />
+            <span className="wf-trail__body">
+              <span className="wf-trail__head">
+                <span className="wf-trail__step">{e.label}</span>
+                {e.by && <span className="wf-trail__by" title={e.by}>{e.by}</span>}
+              </span>
+              {e.note && <span className="wf-trail__note">{e.note}</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
