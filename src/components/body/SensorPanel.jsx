@@ -39,7 +39,7 @@ import { useOpenRepairs } from "../../hooks/useOpenRepairs";
 import { restoreChoice, persistChoice } from "../../lib/navMemory";
 import { watchTableLabels } from "../../lib/tableLabels";
 import EmptyNote from "../shared/EmptyNote";
-import DetailSidebar, { DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
+import DetailSidebar, { DetailSidebarIdent } from "../shared/DetailSidebar";
 import "./SensorPanel.css";
 
 /* Every tab this build has, and where the choice is stored. The allow-list is
@@ -54,8 +54,6 @@ const SENSOR_COLUMNS = [
   { key: "speedKmh",   label: "Speed (km/h)",format: v => v != null ? Math.round(v) : "—", flag: (v, r) => v != null && v > 5 && r.engineOn === false },
   { key: "engineOn",   label: "Engine",      format: v => v == null ? "—" : v ? "ON" : "OFF", flag: () => false },
   { key: "fuelLevelMl",label: "Fuel (L)",    format: v => v != null ? (v/1000).toFixed(1) : "—", flag: v => v != null && v < 20000 },
-  { key: "fuelUsedMl", label: "Δ Fuel (L)",  format: v => v != null ? (v >= 0 ? "−" : "+") + Math.abs(v/1000).toFixed(1) : "—", flag: v => v != null && v < -500 },
-  { key: "accuracyM",  label: "GPS Acc (m)", format: v => v != null ? Math.round(v) : "—", flag: v => v != null && v > 200 },
 ];
 
 const ANOMALY_META = {
@@ -1385,8 +1383,12 @@ function SensorDetail({
           onChanged={() => setRepairTick((n) => n + 1)}
         />
       )}
+      {/* One line, under the progress card: a label and its two buttons. */}
       {reportActions && (
-        <DetailSidebarSection title="Report a Repair">{reportActions}</DetailSidebarSection>
+        <section className="sp4-report" aria-label="Report a repair">
+          <span className="sp4-report-title">Report a repair</span>
+          {reportActions}
+        </section>
       )}
 
       {loading ? (
