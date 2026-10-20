@@ -247,6 +247,18 @@
   .wf-part__acts { grid-column: 1 / -1; }
 }
 
+/* Jobs as cards (sp4-table turns rows into a two-track grid below 600px).
+   The fault is a sentence, so it takes the whole width and wraps to two lines;
+   at half a card its nowrap note ran under the Stage pill and ladder. */
+@media (max-width: 599px) {
+  .wf-table > tbody > tr > td:nth-child(2) { grid-column: 1 / -1; }
+  .wf-table .wf-cell-sub {
+    max-width: none; white-space: normal; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  }
+  .wf-table .wf-cell-stage { gap: 6px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wf-seg__opt:active, .wf-day:active { transform: none; }
 }
