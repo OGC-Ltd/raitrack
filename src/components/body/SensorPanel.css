@@ -4394,6 +4394,9 @@
 .sp4-detail-panel-actions { display: inline-flex; gap: 6px; margin-top: 8px; }
 .sp4-detail--panel .sp4-detail-table-wrap { flex: none; margin-top: 14px; border-radius: 10px; }
 .sp4-detail--panel .sp4-detail-scroll { flex: none; }
+/* Four reading columns fit the 420px sidebar; the grids' 500px floor would
+   scroll them sideways. */
+.sp4-detail--panel .sp4-print-table { min-width: 0; }
 .sp4-detail--panel > .rtl, .sp4-detail--panel > [class*="tracking"] { margin-top: 14px; }
 
 /* Reporting a repair from the unit's sidebar (ProbeReportActions): the three
