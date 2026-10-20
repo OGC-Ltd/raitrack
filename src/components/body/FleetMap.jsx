@@ -179,8 +179,8 @@ const TRUCK_ROW_FOR = { stationary: "ok", "signal-lost": "ok" };
 // the estate: the planted blocks, both nurseries, the factory site, the
 // wetlands, the Malagarasi and the haulage roads — and unlike the other orgs'
 // fences they are the only surveyed thing we hold for that ground. The planting
-// plan beside them is a ±1.5 km georeferenced drawing saying what is meant to
-// be planted; these say where the estate's boundaries actually are, and the
+// plan beside them is the surveyor's drawing of what the estate is laid out to
+// be (zones, irrigation blocks, mains); these say where its fences are, and the
 // violation engine enforces them. Two different questions, so two switches
 // rather than one layer standing in for the other.
 //
@@ -325,32 +325,18 @@ function zoneLabelHtml(name, color, detail, plan) {
 
 // ── Estate PLAN overlay (the CAD drawing) ──────────────────────────────────
 //
-// The surveyor's "ESTATE AREAS TO BE PLANTED 2026-2027" drawing — the field
-// block grid, HC#/ZONE block names and land-use classification, none of which
-// exist in the geofence data. Vector-extracted from the PDF and georeferenced.
+// The surveyor's ESTATE BOUNDARIES.dwg: the estate and zone boundaries, the
+// head-control areas, 507 irrigation blocks, the nurseries, rainfed and flood
+// areas, rivers, reservoirs, the factory site and the irrigation mains — none
+// of which exist in the geofence data.
 //
-// Accuracy is roughly ±1.5 km: the PDF is a plot and carries no coordinate
-// system, so the fit is anchored on drawing labels against known zone
-// centroids. Treat it as orientation, not survey. A DXF export of
-// ESTATE BOUNDARIES.dwg replaces this with an exact UTM-36S conversion — see
-// fleet-server/docs/estate-areas-overlay.md.
-//
-// Paper annotations (compass rose, title block, KEY panel, sheet frame) are
-// stripped at extraction time: they are marks on a drawing, not places, and
-// georeferencing them puts a compass rose in a sugarcane field. (The map used
-// to draw its own north indicator; that was removed on request 2026-08-03.)
-//
-// LETTERFORMS were stripped in a second pass (2026-08-02). AutoCAD plots
-// annotation text as linework as well as text, so the extraction had been
-// keeping the strokes: the sheet's big red "B1".."B4" callouts were sitting on
-// the map as four little red scribbles that read as land. 151 such features are
-// gone. The rule is containment, not size — a feature whose geometry lies
-// wholly inside a PDF text line's box is a glyph, because a real field block is
-// always bigger than the label printed inside it. Re-derived with the same
-// affine recovered from the layer's own named features (109 inliers, median 9 m,
-// max 15 m; 10.68 / 10.57 m per PDF point, rotation 86.3°). 9,450 -> 9,299
-// features. That fixes what the layer DRAWS; it does not move it — absolute
-// accuracy is still the ±1.5 km above, and still DXF-gated.
+// Since 2026-10-20 (operator: "replace the planting area on the new-ui for
+// kasulu with the newly created kmz") it is the drawing's OWN coordinates
+// (WGS 84 / UTM 36S, embedded in the DWG), through a KMZ export and
+// scripts/kmz-to-estate-plan.py, which says what is kept and what is dropped.
+// It replaced a plan vector-traced from the PDF plot and georeferenced by eye to
+// about +/-1.5 km (scripts/clean-estate-plan.py). That plan's land-use classes
+// (rocky, swampy, borrow pits) are not in this drawing and are gone with it.
 const ESTATE_PLAN_URL = "/estate-plan.geojson";
 
 // Only this org has an estate plan. The layer is a static asset rather than
@@ -455,57 +441,49 @@ function siteIcon(category) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+// Classes of the surveyor's drawing (scripts/kmz-to-estate-plan.py). `weight`
+// is the outline in px (0 = none), `fill` the wash; lines take only the stroke.
 const PLAN_STYLE = {
-  planted:   { color: "#16a34a" },
-  rocky:     { color: "#ef4444" },
-  swampy:    { color: "#6366f1" },
-  wet:       { color: "#06b6d4" },
-  factory:   { color: "#22c55e" },
-  logistics: { color: "#eab308" },
-  reservoir: { color: "#d946ef" },
-  borrow:    { color: "#78716c" },
-  boundary:  { color: "#f97316" },
+  boundary:    { color: "#f97316", weight: 2.2, fill: 0 },
+  zone:        { color: "#c2410c", weight: 1.6, fill: 0.03 },
+  headcontrol: { color: "#b45309", weight: 1.1, fill: 0.03 },
+  planted:     { color: "#16a34a", weight: 0.8, fill: 0.14 },
+  nursery:     { color: "#65a30d", weight: 1.2, fill: 0.2 },
+  rainfed:     { color: "#ca8a04", weight: 1, fill: 0.12 },
+  flood:       { color: "#06b6d4", weight: 1.4, fill: 0.08 },
+  water:       { color: "#2563eb", weight: 1.4, fill: 0.35 },
+  reservoir:   { color: "#d946ef", weight: 1.2, fill: 0.4 },
+  factory:     { color: "#22c55e", weight: 1.4, fill: 0.2 },
+  road:        { color: "#78716c", weight: 2, fill: 0.15 },
+  irrigation:  { color: "#0d9488", weight: 1.6, fill: 0 },
 };
-const PLAN_LEGEND = ["planted", "rocky", "swampy", "wet", "factory", "reservoir", "borrow", "boundary"];
+const PLAN_LEGEND = ["planted", "nursery", "rainfed", "flood", "water", "reservoir", "factory", "irrigation", "headcontrol", "zone", "boundary"];
 const PLAN_LABEL = {
-  planted: "Planted", rocky: "Rocky", swampy: "Swampy", wet: "Wet fields",
-  factory: "Factory", reservoir: "Reservoir", borrow: "Borrow pit", boundary: "Block boundary",
+  boundary: "Estate boundary", zone: "Zone", headcontrol: "Head-control area", planted: "Irrigation block",
+  nursery: "Nursery", rainfed: "Rainfed area", flood: "Flood zone", water: "River", reservoir: "Reservoir",
+  factory: "Factory site", road: "Road", irrigation: "Irrigation main",
 };
 
-// The drawing's MACRO names — the ones a reader of the sheet navigates by, and
-// the only labels on it that no geofence carries. Zone 3 has no zone row at all
-// (FARM#210/211 cover that ground under different names) and B1-B4 are Nursery
-// B's harvest blocks.
+// The drawing's area names — the ones a reader of the sheet navigates by, and
+// the only labels on it that no geofence carries.
 //
-// Positions come from the same affine that placed the plan geometry, recovered
-// from the drawing's own block labels (median residual 84 m against the shipped
-// plan features), so a label sits exactly where the sheet puts it RELATIVE to
-// the rest of the layer. Absolute accuracy is the layer's: ~±1.5 km, which the
-// legend already states.
-//
-// Two different anchors, on purpose:
-//  · ZONE 4 sits at the mean of its 245 extracted `ZONE 4 - n` field blocks.
-//    The drawing's own "ZONE 4" text is a callout at the block's southern edge —
-//    3.2 km from the middle — and a plate there reads as labelling the next
-//    block down. The block mean lands 500 m from the `2500 Ha Area` geofence
-//    centroid, which is independent corroboration that the two are the same
-//    ground.
-//  · B1-B4 sit at the mean of their OWN plots. The drawing labels 265 nursery
-//    plots hierarchically — `B.1.5.3`, `B.2.10.1`, `B.4.7.3.2` — so B1 is the
-//    62 `B.1.*` plots, B2 the 80 `B.2.*`, B3 64, B4 55. The big red "B1".."B4"
-//    on the sheet are callouts on the block's north-east EDGE, 650-885 m off
-//    the ground they name; plates placed there sat outside the planted strip
-//    entirely, in open country. See the note below on the letterforms.
-//  · ZONE 3 sits at the drawing's text position. Its constituent geometry is
-//    only partly extracted (the ten HC#3.x blocks are 270.8 ha of it), so their
-//    mean would label the HC cluster rather than the zone.
+// From ESTATE BOUNDARIES.dwg itself since 2026-10-20 (its own UTM 36S
+// coordinates), replacing the PDF-traced plan that was placed to about
+// +/-1.5 km: ZONE 3 moved 2.5 km and ZONE 4 1.8 km against the old plates,
+// which is that error. Each named zone sits at the centroid of its own outline
+// in the drawing (the sheet's text is a callout on a block edge, which reads as
+// labelling the next block); the intakes, which have no outline, at the
+// drawing's text.
 const PLAN_LABELS = [
-  { text: "ZONE 3", lat: -3.97115, lng: 30.41744, minZoom: 11, priority: 3 },
-  { text: "ZONE 4", lat: -4.02922, lng: 30.43863, minZoom: 11, priority: 3, note: "2,320 ha" },
-  { text: "B1", lat: -4.01447, lng: 30.49937, minZoom: 13, priority: 1 },
-  { text: "B2", lat: -4.02108, lng: 30.50811, minZoom: 13, priority: 1 },
-  { text: "B3", lat: -4.02694, lng: 30.51682, minZoom: 13, priority: 1 },
-  { text: "B4", lat: -4.03175, lng: 30.52470, minZoom: 13, priority: 1 },
+  { text: "ZONE 3", lat: -3.99006, lng: 30.40023, minZoom: 11, priority: 3 },
+  { text: "ZONE 4", lat: -4.02411, lng: 30.41735, minZoom: 11, priority: 3 },
+  { text: "COMMERCIAL AREA", lat: -4.02738, lng: 30.48222, minZoom: 11, priority: 3 },
+  { text: "NURSERY B", lat: -4.02092, lng: 30.51427, minZoom: 11, priority: 3 },
+  { text: "NURSERY A", lat: -4.03049, lng: 30.54103, minZoom: 12, priority: 2 },
+  { text: "FACTORY SITE", lat: -4.03881, lng: 30.41352, minZoom: 13, priority: 2 },
+  { text: "INTAKE 1", lat: -4.02183, lng: 30.54110, minZoom: 13, priority: 1 },
+  { text: "INTAKE 2", lat: -4.00190, lng: 30.49923, minZoom: 13, priority: 1 },
+  { text: "INTAKE 3", lat: -3.98890, lng: 30.45628, minZoom: 13, priority: 1 },
 ];
 
 function planLabelHtml(text) {
@@ -4837,17 +4815,16 @@ export default function FleetMap() {
 
   // ── estate PLAN (CAD drawing) overlay ───────────────────────────────────
   //
-  // A google.maps.Data layer rather than 4,451 hand-built Polylines: Data is
-  // built for GeoJSON at this volume and styles by feature property in one
-  // pass. Created and fetched only when the toggle is first switched on — the
-  // payload is 0.84 MB and most sessions never open this layer. (It was 1.6 MB
-  // and 9,450 features before the hatch was dissolved into 184 shading regions.)
+  // A google.maps.Data layer rather than 643 hand-built shapes: Data is built
+  // for GeoJSON and styles by feature property in one pass. Created and fetched
+  // only when the toggle is first switched on — the payload is 0.48 MB and most
+  // sessions never open this layer.
   useEffect(() => {
     const map  = mapRef.current;
     const maps = mapsLibRef.current;
     if (!mapReady || !map || !maps || !showPlan) return;
     if (!planAllowed) return;                       // wrong org — never draw
-    // Already built for this org: re-attach rather than re-fetch the 0.84 MB.
+    // Already built for this org: re-attach rather than re-fetch the 0.48 MB.
     // A toggle still has to take the camera to the drawing — see the site
     // plan's twin of this block for why a second press otherwise does nothing.
     if (planDataRef.current) {
@@ -4860,7 +4837,7 @@ export default function FleetMap() {
     data.setStyle((feature) => {
       const cls  = feature.getProperty("c");
       const name = feature.getProperty("n");
-      const { color } = PLAN_STYLE[cls] ?? PLAN_STYLE.boundary;
+      const { color, weight, fill } = PLAN_STYLE[cls] ?? PLAN_STYLE.boundary;
       // `s` marks a SHADING region — a land-use area dissolved back out of the
       // drawing's diagonal hatching (see scripts/clean-estate-plan.py). The
       // hatch strokes themselves are gone from the data: 2,155 of them were
@@ -4871,18 +4848,17 @@ export default function FleetMap() {
       const shade = feature.getProperty("s") === 1;
       return {
         strokeColor: color,
-        strokeWeight: shade ? 0 : cls === "boundary" ? 1.4 : 1.2,
+        strokeWeight: shade ? 0 : weight,
         strokeOpacity: shade ? 0 : 0.95,
         fillColor: color,
-        fillOpacity: shade ? 0.42 : 0.1,
-        // Only NAMED blocks take pointer events. Making all ~9,300 features
-        // hit-testable taxed every mousemove for no gain — an unnamed hatch
-        // segment has nothing to tell you.
+        fillOpacity: shade ? 0.42 : fill,
+        // Only NAMED shapes take pointer events: the outlines and blocks. The
+        // lines (rivers, mains) have nothing to say on hover.
         clickable: Boolean(name),
         // Shading sits under its own block grid, and the whole plan layer stays
         // negative so it can never climb above the authoritative zone layer or
         // the fleet, both of which start at 1.
-        zIndex: shade ? -2 : -1,
+        zIndex: shade ? -2 : cls === "boundary" || cls === "zone" ? -3 : -1,
       };
     });
 
@@ -4898,13 +4874,14 @@ export default function FleetMap() {
       const name = e.feature.getProperty("n");
       if (!name) return;
       const cls = e.feature.getProperty("c");
+      const ha  = e.feature.getProperty("a");
       hoverWin.open({
         html:
           `<article class="mapcard mapcard--plan">` +
             `<header class="mapcard__head"><h3 class="mapcard__title">${esc(name)}</h3></header>` +
             `<p class="mapcard__class"><i class="mapcard__swatch" style="--swatch:${
                (PLAN_STYLE[cls] ?? PLAN_STYLE.boundary).color
-             }"></i>${esc(PLAN_LABEL[cls] ?? cls)}</p>` +
+             }"></i>${esc(PLAN_LABEL[cls] ?? cls)}${ha ? ` · ${ha.toLocaleString()} ha` : ""}</p>` +
           `</article>`,
         position: e.latLng,
       });
@@ -4945,12 +4922,10 @@ export default function FleetMap() {
 
   // ── the drawing's macro name plates (ZONE 3, ZONE 4, B1-B4) ──────────────
   //
-  // Six fixed points rather than data, because they are not IN the data: the
-  // extraction keeps block geometry and block names, and these are the sheet's
-  // area names — the labels a reader navigates by, and the ones no geofence
-  // carries. They ride with the plan layer, not the zone layer, because they
-  // inherit the drawing's ±1.5 km accuracy and must never be mistaken for a
-  // surveyed boundary.
+  // Fixed points rather than data: these are the sheet's area names — the
+  // labels a reader navigates by, and the ones no geofence carries (see
+  // PLAN_LABELS). They ride with the plan layer, not the zone layer, because
+  // they are the drawing's names and must never be mistaken for a fence.
   useEffect(() => {
     const map  = mapRef.current;
     const maps = mapsLibRef.current;
@@ -4975,10 +4950,9 @@ export default function FleetMap() {
     }
 
     const on = showPlan && planAllowed;
-    // The plan's six macro plates yield to the estate's, which are the
-    // authoritative names — the drawing is indicative to ±1.5 km and the
-    // boundaries are surveyed, so where the two collide the surveyed name is
-    // the one worth reading. Read lazily: the zone plates move as the camera
+    // The plan's macro plates yield to the estate's zone plates, which are the
+    // names operators use — where the two collide the fence's name is the one
+    // worth reading. Read lazily: the zone plates move as the camera
     // does, and this needs where they are NOW.
     const { apply, cancel } = labelApplier(
       map, maps, planLabelsRef.current, on,
@@ -4992,7 +4966,7 @@ export default function FleetMap() {
     return () => { idleListener.remove(); zoomListener.remove(); cancel(); };
   }, [showPlan, planAllowed, mapReady]);
 
-  // Hide without discarding — re-parsing ~9,450 features on every toggle would
+  // Hide without discarding — re-parsing the plan on every toggle would
   // stall the map for seconds.
   useEffect(() => {
     if ((!showPlan || !planAllowed) && planDataRef.current) {
