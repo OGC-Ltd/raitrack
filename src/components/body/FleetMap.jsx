@@ -32,6 +32,7 @@ import { useIncidentInvestigation, InvestigationWindow } from "./IncidentInvesti
 import { useHubArrivals, ArrivalsWindow } from "./HubArrivals";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
+import { mapLabel } from "../../lib/plate";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useAppFields, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -2212,6 +2213,11 @@ export default function FleetMap() {
   // Read before any state below, because several of those states are seeded
   // from THIS ORGANISATION's stored preferences (lib/mapPrefs).
   const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId, openIncidentId, mapClearN } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId", "openIncidentId", "mapClearN");
+  // The names under the markers (the rail's eye): the licence number only,
+  // or the id at Kasulu (lib/plate mapLabel). A ref, since markers are drawn
+  // from callbacks that outlive a render.
+  const labelCompanyRef = useRef(activeCompanyId);
+  labelCompanyRef.current = activeCompanyId;
   const { setSelectedVehicleId, setFeedVehicleId, setDesktopActiveTab, setMobileActiveTab, setPendingFocusId, requestIncident, setSitePlanLinks, setTrackedIds, setInTransitOnly, markSelectionRestored } = useAppActions();
 
   const [mapReady, setMapReady]             = useState(false);
@@ -3466,7 +3472,7 @@ export default function FleetMap() {
       moving:  Boolean(v.onRoad),
       heading: markerHeading(marker, v),
       sprite:  spriteKind(v),
-      name:    v.name || v.id,
+      name:    mapLabel(v, labelCompanyRef.current),
       ...opts,
     }));
     marker._iconSig = null;   // force the next reconcile pass to re-evaluate
@@ -5386,7 +5392,7 @@ export default function FleetMap() {
         marker = new DomMarker({
           position: { lat: v.lat, lng: v.lng },
           html:     markerIconHtml(markerState(v, alertOpts), { moving: v.onRoad, heading: v.heading, sprite: spriteKind(v),
-                                                    dark: isDark(v), darkAge: isDark(v) ? darkAgeLabel(v) : "", name: v.name || v.id }),
+                                                    dark: isDark(v), darkAge: isDark(v) ? darkAgeLabel(v) : "", name: mapLabel(v, labelCompanyRef.current) }),
           anchor:   "bottom",
           zIndex:   3,
           onClick: (e) => {
@@ -5500,7 +5506,7 @@ export default function FleetMap() {
         // Rebuilding during a glide resets CSS animations causing visible stutter.
         if (!marker._tween) {
           marker.setHtml(markerIconHtml(mstate, { highlighted, searched, moving, heading, sprite: spriteKind(v),
-                                                  dark, darkAge: dark ? darkAgeLabel(v) : "", name: v.name || v.id }));
+                                                  dark, darkAge: dark ? darkAgeLabel(v) : "", name: mapLabel(v, labelCompanyRef.current) }));
           marker._iconSig = sig;
           marker._headingFrame = truckFrame(heading);
         }

@@ -29,3 +29,14 @@ export function plateIn(...texts) {
 
 /** What to print for a unit: its plate where it has one, else its id. */
 export const displayPlate = (v) => v?.regPlate ?? v?.id ?? "";
+
+/**
+ * The name under a marker when the map's names are on (operator, 2026-10-20):
+ * the licence number only, "KCB 980V" for a road vehicle and "KTCB 890Z" for
+ * a tractor, read out of names like "Mahindra 9200 4WD KTCC 787D"; the unit's
+ * id where it has no plate. Kasulu shows the id always: its units are named
+ * by fleet number ("MUFINDI: EX 11") and carry Tanzanian plates.
+ */
+const ID_LABEL_COMPANIES = new Set(["kasulu"]);
+export const mapLabel = (v, companyId) =>
+  (ID_LABEL_COMPANIES.has(companyId) ? v?.id : displayPlate(v)) ?? "";
