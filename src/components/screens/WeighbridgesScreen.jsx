@@ -45,6 +45,9 @@ import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
 import EmptyNote from "../shared/EmptyNote";
+import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
+import { useAppActions } from "../../context/AppContext";
+import { usePermissions } from "../../hooks/usePermissions";
 import DateRangePicker from "../layout/DateRangePicker";
 import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
 import "../body/SensorPanel.css";
@@ -187,7 +190,13 @@ function Leg({ label, kg, at, day, bridgeNo, operator, muted }) {
   );
 }
 
-function WeighmentDetail({ row, day, onClose }) {
+/**
+ * The open ticket, in the app's detail sidebar (shared/DetailSidebar: the
+ * Drivers page's panel, as on Alerts and Maintenance). Picking a row opens it
+ * beside the grid; another row swaps the ticket in place; × or Esc closes it.
+ * Everything in it is on the row already, so opening it costs no request.
+ */
+function WeighmentPanel({ row, day, onClose, onShowOnMap }) {
   const transfer = row.category === "CANE_TRANSFER";
   // Centre against factory. Weighing the same load twice is the entire reason
   // a transfer exists as its own flow, so the difference between the two nets
@@ -197,81 +206,65 @@ function WeighmentDetail({ row, day, onClose }) {
     : null;
 
   return (
-    <div className="sp4-detail wb-detail">
-      <div className="sp4-detail-head">
-        <button type="button" className="sp4-back-btn" onClick={onClose}>← Back</button>
-        {/* Classed so the stylesheet can stop this box competing with the Back
-            button for the row. It was a bare <div>, which means min-width:auto,
-            which means a long driver name won the argument. */}
-        <div className="sp4-detail-titles">
-          <div className="sp4-detail-reg">
-            {row.vehicleNo} <TypeChip category={row.category} />
+    <DetailSidebar
+      title="Weighbridge ticket"
+      label={`Weighbridge ticket ${row.token}, ${row.vehicleNo}`}
+      itemKey={row.id}
+      onClose={onClose}
+      footer={onShowOnMap ? (
+        <button type="button" className="sp4-ghost-btn" onClick={onShowOnMap}>
+          <i className="ti ti-map-pin" aria-hidden="true" /> View on Map
+        </button>
+      ) : null}
+    >
+      <DetailSidebarIdent
+        kind={<TypeChip category={row.category} />}
+        name={row.vehicleNo}
+        sub={`Token ${row.token} · ${row.centerName} · ${row.driverName}`}
+      />
+
+      <DetailSidebarFacts facts={[
+        { label: transfer ? "Net at centre" : "Net", value: kilos(row.netWeightKg) },
+        { label: "Payload", value: tonnes(row.netWeightKg) },
+        { label: "Tare → gross", value: gapLabel(row.turnaroundMs) },
+        { label: "This lorry today", value: `${row.seq} of ${row.vehicleTickets}` },
+        // Null on a first ticket, and it says so rather than "0m": there is
+        // no earlier weighment to measure from.
+        { label: row.seq === 1 ? "First today" : "Since previous", value: gapLabel(row.sincePreviousMs) },
+      ]} />
+
+      <DetailSidebarSection title={transfer ? "At the centre" : "At the bridge"}>
+        <Leg label="Tare (empty)"  kg={row.tareWeightKg}  at={row.tareAt}  day={day} bridgeNo={row.tareBridgeNo}  operator={row.tareOperator} />
+        <Leg label="Gross (laden)" kg={row.grossWeightKg} at={row.grossAt} day={day} bridgeNo={row.grossBridgeNo} operator={row.grossOperator} />
+      </DetailSidebarSection>
+
+      {transfer && (
+        <DetailSidebarSection title="At the factory">
+          <Leg label="Gross (laden)" kg={row.factoryGrossWeightKg} at={row.factoryGrossAt} day={day} bridgeNo={row.factoryGrossBridgeNo} operator={row.factoryGrossOperator} />
+          <Leg label="Tare (empty)"  kg={row.factoryTareWeightKg}  at={row.factoryTareAt}  day={day} bridgeNo={row.factoryTareBridgeNo}  operator={row.factoryTareOperator} />
+          <div className="wb-drift">
+            <span>Factory net</span>
+            <strong>{kilos(row.factoryNetWeightKg)}</strong>
+            {drift != null && (
+              <em className={drift < 0 ? "wb-drift--down" : "wb-drift--up"}>
+                {drift >= 0 ? "+" : "−"}{kilos(Math.abs(drift))} against the centre
+              </em>
+            )}
           </div>
-          <div className="sp4-detail-sub">
-            Token {row.token} · {row.centerName} · {row.driverName}
-          </div>
-        </div>
-      </div>
+        </DetailSidebarSection>
+      )}
 
-      <div className="wb-detail__strip">
-        <div className="wb-stat">
-          <span className="wb-stat__n">{kilos(row.netWeightKg)}</span>
-          <span className="wb-stat__l">Net{transfer ? " at centre" : ""}</span>
-        </div>
-        <div className="wb-stat">
-          <span className="wb-stat__n">{tonnes(row.netWeightKg)}</span>
-          <span className="wb-stat__l">Payload</span>
-        </div>
-        <div className="wb-stat">
-          <span className="wb-stat__n">{gapLabel(row.turnaroundMs)}</span>
-          <span className="wb-stat__l">Tare → gross</span>
-        </div>
-        <div className="wb-stat">
-          <span className="wb-stat__n">{row.seq} of {row.vehicleTickets}</span>
-          <span className="wb-stat__l">This lorry today</span>
-        </div>
-        <div className="wb-stat">
-          <span className="wb-stat__n">{gapLabel(row.sincePreviousMs)}</span>
-          {/* Null on a first ticket, and it says so rather than "0m": there is
-              no earlier weighment to measure from. */}
-          <span className="wb-stat__l">{row.seq === 1 ? "First today" : "Since previous"}</span>
-        </div>
-      </div>
-
-      <div className="wb-legs">
-        <div className="wb-legs__group">
-          <h4 className="wb-legs__title">{transfer ? "At the centre" : "At the bridge"}</h4>
-          <Leg label="Tare (empty)"  kg={row.tareWeightKg}  at={row.tareAt}  day={day} bridgeNo={row.tareBridgeNo}  operator={row.tareOperator} />
-          <Leg label="Gross (laden)" kg={row.grossWeightKg} at={row.grossAt} day={day} bridgeNo={row.grossBridgeNo} operator={row.grossOperator} />
-        </div>
-
-        {transfer && (
-          <div className="wb-legs__group">
-            <h4 className="wb-legs__title">At the factory</h4>
-            <Leg label="Gross (laden)" kg={row.factoryGrossWeightKg} at={row.factoryGrossAt} day={day} bridgeNo={row.factoryGrossBridgeNo} operator={row.factoryGrossOperator} />
-            <Leg label="Tare (empty)"  kg={row.factoryTareWeightKg}  at={row.factoryTareAt}  day={day} bridgeNo={row.factoryTareBridgeNo}  operator={row.factoryTareOperator} />
-            <div className="wb-drift">
-              <span>Factory net</span>
-              <strong>{kilos(row.factoryNetWeightKg)}</strong>
-              {drift != null && (
-                <em className={drift < 0 ? "wb-drift--down" : "wb-drift--up"}>
-                  {drift >= 0 ? "+" : "−"}{kilos(Math.abs(drift))} against the centre
-                </em>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="sp4-detail-footer">
-        Ticket raised {stampLabel(row.tokenAt, day)}
-        {row.productName ? ` · ${row.productName}` : ""}
-        {/* Said plainly rather than left as a blank: most of this traffic is
-            contractors' lorries and farmers' tractors, which carry no tracker
-            and appear in no fleet we hold. */}
-        {row.vehicleId ? " · tracked unit" : " · not a tracked unit"}
-      </div>
-    </div>
+      <DetailSidebarSection title="Ticket">
+        <p className="wb-ticket-note">
+          Raised {stampLabel(row.tokenAt, day)}
+          {row.productName ? ` · ${row.productName}` : ""}
+          {/* Said plainly rather than left as a blank: most of this traffic is
+              contractors' lorries and farmers' tractors, which carry no tracker
+              and appear in no fleet we hold. */}
+          {row.vehicleId ? " · tracked unit" : " · not a tracked unit"}
+        </p>
+      </DetailSidebarSection>
+    </DetailSidebar>
   );
 }
 
@@ -326,6 +319,8 @@ export default function WeighbridgesScreen() {
   const [centre,   setCentre]   = useState(DEFAULT_CENTRE);
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState(null);
+  const { can } = usePermissions();
+  const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
 
   /* The grid reads ONE bridge; the board reads them all.
    *
@@ -379,6 +374,7 @@ export default function WeighbridgesScreen() {
   useEffect(() => { setPage(0); }, [from, to, centre, search]);
 
   const openRow = useCallback((row) => setSelected(row), []);
+  const closeRow = useCallback(() => setSelected(null), []);
   const selectedRow = useMemo(
     () => (selected ? rows.find(r => r.id === selected.id) ?? selected : null),
     [selected, rows],
@@ -553,6 +549,18 @@ export default function WeighbridgesScreen() {
 
       {/* ── Body ───────────────────────────────────────────── */}
       <div className="sp4-body">
+        {view !== "analytics" && selectedRow && (
+          <WeighmentPanel
+            row={selectedRow}
+            day={from === to ? from : null}
+            onClose={closeRow}
+            // Only a tracked unit is on the map: most lorries over these
+            // bridges are contractors' and carry no tracker.
+            onShowOnMap={selectedRow.vehicleId && can("map:read")
+              ? () => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedRow.vehicleId); }
+              : null}
+          />
+        )}
         {view === "analytics" ? (
           /* `.analytics-page` on the wrapper is not decoration: the `an-*`
              colour tokens the board draws its marks from are declared on that
@@ -575,8 +583,6 @@ export default function WeighbridgesScreen() {
               </>
             )}
           </div>
-        ) : selectedRow ? (
-          <WeighmentDetail row={selectedRow} day={from === to ? from : null} onClose={() => setSelected(null)} />
         ) : (
           <>
             <div data-tour="page-tabs" className="sp4-tabs">
@@ -707,7 +713,8 @@ export default function WeighbridgesScreen() {
                       {pageRows.map(r => (
                         <tr
                           key={r.id}
-                          className="sp4-tr"
+                          className={"sp4-tr" + (selectedRow?.id === r.id ? " sp4-tr--selected" : "")}
+                          aria-selected={selectedRow?.id === r.id}
                           onClick={() => openRow(r)}
                           tabIndex={0}
                           onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRow(r); } }}

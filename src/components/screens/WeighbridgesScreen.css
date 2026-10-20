@@ -1,11 +1,11 @@
 /* Weighbridges — the parts Sensor Monitor's stylesheet does not already own.
  *
  * Everything structural on this screen (root, header, KPIs, filter bar, tab
- * strip, table shell, detail shell, empty and error states) is SensorPanel.css
+ * strip, table shell, empty and error states) is SensorPanel.css
  * and is not re-declared here — including the GRID, which wears the probes
  * table's own classes so the two read at one rhythm. What follows is only what
  * a weighbridge ticket needs and a sensor row does not: three cell rules, and
- * the breakdown card's legs.
+ * the ticket's legs in the detail sidebar.
  *
  * Every colour is a `--sp4-*` variable rather than a literal, so the light
  * theme is handled by that file's re-points and there is no second palette
@@ -38,67 +38,9 @@
   white-space: nowrap;
 }
 
-/* ── The breakdown ────────────────────────────────────────────────────────
-   Opened by clicking a row, and it answers one question: what did each scale
-   read, and exactly when. */
-.wb-detail__strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px;
-  background: var(--sp4-line);
-  border: 1px solid var(--sp4-line);
-  border-radius: 8px;
-  overflow: hidden;
-  margin: var(--sp4-md) var(--sp4-gutter) 0;
-  /* The detail is a flex column: without this the strip is squeezed to fit
-     and its overflow:hidden crops the last stat off on a phone. */
-  flex-shrink: 0;
-}
-.wb-stat {
-  flex: 1 1 140px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 14px;
-  background: var(--sp4-surface);
-}
-.wb-stat__n {
-  font-size: var(--sp4-strong);
-  font-weight: 800;
-  color: var(--sp4-text-1);
-  font-family: var(--font-mono);
-}
-.wb-stat__l {
-  font-size: var(--sp4-label);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--sp4-text-4);
-}
-
-.wb-legs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp4-md);
-  padding: var(--sp4-md) var(--sp4-gutter);
-}
-.wb-legs__group {
-  flex: 1 1 320px;
-  min-width: 0;
-  border: 1px solid var(--sp4-line);
-  border-radius: 8px;
-  padding: var(--sp4-sm);
-  background: var(--sp4-surface);
-}
-.wb-legs__title {
-  margin: 0 0 var(--sp4-xs);
-  font-size: var(--sp4-label);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--sp4-text-3);
-  font-weight: 700;
-}
-
+/* ── The ticket, in the detail sidebar ──────────────────────────────────
+   One weighing per row: what the scale read, when, which scale, whose hands.
+   The sidebar (shared/DetailSidebar) is the frame; these are its contents. */
 .wb-leg {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -168,46 +110,12 @@
 .wb-drift em { font-style: normal; font-family: var(--font-mono); }
 .wb-drift--down { color: var(--sp4-text-4); }
 .wb-drift--up   { color: var(--sp4-text-4); }
-
-/* ── Ticket detail header ───────────────────────────────────────
-   Back, then the plate and the line that says which ticket this is.
-
-   `.sp4-detail-head` is a shared flex row (SensorPanel.css) with no gap and no
-   shrink rules, and this screen is the only one that puts a BUTTON in it. The
-   title box beside it was a bare <div> — `min-width: auto`, so its intrinsic
-   width is the longest unbreakable run inside it — while the button is
-   shrinkable and breakable by default. A driver with three names therefore
-   took the width it wanted and paid for it out of the button: measured at
-   375px with BONFACE AINEA KASKON in the subtitle, the button went from 70x26
-   to 61x40, because the words had broken onto two lines. That row is the first
-   thing on the screen and it read as a fault.
-
-   Neither of these is a phone-only rule. The same collision happens on a
-   laptop with a long enough name; a phone just gets there first. */
-.wb-detail .sp4-detail-head { gap: 14px; }
-
-/* The control keeps its size. It is two words and it is the way out of this
-   view — it is never the thing that should be giving up room. */
-.wb-detail .sp4-back-btn {
-  flex: 0 0 auto;
-  white-space: nowrap;
+.wb-ticket-note {
+  margin: 0;
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-3);
 }
 
-/* ...and the titles take whatever is left. `min-width: 0` is what lets a flex
-   item shrink below its own content; without it the rule above would only move
-   the overflow somewhere else. */
-.wb-detail .sp4-detail-titles {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* The plate and its type chip sit on one baseline rather than the chip riding
-   on the text’s line box. */
-.wb-detail .sp4-detail-reg {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
 
 
 @media (max-width: 767px) {
@@ -263,20 +171,6 @@
   }
   .wb-root .sp4-filter-chip { padding: 0 10px; }
 
-  /* On a phone, Back and a two-line title do not share 375px; they take a row
-     each. Back first and on its own line, at a size a thumb can hit — 26px
-     tall was built for a mouse — and the ticket’s identity underneath with the
-     full width to say itself in. */
-  .wb-detail .sp4-detail-head {
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .wb-detail .sp4-back-btn {
-    min-height: var(--m-ctl);
-    padding-inline: 14px;
-  }
-  .wb-detail .sp4-detail-titles { flex: 1 0 100%; }
 
 }
 
@@ -324,9 +218,6 @@
   .wb-grid .sp4-kind-chip { padding: 1px 5px; font-size: 10.5px; }
   .sp4-root.wb-root .wb-grid.sp4-keep-table .sp4-table > tbody > tr > td:first-child { font-size: 11.5px; }
   .wb-grid .sp4-table > tbody > tr > td.wb-td-net { font-weight: 700; color: var(--sp4-text-1); }
-
-  /* The ticket's five figures, three then two, rather than three rows. */
-  .wb-stat { flex-basis: 96px; padding: 8px 10px; }
 }
 
 /* ── Breadcrumb ───────────────────────────────────────────────────────────
