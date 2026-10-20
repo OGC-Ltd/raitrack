@@ -14,7 +14,7 @@ import useFocusTrap from "../../hooks/useFocusTrap";
 import { CATEGORY_GROUPS, CATEGORY_LABEL, fetchFlaggableUnits, flagUnits, routeOf } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
-export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, presetVehicleId = null }) {
+export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, presetVehicleId = null, presetCategory = "" }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   useFocusTrap(dialogRef, open);
@@ -22,7 +22,7 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
   const [units, setUnits] = useState(null);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState(() => (presetVehicleId ? [presetVehicleId] : []));
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(presetCategory);
   const [fault, setFault] = useState("");
   const [queue, setQueue] = useState("workshop");
   const [forward, setForward] = useState(true);

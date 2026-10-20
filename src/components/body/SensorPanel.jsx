@@ -1467,7 +1467,6 @@ export default function SensorPanel() {
      than a tab that was never offered. */
   const { can } = usePermissions();
   const canRepairRead   = can("repair:read");
-  const canRepairCreate = can("repair:create");
   const canRepairAssign  = can("repair:assign");
   const openRepairs = useOpenRepairs(canRepairRead);
   // Lifted out of FuelTable: the PDF export needs these same rows, and one
@@ -2009,7 +2008,7 @@ export default function SensorPanel() {
               lastReportedAt={selectedProbeRow ? selectedProbeRow.lastReportedAt ?? "" : null}
               // A unit with a repair already open moves through that job's
               // own controls, above; filing a second is refused anyway.
-              reportActions={canRepairCreate && selectedProbeRow && !openRepairs.byVehicle?.has(selectedProbeRow.vehicleId) ? (
+              reportActions={(can("repair:flag") || can("repair:resolve")) && selectedProbeRow && !openRepairs.byVehicle?.has(selectedProbeRow.vehicleId) ? (
                 <ProbeReportActions
                   row={selectedProbeRow}
                   orgId={orgId}

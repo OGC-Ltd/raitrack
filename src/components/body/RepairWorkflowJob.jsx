@@ -22,7 +22,7 @@ import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL, PART_STATUS } from "../../api
 import {
   fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, decidePath, assessJob,
   bookJob, cancelBooking, arriveJob, assignWorkshop, classifyDamage, voidWarranty, clearWarranty, addWork,
-  completeJob, verifyJob, voidJob, requestPart, sourcePart, issuePart, fitPart,
+  completeJob, verifyJob, voidJob, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
   INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, componentLabel, routeOf,
 } from "../../api/repairWorkflow";
@@ -383,6 +383,10 @@ function Parts({ orgId, job, act, busy, canWork, canIssue, canSource }) {
                     <button type="button" className="sp4-ghost-btn" disabled={!!busy}
                             onClick={() => act(`src-${part.id}`, () => sourcePart(orgId, job.id, part.id, { status: "ordered" }), "Marked ordered.")}>Mark ordered</button>
                   )}
+                  {part.status === "ordered" && canWork && (
+                    <button type="button" className="sp4-ghost-btn" disabled={!!busy}
+                            onClick={() => act(`recv-${part.id}`, () => receivePart(orgId, job.id, part.id), "Received.")}>Received</button>
+                  )}
                   {(part.status === "issued" || part.status === "received") && canWork && (
                     <button type="button" className="sp4-ghost-btn" disabled={!!busy}
                             onClick={() => act(`fit-${part.id}`, () => fitPart(orgId, job.id, part.id), "Fitted.")}>Fitted</button>
@@ -730,7 +734,9 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
         {action}
         {!action && !closed && (
           <p className="wf-muted">
-            {s === "forwarded" && job.assignedToId ? `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.` : "Waiting on the people above. Nothing for you to do here."}
+            {s === "forwarded" && job.assignedToId ? `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`
+              : s === "spare_outsourced" ? "Waiting on spare parts. Each part's progress is under Spare parts below."
+                : "Waiting on the people above. Nothing for you to do here."}
           </p>
         )}
       </section>

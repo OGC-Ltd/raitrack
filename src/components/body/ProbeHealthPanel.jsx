@@ -44,8 +44,9 @@ import {
 } from "../../api/probeHealth";
 import { downloadProbeCsv, downloadProbePdf } from "../../utils/probeReport";
 import TableToolbar from "./TableToolbar";
-import RepairReportForm from "./RepairReportForm";
-import { submitRepairReport, emailBanner, humanKind, OUTCOME_ACTION } from "../../api/repairs";
+import FlagRepairDialog from "./FlagRepairDialog";
+import SpotFixDialog from "./SpotFixDialog";
+import { usePermissions } from "../../hooks/usePermissions";
 import FilterBar from "./FilterBar";
 
 /** What the operator can narrow to. `bad` decides which of that channel's
@@ -425,87 +426,67 @@ export default function ProbeHealthPanel({
 }
 
 /**
- * Reporting a repair on ONE unit, from its sidebar (operator, 2026-10-20:
- * "whenever we select the probe the options of either fixing, cannot be fixed
- * or fixing are to be in the side panel"). The three buttons used to sit in
- * the table's toolbar over a ticked batch; they are here now, beside the unit
- * they are about, and the table has no checkboxes. Each button seeds the one
- * form (RepairReportForm) rather than submitting, as before.
+ * Repairs on ONE unit, from its sidebar. Every repair runs through the
+ * Workshop workflow (2026-10-21): the old Fixing / Needs a spare / Cannot fix
+ * buttons made jobs no ticket, damage check or verification would see.
  *
- * `row` is the unit's probe-health row: its fault label and failing channels
- * go into the form so the spare parts list leads with the right parts.
+ *   Flag for repair    the Flag dialog with this unit and "Fuel probe" chosen;
+ *                      ControlTech claims it from there.
+ *   Fixed on the spot  a technician who fixed it there and then, with nothing
+ *                      from stores: no triage, no assessment, still ticketed
+ *                      and still verified by the Control Room.
  */
 export function ProbeReportActions({ row, orgId, onFiled }) {
-  const [formOpen,    setFormOpen]    = useState(false);
-  const [seedOutcome, setSeedOutcome] = useState("fixing");
-  const [busy,        setBusy]        = useState(false);
-  const [formError,   setFormError]   = useState("");
-  const [banner,      setBanner]      = useState(null);
+  const { can } = usePermissions();
+  const [flagOpen, setFlagOpen] = useState(false);
+  const [spotOpen, setSpotOpen] = useState(false);
+  const [banner, setBanner] = useState(null);
 
-  const items = useMemo(() => (row ? [{
-    key:        row.vehicleId,
-    targetKind: "probe",
-    vehicleId:  row.vehicleId,
-    plate:      row.plate,
-    label:      faultAction(row) || humanKind(null),
-    channels:   CHANNELS.filter((c) => c.id !== "all" && c.bad(row)).map((c) => c.id),
-  }] : []), [row]);
-
-  const openForm = useCallback((outcome) => {
-    setSeedOutcome(outcome);
-    setFormError("");
-    setBanner(null);
-    setFormOpen(true);
-  }, []);
-
-  const handleFile = useCallback(async ({ items: filed, note }) => {
-    setBusy(true);
-    setFormError("");
-    try {
-      const res = await submitRepairReport({ orgId, items: filed, note });
-      setBanner(emailBanner(res?.email));
-      setFormOpen(false);
-      onFiled?.();
-    } catch (e) {
-      setFormError(e?.message ?? "Could not file the report");
-    } finally {
-      setBusy(false);
-    }
-  }, [orgId, onFiled]);
-
-  // The receipt clears itself; an instruction ("no email was sent") stays.
+  // The receipt clears itself.
   useEffect(() => {
-    if (banner?.tone !== "ok") return undefined;
+    if (!banner) return undefined;
     const t = setTimeout(() => setBanner(null), 6000);
     return () => clearTimeout(t);
   }, [banner]);
 
   if (!row) return null;
+  const canFlag = can("repair:flag");
+  const canSpot = can("repair:resolve");
+  if (!canFlag && !canSpot) return null;
   return (
     <>
       <div className="sp4-probe-report">
-        <button type="button" className="sp4-act-btn"
-                onClick={() => openForm("fixing")}>{OUTCOME_ACTION.fixing}</button>
-        <button type="button" className="sp4-act-btn sp4-act-btn--warn"
-                onClick={() => openForm("needs_spare")}>{OUTCOME_ACTION.needs_spare}</button>
-        <button type="button" className="sp4-act-btn sp4-act-btn--crit"
-                onClick={() => openForm("cannot_fix")}>{OUTCOME_ACTION.cannot_fix}</button>
+        {canFlag && (
+          <button type="button" className="sp4-act-btn sp4-act-btn--warn" onClick={() => setFlagOpen(true)}>Flag for repair</button>
+        )}
+        {canSpot && (
+          <button type="button" className="sp4-act-btn" onClick={() => setSpotOpen(true)}>Fixed on the spot</button>
+        )}
       </div>
       {banner && (
-        <div className={"sp4-toast sp4-toast--" + banner.tone} role="status" aria-live="polite">
-          <span className="sp4-toast-text">{banner.text}</span>
+        <div className="sp4-toast sp4-toast--ok" role="status" aria-live="polite">
+          <span className="sp4-toast-text">{banner}</span>
           <button type="button" className="sp4-toast-x" aria-label="Dismiss"
                   onClick={() => setBanner(null)}>×</button>
         </div>
       )}
-      <RepairReportForm
-        open={formOpen}
-        items={items}
-        defaultOutcome={seedOutcome}
-        busy={busy}
-        error={formError}
-        onCancel={() => setFormOpen(false)}
-        onSubmit={handleFile}
+      <FlagRepairDialog
+        key={`flag-${row.vehicleId}`}
+        orgId={orgId}
+        open={flagOpen}
+        presetVehicleId={row.vehicleId}
+        presetCategory="fuel_probe"
+        onClose={() => setFlagOpen(false)}
+        onFlagged={() => { setBanner(`${row.plate} flagged and sent to ControlTech.`); onFiled?.(); }}
+      />
+      <SpotFixDialog
+        key={`spot-${row.vehicleId}`}
+        orgId={orgId}
+        open={spotOpen}
+        unit={row}
+        onClose={() => setSpotOpen(false)}
+        onDone={(jobs) => { setBanner(`Recorded${jobs[0]?.ticketNo ? ` as ${jobs[0].ticketNo}` : ""}. The Control Room verifies it.`); onFiled?.(); }}
+        onFlagInstead={() => setFlagOpen(true)}
       />
     </>
   );
