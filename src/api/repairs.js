@@ -185,6 +185,8 @@ export const OUTCOME_LABEL = {
   cannot_fix:  "Cannot be fixed",
   // No technician recorded it: a fuel case found the probe faulty (Fuel Audit).
   audit:       "From Fuel Audit",
+  // Raised by the Control Room on the Workshop screen (api/repairWorkflow).
+  flagged:     "Flagged by the Control Room",
 };
 
 /** The verb on the button, which is shorter than the noun on the chip. */
@@ -195,7 +197,7 @@ export const OUTCOME_ACTION = {
 };
 
 /** Maps onto the panel's existing .sp4-pill--* modifiers. */
-export const OUTCOME_PILL = { fixing: "con", needs_spare: "warn", cannot_fix: "inc", audit: "info" };
+export const OUTCOME_PILL = { fixing: "con", needs_spare: "warn", cannot_fix: "inc", audit: "info", flagged: "info" };
 
 // ── the ladder ───────────────────────────────────────────────────────────────
 //
@@ -222,6 +224,17 @@ export const STAGE_LABEL = {
   // they mean different things — these two are the same word, so the label can
   // read the way people say it without the column drifting from what it holds.
   failed:           "Unsuccessful",
+  // The Repair Workflow's stages (Workshop screen). Moved only by their own
+  // actions there, never by the stage chips here.
+  forwarded:           "With ControlTech",
+  remote_fix:          "Remote fix",
+  awaiting_assessment: "Awaiting assessment",
+  booked:              "Booked in",
+  towing:              "Towing",
+  field_inspection:    "Field inspection",
+  in_workshop:         "In workshop",
+  completed:           "Awaiting verification",
+  void:                "Void",
 };
 
 /** One line under the node, saying what that stage MEANS. A ladder of bare
@@ -241,6 +254,15 @@ export const STAGE_PILL = {
   fixing:           "warn",
   fixed:            "con",
   failed:           "inc",
+  forwarded:           "info",
+  remote_fix:          "warn",
+  awaiting_assessment: "warn",
+  booked:              "info",
+  towing:              "warn",
+  field_inspection:    "warn",
+  in_workshop:         "warn",
+  completed:           "info",
+  void:                "none",
 };
 
 /**
@@ -319,6 +341,8 @@ export const INSPECTION_VERDICTS = [
   ["replaced", "Replaced", "info"],
 ];
 export const PART_STATUS = {
+  requested: { label: "Requested", pill: "warn" },
+  issued:    { label: "Issued",    pill: "info" },
   ordered:   { label: "Ordered",   pill: "warn" },
   received:  { label: "Received",  pill: "info" },
   fitted:    { label: "Fitted",    pill: "con" },

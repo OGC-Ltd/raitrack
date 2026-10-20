@@ -27,6 +27,10 @@ export const NAV_ITEMS = [
   { key: 'drivers',      label: 'Drivers',      icon: 'users',     permission: 'driver:read'      },
   { key: 'analytics',    label: 'Analytics',    icon: 'chart-bar', permission: 'analytics:read'   },
   { key: 'maintenance',  label: 'Maintenance',  icon: 'tool',      permission: 'sensor:read'      },
+  // The Vehicle Support and Repair Workflow: flag, assess, book, repair,
+  // verify. On repair:read alone, so the Control Room's operator and
+  // supervisor (no sensor:read) reach it.
+  { key: 'workshop',     label: 'Workshop',     icon: 'car-garage', permission: 'repair:read'     },
   { key: 'weighbridges', label: 'Weighbridges', icon: 'scale',     permission: 'weighbridge:read' },
   // Pinned to the foot of the sidebar, and not drawn at all without its
   // permission. The Cases page that sat here is gone (operator, 2026-09-30):
