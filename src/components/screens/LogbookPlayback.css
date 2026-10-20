@@ -135,9 +135,8 @@
   margin: 0 0 8px;
   font-size: var(--sp4-label);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--sp4-text-3);
+  letter-spacing: 0;
+  color: var(--sp4-text-2);
 }
 .lbp-h span { text-transform: none; letter-spacing: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
 

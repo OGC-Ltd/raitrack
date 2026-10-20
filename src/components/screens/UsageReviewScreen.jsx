@@ -41,6 +41,7 @@ import { buildWeb, arc, bearing, edgeWidth } from "../../lib/movementWeb";
 
 export { placeCase };
 import { watchTableLabels } from "../../lib/tableLabels";
+import { nameParts } from "../../lib/plateLabel";
 
 const TZ = "Africa/Nairobi";
 const DAY_MS = 86_400_000;
@@ -202,10 +203,10 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, mode, setMode,
     let alive = true;
     loadMapEngine().then((maps) => {
       if (!alive || !el.current || map.current) return;
-      // No wheel zoom: the map sits in a scrolling page, and the wheel is for
-      // the page (operator, 2026-10-08). The +/- buttons and double-click zoom.
+      // Wheel zoom is back (operator, 2026-10-20): the scroll ball zooms the
+      // map, as on the live map, besides the +/- buttons and double-click.
       map.current = new maps.Map(el.current, {
-        center: { lat: 0.5, lng: 34.6 }, zoom: 9, zoomControl: true, fullscreenControl: true, scrollwheel: false,
+        center: { lat: 0.5, lng: 34.6 }, zoom: 9, zoomControl: true, fullscreenControl: true,
       });
       installOsmBase(maps, map.current);
       map.current.setMapTypeId(OSM_TYPE_ID);
@@ -339,7 +340,7 @@ function ReviewMap({ review, sel, setSel, placeDays, pal, gnames, mode, setMode,
       stopMarks.current = st.map((s) => {
         const mk = new mapsNs.Marker({
           map: m, position: { lat: s.lat, lng: s.lng }, zIndex: 200,
-          icon: stopSignIcon(14),
+          icon: stopSignIcon(16),
         });
         mk.addListener("mouseover", (ev) => setHover({ kind: "stop", stop: s, pos: at(ev) }));
         mk.addListener("mouseout", () => setHover((h) => (h?.kind === "stop" ? null : h)));
@@ -1066,8 +1067,8 @@ export default function UsageReviewScreen() {
             <div data-tour="logbook-bar" className="urv-bar">
               <span className="urv-bar__what">
                 <b>{review.vehicle.plate}</b>
-                {review.vehicle.wialonName && review.vehicle.wialonName !== review.vehicle.plate ? ` · ${review.vehicle.wialonName}` : ""}
-                {" · "}{dayLabel(review.period.from)} {review.period.from.slice(0, 4)} – {dayLabel(review.period.to)} {review.period.to.slice(0, 4)}
+                {nameParts(review.vehicle.wialonName, review.vehicle.plate) ? ` · ${nameParts(review.vehicle.wialonName, review.vehicle.plate)}` : ""}
+                {" · "}{dayLabel(review.period.from)} {review.period.from.slice(0, 4)} to {dayLabel(review.period.to)} {review.period.to.slice(0, 4)}
                 {" · "}{review.period.days} days
                 {/* A saved review of a period still running, built a while ago */}
                 {st?.outdated && review.builtAt && (
@@ -1109,22 +1110,59 @@ export default function UsageReviewScreen() {
               <ReviewMap review={review} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} gnames={gnames}
                          mode={mapMode} setMode={setMapMode} web={web} webEdge={webEdge} setWebEdge={setWebEdge} />
 
-              <section data-tour="logbook-days" className="frv-card urv-card urv-card--top">
-                <h3 className="frv-card__t">Distance per Day</h3>
-                <DailyChart days={review.days} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
-                <p className="frv-card__note">Bars are km, dots are hours driving. Click a day to follow it on the map.</p>
+              {/* Distance per day and driving by hour, one card (operator,
+                  2026-10-20): the day picked in the first drives the second. */}
+              <section className="frv-card urv-card urv-card--top urv-drive">
+                <h3 className="frv-card__t">Driving by Day and Hour</h3>
+                <div data-tour="logbook-days" className="urv-drive__part">
+                  <div className="urv-drive__head">
+                    <h4>Distance per day</h4>
+                    <span>Bars are km, dots hours driving. Click a day to follow it.</span>
+                  </div>
+                  <DailyChart days={review.days} sel={sel} setSel={setSel} placeDays={placeDays} pal={pal} />
+                </div>
+                <div data-tour="logbook-hours" className="urv-drive__part">
+                  <div className="urv-drive__head">
+                    <h4>Driving by hour</h4>
+                    <span>
+                      {sel.day ? `${dayLabel(sel.day, true)}, against the period's average`
+                        : sel.place != null ? "Days at the picked place, against the period's average"
+                        : "Average minutes in each hour (EAT)"}
+                    </span>
+                  </div>
+                  <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal}
+                             placeName={(id) => nameOf(review.places.find((p) => p.id === id), gnames) ?? `Place ${id}`} />
+                </div>
               </section>
             </div>
 
             <div className="urv-grid urv-grid--lower">
               <section data-tour="logbook-places" className="frv-card urv-card urv-card--table">
                 <h3 className="frv-card__t">Where It Spent Its Time</h3>
-                <p className="urv-card__sub">{s.places} places · {nf(s.stoppedH, 0)} h stopped in stops of 10 min or more · click a place</p>
-                {byActivity.length > 0 && (
-                  <p className="urv-card__sub urv-acts" title="What the places are, from Google Maps: hours stopped and stops at each kind">
-                    {byActivity.map((a) => <span key={a.activity}><b>{a.activity}</b> {nf(a.hours, 1)} h · {plural(a.stops, "stop")}</span>)}
-                  </p>
-                )}
+                <p className="urv-card__sub">
+                  <b>{s.places}</b> places · <b>{nf(s.stoppedH, 0)} h</b> stopped in stops of 10 min or more · click a place
+                </p>
+                {byActivity.length > 0 && (() => {
+                  const total = byActivity.reduce((t, a) => t + a.hours, 0) || 1;
+                  return (
+                    <div className="urv-acts" title="What the places are, from Google Maps: hours stopped and stops at each kind">
+                      <div className="urv-acts__bar" aria-hidden="true">
+                        {byActivity.map((a, i) => (
+                          <i key={a.activity} style={{ "--w": `${(a.hours / total) * 100}%`, "--tone": `${Math.max(18, Math.round(100 * 0.62 ** i))}%` }} />
+                        ))}
+                      </div>
+                      <ul className="urv-acts__key">
+                        {byActivity.map((a, i) => (
+                          <li key={a.activity} style={{ "--tone": `${Math.max(18, Math.round(100 * 0.62 ** i))}%` }}>
+                            <span className="urv-acts__name">{a.activity}</span>
+                            <span className="urv-acts__h">{nf(a.hours, 1)} h</span>
+                            <span className="urv-acts__n">{plural(a.stops, "stop")}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
                 <div className="sp4-table-scroll urv-table">
                   <table className="sp4-table">
                     <thead><tr><th>#</th><th>Exact location</th><th>Activity</th><th>Area</th><th>County</th><th className="urv-num">Hours</th><th className="urv-num">Stops</th><th className="urv-num">Days</th><th>Coordinates</th></tr></thead>
@@ -1152,17 +1190,6 @@ export default function UsageReviewScreen() {
                   </table>
                 </div>
                 <TablePager pager={placePager} label="Places pages" />
-              </section>
-
-              <section data-tour="logbook-hours" className="frv-card urv-card urv-card--fixed">
-                <h3 className="frv-card__t">Driving by Hour</h3>
-                <HourChart days={review.days} hourly={review.hourly} sel={sel} placeDays={placeDays} pal={pal}
-                           placeName={(id) => nameOf(review.places.find((p) => p.id === id), gnames) ?? `Place ${id}`} />
-                <p className="frv-card__note">
-                  {sel.day ? `Driving in each hour on ${dayLabel(sel.day, true)}, against the whole period's average.`
-                    : sel.place != null ? "Driving in each hour, averaged over the days it stopped at the picked place, against the whole period's average."
-                    : "Average minutes driving in each hour of the day (EAT) over the period."}
-                </p>
               </section>
             </div>
 

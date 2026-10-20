@@ -47,6 +47,7 @@ import { useCompanies } from "../../context/AppContext";
 import { TripsView, ParkingsView } from "./FuelReportSegments";
 import { watchTableLabels } from "../../lib/tableLabels";
 import { pickDefaultUnit } from "../../lib/fuelReportDefault";
+import { nameParts } from "../../lib/plateLabel";
 import {
   unitChosen, spanChosen, executed, autoPicked, tabChosen, layerToggled, allLinesSet, linesWithDefaults,
 } from "../../store/fuelReportSlice";
@@ -263,7 +264,7 @@ function TrackMap({ pings, report, cursor, marks, unit }) {
       icon: { url, scaledSize: new maps.Size(size, size), anchor: new maps.Point(size / 2, size / 2) },
     });
     const add = (x) => markLayers.current.push(x);
-    if (marks.stop) report.stops.forEach((s) => s.from && add(icon(s.from, ICON.stop, `Stop ${at(s.start)} · ${durationLabel(s.durationMs)}`, 20)));
+    if (marks.stop) report.stops.forEach((s) => s.from && add(icon(s.from, ICON.stop, `Stop ${at(s.start)} · ${durationLabel(s.durationMs)}`, 24)));
     if (marks.fill) report.fillings.forEach((f) => { const pos = posAt(f.at); if (pos) add(icon(pos, ICON.fill, `Filling ${at(f.at)} · ${L(f.volumeL)}`)); });
     if (marks.drain) report.drains.forEach((d) => { const pos = posAt(d.at); if (pos) add(icon(pos, ICON.drain, `${dropWord(d)} ${at(d.at)} · ${L(d.volumeL)}`)); });
   }, [pings, report, failed, marks]);
@@ -566,7 +567,7 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
             ))}
             {marks.stop && report.stops.filter((st) => inView(st.start)).map((st) => (
               <ReferenceDot key={`s-${st.start}`} yAxisId="fuel" x={st.start} y={stopRow} ifOverflow="hidden"
-                            shape={iconShape(ICON.stop, `Stop ${at(st.start)} · ${durationLabel(st.durationMs)}`, 16)} />
+                            shape={iconShape(ICON.stop, `Stop ${at(st.start)} · ${durationLabel(st.durationMs)}`)} />
             ))}
             {marks.fill && report.fillings.filter((f) => inView(f.at)).map((f) => (
               <ReferenceDot key={`f-${f.id}`} yAxisId="fuel" x={f.at} y={eventRow} ifOverflow="hidden"
@@ -600,7 +601,7 @@ function FuelSummary({ unit, stats: st }) {
     : st.lPerHour != null ? `${fmtNum(st.lPerHour, 1)} L/h` : "—";
   const kmPerL = st.consumedL > 0 && st.distanceKm >= 1 ? `${fmtNum(st.distanceKm / st.consumedL, 2)} km` : "—";
   const cols = [
-    ["Unit", unit?.name ?? unit?.id ?? "—"],
+    ["Unit", nameParts(unit?.name ?? unit?.id) || "—"],
     ["Mileage in trips", km(st.distanceKm)],
     ["Mileage in all readings", km(st.allDistanceKm)],
     ["Avg speed", st.avgSpeedKmh == null ? "—" : `${fmtNum(st.avgSpeedKmh, 0)} km/h`],
@@ -900,7 +901,7 @@ function UnitFuelReport() {
       companyName: "Fleet Tracking",
       reportTitle: "Advanced fuel analysis",
       filenameSlug: slug,
-      filterNote: `${ready.unit.id}${ready.unit.name ? ` (${ready.unit.name})` : ""} · ${at(ready.from)} – ${at(ready.to)}`,
+      filterNote: `${nameParts(ready.unit.id)}${nameParts(ready.unit.name, ready.unit.id) ? ` (${nameParts(ready.unit.name, ready.unit.id)})` : ""} · ${at(ready.from)} – ${at(ready.to)}`,
       cards: statCards,
       sections: [
         { title: "Fuel events", head: EVENTS_HEAD, body: eventRows() },
@@ -1017,7 +1018,7 @@ function UnitFuelReport() {
 
             <TableToolbar
               summary={<>
-                <b>{ready.unit.id}</b>{ready.unit.machineName || ready.unit.name ? ` · ${ready.unit.machineName || ready.unit.name}` : ""}
+                <b>{nameParts(ready.unit.id)}</b>{nameParts(ready.unit.machineName || ready.unit.name, ready.unit.id) ? ` · ${nameParts(ready.unit.machineName || ready.unit.name, ready.unit.id)}` : ""}
                 {" · "}{at(ready.from)} – {at(ready.to)}
                 {why}
                 {ready.failedDays > 0 && <span className="frp-warn"> · {ready.failedDays} day(s) failed to load</span>}
