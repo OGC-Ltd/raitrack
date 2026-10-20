@@ -109,7 +109,7 @@
 .wf-seg__opt:hover, .wf-seg__opt.is-hover { color: var(--wf-ink); background: var(--wf-raised); }
 .wf-seg__opt:focus-visible, .wf-seg__opt.is-focus { outline: 2px solid var(--wf-accent); outline-offset: -2px; position: relative; }
 .wf-seg__opt:active, .wf-seg__opt.is-active { transform: translateY(1px); }
-.wf-seg__opt--on, .wf-seg--wrap .wf-seg__opt--on { color: var(--wf-surface); background: var(--wf-ink); border-color: var(--wf-ink); }
+.wf-seg__opt--on, .wf-seg__opt--on:hover, .wf-seg--wrap .wf-seg__opt--on { color: var(--wf-surface); background: var(--wf-ink); border-color: var(--wf-ink); }
 .wf-seg__opt:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .wf-callout { margin: 0; font-size: var(--sp4-body); padding: var(--sp4-xs) var(--sp4-sm); border-left: 3px solid var(--wf-rule-hi); color: var(--wf-ink-2); }
