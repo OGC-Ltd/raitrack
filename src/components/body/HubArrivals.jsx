@@ -16,12 +16,15 @@
  * hub-arrivals). The answer is refreshed every two minutes while open.
  *
  * Phase 1 (operator, 2026-10-15):
- *   class       "Truck or car" or "Tractors" (KT… plates, e.g. KTCB 358X):
+ *   class       "Trucks", "Cars" or "Tractors" (KT… plates, e.g. KTCB 358X):
  *               the list is that class only, and its drive times are at
  *               the class's MEASURED speed, not Google's car's. "Plant"
  *               (excavators, dozers, loaders) is offered where the fleet
  *               has plant: Kasulu, typed by RaiFactorySuite's machine
- *               register (2026-10-20); generators are in no class
+ *               register, and Sukari's company machines (2026-10-20);
+ *               generators are in no class. Trucks and cars were one list
+ *               until 2026-10-20 (operator: "tractors to tractors, trucks
+ *               to trucks, cars to cars")
  *   free only   leaves out units on a dispatch or without a recent position
  *   bands       a drive time past an hour reads 1–2 h, 2–4 h or
  *               4 h+ in its row (Menengai's long hauls)
@@ -46,22 +49,23 @@ const CLS_KEY = "ft-arr-cls";
 const FREE_KEY = "ft-arr-free";
 /** What the drive times are for, as the window offers it. */
 export const ARRIVAL_CLASSES = [
-  ["VEHICLE", "ti-truck", "Truck or car"],
+  ["TRUCK", "ti-truck", "Trucks"],
+  ["CAR", "ti-car", "Cars"],
   ["TRACTOR", "ti-tractor", "Tractors"],
   ["PLANT", "ti-backhoe", "Plant"],
 ];
-const BASE_CLASSES = ["VEHICLE", "TRACTOR"];
+const BASE_CLASSES = ["TRUCK", "CAR", "TRACTOR"];
 /**
  * The classes the window offers: those the fleet has units in, by the
- * server's counts (`/routing/hubs` → classes), "Truck or car" always.
- * Without counts (an older server), the two it always offered.
+ * server's counts (`/routing/hubs` → classes), "Trucks" always.
+ * Without counts (an older server), trucks, cars and tractors.
  */
 export function offeredClasses(counts) {
   if (!counts) return ARRIVAL_CLASSES.filter(([k]) => BASE_CLASSES.includes(k));
-  return ARRIVAL_CLASSES.filter(([k]) => k === "VEHICLE" || (counts[k] ?? 0) > 0);
+  return ARRIVAL_CLASSES.filter(([k]) => k === "TRUCK" || (counts[k] ?? 0) > 0);
 }
-/** The remembered class where it is offered, else "Truck or car". */
-export const offeredClass = (c, offered) => (offered.some(([k]) => k === c) ? c : "VEHICLE");
+/** The remembered class where it is offered, else "Trucks". */
+export const offeredClass = (c, offered) => (offered.some(([k]) => k === c) ? c : "TRUCK");
 const PICK = "__pick";
 const POINT = "__point";
 const hubKeyOf = (orgId) => `ft-arr-hub:${orgId}`;
@@ -98,11 +102,11 @@ export function useHubArrivals({ map, maps, ready, orgId, open }) {
   const hub = hubs.find((h) => h.key === hubKey) ?? hubs[0] ?? null;
   const setHubKey = useCallback((k) => { setHubKeyState(k); if (orgId) write(hubKeyOf(orgId), k); }, [orgId]);
   const [wanted, setClsState] = useState(() => {
-    const c = read(CLS_KEY, "VEHICLE");
-    return ARRIVAL_CLASSES.some(([k]) => k === c) ? c : "VEHICLE";
+    const c = read(CLS_KEY, "TRUCK");
+    return ARRIVAL_CLASSES.some(([k]) => k === c) ? c : "TRUCK";
   });
   const classes = useMemo(() => offeredClasses(hubsQ.data?.classes), [hubsQ.data]);
-  // Plant remembered from Kasulu reads as "Truck or car" at Sukari.
+  // A class this fleet has none of (Plant at Menengai) reads as "Trucks".
   const cls = offeredClass(wanted, classes);
   const setCls = useCallback((c) => { setClsState(c); write(CLS_KEY, c); }, []);
   const [free, setFreeState] = useState(() => read(FREE_KEY, "0") === "1");
