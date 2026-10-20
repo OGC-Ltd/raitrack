@@ -392,7 +392,7 @@ export const PAGE_TOURS = {
       ["logbook-bar", "The Review", "The unit and period on show. A day or place you pick shows here; click it to clear it."],
       ["logbook-downloads", "Excel and PDF", "The workbook with every row behind the review, and a short PDF report. The arrow reads the history again."],
       ["logbook-map", "The Map", "Each day's route, or the movement web between places. Click a place to pick it."],
-      ["logbook-days", "Distance per Day", "How far the unit went each day. Click a day to pick it."],
+      ["logbook-days", "Distance per Day", "How far the unit went each day. Click a day to pick it, and the hours below follow it."],
       ["logbook-places", "Where It Spent Its Time", "Each place by hours spent, with its activity, area and stops. Click one to pick it."],
       ["logbook-hours", "Driving by Hour", "When in the day the unit drove."],
       ["logbook-detail", "Day and Place Detail", "The drives and stops for the day or place you picked. Play a day on the map from here."],

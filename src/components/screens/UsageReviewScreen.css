@@ -4,7 +4,7 @@
 .urv-root .sp4-header-kpis { flex-wrap: wrap; }
 /* One height for "When it drives" and the two tables under the map
    (operator, 2026-10-07: "the height should be similar to When it drives"). */
-.urv-root { --urv-card-h: 300px; --urv-map-h: 360px; }
+.urv-root { --urv-card-h: 300px; --urv-map-h: 420px; }
 .urv-kpi { min-width: 140px; }
 .urv-kpi__u { font-size: 12px; font-weight: 600; color: var(--sp4-text-3); margin-left: 2px; }
 .urv-kpi__sub {
@@ -72,7 +72,7 @@
   padding: 12px var(--sp4-gutter) 0;
 }
 /* Same columns as the row above, so the places table lines up under the map. */
-.urv-grid--lower { align-items: start; }
+.urv-grid--lower { align-items: start; grid-template-columns: minmax(0, 1fr); }
 
 .urv-map {
   position: relative;
@@ -232,6 +232,26 @@
 .urv-card--top .urv-chart { flex: 1 1 auto; min-height: 0; height: auto; }
 .urv-grid--detail { grid-template-columns: minmax(0, 1fr); }
 
+/* Hallmark · component: card (two linked charts) · genre: modern-minimal · theme: sp4 (project tokens)
+ * states: default · day picked · place picked (the charts' own)
+ * Distance per day over driving by hour in one card beside the map (operator,
+ * 2026-10-20): each half its own small head, a hairline between them. */
+.urv-drive { gap: 0; }
+.urv-drive__part { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; padding-top: 8px; }
+.urv-drive__part + .urv-drive__part { margin-top: 6px; border-top: 1px solid var(--sp4-line); }
+.urv-drive__head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; }
+.urv-drive__head h4 { margin: 0; font-size: var(--sp4-label); font-weight: 700; color: var(--sp4-text-2); }
+.urv-drive__head span { min-width: 0; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.urv-drive .urv-chart { flex: 1 1 auto; min-height: 0; height: auto; }
+
+/* Logbook titles in their written case, not capitals (operator, 2026-10-20). */
+.urv-root .frv-card__t {
+  font-size: var(--sp4-body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sp4-text-1);
+}
+
 /* Cards are the Fuel Report's .frv-card (border, radius, title, note); these
    only add what this page needs on top. */
 .urv-card { overflow: hidden; }
@@ -287,6 +307,9 @@
 @media (max-width: 1100px) {
   .urv-grid, .urv-grid--lower { grid-template-columns: minmax(0, 1fr); }
   .urv-root { --urv-map-h: 340px; }
+  .urv-drive { height: auto; }
+  .urv-drive__part { flex: 0 0 auto; }
+  .urv-drive .urv-chart { flex: 0 0 auto; height: 170px; }
 }
 @media (max-width: 767px) {
   .urv-grid { padding: 10px 16px 0; }
@@ -297,11 +320,62 @@
   .urv-hbar { display: none; }
   .urv-kpi { min-width: 0; }
   .urv-kpi__sub { max-width: 150px; }
+  /* The phone table turns each row into a grid, which squeezed a day's head
+     into its first 40px cell, so Play sat wherever that day's text ended.
+     The head spans the row: the day and Play on one line, its figures under. */
+  .urv-detail tr.urv-dayrow { display: block; }
+  .urv-detail tr.urv-dayrow td { display: block; width: auto; }
+  .urv-dayrow__in { flex-wrap: wrap; gap: 2px 12px; }
+  .urv-dayrow__in span { order: 3; flex: 1 0 100%; white-space: normal; }
 }
 
 /* "Where it spent its time": Google's exact name for the spot (operator,
    2026-10-08), the column the eye goes to first. */
 .urv-exact { font-weight: 600; white-space: nowrap; }
+
+/* Hallmark · component: activity share (bar + key) · genre: modern-minimal · theme: sp4 (project tokens)
+ * states: default · empty (not rendered)
+ * One bar of hours stopped by what the places are, most first, each kind a
+ * step lighter of the place orange, with a key under it that reads as a list
+ * rather than one run-on line (operator, 2026-10-20, "redesign the component"). */
+.urv-card__sub b { color: var(--sp4-text-1, var(--sp4-text)); font-weight: 700; font-variant-numeric: tabular-nums; }
+.urv-acts { margin: 8px 0 10px; }
+.urv-acts__bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--frv-track);
+}
+.urv-acts__bar i {
+  flex: 0 0 var(--w);
+  min-width: 3px;
+  background: color-mix(in srgb, var(--frv-s2) var(--tone), var(--frv-track));
+}
+.urv-acts__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sp4-label);
+  line-height: 1.3;
+}
+.urv-acts__key li { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.urv-acts__key li::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  align-self: center;
+  background: color-mix(in srgb, var(--frv-s2) var(--tone), var(--frv-track));
+}
+.urv-acts__name { color: var(--sp4-text-2); font-weight: 600; }
+.urv-acts__h { color: var(--sp4-text-1, var(--sp4-text)); font-weight: 700; font-variant-numeric: tabular-nums; }
+.urv-acts__n { color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
 
 /* ── Day and place detail ──────────────────────────────────────────────────
    Grows with its rows, up to a page of 15 (operator, 2026-10-08); a pick

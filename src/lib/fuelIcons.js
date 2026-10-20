@@ -1,6 +1,6 @@
 // The fuel report's event icons, drawn the same on the graph and on the map:
-// a GREEN fuel pump for a filling, a RED fuel pump for a drain, and a plain
-// red stop sign (no lettering) for a stop.
+// a GREEN fuel pump for a filling, a RED fuel pump for a drain, and a road
+// stop sign (red octagon, white rim) for a stop.
 //
 // Plain SVG strings so one drawing serves both: the graph renders them inside
 // its own <svg> (as a nested <svg>), the map takes them as a data URL.
@@ -20,10 +20,17 @@ export function pumpSvg(color) {
     + `</g></svg>`;
 }
 
-/** A plain stop sign — the octagon, no lettering — 24×24. */
+/**
+ * A road stop sign (operator, 2026-10-20: "an actual stop sign"): the red
+ * octagon on a white rim with a thin white line inside it, 24×24, drawn as
+ * small as the pumps and without the word (operator, 2026-10-20: "make them
+ * small like the fuel drain and fill and remove the text stop").
+ */
 export function stopSvg() {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">`
-    + `<polygon points="7.4,1 16.6,1 23,7.4 23,16.6 16.6,23 7.4,23 1,16.6 1,7.4" fill="${STOP_COLOR}" stroke="#fff" stroke-width="1.5"/>`
+    + `<polygon points="7.1,0.3 16.9,0.3 23.7,7.1 23.7,16.9 16.9,23.7 7.1,23.7 0.3,16.9 0.3,7.1" fill="#fff"/>`
+    + `<polygon points="7.6,1.5 16.4,1.5 22.5,7.6 22.5,16.4 16.4,22.5 7.6,22.5 1.5,16.4 1.5,7.6" fill="${STOP_COLOR}"/>`
+    + `<polygon points="8.2,3 15.8,3 21,8.2 21,15.8 15.8,21 8.2,21 3,15.8 3,8.2" fill="none" stroke="#fff" stroke-width="0.9"/>`
     + `</svg>`;
 }
 

@@ -37,3 +37,18 @@ export function withoutPrefix(id, prefix) {
   const rest = id.slice(m[0].length).trim();
   return rest || id;
 }
+
+/**
+ * A provider's unit name without its dashes: "WKS - Naitiri - KDW 536J" reads
+ * "WKS · Naitiri · KDW 536J" (operator, 2026-10-20, "remove the dashes").
+ * Parts already said in `drop` (the plate leading the same line) are left out,
+ * so "West Sugar-Mahindra-KDW 634X-11km/l" beside KDW 634X reads
+ * "West Sugar · Mahindra · 11km/l".
+ */
+export function nameParts(name, ...drop) {
+  if (typeof name !== 'string') return '';
+  const key = (s) => s.replace(/\s+/g, '').toUpperCase();
+  const split = (s) => s.split(/\s*-\s*/).map((p) => p.trim()).filter(Boolean);
+  const gone = new Set(drop.filter((d) => typeof d === 'string').flatMap(split).map(key));
+  return split(name).filter((p) => !gone.has(key(p))).join(' · ');
+}
