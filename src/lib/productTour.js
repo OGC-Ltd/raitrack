@@ -99,10 +99,10 @@ export function onTourRequest(cb) {
 // it should not be covered again, only new items"). Every step carries a KEY:
 // its page and mark for a part that belongs to one page, and one shared key
 // for a control several pages draw the same way (the pager, the unit picker,
-// the period, Run, the table toolbar, the Manual). A step is recorded as
+// the period, Run, the table toolbar, the Guide). A step is recorded as
 // covered when it is SHOWN, so a tour closed at its second step leaves the
 // rest for the next page that has them. Kept per person in this browser.
-// Manual, which a person presses to see a page again, shows it all.
+// Guide, which a person presses to see a page again, shows it all.
 
 const coveredKey = (userId) => `ft-tour-covered:v${TOUR_VERSION}:${userId ?? "anon"}`;
 export function coveredItems(userId) {
@@ -248,7 +248,7 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
 
   add("manual", first("account", "m-account"), {
     title: "Your Account",
-    description: "Your profile and password are here, and so is the <b>Manual</b>, whenever you want this again.",
+    description: "Your profile and password are here, and so is the <b>Guide</b>, whenever you want this again.",
     side: "bottom", align: "end",
   });
 
@@ -260,7 +260,7 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
 // A short tour of each page, besides the map's (operator, 2026-10-13: "now we
 // can have the driver.js run on different pages"). It runs the first time a
 // person opens that page, once per page in this browser, and again whenever
-// they press Manual there. Steps point at `data-tour` marks as the map tour's
+// they press Guide there. Steps point at `data-tour` marks as the map tour's
 // do: the shared ones (page-toolbar on TableToolbar, page-pager on
 // TablePager, page-unit on UnitPicker) and each page's own (page-kpis,
 // page-table…), and a step whose part is not on screen is dropped.
@@ -412,7 +412,7 @@ export function markPageTourSeen(page, userId) {
 /**
  * The tour of one page, as driver.js steps, or [] for a page without one.
  * Its parts are looked up as the map tour's are (`visible`), and the last step
- * points at the account menu, where Manual runs it again.
+ * points at the account menu, where Guide runs it again.
  */
 export function buildPageTourSteps(page, { visible = () => null, covered = new Set() } = {}) {
   const t = PAGE_TOURS[page];
@@ -432,8 +432,8 @@ export function buildPageTourSteps(page, { visible = () => null, covered = new S
   const account = visible("account") ?? visible("m-account");
   if (account && !covered.has("manual")) {
     steps.push({ key: "manual", element: account, popover: {
-      title: "The Manual",
-      description: "Press <b>Manual</b> in your account menu on any page for that page's guide.",
+      title: "The Guide",
+      description: "Press <b>Guide</b> in your account menu on any page for a tour of that page.",
       side: "bottom", align: "end",
     } });
   }

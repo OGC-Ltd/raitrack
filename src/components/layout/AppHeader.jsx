@@ -417,10 +417,10 @@ export default function AppHeader() {
                   Users
                 </button>
               )}
-              {/* The Manual: the first-time tour, again (lib/productTour). */}
+              {/* The Guide: the first-time tour, again (lib/productTour). */}
               <button className="app-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
                 <ManualIcon />
-                Manual
+                Guide
               </button>
               <div className="app-header__user-divider" />
               <button className="app-header__user-item" onClick={logout}>

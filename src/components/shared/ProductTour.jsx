@@ -72,7 +72,7 @@ export default function ProductTour() {
     const c = live.current;
     // The tour runs on the home page alone (operator, 2026-10-20: "remove
     // driver.js from all other pages except the home page"). The pages'
-    // own tours (lib/productTour PAGE_TOURS) are no longer started; Manual
+    // own tours (lib/productTour PAGE_TOURS) are no longer started; Guide
     // from any page takes the person to the map and runs it there.
     // Most of the tour is about the map, so it runs on the map — and over
     // nothing: the Account and User accounts pages open on top of the app.

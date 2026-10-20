@@ -1,5 +1,5 @@
 /**
- * The Manual's icon: a guide holding up a flag, as on a guided tour. Drawn
+ * The Guide's icon: a guide holding up a flag, as on a guided tour. Drawn
  * here because Tabler has no such glyph. It sits in an <i> and fills with
  * currentColor at 1em, so the menus' own `.…-user-item i` rules size and
  * colour it like the Tabler icons beside it.
