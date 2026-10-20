@@ -3109,9 +3109,8 @@
   margin-bottom: var(--sp4-sm);
 }
 .sp4-track-title {
-  font-size: var(--sp4-label);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--sp4-text-3);
+  font-size: var(--sp4-body); font-weight: 600;
+  color: var(--sp4-text-2);
 }
 .sp4-track-part {
   font-size: var(--sp4-label);
@@ -3138,7 +3137,13 @@
    stretches to the content box, not through the padding — so the line stopped
    dead 16px above the next dot, once per join, all the way down. Measured
    gapToNextDot: 16px before this moved, 2px after. */
-.sp4-track-row:not(:last-child) .sp4-track-body { padding-bottom: var(--sp4-md); }
+.sp4-track-row:not(:last-child) .sp4-track-body { padding-bottom: var(--sp4-sm); }
+/* Compact: only the current rung explains itself. A rung to come is its name
+   on a hollow dot; a rung passed is its name and its date. */
+.sp4-track-row--todo .sp4-track-blurb,
+.sp4-track-row--todo .sp4-track-meta,
+.sp4-track-row--done .sp4-track-blurb { display: none; }
+.sp4-track-row--todo .sp4-track-name { font-weight: 500; }
 
 .sp4-track-rail {
   position: relative;
@@ -4394,6 +4399,15 @@
 /* Reporting a repair from the unit's sidebar (ProbeReportActions): the three
    outcome buttons that used to sit over a ticked batch in the toolbar. */
 .sp4-probe-report { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Report a repair: label and buttons on one line under the progress card,
+   sentence case like the card's own title. */
+.sp4-report {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp4-xs) var(--sp4-sm);
+  padding: var(--sp4-sm) 0;
+}
+.sp4-report-title { font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-2); }
+.sp4-report .sp4-probe-report { gap: var(--sp4-xs); }
 @media (max-width: 767px) {
   .sp4-probe-report .sp4-act-btn { min-height: var(--m-ctl, 40px); flex: 1 1 auto; }
 }
