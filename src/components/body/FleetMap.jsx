@@ -186,7 +186,12 @@ const TRUCK_ROW_FOR = { stationary: "ok", "signal-lost": "ok" };
 //
 // Hence the gate below: this is Mufindi's layer, not a general return of the
 // provider's geometry. The other orgs stay as 2026-09-13 left them.
-const ZONE_AREAS_COMPANY = "kasulu";
+//
+// REMOVED 2026-10-20 (operator: "remove the estate plan, we remain with the
+// planning area"): no org draws the Estate areas layer any more; Kasulu keeps
+// the planting plan. The geometry is still fetched for the stranded-stop test
+// and playback. Set back to "kasulu" to restore the layer.
+const ZONE_AREAS_COMPANY = null;
 
 // The 67 `VES-nnn` sample points are omitted from the overlay. They are
 // 1 km-radius circles that blanket the whole estate and would bury the
