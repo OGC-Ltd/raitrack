@@ -148,10 +148,82 @@
 /* 6px left + the zoom row's 8px = the frame's 14px inset; the y-axis ticks
    sit in the 6px, clear of the border. */
 .frp-chart { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 10px 8px 6px; }
-.frp-chart__plot { flex: 1; min-height: 0; touch-action: pan-y; user-select: none; }
+.frp-chart__plot { position: relative; flex: 1; min-height: 0; touch-action: pan-y; user-select: none; }
 /* Held and dragged like a map: an open hand, a closed one while held. */
 .frp-chart__plot { cursor: grab; }
 .frp-chart__plot:active { cursor: grabbing; }
+/* With a tool on, the drag is the tool's: a crosshair, and no page pan on touch. */
+.frp-chart__plot--capture,
+.frp-chart__plot--zoom,
+.frp-chart__plot--capture:active,
+.frp-chart__plot--zoom:active { cursor: crosshair; touch-action: none; }
+.frp-chart__plot--point,
+.frp-chart__plot--point:active { cursor: cell; touch-action: none; }
+/* Recharts takes focus on a click and rings the whole plot; the ring stays
+   for the keyboard only, as on the Highlights chart. */
+.frp-chart__plot :focus:not(:focus-visible) { outline: none; }
+
+/* The graph tools: three icon buttons at the end of the zoom row. */
+.frp-tools { display: flex; gap: 2px; margin-left: auto; padding: 2px; border: 1px solid var(--sp4-line); border-radius: 6px; }
+.frp-tools__btn {
+  display: grid; place-items: center;
+  width: 28px; height: 24px; padding: 0;
+  border: 0; border-radius: 4px; background: none;
+  color: var(--sp4-text-3); cursor: pointer;
+}
+.frp-tools__btn:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
+.frp-tools__btn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.frp-tools__btn.is-on { color: #fff; background: var(--sp4-accent); }
+
+/* The drag being drawn: a band for a capture, a box for a zoom. */
+.frp-sel { position: absolute; z-index: 2; pointer-events: none; }
+.frp-sel--capture { background: rgba(2, 132, 199, 0.14); border-inline: 1.5px solid #0284c7; }
+.frp-sel--zoom { background: rgba(59, 130, 246, 0.1); border: 1.5px dashed var(--sp4-accent); }
+
+/* A pinned reading's card, beside its line; the tooltip card's rows. */
+.frp-pin {
+  position: absolute; top: 26px; z-index: 3;
+  width: 250px; max-height: calc(100% - 64px); overflow: auto;
+  padding: 8px 10px 6px;
+  border: 1px solid var(--sp4-line-hi); border-radius: 8px;
+  background: var(--sp4-surface); color: var(--sp4-text-1);
+  font-size: var(--sp4-body);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
+  cursor: auto; user-select: text;
+}
+.app--light .frp-pin { border-color: var(--sp4-line); }
+.frp-pin__x {
+  margin: -2px -4px 0 0; padding: 0 5px; border: 0; border-radius: 4px; background: none;
+  color: var(--sp4-text-3); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.frp-pin__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
+.frp-pin__seg { margin: 6px 0 0; font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-2); }
+.frp-pin__seg span { font-weight: 400; color: var(--sp4-text-3); }
+.frp-pin__events { margin: 0; padding: 5px 0 2px; list-style: none; border-top: 1px solid var(--sp4-line); display: grid; gap: 3px; }
+.frp-pin__events li { display: flex; align-items: center; gap: 6px; font-size: var(--sp4-label); }
+.frp-pin__off { margin-left: auto; color: var(--sp4-text-3); white-space: nowrap; }
+
+/* The captured periods compared, under the graph. */
+.frp-cmp { flex: none; max-height: 42%; display: flex; flex-direction: column; margin: 6px 0 0 8px; border-top: 1px solid var(--sp4-line); }
+.frp-cmp__head { display: flex; align-items: center; gap: 10px; padding: 6px 0 4px; }
+.frp-cmp__title { font-size: var(--sp4-label); font-weight: 700; color: var(--sp4-text-1); text-transform: uppercase; letter-spacing: 0.04em; }
+.frp-cmp__note { font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.frp-cmp__clear { margin-left: auto; }
+.frp-cmp__scroll { min-height: 0; overflow: auto; }
+.frp-cmp__table { width: auto; min-width: min(100%, 560px); border-collapse: collapse; font-size: var(--sp4-label); font-variant-numeric: tabular-nums; }
+.frp-cmp__table th, .frp-cmp__table td { padding: 3px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--sp4-line); }
+.frp-cmp__table tbody th { text-align: left; font-weight: 500; color: var(--sp4-text-2); }
+.frp-cmp__table tbody td { font-weight: 600; color: var(--sp4-text-1); }
+.frp-cmp__table thead th { position: sticky; top: 0; background: var(--sp4-surface); vertical-align: bottom; }
+.frp-cmp__col { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.frp-cmp__sw { width: 10px; height: 10px; border-radius: 2px; }
+.frp-cmp__letter { font-weight: 700; color: var(--sp4-text-1); }
+.frp-cmp__x { padding: 0 4px; border: 0; background: none; color: var(--sp4-text-3); font-size: 14px; line-height: 1; cursor: pointer; border-radius: 3px; }
+.frp-cmp__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
+.frp-cmp__when { padding: 0; border: 0; background: none; font: inherit; font-weight: 500; color: var(--sp4-text-3); cursor: pointer; }
+.frp-cmp__when:hover { color: var(--sp4-accent); text-decoration: underline; }
+.frp-cmp__diffh { color: var(--sp4-text-2); }
+.frp-cmp__table td.frp-cmp__diff { color: var(--sp4-text-2); font-weight: 600; }
 .frp-zoom {
   display: flex;
   align-items: center;
@@ -232,6 +304,11 @@
   .frp-run { flex: 1 1 0; height: var(--m-action); }
   .frp-run { flex: 1 1 0; }
   .frp-zoom__hint { display: none; }
+  /* The comparison runs under the graph at its full height, not inside it. */
+  .frp-chart:has(.frp-cmp) { height: auto; }
+  .frp-chart:has(.frp-cmp) .frp-chart__plot { flex: none; height: 340px; }
+  .frp-cmp { max-height: none; }
+  .frp-pin { width: min(250px, calc(100% - 60px)); }
   /* Phones: the same frames on the same gutter as `.frv`; both panels keep
      their fixed phone heights below. */
   .frp-graphmap {
