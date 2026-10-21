@@ -28,7 +28,9 @@ function clean(o) {
 // ── Vocabulary (server: repairs.workflow.schema; Postgres CHECKs) ─────────
 
 export const CATEGORY_GROUPS = [
-  ["Telematics", [["fuel_probe", "Fuel probe"], ["tracker", "Tracker"], ["sensor", "Sensor"]]],
+  // GPS and Ignition added 2026-10-22 (operator): the channels the probe
+  // report names when they stop reporting.
+  ["Telematics", [["fuel_probe", "Fuel probe"], ["tracker", "Tracker"], ["gps", "GPS"], ["ignition", "Ignition"], ["sensor", "Sensor"]]],
   ["Mechanical", [
     ["engine", "Engine"], ["transmission", "Transmission"], ["brakes", "Brakes"],
     ["suspension_steering", "Suspension and steering"], ["tyres", "Tyres"],
@@ -37,13 +39,35 @@ export const CATEGORY_GROUPS = [
   ["Other", [["other", "Other"]]],
 ];
 export const CATEGORY_LABEL = Object.fromEntries(CATEGORY_GROUPS.flatMap(([, list]) => list));
-export const TELEMATICS = new Set(["fuel_probe", "tracker", "sensor"]);
+export const TELEMATICS = new Set(["fuel_probe", "tracker", "gps", "ignition", "sensor"]);
 
 /** Where a flag goes, said before it is sent. */
 export function routeOf(category, chosenQueue) {
   if (TELEMATICS.has(category)) return "controltech";
   if (category === "other") return chosenQueue ?? "workshop";
   return "workshop";
+}
+
+/**
+ * The faults a probe row already shows, as flag categories, so "Flag for
+ * repair" opens with them ticked. A silent tracker is the tracker alone: every
+ * channel under it is unjudgeable, not separately broken.
+ */
+export function categoriesForProbeRow(row) {
+  if (!row) return [];
+  if (row.trackerSilent) return ["tracker"];
+  const out = [];
+  if (["DIED", "SILENT"].includes(row.fuelProbe?.state)) out.push("fuel_probe");
+  if (row.channels?.gps?.state === "NOT_REPORTING") out.push("gps");
+  if (row.channels?.ignition?.state === "NOT_REPORTING") out.push("ignition");
+  if (row.fuelSensor?.uncalibrated) out.push("sensor");
+  return out;
+}
+
+/** "controltech", "workshop", or "both" when the picked faults split. */
+export function routeOfAll(categories, chosenQueue) {
+  const routes = new Set(categories.map((c) => routeOf(c, chosenQueue)));
+  return routes.size === 0 ? null : routes.size === 1 ? [...routes][0] : "both";
 }
 
 export const COMPONENT_LABEL = {
@@ -130,8 +154,9 @@ export const fetchAssignees      = (orgId) => get(`${base(orgId)}/assignees`).th
 
 const item = (orgId, id, what) => `${base(orgId)}/items/${id}/${what}`;
 
-export const flagUnits = (orgId, { vehicleIds, faultCategory, suspectedFault, queue, forward = true }) =>
-  post(`${base(orgId)}/flags`, clean({ vehicleIds, faultCategory, suspectedFault, queue, forward }));
+/** One job per unit per category; `faultCategories` may span both groups. */
+export const flagUnits = (orgId, { vehicleIds, faultCategories, suspectedFault, queue, forward = true }) =>
+  post(`${base(orgId)}/flags`, clean({ vehicleIds, faultCategories, suspectedFault, queue, forward }));
 export const forwardJob     = (orgId, id, queue) => post(item(orgId, id, "forward"), clean({ queue }));
 export const claimJob       = (orgId, id) => post(item(orgId, id, "claim"));
 export const decidePath     = (orgId, id, path, note) => post(item(orgId, id, "path"), clean({ path, note }));

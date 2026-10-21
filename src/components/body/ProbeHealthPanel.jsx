@@ -45,6 +45,7 @@ import {
 import { downloadProbeCsv, downloadProbePdf } from "../../utils/probeReport";
 import TableToolbar from "./TableToolbar";
 import FlagRepairDialog from "./FlagRepairDialog";
+import { categoriesForProbeRow } from "../../api/repairWorkflow";
 import SpotFixDialog from "./SpotFixDialog";
 import { usePermissions } from "../../hooks/usePermissions";
 import FilterBar from "./FilterBar";
@@ -475,9 +476,12 @@ export function ProbeReportActions({ row, orgId, onFiled }) {
         orgId={orgId}
         open={flagOpen}
         presetVehicleId={row.vehicleId}
-        presetCategory="fuel_probe"
+        presetCategories={(() => { const c = categoriesForProbeRow(row); return c.length ? c : ["fuel_probe"]; })()}
         onClose={() => setFlagOpen(false)}
-        onFlagged={() => { setBanner(`${row.plate} flagged and sent to ControlTech.`); onFiled?.(); }}
+        onFlagged={(_, route) => {
+          setBanner(`${row.plate} flagged and sent to ${route === "workshop" ? "the workshop" : route === "both" ? "ControlTech and the workshop" : "ControlTech"}.`);
+          onFiled?.();
+        }}
       />
       <SpotFixDialog
         key={`spot-${row.vehicleId}`}

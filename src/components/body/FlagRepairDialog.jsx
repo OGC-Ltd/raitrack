@@ -6,15 +6,19 @@
  * for assessment. That one line is the routing rule (repairs.workflow.schema
  * queueFor), restated where the decision is made.
  *
+ * Faults are ticked, not chosen (operator, 2026-10-22): a unit can have a dead
+ * GPS and worn brakes at once, so any mix across Telematics, Mechanical and
+ * Other is one flag. Each fault becomes its own job, routed by its own group.
+ *
  * The sp4-modal shell and the focus trap RepairSignOffDialog uses.
  */
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import useFocusTrap from "../../hooks/useFocusTrap";
-import { CATEGORY_GROUPS, CATEGORY_LABEL, fetchFlaggableUnits, flagUnits, routeOf } from "../../api/repairWorkflow";
+import { CATEGORY_GROUPS, CATEGORY_LABEL, fetchFlaggableUnits, flagUnits, routeOf, routeOfAll } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
-export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, presetVehicleId = null, presetCategory = "" }) {
+export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, presetVehicleId = null, presetCategories = [] }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   useFocusTrap(dialogRef, open);
@@ -22,7 +26,8 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
   const [units, setUnits] = useState(null);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState(() => (presetVehicleId ? [presetVehicleId] : []));
-  const [category, setCategory] = useState(presetCategory);
+  const [categories, setCategories] = useState(presetCategories);
+  const toggle = (id) => setCategories((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]));
   const [fault, setFault] = useState("");
   const [queue, setQueue] = useState("workshop");
   const [forward, setForward] = useState(true);
@@ -49,16 +54,18 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
   }, [units, query, picked]);
 
   if (!open) return null;
-  const route = category ? routeOf(category, queue) : null;
-  const ok = picked.length > 0 && category && fault.trim().length > 0;
+  const route = routeOfAll(categories, queue);
+  const ok = picked.length > 0 && categories.length > 0 && fault.trim().length > 0;
+  const listOf = (to) => categories.filter((c) => routeOf(c, queue) === to).map((c) => CATEGORY_LABEL[c]).join(", ");
+  const jobs = picked.length * categories.length;
 
   const send = async () => {
     if (!ok || busy) return;
     setBusy(true);
     setErr(null);
     try {
-      const jobs = await flagUnits(orgId, { vehicleIds: picked, faultCategory: category, suspectedFault: fault, queue: category === "other" ? queue : undefined, forward });
-      onFlagged?.(jobs ?? [], route);
+      const made = await flagUnits(orgId, { vehicleIds: picked, faultCategories: categories, suspectedFault: fault, queue: categories.includes("other") ? queue : undefined, forward });
+      onFlagged?.(made ?? [], route);
       onClose();
     } catch (e) {
       setErr(e?.message || "The flag did not go through. Try again.");
@@ -104,23 +111,26 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
           </div>
 
           <div className="wf-field">
-            <span className="sp4-label">Fault</span>
+            <span className="sp4-label">Faults<span className="wf-req"> pick one or more</span></span>
             {CATEGORY_GROUPS.map(([group, list]) => (
               <div key={group} className="wf-catgroup">
                 <span className="wf-catgroup__name">{group}</span>
-                <div className="wf-seg wf-seg--wrap" role="radiogroup" aria-label={`${group} faults`}>
-                  {list.map(([id, label]) => (
-                    <button key={id} type="button" role="radio" aria-checked={category === id}
-                            className={"wf-seg__opt" + (category === id ? " wf-seg__opt--on" : "")} onClick={() => setCategory(id)}>
-                      {label}
-                    </button>
-                  ))}
+                <div className="wf-seg wf-seg--wrap" role="group" aria-label={`${group} faults`}>
+                  {list.map(([id, label]) => {
+                    const on = categories.includes(id);
+                    return (
+                      <button key={id} type="button" role="checkbox" aria-checked={on}
+                              className={"wf-seg__opt" + (on ? " wf-seg__opt--on" : "")} onClick={() => toggle(id)}>
+                        {on && <i className="ti ti-check" aria-hidden="true" />}{label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
 
-          {category === "other" && (
+          {categories.includes("other") && (
             <div className="wf-field">
               <span className="sp4-label">Send to</span>
               <div className="wf-seg" role="radiogroup" aria-label="Send to">
@@ -148,8 +158,10 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
               <i className={`ti ${route === "controltech" ? "ti-router" : "ti-tool"}`} aria-hidden="true" />
               {!forward ? "Recorded as pending; forward it from the job later."
                 : route === "controltech"
-                  ? `${CATEGORY_LABEL[category]} goes to the ControlTech queue. A technician claims it and decides remote or physical.`
-                  : `${CATEGORY_LABEL[category]} goes straight to the workshop. The Control Room assesses whether it can be driven there.`}
+                  ? `${listOf("controltech")} ${categories.length > 1 ? "go" : "goes"} to the ControlTech queue. A technician claims it and decides remote or physical.`
+                  : route === "workshop"
+                    ? `${listOf("workshop")} ${categories.length > 1 ? "go" : "goes"} straight to the workshop. The Control Room assesses whether it can be driven there.`
+                    : `${listOf("controltech")} to ControlTech, ${listOf("workshop")} to the workshop: one job each.`}
             </p>
           )}
         </div>
@@ -157,7 +169,9 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
           {err && <p className="sp4-modal-err sp4-repair-pending" role="alert">{err}</p>}
           <button type="button" className="sp4-ghost-btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="button" className="sp4-submit-btn" onClick={send} disabled={!ok || busy}>
-            {busy ? "Flagging…" : picked.length > 1 ? `Flag ${picked.length} units` : "Flag unit"}
+            {busy ? "Flagging…"
+              : jobs > 1 ? `Flag ${picked.length > 1 ? `${picked.length} units` : "unit"} · ${jobs} jobs`
+                : "Flag unit"}
           </button>
         </div>
       </div>
