@@ -38,15 +38,18 @@ import { apiFetch } from "../services/api";
  * indexed range scan, fetched as the list is actually scrolled.
  *
  * @param {string} [before] ISO timestamp; returns items strictly older than it.
+ * @param {string[]} [alertTypes] only these alert types (the server's own
+ *   `alertType` filter), e.g. the Safety tab's harsh-driving events.
  * @returns {Promise<{items: Array, nextBefore: string|null}>} `nextBefore` is
  *   null when there is nothing older, which is what ends the scroll.
  */
-export async function getNotifications({ orgId, vehicleId, day, limit = 100, before }) {
+export async function getNotifications({ orgId, vehicleId, day, limit = 100, before, alertTypes }) {
   if (!orgId) return { items: [], nextBefore: null };
 
   const res = await apiFetch(
     `/api/v1/organisations/${orgId}/notifications?limit=${limit}` +
       (vehicleId ? `&vehicleId=${encodeURIComponent(vehicleId)}` : "") +
+      (alertTypes?.length ? `&alertType=${encodeURIComponent(alertTypes.join(","))}` : "") +
       (day ? `&day=${encodeURIComponent(day)}` : "") +
       (before ? `&before=${encodeURIComponent(before)}` : "")
   );
