@@ -208,9 +208,12 @@
 .frp-cmp-wrap {
   position: absolute; z-index: 4;
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  max-width: calc(100% - 100px); max-height: calc(100% - 70px);
   cursor: auto;
 }
+/* The chip and the card's head are its handles. */
+.frp-cmp-chip, .frp-cmp__head { touch-action: none; }
+.frp-cmp__head { cursor: move; }
+.frp-cmp-chip:active { cursor: grabbing; }
 .frp-cmp-chip {
   display: inline-flex; align-items: center; gap: 5px;
   height: 24px; padding: 0 6px 0 8px;
@@ -336,7 +339,6 @@
   .frp-run { flex: 1 1 0; height: var(--m-action); }
   .frp-run { flex: 1 1 0; }
   .frp-zoom__hint { display: none; }
-  .frp-cmp-wrap { max-width: calc(100% - 60px); }
   .frp-pin { width: min(250px, calc(100% - 60px)); }
   /* Phones: the same frames on the same gutter as `.frv`; both panels keep
      their fixed phone heights below. */
