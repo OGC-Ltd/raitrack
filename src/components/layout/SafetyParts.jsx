@@ -11,6 +11,8 @@
  *   OverspeedTimeline  each overspeed as a row: start and end, the peak on a
  *                      bar that marks the limit, and the excess, on one
  *                      scale across the day's rows
+ *   HarshTimeline      each harsh acceleration or brake as a row, in a
+ *                      warning's amber (added 2026-10-21)
  *
  * The figures are VehicleDetailPanel's (overspeedRuns, limitLabel, and
  * vehicleDay's summariseDay / movingSpans); nothing
@@ -189,6 +191,32 @@ export function DaySummary({ hasPings, topSpeed, limit, runs, movingMin, moving,
       </dl>
       {hasPings && <DayStrip runs={runs} moving={moving} now={now} />}
     </div>
+  );
+}
+
+/**
+ * The day's harsh accelerations and harsh brakes, newest first (lib/harshDriving):
+ * when, what, where and how fast, and the force the tracker measured.
+ */
+export function HarshTimeline({ events }) {
+  return (
+    <ol className="sf-ev">
+      {events.map(e => (
+        <li key={e.id} className="sf-ev-row">
+          <span className="sf-ev-when">
+            <time dateTime={new Date(e.t).toISOString()}>{HHMM.format(e.t)}</time>
+          </span>
+          <span className="sf-ev-body">
+            <span className="sf-hd-kind">
+              <i className={`sf-hd-icon ti ${e.type === 'HARSH_BRAKING' ? 'ti-arrow-big-down' : 'ti-arrow-big-up'}`} aria-hidden="true" />
+              {e.title}
+            </span>
+            {e.where && <span className="sf-hd-where">{e.where}</span>}
+          </span>
+          {e.force != null && <span className="sf-hd-force" title="Force the tracker measured">{e.force.toFixed(1)} m/s²</span>}
+        </li>
+      ))}
+    </ol>
   );
 }
 

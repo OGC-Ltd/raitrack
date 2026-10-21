@@ -8,7 +8,8 @@
 .sf-now,
 .sf-day,
 .sf-ev,
-.sf-ev-head {
+.sf-ev-head,
+.sf-hd {
   --sf-ink: var(--vdp-ink, #12181f);
   --sf-ink2: var(--vdp-ink2, #4a545e);
   --sf-mut: var(--vdp-mut, #6b757f);
@@ -25,6 +26,7 @@
   --sf-go: #2563eb;
   --sf-crit: #b91c1c;  --sf-crit-soft: #fef2f2;
   --sf-ok: #15803d;    --sf-ok-soft: #f0fdf4;
+  --sf-warn: #b45309;  --sf-warn-soft: #fffbeb;
   --sf-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -260,6 +262,44 @@
 }
 /* The day's worst run, said once */
 .sf-ev-row--worst .sf-ev-excess { background: var(--sf-crit); color: #fff; }
+
+/* Harsh driving: a warning's amber, one row an event (operator, 2026-10-21).
+ * contrast: kind #b45309 on #fffbeb 4.9:1; place line #6b757f 4.8:1 */
+.sf-hd { margin-top: 14px; }
+.sf-hd .sf-ev { margin-top: 0; }
+.sf-hd-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sf-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.sf-hd-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--sf-warn-soft);
+  color: var(--sf-warn);
+  font-size: 13px;
+  flex: none;
+}
+.sf-hd-where { color: var(--sf-mut); font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.sf-hd-force {
+  align-self: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--sf-warn-soft);
+  color: var(--sf-warn);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sf-hd-none { margin: 2px 0 0; color: var(--sf-mut); font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   .sf-gauge-fill, .sf-ev-row { transition: none; }

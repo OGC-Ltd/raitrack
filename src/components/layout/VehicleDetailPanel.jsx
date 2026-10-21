@@ -30,7 +30,11 @@ import FuelRateSummary from './FuelRateSummary';
 import DateRangePicker from './DateRangePicker';
 import UnitFeed from './UnitFeed';
 import TripTrafficEta from './TripTrafficEta';
-import { SpeedNow, DaySummary, OverspeedTimeline } from './SafetyParts';
+import { SpeedNow, DaySummary, OverspeedTimeline, HarshTimeline } from './SafetyParts';
+import { harshEvents, harshCountWords, HARSH_TYPES } from '../../lib/harshDriving';
+import { getNotifications, fleetToday } from '../../api/notifications';
+import { useApiData } from '../../hooks/useApiData';
+import LoadError from '../shared/LoadError';
 import { DayGroups, TankGauge } from './FuelParts';
 import { ReadingsCard, FactsCard, OverspeedReadout, DriverRow, SummaryCard } from './OverviewParts';
 import { HealthSummary, CheckList } from './FaultsParts';
@@ -380,6 +384,37 @@ const FEED_MAX_DAYS = 90;
  * Live feed shows the fleet's — the shape dash gives a clicked unit (operator,
  * 2026-10-02). All history by default; "Period" narrows it to fleet days.
  */
+/**
+ * The Safety tab's harsh accelerations and brakes for today: the stored day,
+ * with whatever the live feed has brought since (lib/harshDriving).
+ */
+function HarshDay({ orgId, vehicleId }) {
+  const { feed: liveFeed = [] } = useFleetLiveShared();
+  const day = fleetToday();
+  const { data, loading, error, retry } = useApiData(
+    () => getNotifications({ orgId, vehicleId, day, limit: 500, alertTypes: HARSH_TYPES }),
+    [orgId, vehicleId, day]
+  );
+  const events = useMemo(
+    () => harshEvents([...liveFeed.filter((it) => fleetDayKey(new Date(it.ts)) === day), ...(data?.items ?? [])], vehicleId),
+    [liveFeed, data, vehicleId, day]
+  );
+  const words = harshCountWords(events);
+  return (
+    <div className="sf-hd">
+      <div className="sf-ev-head">
+        <span className="vdp-sub-title">Harsh driving</span>
+        <span className="sf-ev-count">{loading && !events.length ? 'Loading…' : words ?? 'None today'}</span>
+      </div>
+      {error && !events.length
+        ? <LoadError label="Harsh driving" onRetry={retry} />
+        : events.length > 0
+          ? <HarshTimeline events={events} />
+          : !loading && <p className="sf-hd-none">No harsh acceleration or braking reported today.</p>}
+    </div>
+  );
+}
+
 function AlertsTab({ vehicle }) {
   const today = fleetDayKey();
   const [range, setRangeState] = useState(null);   // null: all history
@@ -993,6 +1028,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
                   The unit has not reported since midnight, so there is no speed to check.
                 </EmptyNote>
               ))}
+            {vehicle.vehicleId && orgId && <HarshDay key={vehicle.vehicleId} orgId={orgId} vehicleId={vehicle.vehicleId} />}
           </section>
         </>)}
 
