@@ -6,7 +6,7 @@ vi.mock('../../services/api', () => ({ apiFetch: vi.fn(async () => ({ data: null
 
 import { JobView, PhaseLadder, mayWork } from './RepairWorkflowJob';
 import FlagRepairDialog from './FlagRepairDialog';
-import { routeOf, PHASE_OF_STAGE } from '../../api/repairWorkflow';
+import { routeOf, routeOfAll, categoriesForProbeRow, PHASE_OF_STAGE } from '../../api/repairWorkflow';
 import { STAGE_LABEL } from '../../api/repairs';
 
 const grants = (...slugs) => (s) => slugs.includes(s);
@@ -102,5 +102,38 @@ describe('the flag dialog', () => {
     expect(html).toContain('Telematics');
     expect(html).toContain('Mechanical');
     expect(html).toContain('Flag unit');
+  });
+
+  it('offers GPS and Ignition under Telematics, as ticks rather than one choice', () => {
+    const html = renderToStaticMarkup(h(FlagRepairDialog, { orgId: 'o', open: true, onClose() {} }));
+    expect(html).toContain('>GPS<');
+    expect(html).toContain('>Ignition<');
+    expect(html).not.toContain('role="radio"');
+    expect(html.match(/role="checkbox"/g).length).toBeGreaterThan(10);
+  });
+
+  it('opens with several faults ticked across groups', () => {
+    const html = renderToStaticMarkup(h(FlagRepairDialog, {
+      orgId: 'o', open: true, onClose() {}, presetVehicleId: 'v1', presetCategories: ['gps', 'brakes'],
+    }));
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(2);
+    expect(html).toContain('GPS to ControlTech, Brakes to the workshop: one job each.');
+  });
+});
+
+describe('several faults in one flag', () => {
+  it('says where a mixed set goes', () => {
+    expect(routeOfAll(['gps', 'ignition'])).toBe('controltech');
+    expect(routeOfAll(['brakes', 'engine'])).toBe('workshop');
+    expect(routeOfAll(['gps', 'brakes'])).toBe('both');
+    expect(routeOfAll([])).toBe(null);
+  });
+
+  it('ticks the faults a probe row already shows', () => {
+    const ch = (gps, ignition) => ({ gps: { state: gps }, ignition: { state: ignition } });
+    expect(categoriesForProbeRow({ channels: ch('NOT_REPORTING', 'NOT_REPORTING'), fuelProbe: { state: 'OK' } }))
+      .toEqual(['gps', 'ignition']);
+    expect(categoriesForProbeRow({ trackerSilent: true, channels: ch('NOT_REPORTING', 'REPORTING') })).toEqual(['tracker']);
+    expect(categoriesForProbeRow({ channels: ch('REPORTING', 'REPORTING'), fuelProbe: { state: 'DIED' } })).toEqual(['fuel_probe']);
   });
 });

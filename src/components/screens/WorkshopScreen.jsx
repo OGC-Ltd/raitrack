@@ -174,7 +174,8 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
         open={flagging}
         onClose={() => setFlagging(false)}
         onFlagged={(made, route) => {
-          onToast({ tone: "ok", text: `${made.length} unit${made.length === 1 ? "" : "s"} flagged${route === "controltech" ? " and sent to ControlTech" : route === "workshop" ? " and sent to the workshop" : ""}.` });
+          const units = new Set(made.map((j) => j?.vehicleId ?? j?.id)).size;
+          onToast({ tone: "ok", text: `${units} unit${units === 1 ? "" : "s"} flagged${route === "controltech" ? " and sent to ControlTech" : route === "workshop" ? " and sent to the workshop" : route === "both" ? " and sent to ControlTech and the workshop" : ""}.` });
           if (made.length === 1 && made[0]?.id) onOpen(made[0].id);
         }}
       />
