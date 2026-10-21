@@ -265,7 +265,31 @@
 
 /* Harsh driving: a warning's amber, one row an event (operator, 2026-10-21).
  * contrast: kind #b45309 on #fffbeb 4.9:1; place line #6b757f 4.8:1 */
-.sf-hd { margin-top: 14px; }
+/* Hallmark · component: Safety › Harsh driving heading + quiet-day line
+ * states: events (amber badge, count) · clear (grey badge, one line) · loading (meta) · error (LoadError)
+ * contrast: title #12181f 17:1; count/none #6b757f 4.8:1; badge #b45309 on #fffbeb 4.9:1
+ * pre-emit critique: P5 H5 E5 S4 R5 V4 */
+.sf-hd { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--sf-hair); }
+.sf-hd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.sf-hd .sf-hd-title { margin: 0; min-width: 0; }
+.sf-hd-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--sf-warn-soft);
+  color: var(--sf-warn);
+  font-size: 14px;
+  flex: none;
+}
+.sf-hd--clear .sf-hd-badge { background: var(--sf-track); color: var(--sf-mut); }
 .sf-hd .sf-ev { margin-top: 0; }
 .sf-hd-kind {
   display: inline-flex;
@@ -299,7 +323,15 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.sf-hd-none { margin: 2px 0 0; color: var(--sf-mut); font-size: 12px; }
+.sf-hd-none {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--sf-mut);
+  font-size: 12px;
+}
+.sf-hd-none .ti { color: var(--sf-ok); font-size: 14px; flex: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .sf-gauge-fill, .sf-ev-row { transition: none; }
