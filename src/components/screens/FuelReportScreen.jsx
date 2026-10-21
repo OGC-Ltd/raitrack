@@ -454,26 +454,37 @@ const signed = (n, d = 1, unit = "") => {
 };
 const dur = (ms) => (ms > 0 ? durationLabel(ms) : "-");
 
-// The rows of the comparison: a label, the figure as shown, and the number
-// the difference column takes (null where a difference says nothing).
-const COMPARE_ROWS = [
-  ["Duration",          (s) => dur(s.durationMs),                            (s) => s.durationMs, "ms"],
-  ["Start level",       (s) => L(s.startL),                                  (s) => s.startL, "L"],
-  ["End level",         (s) => L(s.endL),                                    (s) => s.endL, "L"],
-  ["Change",            (s) => signed(s.changeL, 1, " L"),                   (s) => s.changeL, "L"],
-  ["Lowest · highest",  (s) => `${fmtNum(s.minL, 1)} · ${fmtNum(s.maxL, 1)} L`, null],
-  ["Filled",            (s) => `${L(s.filledL)} (${s.fillCount})`,           (s) => s.filledL, "L"],
-  ["Drained",           (s) => `${L(s.drainedL)} (${s.drainCount})`,         (s) => s.drainedL, "L"],
-  ["Consumed",          (s) => L(s.consumedL),                               (s) => s.consumedL, "L"],
-  ["Distance",          (s) => `${fmtNum(s.distanceKm, 2)} km`,              (s) => s.distanceKm, "km"],
-  ["Engine on",         (s) => dur(s.engineMs),                              (s) => s.engineMs, "ms"],
-  ["On trips",          (s) => dur(s.tripMs),                                (s) => s.tripMs, "ms"],
-  ["Parked",            (s) => dur(s.parkingMs),                             (s) => s.parkingMs, "ms"],
-  ["L / 100 km",        (s) => fmtNum(s.per100Km, 1),                        (s) => s.per100Km, ""],
-  ["L / engine hour",   (s) => fmtNum(s.perEngineH, 1),                      (s) => s.perEngineH, ""],
-  ["Top speed",         (s) => (s.maxSpeedKmh == null ? "-" : `${fmtNum(s.maxSpeedKmh, 0)} km/h`), (s) => s.maxSpeedKmh, "km/h"],
-  ["Average moving",    (s) => (s.avgMovingKmh == null ? "-" : `${fmtNum(s.avgMovingKmh, 0)} km/h`), (s) => s.avgMovingKmh, "km/h"],
+// The rows of the comparison, in three groups: a label, the figure as shown,
+// the number the difference column takes (null where a difference says
+// nothing), its unit, and whether it is one of the figures the comparison is
+// for (set a step louder). The duration is in each column's head.
+const COMPARE_GROUPS = [
+  ["Fuel", [
+    ["Start level",       (s) => L(s.startL),                                  (s) => s.startL, "L"],
+    ["End level",         (s) => L(s.endL),                                    (s) => s.endL, "L"],
+    ["Change",            (s) => signed(s.changeL, 1, " L"),                   (s) => s.changeL, "L"],
+    ["Lowest · highest",  (s) => `${fmtNum(s.minL, 1)} · ${fmtNum(s.maxL, 1)} L`, null],
+    ["Filled",            (s) => `${L(s.filledL)} (${s.fillCount})`,           (s) => s.filledL, "L"],
+    ["Drained",           (s) => `${L(s.drainedL)} (${s.drainCount})`,         (s) => s.drainedL, "L"],
+    ["Consumed",          (s) => L(s.consumedL),                               (s) => s.consumedL, "L", true],
+  ]],
+  ["Rate", [
+    ["L / 100 km",        (s) => fmtNum(s.per100Km, 1),                        (s) => s.per100Km, "", true],
+    ["L / engine hour",   (s) => fmtNum(s.perEngineH, 1),                      (s) => s.perEngineH, "", true],
+  ]],
+  ["Movement", [
+    ["Distance",          (s) => `${fmtNum(s.distanceKm, 2)} km`,              (s) => s.distanceKm, "km"],
+    ["Engine on",         (s) => dur(s.engineMs),                              (s) => s.engineMs, "ms"],
+    ["On trips",          (s) => dur(s.tripMs),                                (s) => s.tripMs, "ms"],
+    ["Parked",            (s) => dur(s.parkingMs),                             (s) => s.parkingMs, "ms"],
+    ["Top speed",         (s) => (s.maxSpeedKmh == null ? "-" : `${fmtNum(s.maxSpeedKmh, 0)} km/h`), (s) => s.maxSpeedKmh, "km/h"],
+    ["Average moving",    (s) => (s.avgMovingKmh == null ? "-" : `${fmtNum(s.avgMovingKmh, 0)} km/h`), (s) => s.avgMovingKmh, "km/h"],
+  ]],
 ];
+/** A captured stretch as its column head writes it: the day once where it is one day. */
+const spanWord = (from, to) => (dayMon.format(from) === dayMon.format(to - 1)
+  ? `${dayMon.format(from)} · ${clock.format(from)}–${clock.format(to)}`
+  : `${at(from)} – ${at(to)}`);
 const diffText = (a, b, unit) => {
   if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return "-";
   const d = b - a;
@@ -593,8 +604,12 @@ function CaptureCompare({ captures, stats, onRemove, onClear, onZoom }) {
       {open && (
         <section className="frp-cmp" aria-label="Captured periods">
           <div className="frp-cmp__head" {...moveHandlers} title="Drag to move">
+            <svg className="frp-cmp__grip" width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+              <circle cx="2.5" cy="2.5" r="1.3" /><circle cx="7.5" cy="2.5" r="1.3" /><circle cx="2.5" cy="7" r="1.3" />
+              <circle cx="7.5" cy="7" r="1.3" /><circle cx="2.5" cy="11.5" r="1.3" /><circle cx="7.5" cy="11.5" r="1.3" />
+            </svg>
             <span className="frp-cmp__title">Compare periods</span>
-            {captures.length < 2 && <span className="frp-cmp__note">Capture another period to compare.</span>}
+            {captures.length < 2 && <span className="frp-cmp__note">Capture another period to compare</span>}
             <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all</button>
           </div>
           <div className="frp-cmp__scroll">
@@ -605,28 +620,36 @@ function CaptureCompare({ captures, stats, onRemove, onClear, onZoom }) {
                   {captures.map((c, i) => (
                     <th key={c.id} scope="col">
                       <div className="frp-cmp__col">
-                        <i className="frp-cmp__sw" style={{ background: c.color }} aria-hidden="true" />
-                        <span className="frp-cmp__letter">{c.letter}</span>
+                        <span className="frp-cmp__badge" style={{ background: c.color }}>{c.letter}</span>
+                        <span className="frp-cmp__dur">{dur(stats[i].durationMs)}</span>
                         <button type="button" className="frp-cmp__x" onClick={() => onRemove(c.id)}
                                 aria-label={`Remove period ${c.letter}`} title="Remove">×</button>
                       </div>
                       <button type="button" className="frp-cmp__when" onClick={() => onZoom(c)} title="Zoom the graph to this period">
-                        {at(stats[i].from)} – {at(stats[i].to)}
+                        {spanWord(stats[i].from, stats[i].to)}
                       </button>
                     </th>
                   ))}
-                  {two && <th scope="col" className="frp-cmp__diffh">{captures[1].letter} − {captures[0].letter}</th>}
+                  {two && (
+                    <th scope="col" className="frp-cmp__diffh">
+                      <div className="frp-cmp__col">{captures[1].letter} − {captures[0].letter}</div>
+                      <span className="frp-cmp__dur">{diffText(stats[0].durationMs, stats[1].durationMs, "ms")}</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
-              <tbody>
-                {COMPARE_ROWS.map(([label, show, num, unit]) => (
-                  <tr key={label}>
-                    <th scope="row">{label}</th>
-                    {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
-                    {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), unit) : ""}</td>}
-                  </tr>
-                ))}
-              </tbody>
+              {COMPARE_GROUPS.map(([group, rows]) => (
+                <tbody key={group}>
+                  <tr className="frp-cmp__grp"><th scope="rowgroup" colSpan={captures.length + (two ? 2 : 1)}>{group}</th></tr>
+                  {rows.map(([label, show, num, unit, key]) => (
+                    <tr key={label} className={key ? "is-key" : undefined}>
+                      <th scope="row">{label}</th>
+                      {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
+                      {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), unit) : ""}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         </section>
@@ -654,39 +677,58 @@ function PointCard({ detail, style, onClose }) {
     return { k, name, unit, color: l.color, value: l.word ? l.word(p[k]) : fmtNum(p[k], l.dp) };
   });
   const trendMin = TREND_MS / 60_000;
+  const level = levelOf(p);
+  const moves = [
+    ["Since last", detail.stepL, detail.prevGapMs == null ? null : `in ${durationLabel(detail.prevGapMs)}`],
+    [`${trendMin} min before`, detail.trendBeforeL, null],
+    [`${trendMin} min after`, detail.trendAfterL, null],
+  ];
   return (
     <div className="frp-pin" style={style} role="dialog" aria-label={`Reading at ${at(p.t)}`}
          onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <div className="frp-tip__head">
-        <span className="frp-tip__when">{at(p.t)}</span>
+      <div className="frp-pin__head">
+        <div className="frp-pin__title">
+          <span className="frp-pin__when">{at(p.t)}</span>
+          {seg && (
+            <span className="frp-pin__seg">
+              <i className={`frp-pin__dot frp-pin__dot--${seg.kind}`} aria-hidden="true" />
+              {SEGMENT_WORD[seg.kind] ?? seg.kind} {clock.format(seg.start)}–{clock.format(seg.end)} · {durationLabel(seg.end - seg.start)}
+            </span>
+          )}
+        </div>
         <button type="button" className="frp-pin__x" onClick={onClose} aria-label="Close the reading">×</button>
       </div>
-      {seg && (
-        <p className="frp-pin__seg">
-          {SEGMENT_WORD[seg.kind] ?? seg.kind} {clock.format(seg.start)} – {clock.format(seg.end)}
-          <span> · {durationLabel(seg.end - seg.start)}</span>
-        </p>
-      )}
-      <dl className="frp-tip__rows">
-        {rows.map((r) => (
-          <div key={r.k} className="frp-tip__row">
+      <div className="frp-pin__level">
+        <span className="frp-pin__big">{fmtNum(level, 1)}<span className="frp-pin__bigu">L</span></span>
+        <span className="frp-pin__levl">
+          {p.fuelSmoothL != null ? "Processed level" : "Fuel level"}
+          {p.fuelSmoothL != null && p.fuelL != null && <> · raw {fmtNum(p.fuelL, 1)} L</>}
+        </span>
+      </div>
+      <dl className="frp-pin__moves">
+        {moves.map(([label, v, sub]) => (
+          <div key={label} className="frp-pin__move">
+            <dt>{label}</dt>
+            <dd>{signed(v, 1)}<span className="frp-tip__unit">L</span></dd>
+            {sub && <dd className="frp-pin__sub">{sub}</dd>}
+          </div>
+        ))}
+      </dl>
+      <dl className="frp-pin__rows">
+        {rows.filter((r) => r.k !== "fuelL" && r.k !== "fuelSmoothL").map((r) => (
+          <div key={r.k} className="frp-pin__row">
             <dt><i className="frp-tip__sw" style={{ background: r.color }} aria-hidden="true" />{r.name}</dt>
             <dd>{r.value}<span className="frp-tip__unit">{r.unit}</span></dd>
           </div>
         ))}
       </dl>
-      <dl className="frp-tip__rows">
-        <div className="frp-tip__row"><dt>Since last reading</dt>
-          <dd>{signed(detail.stepL, 1)}<span className="frp-tip__unit">L in {detail.prevGapMs == null ? "-" : durationLabel(detail.prevGapMs)}</span></dd></div>
-        <div className="frp-tip__row"><dt>{trendMin} min before</dt><dd>{signed(detail.trendBeforeL, 1)}<span className="frp-tip__unit">L</span></dd></div>
-        <div className="frp-tip__row"><dt>{trendMin} min after</dt><dd>{signed(detail.trendAfterL, 1)}<span className="frp-tip__unit">L</span></dd></div>
-      </dl>
       {detail.events.length > 0 && (
-        <ul className="frp-pin__events">
+        <ul className="frp-pin__events" aria-label="Near this reading">
           {detail.events.map((e) => (
-            <li key={`${e.kind}-${e.id}`}>
+            <li key={`${e.kind}-${e.id}`} className={`frp-pin__event frp-pin__event--${e.kind}`}>
               <img src={ICON[e.kind]} alt="" width={14} height={14} />
-              <span>{e.kind === "drain" ? dropWord(e) : EVENT_WORD[e.kind]} {L(e.volumeL)}</span>
+              <span className="frp-pin__evname">{e.kind === "drain" ? dropWord(e) : EVENT_WORD[e.kind]}</span>
+              <span className="frp-pin__evl">{L(e.volumeL)}</span>
               <span className="frp-pin__off">{offsetWord(e.offsetMs)}</span>
             </li>
           ))}

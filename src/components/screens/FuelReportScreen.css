@@ -180,27 +180,75 @@
 .frp-sel--capture { background: rgba(2, 132, 199, 0.14); border-inline: 1.5px solid #0284c7; }
 .frp-sel--zoom { background: rgba(59, 130, 246, 0.1); border: 1.5px dashed var(--sp4-accent); }
 
-/* A pinned reading's card, beside its line; the tooltip card's rows. */
+/* Hallmark · component: pinned reading card + period comparison card
+ * genre: modern-minimal · theme: sp4 tokens (dark default, .app--light)
+ * states: default · hover · focus-visible · active (drag) · empty (one period)
+ *   n/a: disabled / loading / error / success (read-only figures)
+ * contrast: figures --sp4-text-1, labels --sp4-text-2/3 on --sp4-surface (both themes)
+ * pre-emit critique: P4 H5 E4 S5 R5 V4
+ *
+ * Operator, 2026-10-21: both cards should "fit in well". They were the hover
+ * tooltip's rows at greater length: nine figures of one weight, sixteen table
+ * rows of one weight. Now each leads with what it is for. The pinned reading
+ * opens on the tank's level in the header tiles' numeral, then what the level
+ * did around it as three tiles, then the other lines a step quieter. The
+ * comparison groups its rows (Fuel · Rate · Movement), sets the figures it is
+ * for a step louder, and shades the difference column. */
+
+/* A pinned reading's card, beside its line. */
 .frp-pin {
   position: absolute; top: 26px; z-index: 3;
-  width: 250px; max-height: calc(100% - 64px); overflow: auto;
-  padding: 8px 10px 6px;
-  border: 1px solid var(--sp4-line-hi); border-radius: 8px;
+  width: 272px; max-height: calc(100% - 64px); overflow: auto;
+  border: 1px solid var(--sp4-line-hi); border-radius: 10px;
   background: var(--sp4-surface); color: var(--sp4-text-1);
   font-size: var(--sp4-body);
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
   cursor: auto; user-select: text;
 }
-.app--light .frp-pin { border-color: var(--sp4-line); }
+.app--light .frp-pin { border-color: var(--sp4-line); box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12); }
+.frp-pin__head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 10px 0 12px; }
+.frp-pin__title { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.frp-pin__when { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.frp-pin__seg {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: var(--sp4-label); color: var(--sp4-text-3); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.frp-pin__dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--sp4-text-4); }
+.frp-pin__dot--trip    { background: var(--sp4-crit); }
+.frp-pin__dot--parking { background: var(--sp4-warn); }
+.frp-pin__dot--stop    { background: var(--sp4-accent); }
 .frp-pin__x {
-  margin: -2px -4px 0 0; padding: 0 5px; border: 0; border-radius: 4px; background: none;
+  display: grid; place-items: center; flex: none;
+  width: 22px; height: 22px; margin: -3px -3px 0 0; padding: 0;
+  border: 0; border-radius: 6px; background: none;
   color: var(--sp4-text-3); font-size: 16px; line-height: 1; cursor: pointer;
 }
 .frp-pin__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
-.frp-pin__seg { margin: 6px 0 0; font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-2); }
-.frp-pin__seg span { font-weight: 400; color: var(--sp4-text-3); }
-.frp-pin__events { margin: 0; padding: 5px 0 2px; list-style: none; border-top: 1px solid var(--sp4-line); display: grid; gap: 3px; }
-.frp-pin__events li { display: flex; align-items: center; gap: 6px; font-size: var(--sp4-label); }
+.frp-pin__x:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.frp-pin__level { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 8px 12px 10px; }
+.frp-pin__big { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.frp-pin__bigu { margin-left: 3px; font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-3); letter-spacing: 0; }
+.frp-pin__levl { font-size: var(--sp4-label); color: var(--sp4-text-3); }
+/* What the level did round the reading: three tiles, as the header's. */
+.frp-pin__moves {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0; border-block: 1px solid var(--sp4-line);
+}
+.frp-pin__move { display: grid; align-content: start; gap: 2px; padding: 7px 8px 7px 12px; min-width: 0; }
+.frp-pin__move + .frp-pin__move { border-left: 1px solid var(--sp4-line); padding-left: 10px; }
+.frp-pin__move dt { font-size: var(--sp4-label); color: var(--sp4-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frp-pin__move dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.frp-pin__move dd.frp-pin__sub { font-size: var(--sp4-label); font-weight: 400; color: var(--sp4-text-3); }
+.frp-pin__rows { margin: 0; padding: 8px 12px; display: grid; gap: 4px; }
+.frp-pin__rows:empty { display: none; }
+.frp-pin__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 12px; }
+.frp-pin__row dt { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--sp4-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frp-pin__row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.frp-pin__events { margin: 0; padding: 6px 12px 8px; list-style: none; display: grid; gap: 4px; border-top: 1px solid var(--sp4-line); }
+.frp-pin__event { display: flex; align-items: center; gap: 7px; font-size: var(--sp4-label); }
+.frp-pin__evname { color: var(--sp4-text-2); }
+.frp-pin__evl { font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
 .frp-pin__off { margin-left: auto; color: var(--sp4-text-3); white-space: nowrap; }
 
 /* The captured periods compared: a chip in the plot's top-left corner, and
@@ -213,11 +261,11 @@
 /* The chip and the card's head are its handles. */
 .frp-cmp-chip, .frp-cmp__head { touch-action: none; }
 .frp-cmp__head { cursor: move; }
-.frp-cmp-chip:active { cursor: grabbing; }
+.frp-cmp-chip:active, .frp-cmp__head:active { cursor: grabbing; }
 .frp-cmp-chip {
   display: inline-flex; align-items: center; gap: 5px;
-  height: 24px; padding: 0 6px 0 8px;
-  border: 1px solid var(--sp4-line-hi); border-radius: 12px;
+  height: 26px; padding: 0 5px 0 9px;
+  border: 1px solid var(--sp4-line-hi); border-radius: 13px;
   background: var(--sp4-surface); color: var(--sp4-text-2);
   font: inherit; font-size: var(--sp4-label); font-weight: 600;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
@@ -225,40 +273,78 @@
 }
 .frp-cmp-chip:hover, .frp-cmp-chip.is-on { color: var(--sp4-text-1); border-color: var(--sp4-accent); }
 .frp-cmp-chip:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
-.frp-cmp-chip__p {
-  display: inline-grid; place-items: center;
-  width: 16px; height: 16px; border-radius: 50%;
-  color: #fff; font-size: 10px; font-weight: 700;
+.frp-cmp-chip__p, .frp-cmp__badge {
+  display: inline-grid; place-items: center; flex: none;
+  width: 17px; height: 17px; border-radius: 50%;
+  color: #fff; font-size: 10px; font-weight: 700; line-height: 1;
 }
 .frp-cmp {
   min-height: 0; max-width: 100%;
   display: flex; flex-direction: column;
-  padding: 2px 10px 6px;
-  border: 1px solid var(--sp4-line-hi); border-radius: 8px;
+  border: 1px solid var(--sp4-line-hi); border-radius: 10px;
   background: var(--sp4-surface);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.26);
+  overflow: hidden;
   user-select: text;
 }
 .app--light .frp-cmp, .app--light .frp-cmp-chip { border-color: var(--sp4-line); }
-.frp-cmp__head { display: flex; align-items: center; gap: 10px; padding: 6px 0 4px; }
-.frp-cmp__title { font-size: var(--sp4-label); font-weight: 700; color: var(--sp4-text-1); text-transform: uppercase; letter-spacing: 0.04em; }
-.frp-cmp__note { font-size: var(--sp4-label); color: var(--sp4-text-3); }
-.frp-cmp__clear { margin-left: auto; }
+.app--light .frp-cmp { box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14); }
+.frp-cmp__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px 7px 10px;
+  border-bottom: 1px solid var(--sp4-line);
+}
+.frp-cmp__grip { color: var(--sp4-text-4); flex: none; }
+.frp-cmp__head:hover .frp-cmp__grip { color: var(--sp4-text-2); }
+.frp-cmp__title { font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
+.frp-cmp__note { font-size: var(--sp4-label); color: var(--sp4-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.frp-cmp__clear { margin-left: auto; flex: none; }
 .frp-cmp__scroll { min-height: 0; overflow: auto; }
-.frp-cmp__table { width: auto; min-width: min(100%, 560px); border-collapse: collapse; font-size: var(--sp4-label); font-variant-numeric: tabular-nums; }
-.frp-cmp__table th, .frp-cmp__table td { padding: 3px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--sp4-line); }
+.frp-cmp__table {
+  width: auto; min-width: min(100%, 520px);
+  border-collapse: separate; border-spacing: 0;
+  font-size: var(--sp4-label); font-variant-numeric: tabular-nums;
+}
+.frp-cmp__table th, .frp-cmp__table td { padding: 3px 12px; text-align: right; white-space: nowrap; }
 .frp-cmp__table tbody th { text-align: left; font-weight: 500; color: var(--sp4-text-2); }
 .frp-cmp__table tbody td { font-weight: 600; color: var(--sp4-text-1); }
-.frp-cmp__table thead th { position: sticky; top: 0; background: var(--sp4-surface); vertical-align: bottom; }
-.frp-cmp__col { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
-.frp-cmp__sw { width: 10px; height: 10px; border-radius: 2px; }
-.frp-cmp__letter { font-weight: 700; color: var(--sp4-text-1); }
-.frp-cmp__x { padding: 0 4px; border: 0; background: none; color: var(--sp4-text-3); font-size: 14px; line-height: 1; cursor: pointer; border-radius: 3px; }
+.frp-cmp__table tbody tr:not(.frp-cmp__grp):hover > * { background: var(--sp4-raised); }
+.frp-cmp__table thead th {
+  position: sticky; top: 0; z-index: 1;
+  padding-top: 8px; padding-bottom: 7px;
+  background: var(--sp4-surface); vertical-align: bottom;
+  border-bottom: 1px solid var(--sp4-line);
+}
+.frp-cmp__col { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.frp-cmp__dur { font-weight: 700; color: var(--sp4-text-1); }
+.frp-cmp__x {
+  display: grid; place-items: center; width: 18px; height: 18px; padding: 0;
+  border: 0; border-radius: 4px; background: none;
+  color: var(--sp4-text-3); font-size: 14px; line-height: 1; cursor: pointer;
+}
 .frp-cmp__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
-.frp-cmp__when { padding: 0; border: 0; background: none; font: inherit; font-weight: 500; color: var(--sp4-text-3); cursor: pointer; }
+.frp-cmp__x:focus-visible, .frp-cmp__when:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.frp-cmp__when {
+  display: block; margin: 3px 0 0 auto; padding: 0;
+  border: 0; border-radius: 3px; background: none;
+  font: inherit; font-weight: 500; color: var(--sp4-text-3); cursor: pointer;
+}
 .frp-cmp__when:hover { color: var(--sp4-accent); text-decoration: underline; }
-.frp-cmp__diffh { color: var(--sp4-text-2); }
+/* A group's name, then its rows. */
+.frp-cmp__table .frp-cmp__grp th {
+  padding: 9px 12px 3px;
+  text-align: left; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--sp4-text-3);
+}
+.frp-cmp__table tbody:last-child tr:last-child > * { padding-bottom: 8px; }
+/* The figures the comparison is for, a step louder. */
+.frp-cmp__table tr.is-key th { color: var(--sp4-text-1); font-weight: 700; }
+.frp-cmp__table tr.is-key td { font-size: var(--sp4-body); font-weight: 800; }
+/* Second less first, on its own shade. */
+.frp-cmp__table thead th.frp-cmp__diffh, .frp-cmp__table td.frp-cmp__diff { background: var(--sp4-raised); }
+.frp-cmp__table thead th.frp-cmp__diffh { color: var(--sp4-text-2); }
 .frp-cmp__table td.frp-cmp__diff { color: var(--sp4-text-2); font-weight: 600; }
+.frp-cmp__table tr.is-key td.frp-cmp__diff { color: var(--sp4-text-1); }
 .frp-zoom {
   display: flex;
   align-items: center;
@@ -339,7 +425,7 @@
   .frp-run { flex: 1 1 0; height: var(--m-action); }
   .frp-run { flex: 1 1 0; }
   .frp-zoom__hint { display: none; }
-  .frp-pin { width: min(250px, calc(100% - 60px)); }
+  .frp-pin { width: min(272px, calc(100% - 60px)); }
   /* Phones: the same frames on the same gutter as `.frv`; both panels keep
      their fixed phone heights below. */
   .frp-graphmap {
