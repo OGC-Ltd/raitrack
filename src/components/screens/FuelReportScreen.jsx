@@ -35,6 +35,7 @@ import MapStatusBar from "../body/MapStatusBar";
 import { spriteIcon, bearingDeg } from "../../lib/fleetSprite";
 import { spriteKind } from "../../lib/vehicleMap";
 import { zoomView, panView, isWholeDay, wheelPixels, zoomFactor } from "../../lib/chartView";
+import { rangeStats, pointDetail, levelOf, TREND_MS } from "../../lib/chartCapture";
 import { pumpSvg, stopSvg, svgUrl, FILL_COLOR, DRAIN_COLOR } from "../../lib/fuelIcons";
 import { downloadTableCsv } from "../../utils/tableExport";
 import { buildSensorReport } from "../../utils/sensorReport";
@@ -412,6 +413,174 @@ const plotRight = (right) => (right ? 44 : 16);
 const WHEEL_MIN_MS = 5 * 60_000;    // the narrowest the graph zooms: ~20 readings
 /** One press of +: the view to this share of itself. */
 const STEP = 0.6;
+// The plot's top and foot inside the chart box: the chart's top margin, and
+// the x-axis (30) over the bottom margin (4).
+const PLOT_TOP = 22;
+const PLOT_FOOT = 34;
+/** A drag shorter than this many pixels is a click. */
+const MIN_DRAG_PX = 6;
+
+// The graph's tools (operator, 2026-10-21), beside the zoom buttons. Each is
+// on until pressed again; with none on, a drag moves the graph as before.
+const TOOL_ICON = {
+  capture: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 12h10M9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5" /></>,
+  zoom: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5M12 9v6M9 12h6" />,
+  point: <><path d="M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M8 8.5h8M8 11.5h5" /></>,
+};
+const TOOLS = {
+  capture: { label: "Capture a period", hint: "Drag across the graph to capture a period · up to four, compared below" },
+  zoom:    { label: "Zoom to an area",  hint: "Drag a box round the part to zoom in on" },
+  point:   { label: "Point detail",     hint: "Click a reading for its detail" },
+};
+// The captured periods, lettered in turn. Hues clear of the lines' own.
+const CAPTURE_COLORS = ["#0284c7", "#c2410c", "#047857", "#7c3aed"];
+const MAX_CAPTURES = CAPTURE_COLORS.length;
+const LETTERS = "ABCD";
+
+const signed = (n, d = 1, unit = "") => {
+  if (n == null || !Number.isFinite(n)) return "-";
+  // Signed as shown: a difference that rounds to nothing has no sign.
+  const r = Math.round(n * 10 ** d) / 10 ** d;
+  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${fmtNum(Math.abs(r), d)}${unit}`;
+};
+const dur = (ms) => (ms > 0 ? durationLabel(ms) : "-");
+
+// The rows of the comparison: a label, the figure as shown, and the number
+// the difference column takes (null where a difference says nothing).
+const COMPARE_ROWS = [
+  ["Duration",          (s) => dur(s.durationMs),                            (s) => s.durationMs, "ms"],
+  ["Start level",       (s) => L(s.startL),                                  (s) => s.startL, "L"],
+  ["End level",         (s) => L(s.endL),                                    (s) => s.endL, "L"],
+  ["Change",            (s) => signed(s.changeL, 1, " L"),                   (s) => s.changeL, "L"],
+  ["Lowest · highest",  (s) => `${fmtNum(s.minL, 1)} · ${fmtNum(s.maxL, 1)} L`, null],
+  ["Filled",            (s) => `${L(s.filledL)} (${s.fillCount})`,           (s) => s.filledL, "L"],
+  ["Drained",           (s) => `${L(s.drainedL)} (${s.drainCount})`,         (s) => s.drainedL, "L"],
+  ["Consumed",          (s) => L(s.consumedL),                               (s) => s.consumedL, "L"],
+  ["Distance",          (s) => `${fmtNum(s.distanceKm, 2)} km`,              (s) => s.distanceKm, "km"],
+  ["Engine on",         (s) => dur(s.engineMs),                              (s) => s.engineMs, "ms"],
+  ["On trips",          (s) => dur(s.tripMs),                                (s) => s.tripMs, "ms"],
+  ["Parked",            (s) => dur(s.parkingMs),                             (s) => s.parkingMs, "ms"],
+  ["L / 100 km",        (s) => fmtNum(s.per100Km, 1),                        (s) => s.per100Km, ""],
+  ["L / engine hour",   (s) => fmtNum(s.perEngineH, 1),                      (s) => s.perEngineH, ""],
+  ["Top speed",         (s) => (s.maxSpeedKmh == null ? "-" : `${fmtNum(s.maxSpeedKmh, 0)} km/h`), (s) => s.maxSpeedKmh, "km/h"],
+  ["Average moving",    (s) => (s.avgMovingKmh == null ? "-" : `${fmtNum(s.avgMovingKmh, 0)} km/h`), (s) => s.avgMovingKmh, "km/h"],
+];
+const diffText = (a, b, unit) => {
+  if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return "-";
+  const d = b - a;
+  if (unit === "ms") return d === 0 ? "0" : `${d > 0 ? "+" : "−"}${durationLabel(Math.abs(d))}`;
+  return signed(d, unit === "km" ? 2 : unit === "km/h" ? 0 : 1, unit ? ` ${unit}` : "");
+};
+
+/**
+ * The captured periods side by side, under the graph. With two, a last
+ * column gives the second less the first.
+ */
+function CaptureCompare({ captures, stats, onRemove, onClear, onZoom }) {
+  const two = captures.length === 2;
+  return (
+    <section className="frp-cmp" aria-label="Captured periods">
+      <div className="frp-cmp__head">
+        <span className="frp-cmp__title">Compare periods</span>
+        {captures.length < 2 && <span className="frp-cmp__note">Capture another period to compare.</span>}
+        <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all</button>
+      </div>
+      <div className="frp-cmp__scroll">
+        <table className="frp-cmp__table">
+          <thead>
+            <tr>
+              <td />
+              {captures.map((c, i) => (
+                <th key={c.id} scope="col">
+                  <div className="frp-cmp__col">
+                    <i className="frp-cmp__sw" style={{ background: c.color }} aria-hidden="true" />
+                    <span className="frp-cmp__letter">{c.letter}</span>
+                    <button type="button" className="frp-cmp__x" onClick={() => onRemove(c.id)}
+                            aria-label={`Remove period ${c.letter}`} title="Remove">×</button>
+                  </div>
+                  <button type="button" className="frp-cmp__when" onClick={() => onZoom(c)} title="Zoom the graph to this period">
+                    {at(stats[i].from)} – {at(stats[i].to)}
+                  </button>
+                </th>
+              ))}
+              {two && <th scope="col" className="frp-cmp__diffh">{captures[1].letter} − {captures[0].letter}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARE_ROWS.map(([label, show, num, unit]) => (
+              <tr key={label}>
+                <th scope="row">{label}</th>
+                {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
+                {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), unit) : ""}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+const EVENT_WORD = { fill: "Filling", drain: "Drain" };
+const offsetWord = (ms) => {
+  const m = Math.round(Math.abs(ms) / 60_000);
+  return m === 0 ? "at this reading" : `${m} min ${ms < 0 ? "before" : "after"}`;
+};
+
+/**
+ * One pinned reading in full (the point tool): every line's figure, whether
+ * or not the line is drawn, what the level did either side, the stretch the
+ * unit was in, and any filling or drain near it.
+ */
+function PointCard({ detail, style, onClose }) {
+  const p = detail.point;
+  const seg = detail.segment;
+  const rows = Object.entries(LINES).filter(([k]) => p[k] != null).map(([k, l]) => {
+    const [name, unit] = l.label.split(/,\s*/);
+    return { k, name, unit, color: l.color, value: l.word ? l.word(p[k]) : fmtNum(p[k], l.dp) };
+  });
+  const trendMin = TREND_MS / 60_000;
+  return (
+    <div className="frp-pin" style={style} role="dialog" aria-label={`Reading at ${at(p.t)}`}
+         onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="frp-tip__head">
+        <span className="frp-tip__when">{at(p.t)}</span>
+        <button type="button" className="frp-pin__x" onClick={onClose} aria-label="Close the reading">×</button>
+      </div>
+      {seg && (
+        <p className="frp-pin__seg">
+          {SEGMENT_WORD[seg.kind] ?? seg.kind} {clock.format(seg.start)} – {clock.format(seg.end)}
+          <span> · {durationLabel(seg.end - seg.start)}</span>
+        </p>
+      )}
+      <dl className="frp-tip__rows">
+        {rows.map((r) => (
+          <div key={r.k} className="frp-tip__row">
+            <dt><i className="frp-tip__sw" style={{ background: r.color }} aria-hidden="true" />{r.name}</dt>
+            <dd>{r.value}<span className="frp-tip__unit">{r.unit}</span></dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="frp-tip__rows">
+        <div className="frp-tip__row"><dt>Since last reading</dt>
+          <dd>{signed(detail.stepL, 1)}<span className="frp-tip__unit">L in {detail.prevGapMs == null ? "-" : durationLabel(detail.prevGapMs)}</span></dd></div>
+        <div className="frp-tip__row"><dt>{trendMin} min before</dt><dd>{signed(detail.trendBeforeL, 1)}<span className="frp-tip__unit">L</span></dd></div>
+        <div className="frp-tip__row"><dt>{trendMin} min after</dt><dd>{signed(detail.trendAfterL, 1)}<span className="frp-tip__unit">L</span></dd></div>
+      </dl>
+      {detail.events.length > 0 && (
+        <ul className="frp-pin__events">
+          {detail.events.map((e) => (
+            <li key={`${e.kind}-${e.id}`}>
+              <img src={ICON[e.kind]} alt="" width={14} height={14} />
+              <span>{e.kind === "drain" ? dropWord(e) : EVENT_WORD[e.kind]} {L(e.volumeL)}</span>
+              <span className="frp-pin__off">{offsetWord(e.offsetMs)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /**
  * The fuel graph (operator, 2026-10-13):
@@ -427,14 +596,29 @@ const STEP = 0.6;
  *     it on the Litres axis;
  *   · double-click or "Whole period" zooms back out.
  *
+ * And three tools (operator, 2026-10-21), each turning the drag to its own use:
+ *
+ *   · capture: drag across a period to capture it; up to four, lettered,
+ *     shaded on the graph and compared figure by figure under it;
+ *   · zoom to an area: drag a box, and the graph shows that stretch of time
+ *     and that band of litres;
+ *   · point detail: click a reading to pin it, with every line's figure and
+ *     what the level did either side of it.
+ *
  * View arithmetic as the vehicle panel's chart (lib/chartView).
  */
 function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   const right = lines.speedKmh || lines.mileageKm;
   const full = useMemo(() => [series[0]?.t ?? 0, series[series.length - 1]?.t ?? 0], [series]);
   const [zoom, setZoom] = useState(null);           // [from, to] ms, or null = whole period
-  useEffect(() => { setZoom(null); }, [series]);
+  const [yZoom, setYZoom] = useState(null);         // [low, high] litres from a drawn box, or null
+  const [tool, setTool] = useState(null);           // a key of TOOLS, or null = drag moves
+  const [sel, setSel] = useState(null);             // the drag being drawn, box px {x0, y0, x1, y1}
+  const [captures, setCaptures] = useState([]);     // [{id, letter, color, from, to}]
+  const [pin, setPin] = useState(null);             // the pinned reading's t
+  useEffect(() => { setZoom(null); setYZoom(null); setCaptures([]); setPin(null); }, [series]);
   const view = zoom ?? full;
+  const unzoom = () => { setZoom(null); setYZoom(null); };
 
   // What is in view: the readings (one either side, so the line runs to the
   // edges) and the marks.
@@ -466,10 +650,11 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   // Zoomed to the range the level covered, as ControlTech draws it: from 0 a
   // 5 L fall on a 400 L tank is a flat line.
   const pad = Math.max(1, (fuelMax - fuelMin) * 0.08);
-  const yLo = Math.max(0, Math.floor(fuelMin - pad));
+  // A box drawn with the zoom tool sets the band of litres itself.
+  const yLo = yZoom ? yZoom[0] : Math.max(0, Math.floor(fuelMin - pad));
   // Headroom over the line for two rows of marks: stops on top, fuel events
   // under them, both clear of the level.
-  const yHi = Math.ceil(fuelMax + pad * 3.2);
+  const yHi = yZoom ? yZoom[1] : Math.ceil(fuelMax + pad * 3.2);
   const stopRow = fuelMax + pad * 2.5;
   const eventRow = fuelMax + pad * 1.3;
 
@@ -478,7 +663,7 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   // period, rolling out is left to the page, so the chart never traps a scroll.
   const boxRef = useRef(null);
   const live = useRef(null);
-  live.current = { view, full, right };
+  live.current = { view, full, right, yLo, yHi };
   const fracAt = (clientX) => {
     const r = boxRef.current?.getBoundingClientRect();
     if (!r?.width) return null;
@@ -505,6 +690,8 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
       e.preventDefault();
       if (!next) return;
       setZoom(isWholeDay(next, day) ? null : next);
+      // A new span of time takes its litres from what is in it again.
+      if (!sideways) setYZoom(null);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -514,12 +701,65 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   // Press and drag. Measured from where the drag began, so going back the
   // way it came returns to the view it started from.
   const drag = useRef(null);
+  // The pointer inside the plot, in the chart box's pixels, held to its edges.
+  const plotPx = (e) => {
+    const r = boxRef.current?.getBoundingClientRect();
+    if (!r?.width) return null;
+    const xHi = r.width - plotRight(live.current.right);
+    const yHi = r.height - PLOT_FOOT;
+    return {
+      x: Math.min(xHi, Math.max(PLOT_LEFT, e.clientX - r.left)),
+      y: Math.min(yHi, Math.max(PLOT_TOP, e.clientY - r.top)),
+      w: xHi - PLOT_LEFT,
+      h: yHi - PLOT_TOP,
+    };
+  };
+  const timeAt = (x, w) => { const v = live.current.view; return v[0] + ((x - PLOT_LEFT) / w) * (v[1] - v[0]); };
+  const litresAt = (y, h) => { const { yLo: lo, yHi: hi } = live.current; return hi - ((y - PLOT_TOP) / h) * (hi - lo); };
+
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
+    if (tool) {
+      const p = plotPx(e);
+      if (!p) return;
+      drag.current = { tool, ...p };
+      setSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      return;
+    }
     const hit = fracAt(e.clientX);
     if (!hit) return;
     drag.current = { x: e.clientX, view, w: hit.w, moved: false };
     e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  // A tool's drag ends: a period captured, a box zoomed to, a reading pinned.
+  const finishTool = (d, end) => {
+    const x0 = Math.min(d.x, end.x), x1 = Math.max(d.x, end.x);
+    const y0 = Math.min(d.y, end.y), y1 = Math.max(d.y, end.y);
+    if (d.tool === "point") { setPin(timeAt(end.x, d.w)); return; }
+    if (x1 - x0 < MIN_DRAG_PX) return;
+    let from = Math.round(timeAt(x0, d.w)), to = Math.round(timeAt(x1, d.w));
+    if (d.tool === "capture") {
+      setCaptures((cs) => {
+        // A fifth takes the place of the oldest, and its letter and colour.
+        const kept = cs.length >= MAX_CAPTURES ? cs.slice(1) : cs;
+        const free = CAPTURE_COLORS.findIndex((_, i) => !kept.some((c) => c.slot === i));
+        return [...kept, { id: `${from}-${to}-${Date.now()}`, slot: free, letter: LETTERS[free], color: CAPTURE_COLORS[free], from, to }]
+          .sort((a, b) => a.slot - b.slot);
+      });
+      return;
+    }
+    // Zoom: never narrower than the wheel goes, widened about the box's middle.
+    if (to - from < WHEEL_MIN_MS) {
+      const mid = (from + to) / 2;
+      from = Math.round(mid - WHEEL_MIN_MS / 2); to = from + WHEEL_MIN_MS;
+    }
+    setZoom(isWholeDay([from, to], full) ? null : [from, to]);
+    // A box with height sets the litres too; a flat one keeps them.
+    setYZoom(y1 - y0 >= MIN_DRAG_PX
+      ? [Math.max(0, Math.floor(litresAt(y1, d.h))), Math.ceil(litresAt(y0, d.h))]
+      : null);
   };
   // The graph is held and moved like a sheet: drag right to see earlier,
   // left to see later, at the same zoom. Zooming is the wheel's and the
@@ -528,6 +768,11 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   const onPointerMove = (e) => {
     const d = drag.current;
     if (!d) return;
+    if (d.tool) {
+      const p = plotPx(e);
+      if (p) setSel({ x0: d.x, y0: d.y, x1: p.x, y1: p.y });
+      return;
+    }
     const dx = e.clientX - d.x;
     if (!d.moved && Math.abs(dx) < 4) return;   // a click, not a drag
     d.moved = true;
@@ -535,13 +780,50 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
     if (next) setZoom(next);
   };
   const endDrag = (e) => {
-    if (drag.current) e?.currentTarget?.releasePointerCapture?.(e.pointerId);
+    const d = drag.current;
+    if (d) e?.currentTarget?.releasePointerCapture?.(e.pointerId);
     drag.current = null;
+    if (d?.tool) {
+      setSel(null);
+      const p = e?.type === "pointerup" ? plotPx(e) : null;
+      if (p) finishTool(d, p);
+    }
   };
   const step = (factor) => {
     const next = zoomView(view, full, (view[0] + view[1]) / 2, factor, WHEEL_MIN_MS);
-    if (next) setZoom(isWholeDay(next, full) ? null : next);
+    if (next) { setZoom(isWholeDay(next, full) ? null : next); setYZoom(null); }
   };
+  const pickTool = (k) => setTool((t) => (t === k ? null : k));
+
+  // Escape lets go of a drag being drawn, else of the tool, else of the pin.
+  useEffect(() => {
+    if (!tool && pin == null) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (drag.current?.tool) { drag.current = null; setSel(null); } else if (tool) setTool(null); else setPin(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool, pin]);
+
+  const captureStats = useMemo(
+    () => captures.map((c) => rangeStats(series, report, [c.from, c.to])),
+    [captures, series, report],
+  );
+  const detail = useMemo(() => (pin == null ? null : pointDetail(series, report, pin)), [pin, series, report]);
+  const pinT = detail?.point.t;
+  const pinL = detail ? levelOf(detail.point) : null;
+  // The card opens on the side of the pin with the more room.
+  const pinStyle = (() => {
+    if (pinT == null) return null;
+    const f = Math.min(1, Math.max(0, (pinT - view[0]) / (view[1] - view[0] || 1)));
+    const inner = `(100% - ${PLOT_LEFT + plotRight(right)}px)`;
+    return f > 0.5
+      ? { right: `calc(${plotRight(right)}px + ${1 - f} * ${inner} + 12px)` }
+      : { left: `calc(${PLOT_LEFT}px + ${f} * ${inner} + 12px)` };
+  })();
+  const hint = tool ? TOOLS[tool].hint
+    : zoom ? "Scroll to zoom · drag to move" : "Scroll over the graph to zoom";
 
   return (
     <div className="frp-chart">
@@ -550,24 +832,39 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
                 aria-label="Zoom in" title="Zoom in, or scroll over the graph">+</button>
         <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(1 / STEP)} disabled={!zoom}
                 aria-label="Zoom out" title="Zoom out, or scroll over the graph">−</button>
-        {zoom && (
-          <button type="button" className="sp4-ghost-btn" onClick={() => setZoom(null)}
+        {(zoom || yZoom) && (
+          <button type="button" className="sp4-ghost-btn" onClick={unzoom}
                   title="Show the whole period, or double-click the graph">Whole period</button>
         )}
         <span className="frp-zoom__hint">
           {zoom ? `${at(view[0])} – ${at(view[1])} · ` : ""}
-          {zoom ? "Scroll to zoom · drag to move" : "Scroll over the graph to zoom"}
+          {hint}
         </span>
+        <div className="frp-tools" role="toolbar" aria-label="Graph tools">
+          {Object.entries(TOOLS).map(([k, t]) => (
+            <button key={k} type="button" className={`frp-tools__btn${tool === k ? " is-on" : ""}`}
+                    aria-pressed={tool === k} aria-label={t.label} title={t.label} onClick={() => pickTool(k)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{TOOL_ICON[k]}</svg>
+            </button>
+          ))}
+        </div>
       </div>
       <div
-        className="frp-chart__plot"
+        className={`frp-chart__plot${tool ? ` frp-chart__plot--${tool}` : ""}`}
         ref={boxRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        onDoubleClick={() => setZoom(null)}
+        onDoubleClick={() => { if (tool !== "point") unzoom(); }}
       >
+        {sel && (
+          <div className={`frp-sel frp-sel--${tool}`} aria-hidden="true" style={tool === "zoom"
+            ? { left: Math.min(sel.x0, sel.x1), width: Math.abs(sel.x1 - sel.x0), top: Math.min(sel.y0, sel.y1), height: Math.abs(sel.y1 - sel.y0) }
+            : { left: Math.min(sel.x0, sel.x1), width: Math.abs(sel.x1 - sel.x0), top: PLOT_TOP, bottom: PLOT_FOOT }} />
+        )}
+        {detail && <PointCard detail={detail} style={pinStyle} onClose={() => setPin(null)} />}
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={shown}
@@ -600,6 +897,12 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
                                fill={b.color} fillOpacity={1} strokeOpacity={0} ifOverflow="hidden" />
               ))
               : []))}
+            {captures.filter((c) => c.to >= view[0] && c.from <= view[1]).map((c) => (
+              <ReferenceArea key={c.id} yAxisId="fuel" x1={Math.max(c.from, view[0])} x2={Math.min(c.to, view[1])}
+                             fill={c.color} fillOpacity={0.12} stroke={c.color} strokeOpacity={0.7} strokeDasharray="4 3"
+                             ifOverflow="hidden"
+                             label={{ value: c.letter, position: "insideTopLeft", fontSize: 11, fontWeight: 700, fill: c.color }} />
+            ))}
             {Object.entries(LINES).map(([key, l]) => lines[key] && (
               <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={l.axis === "fuel" || l.step ? 1.6 : 1.2}
                     type={l.step ? "stepAfter" : "linear"} isAnimationActive={false} connectNulls={false} />
@@ -628,11 +931,25 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
               <ReferenceDot yAxisId="fuel" x={hover.t} y={crossL} r={3.5} ifOverflow="hidden"
                             fill={LINES[crossKey].color} stroke="#fff" strokeWidth={1.5} />
             )}
-            <Tooltip content={<ChartTip lines={lines} segments={report.segments} />} isAnimationActive={false}
+            {pinT != null && (
+              <ReferenceLine yAxisId="fuel" x={pinT} ifOverflow="hidden" stroke="var(--sp4-accent)" strokeWidth={1.5} />
+            )}
+            {pinT != null && pinL != null && (
+              <ReferenceDot yAxisId="fuel" x={pinT} y={pinL} r={4.5} ifOverflow="hidden"
+                            fill="var(--sp4-accent)" stroke="#fff" strokeWidth={2} />
+            )}
+            {/* No hover card while a box or a period is being drawn. */}
+            <Tooltip content={sel ? () => null : <ChartTip lines={lines} segments={report.segments} />} isAnimationActive={false}
                      cursor={{ stroke: "var(--sp4-text-3)", strokeWidth: 1, strokeDasharray: "3 3" }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {captures.length > 0 && (
+        <CaptureCompare captures={captures} stats={captureStats}
+                        onRemove={(id) => setCaptures((cs) => cs.filter((c) => c.id !== id))}
+                        onClear={() => setCaptures([])}
+                        onZoom={(c) => { setZoom(isWholeDay([c.from, c.to], full) ? null : [c.from, c.to]); setYZoom(null); }} />
+      )}
     </div>
   );
 }
