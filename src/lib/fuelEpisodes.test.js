@@ -19,7 +19,7 @@ const fill = (over) => ({
   id: 'f1', filledAt: iso(0), verdict: 'REFILL', filledMl: 80_000, observedRiseMl: null, ...over,
 });
 
-describe('drainKind / fillingKind — the server decides, this only names it', () => {
+describe('drainKind / fillingKind, the server decides, this only names it', () => {
   it('names the four kinds the chart shades, and the FUEL RATE finding', () => {
     expect(drainKind({ verdict: 'DRAIN', drainCause: 'SIPHON' })).toBe('theft');
     expect(drainKind({ verdict: 'DRAIN', drainCause: 'SLOSH' })).toBe('slosh');
@@ -41,7 +41,7 @@ describe('drainKind / fillingKind — the server decides, this only names it', (
   });
 });
 
-describe('fuelEpisodes — placed on the tank line', () => {
+describe('fuelEpisodes, placed on the tank line', () => {
   it("covers a siphon's whole descent, not just the ledger's first step (FT 05)", () => {
     const levels = line([
       [-6, 285], [-2, 285], [0, 285], [2, 285], [4, 284], [6, 280], [8, 247], [10, 216], [12, 211],
@@ -155,7 +155,7 @@ describe('fuelEpisodes — placed on the tank line', () => {
   });
 });
 
-describe('fuelEpisodes — wording', () => {
+describe('fuelEpisodes, wording', () => {
   it('names a FUEL RATE or FUEL DOWN band the way its alert is headed', () => {
     const one = (causeReason) =>
       fuelEpisodes({ drains: [drain({ drainCause: 'UNEXPLAINED_BURN', causeReason })] })[0];

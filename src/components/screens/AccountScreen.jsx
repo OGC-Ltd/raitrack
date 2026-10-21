@@ -61,10 +61,10 @@ const TABS = [
 
 /** "3 Sep 2026", or a dash. Dates here are facts, not durations. */
 function fmtDate(value) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   return Number.isNaN(d.getTime())
-    ? "—"
+    ? "-"
     : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -211,7 +211,7 @@ export default function AccountScreen() {
       setNameDone("Name updated.");
     } catch (err) {
       setNameError(isMissingEndpoint(err)
-        ? "Saving is not available yet — this server does not have the account API."
+        ? "Saving is not available yet, this server does not have the account API."
         : firstMessage(err, "fullName", "Could not update your name."));
     } finally {
       setNameBusy(false);
@@ -229,7 +229,7 @@ export default function AccountScreen() {
       load();
     } catch (err) {
       setPwError(isMissingEndpoint(err)
-        ? "Changing your password is not available yet — this server does not have the account API."
+        ? "Changing your password is not available yet, this server does not have the account API."
         : firstMessage(err, "newPassword", "Could not change your password."));
     } finally {
       setPwBusy(false);
@@ -521,11 +521,11 @@ export default function AccountScreen() {
                   <dl className="acct-facts">
                     <div className="acct-fact">
                       <dt>Email</dt>
-                      <dd>{email || "—"}</dd>
+                      <dd>{email || "-"}</dd>
                     </div>
                     <div className="acct-fact">
                       <dt>Home organisation</dt>
-                      <dd>{homeOrg ?? "—"}</dd>
+                      <dd>{homeOrg ?? "-"}</dd>
                     </div>
                     <div className="acct-fact">
                       <dt>Account created</dt>
@@ -533,7 +533,7 @@ export default function AccountScreen() {
                     </div>
                     <div className="acct-fact">
                       <dt>Status</dt>
-                      <dd>{profile?.status ? <StatusPill status={profile.status} /> : "—"}</dd>
+                      <dd>{profile?.status ? <StatusPill status={profile.status} /> : "-"}</dd>
                     </div>
                   </dl>
                 </div>
@@ -642,7 +642,7 @@ export default function AccountScreen() {
                           }
                           disabled={opt.off}
                           aria-pressed={themePref === opt.key}
-                          title={opt.off ? "Not available — FleetTrack is light only" : undefined}
+                          title={opt.off ? "Not available, FleetTrack is light only" : undefined}
                           onClick={() => setThemePref(opt.key)}
                         >
                           {opt.label}

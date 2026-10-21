@@ -27,7 +27,7 @@ const fmt = (n) => (n ?? 0).toLocaleString("en-US");
  */
 function loadValue(v) {
   if ((v.tonnes ?? 0) > 0) return `${v.tonnes}t`;
-  return v.bucket === "plant" ? "no load" : "—";
+  return v.bucket === "plant" ? "no load" : "-";
 }
 
 // Normalise each stat's payload into a common chip shape.
@@ -69,7 +69,7 @@ function buildStrip(stat, summary, cargoWord, products) {
         secondary: `${v.driver} · ${PHASE_WORD[v.phase] ?? "en route"}`,
         // Docked vehicles show live load progress: what's come aboard so far
         // while loading, what's still on board while offloading.
-        value: v.tonnes > 0 ? `${v.tonnes}t ${v.phase === "LOADING" ? "on" : "left"}` : "—",
+        value: v.tonnes > 0 ? `${v.tonnes}t ${v.phase === "LOADING" ? "on" : "left"}` : "-",
         status: v.status,
       })),
     };

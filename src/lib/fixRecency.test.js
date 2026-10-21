@@ -13,7 +13,7 @@ describe("fixAgeMs", () => {
   it("reads the ISO field when the numeric one is absent", () => {
     expect(fixAgeMs({ capturedAt: "2026-09-09T11:30:00Z" }, NOW)).toBe(30 * 60_000);
   });
-  it("clamps a future fix to zero — that is a clock disagreement, not a fresh fix", () => {
+  it("clamps a future fix to zero, that is a clock disagreement, not a fresh fix", () => {
     expect(fixAgeMs(agedBy(-60_000), NOW)).toBe(0);
   });
 });
@@ -30,7 +30,7 @@ describe("fixRecencyTier", () => {
   it("is dark at the line the map already uses", () => {
     expect(fixRecencyTier(agedBy(DARK_AFTER_MS), NOW)).toBe("dark");
   });
-  it("is unknown with no timestamp — not dark, which would be a claim", () => {
+  it("is unknown with no timestamp, not dark, which would be a claim", () => {
     expect(fixRecencyTier({}, NOW)).toBe("unknown");
   });
 });
@@ -51,6 +51,6 @@ describe("fixAgeLabel", () => {
     expect(fixAgeLabel(agedBy(400 * 86_400_000), NOW)).toBe("1y");
   });
   it("is an em dash with nothing to measure", () => {
-    expect(fixAgeLabel({}, NOW)).toBe("—");
+    expect(fixAgeLabel({}, NOW)).toBe("-");
   });
 });

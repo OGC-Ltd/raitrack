@@ -28,7 +28,7 @@ import VehicleBriefCard     from "../cards/VehicleBriefCard";
 import FleetCargoCard       from "../cards/FleetCargoCard";
 
 import { useAppFields, useCompanies, useAppSelector, useAppActions } from "../../context/AppContext";
-import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
+import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -223,7 +223,7 @@ function FuelIncidentBody({ incident, vehicleId, cardShowsLevel = false }) {
   // ("Burn rate above the set ceiling") described findings that now go to the
   // daily summary. The rule stays in the tooltip for whoever audits it.
   const title   = theft ? 'Fuel theft alert' : (INCIDENT_TITLE[incident.reason] ?? 'Fuel alert');
-  const num     = (n) => (n == null ? '—' : n % 1 === 0 ? String(n) : n.toFixed(1));
+  const num     = (n) => (n == null ? '-' : n % 1 === 0 ? String(n) : n.toFixed(1));
   // CONFIRMED when the server is at least 80% sure it was a theft — the cause's
   // own confidence, on a cause allowed to be called one (lib/fuelAlerts). Not
   // "our telemetry watched it", which is what it used to mean and which a
@@ -263,7 +263,7 @@ function FuelIncidentBody({ incident, vehicleId, cardShowsLevel = false }) {
             by the same rule the notification text uses. */}
         <Tile label={theft ? 'Possible theft' : 'Fuel down'} value={num(litres)} unit={litres != null ? ' L' : ''}
               sub={spanMs ? `over ${fmtDuration(spanMs)}` : ''} valColor={accent} />
-        <Tile label="RATE" value={rate != null ? rate : '—'} unit={rate != null ? ' L/h' : ''}
+        <Tile label="RATE" value={rate != null ? rate : '-'} unit={rate != null ? ' L/h' : ''}
               sub={fmtAgo(began) ?? ''} />
         <Tile label="TANK BEFORE" value={num(before)} unit={before != null ? ' L' : ''}
               sub={began ? clock(began) : ''} />
@@ -604,7 +604,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
             <div className="fi-handle" aria-hidden="true" />
             <div className="fi-sheet-head">
               <div className="fi-sheet-head-left">
-                <span className="fi-sheet-title">{plate ?? '—'}</span>
+                <span className="fi-sheet-title">{plate ?? '-'}</span>
                 <span className={`fi-sheet-dot${theft ? '' : ' fi-sheet-dot--amber'}`} aria-hidden="true" />
               </div>
               <div className="fi-sheet-head-right">
@@ -625,7 +625,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
           onPointerCancel={onPointerUp}
         >
           <span className="fi-bar-title">
-            {theft ? 'Possible theft' : 'Fuel event'} · {plate ?? '—'}
+            {theft ? 'Possible theft' : 'Fuel event'} · {plate ?? '-'}
           </span>
           {/* Pin is a window's control, not a sheet's: it buys you a usable
               map beside the incident, and on a phone there is no beside. */}
@@ -635,7 +635,7 @@ function FuelIncidentModal({ incident, vehicle, plate, pinned, onPinnedChange, o
               onClick={() => { const v = !pinned; onPinnedChange(v); if (!v) setPos(null); persist({ pinned: v, x: v ? pos?.x : undefined }); }}
               aria-pressed={pinned}
               aria-label={pinned ? 'Unpin' : 'Pin'}
-              title={pinned ? 'Unpin — return to a dialog' : 'Pin — keep it open while you work'}
+              title={pinned ? 'Unpin, return to a dialog' : 'Pin, keep it open while you work'}
             ><IconPushPin on={pinned} /></button>
           )}
           <button
@@ -1171,7 +1171,7 @@ const TYPE_LABELS = { TRACTOR: "Tractor", TRUCK: "Truck", LORRY: "Lorry", SALOON
  * person reading a clock means by tomorrow.
  */
 function fmtClock(ms, relativeTo) {
-  if (ms == null || Number.isNaN(ms)) return "—";
+  if (ms == null || Number.isNaN(ms)) return "-";
   const d = new Date(ms);
   const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   if (relativeTo == null) return hhmm;
@@ -1519,6 +1519,11 @@ function RightPanel() {
   // shares the map's owner, so it can sit beside that unit's card.
   useEffect(() => { if (incidentOpen) claimSidePanel("map"); }, [incidentOpen]);
   useEffect(() => onSidePanelClaim("map", () => { setIncidentOpen(false); setHeld(null); }), []);
+  // …and with the map's other windows (lib/sidePanels claimMapWindow): opening
+  // Arrivals, Units or Halted closes it. The Fuel alerts list stays, since a
+  // row there is what opens this window.
+  useEffect(() => { if (incidentOpen) claimMapWindow("incident"); }, [incidentOpen]);
+  useEffect(() => onMapWindowClaim(["incident", "fuel"], () => { setIncidentOpen(false); setHeld(null); }), []);
 
   // Leaving the map for another page closes the window (appSlice tabChosen);
   // it is back only when an alert is opened again.
@@ -1651,6 +1656,11 @@ export function FuelIncidentHost() {
   // shares the map's owner, so it can sit beside that unit's card.
   useEffect(() => { if (incidentOpen) claimSidePanel("map"); }, [incidentOpen]);
   useEffect(() => onSidePanelClaim("map", () => { setIncidentOpen(false); setHeld(null); }), []);
+  // …and with the map's other windows (lib/sidePanels claimMapWindow): opening
+  // Arrivals, Units or Halted closes it. The Fuel alerts list stays, since a
+  // row there is what opens this window.
+  useEffect(() => { if (incidentOpen) claimMapWindow("incident"); }, [incidentOpen]);
+  useEffect(() => onMapWindowClaim(["incident", "fuel"], () => { setIncidentOpen(false); setHeld(null); }), []);
 
   // Leaving the map for another page closes the window (appSlice tabChosen);
   // it is back only when an alert is opened again.

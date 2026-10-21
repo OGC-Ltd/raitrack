@@ -171,7 +171,7 @@ function ClusterRow({ id, vehicle, alertOpts, statusColors }) {
   const state = vehicle ? markerState(vehicle, alertOpts) : null;
   const act   = ACTIVITY[state] ?? { label: "Unknown", glyph: "off" };
   const tier  = vehicle ? fixRecencyTier(vehicle) : "unknown";
-  const age   = vehicle ? fixAgeLabel(vehicle) : "—";
+  const age   = vehicle ? fixAgeLabel(vehicle) : "-";
 
   return (
     <li className="lf-ct-row">

@@ -10,7 +10,7 @@ function withVehicleInfo(record) {
   return {
     ...record,
     driver: vehicle?.driver ?? "Unassigned",
-    cargo: vehicle?.cargo ?? "—",
+    cargo: vehicle?.cargo ?? "-",
   };
 }
 

@@ -165,7 +165,7 @@ export function hasWorkingFuelSensor(readings) {
 // One em dash, used everywhere a channel is not reported, so "no reading" is
 // visually distinct from a real zero.
 
-export const NO_READING = '—'
+export const NO_READING = '-'
 
 export function formatKm(km) {
   return km == null ? NO_READING : `${Math.round(km).toLocaleString()} km`

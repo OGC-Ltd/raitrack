@@ -269,9 +269,9 @@ const FUEL_THEFT_CASES_BY_COMPANY = {
   sukari: [
     { vehicleId: "KBP 789L", driver: "F. Mwangi",  date: "2026-07-03", litres: 24, action: "Under investigation",        tone: "warn", open: true },
     { vehicleId: "KDC 890F", driver: "M. Njoroge", date: "2026-06-28", litres: 31, action: "Driver suspended",           tone: "bad",  open: false },
-    { vehicleId: "KBW 678P", driver: "C. Wambu",   date: "2026-06-22", litres: 18, action: "Resolved — sensor fault",    tone: "good", open: false },
+    { vehicleId: "KBW 678P", driver: "C. Wambu",   date: "2026-06-22", litres: 18, action: "Resolved: sensor fault",    tone: "good", open: false },
     { vehicleId: "KBV 012M", driver: "G. Wekesa",  date: "2026-06-15", litres: 40, action: "Escalated to management",    tone: "info", open: false },
-    { vehicleId: "KDF 123J", driver: "R. Koech",   date: "2026-06-09", litres: 22, action: "Resolved — fuel card audit", tone: "good", open: false },
+    { vehicleId: "KDF 123J", driver: "R. Koech",   date: "2026-06-09", litres: 22, action: "Resolved: fuel card audit", tone: "good", open: false },
   ],
 };
 

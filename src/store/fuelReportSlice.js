@@ -25,7 +25,7 @@ const initialState = {
   tab: "graph",
   headerCollapsed: false,
   bg: { trip: true, parking: true, stop: true },
-  lines: { fuelL: true, fuelSmoothL: false, speedKmh: false, mileageKm: false, altitudeM: false, extVoltageV: false, intVoltageV: false },
+  lines: { fuelL: true, fuelSmoothL: false, speedKmh: false, mileageKm: false, altitudeM: false, extVoltageV: false, intVoltageV: false, engineOn: true },
   marks: { fill: true, drain: true, stop: true },
   // Session only (not in FUEL_REPORT_PREFS). Per organisation: whether the
   // operator has picked or run anything this session — until they have, the

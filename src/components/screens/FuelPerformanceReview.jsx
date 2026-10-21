@@ -72,7 +72,7 @@ function MonthColumns({ months }) {
     <div className="fpr-cols" role="img" aria-label="Average litres per day, by month">
       {months.map((m, i) => (
         <div key={m.month} className="fpr-cols__col">
-          <span className="fpr-cols__v">{m.perDay ? `${(m.perDay / 1000).toFixed(1)}k` : "—"}</span>
+          <span className="fpr-cols__v">{m.perDay ? `${(m.perDay / 1000).toFixed(1)}k` : "-"}</span>
           <span className={`fpr-cols__bar${i === months.length - 1 ? " fpr-cols__bar--last" : ""}`}
                 style={{ height: `${(m.perDay / max) * 100}%` }} />
           <span className="fpr-cols__l">{monthLabel(m.month)}<small>{m.days} days</small></span>
@@ -101,7 +101,7 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
         {rows.map((u) => (
           <li key={u.id}>
             <button type="button" className="fpr-ex__row" onClick={() => onOpen?.(u.id)}
-                    title={`${u.name} — ${u.ratio != null ? `${pct(u.ratio)} of standard, ` : ""}${u.usableRefills}/${u.refills} usable refills, ${litres(u.litres)}. Open its vehicle analytics.`}>
+                    title={`${u.name} - ${u.ratio != null ? `${pct(u.ratio)} of standard, ` : ""}${u.usableRefills}/${u.refills} usable refills, ${litres(u.litres)}. Open its vehicle analytics.`}>
               <span className="fpr-ex__ref">{u.ref}{u.id === busiestId && <i aria-label="largest fuel user"> ★</i>}</span>
               <span className="fpr-ex__track">
                 <span className="fpr-ex__std" aria-hidden="true" style={{ left: `${TRACK / SCALE}%` }} />
@@ -123,7 +123,7 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
           <b>Not assessed ({rest.length}):</b>{" "}
           {rest.map((u, i) => (
             <span key={u.id}>{i > 0 && ", "}<button type="button" onClick={() => onOpen?.(u.id)}
-              title={u.rate == null ? "No standard on the register" : `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"} — at least 5 needed`}>{u.ref}</button>{u.rate == null ? " (no standard)" : ""}</span>
+              title={u.rate == null ? "No standard on the register" : `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"}, at least 5 needed`}>{u.ref}</button>{u.rate == null ? " (no standard)" : ""}</span>
           ))}
         </p>
       )}
@@ -154,7 +154,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
   });
 
   const t = review?.totals;
-  const dot = <span className="frp-kpi-none">—</span>;
+  const dot = <span className="frp-kpi-none">-</span>;
   const p = read?.pace;
 
   return (

@@ -72,9 +72,9 @@ const STATES = [
 ];
 
 function when(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? "-" : d.toISOString().slice(0, 10);
 }
 
 export default function RepairJobsPanel({
@@ -358,7 +358,7 @@ export default function RepairJobsPanel({
                     onClick={(e) => toggleRow(e, r.id)}
                     aria-expanded={openId === r.id}>
                     <td className="sp4-td--left sp4-td--pin">
-                      <span className="sp4-reg">{r.vehicle?.registrationPlate ?? "—"}</span>
+                      <span className="sp4-reg">{r.vehicle?.registrationPlate ?? "-"}</span>
                     </td>
                     <td className="sp4-td--left">
                       {humanKind(r.faultKind)}
@@ -375,7 +375,7 @@ export default function RepairJobsPanel({
                         return (
                           <span
                             className={"sp4-pill sp4-pill--crit rj-esc" + (esc.level >= 2 ? " rj-esc--again" : "")}
-                            title={`Escalated ${esc.level} time${esc.level === 1 ? "" : "s"} — ${escalationPhrase(esc)}. The job is still open.`}
+                            title={`Escalated ${esc.level} time${esc.level === 1 ? "" : "s"} - ${escalationPhrase(esc)}. The job is still open.`}
                           >
                             Escalated{esc.level > 1 ? ` ×${esc.level}` : ""}
                           </span>
@@ -391,7 +391,7 @@ export default function RepairJobsPanel({
                       {r.resolvedAt || !mayWork(r) || r.queue
                         ? (
                           <span className={"sp4-pill sp4-pill--" + (STAGE_PILL[r.stage] ?? "none")}>
-                            {STAGE_LABEL[r.stage] ?? r.stage ?? "—"}
+                            {STAGE_LABEL[r.stage] ?? r.stage ?? "-"}
                           </span>
                         )
                         : (
@@ -419,13 +419,13 @@ export default function RepairJobsPanel({
                         )}
                     </td>
                     <td className="sp4-td--left">
-                      {r.sparePart || <span className="sp4-muted">—</span>}
+                      {r.sparePart || <span className="sp4-muted">-</span>}
                     </td>
                     <td className="sp4-td--left">
                       {(() => {
                         const est = estimateState(r);
-                        if (est.tone === "none" && est.text === "—") {
-                          return <span className="sp4-muted">—</span>;
+                        if (est.tone === "none" && est.text === "-") {
+                          return <span className="sp4-muted">-</span>;
                         }
                         /* A pill only once it has slipped. An estimate that is
                            still ahead of itself is information, not an alarm,
@@ -437,7 +437,7 @@ export default function RepairJobsPanel({
                       })()}
                     </td>
                     <td className="sp4-td--left">
-                      {r.report?.reportedBy?.fullName ?? <span className="sp4-muted">—</span>}
+                      {r.report?.reportedBy?.fullName ?? <span className="sp4-muted">-</span>}
                     </td>
                     <td className="sp4-td--left">
                       <div className="sp4-assignment">
@@ -558,7 +558,7 @@ export default function RepairJobsPanel({
         >
           <DetailSidebarIdent
             kind={<span className="rjd-kind">{humanKind(openJob.faultKind)}</span>}
-            name={openJob.vehicle?.registrationPlate ?? "—"}
+            name={openJob.vehicle?.registrationPlate ?? "-"}
             sub={jobSubject(openJob)}
           />
           <DetailSidebarFacts facts={[

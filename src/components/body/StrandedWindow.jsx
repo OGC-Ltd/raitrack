@@ -90,7 +90,7 @@ function stoppedFor(ms) {
  *  rows are today's, and a unit stranded overnight must not read as having
  *  stopped this evening. */
 function stoppedAt(ms) {
-  if (!Number.isFinite(ms)) return { time: "—", date: "" };
+  if (!Number.isFinite(ms)) return { time: "-", date: "" };
   const d = new Date(ms);
   return {
     time: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,

@@ -244,8 +244,8 @@ export const STAGE_BLURB = {
   pending:          "Faulty, and no repair has been filed yet.",
   spare_outsourced: "Reported. The part is on order.",
   fixing:           "Reported. The work is under way.",
-  fixed:            "Signed off — the unit is back in service.",
-  failed:           "Signed off — the repair did not succeed.",
+  fixed:            "Signed off: the unit is back in service.",
+  failed:           "Signed off: the repair did not succeed.",
 };
 
 export const STAGE_PILL = {
@@ -493,7 +493,7 @@ export function emailBanner(email) {
         `Report filed. Queued for delivery to ${total} handler${total === 1 ? "" : "s"}.` };
     case "partial":
       return { tone: "warn", text:
-        `Report filed. Emailed to ${n} of ${total} — ${email.failed.join(", ")} was not reached.` };
+        `Report filed. Emailed to ${n} of ${total} - ${email.failed.join(", ")} was not reached.` };
     case "unconfigured":
       return { tone: "warn", text:
         "Report filed, but no email was sent: the mail service is not configured on the server. Tell an administrator." };
@@ -611,7 +611,7 @@ export function daysUntil(iso, now = Date.now()) {
  */
 export function estimateState(item, now = Date.now()) {
   const day = dayOf(item?.expectedResolutionAt);
-  if (!day) return { text: "—", tone: "none", overdue: false };
+  if (!day) return { text: "-", tone: "none", overdue: false };
   if (item?.resolvedAt) return { text: day, tone: "none", overdue: false };
 
   const d = daysUntil(day, now);

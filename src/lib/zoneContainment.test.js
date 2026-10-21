@@ -42,7 +42,7 @@ const corridor = {
   geometry: { type: "LineString", coordinates: [[30.70, -4.20], [30.72, -4.20]] },
 };
 
-describe("fenceContains — polygons", () => {
+describe("fenceContains, polygons", () => {
   it("finds a point inside the ring", () => {
     expect(fenceContains({ lat: -4.045, lng: 30.505 }, square)).toBe(true);
   });
@@ -71,7 +71,7 @@ describe("fenceContains — polygons", () => {
   });
 });
 
-describe("fenceContains — circles", () => {
+describe("fenceContains, circles", () => {
   it("measures against the radius", () => {
     expect(fenceContains({ lat: -4.10, lng: 30.60 }, circle)).toBe(true);      // dead centre
     expect(fenceContains({ lat: -4.1050, lng: 30.60 }, circle)).toBe(true);    // ~555 m out
@@ -86,7 +86,7 @@ describe("fenceContains — circles", () => {
   });
 });
 
-describe("fenceContains — corridors are NOT containment", () => {
+describe("fenceContains, corridors are NOT containment", () => {
   it("a unit standing on a haulage road is not inside anything", () => {
     // The headline rule. "Sukari to Rapogii road (Tarmac)" and
     // "Sukari-Factory to Ndiwa Marram Road" are fences, but a road is not a
@@ -101,7 +101,7 @@ describe("fenceContains — corridors are NOT containment", () => {
   });
 });
 
-describe("fenceContains — junk in, false out", () => {
+describe("fenceContains, junk in, false out", () => {
   it("never throws on a malformed fence", () => {
     // One bad fence must not take the whole rule down with it.
     for (const bad of [null, {}, { geometry: null }, { geometry: { type: "Polygon" } },
@@ -133,7 +133,7 @@ describe("containingFences / insideAnyFence", () => {
   });
 });
 
-describe("zoneTestFor — the three states", () => {
+describe("zoneTestFor, the three states", () => {
   const fc = { type: "FeatureCollection", features: [square, circle, corridor] };
 
   it("true when the unit is inside a fence", () => {
@@ -144,7 +144,7 @@ describe("zoneTestFor — the three states", () => {
     expect(zoneTestFor(fc)({ lat: -4.000, lng: 30.000 })).toBe(false);
   });
 
-  it("NULL when the org has no geometry — not false", () => {
+  it("NULL when the org has no geometry, not false", () => {
     // Sukari, West Kenya and Menengai are all in this state until their Wialon
     // zones are imported. "We never checked" must never reach an operator as
     // "it is not where it should be".
@@ -152,7 +152,7 @@ describe("zoneTestFor — the three states", () => {
     expect(zoneTestFor(null)({ lat: -4.045, lng: 30.505 })).toBeNull();
   });
 
-  it("NULL when the org has ONLY roads — they are not areas to be inside of", () => {
+  it("NULL when the org has ONLY roads, they are not areas to be inside of", () => {
     // Geometry loaded, but none of it can contain anything. Answering "not in
     // any zone" here is the same false certainty as answering with no fences.
     const roadsOnly = { type: "FeatureCollection", features: [corridor] };

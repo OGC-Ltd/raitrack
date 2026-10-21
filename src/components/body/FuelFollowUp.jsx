@@ -40,9 +40,9 @@ const WHEN = new Intl.DateTimeFormat("en-GB", {
 });
 export const when = (v) => {
   const t = v ? Date.parse(v) : NaN;
-  return Number.isFinite(t) ? WHEN.format(t) : "—";
+  return Number.isFinite(t) ? WHEN.format(t) : "-";
 };
-export const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L`);
+export const litres = (ml) => (ml == null ? "-" : `${(ml / 1000).toFixed(1)} L`);
 
 // The System screen's pill tones, so a follow-up reads the same in both.
 export const STAGE_PILL = {
@@ -99,7 +99,9 @@ function FollowUpWindow({ id, orgId, canTriage }) {
   const [loadError, setLoadError] = useState(null);
   const [mode, setMode] = useState("main"); // 'main' | 'decline' | 'assign' | 'recall'
   const [note, setNote] = useState("");
-  const [decision, setDecision] = useState(null); // 'escalate' | 'deescalate' | null
+  // De-escalate is picked to begin with (operator, 2026-10-20: "the
+  // deescalate button should be selected by default").
+  const [decision, setDecision] = useState("deescalate"); // 'escalate' | 'deescalate' | null
   const [reason, setReason] = useState(null);     // what an escalation is for: ESCALATION_REASONS
   const [assignees, setAssignees] = useState(null); // null until loaded
   const [assigneeId, setAssigneeId] = useState("");
@@ -144,7 +146,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
   const switchMode = (next) => {
     setMode(next);
     setNote("");
-    setDecision(null);
+    setDecision("deescalate");
     setReason(null);
     setAssigneeId("");
     setError(null);
@@ -236,7 +238,7 @@ function FollowUpWindow({ id, orgId, canTriage }) {
                     </div>
 
                     <dl className="ffu-facts">
-                      <div><dt className="sp4-label">Deleted by</dt><dd>{f.dismissedBy?.fullName ?? "—"}</dd></div>
+                      <div><dt className="sp4-label">Deleted by</dt><dd>{f.dismissedBy?.fullName ?? "-"}</dd></div>
                       {f.status === "OPEN" && f.assignedTo ? (
                         <div><dt className="sp4-label">Assigned to</dt><dd>{f.assignedTo.fullName}</dd></div>
                       ) : (

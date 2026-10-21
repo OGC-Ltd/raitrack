@@ -146,7 +146,7 @@ describe("the note at the foot", () => {
   it("says why, not just how many", () => {
     // "3 sections hidden" invites exactly the question it fails to answer.
     const note = withheldNote(["Daily activity"], { window: "September 2026" });
-    expect(note).toBe("Not shown: Daily activity — no records in September 2026.");
+    expect(note).toBe("Not shown: Daily activity, no records in September 2026.");
   });
 
   it("blames the filter when there is one", () => {
@@ -156,7 +156,7 @@ describe("the note at the foot", () => {
       filtered: true, window: "September 2026",
     });
     expect(note).toBe(
-      "Not shown: Sales hauls and Tonnage — no records in September 2026 " +
+      "Not shown: Sales hauls and Tonnage, no records in September 2026 " +
       "for the units and types selected.",
     );
   });

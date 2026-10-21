@@ -191,7 +191,7 @@ export async function getWarehouseAlerts({ companyId } = {}) {
     alerts.push({
       severity: "bad",
       title: `${nearlyFull.name} is almost full (${nearlyFull.capacityPct}%)`,
-      detail: `${nearlyFull.inbound} more delivery${nearlyFull.inbound === 1 ? " is" : "s are"} inbound today — consider rerouting to a depot with more room.`,
+      detail: `${nearlyFull.inbound} more delivery${nearlyFull.inbound === 1 ? " is" : "s are"} inbound today, consider rerouting to a depot with more room.`,
     });
   }
 
@@ -209,7 +209,7 @@ export async function getWarehouseAlerts({ companyId } = {}) {
     alerts.push({
       severity: "warn",
       title: `${reorderSoon.cargo} stock is getting low`,
-      detail: `About ${reorderSoon.daysLeft} days of stock left — worth planning ahead.`,
+      detail: `About ${reorderSoon.daysLeft} days of stock left, worth planning ahead.`,
     });
   }
 

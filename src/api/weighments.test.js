@@ -24,9 +24,9 @@ describe("weights", () => {
   it("says nothing rather than zero when a weight is missing", () => {
     // A ticket half-finished — weighed in, not yet out — is normal. Rendering
     // that as "0 kg" would put an empty lorry on the record.
-    expect(kilos(null)).toBe("—");
-    expect(tonnes(null)).toBe("—");
-    expect(kilos(undefined)).toBe("—");
+    expect(kilos(null)).toBe("-");
+    expect(tonnes(null)).toBe("-");
+    expect(kilos(undefined)).toBe("-");
   });
 });
 
@@ -41,7 +41,7 @@ describe("gaps", () => {
   it("distinguishes no gap from a short one", () => {
     // null is "there was no previous weighment" — the lorry's first of the
     // day. It must not collapse into the same label as a quick turnaround.
-    expect(gapLabel(null)).toBe("—");
+    expect(gapLabel(null)).toBe("-");
     expect(gapLabel(20_000)).toBe("under a minute");
   });
 });
@@ -62,8 +62,8 @@ describe("stamps", () => {
   });
 
   it("has an answer for a weighing that never happened", () => {
-    expect(clockLabel(null)).toBe("—");
-    expect(stampLabel(null, "2026-09-09")).toBe("—");
+    expect(clockLabel(null)).toBe("-");
+    expect(stampLabel(null, "2026-09-09")).toBe("-");
   });
 });
 

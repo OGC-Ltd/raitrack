@@ -17,7 +17,7 @@ const excavator = { id: "KDE 581S", name: "CAT EXCAVATOR 320D", online: true, en
 const truck     = { id: "KBH 123A", name: "Faw Prime mover CA4181", online: true, engine: "on", speed: 44 };
 const offline   = { id: "KCD 118P", name: "Faw Prime mover CA4181", online: false, engine: "off", speed: 0 };
 
-describe("matchesMapFilters — the tracked selection", () => {
+describe("matchesMapFilters, the tracked selection", () => {
   it("passes everything when the selection is empty", () => {
     // An empty selection is the absence of a narrowing, not "hide everything" —
     // the same rule matchesTypeFilter states for an empty type list.
@@ -59,7 +59,7 @@ describe("matchesMapFilters — the tracked selection", () => {
   });
 });
 
-describe("matchesMapFilters — the in-transit lens", () => {
+describe("matchesMapFilters, the in-transit lens", () => {
   it("keeps only units that are actually moving", () => {
     expect(matchesMapFilters(truck, { inTransitOnly: true })).toBe(true);
     expect(matchesMapFilters(excavator, { inTransitOnly: true })).toBe(false);   // engine on, stationary
@@ -79,7 +79,7 @@ describe("matchesMapFilters — the in-transit lens", () => {
   });
 });
 
-describe("matchesMapFilters — the chip-count contract", () => {
+describe("matchesMapFilters, the chip-count contract", () => {
   it("is exactly matchesFilter when no other axis is set", () => {
     // This is what keeps MapOverlay's numbers equal to what clicking them
     // shows. If the composer is ever a STRICTER superset for a bare filterKey,

@@ -72,7 +72,7 @@ function detailedMessage(body) {
     const text = Array.isArray(why) ? why.join('; ') : String(why)
     if (text) parts.push(`${field}: ${text}`)
   }
-  return parts.length > 0 ? `${body.message} — ${parts.join(' · ')}` : body.message
+  return parts.length > 0 ? `${body.message} - ${parts.join(' · ')}` : body.message
 }
 
 /**

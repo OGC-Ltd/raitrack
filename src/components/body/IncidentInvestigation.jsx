@@ -59,7 +59,7 @@ function metresBetween(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-const metres = (m) => (m == null ? "—" : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
+const metres = (m) => (m == null ? "-" : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 const duration = (ms) => {
   const m = Math.round(ms / 60_000);
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
@@ -116,7 +116,7 @@ function stopCard(stop, plate, onClose) {
   div.innerHTML =
     `<button type="button" class="ivp__x" aria-label="Close">×</button>` +
     `<dl>` +
-    `<div><dt>Object</dt><dd>${esc(plate ?? "—")}</dd></div>` +
+    `<div><dt>Object</dt><dd>${esc(plate ?? "-")}</dd></div>` +
     `<div><dt>Address</dt><dd class="ivp__addr">Looking up…</dd></div>` +
     `<div><dt>Position</dt><dd>${stop.lat.toFixed(6)}°, ${stop.lng.toFixed(6)}°</dd></div>` +
     `<div><dt>Came</dt><dd>${STAMP.format(stop.came)}</dd></div>` +
@@ -419,7 +419,7 @@ export function InvestigationWindow({ kind: subjectKind, inv, shaped, loading, e
                 </div>
                 <div className="ivw__cell">
                   <dt>Speed</dt>
-                  <dd>{p.here?.spd != null ? p.here.spd.toFixed(1) : "—"}<small>km/h</small></dd>
+                  <dd>{p.here?.spd != null ? p.here.spd.toFixed(1) : "-"}<small>km/h</small></dd>
                 </div>
                 <div className="ivw__cell">
                   <dt>Distance</dt>

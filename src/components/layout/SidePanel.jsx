@@ -515,7 +515,7 @@ export default function SidePanel() {
                 // sidebar is a 56px icon rail, so it has to be readable to a
                 // screen reader and not only on hover.
                 aria-label={item.key === 'alerts' && fuelAlarm ? `${item.label}, new fuel theft alert` : item.label}
-                title={allowed ? item.label : `${item.label} — no access here`}
+                title={allowed ? item.label : `${item.label}, no access here`}
               >
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
                 {item.key === 'alerts' && openAlerts > 0 && (

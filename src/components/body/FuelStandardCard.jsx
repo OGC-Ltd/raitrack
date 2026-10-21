@@ -63,7 +63,7 @@ export default function FuelStandardCard({ companyId, days, to, windowLabel, onO
       <div className="fsc-figs">
         <div><b>{litres(t.excessL, { short: true })}</b><span>above standard · {(t.excessShare * 100).toFixed(1)}% of fuel</span></div>
         <div><b>{read.attention.length}</b><span>unit{read.attention.length === 1 ? "" : "s"} 10% or more over</span></div>
-        <div><b>{read.reliableShare != null ? `${Math.round(read.reliableShare * 100)}%` : "—"}</b><span>refill records usable</span></div>
+        <div><b>{read.reliableShare != null ? `${Math.round(read.reliableShare * 100)}%` : "-"}</b><span>refill records usable</span></div>
         {read.worstGroup?.excessL > 0 && <div><b>{read.worstGroup.group}</b><span>most fuel above standard ({litres(read.worstGroup.excessL, { short: true })})</span></div>}
       </div>
       <div className="fsc-cols">

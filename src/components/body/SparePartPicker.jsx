@@ -338,7 +338,7 @@ export default function SparePartPicker({
                     <span className="sp4-pick-tick" aria-hidden="true">{isChosen ? "✓" : ""}</span>
                     {o.kind === "part"
                       ? <Marked text={o.part.name} q={query.trim()} />
-                      : <span>Use “<b>{o.text}</b>” — not in the catalogue</span>}
+                      : <span>Use “<b>{o.text}</b>”, not in the catalogue</span>}
                   </div>
                 );
               })}

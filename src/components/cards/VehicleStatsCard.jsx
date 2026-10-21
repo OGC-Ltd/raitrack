@@ -408,12 +408,12 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
   const place = placeName ?? vehicle.location ?? "";
   const isFix = /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(place);
   const locTitle = !coords ? (vehicle.location || undefined)
-    : place && !isFix ? `${place} — ${coords}`
+    : place && !isFix ? `${place} - ${coords}`
     : coords;
 
   const copyTitle = !coords ? "No coordinates available"
     : copyState === "copied" ? `Copied ${coords}`
-    : copyState === "failed" ? "Could not copy — the coordinates are in the tooltip"
+    : copyState === "failed" ? "Could not copy, the coordinates are in the tooltip"
     : `Copy coordinates: ${coords}`;
 
   // Connection, straight from the provider — see isOnline in lib/vehicleMap.
@@ -585,7 +585,7 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
           />
           <Tile
             label="SPEED"
-            value={engineOn ? vehicle.speed : "—"}
+            value={engineOn ? vehicle.speed : "-"}
             unit={engineOn ? " km/h" : ""}
             sub={engineOn
               ? (vehicle.speed > (vehicle.speedLimit ?? 80)
@@ -598,13 +598,13 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
           />
           <Tile
             label="MILEAGE"
-            value={vehicle.odometerKm != null ? Math.round(vehicle.odometerKm).toLocaleString() : "—"}
+            value={vehicle.odometerKm != null ? Math.round(vehicle.odometerKm).toLocaleString() : "-"}
             unit={vehicle.odometerKm != null ? " km" : ""}
             sub="total distance"
           />
           <Tile
             label="ENGINE HRS"
-            value={vehicle.engineHours != null ? Math.round(vehicle.engineHours).toLocaleString() : "—"}
+            value={vehicle.engineHours != null ? Math.round(vehicle.engineHours).toLocaleString() : "-"}
             unit={vehicle.engineHours != null ? " h" : ""}
             sub="total run time"
           />
@@ -616,7 +616,7 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
           {vsStd ? (
             <Tile
               label="BURN RATE"
-              value={vsStd.today != null ? vsStd.today.toFixed(vsStd.digits) : "—"}
+              value={vsStd.today != null ? vsStd.today.toFixed(vsStd.digits) : "-"}
               unit={` ${vsStd.unit}`}
               sub={vsStd.over != null
                 ? <>{vsStd.high && <WarnGlyph />}{` ${overWords(vsStd.over)} (${vsStd.std.toFixed(vsStd.digits)} ${vsStd.unit})`}</>
@@ -628,7 +628,7 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             <Tile
               label="BURN RATE"
               value={burn?.lPerH != null ? burn.lPerH.toFixed(1)
-                : burn?.lPerKm != null ? burn.lPerKm.toFixed(2) : "—"}
+                : burn?.lPerKm != null ? burn.lPerKm.toFixed(2) : "-"}
               unit={burn?.lPerKm != null && burn.lPerH == null ? " L/km" : " L/h"}
               sub={burn?.lPerH != null && burn.lPerKm != null ? `${burn.lPerKm.toFixed(2)} L/km today`
                 : burn ? "today"
@@ -661,7 +661,7 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
                 ? `${Math.round(vehicle.fuelLitres)}/${Math.round(vehicle.tankCapacityL)} L · ${fuel}%`
                 : vehicle.fuelLevel != null ? `${fuel}%`
                 : vehicle.fuelLitres != null ? `${Math.round(vehicle.fuelLitres)} L`
-                : "—"}
+                : "-"}
             </span>
           </div>
           <Bar pct={vehicle.fuelLevel != null ? fuel : 0} color={fuelColor} />
@@ -693,12 +693,12 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
               </span>
               <span className="vt-jarrow">→</span>
               <span className="vt-jdot dest" />
-              <span className="vt-jplace" title={locTitle}>{place || coords || "—"}</span>
+              <span className="vt-jplace" title={locTitle}>{place || coords || "-"}</span>
             </div>
             <div className="vt-journey-times">
               <span className="vt-jtime">
                 <span className="vt-jtime-lbl">DEPARTED</span>{" "}
-                {start ? fmtClock(start.t) : dayPending ? "…" : "—"}
+                {start ? fmtClock(start.t) : dayPending ? "…" : "-"}
               </span>
             </div>
             <div className="vt-bar-section" style={{ marginBottom: 8 }}>

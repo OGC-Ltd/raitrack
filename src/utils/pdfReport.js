@@ -174,7 +174,7 @@ export function downloadReport(doc, filename) {
     doc.setFontSize(7.5);
     doc.setTextColor(C.faint);
     doc.setCharSpace(1);
-    doc.text("FLEET TRACKING — CONFIDENTIAL", MARGIN, pageHeight - 24);
+    doc.text("FLEET TRACKING: CONFIDENTIAL", MARGIN, pageHeight - 24);
     doc.setCharSpace(0);
     doc.text(`Page ${i} of ${pageCount}`, pageWidth - MARGIN, pageHeight - 24, { align: "right" });
     doc.setFillColor(C.greenDeep);

@@ -141,7 +141,7 @@ const DRIVER_STATUS = {
   SUSPENDED: { label: "Suspended", tone: "suspended" },
   TERMINATED: { label: "Terminated", tone: "terminated" },
 };
-const statusMeta = (s) => DRIVER_STATUS[s] || { label: s || "—", tone: "unknown" };
+const statusMeta = (s) => DRIVER_STATUS[s] || { label: s || "-", tone: "unknown" };
 
 /**
  * The whole roster in one reading, for the strip at the top of the page
@@ -306,7 +306,7 @@ export default function DriversScreen() {
       accentColor: accent,
     });
     addSummaryCards(doc, [
-      { value: `${fmt(driver.rating, 1)} / 5`,   label: tier.label ? `Rating — ${tier.label}` : "Rating", color: tier.color },
+      { value: `${fmt(driver.rating, 1)} / 5`,   label: tier.label ? `Rating: ${tier.label}` : "Rating", color: tier.color },
       { value: fmt(totals.trips),                label: "Trips",                  color: "#3b82f6" },
       { value: `${fmt(totals.tonnes, 1)} t`,     label: "Tonnes ferried",         color: TONNES_COLOR },
       { value: `${fmt(totals.mileageKm)} km`,    label: "Mileage",                color: MILEAGE_COLOR },
@@ -322,7 +322,7 @@ export default function DriversScreen() {
         ["Hours on road",      `${fmt(totals.hoursOnRoad, 1)} h`],
         ["Fuel-theft cases",   fmt(totals.fuelTheftCases)],
         ["Overspeeding cases", fmt(totals.overspeedingCases)],
-        ["Heaviest load",      heaviestLoad ? `${fmt(heaviestLoad.tonnes, 1)} t · ${fmtDay(heaviestLoad.date)} · ${heaviestLoad.route}` : "—"],
+        ["Heaviest load",      heaviestLoad ? `${fmt(heaviestLoad.tonnes, 1)} t · ${fmtDay(heaviestLoad.date)} · ${heaviestLoad.route}` : "-"],
       ],
     });
     if (byDay.length > 0) {
@@ -379,7 +379,7 @@ export default function DriversScreen() {
                   title="Tonnes ferried"
                   series={fleet.byDay}
                   valueKey="tonnes"
-                  value={loading ? "—" : fmt(fleet.totals.tonnes, 1)}
+                  value={loading ? "-" : fmt(fleet.totals.tonnes, 1)}
                   unit="t"
                   tone="tonnes"
                   type="bar"
@@ -390,7 +390,7 @@ export default function DriversScreen() {
                   title="Mileage covered"
                   series={fleet.byDay}
                   valueKey="mileageKm"
-                  value={loading ? "—" : fmt(fleet.totals.mileageKm)}
+                  value={loading ? "-" : fmt(fleet.totals.mileageKm)}
                   unit="km"
                   tone="mileage"
                   type="line"
@@ -475,7 +475,7 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
   }, []);
 
   const per = (n, d) => (d > 0 ? n / d : null);
-  const dash = (v, dec, unit) => (v == null ? "—" : `${fmt(v, dec)}${unit}`);
+  const dash = (v, dec, unit) => (v == null ? "-" : `${fmt(v, dec)}${unit}`);
   const windowDays = totals.windowDays ?? 90;
   const headline = [
     { label: "Trips", value: fmt(totals.trips) },
@@ -754,7 +754,7 @@ function FleetCard({ fleet, loading }) {
   const facts = [
     { label: "Driving now", value: fmt(fleet.onRoad), live: fleet.onRoad > 0 },
     { label: "Drove in 90 days", value: fmt(fleet.drove) },
-    { label: "Average rating", value: fleet.avgRating == null ? "—" : `${fmt(fleet.avgRating, 1)} / 5` },
+    { label: "Average rating", value: fleet.avgRating == null ? "-" : `${fmt(fleet.avgRating, 1)} / 5` },
   ];
   return (
     <div className="dr-cell dr-fleet">
@@ -857,7 +857,7 @@ function DriverIdCard({ driver, tier, st, row, w, liveVehicle }) {
         </div>
         <div>
           <dt>{row?.vehicleFrom === "assignment" ? "Assigned to" : "Last drove"}</dt>
-          <dd>{row?.vehicle ?? "—"}</dd>
+          <dd>{row?.vehicle ?? "-"}</dd>
         </div>
         <div>
           <dt>Active</dt>
@@ -901,7 +901,7 @@ function DriverGauge({ g, off }) {
             transform={`rotate(-90 ${c} ${c})`}
           />
         </svg>
-        <span className="dr-gauge__val">{off ? "—" : Math.round(g.value)}</span>
+        <span className="dr-gauge__val">{off ? "-" : Math.round(g.value)}</span>
       </span>
       <span className="dr-gauge__lbl">{g.label}<span className="dr-meter__unit">{g.unit}</span></span>
     </li>
@@ -1375,7 +1375,7 @@ function VehicleCell({ plate, from }) {
   if (!plate) {
     return (
       <td className="dr-veh dr-veh--none" data-label="Vehicle" title="No trip on record and no vehicle assigned">
-        —
+        -
       </td>
     );
   }
@@ -1384,7 +1384,7 @@ function VehicleCell({ plate, from }) {
     <td
       className={`dr-veh${posted ? " dr-veh--posted" : ""}`}
       data-label="Vehicle"
-      title={posted ? "Assigned to this unit — no trip on record yet" : "Last unit driven"}
+      title={posted ? "Assigned to this unit, no trip on record yet" : "Last unit driven"}
     >
       {plate}
     </td>

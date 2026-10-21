@@ -195,7 +195,7 @@ const fmt = (n, d = 0) =>
   });
 
 const fmtOrDash = (n, d = 0) =>
-  n == null ? "—" : fmt(n, d);
+  n == null ? "-" : fmt(n, d);
 
 const days_ = (n) =>
   `${fmt(n)} day${n === 1 ? "" : "s"}`;
@@ -954,7 +954,7 @@ export default function AnalyticsScreen() {
     plate:
       d.registrationPlate ??
       d.name ??
-      "—",
+      "-",
     // Litres, not millilitres: the endpoint prices and converts every level on
     // the way out (fuel-pricing), so this arrives in the same unit — and at the
     // same rounding — as the "Litres lost" total the table has to sum to.
@@ -1518,7 +1518,7 @@ export default function AnalyticsScreen() {
 
                       <span className="an-card__hint">
                         {!machineWeek
-                          ? "—"
+                          ? "-"
                           : !endsToday
                             ? month
                             : machineWeek.days ===
@@ -1597,7 +1597,7 @@ export default function AnalyticsScreen() {
                               (machineWeek.expectedHoursPerDay ?? 1)) *
                             100,
                           )
-                          : "—"}
+                          : "-"}
                         % of the{" "}
                         {
                           machineWeek?.expectedHoursPerDay
@@ -1652,7 +1652,7 @@ export default function AnalyticsScreen() {
                               .length,
                             1,
                           )
-                          : "—"
+                          : "-"
                       }
                       unit="ha / day"
                       series={areaDays?.days.map(
@@ -2106,7 +2106,7 @@ export default function AnalyticsScreen() {
                                     ops.dispatches.truckList[0].at,
                                   ),
                                 )
-                                : "—"
+                                : "-"
                             }
                             em
                           />
@@ -2149,7 +2149,7 @@ export default function AnalyticsScreen() {
                                     .plateUnresolved,
                                 )}{" "}
                                 dispatched on a plate the
-                                registry does not hold —
+                                registry does not hold,
                                 counted in none of the
                                 above.
                               </div>
@@ -2550,7 +2550,7 @@ export default function AnalyticsScreen() {
                               ? fmtDay(
                                 busiestDay.day,
                               )
-                              : "—"
+                              : "-"
                           }
                           sub={
                             busiestDay
@@ -2579,7 +2579,7 @@ export default function AnalyticsScreen() {
                               ? `${fmt(
                                 furthestDay.distanceKm,
                               )} km`
-                              : "—"
+                              : "-"
                           }
                           sub={
                             furthestDay
@@ -2662,7 +2662,7 @@ export default function AnalyticsScreen() {
                                   areaBest.km2,
                                   3,
                                 )} km²`
-                                : "—"
+                                : "-"
                             }
                             sub={
                               areaBest
@@ -2691,7 +2691,7 @@ export default function AnalyticsScreen() {
                                   1e6,
                                   2,
                                 )} km²`
-                                : "—"
+                                : "-"
                             }
                             sub={
                               areaDays
@@ -3375,7 +3375,7 @@ function ChartKeys({
               disabled={none}
               title={
                 none
-                  ? `${item.label} — no reading in this window`
+                  ? `${item.label}, no reading in this window`
                   : `${
                     off ? "Show" : "Hide"
                   } ${item.label}`
@@ -4368,7 +4368,7 @@ function UnitFuelChart({
     // Drawn with connectNulls off and gappy by design — the formatter is
     // handed the null directly rather than a zero.
     if (value == null) {
-      return "— no reading";
+      return ", no reading";
     }
 
     if (key === "km") {

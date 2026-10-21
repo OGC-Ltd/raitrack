@@ -148,7 +148,7 @@ export function awaitingSignIn(trip) {
 /** The leg in the operator's words, refined by how this run will be closed. */
 export function legLabel(trip) {
   if (!trip) return null;
-  if (awaitingSignIn(trip)) return "Back — awaiting sign-in";
+  if (awaitingSignIn(trip)) return "Back, awaiting sign-in";
   return LEG_LABEL[trip.leg] ?? trip.leg;
 }
 

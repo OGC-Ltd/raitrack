@@ -111,7 +111,7 @@ export default function UserMenu() {
               email is here because it is the thing you actually sign in with
               and the one field the account form will not let you change. */}
           <div className="user-menu__who">
-            <div className="user-menu__name">{user.fullName || "—"}</div>
+            <div className="user-menu__name">{user.fullName || "-"}</div>
             {user.email && <div className="user-menu__email">{user.email}</div>}
           </div>
 

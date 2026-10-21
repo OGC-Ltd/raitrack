@@ -26,6 +26,7 @@ import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import { ONLINE_COLORS } from "../../lib/vehicleMap";
 import { displayPlate } from "../../lib/plate";
+import UnitTypeIcon from "../shared/UnitTypeIcon";
 
 /* The five states deriveStatus produces, not the four the mock had: 'idling'
    was missing, so every unit burning fuel at a standstill rendered green and
@@ -168,7 +169,7 @@ function SearchContent() {
               className="mobile-search__result"
               onClick={() => handleSelect(v)}
             >
-              <span className="mobile-search__dot" style={{ background: color }} />
+              <UnitTypeIcon vehicle={v} size={30} />
               <span className="mobile-search__result-info">
                 <span className="mobile-search__result-reg">{displayPlate(v)}</span>
                 <span className="mobile-search__result-driver">{under}</span>

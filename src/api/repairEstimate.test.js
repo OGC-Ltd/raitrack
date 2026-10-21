@@ -80,7 +80,7 @@ describe("what the Repairs tab prints", () => {
 
   it("says nothing at all for a job that never named a date", () => {
     const e = estimateState(open(null), NOW);
-    expect(e.text).toBe("—");
+    expect(e.text).toBe("-");
     expect(e.overdue).toBe(false);
   });
 
@@ -129,7 +129,7 @@ describe("what the Repairs tab prints", () => {
   });
 
   it("survives a row that is missing entirely", () => {
-    expect(estimateState(null, NOW).text).toBe("—");
+    expect(estimateState(null, NOW).text).toBe("-");
     expect(estimateState(undefined, NOW).overdue).toBe(false);
   });
 });

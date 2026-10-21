@@ -45,7 +45,7 @@ const frame = (over = {}) => ({
   ...over,
 })
 
-describe('applyLiveUpdate — the declared load', () => {
+describe('applyLiveUpdate, the declared load', () => {
   it('survives a frame that carries a null weight', () => {
     // Exactly what the Wialon adapter emits: the key is absent AND, on an
     // older server, present-and-null. Neither may clear the load.
@@ -69,7 +69,7 @@ describe('applyLiveUpdate — the declared load', () => {
   })
 })
 
-describe('applyDispatchUpdate — the paperwork', () => {
+describe('applyDispatchUpdate, the paperwork', () => {
   /** What the server pushes when the guard signs a sales run out. */
   const signedOut = {
     vehicleId: 'ckv0000000000000000000ab',
@@ -108,14 +108,14 @@ describe('applyDispatchUpdate — the paperwork', () => {
     expect(next.driver).toBe('Maxwell Masinde')
   })
 
-  it('leaves the measured trip alone — it carries a name, not coordinates', () => {
+  it('leaves the measured trip alone, it carries a name, not coordinates', () => {
     const onTrip = { ...loaded(), trip: { destination: 'Raiply', destinationLat: 0.1, destinationLng: 34.9 } }
     const next = applyDispatchUpdate(onTrip, signedOut)
     expect(next.trip).toBe(onTrip.trip)
   })
 })
 
-describe('applyDispatchUpdate — the seal serial', () => {
+describe('applyDispatchUpdate, the seal serial', () => {
   const base = { id: 'v1', cargo: 'Empty', weight: 0, trip: { serialNumber: null, destination: 'Raiply' }, sealSerial: null };
 
   it('takes a serial that arrives after the sign-out, over the trip\'s empty one', () => {

@@ -181,7 +181,7 @@ export default function RoutePlayback({
         severity: e.severity,
         left: ((e.t - t0) / (t1 - t0)) * 100,
         width: Math.max(0.35, (((e.endT ?? e.t) - e.t) / (t1 - t0)) * 100),
-        title: `${fmt.format(e.t)} · ${e.label}${e.detail ? ` — ${e.detail}` : ""}`,
+        title: `${fmt.format(e.t)} · ${e.label}${e.detail ? ` - ${e.detail}` : ""}`,
       }));
   }, [seen, t0, t1, fmt]);
 
@@ -295,7 +295,7 @@ export default function RoutePlayback({
                   key={m.t}
                   className="rp__midnight"
                   style={{ left: `${m.left}%` }}
-                  title={`Midnight \u2014 ${m.title} begins`}
+                  title={`Midnight: ${m.title} begins`}
                 />
               ))}
               {gapTicks.map((g, i) => (

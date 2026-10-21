@@ -87,8 +87,8 @@ export default function DeliveryCard({ delivery, pending }) {
                 the useful part — the paperwork goes up well before the wheels
                 turn, and a unit can go silent the moment it does. */}
             {pending
-              ? `Dispatched${pending.destination ? ` to ${pending.destination}` : ""} — ${pending.reason}`
-              : "No active trip — vehicle at rest"}
+              ? `Dispatched${pending.destination ? ` to ${pending.destination}` : ""} - ${pending.reason}`
+              : "No active trip, vehicle at rest"}
           </span>
         </div>
         {pending?.driver && <div className="dc-driver dc-driver--pending">{pending.driver}</div>}
@@ -173,7 +173,7 @@ export default function DeliveryCard({ delivery, pending }) {
           <div className="dc-nobar">
             {leg === "no-fix"
               ? "No position reported since dispatch"
-              : "Destination not on the map — no distance to measure"}
+              : "Destination not on the map, no distance to measure"}
           </div>
         ) : (
           <>

@@ -92,6 +92,16 @@ describe('chartSeries', () => {
     expect(s.length).toBeLessThanOrEqual(400);
     expect(Math.min(...s.map((x) => x.fuelL))).toBe(60);
   });
+
+  it('carries the engine as 1 / 0 and keeps every on and off through the thinning', () => {
+    // Engine on for a few minutes, twice, inside an otherwise idle day.
+    const p = track([[1000, 'off', 100], [7, 'idle', 100], [1000, 'off', 100], [3, 'idle', 100], [990, 'off', 100]]);
+    const s = chartSeries(p, 300);
+    expect(s.length).toBeLessThan(p.length);
+    const steps = s.filter((x, i) => i > 0 && x.engineOn !== s[i - 1].engineOn).map((x) => [x.t, x.engineOn]);
+    expect(steps).toEqual([[p[1000].t, 1], [p[1007].t, 0], [p[2007].t, 1], [p[2010].t, 0]]);
+    expect(chartSeries([{ t: 1, engineOn: undefined }])[0].engineOn).toBeNull();
+  });
 });
 
 describe('durationLabel', () => {

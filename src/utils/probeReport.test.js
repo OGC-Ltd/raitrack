@@ -37,7 +37,11 @@ const row = (over = {}) => ({
 
 /** Excel expects CRLF from a .csv on every platform. */
 const CRLF = String.fromCharCode(13, 10);
-const parse = (csv) => csv.split("\r\n").map(l => l.split(","));
+// Fields are split on commas outside quotes: a label such as "Probe reads
+// empty, check probe fitting and wiring" is one quoted field.
+const parse = (csv) => csv.split("\r\n").map(l =>
+  (l.match(/("([^"]|"")*"|[^,]*)(,|$)/g) ?? []).filter((m, i, a) => !(m === "" && i === a.length - 1))
+    .map(m => m.replace(/,$/, "").replace(/^"(.*)"$/s, "$1").replace(/""/g, '"')));
 
 describe("an export contains the filtered set and nothing else", () => {
   // The defect this pins: the CSV and the PDF table always carried the filtered

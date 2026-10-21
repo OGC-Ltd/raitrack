@@ -181,7 +181,7 @@ export default function RangeCalendar({ from, to, max, maxDays, onChange }) {
           <div className="rcal-foot">
             <span className="rcal-hint">
               {anchor
-                ? `From ${SHORT.format(at(anchor))} — now pick the last day`
+                ? `From ${SHORT.format(at(anchor))}, now pick the last day`
                 : `Pick a day, or the first and last of up to ${maxDays}`}
             </span>
             <div className="rcal-presets">

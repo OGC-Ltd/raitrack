@@ -84,7 +84,7 @@ const FLEET_TZ = "Africa/Nairobi";
 const fmt = (n, d = 1) =>
   n == null ? null : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
-const NA = <span className="an-tbl__na">—</span>;
+const NA = <span className="an-tbl__na">-</span>;
 
 /* The date and the clock, separately.
  *
@@ -230,7 +230,7 @@ export default function SugarHaulUnits({ hauls, loading }) {
             ? `${fmt(totals.units, 0)} unit${totals.units === 1 ? "" : "s"}${
                 totals.tonnes != null ? ` · ${fmt(totals.tonnes)} t` : ""
               }`
-            : "—"}
+            : "-"}
         </span>
       </div>
 

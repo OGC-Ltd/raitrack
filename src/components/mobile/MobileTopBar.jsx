@@ -47,8 +47,8 @@ export default function MobileTopBar({ onOpenSwitcher }) {
             type="button"
             className="mobile-topbar__status-pill mobile-topbar__status-pill--offline"
             onClick={retry}
-            aria-label="Status failed to load — tap to retry"
-            title="Status failed to load — tap to retry"
+            aria-label="Status failed to load, tap to retry"
+            title="Status failed to load, tap to retry"
           >
             <span className="mobile-topbar__dot" />
             !

@@ -106,7 +106,7 @@ export function byMostRecent(a, b) {
 
 /** One date/time cell, day and time on one line: "24 Sept 20:58". */
 function When({ value, label }) {
-  if (!value) return <span className="fuel-alerts__cell fuel-alerts__cell--none">—</span>;
+  if (!value) return <span className="fuel-alerts__cell fuel-alerts__cell--none">-</span>;
   return (
     <span className="fuel-alerts__cell" title={`${label} ${value.full}`}>
       <span className="fuel-alerts__day">{value.day}</span>{" "}
@@ -309,7 +309,7 @@ Show this unit and open its incident`}
                     <span className="fuel-alerts__plate-full">{displayPlate(v)}</span>
                     <span className="fuel-alerts__plate-short">{withoutPrefix(v.id, prefix)}</span>
                   </span>
-                  <span className="fuel-alerts__vol">{L(inc?.volumeMl) ?? "—"}</span>
+                  <span className="fuel-alerts__vol">{L(inc?.volumeMl) ?? "-"}</span>
                   <span className="fuel-alerts__began"><When value={began} label="Happened" /></span>
                   <span className="fuel-alerts__reported"><When value={reported} label="Alert" /></span>
                 </button>

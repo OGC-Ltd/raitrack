@@ -39,7 +39,7 @@ const fmtDay = (d) =>
     { day: "numeric", month: "short", timeZone: "UTC" });
 
 const fmt = (n, d = 1) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
 function TipBody({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -84,7 +84,7 @@ export default function SugarTonnageChart({ hauls, loading }) {
       <div className="an-card__head">
         <span className="an-card__title">Sugar Delivered per Day</span>
         <span className="an-card__hint">
-          {runs > 0 ? `${fmt(total)} t · ${fmt(bags, 0)} bags` : "—"}
+          {runs > 0 ? `${fmt(total)} t · ${fmt(bags, 0)} bags` : "-"}
         </span>
       </div>
 

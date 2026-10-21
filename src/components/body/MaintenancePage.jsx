@@ -214,7 +214,7 @@ export default function MaintenancePage({ vehicles = [], selectedId, onSelectVeh
     const doc = createReport({
       companyName: activeCompany?.name || 'Fleet',
       reportTitle: 'Vehicle Maintenance Report',
-      subtitle:    `${v.id} · ${v.vehicleType} · Driver ${v.driver ?? '—'}`,
+      subtitle:    `${v.id} · ${v.vehicleType} · Driver ${v.driver ?? '-'}`,
       accentColor: activeCompany?.accentColor,
     });
     // Only measured channels. The report used to lead with a "Health %" and
@@ -264,7 +264,7 @@ export default function MaintenancePage({ vehicles = [], selectedId, onSelectVeh
               <span className="maint-nohistory__hint">
                 {range
                   ? <>Nothing was recorded between {range.start} and {range.end}. Pick a
-                     wider period on the left — the {rows.length.toLocaleString()}-vehicle
+                     wider period on the left, the {rows.length.toLocaleString()}-vehicle
                      registry below is live either way.</>
                   : <>Trip, distance and speed trends appear here once telemetry starts
                      arriving. The {rows.length.toLocaleString()}-vehicle registry below is live.</>}
@@ -408,7 +408,7 @@ function VehicleReadingsCard({ vehicle }) {
         <div className="maint-invoice">
           <div className="maint-invoice__title">Reported Channels</div>
           <div className="maint-invoice__meta-row">
-            <span>{vehicle.vehicleType ?? '—'}</span>
+            <span>{vehicle.vehicleType ?? '-'}</span>
             <span>{issuedAt}</span>
           </div>
           <div className="maint-invoice__meta-row">
@@ -440,7 +440,7 @@ function VehicleReadingsCard({ vehicle }) {
           <div className="maint-invoice__rule" />
           <div className="maint-invoice__totals">
             <span style={{ color: 'var(--text-2)' }}>
-              {NO_READING} means this unit does not report that channel — not a zero.
+              {NO_READING} means this unit does not report that channel, not a zero.
             </span>
           </div>
         </div>

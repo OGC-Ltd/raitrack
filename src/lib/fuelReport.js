@@ -277,8 +277,11 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
 /**
  * The chart's line, thinned to about `max` points by keeping each bucket's
  * first, lowest and highest reading — a drop or a filling inside a bucket
- * survives the thinning, which a plain stride would cut out.
- * Each point: {t, fuelL, fuelSmoothL, speedKmh, mileageKm, altitudeM, extVoltageV, intVoltageV}.
+ * survives the thinning, which a plain stride would cut out. So does every
+ * reading where the engine came on or went off, so the engine line keeps its
+ * steps.
+ * Each point: {t, fuelL, fuelSmoothL, speedKmh, mileageKm, altitudeM, extVoltageV, intVoltageV,
+ * engineOn}; engineOn is 1, 0, or null where the tracker did not say.
  */
 export function chartSeries(pings, max = 1500) {
   const out = [];
@@ -299,6 +302,7 @@ export function chartSeries(pings, max = 1500) {
       altitudeM: Number.isFinite(p.altitudeM) ? p.altitudeM : null,
       extVoltageV: Number.isFinite(p.extVoltageV) ? p.extVoltageV : null,
       intVoltageV: Number.isFinite(p.intVoltageV) ? p.intVoltageV : null,
+      engineOn: p.engineOn === true ? 1 : p.engineOn === false ? 0 : null,
     });
   }
   smoothFuel(all);
@@ -311,6 +315,9 @@ export function chartSeries(pings, max = 1500) {
     if (withFuel.length) {
       keep.add(withFuel.reduce((m, x) => (x.fuelL < m.fuelL ? x : m)));
       keep.add(withFuel.reduce((m, x) => (x.fuelL > m.fuelL ? x : m)));
+    }
+    for (let k = i; k < i + b.length; k += 1) {
+      if (k > 0 && all[k].engineOn != null && all[k - 1].engineOn != null && all[k].engineOn !== all[k - 1].engineOn) keep.add(all[k]);
     }
     out.push(...[...keep].sort((a, b2) => a.t - b2.t));
   }
@@ -351,7 +358,7 @@ export function smoothFuel(points, halfMs = SMOOTH_HALF_MS) {
 
 /** "2h 05m", "45m", "0m". */
 export function durationLabel(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (!Number.isFinite(ms) || ms < 0) return '-';
   const m = Math.round(ms / 60_000);
   if (m < 60) return `${m}m`;
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;

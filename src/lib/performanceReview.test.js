@@ -25,7 +25,7 @@ describe("formatting", () => {
   });
   it("percentages, bands, lists", () => {
     expect(pct(1.64)).toBe("164%");
-    expect(pct(null)).toBe("—");
+    expect(pct(null)).toBe("-");
     expect(band({ ratio: 1.2 })).toBe("over");
     expect(band({ ratio: 1.05 })).toBe("slight");
     expect(band({ ratio: 0.8 })).toBe("within");

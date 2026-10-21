@@ -91,7 +91,7 @@ const ASSET_DETAILS = {
     telemetry: { engineTemp: 83, fuelLevel: 85, batteryLevel: 63, gpsStatus: "Connected" },
     delivery: { from: "Kisii Sugar Cane Fields", fromTime: "08:51", to: "Kisumu Sugar Mill", eta: "ETA 15:24", progress: 42, capacity: "102 km / 244 km covered" },
     storage: { commodity: "Processed Sugar", grade: "Grade A", stored: 33 },
-    ai: { farm: "KBV 012M · G. Wekesa", msg: "Minor delay building on route to Kisumu Sugar Mill — traffic conditions may push ETA back slightly.", fuelNote: "85% fuel", risk: "Low" },
+    ai: { farm: "KBV 012M · G. Wekesa", msg: "Minor delay building on route to Kisumu Sugar Mill, traffic conditions may push ETA back slightly.", fuelNote: "85% fuel", risk: "Low" },
     maintenance: { item: "Wheel alignment", dueIn: "Due 2026-06-18", pct: 100, status: "Overdue" },
   },
   "KBW 678P": {
@@ -169,7 +169,7 @@ const ASSET_DETAILS = {
     telemetry: { engineTemp: 84, fuelLevel: 76, batteryLevel: 61, gpsStatus: "Connected" },
     delivery: { from: "Thika Sugar Factory", fromTime: "07:27", to: "Mombasa Port Depot", eta: "ETA 17:01", progress: 40, capacity: "96 km / 239 km covered" },
     storage: { commodity: "Processed Sugar", grade: "Grade A", stored: 31 },
-    ai: { farm: "KCA 112X · A. Otieno", msg: "Minor delay building on route to Mombasa Port Depot — traffic conditions may push ETA back slightly.", fuelNote: "76% fuel", risk: "Low" },
+    ai: { farm: "KCA 112X · A. Otieno", msg: "Minor delay building on route to Mombasa Port Depot, traffic conditions may push ETA back slightly.", fuelNote: "76% fuel", risk: "Low" },
     maintenance: { item: "Brake pad inspection", dueIn: "Due 2026-08-11", pct: 89, status: "Good" },
   },
   "KBZ 334Y": {
@@ -208,7 +208,7 @@ const ASSET_DETAILS = {
     telemetry: { engineTemp: 83, fuelLevel: 84, batteryLevel: 59, gpsStatus: "Connected" },
     delivery: { from: "Thika Sugar Factory", fromTime: "09:48", to: "Nairobi CBD Warehouse", eta: "ETA 16:23", progress: 53, capacity: "118 km / 222 km covered" },
     storage: { commodity: "Processed Sugar", grade: "Grade B", stored: 25 },
-    ai: { farm: "KDE 901A · S. Njuguna", msg: "Minor delay building on route to Nairobi CBD Warehouse — traffic conditions may push ETA back slightly.", fuelNote: "84% fuel", risk: "Low" },
+    ai: { farm: "KDE 901A · S. Njuguna", msg: "Minor delay building on route to Nairobi CBD Warehouse, traffic conditions may push ETA back slightly.", fuelNote: "84% fuel", risk: "Low" },
     maintenance: { item: "Brake pad inspection", dueIn: "Due 2026-08-19", pct: 74, status: "Good" },
   },
   "KDF 230B": {
@@ -221,7 +221,7 @@ const ASSET_DETAILS = {
     telemetry: { engineTemp: 72, fuelLevel: 37, batteryLevel: 81, gpsStatus: "Connected" },
     delivery: { from: "Machakos Farm Gate", fromTime: "06:04", to: "Nairobi CBD Warehouse", eta: "ETA 17:00", progress: 35, capacity: "106 km / 303 km covered" },
     storage: { commodity: "Processed Sugar", grade: "Grade A", stored: 33 },
-    ai: { farm: "KDF 230B · P. Kariuki", msg: "Minor delay building on route to Nairobi CBD Warehouse — traffic conditions may push ETA back slightly.", fuelNote: "37% fuel", risk: "Low" },
+    ai: { farm: "KDF 230B · P. Kariuki", msg: "Minor delay building on route to Nairobi CBD Warehouse, traffic conditions may push ETA back slightly.", fuelNote: "37% fuel", risk: "Low" },
     maintenance: { item: "Suspension check", dueIn: "Due 2026-08-03", pct: 79, status: "Good" },
   },
   "KDC 445C": {
@@ -247,7 +247,7 @@ const ASSET_DETAILS = {
     telemetry: { engineTemp: 73, fuelLevel: 88, batteryLevel: 91, gpsStatus: "Connected" },
     delivery: { from: "Eldoret Grain Store", fromTime: "07:57", to: "Nakuru Depot #3", eta: "ETA 12:51", progress: 47, capacity: "118 km / 250 km covered" },
     storage: { commodity: "Processed Sugar", grade: "Grade A", stored: 28 },
-    ai: { farm: "KDH 778D · F. Chebet", msg: "Minor delay building on route to Nakuru Depot #3 — traffic conditions may push ETA back slightly.", fuelNote: "88% fuel", risk: "Low" },
+    ai: { farm: "KDH 778D · F. Chebet", msg: "Minor delay building on route to Nakuru Depot #3, traffic conditions may push ETA back slightly.", fuelNote: "88% fuel", risk: "Low" },
     maintenance: { item: "Engine oil & filter change", dueIn: "Due 2026-06-28", pct: 100, status: "Overdue" },
   },
 };

@@ -95,7 +95,7 @@ export function statMeta(summary, products = []) {
 }
 
 export function statValues(key, summary, cargoWord) {
-  if (!summary) return { value: "—", unit: "", sub: "" };
+  if (!summary) return { value: "-", unit: "", sub: "" };
   if (key === "inTransit") {
     // The VEHICLE COUNT always leads. This button answers "how much of my fleet
     // is out right now", and that is a count of vehicles — tonnage is what they
@@ -151,7 +151,7 @@ export function statValues(key, summary, cargoWord) {
       sub: `${live.length} in transit`,
     };
   }
-  return { value: "—", unit: "", sub: "" };
+  return { value: "-", unit: "", sub: "" };
 }
 
 export function StatButton({ label, value, unit, sub, color, icon, active, onClick }) {

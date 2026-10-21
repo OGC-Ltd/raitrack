@@ -262,7 +262,7 @@ const TIME_FMT = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-
 /** "12 Oct 14:05" on the fleet's clock, or "—". */
 export function when(iso) {
   const t = Date.parse(iso ?? "");
-  if (!Number.isFinite(t)) return "—";
+  if (!Number.isFinite(t)) return "-";
   return `${DAY_FMT.format(t)} ${TIME_FMT.format(t)}`;
 }
 
@@ -284,7 +284,7 @@ export function reportedLate(alert) {
 
 /** "45 s", "3 min", "1 h 05 min". */
 export function duration(sec) {
-  if (sec == null || !Number.isFinite(sec)) return "—";
+  if (sec == null || !Number.isFinite(sec)) return "-";
   if (sec < 60) return `${Math.round(sec)} s`;
   if (sec < 3600) return `${Math.round(sec / 60)} min`;
   const h = Math.floor(sec / 3600);
@@ -292,8 +292,8 @@ export function duration(sec) {
   return `${h} h ${String(m).padStart(2, "0")} min`;
 }
 
-export const litres = (l) => (l == null ? "—" : `${l.toFixed(1)} L`);
-export const kmh = (v) => (v == null ? "—" : `${Math.round(v)} km/h`);
+export const litres = (l) => (l == null ? "-" : `${l.toFixed(1)} L`);
+export const kmh = (v) => (v == null ? "-" : `${Math.round(v)} km/h`);
 
 /** The one figure that says what happened, for the table's Alert column. */
 export function headline(alert) {

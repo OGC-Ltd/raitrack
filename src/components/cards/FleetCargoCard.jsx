@@ -63,7 +63,7 @@ export default function FleetCargoCard({ companyId }) {
         <div
           className="fcc-total-cell"
           title={siloCount === 0
-            ? "No storage recorded for this organisation — cargo hauled for other sites is not stock"
+            ? "No storage recorded for this organisation, cargo hauled for other sites is not stock"
             : `Stock held across ${siloCount ?? "this organisation's"} silo${siloCount === 1 ? "" : "s"}`}
         >
           <span className="fcc-total-value">

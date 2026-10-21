@@ -10,7 +10,7 @@ const row = (over) => ({
   dismissedAt: null, ...over,
 });
 
-describe('fuelRateFindings — what the daily summary counts', () => {
+describe('fuelRateFindings, what the daily summary counts', () => {
   it("takes the announced reasons, oldest first, at the alert's time and with its litres", () => {
     const f = fuelRateFindings([
       row({ id: 'late', beganAt: '2026-09-27T09:00:00.000Z', causeReason: 'burn-far-above-band', stolenMl: 14_800 }),

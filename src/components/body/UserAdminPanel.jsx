@@ -483,7 +483,7 @@ function ViewIcon({ kind }) {
  * states.
  */
 function Contact({ value, kind, shown, onToggle, who }) {
-  if (!value) return <span className="ua-row__none">{"\u2014"}</span>;
+  if (!value) return <span className="ua-row__none">{"-"}</span>;
 
   if (shown) {
     return (
@@ -560,7 +560,7 @@ function ToastMark({ tone }) {
  * hard to scan for the rows that are hardest to tell apart.
  */
 function OrgMark({ org, className = "" }) {
-  const name = org?.name ?? "\u2014";
+  const name = org?.name ?? "-";
   const mark = org ? companyMark(org) : null;
   if (mark) {
     return <img className={"ua-orgbadge__mark " + className} src={mark} alt="" />;
@@ -588,7 +588,7 @@ function OrgMark({ org, className = "" }) {
  * are sugar mills with a cane leaf in the artwork.
  */
 function OrgBadge({ org, id, here }) {
-  const name = org?.name ?? id ?? "\u2014";
+  const name = org?.name ?? id ?? "-";
   return (
     /* The title is not decoration here: under 640px the list view hides the
        name and leaves the mark, and this is what a pointer gets back. The
@@ -769,10 +769,10 @@ const rowKey = (u) => `${u.scopeOrgId}:${u.id}`;
 
 
 function fmtDate(value) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   return Number.isNaN(d.getTime())
-    ? "—"
+    ? "-"
     : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -1546,7 +1546,7 @@ export default function UserAdminPanel() {
         // Reporting that as reason "unknown" sent people looking for a mail
         // failure that never happened.
         flag(
-          `Account created, but this server cannot send invitations yet — it is running an older build. ` +
+          `Account created, but this server cannot send invitations yet, it is running an older build. ` +
           `${form.email.trim()} has no way to sign in until it is updated and they receive a link.`,
         );
       } else {
@@ -1560,7 +1560,7 @@ export default function UserAdminPanel() {
           "not-requested": "no invitation was requested",
         }[result?.invite?.reason] ?? result?.invite?.reason ?? "reason not reported";
         flag(
-          `Account created, but the invitation could not be sent — ${why}. ` +
+          `Account created, but the invitation could not be sent, ${why}. ` +
           `They cannot sign in until they receive a link.`,
         );
       }
@@ -1581,7 +1581,7 @@ export default function UserAdminPanel() {
       closeInvite();
     } catch (err) {
       fail(isMissingEndpoint(err)
-        ? "Creating users is not available yet — this server does not have the account API."
+        ? "Creating users is not available yet, this server does not have the account API."
         : firstMessage(err, "email", "Could not create that user."));
     } finally {
       setBusy(false);
@@ -1755,7 +1755,7 @@ export default function UserAdminPanel() {
       revalidate();
     } catch (err) {
       fail(isMissingEndpoint(err)
-        ? "Permanent deletion is not available yet — this server does not have the account API."
+        ? "Permanent deletion is not available yet, this server does not have the account API."
         : firstMessage(err, null, "Could not delete that account."));
     } finally {
       setDeleteBusy(false);
@@ -1802,7 +1802,7 @@ export default function UserAdminPanel() {
     } catch (err) {
       closeEditor();
       fail(isMissingEndpoint(err)
-        ? "Editing access is not available yet — this server does not have the membership API."
+        ? "Editing access is not available yet, this server does not have the membership API."
         : firstMessage(err, null, "Could not read that person's access."));
     }
   }
@@ -2443,8 +2443,8 @@ export default function UserAdminPanel() {
                     <>
                       <dl className="ua-facts">
                         <dt>Full name</dt><dd>{editUser.fullName}</dd>
-                        <dt>Phone</dt><dd>{editUser.phone || "\u2014"}</dd>
-                        <dt>Employee ID</dt><dd>{editUser.employeeId || "\u2014"}</dd>
+                        <dt>Phone</dt><dd>{editUser.phone || "-"}</dd>
+                        <dt>Employee ID</dt><dd>{editUser.employeeId || "-"}</dd>
                       </dl>
                     </>
                   )}
@@ -2538,7 +2538,7 @@ export default function UserAdminPanel() {
           <TabEmptyState
             icon={<DriversIcon size={44} />}
             title="No accounts yet"
-            hint="Nobody has been invited to the dashboard yet. Invite somebody and they will appear here. Drivers synced from the operations registry are not shown — they have no sign-in."
+            hint="Nobody has been invited to the dashboard yet. Invite somebody and they will appear here. Drivers synced from the operations registry are not shown, they have no sign-in."
           />
         ) : !loading && shown.length === 0 ? (
           /* NOT the empty state above, and the difference matters: there are
@@ -2811,7 +2811,7 @@ export default function UserAdminPanel() {
                                 <span className="ua-danger__hint">
                                   The account row is removed from storage along with its role
                                   grants, sign-in sessions and invitations. It is not marked
-                                  deleted — there is nothing left to restore, and the same
+                                  deleted, there is nothing left to restore, and the same
                                   address can be invited again as a new person.
                                   {" "}Suspending keeps the account and ends every session.
                                 </span>
@@ -2866,7 +2866,7 @@ export default function UserAdminPanel() {
                               </label>
                                 <span className="ua-danger__state" id={`${u.id}-confirm-state`} role="status">
                                   {match === "match"
-                                    ? "Matches — the button below is live."
+                                    ? "Matches, the button below is live."
                                     : match === "partial"
                                       ? "Not the whole address yet. Capitals do not matter."
                                       : "The button below stays disabled until this matches."}

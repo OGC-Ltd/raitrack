@@ -69,7 +69,7 @@ describe("eventLabel", () => {
   });
 });
 
-describe("isTheftEvent — the only event the window highlights", () => {
+describe("isTheftEvent, the only event the window highlights", () => {
   it("is a drop that stayed down and was called a possible theft", () => {
     expect(isTheftEvent({ type: "drop", verdict: "DRAIN", cause: "SIPHON" })).toBe(true);
     expect(isTheftEvent({ type: "drop", verdict: "DRAIN", cause: "UNEXPLAINED_BURN" })).toBe(false);
@@ -86,7 +86,7 @@ describe("unexplainedMatters", () => {
   });
 });
 
-describe("dayAssessment — the day read for the case, not left as 'not explained'", () => {
+describe("dayAssessment, the day read for the case, not left as 'not explained'", () => {
   // MUFINDI - CTR 07, 27 Sep 2026: parked all day, engine never on, 21.3 L
   // drawn off at 08:11 (680.8 L → 659.6 L), the day opening at 691.7 L.
   const THEFT = { id: "ctr07", type: "drop", at: "2026-09-27T05:11:00Z", litres: 21.3, verdict: "DRAIN", cause: "SIPHON" };
@@ -102,7 +102,7 @@ describe("dayAssessment — the day read for the case, not left as 'not explaine
     expect(dayAssessment(ctr07, incident, true)).toEqual([
       "The engine did not run today, so none of the 32.1 L the tank lost was burned.",
       "21.3 L of it is this possible theft at 08:11 (680.8 L → 659.6 L).",
-      "The other 10.8 L went before 08:11, with no event of its own: the tank read 691.7 L at the start of the day and 680.8 L when the theft began — a fall too gradual to be reported on its own.",
+      "The other 10.8 L went before 08:11, with no event of its own: the tank read 691.7 L at the start of the day and 680.8 L when the theft began, a fall too gradual to be reported on its own.",
       "Nothing has gone since.",
     ]);
   });
@@ -122,7 +122,7 @@ describe("dayAssessment — the day read for the case, not left as 'not explaine
       ],
     };
     expect(dayAssessment(ex10, null, true)).toEqual([
-      "The engine ran 12 h 59 min at its usual 11.2 L/h, which burns 145.1 L — all of the 99.1 L the tank lost.",
+      "The engine ran 12 h 59 min at its usual 11.2 L/h, which burns 145.1 L, enough to cover all of the 99.1 L the tank lost.",
       "That is 46.0 L under its usual rate for those hours, so nothing is missing.",
     ]);
   });

@@ -63,7 +63,7 @@ const fmtDay = (d) =>
     { day: "numeric", month: "short", timeZone: "UTC" });
 
 const fmt = (n, d = 1) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
 /**
  * @param views  Which denominators to offer, by key. Defaults to all of them.

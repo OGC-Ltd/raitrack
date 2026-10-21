@@ -75,7 +75,7 @@ function fuelTag(inc) {
 }
 
 const HHMM = new Intl.DateTimeFormat('en-KE', { hour: '2-digit', minute: '2-digit', hour12: false });
-const fmtTime = (ms) => (Number.isFinite(ms) ? HHMM.format(ms) : '—');
+const fmtTime = (ms) => (Number.isFinite(ms) ? HHMM.format(ms) : '-');
 
 function fmtMinutes(min) {
   if (min == null || !Number.isFinite(min)) return NA;
@@ -535,10 +535,10 @@ async function buildVehicleReport({ orgId, vehicle, readings, today, runs, place
     subtitle: `${displayPlate(vehicle)} · ${fmtDay(fleetDayKey())}`,
   });
   addSummaryCards(doc, [
-    { label: 'Fuel level',   value: readings.fuelPct != null ? `${readings.fuelPct}%` : '—' },
-    { label: 'Fuel used',    value: today.usedL != null ? `${num(today.usedL, 1)} L` : '—' },
-    { label: 'Engine hours', value: readings.engineHours != null ? `${num(readings.engineHours)} h` : '—' },
-    { label: 'Odometer',     value: readings.odometerKm != null ? `${num(readings.odometerKm)} km` : '—' },
+    { label: 'Fuel level',   value: readings.fuelPct != null ? `${readings.fuelPct}%` : '-' },
+    { label: 'Fuel used',    value: today.usedL != null ? `${num(today.usedL, 1)} L` : '-' },
+    { label: 'Engine hours', value: readings.engineHours != null ? `${num(readings.engineHours)} h` : '-' },
+    { label: 'Odometer',     value: readings.odometerKm != null ? `${num(readings.odometerKm)} km` : '-' },
   ]);
   addSectionTitle(doc, 'Vehicle');
   addTable(doc, {
@@ -546,15 +546,15 @@ async function buildVehicleReport({ orgId, vehicle, readings, today, runs, place
     body: [
       ['Plate', vehicle.id],
       ['Driver', vehicle.driver ?? 'Unassigned'],
-      ['Type', vehicle.vehicleType ?? '—'],
+      ['Type', vehicle.vehicleType ?? '-'],
       ['Status', statusTag(vehicle).text],
-      ['Location', place ?? vehicle.location ?? '—'],
-      ['Last report', readings.lastReportedAt ? new Date(readings.lastReportedAt).toLocaleString('en-KE') : '—'],
-      ['Load', vehicle.cargo ?? '—'],
-      ['Idle time today', today.idleMin != null ? fmtMinutes(today.idleMin) : '—'],
-      ['Distance today', today.distanceKm != null ? `${num(today.distanceKm, 1)} km` : '—'],
+      ['Location', place ?? vehicle.location ?? '-'],
+      ['Last report', readings.lastReportedAt ? new Date(readings.lastReportedAt).toLocaleString('en-KE') : '-'],
+      ['Load', vehicle.cargo ?? '-'],
+      ['Idle time today', today.idleMin != null ? fmtMinutes(today.idleMin) : '-'],
+      ['Distance today', today.distanceKm != null ? `${num(today.distanceKm, 1)} km` : '-'],
       ['Overspeed events today', String(runs.length)],
-      ['Fuel probe', readings.fuelProbeFault ? 'Fault reported' : readings.fuelPct != null ? 'OK' : '—'],
+      ['Fuel probe', readings.fuelProbeFault ? 'Fault reported' : readings.fuelPct != null ? 'OK' : '-'],
     ],
   });
   if (events.length) {

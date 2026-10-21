@@ -76,9 +76,9 @@ function detectAnomalies(vehicles) {
         : v.connectionOnline != null;
 
       const [label, detail] =
-        everReported ? ["Signal Lost",       `No ping received — last seen ${age} ago`]
+        everReported ? ["Signal Lost",       `No ping received, last seen ${age} ago`]
       : hasTracker   ? ["Never Reported",    "Tracker is bound but has never sent a ping"]
-      :                ["No Tracker Fitted", "No tracker is bound to this vehicle — nothing can report"];
+      :                ["No Tracker Fitted", "No tracker is bound to this vehicle, nothing can report"];
 
       anomalies.push({
         vehicleId:   vid,
@@ -126,7 +126,7 @@ function detectAnomalies(vehicles) {
           type:        "transit_no_engine",
           label:       "Engine Sensor Off in Transit",
           severity:    "warning",
-          detail:      `Vehicle moving for ${mins} min but engine sensor reads OFF — sensor may be disconnected`,
+          detail:      `Vehicle moving for ${mins} min but engine sensor reads OFF, sensor may be disconnected`,
           detectedAt:  now,
         });
       }
@@ -153,7 +153,7 @@ function detectAnomalies(vehicles) {
         type:        "low_accuracy",
         label:       "Poor GPS Accuracy",
         severity:    "warning",
-        detail:      `Last fix accuracy: ${Math.round(v.accuracyM)}m — position unreliable`,
+        detail:      `Last fix accuracy: ${Math.round(v.accuracyM)}m, position unreliable`,
         detectedAt:  now,
       });
     }
@@ -169,7 +169,7 @@ function detectAnomalies(vehicles) {
         type:        "fuel_anomaly",
         label:       "Fuel Sensor Anomaly",
         severity:    "warning",
-        detail:      `Fuel jumped +${Math.abs(Math.round(v.fuelUsedMl / 1000))}L while stationary — no matching refill event`,
+        detail:      `Fuel jumped +${Math.abs(Math.round(v.fuelUsedMl / 1000))}L while stationary, no matching refill event`,
         detectedAt:  now,
       });
     }

@@ -576,3 +576,6 @@
 @media (prefers-reduced-motion: reduce) {
   .an-body { transition: none; }
 }
+
+/* A unit option carries the unit's picture after its box (shared/UnitTypeIcon). */
+.an-filter__opt--unit { grid-template-columns: 16px auto minmax(0, 1fr) auto; }

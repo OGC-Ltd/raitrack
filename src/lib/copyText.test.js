@@ -55,7 +55,7 @@ describe("copyText", () => {
     expect(exec).toHaveBeenCalledWith("copy");
   });
 
-  it("falls back when writeText rejects — denied, or document not focused", async () => {
+  it("falls back when writeText rejects, denied, or document not focused", async () => {
     vi.stubGlobal("navigator", {
       clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
     });

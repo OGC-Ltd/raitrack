@@ -22,8 +22,8 @@ import {
   assignRepairItem, listRepairAssignees, setRepairInspection, updateRepairSparePart, localDayISO,
 } from "../../api/repairs";
 
-const kes = (n) => (n == null ? "—" : `KES ${Number(n).toLocaleString("en-KE")}`);
-const day = (v) => (v ? String(v).slice(0, 10) : "—");
+const kes = (n) => (n == null ? "-" : `KES ${Number(n).toLocaleString("en-KE")}`);
+const day = (v) => (v ? String(v).slice(0, 10) : "-");
 // Quick fix dates beside the picker: the usual answers, one tap each.
 const FIX_PICKS = [["Today", 0, "Today"], ["+1d", 1, "Tomorrow"], ["+3d", 3, "In 3 days"], ["+1w", 7, "In 1 week"]];
 
@@ -175,7 +175,7 @@ function Checklist({ orgId, job, inspections, canWork, onToast, onChanged }) {
               {(i?.note && editing !== key) || i ? (
                 <span className="aud-check-meta sp4-muted">
                   {i?.note && editing !== key && <span className="aud-check-notetext">{i.note} · </span>}
-                  {i && `${i.inspectedBy ?? "—"}, ${day(i.inspectedAt)}`}
+                  {i && `${i.inspectedBy ?? "-"}, ${day(i.inspectedAt)}`}
                 </span>
               ) : null}
             </li>
@@ -225,7 +225,7 @@ function PartCard({ p, canWork, busy, collecting, fixDate, setFixDate, onCollect
             <li key={key} className={`aud-step${idx <= reached ? " aud-step--done" : ""}${idx === reached ? " aud-step--now" : ""}`}>
               <span className="aud-step-dot" aria-hidden="true" />
               <span className="aud-step-label">{label}</span>
-              <span className="aud-step-at">{p[at] ? longDay(p[at]) : "—"}</span>
+              <span className="aud-step-at">{p[at] ? longDay(p[at]) : "-"}</span>
             </li>
           ))}
         </ol>

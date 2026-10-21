@@ -24,7 +24,7 @@ describe("clusterByGrid", () => {
     expect(out.every(c => c.members.length === 1)).toBe(true);
   });
 
-  it("returns singles as groups of one — the caller decides what that means", () => {
+  it("returns singles as groups of one, the caller decides what that means", () => {
     const out = clusterByGrid([at("A", 0, 0)], { project });
     expect(out).toHaveLength(1);
     expect(out[0].members).toHaveLength(1);
@@ -43,7 +43,7 @@ describe("clusterByGrid", () => {
     expect(b[0].members.map(m => m.id)).toEqual(["A", "Z"]);
   });
 
-  it("is stable under a pan — the grid is anchored to the world, not the view", () => {
+  it("is stable under a pan, the grid is anchored to the world, not the view", () => {
     // Same world positions, projected twice. A viewport-anchored grid would
     // re-cut these; a world-anchored one cannot.
     const pts = [at("A", 5, 5), at("B", 12, 12), at("C", 200, 200)];
