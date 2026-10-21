@@ -428,7 +428,7 @@ const TOOL_ICON = {
   point: <><path d="M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M8 8.5h8M8 11.5h5" /></>,
 };
 const TOOLS = {
-  capture: { label: "Capture a period", hint: "Drag across the graph to capture a period · up to four, compared below" },
+  capture: { label: "Capture a period", hint: "Drag across the graph to capture a period · up to four · point at Compare to see them" },
   zoom:    { label: "Zoom to an area",  hint: "Drag a box round the part to zoom in on" },
   point:   { label: "Point detail",     hint: "Click a reading for its detail" },
 };
@@ -473,51 +473,72 @@ const diffText = (a, b, unit) => {
 };
 
 /**
- * The captured periods side by side, under the graph. With two, a last
- * column gives the second less the first.
+ * The captured periods side by side, in a card over the graph (operator,
+ * 2026-10-21: a tooltip, so the graph keeps its height). A chip in the
+ * plot's corner names the periods; pointing at it opens the card, a click
+ * keeps it open. With two, a last column gives the second less the first.
  */
 function CaptureCompare({ captures, stats, onRemove, onClear, onZoom }) {
   const two = captures.length === 2;
+  const [kept, setKept] = useState(false);
+  const [hover, setHover] = useState(false);
+  const open = kept || hover;
   return (
-    <section className="frp-cmp" aria-label="Captured periods">
-      <div className="frp-cmp__head">
-        <span className="frp-cmp__title">Compare periods</span>
-        {captures.length < 2 && <span className="frp-cmp__note">Capture another period to compare.</span>}
-        <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all</button>
-      </div>
-      <div className="frp-cmp__scroll">
-        <table className="frp-cmp__table">
-          <thead>
-            <tr>
-              <td />
-              {captures.map((c, i) => (
-                <th key={c.id} scope="col">
-                  <div className="frp-cmp__col">
-                    <i className="frp-cmp__sw" style={{ background: c.color }} aria-hidden="true" />
-                    <span className="frp-cmp__letter">{c.letter}</span>
-                    <button type="button" className="frp-cmp__x" onClick={() => onRemove(c.id)}
-                            aria-label={`Remove period ${c.letter}`} title="Remove">×</button>
-                  </div>
-                  <button type="button" className="frp-cmp__when" onClick={() => onZoom(c)} title="Zoom the graph to this period">
-                    {at(stats[i].from)} – {at(stats[i].to)}
-                  </button>
-                </th>
-              ))}
-              {two && <th scope="col" className="frp-cmp__diffh">{captures[1].letter} − {captures[0].letter}</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {COMPARE_ROWS.map(([label, show, num, unit]) => (
-              <tr key={label}>
-                <th scope="row">{label}</th>
-                {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
-                {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), unit) : ""}</td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div className="frp-cmp-wrap" style={{ left: PLOT_LEFT + 8, top: PLOT_TOP + 6 }}
+         onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
+         onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <button type="button" className={`frp-cmp-chip${kept ? " is-on" : ""}`} aria-expanded={open}
+              onClick={() => setKept((k) => !k)}
+              title={kept ? "Close the comparison" : "Keep the comparison open"}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+             strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{TOOL_ICON.capture}</svg>
+        Compare
+        {captures.map((c) => (
+          <span key={c.id} className="frp-cmp-chip__p" style={{ background: c.color }}>{c.letter}</span>
+        ))}
+      </button>
+      {open && (
+        <section className="frp-cmp" aria-label="Captured periods">
+          <div className="frp-cmp__head">
+            <span className="frp-cmp__title">Compare periods</span>
+            {captures.length < 2 && <span className="frp-cmp__note">Capture another period to compare.</span>}
+            <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all</button>
+          </div>
+          <div className="frp-cmp__scroll">
+            <table className="frp-cmp__table">
+              <thead>
+                <tr>
+                  <td />
+                  {captures.map((c, i) => (
+                    <th key={c.id} scope="col">
+                      <div className="frp-cmp__col">
+                        <i className="frp-cmp__sw" style={{ background: c.color }} aria-hidden="true" />
+                        <span className="frp-cmp__letter">{c.letter}</span>
+                        <button type="button" className="frp-cmp__x" onClick={() => onRemove(c.id)}
+                                aria-label={`Remove period ${c.letter}`} title="Remove">×</button>
+                      </div>
+                      <button type="button" className="frp-cmp__when" onClick={() => onZoom(c)} title="Zoom the graph to this period">
+                        {at(stats[i].from)} – {at(stats[i].to)}
+                      </button>
+                    </th>
+                  ))}
+                  {two && <th scope="col" className="frp-cmp__diffh">{captures[1].letter} − {captures[0].letter}</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARE_ROWS.map(([label, show, num, unit]) => (
+                  <tr key={label}>
+                    <th scope="row">{label}</th>
+                    {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
+                    {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), unit) : ""}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -943,13 +964,13 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
                      cursor={{ stroke: "var(--sp4-text-3)", strokeWidth: 1, strokeDasharray: "3 3" }} />
           </ComposedChart>
         </ResponsiveContainer>
+        {captures.length > 0 && (
+          <CaptureCompare captures={captures} stats={captureStats}
+                          onRemove={(id) => setCaptures((cs) => cs.filter((c) => c.id !== id))}
+                          onClear={() => setCaptures([])}
+                          onZoom={(c) => { setZoom(isWholeDay([c.from, c.to], full) ? null : [c.from, c.to]); setYZoom(null); }} />
+        )}
       </div>
-      {captures.length > 0 && (
-        <CaptureCompare captures={captures} stats={captureStats}
-                        onRemove={(id) => setCaptures((cs) => cs.filter((c) => c.id !== id))}
-                        onClear={() => setCaptures([])}
-                        onZoom={(c) => { setZoom(isWholeDay([c.from, c.to], full) ? null : [c.from, c.to]); setYZoom(null); }} />
-      )}
     </div>
   );
 }

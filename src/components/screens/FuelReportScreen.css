@@ -203,8 +203,40 @@
 .frp-pin__events li { display: flex; align-items: center; gap: 6px; font-size: var(--sp4-label); }
 .frp-pin__off { margin-left: auto; color: var(--sp4-text-3); white-space: nowrap; }
 
-/* The captured periods compared, under the graph. */
-.frp-cmp { flex: none; max-height: 42%; display: flex; flex-direction: column; margin: 6px 0 0 8px; border-top: 1px solid var(--sp4-line); }
+/* The captured periods compared: a chip in the plot's top-left corner, and
+   over the graph from it a card, so the graph keeps its full height. */
+.frp-cmp-wrap {
+  position: absolute; z-index: 4;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  max-width: calc(100% - 100px); max-height: calc(100% - 70px);
+  cursor: auto;
+}
+.frp-cmp-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 6px 0 8px;
+  border: 1px solid var(--sp4-line-hi); border-radius: 12px;
+  background: var(--sp4-surface); color: var(--sp4-text-2);
+  font: inherit; font-size: var(--sp4-label); font-weight: 600;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  cursor: pointer;
+}
+.frp-cmp-chip:hover, .frp-cmp-chip.is-on { color: var(--sp4-text-1); border-color: var(--sp4-accent); }
+.frp-cmp-chip:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.frp-cmp-chip__p {
+  display: inline-grid; place-items: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  color: #fff; font-size: 10px; font-weight: 700;
+}
+.frp-cmp {
+  min-height: 0; max-width: 100%;
+  display: flex; flex-direction: column;
+  padding: 2px 10px 6px;
+  border: 1px solid var(--sp4-line-hi); border-radius: 8px;
+  background: var(--sp4-surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  user-select: text;
+}
+.app--light .frp-cmp, .app--light .frp-cmp-chip { border-color: var(--sp4-line); }
 .frp-cmp__head { display: flex; align-items: center; gap: 10px; padding: 6px 0 4px; }
 .frp-cmp__title { font-size: var(--sp4-label); font-weight: 700; color: var(--sp4-text-1); text-transform: uppercase; letter-spacing: 0.04em; }
 .frp-cmp__note { font-size: var(--sp4-label); color: var(--sp4-text-3); }
@@ -304,10 +336,7 @@
   .frp-run { flex: 1 1 0; height: var(--m-action); }
   .frp-run { flex: 1 1 0; }
   .frp-zoom__hint { display: none; }
-  /* The comparison runs under the graph at its full height, not inside it. */
-  .frp-chart:has(.frp-cmp) { height: auto; }
-  .frp-chart:has(.frp-cmp) .frp-chart__plot { flex: none; height: 340px; }
-  .frp-cmp { max-height: none; }
+  .frp-cmp-wrap { max-width: calc(100% - 60px); }
   .frp-pin { width: min(250px, calc(100% - 60px)); }
   /* Phones: the same frames on the same gutter as `.frv`; both panels keep
      their fixed phone heights below. */
