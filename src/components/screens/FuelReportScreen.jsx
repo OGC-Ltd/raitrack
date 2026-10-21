@@ -477,19 +477,103 @@ const diffText = (a, b, unit) => {
  * 2026-10-21: a tooltip, so the graph keeps its height). A chip in the
  * plot's corner names the periods; pointing at it opens the card, a click
  * keeps it open. With two, a last column gives the second less the first.
+ *
+ * The chip and the card's head drag it anywhere over the plot (operator,
+ * 2026-10-21: "place it at a place of choice"); the arrow keys move it from
+ * the chip. The card takes the room left below and right of where it stands.
  */
 function CaptureCompare({ captures, stats, onRemove, onClear, onZoom }) {
   const two = captures.length === 2;
   const [kept, setKept] = useState(false);
   const [hover, setHover] = useState(false);
   const open = kept || hover;
+  const [pos, setPos] = useState({ x: PLOT_LEFT + 8, y: PLOT_TOP + 6 });
+  const wrapRef = useRef(null);
+  const moving = useRef(null);
+  const dragged = useRef(false);    // the chip's click after a drag is not a click
+
+  // Held inside the plot: the chip never leaves it. In the plot's right or
+  // lower half the card opens back towards the middle, so it is never
+  // squeezed against the edge the chip was taken to. The side is chosen when
+  // a move ends, and only changes where the card would not fit on the side it
+  // opens to now; mid-drag it keeps its side, so the handle stays under the
+  // pointer. The card's size is its last measured one.
+  const cardSize = useRef({ w: 560, h: 420 });
+  useEffect(() => {
+    // The table's own size, not the card's: the card may be held smaller.
+    const table = wrapRef.current?.querySelector(".frp-cmp__table");
+    const head = wrapRef.current?.querySelector(".frp-cmp__head");
+    if (table && head) cardSize.current = { w: table.offsetWidth + 24, h: head.offsetHeight + table.offsetHeight + 12 };
+  });
+  const place = (x, y, settle = true) => {
+    const box = wrapRef.current?.parentElement?.getBoundingClientRect();
+    const chip = wrapRef.current?.firstElementChild?.getBoundingClientRect();
+    if (!box || !chip) return;
+    const nx = Math.round(Math.min(box.width - chip.width - 4, Math.max(4, x)));
+    const ny = Math.round(Math.min(box.height - chip.height - 4, Math.max(4, y)));
+    const { w, h } = cardSize.current;
+    setPos((p) => {
+      const wasRight = p.fromRight != null, wasDown = p.fromBottom != null;
+      const fitsRightward = nx + w <= box.width - 4, fitsLeftward = nx + chip.width - w >= 4;
+      const fitsDownward = ny + chip.height + 6 + h <= box.height - 4, fitsUpward = ny - 6 - h >= 4;
+      const right = !settle ? wasRight
+        : wasRight ? fitsLeftward || (!fitsRightward && nx > box.width / 2) : !fitsRightward && (fitsLeftward || nx > box.width / 2);
+      const down = !settle ? wasDown
+        : wasDown ? fitsUpward || (!fitsDownward && ny > box.height / 2) : !fitsDownward && (fitsUpward || ny > box.height / 2);
+      return {
+        x: nx, y: ny,
+        fromRight: right ? Math.round(box.width - nx - chip.width) : null,
+        fromBottom: down ? Math.round(box.height - ny - chip.height) : null,
+      };
+    });
+  };
+  const startMove = (e) => {
+    if (e.button !== 0 || e.target.closest(".frp-cmp__clear")) return;
+    moving.current = { sx: e.clientX, sy: e.clientY, x: pos.x, y: pos.y, moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e) => {
+    const m = moving.current;
+    if (!m) return;
+    const dx = e.clientX - m.sx, dy = e.clientY - m.sy;
+    if (!m.moved && Math.hypot(dx, dy) < 4) return;   // a click, not a drag
+    m.moved = true;
+    m.dx = dx; m.dy = dy;
+    place(m.x + dx, m.y + dy, false);
+  };
+  const endMove = (e) => {
+    const m = moving.current;
+    if (!m) return;
+    moving.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    dragged.current = m.moved;
+    if (m.moved) place(m.x + m.dx, m.y + m.dy);
+  };
+  const moveHandlers = { onPointerDown: startMove, onPointerMove: onMove, onPointerUp: endMove, onPointerCancel: endMove };
+  const onChipKey = (e) => {
+    const k = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (!k) return;
+    e.preventDefault();
+    const n = e.shiftKey ? 40 : 10;
+    place(pos.x + k[0] * n, pos.y + k[1] * n);
+  };
+
   return (
-    <div className="frp-cmp-wrap" style={{ left: PLOT_LEFT + 8, top: PLOT_TOP + 6 }}
+    <div ref={wrapRef} className="frp-cmp-wrap"
+         style={{
+           ...(pos.fromRight == null
+             ? { left: pos.x, maxWidth: `calc(100% - ${pos.x + 8}px)` }
+             : { right: pos.fromRight, alignItems: "flex-end", maxWidth: `calc(100% - ${pos.fromRight + 8}px)` }),
+           ...(pos.fromBottom == null
+             ? { top: pos.y, maxHeight: `calc(100% - ${pos.y + 8}px)` }
+             : { bottom: pos.fromBottom, flexDirection: "column-reverse", maxHeight: `calc(100% - ${pos.fromBottom + 8}px)` }),
+         }}
          onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
          onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <button type="button" className={`frp-cmp-chip${kept ? " is-on" : ""}`} aria-expanded={open}
-              onClick={() => setKept((k) => !k)}
-              title={kept ? "Close the comparison" : "Keep the comparison open"}>
+              {...moveHandlers} onKeyDown={onChipKey}
+              onClick={() => { if (dragged.current) { dragged.current = false; return; } setKept((k) => !k); }}
+              title={`${kept ? "Close the comparison" : "Keep the comparison open"} · drag to move`}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{TOOL_ICON.capture}</svg>
         Compare
@@ -499,7 +583,7 @@ function CaptureCompare({ captures, stats, onRemove, onClear, onZoom }) {
       </button>
       {open && (
         <section className="frp-cmp" aria-label="Captured periods">
-          <div className="frp-cmp__head">
+          <div className="frp-cmp__head" {...moveHandlers} title="Drag to move">
             <span className="frp-cmp__title">Compare periods</span>
             {captures.length < 2 && <span className="frp-cmp__note">Capture another period to compare.</span>}
             <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all</button>
