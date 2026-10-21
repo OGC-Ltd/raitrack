@@ -180,67 +180,69 @@
 .frp-sel--capture { background: rgba(2, 132, 199, 0.14); border-inline: 1.5px solid #0284c7; }
 .frp-sel--zoom { background: rgba(59, 130, 246, 0.1); border: 1.5px dashed var(--sp4-accent); }
 
-/* Hallmark · component: floating reading card + period comparison card
+/* Hallmark · component: graph dock (reading card + period comparison card)
  * genre: modern-minimal · theme: sp4 tokens (dark default, .app--light)
- * states: default · hover · focus-visible · active (drag) · empty (one period)
+ * states: default · hover · focus-visible · active · folded · empty (one period)
  *   n/a: disabled / loading / error / success (read-only figures)
  * contrast: figures --sp4-text-1, labels --sp4-text-2/3 on --sp4-surface (both themes)
- * pre-emit critique: P4 H5 E4 S5 R5 V4
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
  *
- * Operator, 2026-10-21: both cards should "fit in well", then be "floating
- * and interactive, not buried or tightly coupled on the chart", scroll their
- * data and close when asked. Each is a panel of its own over the report: a
- * head that drags it and closes it, and a body that scrolls under the head.
- * Each leads with what it is for. The reading opens on the tank's level in
- * the header tiles' numeral, then what the level did around it as three
- * tiles, then the other lines a step quieter. The comparison groups its rows
- * (Fuel · Rate · Movement), sets the figures it is for a step louder, and
- * shades the difference column. */
+ * Operator, 2026-10-21, three rounds: the cards should "fit in well", then
+ * float, then — floating, they sat on the readings being looked at and the
+ * graph under them stopped answering. Now they stand in a dock beside the
+ * plot and never on it: the plot gives up the dock's width while a card is
+ * open and has it back when both close, and hover, click, drag and wheel all
+ * stay the graph's. Each card is compact — its head folds it to one line
+ * (title and a summary) or closes it — and the dock scrolls when the cards
+ * are taller than the graph. Each leads with what it is for: the reading
+ * with the tank's level, the comparison with its consumed and rates. */
 
-/* The report is the cards' layer. */
-.frp-root { position: relative; }
+/* The plot and, beside it, the dock. */
+.frp-chart__body { flex: 1; min-height: 0; display: flex; gap: 10px; }
+.frp-chart__body > .frp-chart__plot { min-width: 0; overflow: hidden; }
+.frp-dock {
+  flex: none; width: 296px; min-height: 0;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 2px 2px 2px 0;
+}
 
-.frp-float {
-  position: absolute; z-index: 30;
-  display: flex; flex-direction: column;
-  max-width: calc(100% - 16px);
-  border: 1px solid var(--sp4-line-hi); border-radius: 10px;
+.frp-dcard {
+  flex: none;
+  border: 1px solid var(--sp4-line-hi); border-radius: 8px;
   background: var(--sp4-surface); color: var(--sp4-text-1);
   font-size: var(--sp4-body);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.3);
-  overflow: hidden;
 }
-.app--light .frp-float { border-color: var(--sp4-line); box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16); }
-/* The head: the handle, the title, the close button. */
-.frp-float__head {
-  display: flex; align-items: center; gap: 8px; flex: none;
-  padding: 8px 8px 8px 10px;
-  border-bottom: 1px solid var(--sp4-line);
-  cursor: grab; touch-action: none; user-select: none;
+.app--light .frp-dcard { border-color: var(--sp4-line); }
+.frp-dcard__head { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 2px; }
+.frp-dcard:not(.is-folded) .frp-dcard__head { border-bottom: 1px solid var(--sp4-line); }
+.frp-dcard__fold {
+  display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0;
+  height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: none;
+  color: var(--sp4-text-1); font: inherit; text-align: left; cursor: pointer;
 }
-.frp-float__head:active { cursor: grabbing; }
-.frp-float__head:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; border-radius: 10px 10px 0 0; }
-.frp-float__grip { color: var(--sp4-text-4); flex: none; }
-.frp-float__head:hover .frp-float__grip { color: var(--sp4-text-2); }
-.frp-float__title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-.frp-float__x {
+.frp-dcard__fold:hover { background: var(--sp4-raised); }
+.frp-dcard__fold:active { transform: translateY(1px); }
+.frp-dcard__fold:focus-visible, .frp-dcard__x:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.frp-dcard__chev { flex: none; color: var(--sp4-text-3); transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1); }
+.frp-dcard.is-folded .frp-dcard__chev { transform: rotate(-90deg); }
+.frp-dcard__title { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.frp-dcard__sum { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; min-width: 0; color: var(--sp4-text-2); white-space: nowrap; }
+.frp-dcard__x {
   display: grid; place-items: center; flex: none;
-  width: 26px; height: 26px; padding: 0;
+  width: 28px; height: 28px; padding: 0;
   border: 0; border-radius: 6px; background: none;
   color: var(--sp4-text-3); font-size: 18px; line-height: 1; cursor: pointer;
 }
-.frp-float__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
-.frp-float__x:active { transform: translateY(1px); }
-.frp-float__x:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
-/* The body scrolls on its own, and never hands the scroll to the page. */
-.frp-float__body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; user-select: text; }
+.frp-dcard__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
+.frp-dcard__x:active { transform: translateY(1px); }
+.frp-dcard__body { user-select: text; }
+@media (prefers-reduced-motion: reduce) { .frp-dcard__chev { transition: none; } }
 
 /* The pinned reading. */
-.frp-pin { width: 272px; }
-.frp-pin .frp-float__title { display: grid; gap: 3px; }
-.frp-pin__when { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.frp-pin__sumL { font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
 .frp-pin__seg {
-  display: flex; align-items: center; gap: 6px; min-width: 0;
+  display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 8px 10px 0;
   font-size: var(--sp4-label); color: var(--sp4-text-3); font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -248,8 +250,8 @@
 .frp-pin__dot--trip    { background: var(--sp4-crit); }
 .frp-pin__dot--parking { background: var(--sp4-warn); }
 .frp-pin__dot--stop    { background: var(--sp4-accent); }
-.frp-pin__level { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
-.frp-pin__big { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.frp-pin__level { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 6px 10px 8px; }
+.frp-pin__big { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .frp-pin__bigu { margin-left: 3px; font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-3); letter-spacing: 0; }
 .frp-pin__levl { font-size: var(--sp4-label); color: var(--sp4-text-3); }
 /* What the level did round the reading: three tiles, as the header's. */
@@ -257,17 +259,17 @@
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0; border-block: 1px solid var(--sp4-line);
 }
-.frp-pin__move { display: grid; align-content: start; gap: 2px; padding: 7px 8px 7px 12px; min-width: 0; }
-.frp-pin__move + .frp-pin__move { border-left: 1px solid var(--sp4-line); padding-left: 10px; }
-.frp-pin__move dt { font-size: var(--sp4-label); color: var(--sp4-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frp-pin__move { display: grid; align-content: start; gap: 1px; padding: 6px 6px 6px 10px; min-width: 0; }
+.frp-pin__move + .frp-pin__move { border-left: 1px solid var(--sp4-line); padding-left: 8px; }
+.frp-pin__move dt { font-size: 10.5px; color: var(--sp4-text-3); white-space: nowrap; }
 .frp-pin__move dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .frp-pin__move dd.frp-pin__sub { font-size: var(--sp4-label); font-weight: 400; color: var(--sp4-text-3); }
-.frp-pin__rows { margin: 0; padding: 8px 12px; display: grid; gap: 4px; }
+.frp-pin__rows { margin: 0; padding: 6px 10px; display: grid; gap: 3px; }
 .frp-pin__rows:empty { display: none; }
-.frp-pin__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 12px; }
+.frp-pin__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 10px; }
 .frp-pin__row dt { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--sp4-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frp-pin__row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.frp-pin__events { margin: 0; padding: 6px 12px 8px; list-style: none; display: grid; gap: 4px; border-top: 1px solid var(--sp4-line); }
+.frp-pin__events { margin: 0; padding: 6px 10px 8px; list-style: none; display: grid; gap: 4px; border-top: 1px solid var(--sp4-line); }
 .frp-pin__event { display: flex; align-items: center; gap: 7px; font-size: var(--sp4-label); }
 .frp-pin__evname { color: var(--sp4-text-2); }
 .frp-pin__evl { font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
@@ -290,57 +292,58 @@
 .frp-cmp-chip:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
 .frp-cmp-chip__p, .frp-cmp__badge {
   display: inline-grid; place-items: center; flex: none;
-  width: 17px; height: 17px; border-radius: 50%;
+  width: 16px; height: 16px; border-radius: 50%;
   color: #fff; font-size: 10px; font-weight: 700; line-height: 1;
 }
-.frp-cmp__title { font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
-.frp-cmp__clear { margin-left: auto; flex: none; }
-.frp-cmp__note { margin: 0; padding: 8px 12px 0; font-size: var(--sp4-label); color: var(--sp4-text-3); }
-.frp-cmp__table {
-  width: auto; min-width: min(100%, 520px);
-  border-collapse: separate; border-spacing: 0;
-  font-size: var(--sp4-label); font-variant-numeric: tabular-nums;
+/* The periods once, with their times. */
+.frp-cmp__legend { margin: 0; padding: 6px 6px 4px 10px; list-style: none; display: grid; gap: 2px; }
+.frp-cmp__legend li { display: flex; align-items: center; gap: 6px; font-size: var(--sp4-label); min-width: 0; }
+.frp-cmp__when {
+  min-width: 0; padding: 1px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 0; border-radius: 3px; background: none;
+  font: inherit; color: var(--sp4-text-2); cursor: pointer; text-align: left;
 }
-.frp-cmp__table th, .frp-cmp__table td { padding: 3px 12px; text-align: right; white-space: nowrap; }
-.frp-cmp__table tbody th { text-align: left; font-weight: 500; color: var(--sp4-text-2); }
-.frp-cmp__table tbody td { font-weight: 600; color: var(--sp4-text-1); }
-.frp-cmp__table tbody tr:not(.frp-cmp__grp):hover > * { background: var(--sp4-raised); }
-.frp-cmp__table thead th, .frp-cmp__table thead td {
-  position: sticky; top: 0; z-index: 1;
-  padding-top: 8px; padding-bottom: 7px;
-  background: var(--sp4-surface); vertical-align: bottom;
-  border-bottom: 1px solid var(--sp4-line);
-}
-.frp-cmp__col { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.frp-cmp__dur { font-weight: 700; color: var(--sp4-text-1); }
+.frp-cmp__when:hover { color: var(--sp4-accent); text-decoration: underline; }
+.frp-cmp__dur { margin-left: auto; font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .frp-cmp__x {
-  display: grid; place-items: center; width: 18px; height: 18px; padding: 0;
+  display: grid; place-items: center; flex: none; width: 20px; height: 20px; padding: 0;
   border: 0; border-radius: 4px; background: none;
   color: var(--sp4-text-3); font-size: 14px; line-height: 1; cursor: pointer;
 }
 .frp-cmp__x:hover { color: var(--sp4-text-1); background: var(--sp4-raised); }
-.frp-cmp__x:focus-visible, .frp-cmp__when:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
-.frp-cmp__when {
-  display: block; margin: 3px 0 0 auto; padding: 0;
-  border: 0; border-radius: 3px; background: none;
-  font: inherit; font-weight: 500; color: var(--sp4-text-3); cursor: pointer;
+.frp-cmp__x:focus-visible, .frp-cmp__when:focus-visible, .frp-cmp__clear:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.frp-cmp__note { margin: 0; padding: 0 10px 4px; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.frp-cmp__table {
+  width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: var(--sp4-label); font-variant-numeric: tabular-nums;
 }
-.frp-cmp__when:hover { color: var(--sp4-accent); text-decoration: underline; }
+/* Four periods share the dock's width: the labels wrap before the figures do,
+   and past that the table scrolls sideways inside the card. */
+.frp-cmp__scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.frp-cmp__table th, .frp-cmp__table td { padding: 2px 4px; text-align: right; white-space: nowrap; }
+.frp-cmp__table th:first-child, .frp-cmp__table td:first-child { padding-left: 10px; }
+.frp-cmp__table th:last-child, .frp-cmp__table td:last-child { padding-right: 8px; }
+.frp-cmp__table thead th, .frp-cmp__table thead td { padding-top: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--sp4-line); }
+.frp-cmp__table tbody th { text-align: left; font-weight: 500; color: var(--sp4-text-2); white-space: normal; min-width: 62px; line-height: 1.25; }
+.frp-cmp__u { font-weight: 400; color: var(--sp4-text-4); }
+.frp-cmp__table tbody td { font-weight: 600; color: var(--sp4-text-1); }
+.frp-cmp__table tbody tr:not(.frp-cmp__grp):hover > * { background: var(--sp4-raised); }
 /* A group's name, then its rows. */
 .frp-cmp__table .frp-cmp__grp th {
-  padding: 9px 12px 3px;
+  padding-top: 7px; padding-bottom: 2px;
   text-align: left; font-size: 10px; font-weight: 700;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--sp4-text-3);
 }
-.frp-cmp__table tbody:last-child tr:last-child > * { padding-bottom: 8px; }
 /* The figures the comparison is for, a step louder. */
 .frp-cmp__table tr.is-key th { color: var(--sp4-text-1); font-weight: 700; }
-.frp-cmp__table tr.is-key td { font-size: var(--sp4-body); font-weight: 800; }
+.frp-cmp__table tr.is-key td { font-weight: 800; }
 /* Second less first, on its own shade. */
-.frp-cmp__table thead th.frp-cmp__diffh, .frp-cmp__table td.frp-cmp__diff { background: var(--sp4-raised); }
-.frp-cmp__table thead th.frp-cmp__diffh { color: var(--sp4-text-2); }
+.frp-cmp__table th.frp-cmp__diffh, .frp-cmp__table td.frp-cmp__diff { background: var(--sp4-raised); }
+.frp-cmp__table th.frp-cmp__diffh { font-weight: 700; color: var(--sp4-text-2); }
 .frp-cmp__table td.frp-cmp__diff { color: var(--sp4-text-2); font-weight: 600; }
 .frp-cmp__table tr.is-key td.frp-cmp__diff { color: var(--sp4-text-1); }
+.frp-cmp__clear { display: block; margin: 6px 10px 8px auto; }
 .frp-zoom {
   display: flex;
   align-items: center;
@@ -421,7 +424,11 @@
   .frp-run { flex: 1 1 0; height: var(--m-action); }
   .frp-run { flex: 1 1 0; }
   .frp-zoom__hint { display: none; }
-  .frp-pin { width: min(272px, calc(100% - 16px)); }
+  /* The dock goes under the plot, the plot keeping its own height. */
+  .frp-chart__body { flex-direction: column; }
+  .frp-chart__body > .frp-chart__plot { flex: none; height: 330px; }
+  .frp-dock { width: auto; overflow: visible; padding: 0; }
+  .frp-graphmap > .frp-graph:has(.frp-dock) { height: auto; }
   /* Phones: the same frames on the same gutter as `.frv`; both panels keep
      their fixed phone heights below. */
   .frp-graphmap {
@@ -429,7 +436,7 @@
     gap: 10px; padding: 12px var(--sp4-gutter) calc(var(--app-footer-h, 64px) + 16px);
   }
   .frp-map { height: 320px; flex: none; }
-  .frp-chart { height: 380px; flex: none; }
+  .frp-chart { min-height: 380px; flex: none; }
   .frp-legend { margin-left: 0; }
 }
 

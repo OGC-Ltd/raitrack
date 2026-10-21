@@ -12,8 +12,7 @@
  * opinion about a drop: drains carry the adjudicator's verdict as given.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -429,8 +428,6 @@ const PLOT_TOP = 22;
 const PLOT_FOOT = 34;
 /** A drag shorter than this many pixels is a click. */
 const MIN_DRAG_PX = 6;
-/** The pinned reading's card width, as FuelReportScreen.css sets it. */
-const PIN_CARD_W = 272;
 
 // The graph's tools (operator, 2026-10-21), beside the zoom buttons. Each is
 // on until pressed again; with none on, a drag moves the graph as before.
@@ -440,7 +437,7 @@ const TOOL_ICON = {
   point: <><path d="M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M8 8.5h8M8 11.5h5" /></>,
 };
 const TOOLS = {
-  capture: { label: "Capture a period", hint: "Drag across the graph to capture a period · up to four · Compare shows or hides them" },
+  capture: { label: "Capture a period", hint: "Drag across the graph to capture a period · up to four · they are compared beside the graph" },
   zoom:    { label: "Zoom to an area",  hint: "Drag a box round the part to zoom in on" },
   point:   { label: "Point detail",     hint: "Click a reading for its detail" },
 };
@@ -457,169 +454,126 @@ const signed = (n, d = 1, unit = "") => {
 };
 const dur = (ms) => (ms > 0 ? durationLabel(ms) : "-");
 
-// The rows of the comparison, in three groups: a label, the figure as shown,
-// the number the difference column takes (null where a difference says
-// nothing), its unit, and whether it is one of the figures the comparison is
-// for (set a step louder). The duration is in each column's head.
+// The rows of the comparison, in three groups: a label, its unit (said once,
+// beside the label, so the figures stay narrow enough for the dock), the
+// figure as shown, the number the difference column takes (null where a
+// difference says nothing), the difference's decimals ("ms" for a time), and
+// whether it is one of the figures the comparison is for (set a step louder).
+const n1 = (n) => fmtNum(n, 1);
 const COMPARE_GROUPS = [
   ["Fuel", [
-    ["Start level",       (s) => L(s.startL),                                  (s) => s.startL, "L"],
-    ["End level",         (s) => L(s.endL),                                    (s) => s.endL, "L"],
-    ["Change",            (s) => signed(s.changeL, 1, " L"),                   (s) => s.changeL, "L"],
-    ["Lowest · highest",  (s) => `${fmtNum(s.minL, 1)} · ${fmtNum(s.maxL, 1)} L`, null],
-    ["Filled",            (s) => `${L(s.filledL)} (${s.fillCount})`,           (s) => s.filledL, "L"],
-    ["Drained",           (s) => `${L(s.drainedL)} (${s.drainCount})`,         (s) => s.drainedL, "L"],
-    ["Consumed",          (s) => L(s.consumedL),                               (s) => s.consumedL, "L", true],
+    ["Start level",  "L",    (s) => n1(s.startL),                              (s) => s.startL, 1],
+    ["End level",    "L",    (s) => n1(s.endL),                                (s) => s.endL, 1],
+    ["Change",       "L",    (s) => signed(s.changeL, 1),                      (s) => s.changeL, 1],
+    ["Low – high",   "L",    (s) => `${fmtNum(s.minL, 0)}–${fmtNum(s.maxL, 0)}`, null],
+    ["Filled",       "L",    (s) => `${n1(s.filledL)}${s.fillCount ? ` (${s.fillCount})` : ""}`,   (s) => s.filledL, 1],
+    ["Drained",      "L",    (s) => `${n1(s.drainedL)}${s.drainCount ? ` (${s.drainCount})` : ""}`, (s) => s.drainedL, 1],
+    ["Consumed",     "L",    (s) => n1(s.consumedL),                           (s) => s.consumedL, 1, true],
   ]],
   ["Rate", [
-    ["L / 100 km",        (s) => fmtNum(s.per100Km, 1),                        (s) => s.per100Km, "", true],
-    ["L / engine hour",   (s) => fmtNum(s.perEngineH, 1),                      (s) => s.perEngineH, "", true],
+    ["L / 100 km",   "",     (s) => n1(s.per100Km),                            (s) => s.per100Km, 1, true],
+    ["L / engine h", "",     (s) => n1(s.perEngineH),                          (s) => s.perEngineH, 1, true],
   ]],
   ["Movement", [
-    ["Distance",          (s) => `${fmtNum(s.distanceKm, 2)} km`,              (s) => s.distanceKm, "km"],
-    ["Engine on",         (s) => dur(s.engineMs),                              (s) => s.engineMs, "ms"],
-    ["On trips",          (s) => dur(s.tripMs),                                (s) => s.tripMs, "ms"],
-    ["Parked",            (s) => dur(s.parkingMs),                             (s) => s.parkingMs, "ms"],
-    ["Top speed",         (s) => (s.maxSpeedKmh == null ? "-" : `${fmtNum(s.maxSpeedKmh, 0)} km/h`), (s) => s.maxSpeedKmh, "km/h"],
-    ["Average moving",    (s) => (s.avgMovingKmh == null ? "-" : `${fmtNum(s.avgMovingKmh, 0)} km/h`), (s) => s.avgMovingKmh, "km/h"],
+    ["Distance",     "km",   (s) => n1(s.distanceKm),                          (s) => s.distanceKm, 1],
+    ["Engine on",    "",     (s) => dur(s.engineMs),                           (s) => s.engineMs, "ms"],
+    ["On trips",     "",     (s) => dur(s.tripMs),                             (s) => s.tripMs, "ms"],
+    ["Parked",       "",     (s) => dur(s.parkingMs),                          (s) => s.parkingMs, "ms"],
+    ["Top speed",    "km/h", (s) => fmtNum(s.maxSpeedKmh, 0),                  (s) => s.maxSpeedKmh, 0],
+    ["Avg moving",   "km/h", (s) => fmtNum(s.avgMovingKmh, 0),                 (s) => s.avgMovingKmh, 0],
   ]],
 ];
-/** A captured stretch as its column head writes it: the day once where it is one day. */
+/** A captured stretch as its line in the legend writes it: the day once where it is one day. */
 const spanWord = (from, to) => (dayMon.format(from) === dayMon.format(to - 1)
   ? `${dayMon.format(from)} · ${clock.format(from)}–${clock.format(to)}`
   : `${at(from)} – ${at(to)}`);
-const diffText = (a, b, unit) => {
+const diffText = (a, b, d) => {
   if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return "-";
-  const d = b - a;
-  if (unit === "ms") return d === 0 ? "0" : `${d > 0 ? "+" : "−"}${durationLabel(Math.abs(d))}`;
-  return signed(d, unit === "km" ? 2 : unit === "km/h" ? 0 : 1, unit ? ` ${unit}` : "");
+  const x = b - a;
+  if (d === "ms") return x === 0 ? "0" : `${x > 0 ? "+" : "−"}${durationLabel(Math.abs(x))}`;
+  return signed(x, d);
 };
 
 /**
- * A card that floats over the report (operator, 2026-10-21: "floating and
- * interactive, not buried or tightly coupled on the chart"). It lives in the
- * report's own layer, not the plot's, so the plot's box never caps it and the
- * graph's wheel and drag never reach it: the wheel inside it scrolls its
- * content, under a head that stays put. The head drags it anywhere over the
- * report (the arrow keys move it from the head, Shift for longer steps) and
- * holds its close button.
- *
- * `start` is where it first stands, in the host's pixels; after that it stays
- * where it was put until it is closed.
+ * A card in the graph's dock (operator, 2026-10-21: the cards covered the
+ * data and the graph under them stopped answering). The dock stands beside
+ * the plot, never on it, so every reading stays in view and the hover, the
+ * click, the drag and the wheel all keep working with a card open. Its head
+ * folds the card to one line (title and a summary) and closes it; the dock
+ * scrolls when the cards are taller than the graph.
  */
-function FloatCard({ host, start, label, head, onClose, className = "", children }) {
-  const ref = useRef(null);
-  const [pos, setPos] = useState(start);
-  const moving = useRef(null);
-  // Held inside the report, the head always in reach.
-  const clamp = useCallback((x, y) => {
-    const w = ref.current?.offsetWidth ?? 0;
-    return {
-      x: Math.round(Math.min(Math.max(8, host.clientWidth - w - 8), Math.max(8, x))),
-      y: Math.round(Math.min(Math.max(8, host.clientHeight - 48), Math.max(8, y))),
-    };
-  }, [host]);
-  useLayoutEffect(() => { setPos((p) => clamp(p.x, p.y)); }, [clamp]);
-  useEffect(() => {
-    const onResize = () => setPos((p) => clamp(p.x, p.y));
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [clamp]);
-
-  const startMove = (e) => {
-    if (e.button !== 0 || e.target.closest("button")) return;
-    moving.current = { sx: e.clientX, sy: e.clientY, x: pos.x, y: pos.y };
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  };
-  const onMove = (e) => {
-    const m = moving.current;
-    if (m) setPos(clamp(m.x + e.clientX - m.sx, m.y + e.clientY - m.sy));
-  };
-  const endMove = (e) => {
-    if (!moving.current) return;
-    moving.current = null;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-  };
-  const onKey = (e) => {
-    const k = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-    if (!k || e.target !== e.currentTarget) return;
-    e.preventDefault();
-    const n = e.shiftKey ? 40 : 10;
-    setPos((p) => clamp(p.x + k[0] * n, p.y + k[1] * n));
-  };
-
-  return createPortal(
-    <section ref={ref} className={`frp-float ${className}`} role="dialog" aria-label={label}
-             style={{ left: pos.x, top: pos.y, maxHeight: `min(560px, calc(100% - ${pos.y + 8}px))` }}>
-      <div className="frp-float__head" tabIndex={0} title="Drag to move" aria-label={`${label}: drag or use the arrow keys to move`}
-           onPointerDown={startMove} onPointerMove={onMove} onPointerUp={endMove} onPointerCancel={endMove} onKeyDown={onKey}>
-        <svg className="frp-float__grip" width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
-          <circle cx="2.5" cy="2.5" r="1.3" /><circle cx="7.5" cy="2.5" r="1.3" /><circle cx="2.5" cy="7" r="1.3" />
-          <circle cx="7.5" cy="7" r="1.3" /><circle cx="2.5" cy="11.5" r="1.3" /><circle cx="7.5" cy="11.5" r="1.3" />
-        </svg>
-        <div className="frp-float__title">{head}</div>
-        <button type="button" className="frp-float__x" onClick={onClose} aria-label={`Close ${label.toLowerCase()}`} title="Close">×</button>
+function DockCard({ label, title, summary, onClose, className = "", children }) {
+  const [folded, setFolded] = useState(false);
+  return (
+    <section className={`frp-dcard ${className}${folded ? " is-folded" : ""}`} aria-label={label}>
+      <div className="frp-dcard__head">
+        <button type="button" className="frp-dcard__fold" aria-expanded={!folded} onClick={() => setFolded((f) => !f)}
+                title={folded ? "Show the detail" : "Fold to one line"}>
+          <svg className="frp-dcard__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          <span className="frp-dcard__title">{title}</span>
+          {summary && <span className="frp-dcard__sum">{summary}</span>}
+        </button>
+        <button type="button" className="frp-dcard__x" onClick={onClose} aria-label={`Close ${label.toLowerCase()}`} title="Close">×</button>
       </div>
-      <div className="frp-float__body">{children}</div>
-    </section>,
-    host,
+      {!folded && <div className="frp-dcard__body">{children}</div>}
+    </section>
   );
 }
 
 /**
- * The captured periods side by side (operator, 2026-10-21), in a floating
- * card: closing it hides it and keeps the periods, and the Compare chip in
- * the graph's toolbar opens it again. With two, a last column gives the
- * second less the first.
+ * The captured periods side by side (operator, 2026-10-21), in the dock:
+ * closing the card keeps the periods, and the Compare chip in the graph's
+ * toolbar opens it again. The periods are listed once with their times
+ * (a click zooms the graph to one); the table under them is lettered, and
+ * with two a last column gives the second less the first.
  */
-function CaptureCompare({ host, start, captures, stats, onRemove, onClear, onZoom, onClose }) {
+function CaptureCompare({ captures, stats, onRemove, onClear, onZoom, onClose }) {
   const two = captures.length === 2;
   return (
-    <FloatCard host={host} start={start} label="Compare periods" className="frp-cmp" onClose={onClose}
-               head={<>
-                 <span className="frp-cmp__title">Compare periods</span>
-                 <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all</button>
-               </>}>
-      {captures.length < 2 && <p className="frp-cmp__note">Capture another period to compare.</p>}
-      <table className="frp-cmp__table">
-        <thead>
-          <tr>
-            <td />
-            {captures.map((c, i) => (
-              <th key={c.id} scope="col">
-                <div className="frp-cmp__col">
-                  <span className="frp-cmp__badge" style={{ background: c.color }}>{c.letter}</span>
-                  <span className="frp-cmp__dur">{dur(stats[i].durationMs)}</span>
-                  <button type="button" className="frp-cmp__x" onClick={() => onRemove(c.id)}
-                          aria-label={`Remove period ${c.letter}`} title="Remove">×</button>
-                </div>
-                <button type="button" className="frp-cmp__when" onClick={() => onZoom(c)} title="Zoom the graph to this period">
-                  {spanWord(stats[i].from, stats[i].to)}
-                </button>
-              </th>
-            ))}
-            {two && (
-              <th scope="col" className="frp-cmp__diffh">
-                <div className="frp-cmp__col">{captures[1].letter} − {captures[0].letter}</div>
-                <span className="frp-cmp__dur">{diffText(stats[0].durationMs, stats[1].durationMs, "ms")}</span>
-              </th>
-            )}
-          </tr>
-        </thead>
-        {COMPARE_GROUPS.map(([group, rows]) => (
-          <tbody key={group}>
-            <tr className="frp-cmp__grp"><th scope="rowgroup" colSpan={captures.length + (two ? 2 : 1)}>{group}</th></tr>
-            {rows.map(([label, show, num, unit, key]) => (
-              <tr key={label} className={key ? "is-key" : undefined}>
-                <th scope="row">{label}</th>
-                {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
-                {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), unit) : ""}</td>}
-              </tr>
-            ))}
-          </tbody>
+    <DockCard label="Compare periods" title="Compare" className="frp-cmp" onClose={onClose}
+              summary={captures.map((c) => <span key={c.id} className="frp-cmp__badge" style={{ background: c.color }}>{c.letter}</span>)}>
+      <ul className="frp-cmp__legend">
+        {captures.map((c, i) => (
+          <li key={c.id}>
+            <span className="frp-cmp__badge" style={{ background: c.color }}>{c.letter}</span>
+            <button type="button" className="frp-cmp__when" onClick={() => onZoom(c)} title="Zoom the graph to this period">
+              {spanWord(stats[i].from, stats[i].to)}
+            </button>
+            <span className="frp-cmp__dur">{dur(stats[i].durationMs)}</span>
+            <button type="button" className="frp-cmp__x" onClick={() => onRemove(c.id)}
+                    aria-label={`Remove period ${c.letter}`} title="Remove">×</button>
+          </li>
         ))}
-      </table>
-    </FloatCard>
+      </ul>
+      {captures.length < 2 && <p className="frp-cmp__note">Drag across the graph to capture another period to compare.</p>}
+      <div className="frp-cmp__scroll">
+        <table className="frp-cmp__table">
+          <thead>
+            <tr>
+              <td />
+              {captures.map((c) => (
+                <th key={c.id} scope="col"><span className="frp-cmp__badge" style={{ background: c.color }}>{c.letter}</span></th>
+              ))}
+              {two && <th scope="col" className="frp-cmp__diffh" title={`${captures[1].letter} less ${captures[0].letter}`}>{captures[1].letter} − {captures[0].letter}</th>}
+            </tr>
+          </thead>
+          {COMPARE_GROUPS.map(([group, rows]) => (
+            <tbody key={group}>
+              <tr className="frp-cmp__grp"><th scope="rowgroup" colSpan={captures.length + (two ? 2 : 1)}>{group}</th></tr>
+              {rows.map(([label, unit, show, num, d, key]) => (
+                <tr key={label} className={key ? "is-key" : undefined}>
+                  <th scope="row">{label}{unit && <span className="frp-cmp__u"> {unit}</span>}</th>
+                  {stats.map((s, i) => <td key={captures[i].id}>{show(s)}</td>)}
+                  {two && <td className="frp-cmp__diff">{num ? diffText(num(stats[0]), num(stats[1]), d) : ""}</td>}
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+      </div>
+      <button type="button" className="sp4-ghost-btn frp-cmp__clear" onClick={onClear}>Clear all periods</button>
+    </DockCard>
   );
 }
 
@@ -630,12 +584,11 @@ const offsetWord = (ms) => {
 };
 
 /**
- * One pinned reading in full (the point tool), in a floating card: every
- * line's figure, whether or not the line is drawn, what the level did either
- * side, the stretch the unit was in, and any filling or drain near it.
- * Pinning another reading keeps the card where it was put.
+ * One pinned reading in full (the point tool), in the dock: the tank's level,
+ * what it did either side, every line's figure whether or not the line is
+ * drawn, the stretch the unit was in, and any filling or drain near it.
  */
-function PointCard({ host, start, detail, onClose }) {
+function PointCard({ detail, onClose }) {
   const p = detail.point;
   const seg = detail.segment;
   const rows = Object.entries(LINES).filter(([k]) => p[k] != null).map(([k, l]) => {
@@ -650,27 +603,25 @@ function PointCard({ host, start, detail, onClose }) {
     [`${trendMin} min after`, detail.trendAfterL, null],
   ];
   return (
-    <FloatCard host={host} start={start} label="Reading detail" className="frp-pin" onClose={onClose}
-               head={<>
-                 <span className="frp-pin__when">{at(p.t)}</span>
-                 {seg && (
-                   <span className="frp-pin__seg">
-                     <i className={`frp-pin__dot frp-pin__dot--${seg.kind}`} aria-hidden="true" />
-                     {SEGMENT_WORD[seg.kind] ?? seg.kind} {clock.format(seg.start)}–{clock.format(seg.end)} · {durationLabel(seg.end - seg.start)}
-                   </span>
-                 )}
-               </>}>
+    <DockCard label="Reading detail" title={at(p.t)} className="frp-pin" onClose={onClose}
+              summary={<span className="frp-pin__sumL">{fmtNum(level, 1)} L</span>}>
+      {seg && (
+        <p className="frp-pin__seg">
+          <i className={`frp-pin__dot frp-pin__dot--${seg.kind}`} aria-hidden="true" />
+          {SEGMENT_WORD[seg.kind] ?? seg.kind} {clock.format(seg.start)}–{clock.format(seg.end)} · {durationLabel(seg.end - seg.start)}
+        </p>
+      )}
       <div className="frp-pin__level">
         <span className="frp-pin__big">{fmtNum(level, 1)}<span className="frp-pin__bigu">L</span></span>
         <span className="frp-pin__levl">
-          {p.fuelSmoothL != null ? "Processed level" : "Fuel level"}
+          {p.fuelSmoothL != null ? "Processed" : "Fuel level"}
           {p.fuelSmoothL != null && p.fuelL != null && <> · raw {fmtNum(p.fuelL, 1)} L</>}
         </span>
       </div>
       <dl className="frp-pin__moves">
         {moves.map(([label, v, sub]) => (
           <div key={label} className="frp-pin__move">
-            <dt>{label}</dt>
+            <dt title={label}>{label}</dt>
             <dd>{signed(v, 1)}<span className="frp-tip__unit">L</span></dd>
             {sub && <dd className="frp-pin__sub">{sub}</dd>}
           </div>
@@ -696,7 +647,7 @@ function PointCard({ host, start, detail, onClose }) {
           ))}
         </ul>
       )}
-    </FloatCard>
+    </DockCard>
   );
 }
 
@@ -717,7 +668,7 @@ function PointCard({ host, start, detail, onClose }) {
  * And three tools (operator, 2026-10-21), each turning the drag to its own use:
  *
  *   · capture: drag across a period to capture it; up to four, lettered,
- *     shaded on the graph and compared figure by figure in a floating card;
+ *     shaded on the graph and compared figure by figure in a card beside it;
  *   · zoom to an area: drag a box, and the graph shows that stretch of time
  *     and that band of litres;
  *   · point detail: click a reading to pin it, with every line's figure and
@@ -933,20 +884,7 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
   const detail = useMemo(() => (pin == null ? null : pointDetail(series, report, pin)), [pin, series, report]);
   const pinT = detail?.point.t;
   const pinL = detail ? levelOf(detail.point) : null;
-  // The cards float in the report's own layer (FloatCard). They first stand
-  // inside the plot's top corners, clear of both axes: the comparison at the
-  // left, the reading at the right, so the two never open on each other.
-  const [host, setHost] = useState(null);
-  useEffect(() => { setHost(boxRef.current?.closest(".frp-root") ?? null); }, []);
-  const cardStart = (side) => {
-    const plot = boxRef.current?.getBoundingClientRect();
-    const h = host?.getBoundingClientRect();
-    if (!plot || !h) return { x: 8, y: 8 };
-    const y = plot.top - h.top + PLOT_TOP + 8;
-    return side === "left"
-      ? { x: plot.left - h.left + PLOT_LEFT + 8, y }
-      : { x: plot.right - h.left - plotRight(right) - PIN_CARD_W - 8, y };
-  };
+  // The cards stand in a dock beside the plot (DockCard), never over it.
   const showCmp = cmpOpen && captures.length > 0;
   const hint = tool ? TOOLS[tool].hint
     : zoom ? "Scroll to zoom · drag to move" : "Scroll over the graph to zoom";
@@ -987,107 +925,115 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
           ))}
         </div>
       </div>
-      <div
-        className={`frp-chart__plot${tool ? ` frp-chart__plot--${tool}` : ""}`}
-        ref={boxRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onDoubleClick={() => { if (tool !== "point") unzoom(); }}
-      >
-        {sel && (
-          <div className={`frp-sel frp-sel--${tool}`} aria-hidden="true" style={tool === "zoom"
-            ? { left: Math.min(sel.x0, sel.x1), width: Math.abs(sel.x1 - sel.x0), top: Math.min(sel.y0, sel.y1), height: Math.abs(sel.y1 - sel.y0) }
-            : { left: Math.min(sel.x0, sel.x1), width: Math.abs(sel.x1 - sel.x0), top: PLOT_TOP, bottom: PLOT_FOOT }} />
+      <div className="frp-chart__body">
+        <div
+          className={`frp-chart__plot${tool ? ` frp-chart__plot--${tool}` : ""}`}
+          ref={boxRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onDoubleClick={() => { if (tool !== "point") unzoom(); }}
+        >
+          {sel && (
+            <div className={`frp-sel frp-sel--${tool}`} aria-hidden="true" style={tool === "zoom"
+              ? { left: Math.min(sel.x0, sel.x1), width: Math.abs(sel.x1 - sel.x0), top: Math.min(sel.y0, sel.y1), height: Math.abs(sel.y1 - sel.y0) }
+              : { left: Math.min(sel.x0, sel.x1), width: Math.abs(sel.x1 - sel.x0), top: PLOT_TOP, bottom: PLOT_FOOT }} />
+          )}
+          {/* Measured afresh when the dock opens or closes beside it, so the
+              plot takes the width it has without waiting on a resize event. */}
+          <ResponsiveContainer key={detail || showCmp ? "docked" : "full"} width="100%" height="100%">
+            <ComposedChart
+              data={shown}
+              margin={{ top: 22, right: right ? 4 : 16, bottom: 4, left: 0 }}
+              onMouseMove={(e) => {
+                // Recharts 3 hands the index under the pointer, not the
+                // reading (its v2 `activePayload` is gone).
+                const i = Number(e?.activeTooltipIndex ?? e?.activeIndex);
+                const p = e?.activePayload?.[0]?.payload ?? (Number.isInteger(i) ? shown[i] : null) ?? null;
+                onCursor(p?.t ?? null);
+                setHover(p);
+              }}
+              onMouseLeave={() => { onCursor(null); setHover(null); }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--sp4-line, #e2e8f0)" />
+              <XAxis dataKey="t" type="number" scale="time" domain={zoom ?? ["dataMin", "dataMax"]} allowDataOverflow
+                     tickFormatter={tick} tick={{ fontSize: 10 }} minTickGap={40} />
+              <YAxis yAxisId="fuel" domain={[yLo, yHi]} tick={{ fontSize: 10 }} width={42} allowDataOverflow
+                     label={{ value: "Litres", angle: -90, position: "insideLeft", fontSize: 10, offset: 10 }} />
+              <YAxis yAxisId="right" orientation="right" hide={!right} tick={{ fontSize: 10 }} width={right ? 40 : 0} />
+              <YAxis yAxisId="alt" orientation="right" hide domain={["dataMin - 20", "dataMax + 20"]} />
+              <YAxis yAxisId="volt" orientation="right" hide domain={[0, "dataMax + 2"]} />
+              {/* On is 1 on a 0–10 scale: the step stays in the bottom tenth,
+                  clear of the fuel line. */}
+              <YAxis yAxisId="eng" orientation="right" hide domain={[-0.15, 10]} allowDataOverflow />
+              {Object.entries(BACKGROUNDS).flatMap(([kind, b]) => (bg[kind]
+                ? report.segments.filter((s) => s.kind === kind && s.end >= view[0] && s.start <= view[1]).map((s) => (
+                  <ReferenceArea key={`${kind}-${s.start}`} yAxisId="fuel"
+                                 x1={Math.max(s.start, view[0])} x2={Math.min(Math.max(s.end, s.start + 60_000), view[1])}
+                                 fill={b.color} fillOpacity={1} strokeOpacity={0} ifOverflow="hidden" />
+                ))
+                : []))}
+              {captures.filter((c) => c.to >= view[0] && c.from <= view[1]).map((c) => (
+                <ReferenceArea key={c.id} yAxisId="fuel" x1={Math.max(c.from, view[0])} x2={Math.min(c.to, view[1])}
+                               fill={c.color} fillOpacity={0.12} stroke={c.color} strokeOpacity={0.7} strokeDasharray="4 3"
+                               ifOverflow="hidden"
+                               label={{ value: c.letter, position: "insideTopLeft", fontSize: 11, fontWeight: 700, fill: c.color }} />
+              ))}
+              {Object.entries(LINES).map(([key, l]) => lines[key] && (
+                <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={l.axis === "fuel" || l.step ? 1.6 : 1.2}
+                      type={l.step ? "stepAfter" : "linear"} isAnimationActive={false} connectNulls={false} />
+              ))}
+              {marks.stop && report.stops.filter((st) => inView(st.start)).map((st) => (
+                <ReferenceDot key={`s-${st.start}`} yAxisId="fuel" x={st.start} y={stopRow} ifOverflow="hidden"
+                              shape={iconShape(ICON.stop, `Stop ${at(st.start)} · ${durationLabel(st.durationMs)}`)} />
+              ))}
+              {marks.fill && report.fillings.filter((f) => inView(f.at)).map((f) => (
+                <ReferenceDot key={`f-${f.id}`} yAxisId="fuel" x={f.at} y={eventRow} ifOverflow="hidden"
+                              shape={iconShape(ICON.fill, `Filling ${at(f.at)} · ${L(f.volumeL)}`)} />
+              ))}
+              {marks.drain && report.drains.filter((d) => inView(d.at)).map((d) => (
+                <ReferenceDot key={`d-${d.id}`} yAxisId="fuel" x={d.at} y={eventRow} ifOverflow="hidden"
+                              shape={iconShape(ICON.drain, `${dropWord(d)} ${at(d.at)} · ${L(d.volumeL)}`)} />
+              ))}
+              {/* The crosshair's level: across at the fuel under the pointer,
+                  its litres on the Litres axis. The upright is the tooltip's
+                  cursor below. */}
+              {crossL != null && (
+                <ReferenceLine yAxisId="fuel" y={crossL} ifOverflow="hidden"
+                               stroke="var(--sp4-text-3)" strokeWidth={1} strokeDasharray="3 3"
+                               label={<CrossLabel text={`${fmtNum(crossL, 1)} L`} />} />
+              )}
+              {crossL != null && (
+                <ReferenceDot yAxisId="fuel" x={hover.t} y={crossL} r={3.5} ifOverflow="hidden"
+                              fill={LINES[crossKey].color} stroke="#fff" strokeWidth={1.5} />
+              )}
+              {pinT != null && (
+                <ReferenceLine yAxisId="fuel" x={pinT} ifOverflow="hidden" stroke="var(--sp4-accent)" strokeWidth={1.5} />
+              )}
+              {pinT != null && pinL != null && (
+                <ReferenceDot yAxisId="fuel" x={pinT} y={pinL} r={4.5} ifOverflow="hidden"
+                              fill="var(--sp4-accent)" stroke="#fff" strokeWidth={2} />
+              )}
+              {/* No hover card while a box or a period is being drawn. */}
+              <Tooltip content={sel ? () => null : <ChartTip lines={lines} segments={report.segments} />} isAnimationActive={false}
+                       cursor={{ stroke: "var(--sp4-text-3)", strokeWidth: 1, strokeDasharray: "3 3" }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        {(detail || showCmp) && (
+          <aside className="frp-dock" aria-label="Graph detail">
+            {detail && <PointCard detail={detail} onClose={() => setPin(null)} />}
+            {showCmp && (
+              <CaptureCompare captures={captures} stats={captureStats}
+                              onRemove={(id) => setCaptures((cs) => cs.filter((c) => c.id !== id))}
+                              onClear={() => setCaptures([])}
+                              onClose={() => setCmpOpen(false)}
+                              onZoom={(c) => { setZoom(isWholeDay([c.from, c.to], full) ? null : [c.from, c.to]); setYZoom(null); }} />
+            )}
+          </aside>
         )}
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart
-            data={shown}
-            margin={{ top: 22, right: right ? 4 : 16, bottom: 4, left: 0 }}
-            onMouseMove={(e) => {
-              // Recharts 3 hands the index under the pointer, not the
-              // reading (its v2 `activePayload` is gone).
-              const i = Number(e?.activeTooltipIndex ?? e?.activeIndex);
-              const p = e?.activePayload?.[0]?.payload ?? (Number.isInteger(i) ? shown[i] : null) ?? null;
-              onCursor(p?.t ?? null);
-              setHover(p);
-            }}
-            onMouseLeave={() => { onCursor(null); setHover(null); }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--sp4-line, #e2e8f0)" />
-            <XAxis dataKey="t" type="number" scale="time" domain={zoom ?? ["dataMin", "dataMax"]} allowDataOverflow
-                   tickFormatter={tick} tick={{ fontSize: 10 }} minTickGap={40} />
-            <YAxis yAxisId="fuel" domain={[yLo, yHi]} tick={{ fontSize: 10 }} width={42} allowDataOverflow
-                   label={{ value: "Litres", angle: -90, position: "insideLeft", fontSize: 10, offset: 10 }} />
-            <YAxis yAxisId="right" orientation="right" hide={!right} tick={{ fontSize: 10 }} width={right ? 40 : 0} />
-            <YAxis yAxisId="alt" orientation="right" hide domain={["dataMin - 20", "dataMax + 20"]} />
-            <YAxis yAxisId="volt" orientation="right" hide domain={[0, "dataMax + 2"]} />
-            {/* On is 1 on a 0–10 scale: the step stays in the bottom tenth,
-                clear of the fuel line. */}
-            <YAxis yAxisId="eng" orientation="right" hide domain={[-0.15, 10]} allowDataOverflow />
-            {Object.entries(BACKGROUNDS).flatMap(([kind, b]) => (bg[kind]
-              ? report.segments.filter((s) => s.kind === kind && s.end >= view[0] && s.start <= view[1]).map((s) => (
-                <ReferenceArea key={`${kind}-${s.start}`} yAxisId="fuel"
-                               x1={Math.max(s.start, view[0])} x2={Math.min(Math.max(s.end, s.start + 60_000), view[1])}
-                               fill={b.color} fillOpacity={1} strokeOpacity={0} ifOverflow="hidden" />
-              ))
-              : []))}
-            {captures.filter((c) => c.to >= view[0] && c.from <= view[1]).map((c) => (
-              <ReferenceArea key={c.id} yAxisId="fuel" x1={Math.max(c.from, view[0])} x2={Math.min(c.to, view[1])}
-                             fill={c.color} fillOpacity={0.12} stroke={c.color} strokeOpacity={0.7} strokeDasharray="4 3"
-                             ifOverflow="hidden"
-                             label={{ value: c.letter, position: "insideTopLeft", fontSize: 11, fontWeight: 700, fill: c.color }} />
-            ))}
-            {Object.entries(LINES).map(([key, l]) => lines[key] && (
-              <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={l.axis === "fuel" || l.step ? 1.6 : 1.2}
-                    type={l.step ? "stepAfter" : "linear"} isAnimationActive={false} connectNulls={false} />
-            ))}
-            {marks.stop && report.stops.filter((st) => inView(st.start)).map((st) => (
-              <ReferenceDot key={`s-${st.start}`} yAxisId="fuel" x={st.start} y={stopRow} ifOverflow="hidden"
-                            shape={iconShape(ICON.stop, `Stop ${at(st.start)} · ${durationLabel(st.durationMs)}`)} />
-            ))}
-            {marks.fill && report.fillings.filter((f) => inView(f.at)).map((f) => (
-              <ReferenceDot key={`f-${f.id}`} yAxisId="fuel" x={f.at} y={eventRow} ifOverflow="hidden"
-                            shape={iconShape(ICON.fill, `Filling ${at(f.at)} · ${L(f.volumeL)}`)} />
-            ))}
-            {marks.drain && report.drains.filter((d) => inView(d.at)).map((d) => (
-              <ReferenceDot key={`d-${d.id}`} yAxisId="fuel" x={d.at} y={eventRow} ifOverflow="hidden"
-                            shape={iconShape(ICON.drain, `${dropWord(d)} ${at(d.at)} · ${L(d.volumeL)}`)} />
-            ))}
-            {/* The crosshair's level: across at the fuel under the pointer,
-                its litres on the Litres axis. The upright is the tooltip's
-                cursor below. */}
-            {crossL != null && (
-              <ReferenceLine yAxisId="fuel" y={crossL} ifOverflow="hidden"
-                             stroke="var(--sp4-text-3)" strokeWidth={1} strokeDasharray="3 3"
-                             label={<CrossLabel text={`${fmtNum(crossL, 1)} L`} />} />
-            )}
-            {crossL != null && (
-              <ReferenceDot yAxisId="fuel" x={hover.t} y={crossL} r={3.5} ifOverflow="hidden"
-                            fill={LINES[crossKey].color} stroke="#fff" strokeWidth={1.5} />
-            )}
-            {pinT != null && (
-              <ReferenceLine yAxisId="fuel" x={pinT} ifOverflow="hidden" stroke="var(--sp4-accent)" strokeWidth={1.5} />
-            )}
-            {pinT != null && pinL != null && (
-              <ReferenceDot yAxisId="fuel" x={pinT} y={pinL} r={4.5} ifOverflow="hidden"
-                            fill="var(--sp4-accent)" stroke="#fff" strokeWidth={2} />
-            )}
-            {/* No hover card while a box or a period is being drawn. */}
-            <Tooltip content={sel ? () => null : <ChartTip lines={lines} segments={report.segments} />} isAnimationActive={false}
-                     cursor={{ stroke: "var(--sp4-text-3)", strokeWidth: 1, strokeDasharray: "3 3" }} />
-          </ComposedChart>
-        </ResponsiveContainer>
       </div>
-      {host && showCmp && (
-        <CaptureCompare host={host} start={cardStart("left")} captures={captures} stats={captureStats}
-                        onRemove={(id) => setCaptures((cs) => cs.filter((c) => c.id !== id))}
-                        onClear={() => setCaptures([])}
-                        onClose={() => setCmpOpen(false)}
-                        onZoom={(c) => { setZoom(isWholeDay([c.from, c.to], full) ? null : [c.from, c.to]); setYZoom(null); }} />
-      )}
-      {host && detail && <PointCard host={host} start={cardStart("right")} detail={detail} onClose={() => setPin(null)} />}
     </div>
   );
 }
