@@ -1791,20 +1791,19 @@ export default function SensorPanel() {
       </div>
 
       {/* ── Filter bar ───────────────────────────────────────── */}
-      {/* Search and Activity narrow the two LIVE tables — probes by
-          registration, fuel by how recently the unit last moved. Neither
-          reaches the incident ledgers, which are paged from the server over a
-          whole month, so on Speed and Malfunction they used to sit there
-          looking operable and doing nothing. A control that filters nothing
-          is worse than no control, so those tabs get their own two groups
-          below instead.
+      {/* Activity narrows the two LIVE tables — probes and fuel, by how
+          recently the unit last moved. It does not reach the incident
+          ledgers, which are paged from the server, so Speed and Malfunction
+          get their own two groups below instead. Search does reach them
+          (2026-10-21): the box is handed to IncidentReport, which sends it to
+          the server so a unit on a later page is still found.
 
           On a phone the groups fold behind a Filters button and the search
           stays out — see FilterBar. The count is what is narrowed away from
           where each tab starts: Activity "all", today's date, the default sort,
           and no drain filter. A typed search is not counted; it is visible. */}
       <FilterBar
-        peek={!isIncidentTab && (
+        peek={(
           <div className="sp4-search-wrap">
             <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -1812,7 +1811,8 @@ export default function SensorPanel() {
             <input
               className="sp4-search"
               type="text"
-              placeholder="Search vehicle reg…"
+              placeholder={isIncidentTab ? "Search plate or name…" : "Search vehicle reg…"}
+              aria-label="Search units"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -2050,6 +2050,7 @@ export default function SensorPanel() {
                 panelTitle="Overspeeding cases"
                 exportSlug={`speed-${incidentDay}-${incidentSort}`}
                 selectedId={selectedAnomaly?.vehicleId}
+                search={search}
                 emptyLabel="No overspeeding recorded on this day."
               />
             )}
@@ -2070,6 +2071,7 @@ export default function SensorPanel() {
                 timeline
                 exportSlug={`malfunction-${incidentDay}-${incidentSort}`}
                 selectedId={selectedAnomaly?.vehicleId}
+                search={search}
                 emptyLabel="No sensor faults recorded on this day."
               />
             )}

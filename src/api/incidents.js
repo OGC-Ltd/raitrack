@@ -36,9 +36,9 @@ const base = (orgId) => `/api/v1/organisations/${orgId}/incidents`;
 /* ── overspeeding ─────────────────────────────────────────────────────────── */
 
 /** One page of the glance list: a row per offending unit. */
-export function getSpeedingSummary({ orgId, from, to, sort = "count", cursor, limit = 50 }) {
+export function getSpeedingSummary({ orgId, from, to, sort = "count", q, cursor, limit = 50 }) {
   if (!orgId) return Promise.resolve({ rows: [], cursor: null, hasNextPage: false });
-  return page(`${base(orgId)}/speeding/summary`, { from, to, sort, cursor, limit });
+  return page(`${base(orgId)}/speeding/summary`, { from, to, sort, q, cursor, limit });
 }
 
 /** Every case for ONE unit in the window, newest first. */
@@ -56,9 +56,9 @@ export async function getSpeedingInsights({ orgId, from, to }) {
 
 /* ── sensor faults ────────────────────────────────────────────────────────── */
 
-export function getFaultSummary({ orgId, from, to, kind, sort = "count", cursor, limit = 50 }) {
+export function getFaultSummary({ orgId, from, to, kind, sort = "count", q, cursor, limit = 50 }) {
   if (!orgId) return Promise.resolve({ rows: [], cursor: null, hasNextPage: false });
-  return page(`${base(orgId)}/faults/summary`, { from, to, kind, sort, cursor, limit });
+  return page(`${base(orgId)}/faults/summary`, { from, to, kind, sort, q, cursor, limit });
 }
 
 export function getFaultEpisodes({ orgId, vehicleId, from, to, kind, cursor, limit = 50 }) {
