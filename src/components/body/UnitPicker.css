@@ -41,7 +41,7 @@
 .upk__opt {
   position: relative;
   display: grid;
-  grid-template-columns: 7px auto minmax(0, 1fr) auto 14px;
+  grid-template-columns: 7px auto auto minmax(0, 1fr) auto 14px;
   align-items: center;
   gap: 10px;
   padding: 7px 12px;
@@ -113,7 +113,7 @@
   .upk__elsewhere:active { transform: none; }
 }
 @media (max-width: 767px) {
-  .upk__opt { padding: 10px 12px; grid-template-columns: 7px auto minmax(0, 1fr) 14px; }
+  .upk__opt { padding: 10px 12px; grid-template-columns: 7px auto auto minmax(0, 1fr) 14px; }
   .upk__type { display: none; }
   .upk__foot { display: none; }
 }

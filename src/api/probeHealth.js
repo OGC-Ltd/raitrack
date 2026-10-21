@@ -104,24 +104,24 @@ export function faultAction(row) {
   // has said nothing for weeks makes every channel on the unit unjudgeable, so
   // "the fuel probe is unknown" is a symptom and this is the cause. 66 of
   // SUKARI's 284 tracked units are in this state.
-  if (row.trackerSilent) return "Tracker silent — check the device";
+  if (row.trackerSilent) return "Tracker silent, check the device";
 
   // A record nobody finished. Desk work, not a workshop job.
   if (sensor?.uncalibrated) return "Add calibration table in Wialon";
 
   // Calibrated, the unit is reporting, and the reading is zero every time.
   // The configuration is sound, so the fault is between the tank and the probe.
-  if (probe === "SILENT") return "Probe reads empty — check probe fitting and wiring";
+  if (probe === "SILENT") return "Probe reads empty, check probe fitting and wiring";
 
   // Read real levels, then went flat. The date it stopped is in the row.
-  if (probe === "DIED") return "Probe stopped — inspect probe and wiring";
+  if (probe === "DIED") return "Probe stopped, inspect probe and wiring";
 
   // No sensor on the unit at all: nothing is broken, nothing is monitored.
   if (probe === "NOT_FITTED" && !sensor?.fitted) return "No fuel monitoring on this unit";
 
   // Not enough telemetry to judge the fuel channel — the tracker is the
   // problem before the probe is.
-  if (probe === "UNKNOWN") return "Unit barely reporting — check the tracker";
+  if (probe === "UNKNOWN") return "Unit barely reporting, check the tracker";
 
   const quiet = Object.entries(row.channels ?? {})
     .filter(([, c]) => c.state === "NOT_REPORTING")

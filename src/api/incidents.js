@@ -76,7 +76,7 @@ export async function getFaultInsights({ orgId, from, to }) {
 
 /** A duration an operator can read at a glance. Seconds only below a minute. */
 export function durationLabel(sec) {
-  if (sec == null || !Number.isFinite(sec)) return "—";
+  if (sec == null || !Number.isFinite(sec)) return "-";
   if (sec < 60) return `${Math.round(sec)}s`;
   const m = Math.round(sec / 60);
   if (m < 60) return `${m}m`;
@@ -88,7 +88,7 @@ export function durationLabel(sec) {
 
 /** Metres, at the precision the measurement actually supports. */
 export function distanceLabel(m) {
-  if (m == null || !Number.isFinite(m)) return "—";
+  if (m == null || !Number.isFinite(m)) return "-";
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 }
 
@@ -99,7 +99,7 @@ const HHMM = new Intl.DateTimeFormat("en-GB", {
 });
 export function whenLabel(iso) {
   const t = Date.parse(iso ?? "");
-  return Number.isFinite(t) ? HHMM.format(t) : "—";
+  return Number.isFinite(t) ? HHMM.format(t) : "-";
 }
 
 /* The fleet clock again, split.
@@ -122,9 +122,9 @@ const HM = new Intl.DateTimeFormat("en-GB", {
 const parsed = (iso) => { const t = Date.parse(iso ?? ""); return Number.isFinite(t) ? t : null; };
 
 /** "09/09/2026" — day first, as both operations write it. */
-export function dateLabel(iso) { const t = parsed(iso); return t == null ? "—" : DMY.format(t); }
+export function dateLabel(iso) { const t = parsed(iso); return t == null ? "-" : DMY.format(t); }
 /** "02:15 hrs" — 24-hour, the way the radio log reads. */
-export function timeLabel(iso) { const t = parsed(iso); return t == null ? "—" : `${HM.format(t)} hrs`; }
+export function timeLabel(iso) { const t = parsed(iso); return t == null ? "-" : `${HM.format(t)} hrs`; }
 /* A combined "09/09/2026 02:15 hrs" formatter lived here briefly, for the
    Last episode column. That column is the map button now and the moment is
    carried by the two above, so nothing consumed it. */
@@ -165,9 +165,9 @@ export const FAULT_SENSORS = {
   engine_hours_not_reporting: "Engine hours",
   fuel_probe_dead:            "Fuel probe",
 };
-export const faultSensor  = (kind) => FAULT_SENSORS[kind] ?? "—";
+export const faultSensor  = (kind) => FAULT_SENSORS[kind] ?? "-";
 export const faultSensors = (kinds) =>
-  kinds ? [...new Set(kinds.split(",").map(faultSensor))].join(", ") : "—";
+  kinds ? [...new Set(kinds.split(",").map(faultSensor))].join(", ") : "-";
 
 /**
  * Coordinates, at five decimal places — about a metre, which is finer than any
@@ -176,7 +176,7 @@ export const faultSensors = (kinds) =>
  * already aged out of the 30-day window. Never 0,0 — that is the Atlantic.
  */
 export function coordLabel(lat, lng) {
-  if (lat == null || lng == null) return "—";
+  if (lat == null || lng == null) return "-";
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
@@ -193,7 +193,7 @@ export function coordLabel(lat, lng) {
  * claim as "it was parked".
  */
 export function motionLabel(moving, speedKmh) {
-  if (moving == null) return "—";
+  if (moving == null) return "-";
   const speed = speedKmh == null ? null : `${Math.round(speedKmh)} km/h`;
   const state = moving ? "Moving" : "Stationary";
   return speed ? `${state} · ${speed}` : state;

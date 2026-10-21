@@ -208,7 +208,7 @@ export default function FuelReportOverview({
   const consumption = [
     s.lPer100Km != null ? `${n1(s.lPer100Km)} L/100 km` : null,
     s.lPerHour != null ? `${n1(s.lPerHour)} L/h` : null,
-  ].filter(Boolean).join(" · ") || "—";
+  ].filter(Boolean).join(" · ") || "-";
 
   return (
     <div className="frv">
@@ -328,7 +328,7 @@ export default function FuelReportOverview({
                         <td className="sp4-td--right sp4-num">{fmtNum(e.beforeL)} L</td>
                         <td className="sp4-td--right sp4-num">{fmtNum(e.afterL)} L</td>
                         <td className="sp4-td--right sp4-num"><b>{fmtNum(e.volumeL)} L</b></td>
-                        <td className="sp4-td--left sp4-muted">{e.location ?? "—"}</td>
+                        <td className="sp4-td--left sp4-muted">{e.location ?? "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -345,7 +345,7 @@ export default function FuelReportOverview({
           <div><dt>Avg consumption</dt><dd>{consumption}</dd></div>
           <div><dt>Max / avg speed</dt><dd>{n0(s.maxSpeedKmh)} / {n0(s.avgSpeedKmh)} km/h</dd></div>
           <div><dt>Trips · parkings · stops</dt><dd>{s.tripCount} · {s.parkingCount} · {s.stopCount}</dd></div>
-          <div><dt>Longest parking</dt><dd>{r.parkings.length ? durationLabel(Math.max(...r.parkings.map((p) => p.durationMs))) : "—"}</dd></div>
+          <div><dt>Longest parking</dt><dd>{r.parkings.length ? durationLabel(Math.max(...r.parkings.map((p) => p.durationMs))) : "-"}</dd></div>
           <div><dt>Readings</dt><dd>{r.readings.toLocaleString("en-KE")}</dd></div>
         </dl>
       </section>

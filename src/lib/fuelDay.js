@@ -178,7 +178,7 @@ export function dayAssessment(b, incident = null, today = false) {
       ? `It covered ${b.distanceKm.toFixed(1)} km at its ${which} ${b.engineKmPerL.toFixed(1)} km/L`
       : `The engine ran ${hoursLabel(b.engineHours)}${b.engineRate != null ? ` at its ${which} ${b.engineRate.toFixed(1)} L/h` : ""}`;
     out.push(engineL >= lost
-      ? `${did}, which burns ${litres(engineL)} — all of the ${litres(lost)} the tank lost.`
+      ? `${did}, which burns ${litres(engineL)}, enough to cover all of the ${litres(lost)} the tank lost.`
       : `${did}, which burns ${litres(engineL)} of the ${litres(lost)} the tank lost.`);
   } else {
     out.push(`There is no engine-hour record for ${dayWord}, so the ${litres(lost)} the tank lost cannot be set against a burn.`);
@@ -219,7 +219,7 @@ export function dayAssessment(b, incident = null, today = false) {
   const at = began != null ? CLOCK.format(new Date(began)) : null;
   const other = thefts.length ? "The other" : "Another";
   if (pre != null && post != null && pre > SAME_LEVEL_L && post <= SAME_LEVEL_L) {
-    out.push(`${other} ${litres(rest)} went before ${at}, with no event of its own: the tank read ${litres(b.opening)} at the start of the day and ${litres(before)} when ${incident?.mayUseTheftWording ? "the theft" : "this drop"} began — a fall too gradual to be reported on its own.`);
+    out.push(`${other} ${litres(rest)} went before ${at}, with no event of its own: the tank read ${litres(b.opening)} at the start of the day and ${litres(before)} when ${incident?.mayUseTheftWording ? "the theft" : "this drop"} began, a fall too gradual to be reported on its own.`);
   } else if (pre != null && post != null && post > SAME_LEVEL_L && pre <= SAME_LEVEL_L) {
     out.push(`${other} ${litres(rest)} went after ${at}, with no event of its own: ${litres(after)} then, ${litres(b.closing)} ${today ? "now" : "at the end of the day"}.`);
   } else {

@@ -107,7 +107,7 @@ const SPRITE_PX = 22;
  * is noise dressed as rigour.
  */
 function ageLabel(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (!Number.isFinite(ms) || ms < 0) return "-";
   const s = Math.floor(ms / 1000);
   if (s < 45) return "now";
   const m = Math.round(s / 60);
@@ -123,7 +123,7 @@ const ageBand = (ms) =>
 /** Moving, running-but-stationary, or stopped. */
 const MOTION = {
   transit: { glyph: "▲", label: "Moving" },
-  idling:  { glyph: "◼", label: "Idling — stationary, engine running" },
+  idling:  { glyph: "◼", label: "Idling, stationary, engine running" },
   parked:  { glyph: "◼", label: "Stationary" },
 };
 
@@ -257,7 +257,7 @@ function UnitPlace({ v }) {
   return (
     <span ref={ref} className="units-menu__loc" role="cell"
           title={coords ? (place ? `${place} (${coords})` : coords) : "No fix"}>
-      {place || coords || "—"}
+      {place || coords || "-"}
     </span>
   );
 }
@@ -475,7 +475,7 @@ export default function UnitsMenu({
                   className={`units-menu__winbtn${pinned ? " units-menu__winbtn--on" : ""}`}
                   aria-pressed={pinned}
                   onClick={() => setPinned((v) => !v)}
-                  title={pinned ? "Unpin \u2014 a press outside closes this again" : "Pin \u2014 keep this open while working on the map"}
+                  title={pinned ? "Unpin: a press outside closes this again" : "Pin: keep this open while working on the map"}
                 >
                   <IconPushPin on={pinned} />
                 </button>
@@ -541,12 +541,12 @@ export default function UnitsMenu({
                   aria-sort={ariaSort(key)}
                   className={`units-menu__h units-menu__h--sortable units-menu__h--${cls}${sort.key === key ? " units-menu__h--on" : ""}`}
                   data-dir={sort.key === key ? sort.dir : undefined}
-                  title={`${label} — click to sort${sort.key === key ? (sort.dir === "asc" ? ", again to reverse" : ", again to reverse") : ""}`}
+                  title={`${label}, click to sort${sort.key === key ? (sort.dir === "asc" ? ", again to reverse" : ", again to reverse") : ""}`}
                   aria-label={`Sort by ${label}`}
                   onClick={() => sortBy(key)}
                 ><Icon /></button>
               ))}
-              <span className="units-menu__h units-menu__h--route"  role="columnheader" title="Quick track — draw this unit's route" aria-label="Quick track"><IconRoute /></span>
+              <span className="units-menu__h units-menu__h--route"  role="columnheader" title="Quick track, draw this unit's route" aria-label="Quick track"><IconRoute /></span>
               <span className="units-menu__h units-menu__h--open"   role="columnheader" title="Open unit" aria-label="Open unit"><IconOpen /></span>
             </div>
 
@@ -603,7 +603,7 @@ export default function UnitsMenu({
                       className={`units-menu__motion units-menu__motion--${activity}`}
                       role="cell"
                       style={{ color: v.online ? ACTIVITY_COLORS[activity] : "#64748b" }}
-                      title={v.online ? motion.label : "Offline — last known state"}
+                      title={v.online ? motion.label : "Offline, last known state"}
                       aria-label={motion.label}
                     >{motion.glyph}</span>
 
@@ -628,7 +628,7 @@ export default function UnitsMenu({
                       role="switch"
                       aria-checked={routeOn}
                       aria-label={`${routeOn ? "Hide" : "Show"} route for ${v.id}`}
-                      title={routeOn ? "Hide this route" : "Show this route — replaces the one showing"}
+                      title={routeOn ? "Hide this route" : "Show this route, replaces the one showing"}
                       onClick={() => onToggleRoute?.(v.id)}
                     >
                       <IconRoute />

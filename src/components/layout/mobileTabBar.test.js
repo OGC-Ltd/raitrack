@@ -23,7 +23,7 @@ const centre = (tabs) => tabs.find((t) => t.fab)?.key;
 const EVERYTHING = ["analytics", "drivers", "fleet", "weighbridges", "maintenance"];
 const DEFAULT    = EVERYTHING;
 
-describe("barTabs — when the map is open", () => {
+describe("barTabs, when the map is open", () => {
   it("leaves the bar exactly as it was", () => {
     const tabs = barTabs(allow(...EVERYTHING));
     expect(keys(tabs)).toEqual(DEFAULT);
@@ -37,7 +37,7 @@ describe("barTabs — when the map is open", () => {
   });
 });
 
-describe("barTabs — when the map is closed", () => {
+describe("barTabs, when the map is closed", () => {
   it("gives the centre to the technician's one screen", () => {
     const tabs = barTabs(allow("maintenance"));
     expect(centre(tabs)).toBe("maintenance");
@@ -73,7 +73,7 @@ describe("barTabs — when the map is closed", () => {
   });
 });
 
-describe("barTabs — the promoted tab can still be drawn", () => {
+describe("barTabs, the promoted tab can still be drawn", () => {
   it("gives every tab an icon, including a demoted Fleet", () => {
     // Fleet used to carry `icon: null` because the centre drew a truck SVG.
     // Once it can be demoted into an ordinary slot it needs a real one, or it

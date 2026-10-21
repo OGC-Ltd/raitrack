@@ -11,7 +11,7 @@
 
 import "./TelemetryCard.css";
 
-const dash = (v, fmt) => (v == null ? "—" : fmt(v));
+const dash = (v, fmt) => (v == null ? "-" : fmt(v));
 
 const CELLS = [
   { key: "mileageKm",   label: "MILEAGE",      icon: "🛣", iconCls: "amber", format: v => dash(v, x => `${Math.round(x).toLocaleString()} km`) },

@@ -24,6 +24,7 @@ import { useCrossOrgUnits } from "../../hooks/useCrossOrgUnits";
 import { fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
 import "./UnitPicker.css";
 import { displayPlate } from "../../lib/plate";
+import UnitTypeIcon from "../shared/UnitTypeIcon";
 
 const MAX_SHOWN = 60;
 /** The theme tokens the floating list reads, copied from the box it belongs to. */
@@ -77,7 +78,7 @@ export function matchUnits(vehicles, q) {
   return scored.map((x) => x.v);
 }
 
-export default function UnitPicker({ vehicles, value, onChange, placeholder = "Search unit — plate, name or type…" }) {
+export default function UnitPicker({ vehicles, value, onChange, placeholder = "Search unit, plate, name or type…" }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const { setActiveCompanyId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
@@ -211,6 +212,7 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
                 onClick={() => pick(v)}
               >
                 <span className={`upk__dot${v.online ? " upk__dot--on" : ""}`} title={v.online ? "Online" : "Offline"} />
+                <UnitTypeIcon vehicle={v} size={22} />
                 <span className="upk__plate">{displayPlate(v)}</span>
                 <span className="upk__name">{rowLabel(v, prefix)}</span>
                 <span className="upk__type">{fleetTypeLabel(fleetType(v))}</span>
@@ -218,7 +220,7 @@ export default function UnitPicker({ vehicles, value, onChange, placeholder = "S
               </li>
             ))}
             {matches.length > MAX_SHOWN && (
-              <li className="upk__more">{matches.length - MAX_SHOWN} more — keep typing to narrow</li>
+              <li className="upk__more">{matches.length - MAX_SHOWN} more, keep typing to narrow</li>
             )}
             {matches.length === 0 && (
               <li className="upk__empty">

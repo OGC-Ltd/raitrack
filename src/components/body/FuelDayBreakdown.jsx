@@ -23,7 +23,7 @@ const WEEKDAY = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "sh
 const at = (day) => new Date(`${day}T12:00:00Z`);
 const prevDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) - 86_400_000);
 // Rounded before the sign is read, so -0.04 prints "0.0", not "-0.0".
-const l1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10 || 0).toFixed(1));
+const l1 = (v) => (v == null ? "-" : (Math.round(v * 10) / 10 || 0).toFixed(1));
 
 /**
  * `cardShowsLevel`: the vehicle card beside this already shows the tank now

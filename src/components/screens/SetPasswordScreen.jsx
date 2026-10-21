@@ -141,7 +141,7 @@ export default function SetPasswordScreen({ token, onDone }) {
               <h1 className="login__title">Just a moment.</h1>
               <p className="login__sub">
                 The server is turning away requests from your network right now.
-                Your link is fine — it has not been used and it has not expired.
+                Your link is fine, it has not been used and it has not expired.
                 Wait a minute and try again.
               </p>
               {/* Deliberately NOT the "send a new link" form. A new link would
@@ -194,7 +194,7 @@ export default function SetPasswordScreen({ token, onDone }) {
           {(state === "ready" || state === "saving") && (
             <>
               <h1 className="login__title">
-                {info?.purpose === "RESET" ? "Choose a new password." : "Welcome — set your password."}
+                {info?.purpose === "RESET" ? "Choose a new password." : "Welcome, set your password."}
               </h1>
               <p className="login__sub">
                 {info?.fullName ? `Signing in as ${info.fullName}` : "Choose a password to finish setting up your account."}

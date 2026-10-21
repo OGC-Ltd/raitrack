@@ -91,7 +91,7 @@ function monthColumns(doc, months, x, y, w, h) {
     const cx = x + i * (cw + gap);
     doc.setFillColor(i === months.length - 1 ? C.greenDeep : C.green);
     doc.rect(cx, base - bh, cw, Math.max(1, bh), "F");
-    text(doc, m.perDay ? `${(m.perDay / 1000).toFixed(1)}k` : "—", cx + cw / 2, base - bh - 4, { size: 8, bold: true, align: "center" });
+    text(doc, m.perDay ? `${(m.perDay / 1000).toFixed(1)}k` : "-", cx + cw / 2, base - bh - 4, { size: 8, bold: true, align: "center" });
     text(doc, monthLabel(m.month), cx + cw / 2, base + 10, { size: 8, color: C.sub, align: "center" });
     text(doc, `(${m.days} days)`, cx + cw / 2, base + 19, { size: 7, color: C.faint, align: "center" });
   });
@@ -237,9 +237,9 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   y = tiles(doc, [
     { value: litres(t.litres, { short: true }), label: `put in over ${review.days} days to ${t.units} units` },
     { value: `~${litres(t.perMonth, { short: true })}`, label: "a typical month (average a day × 30)" },
-    { value: p?.change != null ? `${p.change >= 0 ? "+" : ""}${Math.round(p.change * 100)}%` : "—",
+    { value: p?.change != null ? `${p.change >= 0 ? "+" : ""}${Math.round(p.change * 100)}%` : "-",
       label: p ? `${monthLabel(p.latest.month)} pace vs the full months before` : "pace needs two months", color: "#b9600b" },
-    { value: litres(t.excessL, { short: true }), label: `above standard rates — ${(t.excessShare * 100).toFixed(1)}% of all fuel`, color: C.red },
+    { value: litres(t.excessL, { short: true }), label: `above standard rates, ${(t.excessShare * 100).toFixed(1)}% of all fuel`, color: C.red },
   ], y);
 
   y = sectionHead(doc, "WHERE THE FUEL GOES", y);
@@ -266,7 +266,7 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   const relRows = [
     { label: "Plausible, at or near standard", value: review.records.near, color: C.green },
     { label: "Plausible, well over standard", value: review.records.over, color: C.redBar },
-    { label: "Implausible — needs checking", value: review.records.implausible, color: C.amber },
+    { label: "Implausible, needs checking", value: review.records.implausible, color: C.amber },
     { label: "Hours, km or standard missing", value: review.records.missing, color: C.grey },
   ];
   const yC = hbars(doc, excessRows, M, y, colW, { lw: 96, rowH: 14, format: (v) => litres(v, { short: true }), title: "Litres above standard, by equipment type" });
@@ -292,7 +292,7 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   const attention = read.attention.slice(0, 6).map((u) => [
     { t: `${u.ref} `, b: true }, { t: `(${u.group.replace(/s$/, "").toLowerCase()}): ${pct(u.ratio)} of standard over ${u.usableRefills} refills, ${litres(u.excessL)} above.` },
   ]);
-  if (read.meterFixes.length) attention.push([{ t: "Readings to check: ", b: true }, { t: `${listRefs(read.meterFixes.slice(0, 6))} — refills logged against next to no hours or km.` }]);
+  if (read.meterFixes.length) attention.push([{ t: "Readings to check: ", b: true }, { t: `${listRefs(read.meterFixes.slice(0, 6))}, refills logged against next to no hours or km.` }]);
   // As many benchmark groups as there are attention lines, so the two boxes
   // come out about the same height.
   const bench = read.benchmarks.slice(0, Math.max(5, Math.min(8, Math.min(6, read.attention.length) + (read.meterFixes.length ? 2 : 0)))).map((b) => [
@@ -322,7 +322,7 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   // The exhibit follows straight on when page 1 has room for its heading and
   // a chart, rather than leaving the foot of the page blank.
   if (y + 220 > H - 40) { doc.addPage(); y = 44; } else { y += 18; }
-  text(doc, "EXHIBIT — HOW EACH UNIT COMPARES WITH ITS STANDARD", M, y, { size: 13, bold: true, color: C.greenDeep });
+  text(doc, "EXHIBIT: HOW EACH UNIT COMPARES WITH ITS STANDARD", M, y, { size: 13, bold: true, color: C.greenDeep });
   y += 13;
   y = para(doc, "Each bar shows a unit's typical refill as a percentage of its standard rate. 100% = on standard; higher is worse. The worst unit sits at the top of each chart. Units with at least 5 usable refills (3 for CASE tractors). * = largest fuel user in its group.",
            M, y, W - 2 * M, { size: 7.8, color: C.sub });

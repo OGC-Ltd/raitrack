@@ -33,7 +33,7 @@ import "./LogbookPlayback.css";
 const TZ = "Africa/Nairobi";
 const HHMM = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 const HHMMSS = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: TZ });
-const nf = (n, d = 1) => (n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-GB", { maximumFractionDigits: d, minimumFractionDigits: d }));
+const nf = (n, d = 1) => (n == null || !Number.isFinite(n) ? "-" : n.toLocaleString("en-GB", { maximumFractionDigits: d, minimumFractionDigits: d }));
 const hm = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
 const BASE_MAP_KEY = "ft-map-base";
 
@@ -407,12 +407,12 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
               <section className="lbp-sec">
                 <h3 className="lbp-h">Day</h3>
                 <dl className="lbp-stats">
-                  <div className="is-lead"><dt>Distance</dt><dd>{logDay ? nf(logDay.km, 1) : data?.distanceM != null ? nf(data.distanceM / 1000, 1) : "—"}<small>km</small></dd></div>
-                  <div><dt>Driving</dt><dd>{logDay?.driveH != null ? hm(logDay.driveH) : "—"}</dd></div>
-                  <div><dt>Engine on</dt><dd>{logDay?.engineH != null ? hm(logDay.engineH) : "—"}</dd></div>
-                  <div><dt>Top speed</dt><dd>{topSpeed != null ? Math.round(topSpeed) : "—"}<small>km/h</small></dd></div>
-                  <div><dt>First move</dt><dd>{logDay?.firstMove ? HHMM.format(logDay.firstMove) : pb.t0 ? HHMM.format(pb.t0) : "—"}</dd></div>
-                  <div><dt>Last move</dt><dd>{logDay?.lastMove ? HHMM.format(logDay.lastMove) : pb.t1 ? HHMM.format(pb.t1) : "—"}</dd></div>
+                  <div className="is-lead"><dt>Distance</dt><dd>{logDay ? nf(logDay.km, 1) : data?.distanceM != null ? nf(data.distanceM / 1000, 1) : "-"}<small>km</small></dd></div>
+                  <div><dt>Driving</dt><dd>{logDay?.driveH != null ? hm(logDay.driveH) : "-"}</dd></div>
+                  <div><dt>Engine on</dt><dd>{logDay?.engineH != null ? hm(logDay.engineH) : "-"}</dd></div>
+                  <div><dt>Top speed</dt><dd>{topSpeed != null ? Math.round(topSpeed) : "-"}<small>km/h</small></dd></div>
+                  <div><dt>First move</dt><dd>{logDay?.firstMove ? HHMM.format(logDay.firstMove) : pb.t0 ? HHMM.format(pb.t0) : "-"}</dd></div>
+                  <div><dt>Last move</dt><dd>{logDay?.lastMove ? HHMM.format(logDay.lastMove) : pb.t1 ? HHMM.format(pb.t1) : "-"}</dd></div>
                   <div><dt>Stops</dt><dd>{counts.stop ?? 0}</dd></div>
                   <div className={(counts.theft ?? 0) + (counts.refill ?? 0) ? "is-warn" : ""}><dt>Fuel events</dt><dd>{(counts.theft ?? 0) + (counts.refill ?? 0)}</dd></div>
                   <div className={counts.speeding ? "is-crit" : ""}><dt>Speeding</dt><dd>{counts.speeding ?? 0}</dd></div>

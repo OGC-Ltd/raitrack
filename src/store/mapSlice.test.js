@@ -51,7 +51,7 @@ describe('map bridge', () => {
     expect(runMapCommand('focus', 'u2')).toBeUndefined();
   });
 
-  it('keeps published lists as given — functions and live objects intact', () => {
+  it('keeps published lists as given, functions and live objects intact', () => {
     const onToggle = () => {};
     const vehicle = { id: 'v1', speed: 0 };
     publishLayers([{ id: 'bridges', onToggle }]);

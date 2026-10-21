@@ -149,8 +149,9 @@
    sit in the 6px, clear of the border. */
 .frp-chart { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 10px 8px 6px; }
 .frp-chart__plot { flex: 1; min-height: 0; touch-action: pan-y; user-select: none; }
-/* Drag sideways to zoom: the cursor says the graph resizes left–right. */
-.frp-chart__plot { cursor: ew-resize; }
+/* Held and dragged like a map: an open hand, a closed one while held. */
+.frp-chart__plot { cursor: grab; }
+.frp-chart__plot:active { cursor: grabbing; }
 .frp-zoom {
   display: flex;
   align-items: center;

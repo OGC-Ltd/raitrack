@@ -9,15 +9,15 @@ const CONDITIONS = {
   clear:         { icon: "🌙",  label: "Clear Night",    warning: null },
   partly_cloudy: { icon: "⛅",  label: "Partly Cloudy",  warning: null },
   cloudy:        { icon: "☁️",  label: "Cloudy",         warning: null },
-  overcast:      { icon: "🌫️", label: "Overcast",       warning: "Reduced visibility — reduce speed" },
-  rain:          { icon: "🌧️", label: "Rain",           warning: "Wet roads — maintain safe following distance" },
-  light_rain:    { icon: "🌦️", label: "Light Rain",     warning: "Slippery surface — drive cautiously" },
-  heavy_rain:    { icon: "⛈️", label: "Heavy Rain",     warning: "Poor visibility — consider shelter" },
-  thunderstorm:  { icon: "🌩️", label: "Thunderstorm",  warning: "Dangerous conditions — pull over safely" },
-  fog:           { icon: "🌁",  label: "Fog",            warning: "Very low visibility — use fog lights" },
+  overcast:      { icon: "🌫️", label: "Overcast",       warning: "Reduced visibility, reduce speed" },
+  rain:          { icon: "🌧️", label: "Rain",           warning: "Wet roads, maintain safe following distance" },
+  light_rain:    { icon: "🌦️", label: "Light Rain",     warning: "Slippery surface, drive cautiously" },
+  heavy_rain:    { icon: "⛈️", label: "Heavy Rain",     warning: "Poor visibility, consider shelter" },
+  thunderstorm:  { icon: "🌩️", label: "Thunderstorm",  warning: "Dangerous conditions, pull over safely" },
+  fog:           { icon: "🌁",  label: "Fog",            warning: "Very low visibility, use fog lights" },
   mist:          { icon: "🌫️", label: "Mist",           warning: "Reduced visibility ahead" },
-  snow:          { icon: "❄️",  label: "Snow",           warning: "Hazardous roads — avoid travel if possible" },
-  wind:          { icon: "💨",  label: "Windy",          warning: "High winds — check load security" },
+  snow:          { icon: "❄️",  label: "Snow",           warning: "Hazardous roads, avoid travel if possible" },
+  wind:          { icon: "💨",  label: "Windy",          warning: "High winds, check load security" },
 };
 
 function getCondition(key) {

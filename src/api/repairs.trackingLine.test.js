@@ -23,7 +23,7 @@ const filled = (item) => {
   return n.slice(0, -1).map((_, i) => n[i + 1].state !== "todo");
 };
 
-describe("trackingLine — sequential", () => {
+describe("trackingLine, sequential", () => {
   it("always draws all four rungs in order", () => {
     for (const stage of ["pending", "spare_outsourced", "fixing", "fixed"]) {
       expect(keys({ stage, stageHistory: [] })).toEqual(STAGE_ORDER);
@@ -54,7 +54,7 @@ describe("trackingLine — sequential", () => {
   });
 });
 
-describe("trackingLine — going back", () => {
+describe("trackingLine, going back", () => {
   it("puts a later rung back to 'to come' when the job returns below it", () => {
     const item = {
       stage: "spare_outsourced",
@@ -69,7 +69,7 @@ describe("trackingLine — going back", () => {
   });
 });
 
-describe("trackingLine — a rung passed without standing on it", () => {
+describe("trackingLine, a rung passed without standing on it", () => {
   it("draws the spare rung done, with no date, for a job that needed no part", () => {
     const spare = trackingLine({ stage: "fixing", stageHistory: [at("fixing")] })[1];
     expect(spare.state).toBe("done");
@@ -88,7 +88,7 @@ describe("trackingLine — a rung passed without standing on it", () => {
   });
 });
 
-describe("stageChipState — both chips lit", () => {
+describe("stageChipState, both chips lit", () => {
   const h = (stage) => ({ stage, at: "2026-09-30T08:00:00.000Z" });
   it("lights Spare outsourced beside Fixing when a spare was outsourced", async () => {
     const { stageChipState } = await import("./repairs");
@@ -106,7 +106,7 @@ describe("stageChipState — both chips lit", () => {
   });
 });
 
-describe("mayWorkJob — a technician works only an accepted job of their own", () => {
+describe("mayWorkJob, a technician works only an accepted job of their own", () => {
   const job = (over = {}) => ({ id: "j", resolvedAt: null, assignedToId: "me", assignmentStatus: "accepted", ...over });
   it("lets a technician work their accepted job, and nothing else", async () => {
     const { mayWorkJob } = await import("./repairs");

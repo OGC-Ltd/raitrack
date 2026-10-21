@@ -60,7 +60,7 @@ export function fixRecencyTier(vehicle, now = Date.now()) {
  */
 export function fixAgeLabel(vehicle, now = Date.now()) {
   const age = fixAgeMs(vehicle, now);
-  if (age == null) return "—";
+  if (age == null) return "-";
   const mins = Math.floor(age / 60_000);
   if (mins < 1) return "now";
   if (mins < 60) return `${mins}m`;

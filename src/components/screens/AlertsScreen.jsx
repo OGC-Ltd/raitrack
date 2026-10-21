@@ -132,7 +132,7 @@ function DayField({ label, value, max, onPick }) {
 
 /** One figure as a gauge against the period's whole, like the Fuel Audit's cards. */
 function StatCard({ title, n, of, color, note, loading }) {
-  const shown = n == null ? "—" : n;
+  const shown = n == null ? "-" : n;
   const unit = of > 0 ? `of ${of} alert${of === 1 ? "" : "s"}` : loading ? "reading" : "no alerts";
   return (
     <Card title={title} note={note} className="aud-stat">
@@ -186,7 +186,7 @@ function TrendCard({ trend, loading }) {
         {TREND_LINES.map((l) => (
           <li key={l.key} className={l.cls}>
             <i aria-hidden="true" />{l.label}
-            <b>{series ? (point ? point[l.key] : sum(l.key)) : "—"}</b>
+            <b>{series ? (point ? point[l.key] : sum(l.key)) : "-"}</b>
           </li>
         ))}
         <li className="alr-trend__when">{series ? readout : loading ? "Reading…" : ""}</li>
@@ -242,7 +242,11 @@ function Chip({ on, onClick, children, n, title }) {
 function DecisionPanel({ alert, start, onDecided, onCancel, onToast }) {
   const escalations = alert.choices.filter((c) => c.outcome === "ESCALATED");
   const deescalation = alert.choices.find((c) => c.outcome === "DEESCALATED") ?? null;
-  const [outcome, setOutcome] = useState(start && alert.choices.some((c) => c.outcome === start) ? start : null);
+  // De-escalate is picked when nothing else was asked for (operator,
+  // 2026-10-20: "the deescalate button should be selected by default").
+  const [outcome, setOutcome] = useState(
+    start && alert.choices.some((c) => c.outcome === start) ? start
+      : alert.choices.some((c) => c.outcome === "DEESCALATED") ? "DEESCALATED" : null);
   const [reason, setReason] = useState(escalations[0]?.reason ?? null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -524,7 +528,7 @@ function Facts({ alert, org }) {
     rows.push(["Driver", s.driverName ?? "Not recorded"]);
     rows.push(["Evidence", `${s.frames} reading${s.frames === 1 ? "" : "s"} over the limit`]);
   }
-  rows.push(["Organisation", org?.name ?? "—"]);
+  rows.push(["Organisation", org?.name ?? "-"]);
   return (
     <dl className="alr-facts">
       {rows.map(([k, v]) => (
@@ -587,7 +591,7 @@ function AlertPanel({ alert, org, start, canMap, onClose, onDecided, onToast, on
         )}
         name={plateIn(alert.plate, alert.vehicleName) ?? alert.plate}
         nameTitle={alert.vehicleName || alert.plate}
-        sub={org?.name ?? "—"}
+        sub={org?.name ?? "-"}
       >
         {alert.fuel?.probeHold && (
           <span className="alr-probe" title="This unit is already reported for a fuel probe repair">
@@ -775,7 +779,7 @@ export default function AlertsScreen() {
   const togglePick = (a) => editPicks((m) => { const k = rowKey(a); if (m.has(k)) m.delete(k); else m.set(k, a); });
   const shortName = (o) => {
     const c = companies.find((x) => x.id === companyForOrgCode(o?.code));
-    return c?.short || o?.name || "—";
+    return c?.short || o?.name || "-";
   };
   const kindsHeld = new Set(orgList.flatMap((o) => o.kinds));
   // The speed filter only where overspeeding can be listed: Kasulu alone has none.

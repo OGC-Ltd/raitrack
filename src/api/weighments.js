@@ -156,17 +156,17 @@ export async function getDispatchedUnits({ orgId } = {}) {
  *  Two decimals: these scales resolve to 20 kg, so a third digit would be
  *  precision the machine does not have. */
 export function tonnes(kg) {
-  return kg == null ? "—" : `${(kg / 1000).toFixed(2)} t`;
+  return kg == null ? "-" : `${(kg / 1000).toFixed(2)} t`;
 }
 
 /** Kilograms, grouped. The number printed on the ticket. */
 export function kilos(kg) {
-  return kg == null ? "—" : `${Math.round(kg).toLocaleString()} kg`;
+  return kg == null ? "-" : `${Math.round(kg).toLocaleString()} kg`;
 }
 
 /** A duration as the yard says it: "3h 24m", "18m", "—" for unknown. */
 export function gapLabel(ms) {
-  if (ms == null) return "—";
+  if (ms == null) return "-";
   const mins = Math.round(ms / 60_000);
   if (mins < 1) return "under a minute";
   const h = Math.floor(mins / 60);
@@ -177,7 +177,7 @@ export function gapLabel(ms) {
 /** Clock time of a stamp, to the minute — which is all the provider sends
  *  (the times arrive as HHMM integers, so there are no seconds to show). */
 export function clockLabel(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -187,7 +187,7 @@ export function clockLabel(iso) {
  *  looking at — a tare taken the night before is common, and showing it as a
  *  bare "23:41" beside today's gross reads as a two-minute turnaround. */
 export function stampLabel(iso, dayIso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   const sameDay = dayIso && new Date(dayIso).toDateString() === d.toDateString();
   const p = (n) => String(n).padStart(2, "0");

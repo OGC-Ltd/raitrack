@@ -89,7 +89,7 @@ export default function RepairJobDetail({ orgId, job, canResolve = false, onToas
               {[job.report?.reportedBy?.fullName, at(job.report?.reportedAt)].filter(Boolean).join(" · ") || null}
             </Fact>
             <Fact label="Assigned to">{job.assignedTo?.fullName ?? "Nobody yet"}</Fact>
-            {est.text !== "—" && (
+            {est.text !== "-" && (
               <Fact label="Fix date">
                 <span className={est.overdue ? "rjd-late" : undefined}>{est.text}</span>
               </Fact>

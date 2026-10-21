@@ -96,7 +96,7 @@ import { useGoogleRoutingOn } from "../../lib/googleRouting";
 import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
-import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
+import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
   speeding: "#f59e0b",
@@ -1365,14 +1365,14 @@ function minuteCardHtml(plate, mark, zoneNames, address) {
           : "") +
         '<div class="pb-card__stats">' +
           '<span class="pb-card__stat"><b>' +
-            (mark.spd == null ? "—" : Math.round(mark.spd) + " km/h") + "</b>speed</span>" +
+            (mark.spd == null ? "-" : Math.round(mark.spd) + " km/h") + "</b>speed</span>" +
           '<span class="pb-card__stat"><b>' +
-            (mark.hdg == null ? "—" : Math.round(mark.hdg) + "°") + "</b>heading</span>" +
+            (mark.hdg == null ? "-" : Math.round(mark.hdg) + "°") + "</b>heading</span>" +
           // `null`/absent is not "Off". A track served by a build that does not
           // send ignition would otherwise report every minute of the day as key
           // out, which is a claim about the machine rather than about the data.
           '<span class="pb-card__stat"><b>' +
-            (mark.eng == null ? "—" : mark.eng ? "On" : "Off") + "</b>ignition</span>" +
+            (mark.eng == null ? "-" : mark.eng ? "On" : "Off") + "</b>ignition</span>" +
         "</div>" +
         '<div class="pb-card__coords">' +
           '<span class="pb-card__latlng">' + esc(coords) + "</span>" +
@@ -2212,7 +2212,7 @@ export default function FleetMap() {
   const DomMarkerRef    = useRef(null); // overlay class bound to that namespace
   // Read before any state below, because several of those states are seeded
   // from THIS ORGANISATION's stored preferences (lib/mapPrefs).
-  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId, openIncidentId, mapClearN } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId", "openIncidentId", "mapClearN");
+  const { windowOpen, activeCompanyId, desktopActiveTab, pendingFocusId, sitePlanRequest, fleetTypes, trackedIds, inTransitOnly, restoredVehicleId, selectedVehicleId, mapClearN } = useAppFields("windowOpen", "activeCompanyId", "desktopActiveTab", "pendingFocusId", "sitePlanRequest", "fleetTypes", "trackedIds", "inTransitOnly", "restoredVehicleId", "selectedVehicleId", "mapClearN");
   // The names under the markers (the rail's eye): the licence number only,
   // or the id at Kasulu (lib/plate mapLabel). A ref, since markers are drawn
   // from callbacks that outlive a render.
@@ -2483,20 +2483,19 @@ export default function FleetMap() {
 
   const { vehicles: _lv, orgId, loading: vehiclesLoading, error: vehiclesError, retry } = useFleetLiveShared();
 
-  // The open fuel alert's route, drive zones and point, drawn on this map
-  // while its incident window is open (IncidentInvestigation).
-  // …or a halted unit picked in the Halted window (operator, 2026-10-15):
-  // where it stopped, its route, stops and drive zones. A fuel alert's window
-  // takes precedence while it is open.
+  // A halted unit picked in the Halted window (operator, 2026-10-15): where
+  // it stopped, its route, stops and drive zones (IncidentInvestigation).
+  //
+  // Opening a fuel alert no longer opens it (operator, 2026-10-20: "when I
+  // click on the fuel theft alert I don't want this card rendered, we can
+  // deprecate it"). The `kind: "fuel"` subject still works in
+  // IncidentInvestigation; nothing sets it.
   //
   // What is drawn stays on the map after the window that opened it closes
   // (operator, 2026-10-15: "when we close this modal it should not close the
   // modal for Isochrones"); only the key's own × clears it, or picking
-  // another alert or halted unit, or changing organisation.
+  // another halted unit, or changing organisation.
   const [investigateSubject, setInvestigateSubject] = useState(null);
-  useEffect(() => {
-    if (openIncidentId) setInvestigateSubject({ kind: "fuel", theftId: openIncidentId });
-  }, [openIncidentId]);
   useEffect(() => { setInvestigateSubject(null); }, [orgId]);
   const investigation = useIncidentInvestigation({
     map: mapRef.current, maps: mapsLibRef.current, ready: mapReady, orgId, subject: investigateSubject,
@@ -2784,6 +2783,25 @@ export default function FleetMap() {
     setStrandedOpen(false);
     setFuelAlertsOpen(false);
   }), [setUnitsOpen, setStrandedOpen, setFuelAlertsOpen]);
+
+  /* One map window at a time (lib/sidePanels claimMapWindow; operator,
+   * 2026-10-20: "the arrivals should have cleared the fuel alerts modal").
+   * Units, Halted and Fuel alerts already replace each other (mapSlice); this
+   * adds Arrivals, a fuel alert's incident window (MapOverlay) and a halted
+   * unit's investigation. Whatever opens last closes the rest, except that a
+   * list stays open for the window one of its rows opened: Fuel alerts for
+   * the incident window, Halted for the investigation. */
+  useEffect(() => { if (openWindow) claimMapWindow(openWindow); }, [openWindow]);
+  useEffect(() => { if (arrivalsOpen) claimMapWindow("arrivals"); }, [arrivalsOpen]);
+  useEffect(() => onMapWindowClaim(["units", "stranded", "fuel"], (owner) => {
+    if (owner !== "investigation") setStrandedOpen(false);
+    if (owner !== "incident") setFuelAlertsOpen(false);
+    setUnitsOpen(false);
+  }), [setUnitsOpen, setStrandedOpen, setFuelAlertsOpen]);
+  useEffect(() => onMapWindowClaim("arrivals", () => setArrivalsOpen(false)), []);
+  /* The investigation does not claim: it only ever opens from a Halted row,
+     and Halted is already the newest window. It closes for anything else. */
+  useEffect(() => onMapWindowClaim(["investigation", "stranded"], () => setInvestigateSubject(null)), []);
 
   const [cardMinimized, setCardMinimized] = useState(false);
   /** Which unit's camera window is open, if any. */
@@ -3338,13 +3356,13 @@ export default function FleetMap() {
       // means "quiet lately" — it means this unit has no stored position at
       // all, so say that instead of blaming the window.
       if (points.length === 0) {
-        const age = v.capturedAtMs ? ` — last fix ${agoLabel(Date.now() - v.capturedAtMs)} ago` : "";
+        const age = v.capturedAtMs ? `, last fix ${agoLabel(Date.now() - v.capturedAtMs)} ago` : "";
         if (here) note(here, `No stored track for this vehicle${age}`);
         return;
       }
       if (points.length === 1) {
         note(points[0], stale
-          ? `One fix only — ${agoLabel(Date.now() - v.capturedAtMs)} ago`
+          ? `One fix only, ${agoLabel(Date.now() - v.capturedAtMs)} ago`
           : `Stationary for the last ${TRACK_WINDOW_H} h`);
         return;
       }
@@ -3412,7 +3430,7 @@ export default function FleetMap() {
       const label = [
         track.truncated
           ? "Track start (partial)"
-          : `${stale ? "Last journey" : "Track start"} — ${spanH.toFixed(1)} h`,
+          : `${stale ? "Last journey" : "Track start"} - ${spanH.toFixed(1)} h`,
         gaps > 0 ? `${gaps} reporting gap${gaps > 1 ? "s" : ""}` : null,
       ].filter(Boolean).join(" · ") + ended;
 
@@ -4008,7 +4026,7 @@ export default function FleetMap() {
         }),
         note: null,
         legend: legendFor(zoneCategories, baseMap),
-        hint: "Names appear as you zoom in — smaller zones need a closer look · click a zone for detail",
+        hint: "Names appear as you zoom in, smaller zones need a closer look · click a zone for detail",
       });
     }
     if (planAllowed) {
@@ -6188,9 +6206,22 @@ export default function FleetMap() {
       node.style.transform = `translate3d(${left}px, ${top}px, 0)`;
     };
     place(lastPointerRef.current.x, lastPointerRef.current.y);
-    const onMove = (e) => { notePointer(e); const p = pointerXY(e); place(p.x, p.y); };
+    /* The badge's own `mouseleave` is not enough to close the list (operator,
+       2026-10-20: the card "still follows around" after the cursor leaves the
+       cluster). A badge removed or redrawn under the cursor by a cluster pass,
+       a zoom or a pan never fires it, so the list went on following the
+       pointer. Each move now asks whether the pointer is still on a badge. */
+    const onMove = (e) => {
+      if (!e.target?.closest?.(".lf-cluster")) { setHoveredClusterIds(null); return; }
+      notePointer(e); const p = pointerXY(e); place(p.x, p.y);
+    };
+    const onLeave = (e) => { if (!e.relatedTarget) setHoveredClusterIds(null); };
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
+    document.addEventListener("mouseout", onLeave);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseout", onLeave);
+    };
   }, [hoveredClusterIds, notePointer]);
 
   // Release the isolation when the camera pulls back out.
@@ -7298,7 +7329,7 @@ export default function FleetMap() {
               type="button"
               className="map-cam-btn map-cam-btn--reset"
               onClick={resetView}
-              title="Reset the view — level the camera and go back to the whole estate"
+              title="Reset the view, level the camera and go back to the whole estate"
               aria-label="Reset view"
             >⌖</button>
             <button

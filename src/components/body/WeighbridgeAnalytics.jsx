@@ -103,12 +103,12 @@ const MEASURES = [
 ];
 
 const fmt = (n, d = 1) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
 /** Milliseconds as an operator says them: "7h 39m", and "48m" under the hour.
  *  Never "0.5 h" — nobody at a weighbridge says that. */
 function hours(ms) {
-  if (ms == null) return "—";
+  if (ms == null) return "-";
   const mins = Math.round(ms / 60000);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
@@ -233,7 +233,7 @@ export default function WeighbridgeAnalytics({ data, loading }) {
               4,529 t to 232 t as a collapse in throughput rather than as the
               ingest window closing. */}
           <div className="an-wb__span">
-            {captured && <><b>{span(captured.first, captured.last)}</b> — </>}
+            {captured && <><b>{span(captured.first, captured.last)}</b> - </>}
             {fmt(data?.capturedDays, 0)} day{data?.capturedDays === 1 ? "" : "s"} of
             tickets in a {fmt(data?.days?.length, 0)}-day window
             {gaps > 0 && (

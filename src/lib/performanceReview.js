@@ -12,10 +12,10 @@
 
 export const OVER = 1.10;
 
-export const pct = (r) => (r == null ? "—" : `${Math.round(r * 100)}%`);
+export const pct = (r) => (r == null ? "-" : `${Math.round(r * 100)}%`);
 
 export function litres(n, { short = false } = {}) {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "-";
   if (short) {
     if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M L`;
     if (n >= 1e4) return `${(n / 1e3).toFixed(1)}k L`;

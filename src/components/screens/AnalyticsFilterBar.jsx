@@ -40,7 +40,9 @@
  * whatever the provider adds next.
  */
 
-import { Fragment, useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useMemo } from "react";
+import { useFleetLiveShared } from "../../context/FleetLiveContext";
+import UnitTypeIcon from "../shared/UnitTypeIcon";
 import MonthPicker, { monthLabelOf } from "../header/MonthPicker";
 import { machineCategoryLabel } from "../../lib/vehicleMap";
 import { spanDays } from "../../lib/analyticsFilter";
@@ -199,6 +201,12 @@ function UnitFilter({ options, value, onToggle, onClear }) {
   // the caret as the panel opens rather than waiting to be clicked.
   useEffect(() => { if (open) searchRef.current?.focus(); }, [open]);
 
+  // Each option's picture (shared/UnitTypeIcon). The options carry a plate
+  // and a category only, so the unit's name and type come from the live
+  // fleet, by vehicle id.
+  const { vehicles } = useFleetLiveShared();
+  const liveById = useMemo(() => new Map((vehicles ?? []).map((v) => [v.vehicleId, v])), [vehicles]);
+
   // A fleet with one unit has nothing to choose between; on a fleet with none
   // the control would be furniture over an empty list.
   if (!options || options.length < 2) return null;
@@ -280,12 +288,13 @@ function UnitFilter({ options, value, onToggle, onClear }) {
                   )}
                   <button
                     type="button"
-                    className={`an-filter__opt${on ? " an-filter__opt--on" : ""}${o.silent ? " an-filter__opt--silent" : ""}`}
+                    className={`an-filter__opt an-filter__opt--unit${on ? " an-filter__opt--on" : ""}${o.silent ? " an-filter__opt--silent" : ""}`}
                     onClick={() => onToggle(o.id)}
                     role="checkbox"
                     aria-checked={on}
                   >
                     <span className="an-filter__box" aria-hidden="true">{on ? "✓" : ""}</span>
+                    <UnitTypeIcon vehicle={liveById.get(o.id) ?? { id: o.plate }} size={20} />
                     <span className="an-filter__name">{o.plate}</span>
                     <span className="an-filter__n">{machineCategoryLabel(o.category)}</span>
                   </button>

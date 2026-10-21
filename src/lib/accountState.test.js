@@ -54,7 +54,7 @@ describe("accountState", () => {
       .toBe("Invitation replaced");
   });
 
-  it("consumed beats revoked and expired — they got in", () => {
+  it("consumed beats revoked and expired, they got in", () => {
     const messy = invited({
       consumedAt: new Date(NOW - 2 * HOUR).toISOString(),
       revokedAt: new Date(NOW - HOUR).toISOString(),
@@ -94,7 +94,7 @@ describe("accountState", () => {
     expect(accountState(invited(), NOW).key).toBe("pending");
   });
 
-  it("beats an expired invitation too — having a password is not undone by one ageing out", () => {
+  it("beats an expired invitation too, having a password is not undone by one ageing out", () => {
     const stale = { ...invited({ expiresAt: new Date(NOW - HOUR).toISOString() }), passwordChangeCount: 2 };
     expect(accountState(stale, NOW).key).toBe("active");
   });

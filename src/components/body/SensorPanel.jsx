@@ -50,10 +50,10 @@ const SENSOR_TAB_KEY = "ft-sensor-tab";
 
 // ── Sensor columns ─────────────────────────────────────────────────────────────
 const SENSOR_COLUMNS = [
-  { key: "capturedAt", label: "Time",        format: v => { if (!v) return "—"; const d = new Date(v); const p = n => String(n).padStart(2,"0"); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }, flag: () => false },
-  { key: "speedKmh",   label: "Speed (km/h)",format: v => v != null ? Math.round(v) : "—", flag: (v, r) => v != null && v > 5 && r.engineOn === false },
-  { key: "engineOn",   label: "Engine",      format: v => v == null ? "—" : v ? "ON" : "OFF", flag: () => false },
-  { key: "fuelLevelMl",label: "Fuel (L)",    format: v => v != null ? (v/1000).toFixed(1) : "—", flag: v => v != null && v < 20000 },
+  { key: "capturedAt", label: "Time",        format: v => { if (!v) return "-"; const d = new Date(v); const p = n => String(n).padStart(2,"0"); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }, flag: () => false },
+  { key: "speedKmh",   label: "Speed (km/h)",format: v => v != null ? Math.round(v) : "-", flag: (v, r) => v != null && v > 5 && r.engineOn === false },
+  { key: "engineOn",   label: "Engine",      format: v => v == null ? "-" : v ? "ON" : "OFF", flag: () => false },
+  { key: "fuelLevelMl",label: "Fuel (L)",    format: v => v != null ? (v/1000).toFixed(1) : "-", flag: v => v != null && v < 20000 },
 ];
 
 const ANOMALY_META = {
@@ -219,9 +219,9 @@ function chipTitle(e) {
   if (e.type === "refill") {
     const seen = e.observedMl != null ? ` · our levels saw ${(e.observedMl / 1000).toFixed(1)} L arrive` : "";
     if (e.verdict === "REDISTRIBUTION")
-      return `Undulating — fuel was reported added and the tank is no fuller${seen} · ${when}`;
-    if (e.confirmed) return `Refill — confirmed by our own levels${seen} · ${when}`;
-    return `Refill — reported by the tracker, no telemetry to confirm it · ${when}`;
+      return `Undulating, fuel was reported added and the tank is no fuller${seen} · ${when}`;
+    if (e.confirmed) return `Refill, confirmed by our own levels${seen} · ${when}`;
+    return `Refill, reported by the tracker, no telemetry to confirm it · ${when}`;
   }
   // Only when the figure would actually read as a volume. A handful of
   // REDISTRIBUTION rows recovered tens of MILLILITRES against a claim of tens
@@ -240,12 +240,12 @@ function chipTitle(e) {
   // the tracker.
   const verdict = e.verdict === "DRAIN"
     ? (e.confirmed
-        ? "Suspicious drain — our own readings show it went down and stayed down"
-        : "Suspicious drain — reported by the tracker, our readings could not check it")
+        ? "Suspicious drain, our own readings show it went down and stayed down"
+        : "Suspicious drain, reported by the tracker, our readings could not check it")
     : {
-        REDISTRIBUTION: "Undulating — the level came back, the fuel never left the tank",
-        REFILL:         "A refill explains it — fuel went in",
-        SENSOR_FAULT:   "The fuel probe failed — not a tank event",
+        REDISTRIBUTION: "Undulating, the level came back, the fuel never left the tank",
+        REFILL:         "A refill explains it, fuel went in",
+        SENSOR_FAULT:   "The fuel probe failed, not a tank event",
         PENDING:        "Too recent to judge (settling)",
       }[e.verdict] ?? "No verdict recorded";
   return `${verdict}${back} · ${when}`;
@@ -269,7 +269,7 @@ function splitTitle(s) {
 function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, vehicles, search, timeFilter, engineFilter, fuelFilter, onSelect, selectedId }) {
   const dayLabel = !day || day === fleetDayKey() ? "today" : day;
   const pad = n => String(n).padStart(2, "0");
-  const fmtTime = iso => { if (!iso) return "—"; const d = new Date(iso); return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const fmtTime = iso => { if (!iso) return "-"; const d = new Date(iso); return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const plateFor    = vehicleId => vehicles.find(v => v.vehicleId === vehicleId || v.id === vehicleId)?.id ?? vehicleId.slice(0,8) + "…";
   const engineFor   = vehicleId => { const v = vehicles.find(x => x.vehicleId === vehicleId || x.id === vehicleId); return v?.engine === 'on'; };
   /**
@@ -346,7 +346,7 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
     const t = tankState[vehicleId];
     if (!t) return undefined;
     if (t.engineSeconds == null) {
-      return "Running time could not be established — this unit's tracker reports no "
+      return "Running time could not be established, this unit's tracker reports no "
         + "engine-hour counter, and its ignition flag is contradicted by the fact that "
         + "it moved. Blank rather than 0, which would read as a machine that never ran.";
     }
@@ -368,7 +368,7 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
     if (!w) return undefined;
     return `Moving average of per-run slosh, over the last ${w} stop${w === 1 ? "" : "s"}. `
       + "A run is the motion between two stops; its slosh is the mean level swing per half hour "
-      + "while moving. Fuel shifting inside the tank, not entering or leaving it — "
+      + "while moving. Fuel shifting inside the tank, not entering or leaving it, "
       + "trend only, never used to judge a drain.";
   };
 
@@ -436,7 +436,7 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
         onReload={onReload}
         onCsv={() => downloadTableCsv({ head: EXPORT_HEAD, body: exportBody(), filenameSlug: exportSlug })}
         onPdf={() => downloadTablePdf({
-          reportTitle: "Sensor Monitor — Fuel FSL",
+          reportTitle: "Sensor Monitor: Fuel FSL",
           sectionTitle: `${filtered.length} unit${filtered.length === 1 ? "" : "s"} with fuel events`,
           filterNote,
           cards: [
@@ -463,11 +463,11 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
           <tr>
             <th className="sp4-th--pin">Unit Reg</th>
             <th title="Closing fuel level of the previous day">Initial</th>
-            <th title="Closing fuel level of this day — the latest reading, for today">Current</th>
+            <th title="Closing fuel level of this day, the latest reading, for today">Current</th>
             <th title="Ground covered today, summed from the position fixes">Mileage (km)</th>
-            <th title="Fuel EXPECTED to have burned over that ground, at 2 km per litre. An expectation, not a measurement, and it reads near zero on plant — a dozer burns fuel while covering almost no ground. Compare against Initial minus Current.">Expected (km)</th>
-            <th title="Time the engine ran that day, taken from the machine's own engine-hour counter — the same figure the provider reports. Blank when the tracker has no counter and the running time cannot be established.">Engine hrs</th>
-            <th title="Moving average of per-run slosh — the level swing while moving, averaged over the last few stops. Trend only; never used to judge a drain.">Turbulence</th>
+            <th title="Fuel EXPECTED to have burned over that ground, at 2 km per litre. An expectation, not a measurement, and it reads near zero on plant, a dozer burns fuel while covering almost no ground. Compare against Initial minus Current.">Expected (km)</th>
+            <th title="Time the engine ran that day, taken from the machine's own engine-hour counter, the same figure the provider reports. Blank when the tracker has no counter and the running time cannot be established.">Engine hrs</th>
+            <th title="Moving average of per-run slosh, the level swing while moving, averaged over the last few stops. Trend only; never used to judge a drain.">Turbulence</th>
             <th>Recent FSL Transmissions (last 5)</th>
             <th>Pattern</th>
             <th>Refills</th>
@@ -557,7 +557,7 @@ const SPEED_SUMMARY_COLUMNS = [
   { key: "plate",  label: "Unit",   render: r => r.plate ?? r.vehicleId },
   { key: "cases",  label: "Cases",  numeric: true, render: r => r.incidents },
   { key: "days",   label: "Days",   numeric: true, title: "Distinct days with at least one case", render: r => r.days },
-  { key: "peak",   label: "Peak speed", numeric: true, title: "Fastest speed OBSERVED — the true peak between two fixes is unknowable",
+  { key: "peak",   label: "Peak speed", numeric: true, title: "Fastest speed OBSERVED, the true peak between two fixes is unknowable",
     render: r => `${Math.round(r.peakKmh)} km/h` },
   /* "+12" was a number with no unit anywhere on the row to borrow one from,
      sitting under a header that did not supply it either. Both halves fixed:
@@ -566,7 +566,7 @@ const SPEED_SUMMARY_COLUMNS = [
     render: r => `+${Math.round(r.avgOverKmh)} km/h` },
   /* Was "Total" — total WHAT. It is the time this unit spent above the limit,
      summed over its cases in the window. */
-  { key: "time",   label: "Time over limit", numeric: true, title: "Summed across every case. At least this long — both ends of a case are real fixes, so the true time is never shorter",
+  { key: "time",   label: "Time over limit", numeric: true, title: "Summed across every case. At least this long, both ends of a case are real fixes, so the true time is never shorter",
     render: r => durationLabel(r.totalSeconds) },
   { key: "last",   label: "Last case", render: r => whenLabel(r.lastAt) },
   /* Repeat or one-off, on the definition this codebase already uses for
@@ -574,7 +574,7 @@ const SPEED_SUMMARY_COLUMNS = [
      distinction that decides whether anybody speaks to a driver: once may be
      bad luck, twice is a pattern. */
   { key: "status", label: "Status",
-    title: "Repeat means two or more cases in the window — the same test the analysis strip used for repeat units",
+    title: "Repeat means two or more cases in the window, the same test the analysis strip used for repeat units",
     render: r => (r.incidents >= 2
       ? <span className="sp4-pill sp4-pill--warn">Repeat</span>
       : <span className="sp4-pill sp4-pill--none">One-off</span>),
@@ -597,19 +597,19 @@ const SPEED_SUMMARY_COLUMNS = [
 
 const SPEED_DETAIL_COLUMNS = [
   { key: "started", label: "Started", render: r => whenLabel(r.startedAt) },
-  { key: "for",     label: "Duration", numeric: true, title: "How long this case ran. At least this long — both ends are observed fixes",
+  { key: "for",     label: "Duration", numeric: true, title: "How long this case ran. At least this long, both ends are observed fixes",
     render: r => durationLabel(r.durationSec) },
   { key: "peak",    label: "Peak",    numeric: true, render: r => `${Math.round(r.peakKmh)} km/h` },
   { key: "limit",   label: "Policy limit", numeric: true,
-    title: "The fleet's own limit for this machine type — NOT a posted road limit",
+    title: "The fleet's own limit for this machine type, NOT a posted road limit",
     render: r => `${Math.round(r.limitKmh)} km/h` },
   { key: "over",    label: "Over by", numeric: true, render: r => `+${Math.round(r.overByKmh)} km/h` },
   { key: "dist",    label: "Distance", numeric: true,
     title: "Blank when a fix was missing or the gap too long to measure across",
     render: r => distanceLabel(r.distanceM) },
-  { key: "driver",  label: "Driver",  render: r => r.driverName ?? "—" },
+  { key: "driver",  label: "Driver",  render: r => r.driverName ?? "-" },
   { key: "frames",  label: "Fixes",   numeric: true,
-    title: "Over-limit fixes behind this case — how much evidence there is",
+    title: "Over-limit fixes behind this case, how much evidence there is",
     render: r => r.frames },
 ];
 
@@ -622,8 +622,8 @@ const FAULT_SUMMARY_COLUMNS = [
   { key: "sensor", label: "Sensor",   title: "The sensor affected. A unit with several faults lists each affected sensor once",
     render: r => faultSensors(r.kinds) },
   { key: "eps",    label: "Episodes", numeric: true, render: r => r.episodes },
-  { key: "open",   label: "Still open", numeric: true, title: "Episodes with no recovery yet — unresolved at this moment, not merely at the end of the day shown",
-    render: r => (r.openNow ? r.openNow : "—") },
+  { key: "open",   label: "Still open", numeric: true, title: "Episodes with no recovery yet, unresolved at this moment, not merely at the end of the day shown",
+    render: r => (r.openNow ? r.openNow : "-") },
   /* Both durations are CLIPPED to the chosen day. An episode that spans it —
      a unit dark for three weeks — contributes at most 24 hours here, because
      "faulty for 21 days" under a heading that says one day is not an answer to
@@ -646,8 +646,8 @@ const FAULT_SUMMARY_COLUMNS = [
             </span>
           ))}
         </span>
-      : "—"),
-    text: r => (r.kinds ? r.kinds.split(",").map(faultLabel).join("; ") : "—") },
+      : "-"),
+    text: r => (r.kinds ? r.kinds.split(",").map(faultLabel).join("; ") : "-") },
   /* Where the sensor was last working — the three columns that decide whether
      anyone drives out, and to where. Taken from this unit's most recent
      episode that has a position at all; all three are blank together when
@@ -675,8 +675,8 @@ const FAULT_SUMMARY_COLUMNS = [
      Location beside them answers the same question in words, and the exact
      figures are one click away on the episode that actually carries them. */
   { key: "place",  label: "Location",
-    title: "Those coordinates, reverse-geocoded. Blank while the lookup is still pending — the geocoder is rate-limited and runs behind the capture",
-    render: r => r.lastPlace ?? "—" },
+    title: "Those coordinates, reverse-geocoded. Blank while the lookup is still pending, the geocoder is rate-limited and runs behind the capture",
+    render: r => r.lastPlace ?? "-" },
   { key: "motion", label: "Motion",
     title: "What the unit was doing at that fix. Blank means there was no fix to judge, which is not the same as parked",
     render: r => motionLabel(r.lastMoving, r.lastSpeedKmh) },
@@ -724,7 +724,7 @@ const FAULT_DETAIL_COLUMNS = [
     render: r => coordLabel(r.lastLat, r.lastLng) },
   { key: "place",     label: "Location",
     title: "Those coordinates, reverse-geocoded. Blank while the lookup is still pending",
-    render: r => r.lastPlace ?? "—" },
+    render: r => r.lastPlace ?? "-" },
   { key: "motion",    label: "Motion",
     title: "What the unit was doing at that fix. Blank means there was no fix to judge, which is not the same as parked",
     render: r => motionLabel(r.lastMoving, r.lastSpeedKmh) },
@@ -802,7 +802,7 @@ function PostRestartCheck({ vehicleId, orgId, restartMs, fmtHM }) {
 
   let msg, cls;
   if (deltaL < -2) {
-    msg = `Post-restart (${fromTime}–${toTime}): further drain of ${Math.abs(deltaL).toFixed(1)}L detected — possible continued theft.`;
+    msg = `Post-restart (${fromTime}–${toTime}): further drain of ${Math.abs(deltaL).toFixed(1)}L detected, possible continued theft.`;
     cls = "sp4-post-restart--drain";
   } else if (deltaL > 2) {
     msg = `Post-restart (${fromTime}–${toTime}): refill of +${deltaL.toFixed(1)}L recorded.`;
@@ -826,7 +826,7 @@ function DrainEngineCheck({ vehicleId, orgId, event, rowKey, onLoadingChange }) 
 
   const p2 = n => String(n).padStart(2, "0");
   const fmtHM = iso => {
-    if (!iso) return "—";
+    if (!iso) return "-";
     const d = new Date(iso);
     return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
   };
@@ -834,8 +834,8 @@ function DrainEngineCheck({ vehicleId, orgId, event, rowKey, onLoadingChange }) 
   const emptyTds = (msg) => (
     <>
       <td className="sp4-incident-td"><span className="sp4-engine-check sp4-engine-check--unknown">{msg}</span></td>
-      <td className="sp4-incident-td">—</td>
-      <td className="sp4-incident-td">—</td>
+      <td className="sp4-incident-td">-</td>
+      <td className="sp4-incident-td">-</td>
     </>
   );
 
@@ -936,7 +936,7 @@ function DrainEngineCheck({ vehicleId, orgId, event, rowKey, onLoadingChange }) 
 
     if (odomDelta != null && vehicleMoved) {
       sentences.push(
-        `Odometer moved ${odomDelta} km during engine-off period — vehicle was in motion; possible sensor malfunction.`
+        `Odometer moved ${odomDelta} km during engine-off period, vehicle was in motion; possible sensor malfunction.`
       );
     }
 
@@ -962,7 +962,7 @@ function DrainEngineCheck({ vehicleId, orgId, event, rowKey, onLoadingChange }) 
           )}
           {odomDelta != null ? (
             <div className={`sp4-ec-odometer ${vehicleMoved ? "sp4-ec-odometer--moved" : "sp4-ec-odometer--still"}`}>
-              {vehicleMoved ? `Odometer +${odomDelta} km — moved` : "Odometer unchanged — stationary"}
+              {vehicleMoved ? `Odometer +${odomDelta} km, moved` : "Odometer unchanged, stationary"}
             </div>
           ) : (
             <div className="sp4-ec-odometer sp4-ec-odometer--na">Odometer unavailable</div>
@@ -1051,7 +1051,7 @@ export function FuelDrainDetail({
   const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
   const pad = n => String(n).padStart(2, "0");
   const fmtTime = iso => {
-    if (!iso) return "—";
+    if (!iso) return "-";
     const d = new Date(iso);
     return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
@@ -1199,7 +1199,7 @@ export function FuelDrainDetail({
         <div className="sp4-empty-tab">No drain events for this vehicle {isToday ? "today" : `on ${dayName}`}.</div>
       ) : (
         <div className="sp4-drain-list">
-          <div className="sp4-drain-list__heading">Drain events — engine state check</div>
+          <div className="sp4-drain-list__heading">Drain events: engine state check</div>
           <div className="sp4-drain-list__hint">
             Engine state is read from telemetry pings in a 25-minute window around each drain.
             Engine off during a drain is a strong theft indicator.
@@ -1321,7 +1321,7 @@ function SensorDetail({
       SENSOR_COLUMNS.map(col => col.format(ping[col.key], ping)).join("\t")
     ).join("\n");
     const header = SENSOR_COLUMNS.map(c => c.label).join("\t");
-    const content = `Sensor Report — ${vehicleName}\n${new Date().toLocaleString()}\n\n${header}\n${rows}`;
+    const content = `Sensor Report: ${vehicleName}\n${new Date().toLocaleString()}\n\n${header}\n${rows}`;
     const blob = new Blob([content], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1349,7 +1349,7 @@ function SensorDetail({
             it gave all the way down to its longest word. */}
         <div className="sp4-detail-titles">
           <div className="sp4-detail-reg">{vehicleName}</div>
-          <div className="sp4-detail-sub">Sensor readings — past 1 hour · {pings.length} pings</div>
+          <div className="sp4-detail-sub">Sensor readings: past 1 hour · {pings.length} pings</div>
         </div>
         <div className="sp4-detail-actions">
           <button className="sp4-action-btn" onClick={handlePDF} title="Download as text file">
@@ -1723,7 +1723,7 @@ export default function SensorPanel() {
        raised it may no longer be under the filter that found it. */
     { key: "repairs",     allow: canRepairRead,
       label: "Repairs",     count: openRepairs.loading ? pending : openRepairs.openCount,
-      hint: "Open repair jobs — sign one off once the fix has held" },
+      hint: "Open repair jobs, sign one off once the fix has held" },
   ];
   const tabs = allTabs.filter((t) => t.allow);
 
@@ -2046,7 +2046,7 @@ export default function SensorPanel() {
                 captureStartedAt={speedInsights?.captureStartedAt}
                 caption={`Overspeeding incidents for ${incidentDayLabel}`}
                 loadingLabel="Loading overspeeding incidents…"
-                reportTitle="Sensor Monitor — Speed"
+                reportTitle="Sensor Monitor: Speed"
                 panelTitle="Overspeeding cases"
                 exportSlug={`speed-${incidentDay}-${incidentSort}`}
                 selectedId={selectedAnomaly?.vehicleId}
@@ -2065,7 +2065,7 @@ export default function SensorPanel() {
                 captureStartedAt={faultInsights?.captureStartedAt}
                 caption={`Sensor fault episodes for ${incidentDayLabel}`}
                 loadingLabel="Loading sensor faults…"
-                reportTitle="Sensor Monitor — Malfunction"
+                reportTitle="Sensor Monitor: Malfunction"
                 panelTitle="Fault episodes"
                 timeline
                 exportSlug={`malfunction-${incidentDay}-${incidentSort}`}

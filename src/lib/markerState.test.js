@@ -32,7 +32,7 @@ const unit = (over = {}) => ({
   ...over,
 })
 
-describe('fuel alerts on — the default', () => {
+describe('fuel alerts on, the default', () => {
   it('paints a flagged unit as theft', () => {
     expect(markerState(unit({ status: 'theft' }))).toBe('theft')
     expect(markerState(unit({ status: 'theft' }), {})).toBe('theft')
@@ -77,7 +77,7 @@ describe('fuel alerts off', () => {
     expect(markerState(idling, off)).toBe('idling')
   })
 
-  it('leaves SPEEDING alone — a different alert, not this toggle\'s business', () => {
+  it('leaves SPEEDING alone, a different alert, not this toggle\'s business', () => {
     expect(markerState(unit({ status: 'speeding' }), off)).toBe('speeding')
   })
 

@@ -50,12 +50,12 @@ const FLEET_TZ = "Africa/Nairobi";
  *  — these scales resolve to 20 kg, so a third digit is precision the machine
  *  does not have. Matches `tonnes` in api/weighments so one load cannot be
  *  rounded two ways across the two surfaces. */
-export const t = (kg) => (kg == null ? "—" : `${(kg / 1000).toFixed(2)} t`);
+export const t = (kg) => (kg == null ? "-" : `${(kg / 1000).toFixed(2)} t`);
 
 /** "12 Sep, 17:51" in the fleet's timezone. The year is dropped: a scale's last
  *  ticket is days old at worst, and the card is short. */
 export function stamp(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   const date = new Intl.DateTimeFormat("en-GB", {
     timeZone: FLEET_TZ, day: "numeric", month: "short",

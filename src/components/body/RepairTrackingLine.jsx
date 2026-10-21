@@ -159,7 +159,7 @@ export default function RepairTrackingLine({
             and the ladder alone can only say where it got to. Painted only
             once it has slipped — `estimateState` already refuses to call a
             signed-off job overdue. */}
-        {estimate.text !== "—" && (
+        {estimate.text !== "-" && (
           <span className={"sp4-track-part" + (estimate.overdue ? " sp4-track-part--late" : "")}>
             Fix date: {estimate.text}
           </span>

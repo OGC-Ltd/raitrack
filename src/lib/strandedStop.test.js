@@ -38,7 +38,7 @@ const unit = (stoppedMinsAgo, over = {}) => ({
 
 afterEach(() => { vi.useRealTimers(); });
 
-describe("strandedStop — what it refuses to flag", () => {
+describe("strandedStop, what it refuses to flag", () => {
   it("does not flag a unit that has simply gone dark", () => {
     // A lost tracker is a different story with a different action. Folding the
     // two together buries the handful of stranded machines under every unit
@@ -82,7 +82,7 @@ describe("strandedStop — what it refuses to flag", () => {
   });
 });
 
-describe("strandedStop — what it flags", () => {
+describe("strandedStop, what it flags", () => {
   it("flags a unit stopped for longer than the threshold", () => {
     const why = strandedStop(unit(11), NOW);
     expect(why).not.toBeNull();
@@ -96,7 +96,7 @@ describe("strandedStop — what it flags", () => {
     expect(strandedStop(unit(10), NOW)?.forMs).toBe(STRANDED_STOP_MS);
   });
 
-  it("flags a unit idling — engine on, going nowhere is the case with an action", () => {
+  it("flags a unit idling, engine on, going nowhere is the case with an action", () => {
     const idling = unit(20, {
       engine: "on",
       movement: { state: "idling", moving: false, since: agoMs(20 * MIN), exact: true },
@@ -123,7 +123,7 @@ describe("strandedStop — what it flags", () => {
   });
 });
 
-describe("strandedStop — the zone rung", () => {
+describe("strandedStop, the zone rung", () => {
   it("does not flag a unit standing inside a known geofence", () => {
     // The whole point: a machine parked in a workshop, a yard or a weighbridge
     // is somewhere the estate knows about, whether that fence came from Wialon
@@ -135,7 +135,7 @@ describe("strandedStop — the zone rung", () => {
     expect(strandedStop(unit(45), NOW, { insideZone: () => false })).not.toBeNull();
   });
 
-  it("is the LAST rung — a cheaper failure never pays for the geometry", () => {
+  it("is the LAST rung, a cheaper failure never pays for the geometry", () => {
     // 597 units against 107 fences on every 30-second tick is the difference
     // between this being free and being felt. Only candidates that survive
     // every other rung should reach the point-in-polygon.
@@ -157,7 +157,7 @@ describe("strandedStop — the zone rung", () => {
   });
 });
 
-describe("strandedStop — the clock is a parameter", () => {
+describe("strandedStop, the clock is a parameter", () => {
   it("ignores the system clock entirely", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2031-01-01T00:00:00Z"));
@@ -168,7 +168,7 @@ describe("strandedStop — the clock is a parameter", () => {
     expect(strandedStop(unit(11), NOW)?.forMs).toBe(11 * MIN);
   });
 
-  it("is pure — same inputs, same answer", () => {
+  it("is pure, same inputs, same answer", () => {
     const v = unit(11);
     expect(strandedStop(v, NOW)).toEqual(strandedStop(v, NOW));
   });

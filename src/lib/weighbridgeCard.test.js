@@ -35,7 +35,7 @@ describe("formatting", () => {
     // These scales resolve to 20 kg. A third digit is precision the machine
     // does not have.
     expect(t(25600)).toBe("25.60 t");
-    expect(t(null)).toBe("—");
+    expect(t(null)).toBe("-");
   });
 
   it("stamps a weighing on the fleet's clock, not the reader's", () => {

@@ -67,18 +67,18 @@ const BUILT_FMT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "sho
 const fmtBuilt = (ms) => BUILT_FMT.format(ms);
 
 const nf = (n, d = 1) =>
-  n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
+  n == null || !Number.isFinite(n) ? "-" : n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** "24 Sep" from "2026-09-24"; with the weekday, "Thu 24 Sep". */
 const dayLabel = (d, weekday = false) => {
-  if (!d) return "—";
+  if (!d) return "-";
   const s = `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
   return weekday ? `${WEEKDAYS[new Date(`${d}T00:00:00Z`).getUTCDay()]} ${s}` : s;
 };
 const hm = (h) => {
-  if (h == null) return "—";
+  if (h == null) return "-";
   const m = Math.round(h * 60);
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 };
@@ -111,7 +111,7 @@ function DateField({ label, value, onChange, min, max }) {
   return (
     <label className="frp-when">
       <span className="frp-when__l">{label}</span>
-      <span className="frp-when__v">{value ? `${dayLabel(value)} ${value.slice(0, 4)}` : "—"}</span>
+      <span className="frp-when__v">{value ? `${dayLabel(value)} ${value.slice(0, 4)}` : "-"}</span>
       <svg className="frp-when__i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
@@ -593,7 +593,7 @@ function DailyChart({ days, sel, setSel, placeDays, pal }) {
 /** Driving time in an hour slot: seconds under a minute, so a short move is
  *  never shown as "0 min" beside a visible bar. */
 const slotTime = (m) => {
-  if (m == null || !Number.isFinite(m)) return "—";
+  if (m == null || !Number.isFinite(m)) return "-";
   if (m <= 0) return "None";
   if (m < 1) return `${Math.max(1, Math.round(m * 60))} s`;
   return `${nf(m, m < 10 ? 1 : 0)} min`;
@@ -976,7 +976,7 @@ export default function UsageReviewScreen() {
   }, [sel.place, setPlacePage]);
   const pname = (id) => nameOf(review?.places.find((p) => p.id === id), gnames) ?? `Place ${id}`;
 
-  const dash = <span className="frp-kpi-none">—</span>;
+  const dash = <span className="frp-kpi-none">-</span>;
   const top = review?.places[0];
 
   return (
@@ -1019,7 +1019,7 @@ export default function UsageReviewScreen() {
         <label data-tour="logbook-kmpl" className="frp-when urv-kmpl" title="km per litre for the fuel estimate. Empty uses the vehicle's own rate.">
           <span className="frp-when__l">km/L</span>
           <input type="number" min="1" max="99" step="0.5" inputMode="decimal" value={kmplText}
-                 placeholder={review?.vehicle.kmpl != null ? String(review.vehicle.kmpl) : "—"}
+                 placeholder={review?.vehicle.kmpl != null ? String(review.vehicle.kmpl) : "-"}
                  onChange={(e) => setKmplText(e.target.value)} aria-label="Kilometres per litre" />
         </label>
         <button data-tour="page-run" type="button" className="sp4-submit-btn frp-run" onClick={build}
@@ -1045,8 +1045,8 @@ export default function UsageReviewScreen() {
             <EmptyNote icon="ti-loader-2" tone="busy" title={`Building the Review for ${runUnit?.id ?? "the unit"}`}
                        progress={st?.progress?.total ? st.progress.done / st.progress.total : 0}>
               {STAGE_WORD[st?.stage] ?? "Starting"}
-              {st?.stage === "loading" && st.progress.total ? ` — ${st.progress.done.toLocaleString("en-GB")} of ${st.progress.total.toLocaleString("en-GB")} messages` : ""}
-              {st?.stage === "naming" && st.progress.total ? ` — ${st.progress.done} of ${st.progress.total}` : ""}
+              {st?.stage === "loading" && st.progress.total ? ` - ${st.progress.done.toLocaleString("en-GB")} of ${st.progress.total.toLocaleString("en-GB")} messages` : ""}
+              {st?.stage === "naming" && st.progress.total ? ` - ${st.progress.done} of ${st.progress.total}` : ""}
               .
             </EmptyNote>
           ) : tooLong ? (
@@ -1086,7 +1086,7 @@ export default function UsageReviewScreen() {
               <span data-tour="logbook-downloads" className="urv-bar__acts">
                 {dlError && <span className="frp-warn">{dlError}</span>}
                 <button type="button" className="sp4-ghost-btn" onClick={() => download("xlsx")} disabled={busy != null}
-                        title="Every row behind the review — daily, places, stops, trips, hourly, GPS points — ready for Power BI">
+                        title="Every row behind the review, daily, places, stops, trips, hourly, GPS points, ready for Power BI">
                   <i className="ti ti-file-spreadsheet" aria-hidden="true" /> {busy === "xlsx" ? "Preparing…" : "Excel"}
                 </button>
                 <button type="button" className="sp4-ghost-btn" onClick={() => download("pdf")} disabled={busy != null}
@@ -1173,8 +1173,8 @@ export default function UsageReviewScreen() {
                           <td>{p.id}</td>
                           <td className="urv-exact"
                               title={p.nameFrom === "site-plan" ? `Inside the ${p.site} site plan` : p.nameFrom === "geofence" ? `Inside the ${p.site} geofence` : undefined}>
-                            {gnames.get(p.id) ?? p.exactName ?? <span className="frp-kpi-none" title="No named business on Google Maps or OpenStreetMap at this spot">—</span>}</td>
-                          <td title={gacts.get(p.id)?.kind ?? undefined}>{gacts.get(p.id)?.activity ?? (gnames.has(p.id) ? null : p.activity) ?? <span className="frp-kpi-none" title="Nothing on Google Maps or OpenStreetMap says what this place is">—</span>}</td>
+                            {gnames.get(p.id) ?? p.exactName ?? <span className="frp-kpi-none" title="No named business on Google Maps or OpenStreetMap at this spot">-</span>}</td>
+                          <td title={gacts.get(p.id)?.kind ?? undefined}>{gacts.get(p.id)?.activity ?? (gnames.has(p.id) ? null : p.activity) ?? <span className="frp-kpi-none" title="Nothing on Google Maps or OpenStreetMap says what this place is">-</span>}</td>
                           <td title={p.address ?? undefined}>{placeCase(p.name) ?? `Place ${p.id}`}</td>
                           <td>{p.county ?? ""}</td>
                           <td className="urv-num">
@@ -1303,15 +1303,15 @@ export default function UsageReviewScreen() {
                                 <td className={`urv-what urv-what--${tone}`}>{tone === "drive" ? "Drive" : tone === "night" ? "Overnight" : "Stop"}</td>
                                 {!selDay && (
                                   <>
-                                    <td className="urv-where">{l?.from != null ? placeLink(l.from) : kind === "trip" ? placeLink(x.fromPlace) : <span className="urv-none">—</span>}</td>
-                                    <td className="urv-where">{l?.to != null ? placeLink(l.to) : kind === "trip" ? placeLink(x.toPlace) : <span className="urv-none">—</span>}</td>
+                                    <td className="urv-where">{l?.from != null ? placeLink(l.from) : kind === "trip" ? placeLink(x.fromPlace) : <span className="urv-none">-</span>}</td>
+                                    <td className="urv-where">{l?.to != null ? placeLink(l.to) : kind === "trip" ? placeLink(x.toPlace) : <span className="urv-none">-</span>}</td>
                                   </>
                                 )}
                                 {selDay && (
                                   <td className="urv-where">
                                     {kind === "trip"
                                       ? <>{placeLink(x.fromPlace)} <span className="urv-arrow">→</span> {placeLink(x.toPlace)}</>
-                                      : x.place != null ? placeLink(x.place) : <span className="urv-none">—</span>}
+                                      : x.place != null ? placeLink(x.place) : <span className="urv-none">-</span>}
                                   </td>
                                 )}
                                 {showKm && <td className="urv-num">{kind === "trip" ? nf(x.km, 1) : ""}</td>}

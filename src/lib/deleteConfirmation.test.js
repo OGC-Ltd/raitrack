@@ -47,7 +47,7 @@ describe("confirmMatches", () => {
     expect(confirmMatches("analyst-3@ogc-monitoring.com", phrase)).toBe(false);
   });
 
-  it("still refuses a prefix — the whole thing has to be typed", () => {
+  it("still refuses a prefix, the whole thing has to be typed", () => {
     expect(confirmMatches("analyst-2", phrase)).toBe(false);
     expect(confirmMatches("analyst-2@ogc-monitoring.co", phrase)).toBe(false);
   });

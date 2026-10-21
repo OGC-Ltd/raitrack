@@ -25,6 +25,7 @@ import { useAppActions } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import './MobileSearchTray.css';
 import { displayPlate } from "../../lib/plate";
+import UnitTypeIcon from "../shared/UnitTypeIcon";
 
 const norm = (s) => String(s ?? '').toLowerCase();
 
@@ -109,10 +110,7 @@ export default function MobileSearchTray({ open, onClose }) {
             // unit or camera both read "KCC 386Z". The full name tells them apart.
             title={v.name || v.id}
           >
-            <span
-              className="mst-pill-dot"
-              style={{ background: v.online ? (v.status === 'speeding' ? '#f43f5e' : '#10b981') : '#94a3b8' }}
-            />
+            <UnitTypeIcon vehicle={v} size={18} />
             {displayPlate(v)}
           </button>
         ))}

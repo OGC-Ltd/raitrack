@@ -115,7 +115,7 @@ export default function WarehouseDashboard() {
       <div className="wh-header">
         <div>
           <div className="wh-eyebrow">Depot dashboard</div>
-          <h1 className="wh-h1">{activeCompany?.name || "Fleet"} — depot overview</h1>
+          <h1 className="wh-h1">{activeCompany?.name || "Fleet"}, depot overview</h1>
           <p className="wh-sub">Stock and dock activity across {depots.length} depots.</p>
         </div>
         <DownloadReportButton onGenerate={handleDownloadReport} label="Download PDF Report" />

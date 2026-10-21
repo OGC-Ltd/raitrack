@@ -43,7 +43,7 @@ async function buildLocalInsight({ companyId } = {}) {
     parts.push(`${statusCounts.critical} vehicle${statusCounts.critical === 1 ? " needs" : "s need"} immediate attention.`);
   }
   if (maintenance.overdue > 0) {
-    parts.push(`${maintenance.overdue} vehicle${maintenance.overdue === 1 ? " has" : "s have"} overdue maintenance — review the Maintenance tab.`);
+    parts.push(`${maintenance.overdue} vehicle${maintenance.overdue === 1 ? " has" : "s have"} overdue maintenance, review the Maintenance tab.`);
   } else if (maintenance.dueSoon > 0) {
     parts.push(`${maintenance.dueSoon} vehicle${maintenance.dueSoon === 1 ? " is" : "s are"} due for service soon.`);
   }

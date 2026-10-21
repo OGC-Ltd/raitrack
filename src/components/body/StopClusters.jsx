@@ -49,7 +49,7 @@ import {
 } from "recharts";
 
 const fmt = (n, d = 0) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
 /**
  * Is the long axis worth binning along?
@@ -190,14 +190,14 @@ export default function StopClusters({ data, loading }) {
           <p className={"an-stops__verdict" + (split ? " an-stops__verdict--split" : "")}>
             {!axisReal ? (
               <>
-                This cloud is round — it has no long axis, so the profile beside
+                This cloud is round, it has no long axis, so the profile beside
                 it is a slice in a direction nothing chose. Read it as one place.
               </>
             ) : split ? (
               <>
                 <b>Two places, {fmt(split.apartM)} m apart.</b> Peaks of{" "}
                 {fmt(split.a.n)} and {fmt(split.b.n)} fixes with {fmt(split.trough.n)}{" "}
-                between them. Two bays, two lanes, or two machines — the traffic
+                between them. Two bays, two lanes, or two machines, the traffic
                 treats them as separate.
               </>
             ) : (
@@ -238,7 +238,7 @@ export default function StopClusters({ data, loading }) {
         Every stationary fix in the last {fmt(data.days)} days, gathered into 11 m
         cells and then into places; a place is kept only where at least six
         different units stopped. Units is the greatest count any one of a
-        place&rsquo;s cells saw, never the sum — the same lorry appears in every
+        place&rsquo;s cells saw, never the sum, the same lorry appears in every
         cell it drifted across. The card names no place: it knows where the
         fleet stops, not what is standing there.
       </div>
@@ -253,7 +253,7 @@ function Head({ data, focus }) {
       <span className="an-card__hint">
         {focus
           ? `${fmt(data.clusters.length)} place${data.clusters.length === 1 ? "" : "s"} · busiest used by ${fmt(focus.units)} units · last ${fmt(data?.days)} days`
-          : "—"}
+          : "-"}
       </span>
     </div>
   );

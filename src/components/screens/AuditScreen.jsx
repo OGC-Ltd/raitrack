@@ -52,7 +52,7 @@ const EMPTY = {
               sub: "No fuel case has been found to be a faulty probe yet. Decide one as “Faulty fuel probe” in its case window." },
 };
 
-const day = (v) => (v ? String(v).slice(0, 10) : "—");
+const day = (v) => (v ? String(v).slice(0, 10) : "-");
 const hours = (sec) => (sec == null ? "ongoing" : sec < 3600 ? `${Math.round(sec / 60)} min` : `${(sec / 3600).toFixed(1)} h`);
 
 /** Where the unit's audit stands, from its open cases' current job. */
@@ -102,7 +102,7 @@ function finding(c) {
 
 /** One figure as a gauge: n of the whole it belongs to. */
 function StatCard({ title, n, of, what, color, note, loading }) {
-  const shown = loading && !of ? "—" : n;
+  const shown = loading && !of ? "-" : n;
   const ratio = of > 0 ? n / of : 0;
   const unit = of > 0 ? `of ${of} ${what}${of === 1 ? "" : "s"}` : loading ? "reading" : `no ${what}s yet`;
   return (
@@ -181,7 +181,7 @@ function UnitDetail({ u, st, orgId, canTriage, canWork: canResolve, canWorkAny, 
   return (
     <>
       <DetailSidebarIdent
-        name={u.plate ?? "—"}
+        name={u.plate ?? "-"}
         sub={`${u.cases.length} false alert${u.cases.length === 1 ? "" : "s"} · ${litres(vol)} reported lost`}
       />
       <DetailSidebarFacts facts={[
@@ -273,10 +273,10 @@ function UnitDetail({ u, st, orgId, canTriage, canWork: canResolve, canWorkAny, 
                   <span className={"sp4-pill sp4-pill--" + (REPAIR_PILL[r.stage] ?? "none")}>{REPAIR_STAGE[r.stage] ?? r.stage}</span>
                 </div>
                 <dl>
-                  <dt>By</dt><dd>{r.report?.reportedBy?.fullName ?? "—"}</dd>
+                  <dt>By</dt><dd>{r.report?.reportedBy?.fullName ?? "-"}</dd>
                   <dt>Source</dt><dd>{OUTCOME_LABEL[r.outcome] ?? r.outcome}</dd>
                   <dt>Found / done</dt>
-                  <dd>{[r.problemNote, r.sparePart && `Spare: ${r.sparePart}`, r.fixNote && `Fix: ${r.fixNote}`].filter(Boolean).join(" · ") || "—"}</dd>
+                  <dd>{[r.problemNote, r.sparePart && `Spare: ${r.sparePart}`, r.fixNote && `Fix: ${r.fixNote}`].filter(Boolean).join(" · ") || "-"}</dd>
                   <dt>Closed</dt><dd className="sys-num">{r.resolvedAt ? day(r.resolvedAt) : "Open"}</dd>
                 </dl>
               </li>
@@ -472,7 +472,7 @@ export default function AuditScreen() {
                         onClick={toggle}
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
                       >
-                        <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{u.plate ?? "—"}</span></td>
+                        <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{u.plate ?? "-"}</span></td>
                         <td className="sp4-td--right">
                           <CellBar ratio={vol / maxVol} tone="alert">
                             <b className="sys-num">{litres(vol)}</b> <span className="aud-unit">in {u.cases.length}</span>
@@ -485,7 +485,7 @@ export default function AuditScreen() {
                             <Ladder st={st} />
                           </span>
                         </td>
-                        <td className="sp4-td--left">{st.job?.assignedTo?.fullName ?? <span className="sp4-muted">—</span>}</td>
+                        <td className="sp4-td--left">{st.job?.assignedTo?.fullName ?? <span className="sp4-muted">-</span>}</td>
                         <td className="sp4-td--right sys-num">
                           {u.repairs.length} job{u.repairs.length === 1 ? "" : "s"}
                           {u.probeFaults.length > 0 && <> · {u.probeFaults.length} dead</>}

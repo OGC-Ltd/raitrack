@@ -70,7 +70,7 @@ function SheetContent({ vehicleId, onClose }) {
         <div className="mvs__stat">
           <span className="mvs__stat-label">Fuel</span>
           <span className="mvs__stat-value">
-            {detail ? `${detail.telemetry?.siloLevel ?? "—"}%` : "—"}
+            {detail ? `${detail.telemetry?.siloLevel ?? "-"}%` : "-"}
           </span>
         </div>
         <div className="mvs__stat">

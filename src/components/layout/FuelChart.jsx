@@ -44,12 +44,12 @@ import './FuelChart.css';
 
 const HHMM = new Intl.DateTimeFormat('en-KE', { hour: '2-digit', minute: '2-digit', hour12: false });
 const DDMM = new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short' });
-const fmtTime = (ms) => (Number.isFinite(ms) ? HHMM.format(ms) : '—');
-const fmtDate = (ms) => (Number.isFinite(ms) ? DDMM.format(ms) : '—');
+const fmtTime = (ms) => (Number.isFinite(ms) ? HHMM.format(ms) : '-');
+const fmtDate = (ms) => (Number.isFinite(ms) ? DDMM.format(ms) : '-');
 /** A time with its day, for a chart of several days. */
-const fmtDayTime = (ms) => (Number.isFinite(ms) ? `${DDMM.format(ms)} ${HHMM.format(ms)}` : '—');
+const fmtDayTime = (ms) => (Number.isFinite(ms) ? `${DDMM.format(ms)} ${HHMM.format(ms)}` : '-');
 const num = (n, digits = 0) => (n == null || !Number.isFinite(n)
-  ? '—'
+  ? '-'
   : Number(n).toLocaleString('en-KE', { maximumFractionDigits: digits }));
 
 // Nearest item to `t` in a time-ordered array (binary search)

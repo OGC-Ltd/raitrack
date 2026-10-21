@@ -182,9 +182,9 @@ function Leg({ label, kg, at, day, bridgeNo, operator, muted }) {
       <div className="wb-leg__label">{label}</div>
       <div className="wb-leg__kg">{kilos(kg)}</div>
       <dl className="wb-leg__meta">
-        <div><dt>Captured</dt><dd>{at ? `${stampLabel(at, day)}` : "—"}</dd></div>
-        <div><dt>Bridge</dt><dd>{bridgeNo != null ? `#${bridgeNo}` : "—"}</dd></div>
-        <div><dt>Operator</dt><dd>{operator || "—"}</dd></div>
+        <div><dt>Captured</dt><dd>{at ? `${stampLabel(at, day)}` : "-"}</dd></div>
+        <div><dt>Bridge</dt><dd>{bridgeNo != null ? `#${bridgeNo}` : "-"}</dd></div>
+        <div><dt>Operator</dt><dd>{operator || "-"}</dd></div>
       </dl>
     </div>
   );
@@ -455,7 +455,7 @@ export default function WeighbridgesScreen() {
         <div data-tour="page-kpis" className="sp4-header-kpis">
           <div
             className="sp4-kpi sp4-kpi--fleet"
-            title="Tickets raised across all four bridges on the day being viewed. A ticket is one token — the lorry crossing empty and laden — not one trip over a scale."
+            title="Tickets raised across all four bridges on the day being viewed. A ticket is one token, the lorry crossing empty and laden, not one trip over a scale."
           >
             <span className="sp4-kpi-n">{stats ? stats.weighments : "·"}</span>
             <span className="sp4-kpi-l">Weighments {spanLabel(from, to)}</span>
@@ -471,7 +471,7 @@ export default function WeighbridgesScreen() {
             className="sp4-kpi sp4-kpi--stat"
             title={
               stats?.heaviest
-                ? `Token ${stats.heaviest.token} — ${stats.heaviest.vehicleNo} at ${stats.heaviest.centerName}. Total weighed in today: ${tonnes(stats.totalNetKg)}.`
+                ? `Token ${stats.heaviest.token} - ${stats.heaviest.vehicleNo} at ${stats.heaviest.centerName}. Total weighed in today: ${tonnes(stats.totalNetKg)}.`
                 : "The largest net load recorded on any bridge on this day."
             }
           >
@@ -665,7 +665,7 @@ export default function WeighbridgesScreen() {
                   onCsv={() => downloadTableCsv({ head: [EXPORT_HEAD], body: exportBody(rows), filenameSlug })}
                   onPdf={() => downloadTablePdf({
                     reportTitle:  "Weighbridges",
-                    sectionTitle: `${centreName || "All bridges"} — ${spanLabel(from, to)}`,
+                    sectionTitle: `${centreName || "All bridges"} - ${spanLabel(from, to)}`,
                     filterNote:   exportNote,
                     head: [EXPORT_HEAD], body: exportBody(rows), filenameSlug,
                   })}

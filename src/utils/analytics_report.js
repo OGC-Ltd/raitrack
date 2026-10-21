@@ -97,7 +97,7 @@ const fmt = (n, d = 0) =>
   });
 
 const dash = (n, d = 0) =>
-  n == null ? "—" : fmt(n, d);
+  n == null ? "-" : fmt(n, d);
 
 const fmtDay = (iso) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString(
@@ -118,9 +118,9 @@ const fmtDay = (iso) =>
  * clock (lib/provider-time), so this has to agree with it.
  */
 const fmtStamp = (iso) => {
-  if (iso == null) return "—";
+  if (iso == null) return "-";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString("en-GB", {
     timeZone: "Africa/Nairobi",
     day: "2-digit",
@@ -133,7 +133,7 @@ const fmtStamp = (iso) => {
 
 /** A measured fall duration. Null stays a dash — it is not a zero-minute fall. */
 const fmtMins = (seconds) =>
-  seconds == null ? "—" : `${Math.max(1, Math.round(seconds / 60))}`;
+  seconds == null ? "-" : `${Math.max(1, Math.round(seconds / 60))}`;
 
 // ── Page chrome ───────────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ function addFooters(
     doc.setCharSpace(1);
 
     doc.text(
-      "FLEET TRACKING — CONFIDENTIAL",
+      "FLEET TRACKING: CONFIDENTIAL",
       MARGIN,
       h - 24,
     );
@@ -1029,8 +1029,8 @@ function fuelDrainTable(doc, C, drains) {
     doc,
     C,
     omitted > 0
-      ? `Fuel drains — ${fmt(drains.length)} recorded, ${fmt(DRAIN_ROWS_MAX)} most recent shown`
-      : `Fuel drains — ${fmt(drains.length)} recorded`,
+      ? `Fuel drains: ${fmt(drains.length)} recorded, ${fmt(DRAIN_ROWS_MAX)} most recent shown`
+      : `Fuel drains: ${fmt(drains.length)} recorded`,
   );
 
   // RECORDED is not ANNOUNCED, and the gap is a factor of thirty-six.
@@ -1053,7 +1053,7 @@ function fuelDrainTable(doc, C, drains) {
       uncaused > 0
         ? `${fmt(uncaused)} carry no attributable cause, most often because the unit reports no ignition state.`
         : null,
-      "Slosh and settling — the probe moving rather than the tank — are out, with drops that turned out to be a refill or a sensor fault.",
+      "Slosh and settling, the probe moving rather than the tank, are out, with drops that turned out to be a refill or a sensor fault.",
       measured === 0
         ? "Fall duration was measured on none of these; it has only been recorded since 28 Aug 2026."
         : measured < shown.length
@@ -1090,12 +1090,12 @@ function fuelDrainTable(doc, C, drains) {
 
       body: shown.map((d) => [
         fmtStamp(d.at),
-        d.plate ?? "—",
+        d.plate ?? "-",
         dash(d.levelBefore, 1),
         dash(d.levelAfter, 1),
         dash(d.litres, 1),
         fmtMins(d.fallSeconds),
-        d.location ?? "—",
+        d.location ?? "-",
       ]),
 
       columnWidths: [
@@ -1399,7 +1399,7 @@ export async function downloadAnalyticsReport({
               1,
             ),
           unit: `h over ${machineWeek?.days ??
-            "—"
+            "-"
             } days`,
         },
 
@@ -1432,7 +1432,7 @@ export async function downloadAnalyticsReport({
                   .length,
                 1,
               )
-              : "—",
+              : "-",
           unit: `ha / day  ·  ${areaDays?.measuredDays ??
             0
             } days measured`,
@@ -1980,7 +1980,7 @@ export async function downloadAnalyticsReport({
       sectionTitle(
         doc,
         C,
-        `Fleet state — all ${units.length} units`,
+        `Fleet state: all ${units.length} units`,
       );
 
       const head = [
@@ -2014,8 +2014,8 @@ export async function downloadAnalyticsReport({
                 : "Non-op";
 
             return [
-              u.plate ?? "—",
-              u.state ?? "—",
+              u.plate ?? "-",
+              u.state ?? "-",
               statusLabel,
               dash(
                 u.hoursToday,
@@ -2038,31 +2038,31 @@ export async function downloadAnalyticsReport({
                 ? fmt(
                   u.fuelBurnL,
                 )
-                : "—",
+                : "-",
               u.fuelToday !=
                 null
                 ? fmt(
                   u.fuelToday,
                 )
-                : "—",
+                : "-",
               dash(
                 u.litresPerHour,
                 1,
               ),
               u.sensorHealth ??
-              "—",
+              "-",
               u.distanceKm !=
                 null
                 ? fmt(
                   u.distanceKm,
                 )
-                : "—",
+                : "-",
               u.distanceWeekKm !=
                 null
                 ? fmt(
                   u.distanceWeekKm,
                 )
-                : "—",
+                : "-",
             ];
           },
         );
@@ -2234,7 +2234,7 @@ export async function downloadAnalyticsReport({
                 busiestDay.day,
               )} · ${busiestDay.trips
               } trips`
-              : "—",
+              : "-",
         },
 
         {
@@ -2247,7 +2247,7 @@ export async function downloadAnalyticsReport({
               )} · ${fmt(
                 furthestDay.distanceKm,
               )} km`
-              : "—",
+              : "-",
         },
 
         {

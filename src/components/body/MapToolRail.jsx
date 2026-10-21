@@ -14,6 +14,7 @@ import MapLayersMenu from "./MapLayersMenu";
 import { findVehicleByQuery } from "../../lib/vehicleMap";
 import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
+import UnitTypeIcon from "../shared/UnitTypeIcon";
 import "./MapToolRail.css";
 
 /* OpenStreetMap's geocoder: free, keyless, and limited to one request a second
@@ -165,7 +166,7 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
           <div className="mtr-search__head">Vehicles</div>
           {units.map((v) => (
             <button type="button" key={v.id} className="mtr-search__row" onClick={() => onPickVehicle(v.id)}>
-              <i className="ti ti-truck" aria-hidden="true" />
+              <UnitTypeIcon vehicle={v} size={24} />
               <span className="mtr-search__text">
                 <span className="mtr-search__name">{v.name || v.id}</span>
                 <span className="mtr-search__detail">
@@ -321,7 +322,7 @@ export default function MapToolRail({
               icon="ti-alert-triangle" label="Halted" tour="map-halted"
               title={halted.count
                 ? `Halted: ${halted.count} ${halted.count === 1 ? "unit" : "units"} stopped mid-journey, on the highway or outside their geofences`
-                : "Halted: no unit has stopped mid-journey — open the list anyway"}
+                : "Halted: no unit has stopped mid-journey, open the list anyway"}
               on={halted.open} count={halted.count} expanded={expanded} onClick={halted.onOpen}
             />
           )}
@@ -331,7 +332,7 @@ export default function MapToolRail({
               icon="ti-gas-station" label="Fuel alerts" tour="map-fuel"
               title={fuelAlerts.count
                 ? `Fuel alerts: ${fuelAlerts.count} ${fuelAlerts.count === 1 ? "unit" : "units"} with an open fuel theft alert`
-                : "Fuel alerts: none open — open the list anyway"}
+                : "Fuel alerts: none open, open the list anyway"}
               on={fuelAlerts.open} count={fuelAlerts.count} tone="alert" expanded={expanded} onClick={fuelAlerts.onOpen}
             />
           )}

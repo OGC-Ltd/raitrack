@@ -86,7 +86,7 @@ describe("tripEta", () => {
     expect(eta.etaMs).toBe(AT + eta.minutes * 60_000);
   });
 
-  it("counts down to the YARD while returning — the driver is going home", () => {
+  it("counts down to the YARD while returning, the driver is going home", () => {
     const t = liveTrip(run({ arrivedAt: "2026-09-15T06:00:00Z" }), 0.70, 34.99);
     const eta = tripEta(t, 60, AT);
     expect(eta.towards).toBe("yard");
@@ -180,7 +180,7 @@ describe("a trip is completed by the sign-in, not by arriving", () => {
   });
 
   it("says the signature is what is outstanding", () => {
-    expect(legLabel(home())).toBe("Back — awaiting sign-in");
+    expect(legLabel(home())).toBe("Back, awaiting sign-in");
   });
 
   it("does not claim a sign-in on a lifecycle no guard closes", () => {
@@ -244,7 +244,7 @@ describe("the bed empties when Raiply is BEHIND it, not on arrival", () => {
    * it here wrote the load off at the moment the wheels crossed the line, and
    * put "Empty" on the card of a unit nobody had touched yet.
    */
-  it("is STILL LOADED standing inside Raiply — arriving is not offloading", () => {
+  it("is STILL LOADED standing inside Raiply, arriving is not offloading", () => {
     const t = at(RAIPLY.lat, RAIPLY.lng);
     expect(t.leg).toBe("at-destination");
     expect(hasDelivered(t)).toBe(false);

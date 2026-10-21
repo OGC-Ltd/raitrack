@@ -33,7 +33,7 @@ describe("fleetType", () => {
     expect(fleetType(plated("KBH 123A", "Faw Prime mover CA4181"))).toBe("truck");
   });
 
-  it("never returns null — an unrecognisable unit is still offered as a truck", () => {
+  it("never returns null, an unrecognisable unit is still offered as a truck", () => {
     expect(fleetType(plated("MUFINDI: 013", "MUFINDI: 013"))).toBe("truck");
     expect(fleetType({})).toBe("truck");
   });
@@ -71,7 +71,7 @@ describe("matchesTypeFilter", () => {
   const excavator = coded("MUFINDI: EX 01");
   const tractor = plated("KBH 124A", "Mahindra 575 DI");
 
-  it("passes everything when nothing is ticked — an empty selection is 'no filter'", () => {
+  it("passes everything when nothing is ticked, an empty selection is 'no filter'", () => {
     for (const empty of [[], new Set(), null, undefined]) {
       expect(matchesTypeFilter(excavator, empty)).toBe(true);
       expect(matchesTypeFilter(tractor, empty)).toBe(true);

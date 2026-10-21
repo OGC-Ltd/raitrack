@@ -17,7 +17,7 @@ import { useDispatch, useSelector, useStore } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ReferenceArea, ReferenceDot,
+  ReferenceArea, ReferenceDot, ReferenceLine,
 } from "recharts";
 import "../body/SensorPanel.css";
 import "./FuelReportScreen.css";
@@ -59,14 +59,14 @@ const MAX_DAYS = 31;
 const TZ = "Africa/Nairobi";
 
 const fmtNum = (n, d = 1) =>
-  n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-KE", { maximumFractionDigits: d, minimumFractionDigits: d });
-const L = (n) => (n == null ? "—" : `${fmtNum(n, 1)} L`);
+  n == null || !Number.isFinite(n) ? "-" : n.toLocaleString("en-KE", { maximumFractionDigits: d, minimumFractionDigits: d });
+const L = (n) => (n == null ? "-" : `${fmtNum(n, 1)} L`);
 const stamp = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ,
 });
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
 const dayMon = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: TZ });
-const at = (ms) => (Number.isFinite(ms) ? stamp.format(ms) : "—");
+const at = (ms) => (Number.isFinite(ms) ? stamp.format(ms) : "-");
 
 /** "YYYY-MM-DDTHH:mm" in Nairobi for an instant — the datetime-local value. */
 function localInput(ms) {
@@ -114,6 +114,11 @@ const LINES = {
   mileageKm:   { label: "Mileage in trips, km",    color: "#16a34a", axis: "right", dp: 1 },
   speedKmh:    { label: "Speed, km/h",             color: "#2563eb", axis: "right", dp: 0 },
   altitudeM:   { label: "Altitude, m",             color: "#f59e0b", axis: "alt",   dp: 0 },
+  // The engine check line (operator, 2026-10-20): a step along the foot of the
+  // graph, up while the ignition is on, down while it is off, so a fall in
+  // the fuel line can be read against whether the engine was running.
+  engineOn:    { label: "Engine",                  color: "#334155", axis: "eng",   dp: 0, step: true,
+                 word: (v) => (v ? "On" : "Off") },
 };
 
 // The event marks, drawn once: green pump = filling, red pump = drain, the
@@ -311,7 +316,7 @@ function ChartTip({ active, payload, lines, segments }) {
   const seg = segments?.find((x) => p.t >= x.start && p.t <= x.end);
   const rows = Object.entries(LINES).filter(([k]) => lines[k] && p[k] != null).map(([k, l]) => {
     const [name, unit] = l.label.split(/,\s*/);
-    return { k, name, unit, color: l.color, value: fmtNum(p[k], l.dp), litres: l.axis === "fuel" };
+    return { k, name, unit, color: l.color, value: l.word ? l.word(p[k]) : fmtNum(p[k], l.dp), litres: l.axis === "fuel" };
   });
   const groups = [rows.filter((r) => r.litres), rows.filter((r) => !r.litres)].filter((g) => g.length);
   return (
@@ -387,26 +392,39 @@ function LineList({ lines, onToggle, onAll }) {
   );
 }
 
+/** The crosshair's litres, in a tag over the Litres axis at the line's height. */
+function CrossLabel({ viewBox, text }) {
+  if (!viewBox || !Number.isFinite(viewBox.y)) return null;
+  const w = text.length * 5.6 + 8;
+  const x = Math.max(1, viewBox.x - w + 2);
+  return (
+    <g pointerEvents="none">
+      <rect x={x} y={viewBox.y - 8} width={w} height={16} rx={3} fill="#0f172a" />
+      <text x={x + w / 2} y={viewBox.y + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#fff">{text}</text>
+    </g>
+  );
+}
+
 // The plot's edges inside the chart box: the Litres axis on the left, the
 // speed/mileage axis (or a margin) on the right.
 const PLOT_LEFT = 42;
 const plotRight = (right) => (right ? 44 : 16);
 const WHEEL_MIN_MS = 5 * 60_000;    // the narrowest the graph zooms: ~20 readings
-/** Pixels of drag for one press of + or −. */
-const DRAG_STEP_PX = 80;
 /** One press of +: the view to this share of itself. */
 const STEP = 0.6;
 
 /**
  * The fuel graph (operator, 2026-10-13):
  *
- *   · press and drag RIGHT zooms in, as + does, and LEFT zooms out, as −
- *     does — DRAG_STEP_PX of drag for each press, about the point pressed,
- *     so the stretch under the pointer stays under it;
- *   · the wheel (or a sideways swipe) moves back and forth along the period
- *     at the same zoom; at either end, or at the whole period, the page keeps
- *     the scroll, so the graph never traps it;
- *   · Ctrl/⌘ + wheel (and a trackpad pinch, which arrives as one) zooms;
+ *   · press and drag moves the graph back and forth along the period at
+ *     the same zoom (operator, 2026-10-20), the way a map is dragged;
+ *   · the wheel or trackball zooms about the point under the pointer
+ *     (operator, 2026-10-20: "use the track ball to scroll within the chart
+ *     itself"), and the page does not scroll while the pointer is on the
+ *     graph; a trackpad pinch arrives as Ctrl + wheel and zooms the same;
+ *   · Shift + wheel, or a sideways swipe, moves along the period;
+ *   · a crosshair follows the pointer, with the litres at the reading under
+ *     it on the Litres axis;
  *   · double-click or "Whole period" zooms back out.
  *
  * View arithmetic as the vehicle panel's chart (lib/chartView).
@@ -429,6 +447,12 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
     return series.slice(Math.max(0, i - 1), j);
   }, [series, zoom]);
   const inView = (t) => t >= view[0] && t <= view[1];
+
+  // The reading under the pointer, for the crosshair: the fuel line shown
+  // (the raw level, else the processed one) at that reading.
+  const [hover, setHover] = useState(null);
+  const crossKey = lines.fuelL || !lines.fuelSmoothL ? "fuelL" : "fuelSmoothL";
+  const crossL = hover && (lines.fuelL || lines.fuelSmoothL) && Number.isFinite(hover[crossKey]) ? hover[crossKey] : null;
 
   const tick = (t) => ((zoom ? view[1] - view[0] : spanMs) > 1.5 * DAY
     ? `${dayMon.format(t)} ${clock.format(t)}` : clock.format(t));
@@ -469,14 +493,17 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
       const hit = fracAt(e.clientX);
       if (!hit || !(day[1] > day[0])) return;
       const px = wheelPixels(e);
-      const along = Math.abs(px.x) > Math.abs(px.y) ? px.x : px.y;
-      const next = e.ctrlKey || e.metaKey
-        ? zoomView(v, day, v[0] + hit.f * (v[1] - v[0]), zoomFactor(px.y), WHEEL_MIN_MS)
-        : panView(v, day, (along / hit.w) * (v[1] - v[0]));
-      // Nowhere to go (an end of the period, or the whole of it): the page
-      // keeps the scroll.
-      if (!next) return;
+      // Shift + wheel (a mouse's way of scrolling sideways) or a sideways
+      // swipe moves along the period; the wheel itself zooms about the point
+      // under the pointer.
+      const sideways = e.shiftKey ? (px.x || px.y) : Math.abs(px.x) > Math.abs(px.y) ? px.x : 0;
+      const next = sideways
+        ? panView(v, day, (sideways / hit.w) * (v[1] - v[0]))
+        : zoomView(v, day, v[0] + hit.f * (v[1] - v[0]), zoomFactor(px.y), WHEEL_MIN_MS);
+      // The wheel is the graph's while the pointer is on it: the page does
+      // not scroll under a zoom, even one that has nowhere further to go.
       e.preventDefault();
+      if (!next) return;
       setZoom(isWholeDay(next, day) ? null : next);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -484,26 +511,28 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Press and drag: right zooms in, left zooms out, about the point pressed.
-  // Measured from where the drag began, so going back the way it came
-  // returns to the view it started from.
+  // Press and drag. Measured from where the drag began, so going back the
+  // way it came returns to the view it started from.
   const drag = useRef(null);
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
     const hit = fracAt(e.clientX);
     if (!hit) return;
-    drag.current = { x: e.clientX, view, at: view[0] + hit.f * (view[1] - view[0]), moved: false };
+    drag.current = { x: e.clientX, view, w: hit.w, moved: false };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
+  // The graph is held and moved like a sheet: drag right to see earlier,
+  // left to see later, at the same zoom. Zooming is the wheel's and the
+  // buttons' (operator, 2026-10-20: "click and hold … only drag the chart
+  // back and forth, not zoom").
   const onPointerMove = (e) => {
     const d = drag.current;
     if (!d) return;
     const dx = e.clientX - d.x;
     if (!d.moved && Math.abs(dx) < 4) return;   // a click, not a drag
     d.moved = true;
-    const next = zoomView(d.view, full, d.at, STEP ** (dx / DRAG_STEP_PX), WHEEL_MIN_MS);
-    if (next) setZoom(isWholeDay(next, full) ? null : next);
-    else if (dx < 0) setZoom(null);
+    const next = panView(d.view, full, (-dx / d.w) * (d.view[1] - d.view[0]));
+    if (next) setZoom(next);
   };
   const endDrag = (e) => {
     if (drag.current) e?.currentTarget?.releasePointerCapture?.(e.pointerId);
@@ -518,16 +547,16 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
     <div className="frp-chart">
       <div className="frp-zoom" role="group" aria-label="Graph zoom">
         <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(STEP)}
-                aria-label="Zoom in" title="Zoom in — or drag right across the graph">+</button>
+                aria-label="Zoom in" title="Zoom in, or scroll over the graph">+</button>
         <button type="button" className="sp4-ghost-btn frp-zoom__btn" onClick={() => step(1 / STEP)} disabled={!zoom}
-                aria-label="Zoom out" title="Zoom out — or drag left across the graph">−</button>
+                aria-label="Zoom out" title="Zoom out, or scroll over the graph">−</button>
         {zoom && (
           <button type="button" className="sp4-ghost-btn" onClick={() => setZoom(null)}
-                  title="Show the whole period — or double-click the graph">Whole period</button>
+                  title="Show the whole period, or double-click the graph">Whole period</button>
         )}
         <span className="frp-zoom__hint">
           {zoom ? `${at(view[0])} – ${at(view[1])} · ` : ""}
-          {zoom ? "Drag right to zoom in, left to zoom out · scroll to move" : "Drag right across the graph to zoom in"}
+          {zoom ? "Scroll to zoom · drag to move" : "Scroll over the graph to zoom"}
         </span>
       </div>
       <div
@@ -543,8 +572,15 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
           <ComposedChart
             data={shown}
             margin={{ top: 22, right: right ? 4 : 16, bottom: 4, left: 0 }}
-            onMouseMove={(e) => onCursor(e?.activePayload?.[0]?.payload?.t ?? null)}
-            onMouseLeave={() => onCursor(null)}
+            onMouseMove={(e) => {
+              // Recharts 3 hands the index under the pointer, not the
+              // reading (its v2 `activePayload` is gone).
+              const i = Number(e?.activeTooltipIndex ?? e?.activeIndex);
+              const p = e?.activePayload?.[0]?.payload ?? (Number.isInteger(i) ? shown[i] : null) ?? null;
+              onCursor(p?.t ?? null);
+              setHover(p);
+            }}
+            onMouseLeave={() => { onCursor(null); setHover(null); }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--sp4-line, #e2e8f0)" />
             <XAxis dataKey="t" type="number" scale="time" domain={zoom ?? ["dataMin", "dataMax"]} allowDataOverflow
@@ -554,6 +590,9 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
             <YAxis yAxisId="right" orientation="right" hide={!right} tick={{ fontSize: 10 }} width={right ? 40 : 0} />
             <YAxis yAxisId="alt" orientation="right" hide domain={["dataMin - 20", "dataMax + 20"]} />
             <YAxis yAxisId="volt" orientation="right" hide domain={[0, "dataMax + 2"]} />
+            {/* On is 1 on a 0–10 scale: the step stays in the bottom tenth,
+                clear of the fuel line. */}
+            <YAxis yAxisId="eng" orientation="right" hide domain={[-0.15, 10]} allowDataOverflow />
             {Object.entries(BACKGROUNDS).flatMap(([kind, b]) => (bg[kind]
               ? report.segments.filter((s) => s.kind === kind && s.end >= view[0] && s.start <= view[1]).map((s) => (
                 <ReferenceArea key={`${kind}-${s.start}`} yAxisId="fuel"
@@ -562,8 +601,8 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
               ))
               : []))}
             {Object.entries(LINES).map(([key, l]) => lines[key] && (
-              <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={l.axis === "fuel" ? 1.6 : 1.2}
-                    isAnimationActive={false} connectNulls={false} />
+              <Line key={key} yAxisId={l.axis} dataKey={key} stroke={l.color} dot={false} strokeWidth={l.axis === "fuel" || l.step ? 1.6 : 1.2}
+                    type={l.step ? "stepAfter" : "linear"} isAnimationActive={false} connectNulls={false} />
             ))}
             {marks.stop && report.stops.filter((st) => inView(st.start)).map((st) => (
               <ReferenceDot key={`s-${st.start}`} yAxisId="fuel" x={st.start} y={stopRow} ifOverflow="hidden"
@@ -577,6 +616,18 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
               <ReferenceDot key={`d-${d.id}`} yAxisId="fuel" x={d.at} y={eventRow} ifOverflow="hidden"
                             shape={iconShape(ICON.drain, `${dropWord(d)} ${at(d.at)} · ${L(d.volumeL)}`)} />
             ))}
+            {/* The crosshair's level: across at the fuel under the pointer,
+                its litres on the Litres axis. The upright is the tooltip's
+                cursor below. */}
+            {crossL != null && (
+              <ReferenceLine yAxisId="fuel" y={crossL} ifOverflow="hidden"
+                             stroke="var(--sp4-text-3)" strokeWidth={1} strokeDasharray="3 3"
+                             label={<CrossLabel text={`${fmtNum(crossL, 1)} L`} />} />
+            )}
+            {crossL != null && (
+              <ReferenceDot yAxisId="fuel" x={hover.t} y={crossL} r={3.5} ifOverflow="hidden"
+                            fill={LINES[crossKey].color} stroke="#fff" strokeWidth={1.5} />
+            )}
             <Tooltip content={<ChartTip lines={lines} segments={report.segments} />} isAnimationActive={false}
                      cursor={{ stroke: "var(--sp4-text-3)", strokeWidth: 1, strokeDasharray: "3 3" }} />
           </ComposedChart>
@@ -594,17 +645,17 @@ function FuelGraph({ series, report, bg, lines, marks, onCursor, spanMs }) {
  * "Possible theft" is ControlTech's "Stolen", in this app's word for it.
  */
 function FuelSummary({ unit, stats: st }) {
-  const km = (v) => (v == null ? "—" : `${fmtNum(v, 2)} km`);
-  const hm = (h) => (h == null ? "—" : durationLabel(h * 3_600_000));
+  const km = (v) => (v == null ? "-" : `${fmtNum(v, 2)} km`);
+  const hm = (h) => (h == null ? "-" : durationLabel(h * 3_600_000));
   const consumedPer = st.lPer100Km != null
     ? `${fmtNum(st.lPer100Km, 1)} L/100 km`
-    : st.lPerHour != null ? `${fmtNum(st.lPerHour, 1)} L/h` : "—";
-  const kmPerL = st.consumedL > 0 && st.distanceKm >= 1 ? `${fmtNum(st.distanceKm / st.consumedL, 2)} km` : "—";
+    : st.lPerHour != null ? `${fmtNum(st.lPerHour, 1)} L/h` : "-";
+  const kmPerL = st.consumedL > 0 && st.distanceKm >= 1 ? `${fmtNum(st.distanceKm / st.consumedL, 2)} km` : "-";
   const cols = [
-    ["Unit", nameParts(unit?.name ?? unit?.id) || "—"],
+    ["Unit", nameParts(unit?.name ?? unit?.id) || "-"],
     ["Mileage in trips", km(st.distanceKm)],
     ["Mileage in all readings", km(st.allDistanceKm)],
-    ["Avg speed", st.avgSpeedKmh == null ? "—" : `${fmtNum(st.avgSpeedKmh, 0)} km/h`],
+    ["Avg speed", st.avgSpeedKmh == null ? "-" : `${fmtNum(st.avgSpeedKmh, 0)} km/h`],
     ["Max speed", `${fmtNum(st.maxSpeedKmh, 0)} km/h`],
     ["Time in trips", hm(st.movingHours)],
     ["Engine hours", hm(st.engineHours)],
@@ -663,7 +714,7 @@ function WhenField({ label, value, onChange, max, min }) {
   return (
     <label className="frp-when">
       <span className="frp-when__l">{label}</span>
-      <span className="frp-when__v">{t != null ? at(t) : "—"}</span>
+      <span className="frp-when__v">{t != null ? at(t) : "-"}</span>
       <svg className="frp-when__i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
@@ -883,8 +934,8 @@ function UnitFuelReport() {
   ]);
   const slug = ready ? `fuel-report-${ready.unit.id}-${fleetDayKey(new Date(ready.from))}` : "fuel-report";
   const consumption = r
-    ? (r.stats.lPer100Km != null ? `${fmtNum(r.stats.lPer100Km)} L/100 km` : r.stats.lPerHour != null ? `${fmtNum(r.stats.lPerHour)} L/h` : "—")
-    : "—";
+    ? (r.stats.lPer100Km != null ? `${fmtNum(r.stats.lPer100Km)} L/100 km` : r.stats.lPerHour != null ? `${fmtNum(r.stats.lPerHour)} L/h` : "-")
+    : "-";
   const statCards = r ? [
     { label: "Fuel at start", value: L(r.stats.fuelStartL) },
     { label: "Fuel at end", value: L(r.stats.fuelEndL) },
@@ -917,7 +968,7 @@ function UnitFuelReport() {
   };
   const tabCount = { stats: events.length, trips: r?.trips.length, parkings: r?.parkings.length };
   // Before a report: a quiet dash, not a full stop floating in the tile.
-  const dot = <span className="frp-kpi-none">—</span>;
+  const dot = <span className="frp-kpi-none">-</span>;
 
   return (
     <div className="sp4-root frp-root frp-unit" ref={rootRef}>
@@ -931,7 +982,7 @@ function UnitFuelReport() {
                   start + filled − possible theft − consumed = end. Each term
                   is rounded before consumed is derived, so it closes exactly. */}
               <Kpi n={r ? fmtNum(r.stats.fuelStartL) : dot} label="Start, L" tone="fleet"
-                   title="The level at the start of the period — the median of the first readings, so one slosh does not set it." />
+                   title="The level at the start of the period, the median of the first readings, so one slosh does not set it." />
               <Kpi n={r ? fmtNum(r.stats.filledL) : dot} label="+ Filled, L" tone="live"
                    title="Fillings the server's ledger counts as fuel put in." />
               {r?.stats.unrecordedL > 0 && (

@@ -173,7 +173,7 @@ export function TripsView({ report: r, from, to, fmtNum, at, onHoverAt }) {
                     {fmtNum(s.fuelStartL)} → {fmtNum(s.fuelEndL)} L
                     {used != null && Math.abs(used) >= 0.1 && <small className="frs-delta">{used > 0 ? "−" : "+"}{fmtNum(Math.abs(used))}</small>}
                   </td>
-                  <td className="sp4-td--right sp4-num">{rate != null ? <>{fmtNum(rate)} <small className="frs-unit">L/100 km</small></> : <span className="sp4-muted">—</span>}</td>
+                  <td className="sp4-td--right sp4-num">{rate != null ? <>{fmtNum(rate)} <small className="frs-unit">L/100 km</small></> : <span className="sp4-muted">-</span>}</td>
                 </tr>
               );
             })}

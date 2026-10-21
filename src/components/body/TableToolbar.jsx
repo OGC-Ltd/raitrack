@@ -68,7 +68,7 @@ export default function TableToolbar({
             className="sp4-ghost-btn"
             onClick={onCsv}
             disabled={disabled}
-            title="CSV — the rows on screen, opens in Excel"
+            title="CSV, the rows on screen, opens in Excel"
           >CSV</button>
         )}
         {onPdf && (
@@ -77,7 +77,7 @@ export default function TableToolbar({
             className="sp4-ghost-btn"
             onClick={onPdf}
             disabled={disabled}
-            title="PDF — the rows on screen, as a filed record"
+            title="PDF, the rows on screen, as a filed record"
           >PDF</button>
         )}
       </span>

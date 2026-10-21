@@ -39,7 +39,7 @@ const COLS = [
   { key: "idleHoursToday",       label: "Idle",       align: "r", type: "num", hint: "Stationary where travel is the work" },
   // Fuel, on every category.
   { key: "fuelBurnL",     label: "Fuel L",  align: "r", type: "num", win: true,
-    hint: "Litres over WINDOW — modelled from this unit's own burn rate" },
+    hint: "Litres over WINDOW, modelled from this unit's own burn rate" },
   { key: "litresPerHour", label: "L/hr",    align: "r", type: "num", hint: "Litres per engine hour" },
   { key: "sensorHealth",  label: "Sensor",  align: "l", type: "text", hint: "Fuel probe and tracker health" },
 ];
@@ -47,29 +47,29 @@ const COLS = [
 /** Swapped in when the filter is excavators — distance is noise on a machine
  *  that covers 0.55 km per engine hour, and area is noise on a truck. */
 const AREA_COLS = [
-  { key: "areaKm2",         label: "km² day", align: "r", type: "num", hint: "Last complete day — ground the bucket could reach" },
+  { key: "areaKm2",         label: "km² day", align: "r", type: "num", hint: "Last complete day, ground the bucket could reach" },
   { key: "areaWeekAvgKm2",  label: "km² wk",  align: "r", type: "num", hint: "Mean per day measured digging, this week" },
   { key: "areaMonthAvgKm2", label: "km² SPAN", align: "r", type: "num", win: true, hint: "Mean per day measured digging over WINDOW" },
   { key: "km2PerHour",      label: "km²/hr",  align: "r", type: "num", hint: "Ground per digging hour, last complete day" },
   { key: "hectares",         label: "ha",     align: "r", type: "num", win: true, hint: "Hectares the bucket covered over WINDOW" },
-  { key: "litresPerHectare", label: "L/ha",   align: "r", type: "num", hint: "Litres per hectare worked — separates deep digging from surface work" },
+  { key: "litresPerHectare", label: "L/ha",   align: "r", type: "num", hint: "Litres per hectare worked, separates deep digging from surface work" },
 ];
 
 const DIST_COLS = [
   { key: "distanceTodayKm",    label: "km",     align: "r", type: "num" },
   { key: "distanceWeekAvgKm",  label: "km wk",  align: "r", type: "num" },
   { key: "distanceMonthAvgKm", label: "km SPAN", align: "r", type: "num", win: true, hint: "Mean per reporting day over WINDOW" },
-  { key: "litresPerKm",        label: "L/km",   align: "r", type: "num", hint: "Litres per kilometre — travel units only" },
+  { key: "litresPerKm",        label: "L/km",   align: "r", type: "num", hint: "Litres per kilometre, travel units only" },
 ];
 
 const fmt = (n, d = 0) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
 const fmtFleetDay = (day) =>
   day
     ? new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB",
         { day: "numeric", month: "short", timeZone: "UTC" })
-    : "—";
+    : "-";
 
 export default function FleetStateSection({ state, area, windowSpan, windowLabel }) {
   const [cat, setCat]     = useState("all");
@@ -198,7 +198,7 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
                   setStateFilter(on ? null : s.key);
                 }
               }}
-              title={`${s.label}: ${fmt(n)} of ${fmt(total)} — click to ${on ? "clear" : "filter"}`}
+              title={`${s.label}: ${fmt(n)} of ${fmt(total)}, click to ${on ? "clear" : "filter"}`}
             >
               <span className="an-rail__bar" />
               <span className="an-rail__k">{s.label}</span>
@@ -260,7 +260,7 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
                   <th key={c.key} className={c.align === "r" ? "r" : ""}
                       aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
                     <button type="button" className="an-tbl__sort" onClick={() => toggleSort(c.key)}
-                            title={c.hint ? `${c.hint} — click to sort` : "Click to sort"}>
+                            title={c.hint ? `${c.hint}, click to sort` : "Click to sort"}>
                       <span>{c.label}</span>
                       <span className={"an-tbl__caret" + (on ? ` an-tbl__caret--${sort.dir}` : "")} aria-hidden="true" />
                     </button>
@@ -288,7 +288,7 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
                 <td className="r">{fmt(u.stationaryHoursToday, 1)}</td>
                 <td className="r">
                   {u.idleHoursToday == null
-                    ? <span className="an-tbl__na" title="Not idle time on this machine: its work is done standing still. Plant and tractors — see Stationary beside it">—</span>
+                    ? <span className="an-tbl__na" title="Not idle time on this machine: its work is done standing still. Plant and tractors, see Stationary beside it">-</span>
                     : fmt(u.idleHoursToday, 1)}
                 </td>
                 <td className="r">{fmt(u.fuelBurnL)}</td>
@@ -298,10 +298,10 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
                   <>
                     <td className="r">{fmt(u.areaKm2, 4)}</td>
                     <td className="r">{u.areaWeekAvgKm2 == null
-                      ? <span className="an-tbl__na" title="Not measured digging this week">—</span>
+                      ? <span className="an-tbl__na" title="Not measured digging this week">-</span>
                       : fmt(u.areaWeekAvgKm2, 4)}</td>
                     <td className="r">{u.areaMonthAvgKm2 == null
-                      ? <span className="an-tbl__na" title="Not measured digging this month">—</span>
+                      ? <span className="an-tbl__na" title="Not measured digging this month">-</span>
                       : fmt(u.areaMonthAvgKm2, 4)}</td>
                     <td className="r">{fmt(u.km2PerHour, 4)}</td>
                     <td className="r">{fmt(u.hectares, 1)}</td>
@@ -314,7 +314,7 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
                     <td className="r">{fmt(u.distanceMonthAvgKm, 1)}</td>
                     <td className="r">
                       {u.litresPerKm == null
-                        ? <span className="an-tbl__na" title="Not a rate for this machine: its work is not the kilometres. Plant reports almost none — position freezes at speed 0 — and a tractor's fuel goes into the field rather than the travel. Read L/hr instead">—</span>
+                        ? <span className="an-tbl__na" title="Not a rate for this machine: its work is not the kilometres. Plant reports almost none, position freezes at speed 0, and a tractor's fuel goes into the field rather than the travel. Read L/hr instead">-</span>
                         : fmt(u.litresPerKm, 1)}
                     </td>
                   </>
@@ -331,7 +331,7 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
             Excavators worked <b>{fmt(area.totalM2 / 1e6, 4)} km²</b> on{" "}
             {fmtFleetDay(area.day)}, across {area.units.length} machines at {area.reachMetres} m reach
             {fleetAreaAvg != null && (
-              <> — averaging <b>{fmt(fleetAreaAvg, 4)} km²</b> per machine per day it dug, this month</>
+              <>, averaging <b>{fmt(fleetAreaAvg, 4)} km²</b> per machine per day it dug, this month</>
             )}.
           </span>
         )}
@@ -343,7 +343,7 @@ export default function FleetStateSection({ state, area, windowSpan, windowLabel
 /** Sensor pills */
 const SENSOR = {
   OK:             { label: "OK",        tone: "work", title: "Fuel probe reporting and calibrated" },
-  DIED:           { label: "Dead",      tone: "off",  title: "Probe stopped reporting — workshop job" },
+  DIED:           { label: "Dead",      tone: "off",  title: "Probe stopped reporting, workshop job" },
   SILENT:         { label: "Silent",    tone: "off",  title: "Probe quiet on a unit that is still reporting" },
   UNCALIBRATED:   { label: "No cal.",   tone: "idle", title: "Fitted but carries no calibration table" },
   TRACKER_SILENT: { label: "No signal", tone: "off",  title: "The tracker itself has said nothing" },
@@ -352,7 +352,7 @@ const SENSOR = {
 };
 
 function SensorPill({ health }) {
-  if (!health) return <span className="an-tbl__na">—</span>;
+  if (!health) return <span className="an-tbl__na">-</span>;
   const s = SENSOR[health] ?? SENSOR.UNKNOWN;
   return <span className={`an-pill an-pill--${s.tone}`} title={s.title}>{s.label}</span>;
 }

@@ -193,7 +193,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
           label="Units"
           count={vehicles.length}
           onClick={() => { revealMap?.(); setUnitsOpen?.(true); }}
-          title="Every unit — pick which ones the map is about"
+          title="Every unit, pick which ones the map is about"
         />
         {/* One vehicle over a chosen period — not a fuel page, so it sits
             above the Fuel group rather than after it (operator, 2026-10-07). */}
@@ -203,7 +203,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
             label="Logbook"
             current={review.active}
             onClick={review.open}
-            title="Vehicle logbook — a report on one unit was used over a period — drive hours, distance, fuel and where it spent its time — with Excel and PDF"
+            title="Vehicle logbook, a report on one unit was used over a period, drive hours, distance, fuel and where it spent its time, with Excel and PDF"
           />
         )}
         {/* Fuel (operator, 2026-10-07): audit and report under one heading
@@ -217,7 +217,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
                 label="Audit"
                 current={audit.active}
                 onClick={audit.open}
-                title="Fuel Audit — theft alerts that were a faulty probe, and where each probe repair stands"
+                title="Fuel Audit, theft alerts that were a faulty probe, and where each probe repair stands"
               />
             )}
             {report && (
@@ -226,7 +226,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
                 label="Report"
                 current={report.active}
                 onClick={report.open}
-                title="Advanced fuel analysis — one unit over a period: statistics, fuel graph, fillings, drains, trips and the track"
+                title="Advanced fuel analysis, one unit over a period: statistics, fuel graph, fillings, drains, trips and the track"
               />
             )}
           </div>

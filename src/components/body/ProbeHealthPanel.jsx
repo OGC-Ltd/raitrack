@@ -73,14 +73,14 @@ const STATUSES = [
 const ago = (iso) => {
   if (!iso) return "never";
   const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms)) return "—";
+  if (!Number.isFinite(ms)) return "-";
   const h = ms / 3600000;
   if (h < 1)  return `${Math.max(1, Math.round(h * 60))}m ago`;
   if (h < 48) return `${h.toFixed(1)}h ago`;
   return `${(h / 24).toFixed(0)}d ago`;
 };
 
-const litres = (ml) => (ml == null ? "—" : `${(ml / 1000).toFixed(1)} L`);
+const litres = (ml) => (ml == null ? "-" : `${(ml / 1000).toFixed(1)} L`);
 
 /**
  * State to pill modifier, in the panel's own vocabulary.
@@ -95,7 +95,7 @@ const PILL = {
 };
 
 const Pill = ({ state, label }) => (
-  <span className={`sp4-pill sp4-pill--${PILL[state] ?? "none"}`}>{label ?? state ?? "—"}</span>
+  <span className={`sp4-pill sp4-pill--${PILL[state] ?? "none"}`}>{label ?? state ?? "-"}</span>
 );
 
 /**
@@ -141,7 +141,7 @@ const ProbeRow = memo(
       >
         <td className="sp4-td--left sp4-td--pin">
           <span className="sp4-reg">{r.plate}</span>
-          <div className="sp4-muted">{r.deviceId ?? "—"}</div>
+          <div className="sp4-muted">{r.deviceId ?? "-"}</div>
         </td>
         <td className="sp4-td--left sp4-td--action">
           {/* The server's partial unique index is the real
@@ -151,7 +151,7 @@ const ProbeRow = memo(
           {reported && (
             <div><span className="sp4-pill sp4-pill--warn">Reported</span></div>
           )}
-          {faultAction(r) || <span className="sp4-muted">—</span>}
+          {faultAction(r) || <span className="sp4-muted">-</span>}
         </td>
         <td className={"sp4-td--right" + (r.trackerSilent ? " sp4-probe--fault" : "")}>
           {ago(r.lastReportedAt)}
@@ -159,7 +159,7 @@ const ProbeRow = memo(
         <td className="sp4-td--right">
           {live?.fuelLitres != null
             ? `${live.fuelLitres.toFixed(0)} L${live.fuelPct != null ? ` · ${live.fuelPct}%` : ""}`
-            : <span className="sp4-muted">—</span>}
+            : <span className="sp4-muted">-</span>}
         </td>
         <td className="sp4-td--left">
           <Pill state={r.fuelProbe?.state} label={PROBE_STATE_LABEL[r.fuelProbe?.state]} />
@@ -192,12 +192,12 @@ const ProbeRow = memo(
         <td className="sp4-td--right">
           {r.channels?.odometer?.lastValue != null
             ? `${Math.round(r.channels.odometer.lastValue).toLocaleString()} km`
-            : <span className="sp4-muted">—</span>}
+            : <span className="sp4-muted">-</span>}
         </td>
         <td className="sp4-td--right">
           {r.channels?.engineHours?.lastValue != null
             ? `${Math.round(r.channels.engineHours.lastValue).toLocaleString()} h`
-            : <span className="sp4-muted">—</span>}
+            : <span className="sp4-muted">-</span>}
         </td>
       </tr>
     );

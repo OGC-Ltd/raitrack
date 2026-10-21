@@ -47,13 +47,13 @@ const row = ({
   },
 });
 
-describe("faultAction — the same symptom, different jobs", () => {
+describe("faultAction, the same symptom, different jobs", () => {
   it("blames a silent tracker before anything downstream of it", () => {
     // 66 of SUKARI's 284 tracked units: provisioned, bound, and saying nothing
     // for weeks. Every channel reads UNKNOWN because there is nothing to judge,
     // so reporting the probe would name a symptom and hide the cause.
     expect(faultAction({ ...row({ probe: "UNKNOWN" }), trackerSilent: true }))
-      .toBe("Tracker silent — check the device");
+      .toBe("Tracker silent, check the device");
   });
 
   it("outranks even an uncalibrated sensor", () => {
@@ -61,7 +61,7 @@ describe("faultAction — the same symptom, different jobs", () => {
     // your way out of a device that is not transmitting.
     expect(faultAction({
       ...row({ probe: "NOT_FITTED", calibrationPoints: 0 }), trackerSilent: true,
-    })).toBe("Tracker silent — check the device");
+    })).toBe("Tracker silent, check the device");
   });
 
   it("sends an uncalibrated sensor to Wialon, not to the workshop", () => {
@@ -85,13 +85,13 @@ describe("faultAction — the same symptom, different jobs", () => {
     // 30 units. KTCC 202G: 23,740 readings, a 32-point table, never once above
     // zero. The configuration is sound, so the fault is between tank and probe.
     expect(faultAction(row({ probe: "SILENT", calibrationPoints: 32 })))
-      .toBe("Probe reads empty — check probe fitting and wiring");
+      .toBe("Probe reads empty, check probe fitting and wiring");
   });
 
   it("sends a probe that stopped to the workshop", () => {
     // 12 units. Read real levels, then went flat.
     expect(faultAction(row({ probe: "DIED" })))
-      .toBe("Probe stopped — inspect probe and wiring");
+      .toBe("Probe stopped, inspect probe and wiring");
   });
 
   it("does not call a unit with no sensor broken", () => {
@@ -104,7 +104,7 @@ describe("faultAction — the same symptom, different jobs", () => {
   it("blames the tracker before the probe when there is barely any data", () => {
     // 18 units. Too few readings to judge the fuel channel at all.
     expect(faultAction(row({ probe: "UNKNOWN" })))
-      .toBe("Unit barely reporting — check the tracker");
+      .toBe("Unit barely reporting, check the tracker");
   });
 
   it("says nothing about a healthy unit", () => {

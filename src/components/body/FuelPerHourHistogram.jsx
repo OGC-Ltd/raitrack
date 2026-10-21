@@ -86,7 +86,7 @@ const SERIES = [
 ];
 
 const fmt = (n, d = 1) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d }).format(n);
 
 const medianOf = (v) => (v.length ? [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)] : null);
 
@@ -136,7 +136,7 @@ export default function FuelPerHourHistogram({ state }) {
       <div className="an-card__head">
         <span className="an-card__title">Fuel per operating hour</span>
         <span className="an-card__hint">
-          {total > 0 ? `${total} machines · measured` : "—"}
+          {total > 0 ? `${total} machines · measured` : "-"}
         </span>
       </div>
 

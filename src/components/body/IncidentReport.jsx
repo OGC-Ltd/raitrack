@@ -168,9 +168,9 @@ function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, capt
           filenameSlug: `${exportSlug}-${plate}`.replace(/\s+/g, "-").toLowerCase(),
         })}
         onPdf={() => downloadTablePdf({
-          reportTitle: `${reportTitle} — ${plate}`,
-          sectionTitle: `${plate} — every case loaded`,
-          filterNote: `${caption}. ${rows.length} case${rows.length === 1 ? "" : "s"} loaded${more ? " — more available, load them before exporting for a complete file" : ""}.`,
+          reportTitle: `${reportTitle} - ${plate}`,
+          sectionTitle: `${plate}, every case loaded`,
+          filterNote: `${caption}. ${rows.length} case${rows.length === 1 ? "" : "s"} loaded${more ? ", more available, load them before exporting for a complete file" : ""}.`,
           cards: [
             { label: "Unit",           value: plate },
             { label: "Cases in file",  value: String(rows.length) },
@@ -199,7 +199,7 @@ function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, capt
                   {columns.slice(1).map((c) => (
                     <Fragment key={c.key}>
                       <dt title={c.title}>{c.label}</dt>
-                      <dd>{c.render(r) ?? "—"}</dd>
+                      <dd>{c.render(r) ?? "-"}</dd>
                     </Fragment>
                   ))}
                 </dl>
@@ -331,7 +331,7 @@ export default function IncidentReport({
         onPdf={() => downloadTablePdf({
           reportTitle,
           sectionTitle: `${rows.length} unit${rows.length === 1 ? "" : "s"}`,
-          filterNote: `${caption}. ${more ? "More units are available — load them before exporting for a complete file." : "Every unit in the window."}`,
+          filterNote: `${caption}. ${more ? "More units are available, load them before exporting for a complete file." : "Every unit in the window."}`,
           cards: [{ label: "Units in report", value: String(rows.length) }],
           ...tableFor(summaryColumns, rows),
           filenameSlug: exportSlug,

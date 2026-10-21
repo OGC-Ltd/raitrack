@@ -126,5 +126,5 @@ export function withheldNote(labels, { filtered = false, window: win } = {}) {
   const why = filtered
     ? `${where} for the units and types selected`
     : where;
-  return `Not shown: ${list} — no records${why}.`;
+  return `Not shown: ${list}, no records${why}.`;
 }

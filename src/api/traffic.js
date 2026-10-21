@@ -65,7 +65,7 @@ export function summarizeFleetTraffic(vehicles = []) {
     .slice(0, 3)
     .map((p) => ({
       severity: p.traffic.condition,
-      text: `${p.vehicle.id} — ${p.traffic.highlights[0]?.text || `+${p.traffic.delayMin} min delay`}`,
+      text: `${p.vehicle.id} - ${p.traffic.highlights[0]?.text || `+${p.traffic.delayMin} min delay`}`,
     }));
 
   return {

@@ -61,12 +61,12 @@ const OVERDUE_MS = 4 * HOUR;
 const MAX_BLOCKS = 12;
 
 const fmt = (n, d = 0) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d, minimumFractionDigits: d }).format(n);
+  n == null ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: d, minimumFractionDigits: d }).format(n);
 
 /** Tonnes, to one decimal. The board is read at arm's length and a mill's day
  *  runs to four figures, so the kilogramme on the ticket is noise here — the
  *  grid one crumb away is where a ticket is read exactly. */
-const t1 = (kg) => (kg == null ? "—" : fmt(kg / 1000, 1));
+const t1 = (kg) => (kg == null ? "-" : fmt(kg / 1000, 1));
 
 /** The same tonnage, for the HEADLINE figure on a site card.
  *
@@ -77,17 +77,17 @@ const t1 = (kg) => (kg == null ? "—" : fmt(kg / 1000, 1));
  *  what pushed the mill's book figure out of its column and over the "Expected
  *  in" heading beside it. So the decimal is spent only while the figure is
  *  small enough to carry it; a mill running to four figures reads 15,338 t. */
-const tHead = (kg) => (kg == null ? "—" : fmt(kg / 1000, Math.abs(kg) >= 1_000_000 ? 0 : 1));
+const tHead = (kg) => (kg == null ? "-" : fmt(kg / 1000, Math.abs(kg) >= 1_000_000 ? 0 : 1));
 
 /** A tonnage that has a DIRECTION: "+41 t" in, "−93 t" out. The book move is
  *  the one figure on the strip that is a difference rather than a total, and a
  *  bare "93 t" under "cane on the ground" would read as a level. */
 const signed = (kg) =>
-  (kg == null ? "—" : (kg < 0 ? "−" : "+") + fmt(Math.abs(kg) / 1000, 0) + " t");
+  (kg == null ? "-" : (kg < 0 ? "−" : "+") + fmt(Math.abs(kg) / 1000, 0) + " t");
 
 /** A gap the way the yard says it: "2h 14m", "18m". */
 function gap(msVal) {
-  if (msVal == null) return "—";
+  if (msVal == null) return "-";
   const mins = Math.round(msVal / 60_000);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
@@ -394,7 +394,7 @@ function SiteCard({ site, lastBucket, asOf, closed, totals, spanDays, axis, over
             ways this becomes a number somebody dispatches against. */}
         <div className="wbb-fig wbb-fig--absent">
           <span className="wbb-fig__l">Physical</span>
-          <span className="wbb-fig__n">—</span>
+          <span className="wbb-fig__n">-</span>
           <span className="wbb-fig__s">no yard count in this feed</span>
         </div>
 
@@ -423,7 +423,7 @@ function SiteCard({ site, lastBucket, asOf, closed, totals, spanDays, axis, over
           <span className="wbb-fig__l">Expected in</span>
           <span className="wbb-fig__n">
             {expected.kg == null
-              ? "—"
+              ? "-"
               : <>{tHead(expected.kg)}<i>t</i></>}
           </span>
           <span className="wbb-fig__s">
@@ -708,7 +708,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
               )}
               <span className="wbb-road__count">
                 {r.kg > 0 && <span className="wbb-road__t">{t1(r.kg)} t</span>}
-                <b>{r.trucks.length || "—"}</b>
+                <b>{r.trucks.length || "-"}</b>
               </span>
             </li>
           ))}
@@ -726,7 +726,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
         {feedQuiet && (
           <p className="wbb-panel__note">
             No dispatch from FactorySuite {lastDispatchAt ? <>since {dayClock(lastDispatchAt)}</> : "yet"}
-            {" — "}only lorries weighed loaded at a yard are shown.
+            {" - "}only lorries weighed loaded at a yard are shown.
           </p>
         )}
       </section>
@@ -761,7 +761,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
               <li key={x.key} className="wbb-late__row" title={unitTitle(x)}>
                 <i className={blockClass(x)} aria-hidden="true" />
                 <span className="wbb-late__plate">{x.plate}</span>
-                <span className="wbb-late__dest">{x.destination ?? "—"}</span>
+                <span className="wbb-late__dest">{x.destination ?? "-"}</span>
                 <span className="wbb-late__time">
                   <b>{gap(x.elapsedMs)}</b>
                   {x.typicalMs != null && <> / {gap(x.typicalMs)}</>}
@@ -815,10 +815,10 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
             design this follows makes ("Physical · book says 1,179 t") with the
             two halves the other way round, because ours is the half we hold. */}
         <Stat
-          n="—"
+          n="-"
           label="Cane on the ground"
           sub={`No physical count · book moved ${signed(totals.bookMoveKg)}`}
-          title="The heap standing in the yards. Nothing in the weighbridge feed counts it — a scale weighs lorries, and the yard tally is a walk round with a clipboard that reaches us nowhere. The figure underneath is what the day's weighings MOVED at the outstations: cane in off the fields less cane sent to the mill, which is a movement and not a level."
+          title="The heap standing in the yards. Nothing in the weighbridge feed counts it, a scale weighs lorries, and the yard tally is a walk round with a clipboard that reaches us nowhere. The figure underneath is what the day's weighings MOVED at the outstations: cane in off the fields less cane sent to the mill, which is a movement and not a level."
         />
 
         {/* 2 · BOOK VS PHYSICAL GAP.
@@ -826,10 +826,10 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
             exist. This cell cannot be computed at all rather than computed
             badly — which is why it says what it is waiting for. */}
         <Stat
-          n="—"
+          n="-"
           label="Book vs physical gap"
           sub="Needs a physical count"
-          title="What the book says against what is actually on the ground. It needs both, and the physical count is not in this feed — so there is nothing here to reconcile against yet."
+          title="What the book says against what is actually on the ground. It needs both, and the physical count is not in this feed, so there is nothing here to reconcile against yet."
         />
 
         {/* 3 · RECEIVED TODAY — measured. */}
@@ -858,14 +858,14 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
             harvest or field-dispatch feed behind these bridges; this is what
             the tickets can say about what is still coming. */}
         <Stat
-          n={expectedFields == null ? "—" : fmt(expectedFields / 1000, 0)}
+          n={expectedFields == null ? "-" : fmt(expectedFields / 1000, 0)}
           unit={expectedFields == null ? null : "t"}
           tone="est"
           label="Expected from fields"
           sub={expectedFields == null
             ? "No load weighed yet today"
             : `${totals.openTickets} machine${totals.openTickets === 1 ? "" : "s"} out · ${t1(zoneAvgLoadKg)} t each`}
-          title="Machines that weighed empty at a bridge today and have not come back loaded, priced at what a load has actually weighed across the fleet today. It is a count multiplied by a measured average — the only estimate on this board — because no harvest or field-dispatch feed exists behind these bridges. The middle ticket sits about seven hours between its two weighings, so most of these are out at the farm rather than standing at a scale."
+          title="Machines that weighed empty at a bridge today and have not come back loaded, priced at what a load has actually weighed across the fleet today. It is a count multiplied by a measured average, the only estimate on this board, because no harvest or field-dispatch feed exists behind these bridges. The middle ticket sits about seven hours between its two weighings, so most of these are out at the farm rather than standing at a scale."
         />
 
         {/* 6 · ON THE ROAD TO MILL — measured, both halves. */}
@@ -1007,7 +1007,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
                 ? <>
                     <b>{fmt(last.dispatched, 0)} t</b> sent to the mill against{" "}
                     <b>{fmt(last.received, 0)} t</b> taken in off the fields
-                    {" — "}
+                    {" - "}
                     {last.dispatched > last.received
                       ? <>the yards are <b>{fmt(last.dispatched - last.received, 0)} t</b> down on the day.</>
                       : last.dispatched < last.received
