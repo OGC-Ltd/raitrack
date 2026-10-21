@@ -401,16 +401,28 @@ function HarshDay({ orgId, vehicleId }) {
   );
   const words = harshCountWords(events);
   return (
-    <div className="sf-hd">
-      <div className="sf-ev-head">
-        <span className="vdp-sub-title">Harsh driving</span>
-        <span className="sf-ev-count">{loading && !events.length ? 'Loading…' : words ?? 'None today'}</span>
+    // Its own heading, as "Today" above it; the count only when there is one,
+    // and a quiet day said once (operator, 2026-10-21).
+    <div className={`sf-hd${events.length ? '' : ' sf-hd--clear'}`}>
+      <div className="sf-hd-head">
+        <h3 className="vdp-block-title sf-hd-title">
+          <span className="sf-hd-badge"><i className="ti ti-steering-wheel" aria-hidden="true" /></span>
+          Harsh driving
+        </h3>
+        {loading && !events.length
+          ? <span className="vdp-meta">Loading…</span>
+          : words && <span className="sf-ev-count">{words}</span>}
       </div>
       {error && !events.length
         ? <LoadError label="Harsh driving" onRetry={retry} />
         : events.length > 0
           ? <HarshTimeline events={events} />
-          : !loading && <p className="sf-hd-none">No harsh acceleration or braking reported today.</p>}
+          : !loading && (
+            <p className="sf-hd-none">
+              <i className="ti ti-circle-check" aria-hidden="true" />
+              No harsh acceleration or braking today.
+            </p>
+          )}
     </div>
   );
 }
