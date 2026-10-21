@@ -56,6 +56,14 @@ describe("faultAction, the same symptom, different jobs", () => {
       .toBe("Tracker silent, check the device");
   });
 
+  it("names a dead GPS ahead of the fuel lines that are not faults", () => {
+    // KBL 126W, 2026-10-21: a dead GPS starves the unit of rows, so its fuel
+    // probe reads UNKNOWN — and that line used to win, hiding the GPS.
+    const gps = { gps: { state: "NOT_REPORTING" } };
+    expect(faultAction(row({ probe: "UNKNOWN", channels: gps }))).toBe("Stopped reporting: gps");
+    expect(faultAction(row({ probe: "NOT_FITTED", fitted: false, channels: gps }))).toBe("Stopped reporting: gps");
+  });
+
   it("outranks even an uncalibrated sensor", () => {
     // Calibration is the next-most-explanatory fault, but you cannot calibrate
     // your way out of a device that is not transmitting.

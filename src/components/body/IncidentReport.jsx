@@ -27,7 +27,7 @@
  *   quiet zero that looks like a clean day.
  */
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { whenLabel } from "../../api/incidents";
 import TableToolbar from "./TableToolbar";
 import TablePager, { usePager, withMore } from "./TablePager";
@@ -230,6 +230,7 @@ export default function IncidentReport({
   exportSlug,         // names the file, so Speed and Malfunction don't collide
   panelTitle = "Cases", // heads the sidebar a unit opens in: "Overspeeding cases"
   timeline = false,   // the unit's cases as a -O-O- rail, newest first (Malfunction)
+  search = "",        // plate or name, from the panel's search box
 }) {
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
@@ -238,10 +239,21 @@ export default function IncidentReport({
   const [error, setError] = useState(null);
   const [unit, setUnit] = useState(null);
 
+  /* The search goes to the SERVER, a beat after the last keystroke: the list
+     is paged fifty units at a time, so filtering only what has been loaded
+     would miss a unit on the next page. It is matched here as well, over the
+     rows on hand, so the table narrows as you type rather than after the
+     round trip — and against a server that predates `q`, which ignores it. */
+  const [q, setQ] = useState(search.trim());
+  useEffect(() => {
+    const t = setTimeout(() => setQ(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const load = useCallback(async (nextCursor) => {
     setLoading(true);
     try {
-      const res = await fetchSummary({ orgId, ...range, sort, cursor: nextCursor });
+      const res = await fetchSummary({ orgId, ...range, sort, q: q || undefined, cursor: nextCursor });
       setRows((prev) => (nextCursor ? [...prev, ...res.rows] : res.rows));
       setCursor(res.cursor);
       setMore(res.hasNextPage);
@@ -251,7 +263,7 @@ export default function IncidentReport({
     } finally {
       setLoading(false);
     }
-  }, [fetchSummary, orgId, range, sort]);
+  }, [fetchSummary, orgId, range, sort, q]);
 
   // A change of window, org or sort is a NEW list, so the open unit closes with
   // it — leaving a detail table open across a day change would show one day's
@@ -261,7 +273,7 @@ export default function IncidentReport({
     setUnit(null);
     void load(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, range.from, range.to, sort]);
+  }, [orgId, range.from, range.to, sort, q]);
 
   /**
    * The window reaches back further than the ledger does.
@@ -270,7 +282,14 @@ export default function IncidentReport({
    * capture is not a month with no incidents, and the difference is a fleet
    * that looks clean versus one nobody was watching yet.
    */
-  const pager = usePager(rows, `${orgId}|${range.from}|${range.to}|${sort}`);
+  const needle = search.replace(/\s+/g, "").toLowerCase();
+  const shown = useMemo(
+    () => (needle
+      ? rows.filter((r) => `${r.plate ?? ""}|${r.name ?? ""}`.replace(/\s+/g, "").toLowerCase().includes(needle))
+      : rows),
+    [rows, needle],
+  );
+  const pager = usePager(shown, `${orgId}|${range.from}|${range.to}|${sort}|${needle}`);
   const lastPage = pager.page === pager.pageCount - 1;
   // As in the unit's cases: the next batch is read when the last page is reached.
   useEffect(() => {
@@ -320,29 +339,30 @@ export default function IncidentReport({
           table failed, and a bar that vanishes on failure takes the recovery
           with it. */}
       <TableToolbar
-        summary={<><b>{rows.length}</b> unit{rows.length === 1 ? "" : "s"}{more ? " loaded so far" : ""}</>}
+        summary={<><b>{shown.length}</b> unit{shown.length === 1 ? "" : "s"}{more ? " loaded so far" : ""}</>}
         note={caption}
         loading={loading}
         onReload={() => void load(undefined)}
         onCsv={() => downloadTableCsv({
-          ...tableFor(summaryColumns, rows),
+          ...tableFor(summaryColumns, shown),
           filenameSlug: exportSlug,
         })}
         onPdf={() => downloadTablePdf({
           reportTitle,
-          sectionTitle: `${rows.length} unit${rows.length === 1 ? "" : "s"}`,
-          filterNote: `${caption}. ${more ? "More units are available, load them before exporting for a complete file." : "Every unit in the window."}`,
-          cards: [{ label: "Units in report", value: String(rows.length) }],
-          ...tableFor(summaryColumns, rows),
+          sectionTitle: `${shown.length} unit${shown.length === 1 ? "" : "s"}`,
+          filterNote: `${caption}${needle ? `, matching "${search.trim()}"` : ""}. ${more ? "More units are available, load them before exporting for a complete file." : "Every unit in the window."}`,
+          cards: [{ label: "Units in report", value: String(shown.length) }],
+          ...tableFor(summaryColumns, shown),
           filenameSlug: exportSlug,
         })}
-        disabled={!rows.length}
+        disabled={!shown.length}
       />
 
       {error && <Failed>Could not load the report.</Failed>}
-      {!error && loading && rows.length === 0 && <Loading label={loadingLabel} />}
+      {!error && loading && shown.length === 0 && <Loading label={loadingLabel} />}
 
-      {error || (loading && rows.length === 0) ? null : rows.length === 0 ? <Empty>{emptyLabel}</Empty> : (
+      {error || (loading && shown.length === 0) ? null : shown.length === 0
+        ? <Empty>{needle ? `No units match "${search.trim()}" on this day.` : emptyLabel}</Empty> : (
         <>
           {/* Its own sideways scroller on a phone, so the bar above stays put. */}
           <div className="sp4-keep-table">

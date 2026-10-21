@@ -116,17 +116,21 @@ export function faultAction(row) {
   // Read real levels, then went flat. The date it stopped is in the row.
   if (probe === "DIED") return "Probe stopped, inspect probe and wiring";
 
+  // A channel that has gone quiet is a fault, and it comes before the two
+  // fuel lines below, which are not: a unit with a dead GPS read "No fuel
+  // monitoring" or "barely reporting" (KBL 126W, 2026-10-21) — and a dead GPS
+  // is what starves a unit of telemetry in the first place.
+  const quiet = Object.entries(row.channels ?? {})
+    .filter(([, c]) => c.state === "NOT_REPORTING")
+    .map(([k]) => k);
+  if (quiet.length) return `Stopped reporting: ${quiet.join(", ")}`;
+
   // No sensor on the unit at all: nothing is broken, nothing is monitored.
   if (probe === "NOT_FITTED" && !sensor?.fitted) return "No fuel monitoring on this unit";
 
   // Not enough telemetry to judge the fuel channel — the tracker is the
   // problem before the probe is.
   if (probe === "UNKNOWN") return "Unit barely reporting, check the tracker";
-
-  const quiet = Object.entries(row.channels ?? {})
-    .filter(([, c]) => c.state === "NOT_REPORTING")
-    .map(([k]) => k);
-  if (quiet.length) return `Stopped reporting: ${quiet.join(", ")}`;
 
   return "";
 }
