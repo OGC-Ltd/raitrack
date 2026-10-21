@@ -79,17 +79,26 @@ function parseLocal(v) {
   return Number.isFinite(t) ? t : null;
 }
 const dayStart = (key) => Date.parse(`${key}T00:00:00.000+03:00`);
+/**
+ * The To field read as an instant: it covers its whole minute, so the 23:59
+ * the presets fill in reaches midnight and the day's last readings count.
+ */
+const parseTo = (v) => { const t = parseLocal(v); return t == null ? null : t + 60_000; };
 
-/** The four quick spans, as [from, to) instants. */
+/**
+ * The four quick spans as the fields show them: from 00:00 on the first day
+ * to 23:59 on the last (operator, 2026-10-21), today's included — Execute
+ * reads no further than now.
+ */
 function preset(id) {
   const today = fleetDayKey();
   const t0 = dayStart(today);
-  const now = Date.now();
-  if (id === "today") return [t0, now];
-  if (id === "yesterday") return [t0 - DAY, t0];
-  if (id === "week") return [t0 - 6 * DAY, now];
-  // This calendar month, to now.
-  return [dayStart(`${today.slice(0, 8)}01`), now];
+  const end = t0 + DAY - 60_000;
+  if (id === "today") return [t0, end];
+  if (id === "yesterday") return [t0 - DAY, t0 - 60_000];
+  if (id === "week") return [t0 - 6 * DAY, end];
+  // This calendar month.
+  return [dayStart(`${today.slice(0, 8)}01`), end];
 }
 const PRESETS = [["today", "Today"], ["yesterday", "Yesterday"], ["week", "Week"], ["month", "Month"]];
 
@@ -1257,7 +1266,7 @@ function UnitFuelReport() {
   const unit = useMemo(() => vehicles.find((v) => v.vehicleId === unitId) ?? null, [unitId, vehicles]);
 
   const from = parseLocal(span.from);
-  const to = parseLocal(span.to);
+  const to = parseTo(span.to);
   const days = useMemo(() => (from != null && to != null && to > from
     ? fleetDaysBetween(fleetDayKey(new Date(from)), fleetDayKey(new Date(to - 1)))
     : []), [from, to]);
@@ -1285,7 +1294,8 @@ function UnitFuelReport() {
 
   const execute = useCallback(() => {
     if (!canRun) return;
-    const next = { orgId, unitId: unit.vehicleId, from, to };
+    // A To later than now reads to now, so today's graph ends at its last reading.
+    const next = { orgId, unitId: unit.vehicleId, from, to: Math.max(from + 60_000, Math.min(to, Date.now())) };
     const same = live && live.unitId === next.unitId && live.from === next.from && live.to === next.to;
     if (same) queryClient.refetchQueries({ queryKey: reportKey, exact: true });
     else dispatch(executed(next));
@@ -1306,7 +1316,7 @@ function UnitFuelReport() {
     pickDefaultUnit({ orgId, vehicleIds: vehicles.map((v) => v.vehicleId) })
       .then((pick) => {
         if (gone || !pick || store.getState().fuelReport.touched[orgId]) return;
-        dispatch(autoPicked({ orgId, pick: { ...pick, fromInput: localInput(pick.from), toInput: localInput(pick.to) } }));
+        dispatch(autoPicked({ orgId, pick: { ...pick, fromInput: localInput(pick.from), toInput: localInput(pick.from + DAY - 60_000) } }));
       })
       .catch(() => { /* the page simply waits for a pick, as before */ })
       .finally(() => { if (!gone) setPicking(false); });
