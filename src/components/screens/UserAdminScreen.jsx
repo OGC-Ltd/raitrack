@@ -28,15 +28,22 @@
  * written against that token — it used to come from the Maintenance scroller.
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAppActions } from "../../context/AppContext";
+import { useAuth } from "../../context/AuthContext";
+import { usePermissions } from "../../hooks/usePermissions";
 import { useWayBack } from "../../hooks/useWayBack";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import UserAdminPanel from "../body/UserAdminPanel";
+import UserGroupsPanel from "../body/UserGroupsPanel";
 import "./UserAdminScreen.css";
 
 export default function UserAdminScreen() {
   const { setUserAdminOpen } = useAppActions();
+  const { orgs } = useAuth();
+  const { canIn } = usePermissions();
+  const [section, setSection] = useState("users");
+  const canViewGroups = (orgs ?? []).some((org) => canIn(org.id, "user:read"));
 
   /* The crumb used to read "← Fleet" and only close, which was wrong twice
      over for an administrator without `map:read`: it named a screen they
@@ -91,8 +98,22 @@ export default function UserAdminScreen() {
       </header>
 
       <div className="uadm-page__body">
-        <ErrorBoundary label="Users" fullSection>
-          <UserAdminPanel />
+        {canViewGroups && (
+          <nav className="uadm-sections" aria-label="User administration">
+            <button type="button" className={section === "users" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
+                    aria-current={section === "users" ? "page" : undefined}
+                    onClick={() => setSection("users")}>
+              Users
+            </button>
+            <button type="button" className={section === "groups" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
+                    aria-current={section === "groups" ? "page" : undefined}
+                    onClick={() => setSection("groups")}>
+              Groups
+            </button>
+          </nav>
+        )}
+        <ErrorBoundary label={section === "groups" ? "User groups" : "Users"} fullSection>
+          {section === "groups" && canViewGroups ? <UserGroupsPanel /> : <UserAdminPanel />}
         </ErrorBoundary>
       </div>
     </div>
