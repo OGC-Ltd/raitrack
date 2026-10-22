@@ -436,7 +436,8 @@ const SPRITE_FOR_CODE = {
  */
 const MACHINE_KEYWORDS = [
   [/\b(GENERATOR|GENSET)\b/,                                        'gen'  ],
-  [/\b(MOTOR\s*BIKE|MOTOR\s*CYCLE|BODA)\b/,                         'mc'   ],
+  // West Sugar names its bikes "West Sugar-Bike-KMGJ 333W", "WKS - Bike - …".
+  [/\b(MOTOR\s*BIKE|MOTOR\s*CYCLE|BIKES?|BODA)\b/,                  'mc'   ],
   [/\b(COMPACTOR|BOMAG|ROLLER)\b/,                                  'comp' ],
   [/\b(EXCAVATOR|DOOSAN)\b/,                                        'ex'   ],
   // Cat's D-series ("CATERPILLAR D8GC", "D8R") are crawler dozers. Matched on
@@ -468,6 +469,10 @@ const SPRITE_FOR_TYPE = {
 const BODY_KEYWORDS = [
   [/\b(DOUBLE\s*CAB|D\/CABIN|PICK\s*-?\s*UP|HILUX|PROBOX|LAND\s*ROVER)\b/, 'lmv'],
   [/\b(LANDCRUISER|LAND\s*CRUISER|HIACE|VAN|SALOON)\b/,                    'lmv'],
+  // Kenyan motorcycle plates are KM + two letters ("KMGJ 333W"); cars carry
+  // three letters. Checked last because a plate is weak evidence: Naitiri's
+  // "SAME 9358 (KMHA 326X)" is a tractor, and the brand catches it first.
+  [/\bKM[A-Z]{2}\s*\d{3}[A-Z]\b/,                                         'mc' ],
 ]
 
 /**
