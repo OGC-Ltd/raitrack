@@ -133,6 +133,33 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.uadm-sections {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  padding: 8px var(--maint-gutter);
+  background: var(--color-bg, #f0f4f8);
+  border-bottom: 1px solid var(--color-border, #dde1e7);
+}
+
+.uadm-sections__item {
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-sec, #475569);
+  font: 600 12px var(--font-ui, system-ui);
+  cursor: pointer;
+}
+
+.uadm-sections__item:hover { background: rgba(3, 105, 161, 0.06); }
+.uadm-sections__item:focus-visible { outline: 2px solid #0369a1; outline-offset: 2px; }
+.uadm-sections__item--active {
+  border-color: var(--color-border, #cbd5e1);
+  background: #fff;
+  color: #075985;
+}
+
 @media (min-width: 768px) {
   .uadm-page__body {
     overflow: hidden;
