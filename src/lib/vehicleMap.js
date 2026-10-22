@@ -992,11 +992,12 @@ export function isStrandedStop(vehicle, nowMs, opts) {
 const NON_CARRIER_KINDS = new Set(['ex', 'dz', 'bh', 'comp', 'wl', 'bus', 'lmv', 'mc', 'gen'])
 
 // Machines that share the generic truck sprite (no mesh baked for them) but
-// still carry nothing: a grader blades a road, a crane lifts on site. Matched
+// still carry nothing: a grader blades a road, a crane lifts on site, a pump
+// moves water through a hose rather than on a bed. Matched
 // the same two ways spriteKind matches everything else — equipment code for
 // Kasulu's named units, keywords for Sukari's plate-only ones.
 const NON_CARRIER_CODES = new Set(['GR'])
-const NON_CARRIER_TEXT  = /\b(GRADER|CRANE|HYDRACRANE|HYDRAUKLIC)\b/
+const NON_CARRIER_TEXT  = /\b(GRADER|CRANE|HYDRACRANE|HYDRAUKLIC|PUMPS?)\b/
 
 /**
  * Is this vehicle one that carries cargo at all?
@@ -1141,7 +1142,10 @@ export function mapSnapshotVehicle(v) {
     // 'position' frame (same as fleetdash's useFleet).
     engineTemp:    null,
     oilLevel:      null,
-    maxPayload:    maxPayloadTonnes(v.vehicleType),
+    // Only carriers have a payload. maxPayloadTonnes falls back to 30 t for
+    // any type it does not know, which put "0 / 30 t" on generators and
+    // motorbikes; null here is what tells the cards to leave the row out.
+    maxPayload:    carriesCargo(identity) ? maxPayloadTonnes(v.vehicleType) : null,
     driverRatingScore: v.driverRatingScore ?? null,
     phase:         v.phase ?? null,
     // Assigned-geofence containment, computed server side against the poller's
