@@ -63,7 +63,7 @@ function SkeletonRows({ n }) {
   ));
 }
 
-const NO_READS = { reads: { since: Date.now(), ids: new Set() }, markRead: () => {}, markAllRead: () => {} };
+const NO_READS = { reads: { since: Date.now(), ids: new Map() }, markRead: () => {}, markAllRead: () => {} };
 
 export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
   const { feed: liveFeed = [], vehicles = [], orgId } = useFleetLiveShared();

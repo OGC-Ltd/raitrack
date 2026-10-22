@@ -10,7 +10,10 @@
 //
 //   since  — everything at or before it is read ("Mark all read", or the first
 //            visit's 24-hour floor)
-//   ids    — the lines opened one at a time since then
+//   ids    — the lines opened one at a time since then, each with WHEN it was
+//            read: a line rewritten after that (`revisedAt`, set by the feed
+//            merge in hooks/useFleetLive) is unread again. A parked fall's
+//            call is rewritten by its verdict hours later (2026-10-22).
 //
 // The bell's badge counts every unread line, so it only goes once nothing is
 // left to read; opening and closing the bell changes nothing (operator
@@ -28,28 +31,35 @@ export const MAX_READ_IDS = 500;
 const sinceKey = (org) => `ft-feed-seen:${org}`;
 const idsKey   = (org) => `ft-feed-read:${org}`;
 
-const tsOf = (item) => {
-  const t = Date.parse(item?.ts);
+const msOf = (iso) => {
+  const t = Date.parse(iso);
   return Number.isFinite(t) ? t : null;
 };
 
+/** Newest marks only, oldest dropped first. */
+const capped = (entries) => new Map(entries.slice(-MAX_READ_IDS));
+
 /** Whether a feed line is still unread. A line without a usable time is read. */
 export function isUnread(item, reads) {
-  const t = tsOf(item);
-  if (t == null || t <= reads.since) return false;
-  return !(item?.id != null && reads.ids.has(item.id));
+  const t = msOf(item?.ts);
+  if (t == null) return false;
+  const revised = msOf(item?.revisedAt);
+  if (Math.max(t, revised ?? t) <= reads.since) return false;
+  const readAt = item?.id != null ? reads.ids.get(item.id) : undefined;
+  if (readAt == null) return true;
+  return revised != null && revised > readAt;
 }
 
 /** Mark these lines read; everything else keeps its mark. */
-export function withRead(reads, items) {
+export function withRead(reads, items, now = Date.now()) {
   const add = items.filter((it) => it?.id != null && isUnread(it, reads));
   if (!add.length) return reads;
-  const ids = [...reads.ids, ...add.map((it) => it.id)];
-  return { ...reads, ids: new Set(ids.slice(-MAX_READ_IDS)) };
+  const kept = [...reads.ids].filter(([id]) => !add.some((it) => it.id === id));
+  return { ...reads, ids: capped([...kept, ...add.map((it) => [it.id, now])]) };
 }
 
 /** "Mark all read": everything so far, and the single marks it covers go. */
-export const allRead = (reads, now = Date.now()) => ({ since: now, ids: new Set() });
+export const allRead = (reads, now = Date.now()) => ({ since: now, ids: new Map() });
 
 /**
  * Two copies of the marks (this tab's and another tab's) as one: the later
@@ -58,8 +68,12 @@ export const allRead = (reads, now = Date.now()) => ({ since: now, ids: new Set(
  */
 export function mergeReads(a, b) {
   const since = Math.max(a.since, b.since);
-  const ids = [...new Set([...(a.since === since ? a.ids : []), ...(b.since === since ? b.ids : [])])];
-  return { since, ids: new Set(ids.slice(-MAX_READ_IDS)) };
+  const ids = new Map();
+  for (const side of [a, b]) {
+    if (side.since !== since) continue;
+    for (const [id, at] of side.ids) ids.set(id, Math.max(at, ids.get(id) ?? 0));
+  }
+  return { since, ids: capped([...ids]) };
 }
 
 function load(org) {
@@ -68,12 +82,18 @@ function load(org) {
   try {
     since = Number(localStorage.getItem(sinceKey(org))) || 0;
     const raw = JSON.parse(localStorage.getItem(idsKey(org)) ?? '[]');
-    if (Array.isArray(raw)) ids = raw.filter((x) => typeof x === 'string');
+    // [id, readAt] pairs; a bare id is a mark saved before read times were
+    // kept, read at some time before any line could be revised.
+    if (Array.isArray(raw)) {
+      ids = raw
+        .map((x) => (typeof x === 'string' ? [x, 0] : x))
+        .filter((x) => Array.isArray(x) && typeof x[0] === 'string' && Number.isFinite(x[1]));
+    }
   } catch { /* storage off */ }
   // Never opened in this browser → count only the last 24 hours, so a first
   // visit isn't greeted with every alert in the replayed history.
   since = since || Date.now() - 24 * 3600_000;
-  return { since, ids: new Set(ids) };
+  return { since, ids: new Map(ids) };
 }
 
 function save(org, reads) {

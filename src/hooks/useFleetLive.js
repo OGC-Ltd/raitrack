@@ -103,6 +103,21 @@ function pruneFeed(items) {
 }
 
 /**
+ * A line that came back saying something else carries `revisedAt`, so the bell
+ * lights again for it (lib/feedReads). A parked fall's call is rewritten in
+ * place by its verdict ("still missing", "topped up", "retracted") hours after
+ * it was read; without this the dot stayed dark for the news that mattered.
+ * A replay or an identical re-offer keeps the line's earlier revision.
+ */
+function withRevision(old, item, now) {
+  if (!old) return item
+  if (old.text === item.text && old.type === item.type) {
+    return old.revisedAt ? { ...item, revisedAt: old.revisedAt } : item
+  }
+  return { ...item, revisedAt: new Date(now).toISOString() }
+}
+
+/**
  * Merge one SSE feed item into the panel's list: keyed by `id`, ordered by
  * EVENT time, capped.
  *
@@ -130,9 +145,9 @@ function pruneFeed(items) {
  * `ts` is always an ISO-8601 UTC string (`Date.toISOString()` server-side), so
  * a lexical compare is a chronological one — no Date parsing per comparison.
  */
-function mergeFeedItem(prev, item) {
+export function mergeFeedItem(prev, item, now = Date.now()) {
   const byId = new Map(prev.map(i => [i.id, i]))
-  byId.set(item.id, item)
+  byId.set(item.id, withRevision(byId.get(item.id), item, now))
   // pruneFeed owns ordering, the age horizon and the per-type share, so the
   // live path and the rehydrated path cannot drift apart.
   return pruneFeed([...byId.values()])

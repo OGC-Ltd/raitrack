@@ -12,7 +12,7 @@ const line = (id, iso) => ({ id, ts: iso, type: 'info' });
 const a = line('ya-1', '2026-10-19T06:10:00.000Z');
 const b = line('zn-2', '2026-10-19T06:20:00.000Z');
 const c = line('mg-3', '2026-10-19T06:30:00.000Z');
-const fresh = { since: SINCE, ids: new Set() };
+const fresh = { since: SINCE, ids: new Map() };
 
 describe('feed read marks', () => {
   it('reading one line leaves the others unread', () => {
@@ -45,6 +45,42 @@ describe('feed read marks', () => {
     expect(r.ids.size).toBe(MAX_READ_IDS);
     expect(r.ids.has('n0')).toBe(false);
     expect(r.ids.has(`n${MAX_READ_IDS + 4}`)).toBe(true);
+  });
+});
+
+describe('a line rewritten after it was read', () => {
+  // A parked fall's call is rewritten in place by its verdict hours later.
+  const READ_AT = Date.parse('2026-10-19T06:35:00.000Z');
+  const read = withRead(fresh, [a], READ_AT);
+  const revised = (iso) => ({ ...a, text: 'POSSIBLE THEFT — FUEL STILL MISSING', revisedAt: iso });
+
+  it('is unread again when the rewrite came after the read', () => {
+    expect(isUnread(revised('2026-10-19T08:40:00.000Z'), read)).toBe(true);
+    expect(summariseUnread([revised('2026-10-19T08:40:00.000Z'), b], read).unreadCount).toBe(2);
+  });
+
+  it('stays read when the rewrite was already there when it was read', () => {
+    expect(isUnread(revised('2026-10-19T06:20:00.000Z'), read)).toBe(false);
+  });
+
+  it('is unread again after "Mark all read" too, when it is rewritten later', () => {
+    const all = allRead(fresh, READ_AT);
+    expect(isUnread(revised('2026-10-19T06:30:00.000Z'), all)).toBe(false);
+    expect(isUnread(revised('2026-10-19T08:40:00.000Z'), all)).toBe(true);
+  });
+
+  it('reading it again takes the new read time', () => {
+    const line = revised('2026-10-19T08:40:00.000Z');
+    const again = withRead(read, [line], Date.parse('2026-10-19T08:45:00.000Z'));
+    expect(isUnread(line, again)).toBe(false);
+    expect(again.ids.size).toBe(1);
+  });
+
+  it('two tabs keep the later read time', () => {
+    const line = revised('2026-10-19T08:40:00.000Z');
+    const later = withRead(read, [line], Date.parse('2026-10-19T08:45:00.000Z'));
+    expect(isUnread(line, mergeReads(read, later))).toBe(false);
+    expect(isUnread(line, mergeReads(later, read))).toBe(false);
   });
 });
 
