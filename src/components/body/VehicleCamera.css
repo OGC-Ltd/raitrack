@@ -86,3 +86,100 @@
   color: var(--text-secondary);
 }
 .vcam__empty-note { margin: 0; font-size: 10.5px; line-height: 1.5; }
+
+/* Live: wide enough for the road and the cab side by side. */
+.vcam--live { width: min(760px, var(--safe-w, calc(calc(var(--vw) * 100) - 32px))); }
+
+.vcam__controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vcam__seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.vcam__seg-btn {
+  padding: 3px 10px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vcam__seg-btn:last-child { border-right: 0; }
+.vcam__seg-btn[aria-pressed="true"] { background: var(--color-card-inner); color: var(--text-primary); }
+.vcam__seg-btn:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: -2px; }
+
+/* One 16:9 tile per channel; two side by side once there is room. */
+.vcam__grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
+@media (min-width: 720px) { .vcam__grid--two { grid-template-columns: 1fr 1fr; } }
+
+.vcam__feed {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #0b0d10;
+}
+.vcam__feed:fullscreen { aspect-ratio: auto; border-radius: 0; border: 0; }
+/* The SDK appends its own canvas here, sized to the box when it starts. */
+.vcam__canvas, .vcam__canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.vcam__feed-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+}
+
+.vcam__caption {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.vcam__status { font-weight: 500; opacity: 0.8; }
+.vcam__dot { width: 6px; height: 6px; border-radius: 50%; background: #9ca3af; }
+.vcam__dot--live { background: var(--accent-ok, #22c55e); }
+.vcam__dot--connecting { background: var(--accent-warn, #f59e0b); }
+.vcam__dot--stalled, .vcam__dot--failed { background: var(--accent-crit, #ef4444); }
+
+.vcam__tools {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  gap: 4px;
+}
+.vcam__tool {
+  width: 26px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.vcam__tool:hover:not(:disabled) { background: rgba(0, 0, 0, 0.75); }
+.vcam__tool:disabled { opacity: 0.4; cursor: default; }
+.vcam__tool:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
