@@ -38,6 +38,10 @@ describe("fleetType", () => {
     expect(fleetType(plated("KHMA 900A", "Perkins Generator 100kVA"))).toBe("gen");
     expect(fleetType(plated("KMFA 123B", "Honda Motorbike"))).toBe("mc");
     expect(fleetType(plated("KMFA 124B", "Boxer", "MOTORCYCLE"))).toBe("mc");
+    expect(fleetType(plated("KMGJ 333W", "West Sugar-Bike-KMGJ 333W"))).toBe("mc");
+    expect(fleetType(plated("KMFU 927U", "Menengai - KMFU 927U"))).toBe("mc");
+    expect(fleetType(plated("KMHA 326X", "WKS - Naitiri - SAME 9358 (KMHA 326X)"))).toBe("mtr");
+    expect(fleetType(plated("KDA 123A", "Menengai - KDA 123A"))).toBe("truck");
     expect(fleetTypeLabel("gen")).toBe("Generator");
     expect(fleetTypeLabel("mc")).toBe("Motorbike");
   });
