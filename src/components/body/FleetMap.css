@@ -182,6 +182,8 @@
 .lf-truck--bus   { background-image: url("/bus-atlas.png"); }
 .lf-truck--bh    { background-image: url("/bh-atlas.png"); }
 .lf-truck--wl    { background-image: url("/wl-atlas.png"); }
+.lf-truck--mc    { background-image: url("/mc-atlas.png"); }
+.lf-truck--gen   { background-image: url("/gen-atlas.png"); }
 
 /* Generated meshes rather than scanned ones — see lib/procedural-meshes.mjs. */
 .lf-truck--ex    { background-image: url("/ex-atlas.png"); }

@@ -190,6 +190,36 @@ const REGISTRY = [
     yaw: 0,
     fill: 0.90,
   },
+  {
+    kind: 'mc',
+    file: 'motorbike.obj',
+    // Honda CB650R, extracted from "CBR+650r.max" (a 3ds Max configurator
+    // scene) by reading its Scene stream: every Editable Mesh, placed by its
+    // node's PRS. The scene holds the bike twice (a second copy at 2.6× scale
+    // inside Group009) and the CB650F/FR/R variants overlaid; only the root
+    // copy is kept, without the ACC_ accessories. Front wheel is at +Z.
+    // The tail light belongs to a tail section that copy lacks, so it floats
+    // a hand's width behind the bike — and stretches the fit with it.
+    exclude: /^(BASE_CB650FR_Stoplight(_GlassInterior)?_0|BASE_CB650_Main_11)$/,
+    wheels:  /Tire|Rims|Disc|Chain_|Fork_|Swingarm|Exhaust|Muffler|Engine|Radiator/,
+    glass:   /Glass|Windshield/,
+    yaw: 0,
+    fill: 0.90,
+  },
+  {
+    kind: 'gen',
+    file: 'generator.obj',
+    // "generator-1.obj" — a canopied diesel genset. One body object; its parts
+    // are told apart by material, so the rules match `usemtl` names. The
+    // maker's logo objects are dropped: unreadable at 40 px, and not ours.
+    exclude: /^CAT_logo/,
+    wheelMtl: /^Black_/,
+    glassMtl: /^(Glass|digital)/,
+    // Modelled long side along X. Turned so its length runs with the heading
+    // like every other machine; side-on list icons then show the long side.
+    yaw: 90,
+    fill: 0.80,
+  },
 
   // ── generated, not scanned ────────────────────────────────────────────────
   // No mesh exists for these; see lib/procedural-meshes.mjs for the dimensions
@@ -225,6 +255,7 @@ async function parseObj(path, cfg) {
   let triMat    = new Uint8Array(1 << 14),   nm = 0
 
   let material = BODY
+  let objectMaterial = BODY
   let skipping = false
 
   const rl = createInterface({ input: createReadStream(path), crlfDelay: Infinity })
@@ -252,6 +283,15 @@ async function parseObj(path, cfg) {
       const name = line.slice(2).trim()
       skipping = cfg.exclude?.test(name) ?? false
       material = cfg.wheels?.test(name) ? WHEEL : cfg.glass?.test(name) ? GLASS : BODY
+      objectMaterial = material
+      continue
+    }
+
+    // Material-name rules, for meshes that are one object with parts told
+    // apart only by `usemtl`. Unmatched materials fall back to the object's.
+    if ((cfg.wheelMtl || cfg.glassMtl) && line.startsWith('usemtl ')) {
+      const m = line.slice(7).trim()
+      material = cfg.wheelMtl?.test(m) ? WHEEL : cfg.glassMtl?.test(m) ? GLASS : objectMaterial
       continue
     }
 
