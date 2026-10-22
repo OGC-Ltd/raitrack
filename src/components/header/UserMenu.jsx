@@ -46,17 +46,17 @@ function initialsOf(name, email) {
 }
 
 export default function UserMenu() {
-  const { user, logout } = useAuth();
+  const { user, orgs, logout } = useAuth();
   // The account page is a full screen now, so whether it is open is app-level
   // navigation rather than something this menu owns.
   const { setAccountOpen, setUserAdminOpen } = useAppActions();
   // User accounts used to be a Maintenance sub-tab. It is here because it
   // belongs with Account rather than with vehicle servicing — and because this
   // menu is already the one place in the app that is about WHO you are.
-  // Gated on `user:create`, the same slug the tab used and the same one the
-  // server enforces, so nobody is offered a page they cannot act on.
-  const { can } = usePermissions();
-  const canAdminUsers = can("user:create");
+  // The page supports read-only access too; writes remain gated by the
+  // organisation-specific permissions enforced by the API.
+  const { canIn } = usePermissions();
+  const canAdminUsers = (orgs ?? []).some((org) => canIn(org.id, "user:read"));
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
