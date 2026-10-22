@@ -53,7 +53,7 @@ export function summariseUnread(feed, reads) {
   // single lines read. Every unread line counts, so the badge only goes once
   // nothing is left to read (operator 2026-10-19: opening and closing the bell
   // used to empty it while the panel still held unread lines).
-  const r = typeof reads === 'number' ? { since: reads, ids: new Set() } : reads;
+  const r = typeof reads === 'number' ? { since: reads, ids: new Map() } : reads;
   let unreadCount = 0;
   // A malformed or missing timestamp cannot be placed against the cut-off,
   // and counting it would make the badge tick up on every reconnect that
