@@ -320,6 +320,7 @@ const EQUIPMENT_LABELS = {
   BUS:  'Bus',
   DB:   'Dump Body',
   WB:   'Water Bowser',
+  DG:   'Diesel Generator',   // MUFINDI - DG 12/13; the server's KASULU:DG
 }
 
 /**
@@ -414,6 +415,7 @@ const SPRITE_FOR_CODE = {
   CTR:  'mtr',   // cane tractor — same machine
   COMP: 'comp',  // single-drum roller
   CM:   'comp',  // the operator's other code for one
+  DG:   'gen',   // canopied diesel genset
 }
 
 /**
@@ -433,6 +435,8 @@ const SPRITE_FOR_CODE = {
  * Mahindra/Same/Landini are farm tractors, Faw/Sino build the prime movers.
  */
 const MACHINE_KEYWORDS = [
+  [/\b(GENERATOR|GENSET)\b/,                                        'gen'  ],
+  [/\b(MOTOR\s*BIKE|MOTOR\s*CYCLE|BODA)\b/,                         'mc'   ],
   [/\b(COMPACTOR|BOMAG|ROLLER)\b/,                                  'comp' ],
   [/\b(EXCAVATOR|DOOSAN)\b/,                                        'ex'   ],
   // Cat's D-series ("CATERPILLAR D8GC", "D8R") are crawler dozers. Matched on
@@ -455,6 +459,9 @@ const SPRITE_FOR_TYPE = {
   TRUCK:           'truck',
   COMPANY_VEHICLE: 'lmv',
   BUS:             'bus',
+  GENERATOR:       'gen',
+  MOTORCYCLE:      'mc',
+  MOTORBIKE:       'mc',
 }
 
 /** Body styles, checked only when nothing stronger decided. */
@@ -520,6 +527,8 @@ export const FLEET_TYPE_LABELS = {
   dz:    'Dozer',
   bh:    'Backhoe',
   comp:  'Compactor',
+  mc:    'Motorbike',
+  gen:   'Generator',
 }
 
 /**
@@ -975,7 +984,7 @@ export function isStrandedStop(vehicle, nowMs, opts) {
  * A tractor is NOT here: cane haulage in both fleets is tractor-and-trailer
  * (Bell, Haulmaster), so a tractor is one of the biggest carriers we have.
  */
-const NON_CARRIER_KINDS = new Set(['ex', 'dz', 'bh', 'comp', 'wl', 'bus', 'lmv'])
+const NON_CARRIER_KINDS = new Set(['ex', 'dz', 'bh', 'comp', 'wl', 'bus', 'lmv', 'mc', 'gen'])
 
 // Machines that share the generic truck sprite (no mesh baked for them) but
 // still carry nothing: a grader blades a road, a crane lifts on site. Matched

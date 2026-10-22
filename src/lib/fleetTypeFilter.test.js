@@ -33,6 +33,15 @@ describe("fleetType", () => {
     expect(fleetType(plated("KBH 123A", "Faw Prime mover CA4181"))).toBe("truck");
   });
 
+  it("draws generators and motorbikes as themselves", () => {
+    expect(fleetType(coded("MUFINDI - DG 13"))).toBe("gen");
+    expect(fleetType(plated("KHMA 900A", "Perkins Generator 100kVA"))).toBe("gen");
+    expect(fleetType(plated("KMFA 123B", "Honda Motorbike"))).toBe("mc");
+    expect(fleetType(plated("KMFA 124B", "Boxer", "MOTORCYCLE"))).toBe("mc");
+    expect(fleetTypeLabel("gen")).toBe("Generator");
+    expect(fleetTypeLabel("mc")).toBe("Motorbike");
+  });
+
   it("never returns null, an unrecognisable unit is still offered as a truck", () => {
     expect(fleetType(plated("MUFINDI: 013", "MUFINDI: 013"))).toBe("truck");
     expect(fleetType({})).toBe("truck");
