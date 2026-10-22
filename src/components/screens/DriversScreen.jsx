@@ -20,6 +20,7 @@ import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { DriversIcon } from "../footer/NavIcons";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
+import { carriesCargo } from "../../lib/vehicleMap";
 
 // Report-only. The on-screen charts take their colour from --tone-tonnes /
 // --tone-mileage on .drivers-page; jsPDF cannot resolve a CSS variable, so the
@@ -826,7 +827,8 @@ function DriverIdCard({ driver, tier, st, row, w, liveVehicle }) {
       tone: temp > 105 ? "crit" : temp > 95 ? "warn" : "info" },
     { key: "oil",   label: "Oil",   unit: "%",    value: oil,     max: 100,
       tone: oil < 20 ? "crit" : oil < 40 ? "warn" : "ok" },
-  ];
+  // A generator or motorbike has no load to gauge; the radar takes any count.
+  ].filter((g) => g.key !== "load" || !v || carriesCargo(v));
   const liveState = !v ? "No vehicle on record" : engineOn ? "Live" : "Engine off";
 
   return (

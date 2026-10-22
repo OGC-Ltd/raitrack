@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import "./VehicleStatsCard.css";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import { copyText, formatCoords } from "../../lib/copyText";
-import { vehicleActivity, isInTransit, isOnline, equipmentLabel, ACTIVITY_LABELS, ACTIVITY_COLORS, ONLINE_COLORS } from "../../lib/vehicleMap";
+import { vehicleActivity, isInTransit, isOnline, equipmentLabel, carriesCargo, maxPayloadTonnes, ACTIVITY_LABELS, ACTIVITY_COLORS, ONLINE_COLORS } from "../../lib/vehicleMap";
 import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
@@ -311,7 +311,10 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
                   : fuel < 40 ? "var(--accent-warn)"
                   : "var(--accent-ok)";
 
-  const maxPay    = vehicle.maxPayload ?? 30;
+  // Generators, motorbikes, plant and light vehicles never carry a load, so
+  // they get no payload row at all rather than "No load expected 0 / 30 t".
+  const hasPayload = carriesCargo(vehicle);
+  const maxPay    = vehicle.maxPayload ?? maxPayloadTonnes(vehicle.vehicleType);
   const loadPct   = maxPay > 0 ? Math.round((vehicle.weight / maxPay) * 100) : 0;
   /* A FULL TRUCK IS THE GOAL, not an alarm.
      This graded the load like the fuel bar above it — red past 95%, amber
@@ -667,19 +670,22 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
           <Bar pct={vehicle.fuelLevel != null ? fuel : 0} color={fuelColor} />
         </div>
 
-        <div className="vt-divider" />
-
-        {/* ── Payload bar ── */}
-        <div className="vt-bar-section">
-          <div className="vt-bar-hdr">
-            <span className="vt-bar-lbl">{vehicle.cargo}</span>
-            <span className="vt-bar-amt" style={{ color: loadColor }}>
-              {vehicle.weight} / {maxPay} t
-            </span>
-          </div>
-          <Bar pct={loadPct} color={loadColor} />
-          <span className="vt-bar-sub">{loadPct}% of payload capacity</span>
-        </div>
+        {/* ── Payload bar (carriers only) ── */}
+        {hasPayload && (
+          <>
+            <div className="vt-divider" />
+            <div className="vt-bar-section">
+              <div className="vt-bar-hdr">
+                <span className="vt-bar-lbl">{vehicle.cargo}</span>
+                <span className="vt-bar-amt" style={{ color: loadColor }}>
+                  {vehicle.weight} / {maxPay} t
+                </span>
+              </div>
+              <Bar pct={loadPct} color={loadColor} />
+              <span className="vt-bar-sub">{loadPct}% of payload capacity</span>
+            </div>
+          </>
+        )}
 
         {/* ── Journey: where it set off today, and where it is now ── */}
         {showJourney && (
