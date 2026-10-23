@@ -362,6 +362,18 @@ export function useFloatingWindow({ id, dock = "bottom-center", enabled = true, 
     return () => window.removeEventListener("resize", onResize);
   }, [enabled, place]);
 
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      if (!placedRef.current) return;
+      const box = rectXY(el.getBoundingClientRect());
+      place(box.left, box.top);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [enabled, place]);
+
   /**
    * Press, hold, move.
    *
