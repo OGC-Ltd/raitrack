@@ -9,7 +9,6 @@ import COMPANIES from '../../data/companyData';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
-import { TreeCountsMasked } from './SideTree';
 import FleetsTree from './FleetsTree';
 import FleetAIInsightCard from '../cards/FleetAIInsightCard';
 import ErrorBoundary from '../shared/ErrorBoundary';
@@ -197,6 +196,7 @@ export default function SidePanel() {
   const { setDesktopActiveTab } = useAppActions();
   const { activeCompany } = useCompanies();
   const { can } = usePermissions();
+  const mainNavItems = NAV_ITEMS.filter(item => !item.section && can(item.permission));
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
   // Open alerts across every organisation held (the Alerts page's default week).
   const alertSummary = useAlertSummary(can(NAV_ITEMS.find(n => n.key === 'alerts')?.permission));
@@ -284,27 +284,12 @@ export default function SidePanel() {
         <div className="side-panel__body">
 
 
-          {/* ── Stats grid — clickable ──
-              These are the map's status filters, drawn as counts, so without
-              `map:read` there is nothing for them to filter. They are still
-              DRAWN: a sidebar that loses its top third for one account and not
-              another looks half-loaded rather than restricted, and the shape of
-              the panel is part of knowing where you are.
-
-              What goes is the interaction and the figures. The cards are
-              disabled, and every value reads "–" — the same mark the grid
-              already shows while the fleet is still loading, so it needs no new
-              vocabulary. The labels stay, because the point is the shape.
-
-              Both halves matter. Numbers alone would tell somebody who cannot
-              open the map how many units exist and how many are in trouble;
-              a live button alone would filter a map they will never see. */}
-          {(() => {
-            const locked = !can('map:read');
+          {/* Fleet status controls are part of the map and only render with map access. */}
+          {can('map:read') && (() => {
             // filterKey must match cases in lib/vehicleMap.js matchesFilter()
             const stats = STATUS_STATS.map(s => ({
               ...s,
-              value: waiting || locked ? '–' : counts[s.key],
+              value: waiting ? '–' : counts[s.key],
             }));
             const by = Object.fromEntries(stats.map(s => [s.key, s]));
             // Three rows, by what the figures ARE (lib/vehicleMap
@@ -313,12 +298,12 @@ export default function SidePanel() {
             // alerts, which overlap and sum to nothing.
             const order = ['all', 'online', 'offline', 'idling', 'warning', 'critical'];
             const total = counts.all || 0;
-            const onShare = !waiting && !locked && total ? counts.online / total : 0;
+            const onShare = !waiting && total ? counts.online / total : 0;
             return (
-              <div className={`sp-stats-grid${locked ? ' sp-stats-grid--locked' : ''}`} data-tour="status">
+              <div className="sp-stats-grid" data-tour="status">
                 {order.map(key => {
                   const s = by[key];
-                  const isActive = !locked && activeFilter === s.filterKey;
+                  const isActive = activeFilter === s.filterKey;
                   // Clicking the lit card clears back to ALL, which is also
                   // what the ALL card does — so it can never leave the map
                   // filtered with nothing showing as filtered.
@@ -340,10 +325,7 @@ export default function SidePanel() {
                       ].join(' ')}
                       style={{ '--stat-color': s.color }}
                       aria-pressed={isActive}
-                      disabled={locked}
-                      title={locked
-                        ? 'The Live Map is not part of your access'
-                        : `Show ${s.label.toLowerCase()} on the map`}
+                      title={`Show ${s.label.toLowerCase()} on the map`}
                       onClick={() => applyFilter(next)}
                     >
                       <span className="sp-stat-num">{s.value}</span>
@@ -368,34 +350,33 @@ export default function SidePanel() {
           })()}
 
           {/* ── Navigation ── */}
-          <nav className="sp-nav-box" data-tour="nav">
-            {NAV_ITEMS.filter(item => !item.section).map(item => {
-              const allowed  = can(item.permission);
-              const isActive = desktopActiveTab === item.key;
-              return (
-                <button
-                  key={item.key}
-                  className={[
-                    'sp-nav-item',
-                    isActive  ? 'sp-nav-item--active'   : '',
-                    !allowed  ? 'sp-nav-item--disabled' : '',
-                    item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
-                  ].join(' ')}
-                  onClick={() => handleNav(item.key)}
-                  disabled={!allowed}
-                >
-                  {isActive && <span className="sp-nav-bar" />}
-                  <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
-                  <span className="sp-nav-label">{item.label}</span>
-                  {item.key === 'alerts' && openAlerts > 0 && (
-                    <span className="sp-nav-count" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} you have not read, last 7 days${fuelAlarm ? ' · a new fuel theft alert' : ''}`}>
-                      {badgeText(openAlerts)}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          {mainNavItems.length > 0 && (
+            <nav className="sp-nav-box" data-tour="nav">
+              {mainNavItems.map(item => {
+                const isActive = desktopActiveTab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    className={[
+                      'sp-nav-item',
+                      isActive  ? 'sp-nav-item--active'   : '',
+                      item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
+                    ].join(' ')}
+                    onClick={() => handleNav(item.key)}
+                  >
+                    {isActive && <span className="sp-nav-bar" />}
+                    <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
+                    <span className="sp-nav-label">{item.label}</span>
+                    {item.key === 'alerts' && openAlerts > 0 && (
+                      <span className="sp-nav-count" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} you have not read, last 7 days${fuelAlarm ? ' · a new fuel theft alert' : ''}`}>
+                        {badgeText(openAlerts)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
 
           {/* ── The map's own controls, as trees ──────────────────────────
               Fleets, Units and Map layers used to be three buttons floating in
@@ -409,42 +390,26 @@ export default function SidePanel() {
               the map's menu said and grouped nothing: "Weighbridges", "Sukari
               Oyani" and "Nyaondo" as three peers, which is three names for two
               kinds of thing. */}
-          {/* Same treatment as the grid above, for the same reason: these two
-              are the MAP's controls — which fleets it draws and which layers it
-              shows — so without map:read they are drawn and dead.
-
-              `inert` rather than `pointer-events: none`, because these are
-              trees of real buttons and checkboxes: pointer-events stops a mouse
-              and does nothing about a Tab key, which would walk somebody
-              straight into controls the panel is saying are not theirs. Set
-              through a ref because React 18 does not pass the property through
-              from JSX. */}
-          <div
-            data-tour="fleets"
-            className={`sp-trees${can('map:read') ? '' : ' sp-trees--locked'}`}
-            ref={(el) => { if (el) el.inert = !can('map:read'); }}
-          >
-            {/* Limited access: every count in the trees reads "–", like the
-                status cards above (see TreeCountsMasked). */}
-            <TreeCountsMasked.Provider value={!can('map:read')}>
-            <FleetsTree
-              audit={can('fuel_audit:read') ? {
-                active: desktopActiveTab === 'audit',
-                open:   () => handleNav('audit'),
-              } : null}
-              report={can('fuel_filling:read') ? {
-                active: desktopActiveTab === 'fuelReport',
-                open:   () => handleNav('fuelReport'),
-              } : null}
-              review={can('telemetry:read') ? {
-                active: desktopActiveTab === 'usageReview',
-                open:   () => handleNav('usageReview'),
-              } : null}
-            />
-            {/* No Map layers here since 2026-10-07: base map and layers are in
-                the map rail's Maps panel, live traffic is its own rail button. */}
-            </TreeCountsMasked.Provider>
-          </div>
+          {can('map:read') && (
+            <div data-tour="fleets" className="sp-trees">
+              <FleetsTree
+                audit={can('fuel_audit:read') ? {
+                  active: desktopActiveTab === 'audit',
+                  open:   () => handleNav('audit'),
+                } : null}
+                report={can('fuel_filling:read') ? {
+                  active: desktopActiveTab === 'fuelReport',
+                  open:   () => handleNav('fuelReport'),
+                } : null}
+                review={can('telemetry:read') ? {
+                  active: desktopActiveTab === 'usageReview',
+                  open:   () => handleNav('usageReview'),
+                } : null}
+              />
+              {/* No Map layers here since 2026-10-07: base map and layers are in
+                  the map rail's Maps panel, live traffic is its own rail button. */}
+            </div>
+          )}
 
         </div>
       )}
@@ -464,11 +429,9 @@ export default function SidePanel() {
         </div>
       )}
 
-      {/* ── Fuel Audit at the foot ──
-          Outside the scrolling body, so it stays at the foot of the sidebar
-          however long the trees above get. It lives in Fleets > Fuel, so it
-          is drawn here only for an account whose trees are locked (no
-          map:read), which would otherwise have no way to it. */}
+      {/* ── System resources at the foot ──
+          Without map access the fleet tree is absent, so permitted system
+          pages remain available here. */}
       {!collapsed && systemItems.length > 0 && !can('map:read') && (
         <div className="sp-foot">
           <nav className="sp-nav-box" aria-label="Fuel audit">
@@ -494,37 +457,36 @@ export default function SidePanel() {
 
       {/* Collapsed — icons only */}
       {collapsed && (
-        <nav className="side-panel__nav" aria-label="Main" data-tour="nav">
-          {NAV_ITEMS.filter(item => !item.section).map(item => {
-            const isActive = desktopActiveTab === item.key;
-            const allowed  = can(item.permission);
-            return (
-              <button
-                key={item.key}
-                type="button"
-                className={[
-                  'side-panel__nav-item',
-                  isActive ? 'side-panel__nav-item--active'   : '',
-                  !allowed ? 'side-panel__nav-item--disabled' : '',
-                  item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
-                ].filter(Boolean).join(' ')}
-                onClick={() => handleNav(item.key)}
-                disabled={!allowed}
-                aria-current={isActive ? 'page' : undefined}
-                // The label is the only thing naming this button when the
-                // sidebar is a 56px icon rail, so it has to be readable to a
-                // screen reader and not only on hover.
-                aria-label={item.key === 'alerts' && fuelAlarm ? `${item.label}, new fuel theft alert` : item.label}
-                title={allowed ? item.label : `${item.label}, no access here`}
-              >
-                <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
-                {item.key === 'alerts' && openAlerts > 0 && (
-                  <span className="side-panel__nav-count" aria-hidden="true">{badgeText(openAlerts)}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
+        mainNavItems.length > 0 && (
+          <nav className="side-panel__nav" aria-label="Main" data-tour="nav">
+            {mainNavItems.map(item => {
+              const isActive = desktopActiveTab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={[
+                    'side-panel__nav-item',
+                    isActive ? 'side-panel__nav-item--active'   : '',
+                    item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => handleNav(item.key)}
+                  aria-current={isActive ? 'page' : undefined}
+                  // The label is the only thing naming this button when the
+                  // sidebar is a 56px icon rail, so it has to be readable to a
+                  // screen reader and not only on hover.
+                  aria-label={item.key === 'alerts' && fuelAlarm ? `${item.label}, new fuel theft alert` : item.label}
+                  title={item.label}
+                >
+                  <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
+                  {item.key === 'alerts' && openAlerts > 0 && (
+                    <span className="side-panel__nav-count" aria-hidden="true">{badgeText(openAlerts)}</span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        )
       )}
 
       {/* Collapsed Fuel Audit, at the foot of the icon rail like the open one. */}

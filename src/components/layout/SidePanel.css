@@ -348,8 +348,6 @@
 .sp-nav-item:last-child { border-bottom: none; }
 .sp-nav-item:hover { background: #f8fafc; }
 .sp-nav-item--active { background: #eff6ff; }
-.sp-nav-item--disabled { opacity: 0.4; cursor: not-allowed; }
-
 .sp-nav-bar {
   position: absolute;
   left: 0;
@@ -426,9 +424,6 @@
   border-radius: 0 2px 2px 0;
   background: var(--sp-current);
 }
-.side-panel__nav-item--disabled,
-.side-panel__nav-item:disabled { opacity: 0.4; cursor: not-allowed; }
-
 /* ── System, at the foot of the sidebar ──
    Same box and item as the nav above; only the count is new. It is amber, the
    app's colour for something waiting on a person, in every state. */
@@ -554,30 +549,6 @@
   .side-panel__nav-item { transition: none; }
   .side-panel__toggle:active,
   .side-panel__nav-item:active:not(:disabled) { transform: none; }
-}
-
-/* ── Drawn, but not yours ───────────────────────────────────────────────────
-   The stat grid and the map trees are the Live Map's controls. An account
-   without `map:read` still sees them, so the panel keeps its shape, but they
-   are dead and the counts read "–" (SidePanel.jsx).
-
-   Dimmed to the same 0.4 the disabled nav item uses two rules up, so every
-   unavailable thing in this panel looks unavailable in the same way. */
-/* The sheet dims as one: per cell, the hairline ground showed through. */
-.sp-stats-grid--locked,
-.sp-trees--locked {
-  opacity: 0.4;
-}
-.sp-stats-grid--locked .sp-stat-box {
-  cursor: not-allowed;
-}
-/* The border highlight is a promise this card cannot keep any more, so it goes
-   with the click. The literal #e2e8f0 rather than `inherit`, because the base
-   rule sets it on the shorthand and `inherit` there takes the PARENT's border
-   colour, which is not the same thing and happened to be nearly black. */
-.sp-stats-grid--locked .sp-stat-box:hover {
-  border-color: var(--sps-line);
-  background: var(--sps-surface);
 }
 
 /* ── Mark + version, at the very bottom ──────────────────────
