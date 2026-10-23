@@ -27,7 +27,9 @@
   right: 24px;
   bottom: 96px;
   z-index: 1290;
-  width: min(380px, var(--safe-w, calc(100vw - 24px)));
+  width: max-content;
+  min-width: min(380px, var(--safe-w, calc(100vw - 24px)));
+  max-width: min(460px, var(--safe-w, calc(100vw - 24px)));
   border: 1px solid var(--arw-edge-hi);
   border-radius: 8px;
   background: var(--arw-surface);
@@ -67,9 +69,9 @@
 .arw__tool:focus-visible { outline: 2px solid var(--arw-accent); outline-offset: 1px; }
 .arw__tool:disabled { opacity: 0.4; cursor: default; background: transparent; }
 
-.arw__body { display: grid; gap: 9px; padding: 9px 11px 10px; }
+.arw__body { display: grid; gap: 9px; min-width: 0; padding: 9px 11px 10px; }
 
-.arw__modes { display: flex; align-items: center; gap: 6px; }
+.arw__modes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .arw__mode {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 9px; border: 1px solid var(--arw-edge-hi); border-radius: 999px;
@@ -150,7 +152,7 @@
 @keyframes arw-pulse { from { opacity: 1; } to { opacity: 0.5; } }
 
 @media (max-width: 767px) {
-  .arw { width: calc(100vw - 20px); right: 10px; bottom: 88px; }
+  .arw { width: calc(100vw - 20px); min-width: 0; max-width: calc(100vw - 20px); right: 10px; bottom: 88px; }
   .arw__rings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .arw__ring:nth-child(3) { border-left: 0; }
 }
