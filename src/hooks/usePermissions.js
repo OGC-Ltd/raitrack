@@ -6,6 +6,8 @@
 // and re-resolves when that changes.
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchVssCameraCount } from "../api/vssAlarms";
 import { useAuth } from "../context/AuthContext";
 import { useAppSelector } from "../context/AppContext";
 import { ORG_CODE_BY_COMPANY } from "../api/org";
@@ -42,6 +44,9 @@ export function accessIn(orgs, companyId) {
  */
 const anyOf = (slug) => (Array.isArray(slug) ? slug : [slug]);
 
+/** The Alarms tab: granted by dashcams, not by a role (see usePermissions). */
+export const VSS_ALARMS = "vss:alarms";
+
 /**
  * The grader for one organisation BY ID, with no active company involved.
  *
@@ -74,10 +79,31 @@ export function usePermissions() {
   const { orgs, isPlatform } = useAuth();
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
 
-  const { org, can } = useMemo(
+  const { org, can: canHere } = useMemo(
     () => accessIn(orgs, activeCompanyId),
     [orgs, activeCompanyId],
   );
+
+  // 'vss:alarms' (the Alarms tab) is not a role: it is whether this
+  // organisation's vehicles carry Control Tech (VSS) cameras, asked of the
+  // backend once per organisation (api/vssAlarms). Not even a platform
+  // administrator gets it without cameras: an empty tab is no use to anyone.
+  // A backend without the route answers 0, so the tab simply stays hidden.
+  const vssCameras = useQuery({
+    queryKey: ["vss", "cameras", org?.id ?? null],
+    queryFn: () => fetchVssCameraCount(org.id),
+    enabled: Boolean(org?.id),
+    staleTime: 10 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const vssOn = (vssCameras.data ?? 0) > 0;
+  const can = useMemo(() => (slug) => {
+    const list = anyOf(slug);
+    if (vssOn && list.includes(VSS_ALARMS)) return true;
+    const rest = list.filter((s) => s !== VSS_ALARMS);
+    return rest.length > 0 && canHere(rest);
+  }, [canHere, vssOn]);
 
   return useMemo(() => ({
     orgId: org?.id ?? null,

@@ -16,10 +16,16 @@ import ErrorBoundary from '../shared/ErrorBoundary';
 import { versionLabel, buildDetail } from '../../lib/version';
 import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
+import { useVssBadge } from '../../hooks/useVssBadge';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
   { key: 'fleet',        label: 'Live Map',     icon: 'map-2',     permission: 'map:read'         },
+  // Dashcam alarms with their clips (Control Tech VSS), for organisations whose
+  // vehicles carry VSS cameras; usePermissions grants 'vss:alarms' only there.
+  // `hiddenWhenClosed`: an organisation without cameras should not see a
+  // greyed-out tab it can never open.
+  { key: 'dashcam',      label: 'Alarms',       icon: 'video',     permission: 'vss:alarms', hiddenWhenClosed: true },
   // Fuel and overspeeding alerts from every organisation the account holds,
   // escalated and de-escalated in one place (operator, 2026-10-12). Either
   // grant opens it: the page shows each kind only where it is held.
@@ -203,6 +209,11 @@ export default function SidePanel() {
   const openAlerts = alertSummary?.open ?? 0;
   // A new fuel theft alert: the Alerts button shakes in red until the page is opened.
   const fuelAlarm = useFuelAlarm(alertSummary);
+  // The Alarms tab's own badge: today's dashcam alarms not yet reviewed.
+  const { orgId: alarmsOrgId } = usePermissions();
+  const vssBadge = useVssBadge(alarmsOrgId, activeCompany?.id, can('vss:alarms'));
+  const openVss = vssBadge?.open ?? 0;
+  const vssTitle = `${openVss} dashcam alarm${openVss === 1 ? '' : 's'} today not yet reviewed${vssBadge?.critical ? ` · ${vssBadge.critical} critical` : ''}`;
   // `activeFilter` comes from the map rather than from local state here.
   // The local copy could not see the map clearing the filter on its own — on a
   // company switch, or when focusing a single unit — so a card stayed lit over
@@ -369,7 +380,7 @@ export default function SidePanel() {
 
           {/* ── Navigation ── */}
           <nav className="sp-nav-box" data-tour="nav">
-            {NAV_ITEMS.filter(item => !item.section).map(item => {
+            {NAV_ITEMS.filter(item => !item.section && (!item.hiddenWhenClosed || can(item.permission))).map(item => {
               const allowed  = can(item.permission);
               const isActive = desktopActiveTab === item.key;
               return (
@@ -391,6 +402,9 @@ export default function SidePanel() {
                     <span className="sp-nav-count" title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} you have not read, last 7 days${fuelAlarm ? ' · a new fuel theft alert' : ''}`}>
                       {badgeText(openAlerts)}
                     </span>
+                  )}
+                  {item.key === 'dashcam' && openVss > 0 && (
+                    <span className="sp-nav-count" title={vssTitle}>{badgeText(openVss)}</span>
                   )}
                 </button>
               );
@@ -495,7 +509,7 @@ export default function SidePanel() {
       {/* Collapsed — icons only */}
       {collapsed && (
         <nav className="side-panel__nav" aria-label="Main" data-tour="nav">
-          {NAV_ITEMS.filter(item => !item.section).map(item => {
+          {NAV_ITEMS.filter(item => !item.section && (!item.hiddenWhenClosed || can(item.permission))).map(item => {
             const isActive = desktopActiveTab === item.key;
             const allowed  = can(item.permission);
             return (
@@ -520,6 +534,9 @@ export default function SidePanel() {
                 <i className={`ti ti-${item.icon} side-panel__nav-icon`} aria-hidden="true" />
                 {item.key === 'alerts' && openAlerts > 0 && (
                   <span className="side-panel__nav-count" aria-hidden="true">{badgeText(openAlerts)}</span>
+                )}
+                {item.key === 'dashcam' && openVss > 0 && (
+                  <span className="side-panel__nav-count" aria-hidden="true">{badgeText(openVss)}</span>
                 )}
               </button>
             );
