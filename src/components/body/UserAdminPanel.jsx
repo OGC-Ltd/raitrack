@@ -53,6 +53,7 @@ import { toCsv, exportFilename, downloadCsv } from "../../lib/rosterExport";
 import { accountState } from "../../lib/accountState";
 import { companyMark } from "../../lib/companyLogos";
 import { maskEmail, maskPhone } from "../../lib/mask";
+import { displayGroupText } from "../../lib/groupDisplay";
 import {
   confirmPhraseFor, confirmMatches, confirmState, skipsTypedConfirmation,
 } from "../../lib/deleteConfirmation";
@@ -2691,7 +2692,7 @@ export default function UserAdminPanel() {
                         {shows("group") && (
                           <td data-label="Group">
                             {u.group
-                              ? <span className="ua-groupchip">{u.group.name}</span>
+                              ? <span className="ua-groupchip">{displayGroupText(u.group.name)}</span>
                               /* Said, not left blank. An ungrouped account is
                                  reachable by the platform administrator alone
                                  once enforcement is on, and that is a fact

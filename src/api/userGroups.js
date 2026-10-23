@@ -9,18 +9,26 @@ export async function listUserGroups(orgId) {
   return res.data ?? [];
 }
 
-export async function createUserGroup(orgId, { name, description }) {
+export async function createUserGroup(orgId, { name, description, organisationIds }) {
   const res = await apiFetch(base(orgId), {
     method: "POST",
-    body: JSON.stringify({ name, description: description || null }),
+    body: JSON.stringify({
+      name,
+      description: description || null,
+      ...(organisationIds ? { organisationIds } : {}),
+    }),
   });
   return res.data;
 }
 
-export async function updateUserGroup(orgId, groupId, { name, description }) {
+export async function updateUserGroup(orgId, groupId, { name, description, organisationIds }) {
   const res = await apiFetch(`${base(orgId)}/${encodeURIComponent(groupId)}`, {
     method: "PATCH",
-    body: JSON.stringify({ name, description: description || null }),
+    body: JSON.stringify({
+      name,
+      description: description || null,
+      ...(organisationIds ? { organisationIds } : {}),
+    }),
   });
   return res.data;
 }
