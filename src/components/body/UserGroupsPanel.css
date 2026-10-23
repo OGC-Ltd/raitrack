@@ -43,7 +43,7 @@
 @media (min-width: 768px) {
   .ug-page { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
   .ug-page__inner { flex: 1 1 auto; min-height: 0; }
-  .ug-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 24px; }
+  .ug-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 260px; }
 }
 
 .ug-icon {
@@ -159,7 +159,7 @@
 .ug-addfilter:hover, .ug-action:hover { color: var(--ug-text-1); border-color: var(--ug-text-4); }
 
 /* ── Tiles ── */
-.ug-body { padding: 16px var(--ug-gutter) 0; }
+.ug-body { padding: 16px var(--ug-gutter) 260px; }
 
 .ug-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
 
@@ -187,10 +187,10 @@
 .ug-section-head__title span { margin-left: 4px; color: var(--ug-text-4); font-weight: 600; }
 
 /* ── Cards ── */
-.ug-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.ug-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
 
 .ug-card {
-  position: relative; min-width: 0; padding: 12px;
+  position: relative; width: 95%; min-width: 0; box-sizing: border-box; justify-self: center; padding: 10px;
   border: 1px solid var(--ug-line); border-radius: 10px; background: var(--ug-surface);
   transition: border-color 140ms ease;
 }
@@ -198,7 +198,7 @@
 /* Lifts the open menu or picker above the card beneath it. */
 .ug-card:focus-within, .ug-card--raised { z-index: 4; }
 
-.ug-card__top { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; }
+.ug-card__top { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
 .ug-card__icon {
   display: grid; flex: none; place-items: center; width: 32px; height: 32px;
   border: 1px solid var(--ug-line); border-radius: 8px; background: var(--ug-surface); color: var(--ug-text-1);
@@ -208,8 +208,8 @@
 .ug-card__name { overflow: hidden; font-size: 13px; font-weight: 800; color: var(--ug-text-1); text-overflow: ellipsis; white-space: nowrap; }
 .ug-card__desc { overflow: hidden; color: var(--ug-text-4); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 
-.ug-panel { display: grid; gap: 1px; padding: 4px 10px; border-radius: 8px; background: var(--ug-raised); }
-.ug-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 33px; min-width: 0; }
+.ug-panel { display: grid; gap: 1px; padding: 3px 8px; border-radius: 8px; background: var(--ug-raised); }
+.ug-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 29px; min-width: 0; }
 .ug-row__label { display: inline-flex; flex: none; align-items: center; gap: 8px; color: var(--ug-text-3); font-size: 11px; }
 .ug-row__members { display: inline-flex; align-items: center; gap: 8px; }
 .ug-row__none { color: var(--ug-text-3); font-size: 11px; }
@@ -516,10 +516,12 @@
 
 /* ── Responsive ── */
 @media (max-width: 1100px) {
-  .ug-tiles, .ug-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ug-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ug-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
   .ug-page { overflow: visible; }
+  .ug-body { padding-bottom: 260px; }
   .ug-toolbar { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .ug-toolbar__filter-section { padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--ug-line); }
   .ug-toolbar__filter-controls { align-items: stretch; }

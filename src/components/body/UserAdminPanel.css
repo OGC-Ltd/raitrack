@@ -1250,6 +1250,54 @@ select.ua-input { appearance: none; cursor: pointer; }
 }
 .ua-access__hint { font-size: 11px; font-weight: 500; color: var(--text-2); }
 .ua-access__empty { margin: 8px 0 0; font-size: 12px; color: var(--text-2); }
+.ua-access__shared {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 10px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+}
+.ua-access__shared .ua-field { min-width: 0; }
+.ua-access__shared-rolepick { box-sizing: border-box; width: 100%; min-height: 36px; justify-content: space-between; }
+.ua-access__shared-rolepick .ua-rolepick__select { width: 100%; min-width: 0; }
+.ua-access__shared-rolepick .ua-rolepick__select:disabled { opacity: 0.6; cursor: not-allowed; }
+.ua-access__shared-rolepick .ua-rolepick__select option { background: var(--ua-surface); color: var(--ua-text-1); }
+.ua-access__shared-apply {
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent-ok, #22c55e);
+  border-radius: 6px;
+  background: var(--accent-ok, #22c55e);
+  color: var(--color-bg, #0b0d10);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+.ua-access__shared-apply:hover:not(:disabled) { filter: brightness(1.07); }
+.ua-access__shared-apply:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 2px; }
+.ua-access__shared-apply:active:not(:disabled) { transform: translateY(1px); }
+.ua-access__shared-apply:disabled { opacity: 0.5; cursor: not-allowed; }
+.ua-access__shared-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+@media (max-width: 480px) {
+  .ua-access__shared { grid-template-columns: minmax(0, 1fr); }
+  .ua-access__shared-apply { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ua-access__shared-apply { transition: none; }
+}
 
 /* A GRID, not a stack.
  *
@@ -1297,6 +1345,44 @@ select.ua-input { appearance: none; cursor: pointer; }
 }
 .ua-org__toggle:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 2px; border-radius: 6px; }
 .ua-org__toggle:disabled { opacity: 0.6; cursor: not-allowed; }
+.ua-org__select-all {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.ua-org__select-all[aria-checked="true"] .ua-box {
+  background: var(--accent-ok, #22c55e);
+  border-color: var(--accent-ok, #22c55e);
+}
+.ua-org__select-all[aria-checked="true"] .ua-box::after { transform: rotate(45deg) scale(1); }
+.ua-org__select-all[aria-checked="mixed"] .ua-box {
+  background: var(--accent-ok, #22c55e);
+  border-color: var(--accent-ok, #22c55e);
+}
+.ua-org__select-all[aria-checked="mixed"] .ua-box::after {
+  left: 2px;
+  top: 6px;
+  width: 7px;
+  height: 0;
+  border: 0;
+  border-top: 2px solid var(--bg);
+  transform: none;
+}
+.ua-org__select-all:focus-visible { outline: 2px solid var(--accent-info, #38bdf8); outline-offset: 2px; }
+.ua-org__select-all:disabled { opacity: 0.6; cursor: not-allowed; }
+.ua-org__select-count { margin-left: auto; color: var(--text-2); font-size: 11px; font-weight: 500; }
 
 .ua-org__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
