@@ -35,6 +35,25 @@ describe("user group API", () => {
     ]);
   });
 
+  it("sends selected organisations when creating or updating a group", async () => {
+    apiFetch.mockResolvedValue({ data: { id: "grp-1" } });
+    const organisationIds = ["org-1", "org-2", "org-3"];
+
+    await createUserGroup("org-1", {
+      name: "Dispatch", description: "Shared roster", organisationIds,
+    });
+    await updateUserGroup("org-1", "grp-1", {
+      name: "Night dispatch", description: "Shared night roster", organisationIds,
+    });
+
+    expect(JSON.parse(apiFetch.mock.calls[0][1].body)).toEqual({
+      name: "Dispatch", description: "Shared roster", organisationIds,
+    });
+    expect(JSON.parse(apiFetch.mock.calls[1][1].body)).toEqual({
+      name: "Night dispatch", description: "Shared night roster", organisationIds,
+    });
+  });
+
   it("adds and removes one membership without replacing other group assignments", async () => {
     apiFetch.mockResolvedValue({ data: { userId: "user-1", groupId: "group/1" } });
     await addUserToGroup("org-1", "group/1", "user/1");
