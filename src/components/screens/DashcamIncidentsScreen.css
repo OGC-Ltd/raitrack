@@ -1,0 +1,168 @@
+/* Dashcam Alarms — the inbox for organisations with VSS (Control Tech) cameras.
+ * Everything is prefixed .dci- so nothing here can touch the regular Alerts
+ * page (AlertsScreen.css, the alr- and aud- classes). Layout follows mockup A. */
+
+.dci {
+  --dci-ink: #0f172a; --dci-ink-2: #475569; --dci-ink-3: #64748b; --dci-ink-4: #94a3b8;
+  --dci-line: #edf0f4; --dci-line-2: #e2e8f0; --dci-blue: #2563eb; --dci-blue-bg: #eff6ff;
+  --dci-crit: #dc2626; --dci-warn: #d97706; --dci-info: #2563eb;
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: #f8fafc; color: var(--dci-ink);
+}
+
+/* ── top bar ── */
+.dci-top {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+  padding: 14px 22px 12px; background: #fff; border-bottom: 1px solid var(--dci-line);
+}
+.dci-title { font-size: 17px; font-weight: 700; margin: 0 6px 0 0; white-space: nowrap; }
+.dci-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dci-chip {
+  font: inherit; font-size: 12px; color: var(--dci-ink-2); background: #fff;
+  border: 1px solid var(--dci-line-2); border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.dci-chip:hover { border-color: #cbd5e1; }
+.dci-chip--on { background: var(--dci-ink); border-color: var(--dci-ink); color: #fff; }
+.dci-chip:focus-visible, .dci-row:focus-visible, .dci-btn:focus-visible, .dci-select:focus-visible, .dci-seg button:focus-visible {
+  outline: 2px solid var(--dci-blue); outline-offset: 2px;
+}
+.dci-filters { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.dci-select {
+  font: inherit; font-size: 12px; color: var(--dci-ink-2); background: #fff;
+  border: 1px solid var(--dci-line-2); border-radius: 999px; padding: 5px 10px; cursor: pointer;
+}
+.dci-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dci-ink-3); cursor: pointer; white-space: nowrap; }
+
+/* ── body: list | detail ── */
+.dci-body { flex: 1; min-height: 0; display: flex; }
+.dci-list {
+  width: 400px; flex: none; overflow-y: auto; background: #fff; border-right: 1px solid var(--dci-line);
+  transition: opacity .15s;
+}
+.dci-list--stale { opacity: .6; }
+.dci-note { padding: 18px; font-size: 13px; color: var(--dci-ink-3); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; margin: 0; }
+.dci-note--err { color: #991b1b; }
+
+.dci-row {
+  font: inherit; text-align: left; width: 100%; background: none; border: 0; cursor: pointer;
+  display: flex; gap: 11px; align-items: flex-start; padding: 11px 14px;
+  border-bottom: 1px solid #f1f5f9; color: inherit;
+}
+.dci-row:hover { background: #f8fafc; }
+.dci-row--on, .dci-row--on:hover { background: var(--dci-blue-bg); box-shadow: inset 3px 0 var(--dci-blue); }
+.dci-row--done .dci-row__t { color: var(--dci-ink-3); }
+.dci-ic {
+  width: 30px; height: 30px; border-radius: 8px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: #fff; letter-spacing: -.02em;
+}
+.dci-ic--critical { background: var(--dci-crit); }
+.dci-ic--warning { background: var(--dci-warn); }
+.dci-ic--informational { background: var(--dci-info); }
+.dci-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dci-row__t { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.dci-row__s { font-size: 11.5px; color: var(--dci-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dci-row__time { font-size: 11px; color: var(--dci-ink-4); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dci-done { font-size: 10px; font-weight: 700; color: #166534; background: #dcfce7; border-radius: 4px; padding: 1px 5px; }
+.dci-clip {
+  align-self: flex-start; margin-top: 4px; font-size: 10.5px; font-weight: 700;
+  color: var(--dci-blue); background: var(--dci-blue-bg); border-radius: 4px; padding: 2px 6px;
+}
+.dci-clip--fresh { color: #92400e; background: #fef3c7; }
+
+/* ── detail ── */
+.dci-detail { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 22px 22px; }
+.dci-detail__inner { max-width: 820px; display: flex; flex-direction: column; gap: 14px; }
+.dci-empty { color: var(--dci-ink-3); font-size: 13px; padding: 40px 0; }
+
+.dci-player { display: flex; flex-direction: column; gap: 8px; }
+.dci-player__bar { display: flex; align-items: center; gap: 10px; }
+.dci-player__cam { font-size: 12px; font-weight: 600; color: var(--dci-ink-2); }
+.dci-player__stamp { margin-left: auto; font: 600 11.5px ui-monospace, Consolas, monospace; color: var(--dci-ink-3); }
+.dci-seg { display: inline-flex; border: 1px solid var(--dci-line-2); border-radius: 8px; overflow: hidden; background: #fff; }
+.dci-seg button { font: inherit; font-size: 12px; border: 0; background: none; padding: 5px 12px; cursor: pointer; color: var(--dci-ink-2); }
+.dci-seg button.on { background: var(--dci-ink); color: #fff; font-weight: 600; }
+
+.dci-video { position: relative; aspect-ratio: 16 / 9; background: #0b1120; border-radius: 10px; overflow: hidden; }
+.dci-video video { width: 100%; height: 100%; display: block; object-fit: contain; background: #0b1120; }
+.dci-tag {
+  position: absolute; top: 10px; left: 10px; z-index: 3; pointer-events: none;
+  color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .5px; padding: 3px 8px; border-radius: 4px;
+}
+.dci-tag--critical { background: var(--dci-crit); }
+.dci-tag--warning { background: var(--dci-warn); }
+.dci-tag--informational { background: var(--dci-info); }
+.dci-video__msg {
+  position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 20px; text-align: center; color: #e2e8f0; background: rgba(11, 17, 32, .92); font-size: 13px;
+}
+.dci-video__msg b { font-size: 15px; color: #fff; }
+.dci-video__msg .dci-btn { margin-top: 6px; }
+
+.dci-novid {
+  aspect-ratio: 16 / 5; border: 1px dashed #cbd5e1; border-radius: 10px; background: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  text-align: center; padding: 16px; font-size: 12.5px; color: var(--dci-ink-3);
+}
+.dci-novid b { font-size: 14px; color: var(--dci-ink); }
+
+.dci-info { display: flex; gap: 14px; align-items: stretch; }
+.dci-card {
+  flex: 1; min-width: 0; background: #fff; border-radius: 12px; padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+}
+.dci-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.dci-card__t { font-size: 15px; font-weight: 700; }
+.dci-sev { font-size: 10.5px; font-weight: 700; letter-spacing: .3px; border-radius: 4px; padding: 2px 6px; }
+.dci-sev--critical { color: #991b1b; background: #fee2e2; }
+.dci-sev--warning { color: #92400e; background: #fef3c7; }
+.dci-sev--informational { color: #1e40af; background: #dbeafe; }
+.dci-kv { display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; font-size: 12.5px; margin: 0; }
+.dci-kv dt { color: var(--dci-ink-3); }
+.dci-kv dd { margin: 0; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.dci-muted { color: var(--dci-ink-4); font-weight: 400; }
+.dci-late { color: #92400e; }
+
+.dci-mini { width: 240px; flex: none; position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); background: #eceee8; min-height: 190px; }
+.dci-mini__map { position: absolute; inset: 0; }
+.dci-mini__map .leaflet-control-attribution { font-size: 9px; }
+.dci-mini__none { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--dci-ink-3); z-index: 500; }
+
+.dci-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dci-btn {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--dci-ink); text-decoration: none;
+  background: #fff; border: 1px solid var(--dci-line-2); border-radius: 7px; padding: 7px 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.dci-btn:hover { border-color: #cbd5e1; }
+.dci-btn:disabled { color: var(--dci-ink-4); cursor: default; }
+.dci-btn--p { background: var(--dci-blue); border-color: var(--dci-blue); color: #fff; }
+.dci-btn--p:hover { background: #1d4ed8; border-color: #1d4ed8; }
+.dci-btn--done { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+
+/* ── narrower screens: stack ── */
+@media (max-width: 1180px) {
+  .dci-list { width: 340px; }
+  .dci-mini { width: 200px; }
+}
+@media (max-width: 900px) {
+  .dci-body { flex-direction: column; overflow-y: auto; }
+  .dci-list { width: auto; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--dci-line); }
+  .dci-detail { overflow: visible; padding: 14px 16px 20px; }
+  .dci-info { flex-direction: column; }
+  .dci-mini { width: auto; height: 180px; }
+  .dci-filters { margin-left: 0; }
+  .dci-top { padding: 12px 16px; }
+}
+
+/* Snapshots (VSS sends a still with most alarms; some come with a still only). */
+.dci-video img { width: 100%; height: 100%; display: block; object-fit: contain; background: #0b1120; }
+.dci-player__bar .dci-seg + .dci-seg { margin-left: 8px; }
+.dci-thumbs { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.dci-thumb {
+  width: 96px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; border: 2px solid transparent;
+  padding: 0; background: #0b1120; cursor: pointer;
+}
+.dci-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dci-thumb--on { border-color: var(--dci-blue); }
