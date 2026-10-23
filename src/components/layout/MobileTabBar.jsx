@@ -1,19 +1,8 @@
 // MobileTabBar — bottom navigation for mobile, mirrors the React Native app exactly.
 // Only visible on screens < 768px. Desktop is unaffected.
 //
-// ## It is gated, and it reads the same list the sidebar does
-//
-// This bar had no permission check at all, which made it the one way round the
-// nav on the desktop side: a technician holds sensor:read and nothing else of
-// the five, so SidePanel draws four of its five items disabled — and then the
-// phone drew the same four live, with the Fleet map as the big green button in
-// the middle. Tapping one did not open it (App's guard sends an unpermitted tab
-// straight back to the first allowed one), so the result was a bar that bounced
-// you off it without saying why, which is worse than a control that is plainly
-// not for you.
-//
-// The permission for each key comes from NAV_ITEMS rather than a second list
-// here. Two lists is how the phone came to disagree with the sidebar.
+// Unavailable resources are omitted, not shown as disabled controls. Permission
+// metadata comes from NAV_ITEMS so mobile and desktop stay in sync.
 //
 // ## The centre button belongs to whoever can use it
 //
@@ -22,20 +11,12 @@
 // the best position on the bar a dead one, and left the screen they actually
 // work in as a small tab in the corner.
 //
-// So when the map is closed to somebody, the centre is SWAPPED with the first
-// screen that is open to them: they get the reachable button, and the map takes
-// the ordinary slot its replacement came from, dimmed like the rest. Five
-// positions either way, so nothing else moves — and anybody who has the map
-// sees exactly what they saw before.
+// When the map is unavailable, the centre goes to an available screen instead.
 
 import { useAppSelector, useAppActions } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { NAV_ITEMS } from './SidePanel';
 import './MobileTabBar.css';
-
-/** The raised slot. An index rather than a key, because which tab sits in it is
- *  the thing that varies. */
-const CENTRE = 2;
 
 /* `fleet` carries a map icon for the case where it is NOT in the centre — the
    truck is drawn for the centre position only, and a demoted Fleet tab with no
@@ -51,29 +32,26 @@ const TABS = [
 const permissionFor = (key) => NAV_ITEMS.find((n) => n.key === key)?.permission;
 
 /**
- * The five buttons in order, each marked with whether it is the centre one.
+ * The available buttons in order, each marked with whether it is the centre one.
  *
  * Pure and exported for test: this is the whole ordering decision, and the rest
  * of this file is markup. `allowed` is a predicate on a tab key.
  *
- * A swap happens only when the centre tab is closed AND something else is open.
- * An account with nothing open keeps the default arrangement — every button
- * dimmed, which is the honest picture — rather than being handed a promoted
- * button it cannot use either.
+ * Unavailable tabs are not returned. If Fleet is unavailable, an available
+ * screen takes the centre slot; if nothing is available, the bar is empty.
  */
 export function barTabs(allowed) {
-  const centre = TABS[CENTRE];
-  const mark = (list) => list.map((t, i) => ({ ...t, fab: i === CENTRE }));
+  const visible = TABS.filter((tab) => allowed(tab.key));
+  if (visible.length === 0) return [];
 
-  if (allowed(centre.key)) return mark(TABS);
-
-  const promoted = TABS.find((t) => t.key !== centre.key && allowed(t.key));
-  if (!promoted) return mark(TABS);
-
-  const out = [...TABS];
-  out[CENTRE] = promoted;
-  out[TABS.indexOf(promoted)] = centre;
-  return mark(out);
+  const centre = visible.find((tab) => tab.key === 'fleet')
+    ?? visible[Math.floor(visible.length / 2)];
+  const centreIndex = visible.indexOf(centre);
+  const middleIndex = Math.floor(visible.length / 2);
+  const ordered = [...visible];
+  ordered.splice(centreIndex, 1);
+  ordered.splice(middleIndex, 0, centre);
+  return ordered.map((tab) => ({ ...tab, fab: tab.key === centre.key }));
 }
 
 export default function MobileTabBar() {
@@ -81,32 +59,31 @@ export default function MobileTabBar() {
   const { setDesktopActiveTab } = useAppActions();
   const { can } = usePermissions();
 
-  /* An unknown key is allowed rather than blocked: a tab this bar knows about
-     and NAV_ITEMS does not is a bug in the two lists, and failing it closed
-     would hide a working screen. The screens themselves are gated in App,
-     which is the check that decides anything. */
+  /* The list and its permission come from the shared navigation catalogue. */
   const allowed = (key) => {
     const perm = permissionFor(key);
-    return perm ? can(perm) : true;
+    return Boolean(perm) && can(perm);
   };
+  const tabs = barTabs(allowed);
+  if (tabs.length === 0) return null;
 
   return (
-    <nav className="mobile-tab-bar" data-tour="m-tabs">
-      {barTabs(allowed).map(tab => {
+    <nav
+      className="mobile-tab-bar"
+      data-tour="m-tabs"
+      style={tabs.length > 0 && tabs.length < TABS.length
+        ? { gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }
+        : undefined}
+    >
+      {tabs.map(tab => {
         const isActive = desktopActiveTab === tab.key;
-        const isOpen   = allowed(tab.key);
 
         if (tab.fab) {
           return (
             <button
               key={tab.key}
-              className={[
-                'mobile-tab-bar__fab',
-                isActive ? 'mobile-tab-bar__fab--active'   : '',
-                !isOpen  ? 'mobile-tab-bar__fab--disabled' : '',
-              ].join(' ').trim()}
+              className={`mobile-tab-bar__fab${isActive ? ' mobile-tab-bar__fab--active' : ''}`}
               onClick={() => setDesktopActiveTab(tab.key)}
-              disabled={!isOpen}
               aria-label={tab.key === 'fleet' ? 'Fleet map' : tab.label}
             >
               {tab.key === 'fleet' ? (
@@ -125,13 +102,8 @@ export default function MobileTabBar() {
         return (
           <button
             key={tab.key}
-            className={[
-              'mobile-tab-bar__item',
-              isActive ? 'mobile-tab-bar__item--active'   : '',
-              !isOpen  ? 'mobile-tab-bar__item--disabled' : '',
-            ].join(' ').trim()}
+            className={`mobile-tab-bar__item${isActive ? ' mobile-tab-bar__item--active' : ''}`}
             onClick={() => setDesktopActiveTab(tab.key)}
-            disabled={!isOpen}
           >
             <i className={`ti ti-${tab.icon} mobile-tab-bar__icon`} aria-hidden="true" />
             <span className="mobile-tab-bar__label">{tab.label}</span>
