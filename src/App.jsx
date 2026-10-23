@@ -143,9 +143,8 @@ function AppShell() {
               map does not re-create it, re-fetch the fleet and re-fit the
               viewport. That is worth doing for somebody who HAS the map.
 
-              It is not worth doing for somebody who does not. Without map:read
-              the Live Map is closed to them everywhere else — the sidebar item
-              is disabled, the tab bar item is disabled, `show('fleet')` is
+              It is not worth doing for somebody who does not.               Without map:read the Live Map is closed to them everywhere else —
+              its sidebar and tab bar items are omitted, `show('fleet')` is
               false — and mounting it anyway kept a live fleet subscription, a
               status count and a full set of markers running behind a hidden
               div for an account that cannot open it. Not drawn is not the same
