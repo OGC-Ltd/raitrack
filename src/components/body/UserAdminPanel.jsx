@@ -256,7 +256,7 @@ function Drawer({ open, onClose, id, title, hint, children }) {
  */
 function OrgPicker({
   orgs, draft, base, rolesByOrg, canAssignRoles, disabled,
-  currentOrgId, roleOrg, onRoleOrg, onToggleOrg, onToggleRole,
+  currentOrgId, roleOrg, onRoleOrg, onToggleOrg, onToggleRole, onSelectAll,
 }) {
   const [adding, setAdding] = useState(false);
   const [find, setFind] = useState("");
@@ -266,6 +266,8 @@ function OrgPicker({
      eighteen would make un-doing a mistaken untick a search. */
   const held = orgs.filter((o) => o.id in draft || (base != null && o.id in base));
   const rest = orgs.filter((o) => !held.includes(o));
+  const selectedCount = orgs.filter((o) => o.id in draft).length;
+  const allSelected = selectedCount === orgs.length;
   const needle = find.trim().toLowerCase();
   const shown = needle ? rest.filter((o) => o.name.toLowerCase().includes(needle)) : rest;
 
@@ -282,6 +284,16 @@ function OrgPicker({
 
   return (
     <>
+      {base == null && orgs.length > 1 && (
+        <button type="button" className="ua-org__select-all" role="checkbox"
+                aria-checked={allSelected ? true : selectedCount > 0 ? "mixed" : false}
+                onClick={() => onSelectAll(!allSelected)}
+                disabled={disabled}>
+          <span className="ua-box" aria-hidden="true" />
+          <span>Select all organisations</span>
+          <span className="ua-org__select-count">{selectedCount} of {orgs.length}</span>
+        </button>
+      )}
       {held.length === 0 ? (
         <p className="ua-access__empty">
           No organisation chosen yet. Somebody with no organisation has no way in.
@@ -816,6 +828,7 @@ export default function UserAdminPanel() {
    * organisation with no roles yet is still a valid grant (access, no role).
    */
   const [picked, setPicked] = useState({});
+  const [sharedRoleSlug, setSharedRoleSlug] = useState("");
   const [rolesByOrg, setRolesByOrg] = useState({});
   /* Whose roles are expanded, in whichever panel is open. One piece of state
      for both, because only one panel can be open at a time — and it lives up
@@ -905,6 +918,7 @@ export default function UserAdminPanel() {
 
   const openInvite = useCallback(() => {
     setError("");
+    setSharedRoleSlug("");
     setRoleOrg(null);
     setInviteOpen(true);
   }, []);
@@ -1504,6 +1518,22 @@ export default function UserAdminPanel() {
   }
 
   const selectedOrgIds = useMemo(() => Object.keys(picked), [picked]);
+  const sharedRolesLoading = selectedOrgIds.length > 1
+    && selectedOrgIds.some((id) => !Object.prototype.hasOwnProperty.call(rolesByOrg, id));
+  const sharedRoleOptions = useMemo(() => {
+    if (selectedOrgIds.length < 2 || sharedRolesLoading) return [];
+    const [first, ...rest] = selectedOrgIds;
+    return (rolesByOrg[first] ?? [])
+      .filter((role) => rest.every((id) => (rolesByOrg[id] ?? []).some((candidate) => candidate.slug === role.slug)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedOrgIds, rolesByOrg, sharedRolesLoading]);
+
+  function applySharedRole() {
+    if (!sharedRoleOptions.some((role) => role.slug === sharedRoleSlug)) return;
+    setPicked((current) => Object.fromEntries(
+      Object.keys(current).map((id) => [id, [sharedRoleSlug]]),
+    ));
+  }
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -2360,7 +2390,43 @@ export default function UserAdminPanel() {
                 onRoleOrg={setRoleOrg}
                 onToggleOrg={toggleOrg}
                 onToggleRole={toggleRole}
+                onSelectAll={(selectAll) => {
+                  setPicked((current) => {
+                    if (!selectAll) return {};
+                    return Object.fromEntries(orgs.map((org) => [org.id, current[org.id] ?? []]));
+                  });
+                  setRoleOrg(null);
+                }}
               />
+              {selectedOrgIds.length > 1 && canAssignRoles && (
+                <div className="ua-access__shared">
+                  <label className="ua-field">
+                    <span className="ua-label">Apply one role to all {selectedOrgIds.length} selected organisations</span>
+                    <span className="ua-rolepick ua-access__shared-rolepick">
+                      <select className="ua-rolepick__select" value={sharedRoleSlug}
+                              onChange={(e) => setSharedRoleSlug(e.target.value)}
+                              disabled={busy || sharedRolesLoading}>
+                        <option value="">
+                          {sharedRolesLoading
+                            ? "Loading shared roles…"
+                            : sharedRoleOptions.length === 0 ? "No shared roles available" : "Choose a shared role"}
+                        </option>
+                        {sharedRoleOptions.map((role) => (
+                          <option key={role.slug} value={role.slug}>{role.name}</option>
+                        ))}
+                      </select>
+                    </span>
+                  </label>
+                  <button type="button" className="ua-access__shared-apply"
+                          onClick={applySharedRole}
+                          disabled={busy || !sharedRoleOptions.some((role) => role.slug === sharedRoleSlug)}>
+                    Apply to selected
+                  </button>
+                  <span className="ua-access__shared-hint">
+                    Replaces each selected organisation’s role selection with this role.
+                  </span>
+                </div>
+              )}
             </fieldset>
 
                 </div>

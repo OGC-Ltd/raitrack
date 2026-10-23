@@ -319,6 +319,7 @@ function MemberPicker({ group, users, orgById, manageableOrgIds, pendingKey, onT
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const rootRef = useRef(null);
+  const listRef = useRef(null);
   const listId = useId();
 
   const groupOrgIds = useMemo(() => new Set(group.organisationIds ?? []), [group.organisationIds]);
@@ -352,6 +353,10 @@ function MemberPicker({ group, users, orgById, manageableOrgIds, pendingKey, onT
     const close = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) listRef.current?.scrollIntoView({ block: "nearest" });
   }, [open]);
 
   useEffect(() => { setActive(0); }, [query, roleFilter]);
@@ -401,7 +406,7 @@ function MemberPicker({ group, users, orgById, manageableOrgIds, pendingKey, onT
         </label>
       </div>
       {open && (
-        <ul className="ug-picker__list" id={listId} role="listbox">
+        <ul ref={listRef} className="ug-picker__list" id={listId} role="listbox">
           {results.length === 0 && <li className="ug-picker__empty">No users found</li>}
           {results.map((user, index) => {
             const member = isMember(user, group.id);
@@ -447,13 +452,13 @@ export default function UserGroupsPanel() {
   );
   const orgById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o])), [orgs]);
 
-  /* Which organisations the page lists: 1 to all. Starts on the active one. */
-  const [scopeIds, setScopeIds] = useState(() => (orgId ? [orgId] : []));
+  /* Which organisations the page lists: start with every reachable org. */
+  const [scopeIds, setScopeIds] = useState([]);
   const [modal, setModal] = useState(null);      // { mode: "create"|"edit"|"delete", group? }
   const [modalOpen, setModalOpen] = useState(false);
   const [groupForm, setGroupForm] = useState(EMPTY_GROUP);
   const [modalOrgIds, setModalOrgIds] = useState([]);
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = useState("active");
   const [sort, setSort] = useState("recent");
   const [query, setQuery] = useState("");
   const [menuId, setMenuId] = useState("");
@@ -466,6 +471,10 @@ export default function UserGroupsPanel() {
   /* Keep the scope on organisations that exist and are reachable, never empty. */
   useEffect(() => {
     if (adminOrgs.length === 0) return;
+    if (scopeIds.length === 0) {
+      setScopeIds(adminOrgs.map((o) => o.id));
+      return;
+    }
     const valid = scopeIds.filter((id) => adminOrgs.some((o) => o.id === id));
     if (valid.length === scopeIds.length && valid.length > 0) return;
     setScopeIds(valid.length > 0
