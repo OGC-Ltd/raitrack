@@ -304,6 +304,8 @@
 }
 
 .sp-stat-box:hover { border-color: var(--sps-line-hi); background: var(--sps-hover); }
+/* A technician's figures: read-only, so no hover, press or pointer. */
+.sp-stat-box--static, .sp-stat-box--static:hover { cursor: default; border-color: inherit; background: inherit; transform: none; }
 .sp-stat-box:focus-visible { outline: 2px solid var(--sps-focus); outline-offset: 2px; }
 .sp-stat-box:active:not(:disabled) { transform: translateY(1px); }
 .sp-stat-box--active,
