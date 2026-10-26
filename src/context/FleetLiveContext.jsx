@@ -15,7 +15,8 @@ import { usePermissions } from "../hooks/usePermissions";
 // A technician's Live Feed is the repair notices on their flagged units; the
 // server sends only those, and this drops any tracking items a browser kept
 // from before (operator, 2026-10-27).
-const repairOnly = (feed) => feed?.filter((f) => f?.source === "repair") ?? feed;
+const REPAIR_SOURCES = new Set(["repair", "repair_flag"]);
+const repairOnly = (feed) => feed?.filter((f) => REPAIR_SOURCES.has(f?.source)) ?? feed;
 
 const FleetLiveContext = createContext(null);
 
