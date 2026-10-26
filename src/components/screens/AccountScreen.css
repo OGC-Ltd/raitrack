@@ -867,6 +867,7 @@
 /* Preferences — a segmented control, because the three options are exclusive
    and all three should be visible. A select would hide two of them. */
 .acct-choice { border: 0; margin: 0; padding: 0; }
+.acct-choice + .acct-choice { margin-top: 20px; }
 .acct-choice__row { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 
 .acct-choice__opt {
