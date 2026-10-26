@@ -19,7 +19,7 @@ import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
-import { pushState, enablePush, disablePush, refreshPush } from '../../lib/pushNotifications';
+import { refreshPush } from '../../lib/pushNotifications';
 import ManualIcon from './ManualIcon';
 import { isUnread, useFeedReads } from '../../lib/feedReads';
 import { claimSidePanel, onSidePanelClaim } from '../../lib/sidePanels';
@@ -87,23 +87,9 @@ const OPERATIONAL_STOP = /^(LOADING|UNLOADING|OFFLOADING|AT_GARAGE)$/;
 export default function AppHeader() {
   const { activeCompanyId, selectedVehicleId, desktopActiveTab } = useAppFields("activeCompanyId", "selectedVehicleId", "desktopActiveTab");
 
-  // Push notifications on this device (lib/pushNotifications): repair ticket
-  // numbers reach the operator and the security heads this way.
-  const [push, setPush] = useState('unsupported');
-  const [pushBusy, setPushBusy] = useState(false);
-  useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
+  // A device that already allowed push notifications is re-linked to whoever
+  // is signed in; the switch itself is under Account › Preferences.
   useEffect(() => { refreshPush(activeCompanyId); }, [activeCompanyId]);
-  const togglePush = async () => {
-    if (pushBusy || !activeCompanyId) return;
-    setPushBusy(true);
-    try {
-      setPush(await (push === 'on' ? disablePush(activeCompanyId) : enablePush(activeCompanyId)));
-    } catch {
-      setPush(await pushState().catch(() => 'off'));
-    } finally {
-      setPushBusy(false);
-    }
-  };
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
   const { can, flaggedOnly } = usePermissions();
@@ -443,13 +429,6 @@ export default function AppHeader() {
                 <button className="app-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" />
                   Users
-                </button>
-              )}
-              {push !== 'unsupported' && (
-                <button className="app-header__user-item" onClick={togglePush} disabled={pushBusy || push === 'denied'}
-                        title={push === 'denied' ? 'Notifications are blocked for this site in the browser settings' : undefined}>
-                  <i className={`ti ${push === 'on' ? 'ti-bell-ringing' : 'ti-bell-off'}`} aria-hidden="true" />
-                  {pushBusy ? 'Working…' : push === 'on' ? 'Push notifications: on' : push === 'denied' ? 'Push notifications: blocked' : 'Turn on push notifications'}
                 </button>
               )}
               {/* The Guide: the first-time tour, again (lib/productTour). */}
