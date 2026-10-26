@@ -168,22 +168,23 @@ export default function FleetsTree({ audit = null, report = null, review = null 
         </div>
       )}
 
-      {canFilter && (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={Boolean(inTransitOnly)}
-          className={`fleets__switch${inTransitOnly ? ' fleets__switch--on' : ''}`}
-          onClick={() => { revealMap?.(); setInTransitOnly(v => !v); }}
-          title="Draw only the units that are moving"
-        >
-          <span className="fleets__switch-text">
-            <span className="fleets__switch-label">In transit only</span>
-            <span className="fleets__switch-sub">{masked ? MASKED_COUNT : inTransitCount} moving now</span>
-          </span>
-          <span className="fleets__track" aria-hidden="true"><span className="fleets__thumb" /></span>
-        </button>
-      )}
+      {/* On the map alone, not map:filter: technicians get In transit only
+          over their flagged units without the machine-type chips (operator,
+          2026-10-27). */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={Boolean(inTransitOnly)}
+        className={`fleets__switch${inTransitOnly ? ' fleets__switch--on' : ''}`}
+        onClick={() => { revealMap?.(); setInTransitOnly(v => !v); }}
+        title="Draw only the units that are moving"
+      >
+        <span className="fleets__switch-text">
+          <span className="fleets__switch-label">In transit only</span>
+          <span className="fleets__switch-sub">{masked ? MASKED_COUNT : inTransitCount} moving now</span>
+        </span>
+        <span className="fleets__track" aria-hidden="true"><span className="fleets__thumb" /></span>
+      </button>
 
       <nav className="fleets__list" aria-label="Fleet lists">
         {/* The map's units panel (search, sort, recency, route toggle) — the

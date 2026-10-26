@@ -244,7 +244,7 @@ export async function setUserStatus(orgId, userId, status) {
   return res.data?.user ?? null;
 }
 
-/** Replace this person's roles in this organisation. */
+/** Set this person's role in every organisation they belong to, platform roles included. */
 export async function setUserRole(orgId, userId, roleSlugs) {
   const res = await apiFetch(`${base(orgId)}/${encodeURIComponent(userId)}/role`, {
     method: "PATCH",
