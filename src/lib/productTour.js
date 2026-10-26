@@ -203,7 +203,7 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
   });
 
   const reports = [
-    can("telemetry:read")    && "<b>Logbook</b>: how one unit was used over a period, with a PDF and a workbook",
+    can("logbook:read")      && "<b>Logbook</b>: how one unit was used over a period, with a PDF and a workbook",
     can("fuel_audit:read")   && "<b>Fuel Audit</b>: fuel alerts found to be a faulty probe, and their repairs",
     can("fuel_filling:read") && "<b>Fuel Report</b>: one unit's fuel over a period, fillings and drains included",
   ].filter(Boolean);
@@ -446,7 +446,7 @@ export const hasNewItems = (steps) => steps.some((x) => !x.key?.endsWith(":intro
 /** The permission each sidebar screen asks for (SidePanel NAV_ITEMS). */
 export const PERMISSION_OF = {
   fleet: "map:read",
-  alerts: ["fuel_theft:read", "analytics:read"],
+  alerts: ["alerts:read", "fuel_theft:read", "analytics:read"],
   drivers: "driver:read",
   analytics: "analytics:read",
   maintenance: "sensor:read",

@@ -45,6 +45,7 @@ import UnitPicker from "../body/UnitPicker";
 import FuelReportOverview from "./FuelReportOverview";
 import FuelPerformanceReview from "./FuelPerformanceReview";
 import { useCompanies } from "../../context/AppContext";
+import { usePermissions } from "../../hooks/usePermissions";
 import { TripsView, ParkingsView } from "./FuelReportSegments";
 import { watchTableLabels } from "../../lib/tableLabels";
 import { pickDefaultUnit } from "../../lib/fuelReportDefault";
@@ -1557,10 +1558,15 @@ const MODE_KEY = "fuelReport.mode";
 export default function FuelReportScreen() {
   const { orgId } = useFleetLiveShared();
   const { activeCompany } = useCompanies();
+  const { can } = usePermissions();
   const dispatch = useDispatch();
-  const [mode, setModeState] = useState(() => {
+  // The fleet review is its own grant (fuel_review:read): the operator gets
+  // Vehicle analytics alone, and no mode strip (operator, 2026-10-26).
+  const canReview = can("fuel_review:read");
+  const [stored, setModeState] = useState(() => {
     try { return localStorage.getItem(MODE_KEY) === "unit" ? "unit" : "review"; } catch { return "review"; }
   });
+  const mode = canReview ? stored : "unit";
   const setMode = (m) => {
     setModeState(m);
     try { localStorage.setItem(MODE_KEY, m); } catch { /* per-viewer nicety only */ }
@@ -1571,12 +1577,14 @@ export default function FuelReportScreen() {
   };
   return (
     <div className="sp4-root frp-shell">
-      <div data-tour="page-modes" className="frp-modes" role="tablist" aria-label="Fuel report view">
-        {[["review", "Performance"], ["unit", "Vehicle analytics"]].map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={mode === k}
-                  className={`frp-mode${mode === k ? " frp-mode--on" : ""}`} onClick={() => setMode(k)}>{label}</button>
-        ))}
-      </div>
+      {canReview && (
+        <div data-tour="page-modes" className="frp-modes" role="tablist" aria-label="Fuel report view">
+          {[["review", "Performance"], ["unit", "Vehicle analytics"]].map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={mode === k}
+                    className={`frp-mode${mode === k ? " frp-mode--on" : ""}`} onClick={() => setMode(k)}>{label}</button>
+          ))}
+        </div>
+      )}
       {mode === "review"
         ? <FuelPerformanceReview orgId={orgId} orgName={activeCompany?.name} onOpenUnit={openUnit} />
         : <UnitFuelReport />}

@@ -45,7 +45,7 @@ describe("buildTourSteps", () => {
   });
 
   it("lists only the screens and reports this account may open", () => {
-    const can = (p) => ["map:read", "weighbridge:read", "telemetry:read"].includes(p);
+    const can = (p) => ["map:read", "weighbridge:read", "telemetry:read", "logbook:read"].includes(p);
     const steps = buildTourSteps({ can, visible: DESKTOP });
     const screens = steps.find((s) => s.popover.title === "The Screens").popover.description;
     expect(screens).toContain("Live Map");
@@ -54,6 +54,14 @@ describe("buildTourSteps", () => {
     const reports = steps.find((s) => s.popover.title === "Fleets and Reports").popover.description;
     expect(reports).toContain("Logbook");
     expect(reports).not.toContain("Fuel Audit");
+  });
+
+  it("includes Alerts for roles with the dedicated alerts permission", () => {
+    const can = (p) => p === "alerts:read";
+    const steps = buildTourSteps({ can, visible: DESKTOP });
+    const screens = steps.find((s) => s.popover.title === "The Screens").popover.description;
+    expect(screens).toContain("Alerts");
+    expect(screens).not.toContain("Analytics");
   });
 
   it("names Halted and Fuel alerts only when the rail draws them", () => {
