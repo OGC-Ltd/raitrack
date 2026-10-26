@@ -49,6 +49,7 @@ import {
 import { firstMessage, isMissingEndpoint } from "../../lib/formErrors";
 import { uniqueRoles as distinctRoles, roleNames } from "../../lib/accountRoles";
 import LoadError from "../shared/LoadError";
+import { pushState, enablePush, disablePush } from "../../lib/pushNotifications";
 import "./AccountScreen.css";
 
 const MIN_LENGTH = 12;
@@ -181,6 +182,23 @@ export default function AccountScreen() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState("");
   const [pwDone, setPwDone] = useState("");
+
+  // Push notification on this device (lib/pushNotifications): repair ticket
+  // numbers reach the operator and the security heads this way.
+  const [push, setPush] = useState("unsupported");
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
+  async function choosePush(on) {
+    if (pushBusy || !activeCompanyId || (push === "on") === on) return;
+    setPushBusy(true);
+    try {
+      setPush(await (on ? enablePush(activeCompanyId) : disablePush(activeCompanyId)));
+    } catch {
+      setPush(await pushState().catch(() => "off"));
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   const [sessionBusy, setSessionBusy] = useState(null);
   const [sessionNote, setSessionNote] = useState("");
@@ -652,6 +670,34 @@ export default function AccountScreen() {
                     <span className="acct-field__hint">
                       FleetTrack uses the light theme everywhere. Match system and Dark
                       are not available.
+                    </span>
+                  </fieldset>
+
+                  <fieldset className="acct-choice">
+                    <legend className="acct-field__label">Push notification</legend>
+                    <div className="acct-choice__row">
+                      {[{ on: true, label: "On" }, { on: false, label: "Off" }].map((opt) => {
+                        const off = push === "unsupported" || (push === "denied" && opt.on);
+                        const chosen = (push === "on") === opt.on;
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            className={"acct-choice__opt" + (chosen ? " acct-choice__opt--on" : "") + (off ? " acct-choice__opt--off" : "")}
+                            disabled={off || pushBusy}
+                            aria-pressed={chosen}
+                            onClick={() => choosePush(opt.on)}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="acct-field__hint">
+                      {push === "unsupported" ? "This browser cannot receive push notifications."
+                        : push === "denied" ? "Blocked for this site in the browser settings. Allow notifications there, then turn it on here."
+                          : pushBusy ? "Working…"
+                            : "On this device only. Repair ticket numbers arrive here as they are issued."}
                     </span>
                   </fieldset>
                 </div>
