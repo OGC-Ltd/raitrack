@@ -314,27 +314,21 @@ export default function SidePanel() {
                   // alert with something in it. Everywhere else the dot
                   // carries the status and the figure stays ink.
                   const alert = (key === 'warning' || key === 'critical') && s.value > 0;
-                  // A technician reads these and cannot filter by them
-                  // (operator, 2026-10-27): drawn as figures, not buttons.
-                  const Stat = flaggedOnly ? 'div' : 'button';
                   return (
-                    <Stat
+                    <button
                       key={s.key}
-                      {...(flaggedOnly ? {} : { type: 'button' })}
+                      type="button"
                       className={[
                         'sp-stat-box',
-                        flaggedOnly ? 'sp-stat-box--static' : '',
                         `sp-stat-box--${s.key}`,
                         isActive ? 'sp-stat-box--active' : '',
                         alert ? 'sp-stat-box--alert' : '',
                         s.value === 0 ? 'sp-stat-box--zero' : '',
                       ].join(' ')}
                       style={{ '--stat-color': s.color }}
-                      {...(flaggedOnly ? {} : {
-                        'aria-pressed': isActive,
-                        title: `Show ${s.label.toLowerCase()} on the map`,
-                        onClick: () => applyFilter(next),
-                      })}
+                      aria-pressed={isActive}
+                      title={`Show ${s.label.toLowerCase()} on the map`}
+                      onClick={() => applyFilter(next)}
                     >
                       <span className="sp-stat-num">{s.value}</span>
                       <span className="sp-stat-lbl">
@@ -350,7 +344,7 @@ export default function SidePanel() {
                           {onShare > 0 && <b style={{ flexGrow: counts.offline }} />}
                         </span>
                       )}
-                    </Stat>
+                    </button>
                   );
                 })}
               </div>

@@ -69,9 +69,12 @@ const FEED_PERSIST_DEBOUNCE_MS = 2_000
  */
 const MAJORITY_SHARE = 0.6
 
-/** Newest first, nothing older than the horizon, and no type hogging the list. */
-function pruneFeed(items) {
-  const floor = Date.now() - FEED_CACHE_MAX_AGE_MS
+/** Newest first, nothing older than the horizon, and no type hogging the list.
+ *  `horizonMs` Infinity keeps every age: a technician's feed is the repair
+ *  notices on their jobs, which stay until read however old (operator,
+ *  2026-10-27). */
+function pruneFeed(items, horizonMs = FEED_CACHE_MAX_AGE_MS) {
+  const floor = Date.now() - horizonMs
   const sorted = items
     .filter(i => i && i.id && (Date.parse(i.ts) || 0) >= floor)
     .sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
@@ -146,12 +149,12 @@ function withRevision(old, item, now) {
  * `ts` is always an ISO-8601 UTC string (`Date.toISOString()` server-side), so
  * a lexical compare is a chronological one — no Date parsing per comparison.
  */
-export function mergeFeedItem(prev, item, now = Date.now()) {
+export function mergeFeedItem(prev, item, now = Date.now(), horizonMs = FEED_CACHE_MAX_AGE_MS) {
   const byId = new Map(prev.map(i => [i.id, i]))
   byId.set(item.id, withRevision(byId.get(item.id), item, now))
   // pruneFeed owns ordering, the age horizon and the per-type share, so the
   // live path and the rehydrated path cannot drift apart.
-  return pruneFeed([...byId.values()])
+  return pruneFeed([...byId.values()], horizonMs)
 }
 
 // How often to re-read the snapshot purely to refresh ONLINE/OFFLINE.
@@ -222,11 +225,11 @@ export const vehiclesQuery = (companyId, orgId) => ({
   structuralSharing: false,
 })
 
-const feedQuery = (companyId) => ({
+const feedQuery = (companyId, horizonMs) => ({
   queryKey: fleetKeys.feed(companyId),
   queryFn: () => NONE,          // never runs: enabled is false
   enabled: false,
-  initialData: () => pruneFeed(readCache(feedCacheKey(companyId)) || []),
+  initialData: () => pruneFeed(readCache(feedCacheKey(companyId)) || [], horizonMs),
   staleTime: Infinity,
   gcTime: Infinity,
   structuralSharing: false,
@@ -246,14 +249,19 @@ function applyFrames(list, updates) {
   return changed ? next : list
 }
 
-export function useFleetLive(companyId) {
+/**
+ * @param {{ keepFeed?: boolean }} [opts] keepFeed: hold feed items of every
+ *   age rather than the last 12 hours (technicians' repair notices).
+ */
+export function useFleetLive(companyId, { keepFeed = false } = {}) {
+  const horizonMs = keepFeed ? Infinity : FEED_CACHE_MAX_AGE_MS
   const queryClient = useQueryClient()
   const [retryToken, setRetryToken] = useState(0)
 
   const org = useQuery(orgIdQuery(companyId))
   const orgId = org.data ?? null
   const fleet = useQuery(vehiclesQuery(companyId, orgId))
-  const { data: feed = NONE } = useQuery(feedQuery(companyId))
+  const { data: feed = NONE } = useQuery(feedQuery(companyId, horizonMs))
 
   // The snapshot has been READ (not only seeded from storage): the stream may
   // open. Stays true across later refreshes, so they do not reconnect it.
@@ -318,7 +326,7 @@ export function useFleetLive(companyId) {
         if (item.orgId && item.orgId !== orgId) return
         // The server replays its newest 40 on every (re)connect; mergeFeedItem
         // keys by id, so a replayed item is an update, never a copy.
-        const next = queryClient.setQueryData(feedKey, (prev) => mergeFeedItem(prev ?? NONE, item))
+        const next = queryClient.setQueryData(feedKey, (prev) => mergeFeedItem(prev ?? NONE, item, Date.now(), horizonMs))
         scheduleFeedPersist(next)
       } catch { /* ignore malformed frame */ }
     })

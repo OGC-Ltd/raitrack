@@ -26,6 +26,7 @@ import { feedClock } from '../../lib/feedTime';
 import { driverIndex, driverFor } from '../../lib/feedDriver';
 import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
 import { useVehicleFeed } from '../../hooks/useVehicleFeed';
+import { usePermissions } from '../../hooks/usePermissions';
 import { isUnread } from '../../lib/feedReads';
 import { nearBottom } from '../shared/FeedFooter';
 import './LiveFeed.css';
@@ -67,7 +68,9 @@ const NO_READS = { reads: { since: Date.now(), ids: new Map() }, markRead: () =>
 
 export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
   const { feed: liveFeed = [], vehicles = [], orgId } = useFleetLiveShared();
-  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed);
+  // A technician's feed is their repair notices, kept past midnight.
+  const { flaggedOnly } = usePermissions();
+  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed, null, { allDays: flaggedOnly });
   const { focusVehicle } = useMapLayers();
   const drivers = useMemo(() => driverIndex(vehicles), [vehicles]);
   const alerts  = feed.filter(f => ALERT_TYPES.has(f.type)).length;
@@ -180,8 +183,10 @@ export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
             : (
               <div className="live-feed__empty">
                 <span className="live-feed__empty-icon" aria-hidden="true"><i className="ti ti-bell-check" /></span>
-                <div className="live-feed__empty-title">Nothing Yet Today</div>
-                <p>Arrivals, departures, fuel and alerts show here as they happen.</p>
+                <div className="live-feed__empty-title">{flaggedOnly ? 'No Repair Notifications' : 'Nothing Yet Today'}</div>
+                <p>{flaggedOnly
+                  ? 'Units reported for repair, and every step of their jobs, show here.'
+                  : 'Arrivals, departures, fuel and alerts show here as they happen.'}</p>
               </div>
             ))}
 
@@ -195,7 +200,7 @@ export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
             const e = entry.get(item.id);
             const heading = i === 0 && isNew(item)
               ? (newCount > 0 ? `New · ${newCount}` : 'New')
-              : i === firstOld && firstOld > 0 ? 'Earlier today' : null;
+              : i === firstOld && firstOld > 0 ? (flaggedOnly ? 'Earlier' : 'Earlier today') : null;
             return (
               <div key={item.id ?? i} role="article" aria-label={`${item.plate ?? 'Fleet'}, ${feedClock(item)}`}>
                 {heading && <div className={`live-feed__group${i === 0 && isNew(item) ? ' live-feed__group--new' : ''}`}>{heading}</div>}
@@ -238,7 +243,7 @@ export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
               ? (
                 <div className="live-feed__end">
                   <i className="ti ti-circle-check" aria-hidden="true" />
-                  That is everything logged today · {feed.length.toLocaleString()} update{feed.length === 1 ? '' : 's'}
+                  That is everything logged{flaggedOnly ? '' : ' today'} · {feed.length.toLocaleString()} update{feed.length === 1 ? '' : 's'}
                 </div>
               )
               : <button type="button" className="live-feed__more" onClick={loadMore}>Load older</button>)}

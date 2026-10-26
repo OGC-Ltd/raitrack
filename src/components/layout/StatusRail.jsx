@@ -89,28 +89,26 @@ export default function StatusRail({ vehicles = [], loading = false, activeFilte
           {stats.map((s) => {
             const isActive = activeFilter === s.filterKey;
             const n = counts[s.key];
-            // Read-only for a technician (operator, 2026-10-27).
-            const Chip = flaggedOnly ? 'div' : 'button';
             return (
-              <Chip
+              <button
                 key={s.key}
-                {...(flaggedOnly ? {} : { type: 'button' })}
-                className={`status-rail__chip${isActive ? ' status-rail__chip--active' : ''}${flaggedOnly ? ' status-rail__chip--static' : ''}`}
+                type="button"
+                className={`status-rail__chip${isActive ? ' status-rail__chip--active' : ''}`}
                 style={{ '--chip-color': s.color }}
-                aria-pressed={flaggedOnly ? undefined : isActive}
+                aria-pressed={isActive}
                 // Zero reads as quiet; an alert bucket with anything in it
                 // reads louder than the rest even while another is selected.
                 data-zero={!waiting && n === 0 ? '' : undefined}
                 data-alert={!waiting && n > 0 && (s.key === 'critical' || s.key === 'warning') ? '' : undefined}
-                title={flaggedOnly ? undefined : `Show ${s.label.toLowerCase()} on the map`}
+                title={`Show ${s.label.toLowerCase()} on the map`}
                 // Tapping the lit chip clears back to the whole fleet, which is
                 // what ALL does — so it can never leave the map filtered with
                 // nothing on screen showing as filtered.
-                onClick={flaggedOnly ? undefined : () => onFilter?.(isActive ? 'all' : s.filterKey)}
+                onClick={() => onFilter?.(isActive ? 'all' : s.filterKey)}
               >
                 <span className="status-rail__count">{waiting ? '–' : n}</span>
                 <span className="status-rail__label">{s.short}</span>
-              </Chip>
+              </button>
             );
           })}
         </div>
