@@ -46,7 +46,6 @@ import { downloadProbeCsv, downloadProbePdf } from "../../utils/probeReport";
 import TableToolbar from "./TableToolbar";
 import FlagRepairDialog from "./FlagRepairDialog";
 import { categoriesForProbeRow } from "../../api/repairWorkflow";
-import SpotFixDialog from "./SpotFixDialog";
 import { usePermissions } from "../../hooks/usePermissions";
 import FilterBar from "./FilterBar";
 
@@ -433,14 +432,13 @@ export default function ProbeHealthPanel({
  *
  *   Flag for repair    the Flag dialog with this unit and "Fuel probe" chosen;
  *                      ControlTech claims it from there.
- *   Fixed on the spot  a technician who fixed it there and then, with nothing
- *                      from stores: no triage, no assessment, still ticketed
- *                      and still verified by the Control Room.
+ *
+ * "Fixed on the spot" was taken off this sidebar on 2026-10-27 (operator):
+ * every repair now starts as a flag.
  */
 export function ProbeReportActions({ row, orgId, onFiled }) {
   const { can } = usePermissions();
   const [flagOpen, setFlagOpen] = useState(false);
-  const [spotOpen, setSpotOpen] = useState(false);
   const [banner, setBanner] = useState(null);
 
   // The receipt clears itself.
@@ -451,18 +449,11 @@ export function ProbeReportActions({ row, orgId, onFiled }) {
   }, [banner]);
 
   if (!row) return null;
-  const canFlag = can("repair:flag");
-  const canSpot = can("repair:resolve");
-  if (!canFlag && !canSpot) return null;
+  if (!can("repair:flag")) return null;
   return (
     <>
       <div className="sp4-probe-report">
-        {canFlag && (
-          <button type="button" className="sp4-act-btn sp4-act-btn--warn" onClick={() => setFlagOpen(true)}>Flag for repair</button>
-        )}
-        {canSpot && (
-          <button type="button" className="sp4-act-btn" onClick={() => setSpotOpen(true)}>Fixed on the spot</button>
-        )}
+        <button type="button" className="sp4-act-btn sp4-act-btn--warn" onClick={() => setFlagOpen(true)}>Flag for repair</button>
       </div>
       {banner && (
         <div className="sp4-toast sp4-toast--ok" role="status" aria-live="polite">
@@ -482,15 +473,6 @@ export function ProbeReportActions({ row, orgId, onFiled }) {
           setBanner(`${row.plate} flagged and sent to ${route === "workshop" ? "the workshop" : route === "both" ? "ControlTech and the workshop" : "ControlTech"}.`);
           onFiled?.();
         }}
-      />
-      <SpotFixDialog
-        key={`spot-${row.vehicleId}`}
-        orgId={orgId}
-        open={spotOpen}
-        unit={row}
-        onClose={() => setSpotOpen(false)}
-        onDone={(jobs) => { setBanner(`Recorded${jobs[0]?.ticketNo ? ` as ${jobs[0].ticketNo}` : ""}. The Control Room verifies it.`); onFiled?.(); }}
-        onFlagInstead={() => setFlagOpen(true)}
       />
     </>
   );

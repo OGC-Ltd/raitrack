@@ -15,6 +15,11 @@
  *
  * The server decides every rule (repairs.workflow); this only draws the step
  * a person can take and says the server's refusal in a toast when it comes.
+ *
+ * A step is chosen, then saved. Its button only stages the choice; Back puts
+ * the form back as it was, and Save at the foot of the panel sends it. A wrong
+ * click moved a job for good before (operator, 2026-10-27). The ticket's own
+ * records (parts, work log, warranty, technician, void) still save at once.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -123,6 +128,15 @@ function useAct(onToast, onDone) {
   }, [busy, onToast, onDone]);
   return [busy, run];
 }
+
+/** What a staged step does, in the words the Save bar uses. */
+const PENDING_LABEL = {
+  fwd: "Forward the job", claim: "Claim this job", remote: "Fix remotely",
+  physical: "Send for a physical inspection", assess: "Record the assessment", book: "Book a workshop day",
+  cancel: "Cancel the booking", arrive: "Check the unit in and issue the ticket",
+  damage: "Record the damage and start the repair", complete: "Complete the repair",
+  reject: "Reject the repair", accept: "Verify: fixed and available",
+};
 
 // ── The next-step actions, one per stage ────────────────────────────────────
 
@@ -235,7 +249,7 @@ function BookStep({ orgId, job, act, busy }) {
       </div>
       <div className="wf-actions">
         <button type="button" className="sp4-submit-btn" disabled={!pick || !!busy}
-                onClick={() => act("book", () => bookJob(orgId, job.id, wid, pick), `Booked for ${dayLabel(pick)}.`).then((ok) => { if (!ok) readAvail(); })}>
+                onClick={() => act("book", () => bookJob(orgId, job.id, wid, pick), `Booked for ${dayLabel(pick)}.`, `Book ${dayLabel(pick)}`)}>
           {busy === "book" ? "Booking…" : pick ? `Book ${dayLabel(pick)}` : "Pick a day"}
         </button>
       </div>
@@ -650,6 +664,18 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
   const [busy, act] = useAct(onToast, onChanged);
   const canWork = useMemo(() => mayWork(job, can, userId), [job, can, userId]);
 
+  // The step chosen but not yet saved. Step buttons call `choose`, not `act`.
+  const [pending, setPending] = useState(null);
+  const choose = useCallback((key, fn, ok, label) => {
+    setPending({ key, fn, ok, label: label ?? PENDING_LABEL[key] ?? "This step" });
+    return Promise.resolve(true);
+  }, []);
+  // A job that moved, or another job, has nothing staged.
+  useEffect(() => { setPending(null); }, [job.id, job.stage]);
+  const save = () => {
+    if (pending) act(pending.key, pending.fn, pending.ok).then((ok) => { if (ok) setPending(null); });
+  };
+
   const s = job.stage;
   const next = NEXT_STEP[s] ?? { who: null, what: STAGE_LABEL[s] ?? s };
   const lastAssessment = job.assessments?.at(-1) ?? null;
@@ -663,7 +689,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
     action = (
       <div className="wf-actions">
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => act("fwd", () => forwardJob(orgId, job.id), "Forwarded.")}>
+                onClick={() => choose("fwd", () => forwardJob(orgId, job.id), "Forwarded.")}>
           {busy === "fwd" ? "Forwarding…" : routeOf(job.faultCategory ?? "fuel_probe") === "controltech" ? "Forward to ControlTech" : "Send to the workshop"}
         </button>
       </div>
@@ -672,54 +698,54 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
     action = (
       <div className="wf-actions">
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => act("claim", () => claimJob(orgId, job.id), "Claimed. It is yours.")}>
+                onClick={() => choose("claim", () => claimJob(orgId, job.id), "Claimed. It is yours.")}>
           {busy === "claim" ? "Claiming…" : "Claim this job"}
         </button>
       </div>
     );
   } else if ((s === "forwarded" || s === "pending") && canWork) {
-    action = <PathStep orgId={orgId} job={job} act={act} busy={busy} from={s} />;
+    action = <PathStep orgId={orgId} job={job} act={choose} busy={busy} from={s} />;
   } else if (s === "remote_fix" && canWork) {
     action = (
       <>
-        <CompleteStep orgId={orgId} job={job} act={act} busy={busy} />
+        <CompleteStep orgId={orgId} job={job} act={choose} busy={busy} />
         <details className="wf-alt"><summary>A remote fix is not possible</summary>
-          <PathStep orgId={orgId} job={job} act={act} busy={busy} from="remote_fix" />
+          <PathStep orgId={orgId} job={job} act={choose} busy={busy} from="remote_fix" />
         </details>
       </>
     );
   } else if (needsBooking && can("repair:book")) {
     action = (
       <>
-        <BookStep orgId={orgId} job={job} act={act} busy={busy} />
+        <BookStep orgId={orgId} job={job} act={choose} busy={busy} />
         {can("repair:assess") && (
           <details className="wf-alt"><summary>It can no longer be driven: reassess</summary>
-            <AssessStep orgId={orgId} job={job} act={act} busy={busy} />
+            <AssessStep orgId={orgId} job={job} act={choose} busy={busy} />
           </details>
         )}
       </>
     );
   } else if (s === "awaiting_assessment" && !needsBooking && can("repair:assess")) {
-    action = <AssessStep orgId={orgId} job={job} act={act} busy={busy} />;
+    action = <AssessStep orgId={orgId} job={job} act={choose} busy={busy} />;
   } else if ((s === "booked" || s === "towing") && can("repair:book")) {
     action = (
       <div className="wf-actions">
         {s === "booked" && (
           <ReasonButton label="Cancel booking" busyLabel="Cancelling…" placeholder="Unit needed on the haul today"
-                        busy={busy === "cancel"} onSend={(r) => act("cancel", () => cancelBooking(orgId, job.id, r), "Booking cancelled.")} />
+                        busy={busy === "cancel"} onSend={(r) => choose("cancel", () => cancelBooking(orgId, job.id, r), "Booking cancelled.")} />
         )}
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => act("arrive", () => arriveJob(orgId, job.id), (t) => `Checked in. Ticket ${t?.ticketNo ?? ""}.`)}>
+                onClick={() => choose("arrive", () => arriveJob(orgId, job.id), (t) => `Checked in. Ticket ${t?.ticketNo ?? ""}.`)}>
           {busy === "arrive" ? "Checking in…" : "Unit has arrived: issue the ticket"}
         </button>
       </div>
     );
   } else if ((s === "in_workshop" || s === "field_inspection") && canWork) {
-    action = <DamageStep orgId={orgId} job={job} act={act} busy={busy} />;
+    action = <DamageStep orgId={orgId} job={job} act={choose} busy={busy} />;
   } else if (s === "fixing" && canWork) {
-    action = <CompleteStep orgId={orgId} job={job} act={act} busy={busy} />;
+    action = <CompleteStep orgId={orgId} job={job} act={choose} busy={busy} />;
   } else if (s === "completed" && can("repair:verify")) {
-    action = <VerifyStep orgId={orgId} job={job} act={act} busy={busy} isCompleter={job.completedById === userId} />;
+    action = <VerifyStep orgId={orgId} job={job} act={choose} busy={busy} isCompleter={job.completedById === userId} />;
   }
 
   const closed = !!job.resolvedAt;
@@ -758,7 +784,15 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
         </div>
         <p className="wf-next__what">{closed ? (s === "fixed" ? "Verified fixed and available" : next.what) : nextWhat}</p>
         {s === "void" && job.voidReason && <p className="wf-muted">{job.voidReason}</p>}
-        {action}
+        {action && <div className="wf-next__step" hidden={!!pending}>{action}</div>}
+        {pending && (
+          <div className="wf-pending" role="status">
+            <span className="wf-pending__text">Chosen, not saved: <b>{pending.label}</b></span>
+            <button type="button" className="sp4-ghost-btn" disabled={!!busy} onClick={() => setPending(null)}>
+              <i className="ti ti-arrow-back-up" aria-hidden="true" /> Back
+            </button>
+          </div>
+        )}
         {!action && !closed && (
           <p className="wf-muted">
             {s === "forwarded" && job.assignedToId ? `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`
@@ -815,6 +849,15 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
 
       <WorkLog orgId={orgId} job={job} act={act} busy={busy} canWork={canWork} />
       <Trail job={job} />
+
+      {action && !closed && (
+        <div className="wf-save">
+          <span className="wf-save__note">{pending ? `Unsaved: ${pending.label}` : "Choose the next step above, then save it"}</span>
+          <button type="button" className="sp4-submit-btn" disabled={!pending || !!busy} onClick={save}>
+            {pending && busy === pending.key ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
 
       <footer className="wf-job__foot">
         <button type="button" className="sp4-ghost-btn" onClick={() => printTicket(job)}>
