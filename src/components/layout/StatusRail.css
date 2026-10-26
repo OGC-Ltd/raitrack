@@ -214,6 +214,3 @@
   .status-rail__chip { transition: none; }
   .status-rail__scroller { scroll-behavior: auto; }
 }
-
-/* A technician's figures: read-only, so no hover, press or pointer. */
-.status-rail__chip--static, .status-rail__chip--static:hover, .status-rail__chip--static:active { cursor: default; background: transparent; }
