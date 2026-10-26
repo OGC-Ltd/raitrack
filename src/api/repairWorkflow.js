@@ -178,12 +178,6 @@ export const voidJob        = (orgId, id, reason) => post(item(orgId, id, "void"
 export const requestPart    = (orgId, id, p) => post(item(orgId, id, "parts"), clean({
   name: p.name, quantity: Number(p.quantity) || 1, source: p.source, itemCode: p.itemCode, store: p.store, note: p.note,
 }));
-/** Fixed on the spot, nothing from stores: one completed, ticketed job per unit, waiting for verification. */
-export const spotFix        = (orgId, f) => post(`${base(orgId)}/spot-fixes`, clean({
-  vehicleIds: f.vehicleIds, faultCategory: f.faultCategory, suspectedFault: f.suspectedFault, fixNote: f.fixNote,
-  testNote: f.testNote, labourMinutes: f.labourMinutes === "" ? undefined : Number(f.labourMinutes) || undefined,
-  storePartTaken: f.storePartTaken,
-}));
 export const sourcePart     = (orgId, id, partId, s) => post(`${item(orgId, id, "parts")}/${partId}/source`, clean(s));
 export const issuePart      = (orgId, id, partId, s) => post(`${item(orgId, id, "parts")}/${partId}/issue`, clean(s));
 export const fitPart        = (orgId, id, partId) => post(`${item(orgId, id, "parts")}/${partId}`, { status: "fitted" });
