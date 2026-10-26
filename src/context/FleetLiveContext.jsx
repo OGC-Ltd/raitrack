@@ -10,6 +10,12 @@ import { useFleetLive } from "../hooks/useFleetLive";
 import { useAppSelector } from "./AppContext";
 import { useDismissedIncidents, withoutDismissed } from "../lib/fuelDismissals";
 import { deriveStatus } from "../lib/vehicleMap";
+import { usePermissions } from "../hooks/usePermissions";
+
+// A technician's Live Feed is the repair notices on their flagged units; the
+// server sends only those, and this drops any tracking items a browser kept
+// from before (operator, 2026-10-27).
+const repairOnly = (feed) => feed?.filter((f) => f?.source === "repair") ?? feed;
 
 const FleetLiveContext = createContext(null);
 
@@ -24,9 +30,11 @@ export function FleetLiveProvider({ children }) {
     () => withoutDismissed(live.vehicles, dismissed, deriveStatus),
     [live.vehicles, dismissed],
   );
+  const { flaggedOnly } = usePermissions();
+  const feed = useMemo(() => (flaggedOnly ? repairOnly(live.feed) : live.feed), [flaggedOnly, live.feed]);
   const fleet = useMemo(
-    () => (vehicles === live.vehicles ? live : { ...live, vehicles }),
-    [live, vehicles],
+    () => (vehicles === live.vehicles && feed === live.feed ? live : { ...live, vehicles, feed }),
+    [live, vehicles, feed],
   );
   return <FleetLiveContext.Provider value={fleet}>{children}</FleetLiveContext.Provider>;
 }
