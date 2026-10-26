@@ -24,12 +24,15 @@
  */
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
-import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
+import { STATUS_STATS, FLAGGED_ONLY_HIDDEN, countStatuses } from '../../lib/fleetStatusStats';
+import { usePermissions } from '../../hooks/usePermissions';
 import './StatusRail.css';
 
 export default function StatusRail({ vehicles = [], loading = false, activeFilter = 'all', onFilter, afterToggle = false }) {
   const scrollerRef = useRef(null);
 
+  const { flaggedOnly } = usePermissions();
+  const stats   = flaggedOnly ? STATUS_STATS.filter((s) => !FLAGGED_ONLY_HIDDEN.has(s.key)) : STATUS_STATS;
   const counts  = countStatuses(vehicles);
   const waiting = loading && vehicles.length === 0;
 
@@ -83,7 +86,7 @@ export default function StatusRail({ vehicles = [], loading = false, activeFilte
     <div className={`status-rail${afterToggle ? '' : ' status-rail--alone'}`} role="group" aria-label="Filter the map by status" aria-busy={waiting || undefined}>
       <div className="status-rail__bar">
         <div className="status-rail__scroller" ref={scrollerRef} data-more={more || undefined} onScroll={measure}>
-          {STATUS_STATS.map((s) => {
+          {stats.map((s) => {
             const isActive = activeFilter === s.filterKey;
             const n = counts[s.key];
             return (

@@ -8,7 +8,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import COMPANIES from '../../data/companyData';
 import { useMapLayers } from '../../context/MapLayersContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { STATUS_STATS, countStatuses } from '../../lib/fleetStatusStats';
+import { STATUS_STATS, FLAGGED_ONLY_HIDDEN, countStatuses } from '../../lib/fleetStatusStats';
 import FleetsTree from './FleetsTree';
 import FleetAIInsightCard from '../cards/FleetAIInsightCard';
 import ErrorBoundary from '../shared/ErrorBoundary';
@@ -196,7 +196,7 @@ export default function SidePanel() {
   const desktopActiveTab = useAppSelector((a) => a.desktopActiveTab);
   const { setDesktopActiveTab } = useAppActions();
   const { activeCompany } = useCompanies();
-  const { can } = usePermissions();
+  const { can, flaggedOnly } = usePermissions();
   const mainNavItems = NAV_ITEMS.filter(item => !item.section && can(item.permission));
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
   // Open alerts across every organisation held (the Alerts page's default week).
@@ -297,7 +297,8 @@ export default function SidePanel() {
             // matchesFilter): the whole fleet; the two halves it splits into,
             // Online + Offline = All; then Idling (part of Online) and the two
             // alerts, which overlap and sum to nothing.
-            const order = ['all', 'online', 'offline', 'idling', 'warning', 'critical'];
+            const order = ['all', 'online', 'offline', 'idling', 'warning', 'critical']
+              .filter(key => !(flaggedOnly && FLAGGED_ONLY_HIDDEN.has(key)));
             const total = counts.all || 0;
             const onShare = !waiting && total ? counts.online / total : 0;
             return (
@@ -422,7 +423,9 @@ export default function SidePanel() {
           Outside the scrolling body like Fuel Audit below, so it stays put
           however long the trees get; the two never share the foot, since this
           needs map:read and that one is drawn only without it. */}
-      {!collapsed && can('map:read') && (
+      {/* Not for technicians: a summary of the whole fleet says nothing about
+          the flagged units they are limited to (operator, 2026-10-27). */}
+      {!collapsed && can('map:read') && !flaggedOnly && (
         <div className="sp-foot">
           <ErrorBoundary label="Fleet AI insight">
             <FleetAIInsightCard companyId={activeCompany?.id} unit={aiUnit} className="sp-ai-card" />

@@ -31,7 +31,9 @@ export function accessIn(orgs, companyId) {
   // guessed the URL — a mismatch between what is drawn and what is allowed is
   // its own kind of bug.
   const can = (slug) => held.has("platform:admin") || anyOf(slug).some((s) => held.has(s));
-  return { org, can };
+  // A restriction, not a grant, so the wildcard must not switch it on.
+  const flaggedOnly = held.has("vehicle:flagged_only") && !held.has("platform:admin");
+  return { org, can, flaggedOnly };
 }
 
 /**
@@ -74,7 +76,7 @@ export function usePermissions() {
   const { orgs, isPlatform } = useAuth();
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
 
-  const { org, can } = useMemo(
+  const { org, can, flaggedOnly } = useMemo(
     () => accessIn(orgs, activeCompanyId),
     [orgs, activeCompanyId],
   );
@@ -83,6 +85,8 @@ export function usePermissions() {
     orgId: org?.id ?? null,
     isPlatform,
     can,
+    /** Restricted to units with an open repair job (technicians). */
+    flaggedOnly,
     /** True only if EVERY slug is held — for controls that need a pair. */
     canAll: (...slugs) => slugs.every(can),
     /** True if ANY slug is held — for a screen reachable several ways. */
@@ -106,7 +110,7 @@ export function usePermissions() {
     vehicleIds: org?.vehicleIds ?? null,
     /** Convenience for filtering a list the server already scoped. */
     isVehicleVisible: (id) => (org?.vehicleIds ?? null) === null || org.vehicleIds.includes(id),
-  }), [org, can, isPlatform, orgs]);
+  }), [org, can, flaggedOnly, isPlatform, orgs]);
 }
 
 /**
