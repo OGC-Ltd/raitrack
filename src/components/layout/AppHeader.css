@@ -429,6 +429,23 @@
 }
 @keyframes app-bell-pop { from { transform: scale(0.6); opacity: 0; } }
 
+/* The figure badge (technicians): the unread count in a 16px pill. */
+.app-header__bell--figure { --bell-badge-size: 16px; --bell-badge-dx: 10px; --bell-badge-dy: -10px; }
+.app-header__bell-count--figure {
+  display: grid;
+  place-items: center;
+  min-width: var(--bell-badge-size);
+  width: auto;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-header__bell { transition: none; }
   .app-header__bell-icon--swing, .app-header__bell-count { animation: none; }
