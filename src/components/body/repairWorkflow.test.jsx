@@ -35,6 +35,16 @@ describe('the job panel shows the one next step, to whoever may take it', () => 
     expect(html).toContain('Claim this job');
   });
 
+  it('holds a step until Save, which starts disabled', () => {
+    const html = render(job({ queue: 'controltech', faultCategory: 'tracker' }), grants('repair:claim', 'repair:resolve'));
+    expect(html).toContain('Choose the next step above, then save it');
+    expect(html).toMatch(/<button type="button" class="sp4-submit-btn" disabled="">Save<\/button>/);
+  });
+
+  it('shows no Save bar to someone with no step to take', () => {
+    expect(render(job({ stage: 'awaiting_assessment' }), grants())).not.toContain('then save it');
+  });
+
   it('gives the claimer the remote or physical decision', () => {
     const html = render(job({ assignedToId: 'u1', assignmentStatus: 'accepted' }), grants('repair:claim', 'repair:resolve'));
     expect(html).toContain('Fix remotely');
