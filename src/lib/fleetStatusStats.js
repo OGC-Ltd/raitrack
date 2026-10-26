@@ -46,6 +46,13 @@ export const STATUS_STATS = [
 ];
 
 /**
+ * The buckets a technician does not get (operator, 2026-10-27). They see only
+ * units with an open repair job, and idling and the fuel/speed alert counts
+ * are the control room's business, not the workshop's.
+ */
+export const FLAGGED_ONLY_HIDDEN = new Set(['idling', 'warning', 'critical']);
+
+/**
  * Count every bucket in one pass over the fleet.
  *
  * Six separate `.filter().length` calls walked a 597-unit array six times on
