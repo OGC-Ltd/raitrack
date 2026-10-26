@@ -40,7 +40,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
 import {
   listUsersAcrossOrgs, listAssignableRoles, createOrgUser, updateOrgUser, resendInvite, setUserStatus,
-  listUserMemberships, setUserMembership, removeUserMembership,
+  listUserMemberships, setUserMembership, setUserRole, removeUserMembership,
   deleteOrgUserPermanently,
 } from "../../api/users";
 import { firstMessage, isMissingEndpoint } from "../../lib/formErrors";
@@ -234,7 +234,13 @@ function Drawer({ open, onClose, id, title, hint, children }) {
 }
 
 /**
- * The organisation and role picker, shared by both panels.
+ * The organisation picker, shared by both panels.
+ *
+ * Organisations only, since 2026-10-27. A person holds ONE role across all of
+ * their organisations (operator: "roles are organisation independent"), chosen
+ * once in RolePicker above this list; it used to be chosen here per
+ * organisation, which let one person be an Operator in one place and a
+ * Manager in the next, and hid a platform role altogether.
  *
  * ## What it is sized for
  *
@@ -251,12 +257,9 @@ function Drawer({ open, onClose, id, title, hint, children }) {
  * control. The section is then as long as their access is, not as long as the
  * tenant is — four sites or forty.
  *
- * Roles open for ONE organisation at a time, for the same reason: they are the
- * detail of a grant, not a property of the list.
  */
 function OrgPicker({
-  orgs, draft, base, rolesByOrg, canAssignRoles, disabled,
-  currentOrgId, roleOrg, onRoleOrg, onToggleOrg, onToggleRole, onSelectAll,
+  orgs, draft, base, disabled, currentOrgId, onToggleOrg, onSelectAll,
 }) {
   const [adding, setAdding] = useState(false);
   const [find, setFind] = useState("");
@@ -270,13 +273,6 @@ function OrgPicker({
   const allSelected = selectedCount === orgs.length;
   const needle = find.trim().toLowerCase();
   const shown = needle ? rest.filter((o) => o.name.toLowerCase().includes(needle)) : rest;
-
-  /* Their name, not their slug. The roles for an organisation are fetched when
-     it is first expanded, so a chip drawn before that arrives has only the
-     slug to show — which is a real name in this product ("platform-admin"),
-     just not the one the rest of the page uses. */
-  const nameOf = (orgId, slug) =>
-    (rolesByOrg[orgId] ?? []).find((r) => r.slug === slug)?.name ?? slug;
 
   if (orgs.length === 0) {
     return <p className="ua-access__empty">No organisations are available to you.</p>;
@@ -302,10 +298,7 @@ function OrgPicker({
         <ul className="ua-orgs">
           {held.map((org) => {
             const on = org.id in draft;
-            const chosen = draft[org.id] ?? [];
-            const available = rolesByOrg[org.id];
             const wasIn = base != null && org.id in base;
-            const open = roleOrg === org.id;
             return (
               <li className={"ua-org" + (on ? " ua-org--on" : "")} key={org.id}>
                 <button type="button" className="ua-org__toggle"
@@ -321,65 +314,6 @@ function OrgPicker({
                   {!wasIn && on && base != null && <span className="ua-org__here">adding</span>}
                 </button>
 
-                {/* The summary IS the control. A row of chips beside a button
-                    labelled "Roles" is the same fact twice, and the chips are
-                    the half that says something. */}
-                {on && canAssignRoles && (
-                  <>
-                    <button type="button"
-                            className={"ua-org__roles" + (open ? " ua-org__roles--open" : "")}
-                            aria-expanded={open}
-                            onClick={() => onRoleOrg(open ? null : org.id)}
-                            disabled={disabled}>
-                      <span className="ua-org__held">
-                        {chosen.length === 0
-                          ? <span className="ua-roles__empty">No role here</span>
-                          : chosen.map((slug) => (
-                              <span className="ua-rolechip" key={slug}>{nameOf(org.id, slug)}</span>
-                            ))}
-                      </span>
-                      <span className="ua-org__caret" aria-hidden="true">
-                        <svg width="9" height="9" viewBox="0 0 12 12" fill="none"
-                             stroke="currentColor" strokeWidth="2">
-                          <path d="M3 4.5L6 7.5L9 4.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                    </button>
-
-                    {open && (
-                      <div className="ua-roles">
-                        {available === undefined ? (
-                          <span className="ua-roles__empty">Loading roles…</span>
-                        ) : available.length === 0 ? (
-                          /* Distinguishes "this org genuinely has none" from
-                             "the request failed" — which, before the account
-                             API is deployed, is the case that actually fires. */
-                          <span className="ua-roles__empty">No roles available here yet.</span>
-                        ) : (
-                          available.map((r) => (
-                            <button key={r.slug} type="button"
-                                    className={"ua-role"
-                                      + (chosen.includes(r.slug) ? " ua-role--on" : "")
-                                      + (r.platform ? " ua-role--platform" : "")}
-                                    aria-pressed={chosen.includes(r.slug)}
-                                    onClick={() => onToggleRole(org.id, r.slug)}
-                                    disabled={disabled}
-                                    title={r.platform
-                                      ? "This role reaches every organisation, not only this one."
-                                      : undefined}>
-                              {r.name}
-                              {/* Said in words, not colour: a grant made inside
-                                  one organisation that takes effect in all of
-                                  them, and an admin choosing it needs to know
-                                  that before they click rather than after. */}
-                              {r.platform && <span className="ua-role__scope">all orgs</span>}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
               </li>
             );
           })}
@@ -409,10 +343,6 @@ function OrgPicker({
                           role="checkbox" aria-checked={false}
                           onClick={() => {
                             onToggleOrg(org.id);
-                            /* Straight into its roles. Granting access and
-                               deciding what it is are one decision, and this
-                               is the moment the person is thinking about it. */
-                            onRoleOrg(org.id);
                             setAdding(false); setFind("");
                           }}
                           disabled={disabled}>
@@ -438,6 +368,40 @@ function OrgPicker({
         </button>
       ))}
     </>
+  );
+}
+
+/**
+ * The person's role: one, for every organisation they belong to.
+ *
+ * Picking a role replaces the one held, because a person has a role rather
+ * than a collection of them. Somebody who already holds several shows them
+ * all lit until one is picked. A platform role (offered only to a platform
+ * administrator) says in words that it reaches every organisation; a role
+ * they hold that this list does not offer is still drawn, so it can be seen
+ * and replaced rather than surviving unnoticed.
+ */
+function RolePicker({ roles, chosen, held = [], onChoose, disabled }) {
+  if (roles === undefined) return <span className="ua-roles__empty">Loading roles…</span>;
+  const listed = new Set(roles.map((r) => r.slug));
+  const all = [...roles, ...held.filter((r) => chosen.includes(r.slug) && !listed.has(r.slug))];
+  if (all.length === 0) return <span className="ua-roles__empty">No roles available here yet.</span>;
+  return (
+    <div className="ua-roles ua-roles--person" role="radiogroup" aria-label="Role">
+      {all.map((r) => {
+        const on = chosen.includes(r.slug);
+        return (
+          <button key={r.slug} type="button" role="radio" aria-checked={on}
+                  className={"ua-role" + (on ? " ua-role--on" : "") + (r.platform ? " ua-role--platform" : "")}
+                  onClick={() => onChoose(r.slug)}
+                  disabled={disabled}
+                  title={r.platform ? "This role reaches every organisation." : undefined}>
+            {r.name}
+            {r.platform && <span className="ua-role__scope">all orgs</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -828,15 +792,9 @@ export default function UserAdminPanel() {
    * organisation with no roles yet is still a valid grant (access, no role).
    */
   const [picked, setPicked] = useState({});
-  const [sharedRoleSlug, setSharedRoleSlug] = useState("");
+  /** The new person's role, the same in every organisation ticked. */
+  const [createRoles, setCreateRoles] = useState([]);
   const [rolesByOrg, setRolesByOrg] = useState({});
-  /* Whose roles are expanded, in whichever panel is open. One piece of state
-     for both, because only one panel can be open at a time — and it lives up
-     here rather than inside OrgPicker because the fetch below reads it: the
-     roles for an organisation are not worth asking for until somebody opens
-     it. */
-  const [roleOrg, setRoleOrg] = useState(null);
-
   /**
    * The row being edited, and its access.
    *
@@ -848,6 +806,10 @@ export default function UserAdminPanel() {
   const [editing, setEditing] = useState(null);
   const [editBase, setEditBase] = useState(null);
   const [editDraft, setEditDraft] = useState({});
+  /* Their role, for every organisation and the platform: what the server said
+     on open (`editRolesBase`, slug + name + platform), and what it is now. */
+  const [editRolesBase, setEditRolesBase] = useState(null);
+  const [editRoles, setEditRoles] = useState([]);
   const [editBusy, setEditBusy] = useState(false);
   /* A SNAPSHOT of the person, not a lookup back into the roster. The panel
      outlives its row — saving refreshes the list, and the object that row was
@@ -918,8 +880,7 @@ export default function UserAdminPanel() {
 
   const openInvite = useCallback(() => {
     setError("");
-    setSharedRoleSlug("");
-    setRoleOrg(null);
+    setCreateRoles([]);
     setInviteOpen(true);
   }, []);
   const closeInvite = useCallback(() => setInviteOpen(false), []);
@@ -1131,21 +1092,11 @@ export default function UserAdminPanel() {
   }, [orgId]);
 
   /**
-   * Roles are fetched per organisation, because each has its own set — a role
-   * list borrowed from one org would offer slugs another does not have.
-   *
-   * What is asked for is what is on screen: the organisations this person
-   * HOLDS, whose chips name their roles, plus the one whose list is expanded.
-   * The editor used to ask for every organisation the administrator could
-   * reach, on open — twenty requests before the panel had drawn, nineteen of
-   * them for lists nobody was going to look at.
+   * The role list comes from the organisation being administered. The role is
+   * the same everywhere the person belongs, and the server refuses a role that
+   * one of their other organisations does not have, naming it.
    */
-  const wantedOrgIds = useMemo(() => {
-    const ids = new Set(editing ? Object.keys(editDraft) : Object.keys(picked));
-    if (editing && editBase) for (const id of Object.keys(editBase)) ids.add(id);
-    if (roleOrg) ids.add(roleOrg);
-    return [...ids];
-  }, [editing, editDraft, editBase, picked, roleOrg]);
+  const wantedOrgIds = useMemo(() => (orgId ? [orgId] : []), [orgId]);
 
   useEffect(() => {
     if (!canAssignRoles) return undefined;
@@ -1507,33 +1458,13 @@ export default function UserAdminPanel() {
     });
   }
 
-  function toggleRole(id, slug) {
-    setPicked((p) => {
-      const held = p[id] ?? [];
-      return {
-        ...p,
-        [id]: held.includes(slug) ? held.filter((s) => s !== slug) : [...held, slug],
-      };
-    });
-  }
-
   const selectedOrgIds = useMemo(() => Object.keys(picked), [picked]);
-  const sharedRolesLoading = selectedOrgIds.length > 1
-    && selectedOrgIds.some((id) => !Object.prototype.hasOwnProperty.call(rolesByOrg, id));
-  const sharedRoleOptions = useMemo(() => {
-    if (selectedOrgIds.length < 2 || sharedRolesLoading) return [];
-    const [first, ...rest] = selectedOrgIds;
-    return (rolesByOrg[first] ?? [])
-      .filter((role) => rest.every((id) => (rolesByOrg[id] ?? []).some((candidate) => candidate.slug === role.slug)))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [selectedOrgIds, rolesByOrg, sharedRolesLoading]);
-
-  function applySharedRole() {
-    if (!sharedRoleOptions.some((role) => role.slug === sharedRoleSlug)) return;
-    setPicked((current) => Object.fromEntries(
-      Object.keys(current).map((id) => [id, [sharedRoleSlug]]),
-    ));
-  }
+  /* Platform roles are granted to an existing account, from its editor, not
+     made at sign-up: the create route refuses them. */
+  const createChoices = useMemo(
+    () => (rolesByOrg[orgId] === undefined ? undefined : rolesByOrg[orgId].filter((r) => !r.platform)),
+    [rolesByOrg, orgId],
+  );
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -1544,14 +1475,14 @@ export default function UserAdminPanel() {
       // admin ticked rides along as an extra membership with its own roles.
       const extras = selectedOrgIds
         .filter((id) => id !== orgId)
-        .map((id) => ({ organisationId: id, roleSlugs: picked[id] ?? [], allVehicles: true }));
+        .map((id) => ({ organisationId: id, roleSlugs: createRoles, allVehicles: true }));
 
       const result = await createOrgUser(orgId, {
         fullName: form.fullName.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         employeeId: form.employeeId.trim(),
-        roleSlugs: picked[orgId] ?? [],
+        roleSlugs: createRoles,
         memberships: extras,
       });
 
@@ -1598,6 +1529,7 @@ export default function UserAdminPanel() {
 
       setForm(EMPTY_FORM);
       setPicked(orgId ? { [orgId]: [] } : {});
+      setCreateRoles([]);
       /* Show the person who was just created.
          A new account is Pending with whatever roles were ticked, so a filter
          left on "Suspended", or on a role they do not hold, would hide the row
@@ -1821,7 +1753,8 @@ export default function UserAdminPanel() {
     setEditStatus(user.status ?? "ACTIVE");
     setEditBase(null);
     setEditDraft({});
-    setRoleOrg(null);
+    setEditRolesBase(null);
+    setEditRoles([]);
     setError("");
     try {
       const memberships = await listUserMemberships(user.scopeOrgId, user.id);
@@ -1830,6 +1763,11 @@ export default function UserAdminPanel() {
       );
       setEditBase(asDraft);
       setEditDraft(asDraft);
+      /* Every role they hold anywhere, platform included, once each. */
+      const held = new Map();
+      for (const m of memberships) for (const r of m.roles ?? []) held.set(r.slug, r);
+      setEditRolesBase([...held.values()]);
+      setEditRoles([...held.keys()]);
     } catch (err) {
       closeEditor();
       fail(isMissingEndpoint(err)
@@ -1853,16 +1791,6 @@ export default function UserAdminPanel() {
       if (id in next) delete next[id];
       else next[id] = [];
       return next;
-    });
-  }
-
-  function toggleEditRole(id, slug) {
-    setEditDraft((d) => {
-      const held = d[id] ?? [];
-      return {
-        ...d,
-        [id]: held.includes(slug) ? held.filter((x) => x !== slug) : [...held, slug],
-      };
     });
   }
 
@@ -1902,8 +1830,12 @@ export default function UserAdminPanel() {
     const same = (a = [], b = []) =>
       a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
-    const toWrite = Object.keys(after).filter((id) => !(id in before) || !same(before[id], after[id]));
+    /* Organisations decide where they belong; the role is one, everywhere.
+       New organisations are joined first and the role then set once, which
+       also brings every existing organisation and any platform role in line. */
+    const toWrite = Object.keys(after).filter((id) => !(id in before));
     const toRemove = Object.keys(before).filter((id) => !(id in after));
+    const roleChanged = editRolesBase != null && !same(editRolesBase.map((r) => r.slug), editRoles);
 
     /* What they typed about the person themselves, minus anything they did
        not touch. Trimmed here rather than on the way out, so "  " does not
@@ -1924,8 +1856,13 @@ export default function UserAdminPanel() {
       return;
     }
 
-    if (!identityChanged && !statusChanged && toWrite.length === 0 && toRemove.length === 0) {
+    if (!identityChanged && !statusChanged && !roleChanged && toWrite.length === 0 && toRemove.length === 0) {
       closeEditor(); return;
+    }
+
+    if ((roleChanged || toWrite.length) && editRoles.length === 0) {
+      setError("Choose a role.");
+      return;
     }
 
     if (toRemove.length && Object.keys(after).length === 0) {
@@ -1941,7 +1878,8 @@ export default function UserAdminPanel() {
          and no way to tell from the roster that anything half-happened. */
       if (identityChanged) await updateOrgUser(user.organisationId, user.id, identity);
 
-      for (const id of toWrite) await setUserMembership(id, user.id, after[id] ?? []);
+      for (const id of toWrite) await setUserMembership(id, user.id, []);
+      if (roleChanged || toWrite.length) await setUserRole(user.scopeOrgId, user.id, editRoles);
       for (const id of toRemove) await removeUserMembership(id, user.id);
 
       /* Suspension LAST, and after the removals, because it is the one write
@@ -1960,7 +1898,13 @@ export default function UserAdminPanel() {
           ? "suspended and signed out"
           : "reactivated");
       }
-      if (toWrite.length) parts.push(`updated ${named(toWrite)}`);
+      if (roleChanged) {
+        const names = editRoles.map((slug) =>
+          (rolesByOrg[orgId] ?? []).find((r) => r.slug === slug)?.name
+          ?? editRolesBase.find((r) => r.slug === slug)?.name ?? slug);
+        parts.push(`now ${names.join(", ")} in every organisation`);
+      }
+      if (toWrite.length) parts.push(`added to ${named(toWrite)}`);
       if (toRemove.length) parts.push(`removed from ${named(toRemove)}`);
       say(`${identity.fullName ?? user.fullName}: ${parts.join("; ")}.`);
 
@@ -2367,66 +2311,35 @@ export default function UserAdminPanel() {
               </label>
             </div>
 
-            {/* Access. The organisation list is the spine of this form: roles
-                hang off an organisation, never the other way round. */}
+            {/* Access: one role, then the organisations it applies in. */}
             <fieldset className="ua-access">
               <legend className="ua-access__legend">
                 Access
                 <span className="ua-access__hint">
-                  Tick each organisation, then choose what they are in it.
-                  {!canAssignRoles && " You cannot assign roles, so they will be granted access with no role."}
+                  {canAssignRoles
+                    ? "Choose their role, then each organisation they belong to. The role is the same in all of them."
+                    : "Tick each organisation. You cannot assign roles, so they will be granted access with no role."}
                 </span>
               </legend>
 
+              {canAssignRoles && (
+                <RolePicker roles={createChoices} chosen={createRoles}
+                            onChoose={(slug) => setCreateRoles([slug])} disabled={busy} />
+              )}
               <OrgPicker
                 orgs={orgs}
                 draft={picked}
                 base={null}
-                rolesByOrg={rolesByOrg}
-                canAssignRoles={canAssignRoles}
                 disabled={busy}
                 currentOrgId={orgId}
-                roleOrg={roleOrg}
-                onRoleOrg={setRoleOrg}
                 onToggleOrg={toggleOrg}
-                onToggleRole={toggleRole}
                 onSelectAll={(selectAll) => {
                   setPicked((current) => {
                     if (!selectAll) return {};
                     return Object.fromEntries(orgs.map((org) => [org.id, current[org.id] ?? []]));
                   });
-                  setRoleOrg(null);
                 }}
               />
-              {selectedOrgIds.length > 1 && canAssignRoles && (
-                <div className="ua-access__shared">
-                  <label className="ua-field">
-                    <span className="ua-label">Apply one role to all {selectedOrgIds.length} selected organisations</span>
-                    <span className="ua-rolepick ua-access__shared-rolepick">
-                      <select className="ua-rolepick__select" value={sharedRoleSlug}
-                              onChange={(e) => setSharedRoleSlug(e.target.value)}
-                              disabled={busy || sharedRolesLoading}>
-                        <option value="">
-                          {sharedRolesLoading
-                            ? "Loading shared roles…"
-                            : sharedRoleOptions.length === 0 ? "No shared roles available" : "Choose a shared role"}
-                        </option>
-                        {sharedRoleOptions.map((role) => (
-                          <option key={role.slug} value={role.slug}>{role.name}</option>
-                        ))}
-                      </select>
-                    </span>
-                  </label>
-                  <button type="button" className="ua-access__shared-apply"
-                          onClick={applySharedRole}
-                          disabled={busy || !sharedRoleOptions.some((role) => role.slug === sharedRoleSlug)}>
-                    Apply to selected
-                  </button>
-                  <span className="ua-access__shared-hint">
-                    Replaces each selected organisation’s role selection with this role.
-                  </span>
-                </div>
-              )}
             </fieldset>
 
                 </div>
@@ -2551,18 +2464,20 @@ export default function UserAdminPanel() {
                 {/* ─ Access ─ */}
                 <section className="ua-sect">
                   <h3 className="ua-sect__title">Access</h3>
+                  {canAssignRoles && editRolesBase != null && (
+                    <>
+                      <p className="ua-access__hint">Their role, in every organisation below.</p>
+                      <RolePicker roles={rolesByOrg[orgId]} chosen={editRoles} held={editRolesBase}
+                                  onChoose={(slug) => setEditRoles([slug])} disabled={editBusy} />
+                    </>
+                  )}
                   <OrgPicker
                     orgs={orgs}
                     draft={editDraft}
                     base={editBase}
-                    rolesByOrg={rolesByOrg}
-                    canAssignRoles={canAssignRoles}
                     disabled={editBusy}
                     currentOrgId={orgId}
-                    roleOrg={roleOrg}
-                    onRoleOrg={setRoleOrg}
                     onToggleOrg={toggleEditOrg}
-                    onToggleRole={toggleEditRole}
                   />
                 </section>
               </div>
