@@ -207,6 +207,13 @@
 .wf-job__foot { display: flex; justify-content: space-between; gap: var(--sp4-sm); flex-wrap: wrap; border-top: 1px solid var(--wf-rule); padding-top: var(--sp4-sm); }
 .wf-job__foot > .wf-form { flex: 1 1 100%; }
 
+/* A chosen step waits here until Save; Back returns to the form. */
+.wf-pending { display: flex; align-items: center; justify-content: space-between; gap: var(--sp4-sm); flex-wrap: wrap; padding: var(--sp4-xs) var(--sp4-sm); border-left: 3px solid var(--wf-warn); background: var(--wf-raised); }
+.wf-pending__text { color: var(--wf-ink-2); font-size: var(--sp4-body); }
+.wf-pending__text b { color: var(--wf-ink); }
+.wf-save { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--sp4-sm); padding: var(--sp4-sm) 0; border-top: 1px solid var(--wf-rule); background: var(--wf-surface); }
+.wf-save__note { color: var(--wf-ink-3); font-size: var(--sp4-body); min-width: 0; }
+
 /* ── Screen: tables, board ───────────────────────────────────────────────── */
 
 .wf-table .wf-tr { cursor: pointer; }
