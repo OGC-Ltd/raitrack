@@ -524,6 +524,7 @@ export function emailBanner(email) {
 export function assignmentToast(email, assignedName = "the selected person") {
   if (email?.sent) return { tone: "ok", text: `Triage assigned to ${assignedName}. Email sent.` };
   if (email?.reason === "self-assignment") return { tone: "ok", text: "Task assigned to you. No email was sent." };
+  if (email?.reason === "in-app") return { tone: "ok", text: `Triage assigned to ${assignedName}. They are notified in the app.` };
   if (email?.reason === "queued") {
     return { tone: "ok", text: `Triage assigned to ${assignedName}. Email queued for delivery.` };
   }
