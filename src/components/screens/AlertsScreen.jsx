@@ -7,9 +7,9 @@
  * escalate & de-escalate … it should list all organizations alerts and we can
  * filter so that it ease the pain of navigating from one organization to the
  * next." So the page does not follow the company in the header: it lists
- * every organisation the server says this account may read (fuel where it
- * holds fuel_theft:read, overspeeding where it holds analytics:read), and the
- * Organisation chips narrow it.
+ * every organisation the server says this account may read (through
+ * alerts:read, or the existing fuel_theft:read / analytics:read grants), and
+ * the Organisation chips narrow it.
  *
  * A fuel alert is what the map announces as a possible theft; unlike the map,
  * it stays here after 24 hours and after a decision, listed under it. An
@@ -1062,7 +1062,7 @@ export default function AlertsScreen() {
           </EmptyNote>
         ) : page && orgList.length === 0 ? (
           <EmptyNote icon="ti-lock" tone="warn" title="No Alerts Open to Your Role">
-            Fuel alerts need fuel theft access, overspeeding needs analytics access, in an organisation you belong to.
+            This role has no alert access in an organisation you belong to.
           </EmptyNote>
         ) : rows.length === 0 && (
           <EmptyNote icon={(EMPTY_READ[readF] ?? EMPTY[status]).icon} title={(EMPTY_READ[readF] ?? EMPTY[status]).title}>

@@ -41,6 +41,8 @@ const BUCKETS = [
   ["controltech",  "ControlTech",  ["forwarded", "remote_fix", "spare_outsourced"]],
   ["workshop",     "Workshop",     ["in_workshop", "field_inspection", "fixing"]],
 ];
+/** Any one of these opens the Jobs and Workshop Day tabs. */
+const BOARD_VERBS = ["repair:flag", "repair:assess", "repair:book", "repair:verify", "repair:work_any"];
 const bucketOf = (stage) => BUCKETS.find(([, , list]) => list.includes(stage))?.[0] ?? null;
 
 /** Re-read on mount, on demand, and whenever any repair changes (SSE or a write here). */
@@ -561,12 +563,16 @@ export default function WorkshopScreen() {
   const [openId, setOpenId] = useState(() => takeWorkshopHandoff());
   const [openCase, setOpenCase] = useState(null);
 
+  // Jobs and Workshop Day are the Control Room's and the workshop's boards:
+  // drawn for whoever holds one of their verbs. A technician holds none, and
+  // sees only the ControlTech queue (operator, 2026-10-26).
+  const board = can("repair:read") && can(BOARD_VERBS);
   const tabs = useMemo(() => [
-    { key: "jobs",     label: "Jobs",          allow: can("repair:read") },
+    { key: "jobs",     label: "Jobs",          allow: board },
     { key: "queue",    label: "ControlTech",   allow: can("repair:claim") },
-    { key: "day",      label: "Workshop Day",  allow: can("repair:read") },
+    { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
-  ].filter((t) => t.allow), [can]);
+  ].filter((t) => t.allow), [can, board]);
   const [tab, setTab] = useState("jobs");
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
 
