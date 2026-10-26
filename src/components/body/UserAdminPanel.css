@@ -3260,3 +3260,7 @@ select.ua-input { appearance: none; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .ua-org__roles, .ua-org__caret { transition: none; }
 }
+
+/* The person's one role, above the organisations it applies in: a list of its
+   own, so not indented or ruled off like a role list under an organisation. */
+.ua-roles--person { margin: 6px 0 12px; padding-top: 0; border-top: 0; }

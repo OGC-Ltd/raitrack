@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, setAccessToken, setSessionLostHandler, refreshOnce } from "../services/api";
+import { ACCESS_CHANGED } from "../lib/accessChanged";
 
 export const authKeys = { me: ["auth", "me"] };
 
@@ -44,7 +45,8 @@ async function bootSession() {
 const meQuery = {
   queryKey: authKeys.me,
   queryFn: bootSession,
-  // Changes only by sign-in, sign-out or an explicit reload().
+  // Changes by sign-in, sign-out, an explicit reload(), or a role change
+  // (AuthProvider below re-reads it; the query itself never refetches).
   staleTime: Infinity,
   gcTime: Infinity,
   retry: false,
@@ -76,8 +78,37 @@ export function AuthProvider({ children }) {
     setSessionLostHandler(() => signOutLocally(queryClient));
     return () => setSessionLostHandler(null);
   }, [queryClient]);
+
+  /* A role change shows at once (operator, 2026-10-27). The live stream's
+     `access_changed` is the prompt; returning to the tab and a slow timer are
+     the fallback for accounts with no stream open (no live map, a closed
+     laptop, a dropped connection). Only re-read while signed in. */
+  useEffect(() => {
+    let busy = false;
+    const reread = async () => {
+      if (busy || !queryClient.getQueryData(authKeys.me)) return;
+      busy = true;
+      try {
+        const data = await readMe();
+        if (data) queryClient.setQueryData(authKeys.me, data);
+      } catch { /* a lost session is handled by apiFetch; anything else waits for the next prompt */ }
+      finally { busy = false; }
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") reread(); };
+    window.addEventListener(ACCESS_CHANGED, reread);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(reread, ACCESS_POLL_MS);
+    return () => {
+      window.removeEventListener(ACCESS_CHANGED, reread);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, [queryClient]);
   return children;
 }
+
+/** The fallback re-read of /auth/me for a signed-in tab with no live stream. */
+const ACCESS_POLL_MS = 2 * 60_000;
 
 export function useAuth() {
   const queryClient = useQueryClient();
