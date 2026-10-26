@@ -156,9 +156,12 @@ export async function catchUp(fetchPage, since, maxPages = CATCH_UP_MAX_PAGES) {
  *   read starts at the range's end (`before`) and pages back until a page
  *   reaches past its start. Live items and the minute catch-up only apply
  *   while the range includes today. Null or absent: the whole history.
+ * @param {{ allDays?: boolean }} [opts] fleet scope only: allDays reads the
+ *   whole history rather than today (a technician's repair notices do not
+ *   reset at midnight, operator 2026-10-27).
  * @returns {{ items: Array, loading: boolean, error: Error|null, retry: () => void }}
  */
-export function useVehicleFeed(vehicle, orgId, liveFeed, range = null) {
+export function useVehicleFeed(vehicle, orgId, liveFeed, range = null, { allDays = false } = {}) {
   // Depend on the IDENTITY strings, not on the vehicle object: every SSE
   // position flush hands back a new object for the same unit, so memoising on
   // the object would re-merge the whole feed a few times a second for a
@@ -169,7 +172,7 @@ export function useVehicleFeed(vehicle, orgId, liveFeed, range = null) {
   // history and passes no day at all. Recomputed per render rather than held
   // in state — it is a string, so it is only a new dependency once a night,
   // and the rollover then resets the read the same way a new selection does.
-  const day = vehicleId ? null : fleetToday();
+  const day = vehicleId || allDays ? null : fleetToday();
   // A unit's range, as primitives so it is a stable dependency.
   const rangeFrom = vehicleId ? range?.from ?? null : null;
   const rangeTo   = vehicleId ? range?.to ?? null : null;
@@ -285,7 +288,7 @@ export function useVehicleFeed(vehicle, orgId, liveFeed, range = null) {
       let next = null;
       for (const it of liveFeed) {
         if (it?.id == null) continue;
-        if (subject ? !feedItemMatchesVehicle(it, subject) : !onFleetDay(it, day)) continue;
+        if (subject ? !feedItemMatchesVehicle(it, subject) : day && !onFleetDay(it, day)) continue;
         if (bounds && !(it.ts >= bounds.start)) continue;
         if (prev.get(it.id) === it) continue;
         next ??= new Map(prev);

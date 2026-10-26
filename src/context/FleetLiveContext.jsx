@@ -21,12 +21,12 @@ const FleetLiveContext = createContext(null);
 
 export function FleetLiveProvider({ children }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
-  const live = useFleetLive(activeCompanyId);
+  const { flaggedOnly, vehicleIds } = usePermissions();
+  const live = useFleetLive(activeCompanyId, { keepFeed: flaggedOnly });
   // Incidents deleted in the incident window leave the fleet here, once, so the
   // alerts list, the map, the side panel and the window all drop them together.
   // UI only: see lib/fuelDismissals.
   const dismissed = useDismissedIncidents();
-  const { flaggedOnly, vehicleIds } = usePermissions();
   // A technician's fleet is the units flagged for repair, everywhere a list,
   // a count or a type chip reads it (operator, 2026-10-27). The server sends
   // only those; this also keeps a fleet cached in the browser from before out.

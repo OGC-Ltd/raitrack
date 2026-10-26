@@ -207,7 +207,10 @@ export default function AppHeader() {
 
   const toggleStat = (key) => setActiveStat((prev) => (prev === key ? null : key));
 
-  const statButtons = statMeta(liveSummary, activeProducts).map(({ key, label, color, icon }) => {
+  // No In transit or Empty card for a technician (operator, 2026-10-27).
+  const statButtons = statMeta(liveSummary, activeProducts)
+    .filter(({ key }) => !(flaggedOnly && (key === "inTransit" || key === "empty")))
+    .map(({ key, label, color, icon }) => {
     const { value, unit, sub } = statValues(key, liveSummary, cargoWord, products);
     return (
       <StatButton
