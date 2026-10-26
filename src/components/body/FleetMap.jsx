@@ -2467,7 +2467,12 @@ export default function FleetMap() {
   // Read HERE rather than beside the layer menu that consumes it, because the
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
-  const { can: canDo } = usePermissions();
+  const { can: canDo, flaggedOnly } = usePermissions();
+  // A technician has no status filters (the boxes are figures only), so one
+  // remembered from before must not keep their map narrowed.
+  useEffect(() => {
+    if (flaggedOnly && activeFilter !== "all") setActiveFilter("all");
+  }, [flaggedOnly, activeFilter, setActiveFilter]);
   const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen, setFuelAlertsOpen } = useMapLayers();
   const { isCompact, isMobile } = useBreakpoint();
   /* Where the side panel exists (desktop) a click selects the unit and the
