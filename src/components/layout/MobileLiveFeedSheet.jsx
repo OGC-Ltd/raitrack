@@ -6,6 +6,7 @@ import FeedText from '../shared/FeedText';
 import { feedClock, feedDate } from '../../lib/feedTime';
 import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
 import { useVehicleFeed } from '../../hooks/useVehicleFeed';
+import { usePermissions } from '../../hooks/usePermissions';
 import FeedFooter, { nearBottom } from '../shared/FeedFooter';
 import './MobileLiveFeedSheet.css';
 
@@ -20,7 +21,8 @@ function dotColor(type) {
 
 export default function MobileLiveFeedSheet({ open, onClose }) {
   const { feed: liveFeed = [], orgId } = useFleetLiveShared();
-  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed);
+  const { flaggedOnly } = usePermissions();
+  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed, null, { allDays: flaggedOnly });
   const unread = feed.filter(f => ALERT_TYPES.has(f.type)).length;
 
   return (
@@ -68,7 +70,7 @@ export default function MobileLiveFeedSheet({ open, onClose }) {
             </div>
             );
           })}
-          <FeedFooter count={feed.length} loadingMore={loadingMore} atEnd={atEnd} loadMore={loadMore} />
+          <FeedFooter count={feed.length} loadingMore={loadingMore} atEnd={atEnd} loadMore={loadMore} allDays={flaggedOnly} />
         </div>
       </div>
     </>

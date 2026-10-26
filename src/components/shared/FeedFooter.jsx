@@ -11,14 +11,14 @@ export function nearBottom(loadMore) {
   };
 }
 
-export default function FeedFooter({ count, loadingMore, atEnd, loadMore }) {
+export default function FeedFooter({ count, loadingMore, atEnd, loadMore, allDays = false }) {
   if (!count) return null;
   return (
     <div className="feed-foot">
       {loadingMore
         ? "Loading older activity…"
         : atEnd
-          ? `That is everything logged today · ${count.toLocaleString()} update${count === 1 ? "" : "s"}.`
+          ? `That is everything logged${allDays ? "" : " today"} · ${count.toLocaleString()} update${count === 1 ? "" : "s"}.`
           : <button type="button" className="feed-foot__btn" onClick={loadMore}>Load older</button>}
     </div>
   );
