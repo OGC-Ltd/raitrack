@@ -22,6 +22,7 @@ import { readCache, writeCache } from '../services/cache'
 import { repairsChanged } from '../api/repairs'
 import { dismissIncident } from '../lib/fuelDismissals'
 import { followUpsChanged } from '../lib/fuelFollowUps'
+import { accessChanged } from '../lib/accessChanged'
 import { createFrameStore } from '../lib/positionDelta'
 
 const fleetCacheKey = (companyId) => `ft-fleet:${companyId}`
@@ -336,6 +337,16 @@ export function useFleetLive(companyId) {
     /* A repair job changed for anybody in this organisation: the Repairs tab
        and the Fuel Audit read it again. */
     es.addEventListener('repair_changed', () => { repairsChanged() })
+    /* An administrator changed THIS account's role or access. The server
+       closes the stream after this frame; the reconnect is checked against
+       the new access, and AuthProvider re-reads who this is. */
+    es.addEventListener('access_changed', () => {
+      accessChanged()
+      // Which units this account sees may have changed with it (a technician
+      // sees flagged units only, and a resolved one drops off): read the
+      // snapshot again rather than keep drawing units now out of scope.
+      queryClient.invalidateQueries({ queryKey: vehiclesKey })
+    })
     /* What the unit is CARRYING, pushed when the gate signs it out — its own
        event because a truck standing at the gate may not send a position for an
        hour. Frames for units not in this org's snapshot fall through
