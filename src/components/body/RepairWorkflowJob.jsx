@@ -149,12 +149,15 @@ function PathStep({ orgId, job, act, busy, from }) {
       <div className="wf-actions">
         {from !== "remote_fix" && (
           <button type="button" className="sp4-ghost-btn" disabled={!!busy}
-                  onClick={() => act("remote", () => decidePath(orgId, job.id, "remote", note), "Fixing remotely.")}>
+                  onClick={() => act("remote", () => decidePath(orgId, job.id, "remote", note), "Fixing remotely. Ticket issued.",
+                    job.ticketNo ? undefined : "Fix remotely and issue the ticket")}>
             {busy === "remote" ? "Saving…" : "Fix remotely"}
           </button>
         )}
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => act("physical", () => decidePath(orgId, job.id, "physical", note), "Sent to the Control Room for a physical inspection.")}>
+                onClick={() => act("physical", () => decidePath(orgId, job.id, "physical", note),
+                  job.ticketNo ? "Sent to the Control Room for a physical inspection." : "Sent for a physical inspection. Ticket issued.",
+                  job.ticketNo ? undefined : "Send for a physical inspection and issue the ticket")}>
           {busy === "physical" ? "Saving…" : "Needs physical inspection"}
         </button>
       </div>
@@ -735,8 +738,9 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
                         busy={busy === "cancel"} onSend={(r) => choose("cancel", () => cancelBooking(orgId, job.id, r), "Booking cancelled.")} />
         )}
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => choose("arrive", () => arriveJob(orgId, job.id), (t) => `Checked in. Ticket ${t?.ticketNo ?? ""}.`)}>
-          {busy === "arrive" ? "Checking in…" : "Unit has arrived: issue the ticket"}
+                onClick={() => choose("arrive", () => arriveJob(orgId, job.id), (t) => `Checked in. Ticket ${t?.ticketNo ?? ""}.`,
+                  job.ticketNo ? "Check the unit in" : undefined)}>
+          {busy === "arrive" ? "Checking in…" : job.ticketNo ? "Unit has arrived: check it in" : "Unit has arrived: issue the ticket"}
         </button>
       </div>
     );
@@ -809,6 +813,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
           <Fact label="Route">{job.queue === "controltech" ? "ControlTech queue" : job.queue === "workshop" ? "Workshop" : null}</Fact>
           <Fact label="ControlTech">{job.assignedTo?.fullName}</Fact>
           <Fact label="Path">{job.path ? `${PATH_LABEL[job.path]}${job.pathNote ? ` · ${job.pathNote}` : ""}` : null}</Fact>
+          <Fact label="Ticket">{job.ticketNo ? [job.ticketNo, job.ticketIssuedAt && at(job.ticketIssuedAt)].filter(Boolean).join(" · ") : null}</Fact>
         </dl>
       </Section>
 
@@ -826,14 +831,13 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
         </Section>
       )}
 
-      {(booking || job.ticketNo || job.workshopTechnicianName) && (
+      {(booking || job.workshopTechnicianName || (job.ticketNo && job.path === "physical")) && (
         <Section title="Workshop">
           <dl className="wf-facts">
             <Fact label="Booked">{booking ? `${booking.workshop?.name ?? "Workshop"} · ${dayLabel(booking.bookingDate)}${booking.status === "arrived" ? " · arrived" : ""}` : null}</Fact>
-            <Fact label="Ticket">{job.ticketNo ? [job.ticketNo, job.ticketIssuedAt && at(job.ticketIssuedAt)].filter(Boolean).join(" · ") : null}</Fact>
             <Fact label="Technician">{job.workshopTechnicianName}</Fact>
           </dl>
-          {job.ticketNo && !closed && can("repair:book") && (
+          {job.ticketNo && job.path === "physical" && !closed && can("repair:book") && (
             <WorkshopTech orgId={orgId} job={job} act={act} busy={busy} assignees={assignees} setAssignees={setAssignees} />
           )}
         </Section>
