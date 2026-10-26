@@ -26,11 +26,15 @@ export function FleetLiveProvider({ children }) {
   // alerts list, the map, the side panel and the window all drop them together.
   // UI only: see lib/fuelDismissals.
   const dismissed = useDismissedIncidents();
-  const vehicles = useMemo(
-    () => withoutDismissed(live.vehicles, dismissed, deriveStatus),
-    [live.vehicles, dismissed],
-  );
-  const { flaggedOnly } = usePermissions();
+  const { flaggedOnly, vehicleIds } = usePermissions();
+  // A technician's fleet is the units flagged for repair, everywhere a list,
+  // a count or a type chip reads it (operator, 2026-10-27). The server sends
+  // only those; this also keeps a fleet cached in the browser from before out.
+  const flagged = useMemo(() => (flaggedOnly && vehicleIds ? new Set(vehicleIds) : null), [flaggedOnly, vehicleIds]);
+  const vehicles = useMemo(() => {
+    const kept = withoutDismissed(live.vehicles, dismissed, deriveStatus);
+    return flagged && kept ? kept.filter((v) => flagged.has(v.vehicleId)) : kept;
+  }, [live.vehicles, dismissed, flagged]);
   const feed = useMemo(() => (flaggedOnly ? repairOnly(live.feed) : live.feed), [flaggedOnly, live.feed]);
   const fleet = useMemo(
     () => (vehicles === live.vehicles && feed === live.feed ? live : { ...live, vehicles, feed }),

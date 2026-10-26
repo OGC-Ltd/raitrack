@@ -89,26 +89,28 @@ export default function StatusRail({ vehicles = [], loading = false, activeFilte
           {stats.map((s) => {
             const isActive = activeFilter === s.filterKey;
             const n = counts[s.key];
+            // Read-only for a technician (operator, 2026-10-27).
+            const Chip = flaggedOnly ? 'div' : 'button';
             return (
-              <button
+              <Chip
                 key={s.key}
-                type="button"
-                className={`status-rail__chip${isActive ? ' status-rail__chip--active' : ''}`}
+                {...(flaggedOnly ? {} : { type: 'button' })}
+                className={`status-rail__chip${isActive ? ' status-rail__chip--active' : ''}${flaggedOnly ? ' status-rail__chip--static' : ''}`}
                 style={{ '--chip-color': s.color }}
-                aria-pressed={isActive}
+                aria-pressed={flaggedOnly ? undefined : isActive}
                 // Zero reads as quiet; an alert bucket with anything in it
                 // reads louder than the rest even while another is selected.
                 data-zero={!waiting && n === 0 ? '' : undefined}
                 data-alert={!waiting && n > 0 && (s.key === 'critical' || s.key === 'warning') ? '' : undefined}
-                title={`Show ${s.label.toLowerCase()} on the map`}
+                title={flaggedOnly ? undefined : `Show ${s.label.toLowerCase()} on the map`}
                 // Tapping the lit chip clears back to the whole fleet, which is
                 // what ALL does — so it can never leave the map filtered with
                 // nothing on screen showing as filtered.
-                onClick={() => onFilter?.(isActive ? 'all' : s.filterKey)}
+                onClick={flaggedOnly ? undefined : () => onFilter?.(isActive ? 'all' : s.filterKey)}
               >
                 <span className="status-rail__count">{waiting ? '–' : n}</span>
                 <span className="status-rail__label">{s.short}</span>
-              </button>
+              </Chip>
             );
           })}
         </div>
