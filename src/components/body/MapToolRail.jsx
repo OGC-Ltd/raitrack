@@ -15,6 +15,7 @@ import { findVehicleByQuery } from "../../lib/vehicleMap";
 import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import UnitTypeIcon from "../shared/UnitTypeIcon";
+import { usePermissions } from "../../hooks/usePermissions";
 import "./MapToolRail.css";
 
 /* OpenStreetMap's geocoder: free, keyless, and limited to one request a second
@@ -252,6 +253,9 @@ export default function MapToolRail({
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const wrapRef = useRef(null);
+  // Technicians get no route, traffic, geofence or arrivals tools: removed,
+  // not drawn disabled (operator, 2026-10-27).
+  const { flaggedOnly } = usePermissions();
 
   // The search panel closes on a press outside the rail, like the layers menu.
   useEffect(() => {
@@ -292,6 +296,7 @@ export default function MapToolRail({
             title={measuring ? "Stop measuring (Esc)" : "Measure a distance: click points on the map"}
             on={measuring} expanded={expanded} onClick={onToggleMeasure}
           />
+          {!flaggedOnly && (<>
           <RailButton
             icon="ti-route" label="Route covered" title={route.title}
             on={route.on} disabled={!route.available} expanded={expanded} onClick={route.onToggle}
@@ -314,6 +319,7 @@ export default function MapToolRail({
               : "No geofences are drawn for this company"}
             on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
           />
+          </>)}
           {/* Halted (operator, 2026-10-07: "right below geofences"): units
               that stopped mid-journey — on the highway or outside their
               geofences. Opens the same window the sidebar row used to. */}
@@ -337,7 +343,7 @@ export default function MapToolRail({
             />
           )}
           {/* Arrivals at a hub: every unit's live drive time in. */}
-          {arrivals && (
+          {arrivals && !flaggedOnly && (
             <RailButton
               icon="ti-target-arrow" label="Arrivals" tour="map-arrivals"
               title="Arrivals: who can reach a hub, and when, with live traffic"
