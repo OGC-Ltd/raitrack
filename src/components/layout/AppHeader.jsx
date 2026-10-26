@@ -87,7 +87,7 @@ export default function AppHeader() {
   const { activeCompanyId, selectedVehicleId, desktopActiveTab } = useAppFields("activeCompanyId", "selectedVehicleId", "desktopActiveTab");
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
-  const { can } = usePermissions();
+  const { can, flaggedOnly } = usePermissions();
   const { user, logout } = useAuth();
 
   /* The server's field is `fullName`. This header asked for `user.name`, which
@@ -345,7 +345,7 @@ export default function AppHeader() {
         {!limited && (
         <button
           data-tour="alerts"
-          className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}${unreadCount > 0 ? ' app-header__bell--news' : ''}`}
+          className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}${unreadCount > 0 ? ' app-header__bell--news' : ''}${flaggedOnly ? ' app-header__bell--figure' : ''}`}
           onClick={toggleFeed}
           // The count lives in the name: a label on the badge inside a labelled
           // button is never read out.
@@ -364,7 +364,13 @@ export default function AppHeader() {
             // A dot, no figure (operator 2026-10-19): it says "something to
             // read" and goes once everything is read. Keyed on the swing so it
             // pops when news arrives.
-            <span key={`dot-${swing}`} className="app-header__bell-count" aria-hidden="true" />
+            // A technician's bell carries the figure (operator, 2026-10-27):
+            // their feed is the repair notices sent to them, few enough to count.
+            flaggedOnly
+              ? <span key={`dot-${swing}`} className="app-header__bell-count app-header__bell-count--figure" aria-hidden="true">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              : <span key={`dot-${swing}`} className="app-header__bell-count" aria-hidden="true" />
           )}
         </button>
         )}

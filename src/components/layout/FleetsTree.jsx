@@ -77,7 +77,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
   const { setFleetTypes, setInTransitOnly } = useAppActions();
   const { vehicles = [] } = useFleetLiveShared();
   const { setUnitsOpen, revealMap } = useMapLayers() ?? {};
-  const { can } = usePermissions();
+  const { can, flaggedOnly } = usePermissions();
   const masked = useContext(TreeCountsMasked);
   const [allTypes, setAllTypes] = useState(false);
   const options  = useMemo(() => fleetTypeOptions(vehicles), [vehicles]);
@@ -90,7 +90,8 @@ export default function FleetsTree({ audit = null, report = null, review = null 
   const inTransitCount = useMemo(() => vehicles.filter(isInTransit).length, [vehicles]);
 
   // A fleet of one machine type has nothing to narrow — the map funnel's rule.
-  const canFilter = can('map:filter');
+  // Technicians narrow their flagged units by type too (operator, 2026-10-27).
+  const canFilter = can('map:filter') || flaggedOnly;
   const showTypes = canFilter && options.length > 1;
   const filtered  = selected.size > 0 || Boolean(inTransitOnly);
 
