@@ -26,7 +26,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   const canTriage = can('fuel_audit:read');
   // Open alerts across every organisation held (the sidebar's badge): a dot
   // on the avatar, the count beside Alerts in its menu.
-  const canAlerts = can(['fuel_theft:read', 'analytics:read']);
+  const canAlerts = can(['alerts:read', 'fuel_theft:read', 'analytics:read']);
   const alertSummary = useAlertSummary(canAlerts);
   const openAlerts = alertSummary?.open ?? 0;
   const fuelAlarm = useFuelAlarm(alertSummary);
@@ -199,7 +199,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel report
                 </button>
               )}
-              {can('telemetry:read') && (
+              {can('logbook:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('usageReview'); setUserOpen(false); }}>
                   <i className="ti ti-car" aria-hidden="true" /> Logbook
                 </button>
