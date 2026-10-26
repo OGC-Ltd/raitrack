@@ -22,7 +22,7 @@ export const NAV_ITEMS = [
   // Fuel and overspeeding alerts from every organisation the account holds,
   // escalated and de-escalated in one place (operator, 2026-10-12). Either
   // grant opens it: the page shows each kind only where it is held.
-  { key: 'alerts',       label: 'Alerts',       icon: 'bell-ringing', permission: ['fuel_theft:read', 'analytics:read'] },
+  { key: 'alerts',       label: 'Alerts',       icon: 'bell-ringing', permission: ['alerts:read', 'fuel_theft:read', 'analytics:read'] },
   { key: 'drivers',      label: 'Drivers',      icon: 'users',     permission: 'driver:read'      },
   { key: 'analytics',    label: 'Analytics',    icon: 'chart-bar', permission: 'analytics:read'   },
   { key: 'maintenance',  label: 'Maintenance',  icon: 'tool',      permission: 'sensor:read'      },
@@ -40,8 +40,9 @@ export const NAV_ITEMS = [
   // Fuel > Report: advanced fuel analysis for one unit over a period.
   { key: 'fuelReport',   label: 'Fuel Report',  icon: 'report-analytics', permission: 'fuel_filling:read', section: 'system' },
   // Logbook (was Highlights): how one unit was used over a period — drive hours, km, fuel,
-  // where it spent its time — with the workbook and a PDF.
-  { key: 'usageReview',  label: 'Logbook',      icon: 'car', permission: 'telemetry:read', section: 'system' },
+  // where it spent its time — with the workbook and a PDF. Its own slug since
+  // 2026-10-26: operator and technician read telemetry but get no Logbook.
+  { key: 'usageReview',  label: 'Logbook',      icon: 'car', permission: 'logbook:read', section: 'system' },
 ];
 
 function weatherDesc(code) {
@@ -401,7 +402,7 @@ export default function SidePanel() {
                   active: desktopActiveTab === 'fuelReport',
                   open:   () => handleNav('fuelReport'),
                 } : null}
-                review={can('telemetry:read') ? {
+                review={can('logbook:read') ? {
                   active: desktopActiveTab === 'usageReview',
                   open:   () => handleNav('usageReview'),
                 } : null}
