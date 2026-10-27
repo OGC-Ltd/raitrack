@@ -48,7 +48,8 @@ const key = (companyId) => `ft-map-prefs:${companyId}`;
  */
 export const LAYERS = [
   "plan", "site", "bridges", "zones",
-  "traffic",       // TomTom live traffic, any org
+  "traffic",       // Google live traffic, any org
+  "weather",       // Google current weather, any org; off until asked for
   "site:nzoia",    // Nzoia's survey while it sat under West Kenya; kept so old blobs still read
   "site:naitiri",  // and the sugar factory the lorries load at
   "site:raiply",   // and where that sugar is taken
