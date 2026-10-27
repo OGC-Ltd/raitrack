@@ -98,6 +98,17 @@ describe('the job panel shows the one next step, to whoever may take it', () => 
 });
 
 describe('the ladder', () => {
+  it('lets the Control Room click any other phase to move the job there', () => {
+    const buttons = (html) => (html.match(/class="wf-ladder__btn"/g) ?? []).length;
+    const tech = job({ queue: 'controltech', faultCategory: 'tracker', stage: 'fixing', ticketNo: 'RT-2026-00003' });
+    expect(buttons(render(tech, grants('repair:verify')))).toBe(5);
+    // A mechanical fault has no triage to go back to.
+    expect(buttons(render(job({ stage: 'fixing', ticketNo: 'RT-2026-00004' }), grants('repair:verify')))).toBe(4);
+    // Nobody else moves it, and a closed job does not move.
+    expect(buttons(render(tech, grants('repair:resolve')))).toBe(0);
+    expect(buttons(render({ ...tech, resolvedAt: '2026-10-27T00:00:00Z', stage: 'fixed' }, grants('repair:verify')))).toBe(0);
+  });
+
   it('marks the current phase', () => {
     const html = renderToStaticMarkup(h(PhaseLadder, { stage: 'in_workshop' }));
     expect(html).toContain('aria-current="step"');
