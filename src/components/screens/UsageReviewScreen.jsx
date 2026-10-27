@@ -27,7 +27,7 @@ import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { loadMapEngine, maps as mapsNs } from "../../lib/mapEngine";
 import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from "../../lib/osmBase";
-import { installGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
+import { installGoogleBase, isGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
 import MapStatusBar from "../body/MapStatusBar";
 import EmptyNote from "../shared/EmptyNote";
 import UnitPicker from "../body/UnitPicker";
@@ -167,7 +167,7 @@ const MAX_WEB_EDGES = 40;
 /** The base map picked here and on the live map's Maps panel (one choice). */
 const BASE_MAP_KEY = "ft-map-base";
 const readBase = () => {
-  try { return GOOGLE_BASE_AVAILABLE && localStorage.getItem(BASE_MAP_KEY) === "google" ? "google" : "osm"; } catch { return "osm"; }
+  try { return GOOGLE_BASE_AVAILABLE && isGoogleBase(localStorage.getItem(BASE_MAP_KEY)) ? "google" : "osm"; } catch { return "osm"; }
 };
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 

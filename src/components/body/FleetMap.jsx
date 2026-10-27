@@ -77,13 +77,18 @@ import { useNowTick } from "../../hooks/useNowTick";
 import StatusRail from "../layout/StatusRail";
 import { useBreakpoint } from "../../hooks/useBreakpoint";
 import {
-  TRAFFIC_AVAILABLE, FLOW_TILE_URL, INCIDENT_TILE_URL, TILE_REFRESH_MS,
-  TRAFFIC_LEGEND, JAM_COLOR, ROUTE_COLOR, travelModeFor,
+  JAM_COLOR, ROUTE_COLOR, travelModeFor,
   trackJourney, fetchExpectedTime, TRAFFIC_AVAILABLE as EXPECTED_AVAILABLE,
 } from "../../lib/tomtomTraffic";
 import RouteCoveredCard from "./RouteCoveredCard";
 import MapToolRail from "./MapToolRail";
-import { installGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
+import {
+  installGoogleBase, isGoogleBase, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION,
+  LIVE_TRAFFIC_AVAILABLE, GOOGLE_TRAFFIC_LEGEND, TRAFFIC_REDRAW_MS, addGoogleTraffic,
+} from "../../lib/googleBase";
+import { addWeatherLayer } from "../../lib/weatherLayer";
+import "../../lib/weatherLayer.css";
+import { getWeatherGrid } from "../../api/weather";
 import { pathLengthM, plainPoint, formatDistance } from "../../lib/measure";
 
 /* "Show the route covered" → expected-time card (RouteCoveredCard, TomTom
@@ -777,11 +782,14 @@ const FUEL_ALERTS_KEY = "ft-fuel-alerts-on";
 const NAMES_KEY = "ft-map-names-on";
 const TOOLS_EXPANDED_KEY = "ft-map-tools-expanded";
 // The base map picked in the rail's Maps panel, or on a phone or tablet the
-// toggle at the map's top left: "osm" or "google". `short` is the toggle's word.
+// toggle at the map's top left: "osm" or one of googleBase's GOOGLE_BASES
+// ("google" is the hybrid). `short` is the toggle's word.
 const BASE_MAP_KEY = "ft-map-base";
 const BASE_MAPS = [
-  { id: "osm",    label: "OpenStreetMap",    short: "Map" },
-  { id: "google", label: "Google Satellite", short: "Satellite" },
+  { id: "osm",              label: "OpenStreetMap",    short: "Map" },
+  { id: "google-satellite", label: "Google Satellite", short: "Satellite" },
+  { id: "google",           label: "Google Hybrid",    short: "Hybrid" },
+  { id: "google-terrain",   label: "Google Terrain",   short: "Terrain" },
 ];
 
 // Pan/zoom limits. Deliberately wider than Kenya alone: Kasulu (TZ) sits at
@@ -2298,11 +2306,17 @@ export default function FleetMap() {
     () => readMapPrefs(activeCompanyId).layers.zones,
   );
   const zoneLayerRef      = useRef(null);   // { shapes[], labels[], info, bounds } | null
-  /* Live traffic (TomTom): flow + incident tiles over the base map, and the
-   * pinned unit's routed line with its jams. See lib/tomtomTraffic. */
+  /* Live traffic (Google's TrafficLayer, lib/googleBase) over the base map,
+   * and the pinned unit's routed line. TomTom's tiles were switched off
+   * 2026-10-09 and replaced by Google's 2026-10-27. */
   const [showTraffic, setShowTraffic]       = useState(
-    () => TRAFFIC_AVAILABLE && readMapPrefs(activeCompanyId).layers.traffic,
+    () => LIVE_TRAFFIC_AVAILABLE && readMapPrefs(activeCompanyId).layers.traffic,
   );
+  /* Current weather, Google Weather API points over the view (lib/weatherLayer). */
+  const [showWeather, setShowWeather]       = useState(
+    () => readMapPrefs(activeCompanyId).layers.weather,
+  );
+  const [weatherNote, setWeatherNote]       = useState(null);
   const zonesRequestedRef = useRef(false);  // a toggle is a request; a default is not
   // CAD plan overlay — separate toggle, separate layer, lazily fetched.
   const [showPlan, setShowPlan]             = useState(
@@ -2359,8 +2373,10 @@ export default function FleetMap() {
   const measuringRef = useRef(false);
   measuringRef.current = measuring;
   // Base map. Google only where a key was built in; otherwise OSM, always.
-  const [baseMap, setBaseMap] = useState(() =>
-    GOOGLE_BASE_AVAILABLE && readCache(BASE_MAP_KEY) === "google" ? "google" : "osm");
+  const [baseMap, setBaseMap] = useState(() => {
+    const stored = readCache(BASE_MAP_KEY);
+    return GOOGLE_BASE_AVAILABLE && isGoogleBase(stored) ? stored : "osm";
+  });
   // For the overlay style callbacks, which are built once and re-run on a base
   // switch rather than rebuilt — the polygon colours depend on it (zoneColor).
   const baseMapRef = useRef(baseMap);
@@ -4046,7 +4062,7 @@ export default function FleetMap() {
     }
     // Live traffic is a property of the roads, not of the org, so every org
     // with a key configured is offered it.
-    if (TRAFFIC_AVAILABLE) {
+    if (LIVE_TRAFFIC_AVAILABLE) {
       out.push({
         id: "traffic",
         label: "Live traffic",
@@ -4056,12 +4072,25 @@ export default function FleetMap() {
           return !v;
         }),
         note: null,
-        legend: TRAFFIC_LEGEND,
-        hint: "TomTom live traffic · click a unit on a trip for its route and traffic-adjusted ETA",
+        legend: GOOGLE_TRAFFIC_LEGEND,
+        hint: "Google live traffic · click a unit on a trip for its route and traffic-adjusted ETA",
       });
     }
+    // Weather, like traffic, belongs to the ground rather than the org.
+    out.push({
+      id: "weather",
+      label: "Weather",
+      on: showWeather,
+      onToggle: () => setShowWeather(v => {
+        writeMapPrefs(activeCompanyId, { layers: { weather: !v } });
+        return !v;
+      }),
+      note: showWeather ? weatherNote : null,
+      legend: null,
+      hint: "Google current weather · hover a reading for rain and wind · blue edge rain, red edge storm",
+    });
     return out;
-  }, [showTraffic, showBridges, hasBridges, bridgesLoading, activeCompanyId,
+  }, [showTraffic, showWeather, weatherNote, showBridges, hasBridges, bridgesLoading, activeCompanyId,
       showZones, zonesAllowed, hasZones, zoneCategories,
       showPlan, planAllowed, planState,
       sitePlans, siteOn, siteStatus, siteCats, canDo, baseMap]);
@@ -4549,9 +4578,9 @@ export default function FleetMap() {
     const map = mapRef.current;
     if (!map || !mapReady) return undefined;
     let dead = false;
-    if (baseMap === "google") {
-      installGoogleBase(map)
-        .then(() => { if (!dead) { map.setMapTypeId(GOOGLE_TYPE_ID); setBaseNote(null); } })
+    if (isGoogleBase(baseMap)) {
+      installGoogleBase(map, baseMap)
+        .then(() => { if (!dead) { map.setMapTypeId(baseMap); setBaseNote(null); } })
         .catch((e) => {
           if (dead) return;
           setBaseNote(`Google Maps is unavailable: ${e.message}. Showing OpenStreetMap.`);
@@ -6273,7 +6302,8 @@ export default function FleetMap() {
     setSiteOn(siteOnFor(activeCompanyId));
     setShowBridges(layers.bridges);
     setShowZones(layers.zones);
-    setShowTraffic(TRAFFIC_AVAILABLE && layers.traffic);
+    setShowTraffic(LIVE_TRAFFIC_AVAILABLE && layers.traffic);
+    setShowWeather(layers.weather);
     bridgeRequestedRef.current = false;
     zonesRequestedRef.current  = false;
     planRequestedRef.current   = false;
@@ -6856,29 +6886,38 @@ export default function FleetMap() {
     };
   }, [showBridges, hasBridges, bridges, mapReady, activeCompanyId, handleFocusVehicle]);
 
-  // ── Live traffic tiles ────────────────────────────────────────────────────
-  // Flow under incidents, both under every vector and marker (the engine's
-  // g-tiles pane). Re-fetched every TILE_REFRESH_MS while on; TomTom serves
-  // them no-store, so a redraw is a fresh read of the roads.
+  // ── Live traffic ──────────────────────────────────────────────────────────
+  // Google's TrafficLayer as a transparent overlay under every vector and
+  // marker (the engine's g-tiles pane), on either base. Redrawn every
+  // TRAFFIC_REDRAW_MS to pick up Google's own refresh.
   useEffect(() => {
-    const map  = mapRef.current;
-    const maps = mapsLibRef.current;
-    if (!mapReady || !map || !maps?.TileOverlay || !showTraffic) return undefined;
-    const flow = new maps.TileOverlay({ url: FLOW_TILE_URL, zIndex: 1, opacity: 0.85, maxNativeZoom: 18 });
-    const incidents = new maps.TileOverlay({ url: INCIDENT_TILE_URL, zIndex: 2, maxNativeZoom: 18 });
-    flow.setMap(map);
-    incidents.setMap(map);
-    const timer = setInterval(() => {
-      if (document.hidden) return;
-      flow.refresh();
-      incidents.refresh();
-    }, TILE_REFRESH_MS);
+    const map = mapRef.current;
+    if (!mapReady || !map || !showTraffic) return undefined;
+    let layer = null, gone = false;
+    addGoogleTraffic(map)
+      .then((l) => { if (gone) l.remove(); else layer = l; })
+      .catch((err) => console.warn("Live traffic unavailable:", err.message));
+    const timer = setInterval(() => { if (!document.hidden) layer?.refresh(); }, TRAFFIC_REDRAW_MS);
     return () => {
+      gone = true;
       clearInterval(timer);
-      flow.setMap(null);
-      incidents.setMap(null);
+      layer?.remove();
     };
   }, [mapReady, showTraffic]);
+
+  // ── Weather ───────────────────────────────────────────────────────────────
+  // Google's current conditions on a grid over the view, re-read as the map
+  // settles and every few minutes (lib/weatherLayer).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || !showWeather || !orgId) return undefined;
+    setWeatherNote("loading…");
+    return addWeatherLayer(map, async (b) => {
+      const grid = await getWeatherGrid({ orgId, ...b });
+      setWeatherNote(grid.enabled ? null : "not configured");
+      return grid;
+    }, { onError: () => setWeatherNote("failed") });
+  }, [mapReady, showWeather, orgId]);
 
   // ── The pinned unit's routed line ─────────────────────────────────────────
   // Blue along TomTom's road route to the end of the current leg, with each
@@ -7113,7 +7152,7 @@ export default function FleetMap() {
         <ArrivalsWindow arrivals={arrivals} onSelectUnit={handleFocusVehicle} onClose={() => setArrivalsOpen(false)} />
         <MapStatusBar
           map={mapReady ? mapRef.current : null}
-          attribution={baseMap === "google" ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION}
+          attribution={isGoogleBase(baseMap) ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION}
           className="map-status--live"
         />
 
@@ -7136,10 +7175,19 @@ export default function FleetMap() {
                 className={`map-type-btn${baseMap === b.id ? " map-type-btn--active" : ""}`}
                 onClick={() => chooseBase(b.id)}
                 // Why Google is not showing, when it could not be loaded.
-                title={b.id === "google" && baseNote ? baseNote : b.label}
+                title={isGoogleBase(b.id) && baseNote ? baseNote : b.label}
                 aria-label={b.label}
               >
-                {b.id === "osm" ? (
+                {b.id === "google-terrain" ? (
+                  <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                    <path d="M2.5 19.5 9 8l4 7 2.5-4 6 8.5Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                  </svg>
+                ) : b.id === "google-satellite" ? (
+                  <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                    <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6"/>
+                    <path d="m4 16 5-5 4 4 2-2 5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                  </svg>
+                ) : b.id === "osm" ? (
                   <svg className="map-type-ico" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
                     <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
                     <path d="M9 4v14M15 6v14" fill="none" stroke="currentColor" strokeWidth="1.6"/>
