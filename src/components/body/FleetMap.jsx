@@ -33,6 +33,7 @@ import { useHubArrivals, ArrivalsWindow } from "./HubArrivals";
 import VehicleStatsCard from "../cards/VehicleStatsCard";
 import { copyText } from "../../lib/copyText";
 import { mapLabel } from "../../lib/plate";
+import { eventMl } from "../../lib/eventLitres";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useAppFields, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -1524,26 +1525,6 @@ function eventMarkerHtml(ev, lastT) {
       "</span>" +
     "</div>"
   );
-}
-
-/**
- * The volume an event moved, in millilitres, from whichever field carries it.
- *
- * `ml` is the number the server was taught to send for exactly this. It is NOT
- * there on every deployment — the field is newer than the events themselves —
- * and against a server without it the pin rendered "?L", which is the worst of
- * the three possible answers: it looks like the fuel figure is unknown when the
- * figure is right there in `detail`.
- *
- * So `detail` is the fallback, and a reliable one: it is built by a single
- * formatter on the server (`litres()`), always leads with the volume, and
- * always writes it as "<number> L". The pair — "120.0 L · probe saw 118.0 L" —
- * puts the provider's claim first, which is the one this pin is about.
- */
-function eventMl(ev) {
-  if (Number.isFinite(ev?.ml)) return ev.ml;
-  const m = /(\d+(?:\.\d+)?)\s*L/.exec(ev?.detail ?? "");
-  return m ? Math.round(parseFloat(m[1]) * 1000) : null;
 }
 
 /**
