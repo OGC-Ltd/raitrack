@@ -26,8 +26,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL, PART_STATUS } from "../../api/repairs";
 import {
   fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, decidePath, assessJob,
-  bookJob, cancelBooking, arriveJob, assignWorkshop, classifyDamage, voidWarranty, clearWarranty, addWork,
-  completeJob, verifyJob, voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
+  bookJob, cancelBooking, arriveJob, assignWorkshop, voidWarranty, clearWarranty, addWork,
+  voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
   INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, workKindsFor, componentLabel, routeOf,
 } from "../../api/repairWorkflow";
@@ -298,88 +298,6 @@ function ReasonButton({ label, busyLabel, placeholder, onSend, busy, tone = "gho
   );
 }
 
-function DamageStep({ orgId, job, act, busy }) {
-  const [cls, setCls] = useState("genuine");
-  const [note, setNote] = useState("");
-  const [diagnosis, setDiagnosis] = useState("");
-  const malicious = cls === "suspected_malicious";
-  const ok = !malicious || note.trim().length > 0;
-  return (
-    <div className="wf-form">
-      <Choice label="Damage" value={cls} onChange={setCls}
-              options={[["genuine", "Genuine wear or fault"], ["suspected_malicious", "Suspected malicious"]]} />
-      {malicious && (
-        <Note label="Describe the damage" required value={note} onChange={setNote} rows={3}
-              placeholder="Probe cable cut clean at the tank entry; seal broken" />
-      )}
-      <Note label="Diagnosis" value={diagnosis} onChange={setDiagnosis} rows={3} max={4000}
-            placeholder="What is wrong, and what the repair will be" />
-      {malicious && (
-        <p className="wf-callout wf-callout--crit">
-          The Head of Security is notified and an investigation opens. The repair goes ahead.
-        </p>
-      )}
-      <div className="wf-actions">
-        <button type="button" className="sp4-submit-btn" disabled={!ok || !!busy}
-                onClick={() => act("damage", () => classifyDamage(orgId, job.id, { damageClass: cls, note, diagnosis }),
-                  malicious ? "Recorded. The Head of Security has been notified." : "Recorded. The repair is under way.")}>
-          {busy === "damage" ? "Saving…" : "Record and start the repair"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function CompleteStep({ orgId, job, act, busy }) {
-  const [result, setResult] = useState("pass");
-  const [testNote, setTestNote] = useState("");
-  const [fixNote, setFixNote] = useState("");
-  const [rec, setRec] = useState("");
-  const ok = fixNote.trim().length > 0;
-  return (
-    <div className="wf-form">
-      <Choice label="Test result" value={result} onChange={setResult} options={[["pass", "Passed"], ["fail", "Failed"]]} />
-      <Note label="How it was tested" value={testNote} onChange={setTestNote} placeholder="Road test, 3 km: holds under load" />
-      <Note label="What was done" required value={fixNote} onChange={setFixNote} rows={3} max={2000}
-            placeholder="What you replaced, adjusted or refitted" />
-      {result === "pass" && <Note label="Recommendation" value={rec} onChange={setRec} max={2000} />}
-      <div className="wf-actions">
-        <button type="button" className="sp4-submit-btn" disabled={!ok || !!busy}
-                onClick={() => act("complete", () => completeJob(orgId, job.id, {
-                  testResult: result, testNote, fixNote, recommendation: result === "pass" ? rec : undefined,
-                }), (out) => (out?.testFailed ? "Failed test recorded on the work log. Keep working." : "Completed. Sent to the Control Room to verify."))}>
-          {busy === "complete" ? "Saving…" : result === "pass" ? "Complete and send to verify" : "Record the failed test"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function VerifyStep({ orgId, job, act, busy, isCompleter }) {
-  const [note, setNote] = useState("");
-  if (isCompleter) return <p className="wf-muted">You completed this repair. Someone else in the Control Room verifies it.</p>;
-  return (
-    <div className="wf-form">
-      <dl className="wf-facts wf-facts--tight">
-        <Fact label="Completed">{[job.completedByName, at(job.completedAt)].filter(Boolean).join(" · ")}</Fact>
-        <Fact label="Test">{job.testResult === "pass" ? "Passed" : job.testResult}{job.testNote ? ` · ${job.testNote}` : ""}</Fact>
-        <Fact label="What was done">{job.fixNote}</Fact>
-      </dl>
-      <Note label="Note" value={note} onChange={setNote} placeholder="Required to reject: what does not match" />
-      <div className="wf-actions">
-        <button type="button" className="sp4-ghost-btn" disabled={!note.trim() || !!busy}
-                onClick={() => act("reject", () => verifyJob(orgId, job.id, "reject", note), "Sent back to the technician.")}>
-          {busy === "reject" ? "Sending…" : "Reject"}
-        </button>
-        <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => act("accept", () => verifyJob(orgId, job.id, "accept", note), "Verified. The unit is fixed and available.")}>
-          {busy === "accept" ? "Verifying…" : "Verify: fixed and available"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── The ticket record ───────────────────────────────────────────────────────
 
 function Parts({ orgId, job, act, busy, canWork, canIssue, canSource }) {
@@ -470,14 +388,54 @@ function Parts({ orgId, job, act, busy, canWork, canIssue, canSource }) {
   );
 }
 
-function WorkLog({ orgId, job, act, busy, kinds }) {
+/**
+ * The work log, and the way the work moves the job on: the entry that
+ * finishes a stage runs that stage's step on the server. A diagnosis in the
+ * workshop, with the damage class, starts the repair; a passed test
+ * completes the job and sends it to verify; a verification closes it or
+ * sends it back. Other entries are logged where they stand.
+ */
+/** Where the next step is taken: the work log, whose entries move the job on. */
+function WorkHint({ children }) {
+  return <p className="wf-muted wf-work-hint"><i className="ti ti-arrow-down" aria-hidden="true" /> {children}</p>;
+}
+
+function WorkLog({ orgId, job, act, busy, kinds, userId }) {
   const [picked, setKind] = useState(null);
   const [text, setText] = useState("");
   const [mins, setMins] = useState("");
+  const [cls, setCls] = useState("genuine");
+  const [damageNote, setDamageNote] = useState("");
+  const [result, setResult] = useState("pass");
+  const [rec, setRec] = useState("");
+  const [verdict, setVerdict] = useState("accept");
   const entries = job.workEntries ?? [];
   // The stage decides what may be logged; a pick the stage no longer opens falls back to its first.
   const kind = kinds.includes(picked) ? picked : kinds[0];
+  const diagnosing = kind === "diagnosis" && (job.stage === "in_workshop" || job.stage === "field_inspection");
+  const testing = kind === "test";
   const verifying = kind === "verification";
+  const malicious = diagnosing && cls === "suspected_malicious";
+  const finishes = diagnosing || (testing && result === "pass") || verifying;
+  const ok = text.trim().length > 0 && (!malicious || damageNote.trim().length > 0);
+  const ownRepair = verifying && job.completedById === userId;
+
+  const body = {
+    kind, text,
+    ...(finishes || testing ? {} : { labourMinutes: mins === "" ? undefined : Number(mins) }),
+    ...(diagnosing ? { damageClass: cls, damageNote: malicious ? damageNote : undefined } : {}),
+    ...(testing ? { testResult: result, recommendation: result === "pass" && rec.trim() ? rec : undefined } : {}),
+    ...(verifying ? { verdict } : {}),
+  };
+  const done = diagnosing ? (malicious ? "Logged. The repair is under way; the Head of Security has been notified." : "Logged. The repair is under way.")
+    : testing ? (result === "pass" ? "Logged. Completed and sent to the Control Room to verify." : "Failed test logged. Keep working.")
+      : verifying ? (verdict === "accept" ? "Verified. The unit is fixed and available." : "Sent back to the technician.")
+        : null;
+  const button = diagnosing ? "Log and start the repair"
+    : testing ? (result === "pass" ? "Log: complete and send to verify" : "Log the failed test")
+      : verifying ? (verdict === "accept" ? "Verify: fixed and available" : "Reject: back to the technician")
+        : "Log it";
+
   return (
     <Section title="Work log" aside={entries.length ? `${entries.length}` : null}>
       {entries.length === 0 && <p className="wf-muted">Nothing logged yet.</p>}
@@ -493,26 +451,52 @@ function WorkLog({ orgId, job, act, busy, kinds }) {
           ))}
         </ol>
       )}
-      {kinds.length > 0 && (
+      {ownRepair && <p className="wf-muted">You completed this repair. Someone else in the Control Room verifies it.</p>}
+      {kinds.length > 0 && !ownRepair && (
         <div className="wf-form wf-form--inline">
           <div className="wf-row">
             <Choice label="Entry" value={kind} onChange={setKind} options={kinds.map((k) => [k, WORK_KIND_LABEL[k]])} />
-            {!verifying && (
+            {!finishes && !testing && (
               <label className="sp4-field wf-field wf-qty">
                 <span className="sp4-label">Minutes</span>
                 <input className="sp4-input" type="number" min={0} value={mins} onChange={(e) => setMins(e.target.value)} />
               </label>
             )}
           </div>
-          <Note label={verifying ? "What was checked" : "What was done"} value={text} onChange={setText} max={4000} />
+          {verifying && (
+            <dl className="wf-facts wf-facts--tight">
+              <Fact label="Completed">{[job.completedByName, at(job.completedAt)].filter(Boolean).join(" · ")}</Fact>
+              <Fact label="Test">{job.testResult === "pass" ? "Passed" : job.testResult}{job.testNote ? ` · ${job.testNote}` : ""}</Fact>
+              <Fact label="What was done">{job.fixNote}</Fact>
+            </dl>
+          )}
+          {diagnosing && (
+            <Choice label="Damage" value={cls} onChange={setCls}
+                    options={[["genuine", "Genuine wear or fault"], ["suspected_malicious", "Suspected malicious"]]} />
+          )}
+          {testing && <Choice label="Test result" value={result} onChange={setResult} options={[["pass", "Passed"], ["fail", "Failed"]]} />}
+          {verifying && <Choice label="Verdict" value={verdict} onChange={setVerdict} options={[["accept", "Verified"], ["reject", "Rejected"]]} />}
+          <Note label={diagnosing ? "Diagnosis" : testing ? "How it was tested" : verifying ? (verdict === "accept" ? "What was checked" : "What does not match") : "What was done"}
+                required value={text} onChange={setText} max={4000} />
+          {malicious && (
+            <>
+              <Note label="Describe the damage" required value={damageNote} onChange={setDamageNote} rows={3} max={2000}
+                    placeholder="Probe cable cut clean at the tank entry; seal broken" />
+              <p className="wf-callout wf-callout--crit">
+                The Head of Security is notified and an investigation opens. The repair goes ahead.
+              </p>
+            </>
+          )}
+          {testing && result === "pass" && <Note label="Recommendation" value={rec} onChange={setRec} max={2000} />}
+          {testing && result === "pass" && <p className="wf-muted">The repair entries above are the account of what was done.</p>}
           <div className="wf-actions">
-            <button type="button" className="sp4-ghost-btn" disabled={!text.trim() || !!busy}
+            <button type="button" className={finishes ? "sp4-submit-btn" : "sp4-ghost-btn"} disabled={!ok || !!busy}
                     onClick={async () => {
-                      if (await act("work", () => addWork(orgId, job.id, { kind, text, labourMinutes: mins === "" || verifying ? undefined : Number(mins) }), null)) {
-                        setText(""); setMins("");
+                      if (await act("work", () => addWork(orgId, job.id, body), done)) {
+                        setText(""); setMins(""); setDamageNote(""); setRec("");
                       }
                     }}>
-              {busy === "work" ? "Logging…" : "Log it"}
+              {busy === "work" ? "Logging…" : button}
             </button>
           </div>
         </div>
@@ -583,7 +567,11 @@ function DamageRecord({ orgId, job, act, busy, canWork, canSecurity }) {
   );
 }
 
+/** Steps the trail shows folded; the rest open on request, as a long job's trail runs to dozens. */
+const TRAIL_FOLDED = 3;
+
 function Trail({ job }) {
+  const [open, setOpen] = useState(false);
   const events = (Array.isArray(job.stageHistory) ? job.stageHistory : []).filter((e) => e?.stage || e?.kind);
   if (events.length === 0) return null;
   const items = [...events].reverse().map((e) => ({
@@ -596,7 +584,13 @@ function Trail({ job }) {
   }));
   return (
     <Section title="Trail" aside={`${items.length} steps`}>
-      <TrailList items={items} />
+      <TrailList items={open ? items : items.slice(0, TRAIL_FOLDED)} />
+      {items.length > TRAIL_FOLDED && (
+        <button type="button" className="sp4-ghost-btn wf-trail-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <i className={`ti ti-chevron-${open ? "up" : "down"}`} aria-hidden="true" />
+          {open ? "Show the latest only" : `Show all ${items.length} steps`}
+        </button>
+      )}
     </Section>
   );
 }
@@ -712,6 +706,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
 
   /** The action for this stage, when this person may take it; else null. */
   let action = null;
+  // A step taken in the work log saves itself there: no Save bar for it.
+  let staged = true;
   if (s === "pending" && can("repair:flag")) {
     action = (
       <div className="wf-actions">
@@ -735,7 +731,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
   } else if (s === "remote_fix" && canWork) {
     action = (
       <>
-        <CompleteStep orgId={orgId} job={job} act={choose} busy={busy} />
+        <WorkHint>Log the repair, then a passed test, in the work log below: the test completes the job.</WorkHint>
         <details className="wf-alt"><summary>A remote fix is not possible</summary>
           <PathStep orgId={orgId} job={job} act={choose} busy={busy} from="remote_fix" />
         </details>
@@ -769,11 +765,14 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       </div>
     );
   } else if ((s === "in_workshop" || s === "field_inspection") && canWork) {
-    action = <DamageStep orgId={orgId} job={job} act={choose} busy={busy} />;
+    staged = false;
+    action = <WorkHint>Log the diagnosis in the work log below: it starts the repair.</WorkHint>;
   } else if (s === "fixing" && canWork) {
-    action = <CompleteStep orgId={orgId} job={job} act={choose} busy={busy} />;
+    staged = false;
+    action = <WorkHint>Log the repair, then a passed test, in the work log below: the test completes the job.</WorkHint>;
   } else if (s === "completed" && can("repair:verify")) {
-    action = <VerifyStep orgId={orgId} job={job} act={choose} busy={busy} isCompleter={job.completedById === userId} />;
+    staged = false;
+    action = <WorkHint>Log the verification in the work log below: verified closes the job, rejected sends it back.</WorkHint>;
   }
 
   const closed = !!job.resolvedAt;
@@ -879,10 +878,10 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
                canIssue={can("repair:parts_issue")} canSource={can("repair:parts_source")} />
       )}
 
-      <WorkLog orgId={orgId} job={job} act={act} busy={busy} kinds={workKindsFor(job, can, userId)} />
+      <WorkLog orgId={orgId} job={job} act={act} busy={busy} kinds={workKindsFor(job, can, userId)} userId={userId} />
       <Trail job={job} />
 
-      {(action || canMove) && !closed && (
+      {((action && staged) || canMove) && !closed && (
         <div className="wf-save">
           <span className="wf-save__note">{pending ? `Unsaved: ${pending.label}` : "Choose the next step above, then save it"}</span>
           <button type="button" className="sp4-submit-btn" disabled={!pending || !!busy} onClick={save}>

@@ -79,7 +79,7 @@ describe('the job panel shows the one next step, to whoever may take it', () => 
     expect(html).toContain('Suspected malicious damage.');
     expect(html).toContain('The repair continues');
     expect(html).toContain('RT-2026-00007');
-    expect(html).toContain('Complete and send to verify');
+    expect(html).toContain('the test completes the job');
     expect(html).toContain('Mark warranty void');
   });
 
@@ -188,5 +188,53 @@ describe('the work log opens by stage, to the right person', () => {
 
   it('opens nothing while awaiting assessment', () => {
     expect(entryOptions(render(mine('awaiting_assessment'), room))).toEqual([]);
+  });
+});
+
+describe('the trail folds when long', () => {
+  const steps = (n) => Array.from({ length: n }, (_, i) => ({ stage: 'forwarded', at: `2026-10-2${i % 9}T08:00:00Z`, note: `step ${i}` }));
+  const shown = (html) => (html.match(/wf-trail__e[ "]/g) ?? []).length;
+
+  it('shows the latest three of a long trail, and a way to open the rest', () => {
+    const html = render(job({ stageHistory: steps(8) }), grants());
+    expect(shown(html)).toBe(3);
+    expect(html).toContain('Show all 8 steps');
+    expect(html).toContain('step 7');
+    expect(html).not.toContain('step 0<');
+  });
+
+  it('has nothing to fold in a short trail', () => {
+    const html = render(job({ stageHistory: steps(3) }), grants());
+    expect(shown(html)).toBe(3);
+    expect(html).not.toContain('Show all');
+  });
+});
+
+describe('the work log moves the job on', () => {
+  const mine = (stage, over = {}) => job({ stage, ticketNo: 'RT-1', assignedToId: 'u1', assignmentStatus: 'accepted', ...over });
+
+  it('asks a workshop diagnosis for the damage class, and says it starts the repair', () => {
+    const html = render(mine('in_workshop'), grants('repair:resolve'));
+    expect(html).toContain('aria-label="Damage"');
+    expect(html).toContain('Log and start the repair');
+    expect(html).toContain('it starts the repair');
+  });
+
+  it('logs a triage diagnosis plainly: the path is still to decide', () => {
+    const html = render(mine('forwarded', { queue: 'controltech' }), grants('repair:resolve'));
+    expect(html).not.toContain('aria-label="Damage"');
+    expect(html).toContain('Log it');
+  });
+
+  it('offers the Control Room the verdict, with what was done beside it', () => {
+    const html = render(mine('completed', { completedById: 'u1', fixNote: 'Replaced the probe' }), grants('repair:verify'), 'sup-1');
+    expect(html).toContain('aria-label="Verdict"');
+    expect(html).toContain('Replaced the probe');
+  });
+
+  it('keeps the completer from verifying their own repair', () => {
+    const html = render(mine('completed', { completedById: 'sup-1' }), grants('repair:verify'), 'sup-1');
+    expect(html).toContain('Someone else in the Control Room verifies it');
+    expect(html).not.toContain('aria-label="Verdict"');
   });
 });
