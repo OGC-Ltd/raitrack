@@ -127,7 +127,28 @@ export const INVESTIGATION_LABEL = {
   open: "Open", investigating: "Investigating", closed_confirmed: "Closed: confirmed", closed_unfounded: "Closed: unfounded",
 };
 export const INVESTIGATION_PILL = { open: "inc", investigating: "warn", closed_confirmed: "inc", closed_unfounded: "none" };
-export const WORK_KIND_LABEL = { diagnosis: "Diagnosis", repair: "Repair", test: "Test", note: "Note" };
+export const WORK_KIND_LABEL = { diagnosis: "Diagnosis", repair: "Repair", test: "Test", note: "Note", verification: "Verification" };
+/**
+ * The work log entries each stage opens, as the server's WORK_KINDS_AT holds
+ * them: diagnosis at triage and in the workshop, repair and test together
+ * while fixing (the technician's), verification once completed (the Control
+ * Room's). A stage not named opens none.
+ */
+const TECH_DIAGNOSIS = ["diagnosis", "note"], TECH_REPAIR = ["repair", "test", "note"];
+export const WORK_KINDS_AT = {
+  forwarded: TECH_DIAGNOSIS, in_workshop: TECH_DIAGNOSIS, field_inspection: TECH_DIAGNOSIS,
+  remote_fix: TECH_REPAIR, fixing: TECH_REPAIR, spare_outsourced: TECH_REPAIR,
+  completed: ["verification"],
+};
+/** The kinds this person may log on this job now: the job's own technician, or the Control Room at verification. */
+export function workKindsFor(job, can, userId) {
+  if (!job || job.resolvedAt) return [];
+  const kinds = WORK_KINDS_AT[job.stage] ?? [];
+  if (job.stage === "completed") return can("repair:verify") ? kinds : [];
+  const technician = (job.workshopTechnicianId && job.workshopTechnicianId === userId)
+    || (job.assignedToId === userId && job.assignmentStatus === "accepted");
+  return technician && can("repair:resolve") ? kinds : [];
+}
 export const SERVICE_STATE_LABEL = {
   awaiting_repair: "Repair flagged", in_workshop: "In workshop", awaiting_verification: "Awaiting verification",
 };
