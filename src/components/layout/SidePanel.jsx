@@ -1,7 +1,7 @@
 // SidePanel — left sidebar: weather card, stats grid, nav, map layers.
 // Sample 2 design: cloud illustration weather, bordered stat boxes, bordered nav and layers sections.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppSelector, useAppActions, useCompanies } from '../../context/AppContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -200,6 +200,23 @@ export default function SidePanel() {
   useEffect(() => { setUserCollapsed(null); }, [isTablet, isLaptop]);
 
   const desktopActiveTab = useAppSelector((a) => a.desktopActiveTab);
+
+  /* The dashcam page wants the width for footage, so opening it folds the
+   * menu to its icon rail. Leaving hands back whatever the menu was before,
+   * and pressing the hamburger on the page still opens it. */
+  const beforeDashcam = useRef(undefined);
+  useEffect(() => {
+    if (desktopActiveTab === 'dashcam') {
+      if (beforeDashcam.current === undefined) {
+        beforeDashcam.current = userCollapsed;
+        setUserCollapsed(true);
+      }
+    } else if (beforeDashcam.current !== undefined) {
+      setUserCollapsed(beforeDashcam.current);
+      beforeDashcam.current = undefined;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a page change should fold or restore
+  }, [desktopActiveTab]);
   const { setDesktopActiveTab } = useAppActions();
   const { activeCompany } = useCompanies();
   const { can, flaggedOnly } = usePermissions();
