@@ -1,5 +1,5 @@
-/* One repair job, opened from its row (RepairJobDetail). Two columns like the
-   Fuel Audit's overhaul: the job and its progress, then its spare parts. */
+/* One repair job, opened from its row (RepairJobDetail): the job, then its
+   repair progress as the Workshop has it. Read only. */
 .rjd {
   padding: 12px;
   border: 1px solid var(--sp4-line, rgba(0, 0, 0, 0.12));
@@ -8,7 +8,7 @@
 }
 .rjd-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -30,11 +30,6 @@
 .rj-row--open > td { border-bottom-color: transparent; background: color-mix(in srgb, var(--sp4-accent) 7%, transparent); }
 
 @media (max-width: 900px) {
-  .rjd-grid { grid-template-columns: minmax(0, 1fr); }
-  .rjd-grid > .aud-ov-col--parts {
-    padding-left: 0; padding-top: 14px; border-left: 0;
-    border-top: 1px solid var(--sp4-line, rgba(0, 0, 0, 0.1));
-  }
   .rjd-fact { grid-template-columns: 100px minmax(0, 1fr); }
 }
 
