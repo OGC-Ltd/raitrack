@@ -703,7 +703,10 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             </div>
             <div className="vt-journey-times">
               <span className="vt-jtime">
-                <span className="vt-jtime-lbl">DEPARTED</span>{" "}
+                {/* Departed only on a FactorySuite dispatch (every open trip is
+                    one); otherwise the unit simply started work (operator,
+                    2026-10-27). */}
+                <span className="vt-jtime-lbl">{hasLeg ? "DEPARTED" : "STARTED"}</span>{" "}
                 {start ? fmtClock(start.t) : dayPending ? "…" : "-"}
               </span>
             </div>
