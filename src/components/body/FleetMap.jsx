@@ -7225,11 +7225,12 @@ export default function FleetMap() {
             onPickPlace={handlePickPlace}
             namesOn={namesOn}
             onToggleNames={toggleNames}
-            /* Live traffic is a rail button of its own, so the Maps panel
-               lists every layer but that one. (The phone's layers menu in the
-               camera rail still carries it — there is no rail there.) */
-            layers={mapLayers.filter(l => l.id !== "traffic")}
+            /* Live traffic and weather are rail buttons of their own, so the
+               Maps panel lists every layer but those. (The phone's layers menu
+               in the camera rail still carries them — there is no rail there.) */
+            layers={mapLayers.filter(l => l.id !== "traffic" && l.id !== "weather")}
             traffic={mapLayers.find(l => l.id === "traffic") ?? null}
+            weather={mapLayers.find(l => l.id === "weather") ?? null}
             bases={GOOGLE_BASE_AVAILABLE ? BASE_MAPS : null}
             base={baseMap}
             onBase={chooseBase}
