@@ -39,8 +39,13 @@ const msOf = (iso) => {
 /** Newest marks only, oldest dropped first. */
 const capped = (entries) => new Map(entries.slice(-MAX_READ_IDS));
 
-/** Whether a feed line is still unread. A line without a usable time is read. */
-export function isUnread(item, reads) {
+/**
+ * Whether a feed line is still unread. A line without a usable time is read,
+ * and so is one `me` caused: an action is not news to whoever took it
+ * (operator, 2026-10-27; the server names the actor as `actorId`).
+ */
+export function isUnread(item, reads, me) {
+  if (me && item?.actorId === me) return false;
   const t = msOf(item?.ts);
   if (t == null) return false;
   const revised = msOf(item?.revisedAt);

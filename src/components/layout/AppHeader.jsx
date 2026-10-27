@@ -49,7 +49,7 @@ import { claimSidePanel, onSidePanelClaim } from '../../lib/sidePanels';
  * Exported because it is the whole of the rule and none of the rendering,
  * the same reason groupLayers is exported from MapLayersTree.
  */
-export function summariseUnread(feed, reads) {
+export function summariseUnread(feed, reads, me) {
   // `reads` is lib/feedReads' marks; a bare time reads as a cut-off with no
   // single lines read. Every unread line counts, so the badge only goes once
   // nothing is left to read (operator 2026-10-19: opening and closing the bell
@@ -59,7 +59,7 @@ export function summariseUnread(feed, reads) {
   // A malformed or missing timestamp cannot be placed against the cut-off,
   // and counting it would make the badge tick up on every reconnect that
   // replays it. isUnread reads it as read, the safe reading.
-  for (const f of feed ?? []) if (isUnread(f, r)) unreadCount += 1;
+  for (const f of feed ?? []) if (isUnread(f, r, me)) unreadCount += 1;
   return { unreadCount };
 }
 
@@ -241,7 +241,7 @@ export default function AppHeader() {
   // feed at all. The feed is the fleet's events, which such an account is not
   // shown anywhere else (the sidebar dashes its counts).
   const limited = !can('map:read');
-  const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, feedReads.reads);
+  const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, feedReads.reads, user?.id);
   // The bell swings once when the count goes up — news arrived — and not when
   // it falls (lines read) or on a re-render with the same count.
   const prevUnread = useRef(unreadCount);

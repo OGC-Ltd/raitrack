@@ -28,6 +28,7 @@ import { feedItemFollowUp, openFollowUp } from '../../lib/fuelFollowUps';
 import { useVehicleFeed } from '../../hooks/useVehicleFeed';
 import { usePermissions } from '../../hooks/usePermissions';
 import { isUnread } from '../../lib/feedReads';
+import { useAuth } from '../../context/AuthContext';
 import { nearBottom } from '../shared/FeedFooter';
 import './LiveFeed.css';
 
@@ -85,7 +86,8 @@ export default function LiveFeed({ open, onClose, reads: marks = NO_READS }) {
   // is unread until it is opened.
   const { reads, markRead, markAllRead } = marks;
   const isNew = (item) => { const t = tsOf(item); return t != null && t > reads.since; };
-  const unread = (item) => isUnread(item, reads);
+  const me = useAuth().user?.id;
+  const unread = (item) => isUnread(item, reads, me);
   const newCount = feed.filter(unread).length;
   const firstOld = feed.findIndex((it) => !isNew(it));
 
