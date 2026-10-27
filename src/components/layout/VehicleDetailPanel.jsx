@@ -826,7 +826,9 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
         {/* Trip: from, then to, as two stops on one line */}
         <ol className="vh-route" aria-label="Trip">
           <li className="vh-stop vh-stop--from">
-            <span className="vh-stop-lbl">Departed</span>
+            {/* Departed when FactorySuite dispatched it; its own first
+                movement otherwise is when it started (operator, 2026-10-27). */}
+            <span className="vh-stop-lbl">{vehicle.departure ? 'Departed' : 'Started'}</span>
             <span className="vh-stop-val" title={vehicle.departure ?? ''}>
               {vehicle.departure
                 ?? (today.firstMove ? `${startPlace ?? 'Moved'} · ${fmtTime(today.firstMove.t)}` : tele.loading ? '…' : 'Not moved today')}
