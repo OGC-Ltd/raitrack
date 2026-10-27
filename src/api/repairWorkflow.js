@@ -149,6 +149,9 @@ export function workKindsFor(job, can, userId) {
     || (job.assignedToId === userId && job.assignmentStatus === "accepted");
   return technician && can("repair:resolve") ? kinds : [];
 }
+
+/** Logged while the job stands at its stage, so counted against that stage's one-of-each. */
+export const loggedThisStage = (job, e) => !job.stageChangedAt || new Date(e.at) >= new Date(job.stageChangedAt);
 export const SERVICE_STATE_LABEL = {
   awaiting_repair: "Repair flagged", in_workshop: "In workshop", awaiting_verification: "Awaiting verification",
 };
@@ -193,6 +196,9 @@ export const classifyDamage = (orgId, id, d) => post(item(orgId, id, "damage"), 
 export const voidWarranty   = (orgId, id, note, components) => post(item(orgId, id, "warranty-void"), { note: note.trim(), components });
 export const clearWarranty  = (orgId, id, note) => post(item(orgId, id, "warranty-void/clear"), { note: note.trim() });
 export const addWork        = (orgId, id, w) => post(item(orgId, id, "work"), clean(w));
+/** Edit or delete a logged entry: only its author, the job staying where it stands. */
+export const editWork       = (orgId, id, entryId, w) => post(item(orgId, id, `work/${entryId}`), clean(w));
+export const deleteWork     = (orgId, id, entryId) => post(item(orgId, id, `work/${entryId}/delete`));
 export const completeJob    = (orgId, id, c) => post(item(orgId, id, "complete"), clean(c));
 export const verifyJob      = (orgId, id, decision, note) => post(item(orgId, id, "verify"), clean({ decision, note }));
 export const voidJob        = (orgId, id, reason) => post(item(orgId, id, "void"), { reason: reason.trim() });
