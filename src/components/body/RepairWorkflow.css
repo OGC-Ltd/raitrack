@@ -78,6 +78,7 @@
 .wf-sec { display: flex; flex-direction: column; gap: var(--sp4-xs); border-top: 1px solid var(--wf-rule); padding-top: var(--sp4-sm); min-width: 0; }
 .wf-sec__h { margin: 0; font-size: var(--sp4-label); text-transform: uppercase; letter-spacing: 0.06em; color: var(--wf-ink-3); font-weight: 600; display: flex; gap: var(--sp4-xs); }
 .wf-sec__aside { color: var(--wf-ink-4); font-weight: 500; }
+.wf-trail-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--sp4-xs); }
 
 .wf-facts { margin: 0; display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); gap: var(--sp4-2xs) var(--sp4-md); font-size: var(--sp4-body); }
 .wf-fact { display: contents; }
