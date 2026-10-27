@@ -10,6 +10,7 @@
  */
 import L from "leaflet";
 import { weatherTone, weatherTitle } from "./weatherChip";
+import { createWeatherEffects } from "./weatherEffects";
 
 /** Re-read while on: Google refreshes current conditions about this often. */
 export const WEATHER_REFRESH_MS = 10 * 60_000;
@@ -36,6 +37,8 @@ export function addWeatherLayer(map, fetchGrid, { onError } = {}) {
     pane.style.zIndex = "415"; // over zones and tracks, under the units
   }
   const group = L.layerGroup().addTo(l);
+  // Rain, wind and storms animated under the chips (lib/weatherEffects).
+  const fx = createWeatherEffects(l, "g-weather");
   let seq = 0;
   let settle = null;
 
@@ -43,12 +46,13 @@ export function addWeatherLayer(map, fetchGrid, { onError } = {}) {
     const mine = ++seq;
     const b = l.getBounds();
     try {
-      const { points } = await fetchGrid({
+      const { points, step } = await fetchGrid({
         south: Math.max(-90, b.getSouth()), west: Math.max(-180, b.getWest()),
         north: Math.min(90, b.getNorth()),  east: Math.min(180, b.getEast()),
       });
       if (mine !== seq) return; // a newer view answered, or the layer is gone
       group.clearLayers();
+      fx.set(points, step);
       for (const p of points) {
         L.marker([p.lat, p.lng], {
           pane: "g-weather",
@@ -72,5 +76,6 @@ export function addWeatherLayer(map, fetchGrid, { onError } = {}) {
     clearInterval(timer);
     l.off("moveend", onMove);
     group.remove();
+    fx.remove();
   };
 }
