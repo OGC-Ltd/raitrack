@@ -6,6 +6,7 @@
  * grant and they are the people who flag, assess, book and verify.
  *
  *   Jobs           every job on the workflow, filtered by who acts next
+ *   My jobs        a technician's own jobs: open, sent to the workshop, closed
  *   ControlTech    the queue ControlTech technicians claim from (repair:claim)
  *   Workshop day   one day's intake against the 3-a-day cap
  *   Security       investigations opened by suspected malicious damage
@@ -23,7 +24,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useAuth } from "../../context/AuthContext";
 import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
 import {
-  listWorkflowJobs, fetchQueue, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
+  listWorkflowJobs, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
   takeWorkshopHandoff, WORKSHOP_OPEN,
 } from "../../api/repairWorkflow";
@@ -217,6 +218,101 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
           if (made.length === 1 && made[0]?.id) onOpen(made[0].id);
         }}
       />
+    </>
+  );
+}
+
+// ── My jobs ─────────────────────────────────────────────────────────────────
+
+/** Stages a job reaches only by going physical: assessment, booking, the workshop. */
+const WORKSHOP_STAGES = ["awaiting_assessment", "booked", "towing", "field_inspection", "in_workshop"];
+/** Where one of my jobs stands: still open with me, sent on to the workshop, or closed. */
+export const mineGroup = (j) => (j.resolvedAt ? "closed"
+  : j.path === "physical" || j.queue === "workshop" || WORKSHOP_STAGES.includes(j.stage) ? "workshop" : "open");
+const MINE_GROUPS = [["open", "Open"], ["workshop", "Sent to the workshop"], ["closed", "Closed"]];
+const MINE_EMPTY = {
+  open: ["No Open Jobs", "No open job is assigned to you. Claim one from the ControlTech queue."],
+  workshop: ["None in the Workshop", "None of your jobs has gone on to the workshop."],
+  closed: ["None Closed Yet", "None of your jobs has closed yet."],
+};
+
+/**
+ * A technician's own jobs (operator, 2026-10-27): what is assigned to them,
+ * what went on to the workshop after they had it, and what has closed. The
+ * ControlTech queue only holds jobs still at ControlTech.
+ */
+function MyJobsTab({ orgId, userId, onOpen, openId }) {
+  const jobs = useLive(() => fetchMyJobs(orgId), [orgId]);
+  const [group, setGroup] = useState("open");
+  const all = jobs.data ?? [];
+  const counts = Object.fromEntries(MINE_GROUPS.map(([k]) => [k, all.filter((j) => mineGroup(j) === k).length]));
+  const rows = all.filter((j) => mineGroup(j) === group);
+
+  return (
+    <>
+      <TableToolbar summary={<><b>{counts.open}</b> open · <b>{counts.workshop}</b> in the workshop · <b>{counts.closed}</b> closed</>}
+                    loading={jobs.loading} onReload={jobs.read} />
+      <div className="sp4-filter-group wf-mine-groups">
+        {MINE_GROUPS.map(([id, text]) => (
+          <button key={id} type="button" aria-pressed={group === id}
+                  className={"sp4-filter-chip" + (group === id ? " sp4-filter-chip--on" : "")}
+                  onClick={() => setGroup(id)}>{text}<span className="sys-chip-n">{counts[id]}</span></button>
+        ))}
+      </div>
+      {rows.length === 0 && jobs.loading ? (
+        <EmptyNote icon="ti-loader-2" tone="busy" title="Reading Your Jobs">Jobs assigned to you, open and closed.</EmptyNote>
+      ) : rows.length === 0 && jobs.error ? (
+        <EmptyNote icon="ti-alert-triangle" tone="error" title="Your Jobs Could Not Be Loaded" action={{ label: "Try again", onClick: jobs.read }}>{jobs.error}</EmptyNote>
+      ) : rows.length === 0 ? (
+        <EmptyNote icon="ti-circle-check" title={MINE_EMPTY[group][0]}>{MINE_EMPTY[group][1]}</EmptyNote>
+      ) : (
+        <div className="sp4-table-scroll">
+          <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable wf-table">
+            <thead>
+              <tr>
+                <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
+                <th className="sp4-th--left">Fault</th>
+                <th className="sp4-th--left">Stage</th>
+                <th className="sp4-th--left">Ticket</th>
+                <th className="sp4-th--left">{group === "workshop" ? "Workshop" : "Your part"}</th>
+                <th className="sp4-th--right">{group === "closed" ? "Closed" : "In stage"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((j) => {
+                const booking = j.bookings?.[0];
+                const open = () => onOpen(j.id);
+                const where = [booking?.workshop?.name, booking ? isoDay(booking.bookingDate) : null,
+                  j.workshopTechnician?.fullName ?? j.workshopTechnicianName].filter(Boolean).join(" · ");
+                return (
+                  <tr key={j.id} data-job={j.id} tabIndex={0}
+                      className={"sp4-tr wf-tr" + (openId === j.id ? " wf-tr--open" : "")}
+                      aria-expanded={openId === j.id} onClick={open}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}>
+                    <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{j.vehicle?.registrationPlate ?? "-"}</span></td>
+                    <td className="sp4-td--left">
+                      <span className="wf-cell-fault">{jobLabel(j)}</span>
+                      {(j.suspectedFault ?? j.problemNote) && <span className="wf-cell-sub">{j.suspectedFault ?? j.problemNote}</span>}
+                    </td>
+                    <td className="sp4-td--left">
+                      <span className="wf-cell-stage">
+                        <span className={`sp4-pill sp4-pill--${STAGE_PILL[j.stage] ?? "none"}`}>{STAGE_LABEL[j.stage] ?? j.stage}</span>
+                        <PhaseLadder stage={j.stage} compact />
+                      </span>
+                    </td>
+                    <td className="sp4-td--left"><span className="wf-mono">{j.ticketNo ?? "-"}</span></td>
+                    <td className="sp4-td--left">
+                      {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
+                        : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
+                    </td>
+                    <td className="sp4-td--right sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.createdAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }
@@ -601,10 +697,12 @@ export default function WorkshopScreen() {
 
   // Jobs and Workshop Day are the Control Room's and the workshop's boards:
   // drawn for whoever holds one of their verbs. A technician holds none, and
-  // sees only the ControlTech queue (operator, 2026-10-26).
+  // sees only the ControlTech queue (operator, 2026-10-26) and their own
+  // jobs (2026-10-27).
   const board = can("repair:read") && can(BOARD_VERBS);
   const tabs = useMemo(() => [
     { key: "jobs",     label: "Jobs",          allow: board },
+    { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
     { key: "queue",    label: "ControlTech",   allow: can("repair:claim") },
     { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
@@ -655,6 +753,7 @@ export default function WorkshopScreen() {
 
       <div className="sp4-body">
         {active === "jobs" && <JobsTab orgId={orgId} can={can} onOpen={setOpenId} openId={openId} onToast={setToast} />}
+        {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} />}
         {active === "queue" && <QueueTab orgId={orgId} userId={userId} onOpen={setOpenId} onToast={setToast} />}
         {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
         {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
