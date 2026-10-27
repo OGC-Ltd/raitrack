@@ -53,20 +53,20 @@ jobs:
       # Baked into the bundle by vite at BUILD time, so it has to exist on the
       # runner; .env is gitignored and a clean checkout has no copy.
       #
-      # new-ui draws its base map from OpenStreetMap through Leaflet and needs
-      # no key for it — the Google Maps key dash checked here is gone. The one
-      # key the bundle needs is TomTom's, for the live traffic layer and the
-      # trip ETAs. Without it the build still succeeds and the map still works,
-      # but traffic silently disappears (TRAFFIC_AVAILABLE is false), so it is
-      # checked like the map key was.
+      # new-ui draws its default base map from OpenStreetMap through Leaflet
+      # and needs no key for it. The key the bundle needs is Google's Maps key
+      # (lib/googleBase): the Google Satellite, Hybrid and Terrain base maps and,
+      # since 2026-10-27, the live traffic layer. Without it the build still
+      # succeeds and the map still works, but traffic and the Google maps
+      # silently disappear (LIVE_TRAFFIC_AVAILABLE is false), so it is checked.
       #
-      # TomTom keys ship in the browser bundle and are public by nature; what
-      # protects this one is the domain allow-list in the TomTom dashboard.
-      VITE_MYTOMTOM_API_KEY: ${{ secrets.VITE_MYTOMTOM_API_KEY }}
-      # Google Maps as the second base map (lib/googleBase), chosen in the map
-      # rail's Maps panel. Optional: without it the choice is simply not
-      # offered and the map is OpenStreetMap only, so it is not checked below.
+      # The key ships in the browser bundle and is public by nature; what
+      # protects it is the HTTP referrer restriction in the Google Cloud console.
       VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+      # TomTom: switched off in code since 2026-10-09 (TOMTOM_ENABLED in
+      # lib/tomtomTraffic), so the bundle carries no TomTom key and none is
+      # checked. Still passed, so turning TomTom back on needs no workflow edit.
+      VITE_MYTOMTOM_API_KEY: ${{ secrets.VITE_MYTOMTOM_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -85,28 +85,28 @@ jobs:
 
       # Before the build, so the failure names the missing secret rather than
       # arriving later as a blank map in production.
-      - name: the traffic key must be set
+      - name: the Google Maps key must be set
         run: |
           set -euo pipefail
-          if [ -z "${VITE_MYTOMTOM_API_KEY}" ]; then
-            echo "::error::VITE_MYTOMTOM_API_KEY is not set — this build would ship a map with no live traffic"
+          if [ -z "${VITE_GOOGLE_MAPS_API_KEY}" ]; then
+            echo "::error::VITE_GOOGLE_MAPS_API_KEY is not set — this build would ship a map with no live traffic and no Google maps"
             exit 1
           fi
-          echo "traffic key is present"
+          echo "Google Maps key is present"
 
       - run: npm run build
 
       # And after it, because a present secret is not proof of a baked one: vite
       # only exposes variables it sees at build time under the VITE_ prefix, so
       # a rename or a misspelling passes the check above and still ships blank.
-      - name: the traffic key must be in the built bundle
+      - name: the Google Maps key must be in the built bundle
         run: |
           set -euo pipefail
-          if ! grep -rqF "${VITE_MYTOMTOM_API_KEY}" build/assets; then
-            echo "::error::the bundle does not contain the traffic key — check the variable is spelled VITE_MYTOMTOM_API_KEY"
+          if ! grep -rqF "${VITE_GOOGLE_MAPS_API_KEY}" build/assets; then
+            echo "::error::the bundle does not contain the Google Maps key — check the variable is spelled VITE_GOOGLE_MAPS_API_KEY"
             exit 1
           fi
-          echo "traffic key is baked into the bundle"
+          echo "Google Maps key is baked into the bundle"
 
       - name: every public asset must be in the bundle
         run: |
