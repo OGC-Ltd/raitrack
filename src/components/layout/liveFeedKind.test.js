@@ -15,6 +15,16 @@ describe('feedKind', () => {
     expect(k('KCQ 735A arrived late', 'warning')).toBe('alert-triangle');
   });
 
+  it('shows maintenance tools for every repair notice, whatever its wording', () => {
+    const line = 'CTR 19 · RT-2026-00011 · Fuel probe: fixing remotely · ticket issued';
+    for (const source of ['repair', 'repair_flag', 'repair_ticket', 'repair_verified']) {
+      expect(feedKind({ text: line, type: 'info', source }).icon).toBe('tools');
+    }
+    expect(feedKind({ text: line, type: 'warning', source: 'repair' })).toEqual({ icon: 'tools', tone: 'warning' });
+    // A weighbridge ticket still gets its scale.
+    expect(k('Ticket 4410 weighed 32.1 tonne')).toBe('scale');
+  });
+
   it('falls back to a plain point for anything unrecognised or missing', () => {
     expect(k('Something else entirely')).toBe('point');
     expect(feedKind(undefined).icon).toBe('point');
