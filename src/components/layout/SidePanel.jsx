@@ -19,6 +19,12 @@ import './SidePanel.css';
 
 export const NAV_ITEMS = [
   { key: 'fleet',        label: 'Live Map',     icon: 'map-2',     permission: 'map:read'         },
+  // Dashcam alarms with their clips (Control Tech VSS), for organisations whose
+  // vehicles carry VSS cameras; usePermissions grants 'vss:alarms' only there.
+  // Opened from the map's tool rail, not the sidebar (operator, 2026-10-27):
+  // section 'rail' keeps it out of both sidebar lists, while App still treats
+  // it as a page it may show.
+  { key: 'dashcam',      label: 'Alarms',       icon: 'video',     permission: 'vss:alarms', section: 'rail' },
   // Fuel and overspeeding alerts from every organisation the account holds,
   // escalated and de-escalated in one place (operator, 2026-10-12). Either
   // grant opens it: the page shows each kind only where it is held.
