@@ -570,9 +570,6 @@ export default function RepairJobsPanel({
             key={openJob.id}
             orgId={orgId}
             job={openJob}
-            canResolve={mayWork(openJob)}
-            onToast={setToast}
-            onChanged={reloadAll}
             inPanel
           />
         </DetailSidebar>
