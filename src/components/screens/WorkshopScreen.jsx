@@ -71,19 +71,32 @@ const since = (iso) => {
 
 // ── Jobs ────────────────────────────────────────────────────────────────────
 
+/** What the Jobs search reads: reg, ticket, fault, the suspected fault, stage and who is next. */
+export function jobText(j) {
+  return [
+    j.vehicle?.registrationPlate, j.vehicle?.name, j.ticketNo, jobLabel(j), j.suspectedFault, j.problemNote,
+    STAGE_LABEL[j.stage] ?? j.stage, NEXT_STEP[j.stage]?.who,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
 function JobsTab({ orgId, can, onOpen, openId, onToast }) {
   const [state, setState] = useState("open");
   const [bucket, setBucket] = useState("all");
   const [flagging, setFlagging] = useState(false);
+  const [search, setSearch] = useState("");
   const jobs = useLive(() => listWorkflowJobs(orgId, { status: state === "closed" ? "all" : state }), [orgId, state]);
-  const all = (jobs.data ?? []).filter((j) => (state === "closed" ? !!j.resolvedAt : true));
+  // The search narrows before the counts, so each chip says how many match.
+  const q = search.trim().toLowerCase();
+  const all = (jobs.data ?? [])
+    .filter((j) => (state === "closed" ? !!j.resolvedAt : true))
+    .filter((j) => !q || jobText(j).includes(q));
   const counts = Object.fromEntries(BUCKETS.map(([k]) => [k, all.filter((j) => bucketOf(j.stage) === k).length]));
   const rows = bucket === "all" ? all : all.filter((j) => bucketOf(j.stage) === bucket);
 
   return (
     <>
       <TableToolbar
-        summary={<><b>{rows.length}</b> job{rows.length === 1 ? "" : "s"}</>}
+        summary={<><b>{rows.length}</b> job{rows.length === 1 ? "" : "s"}{q ? <> matching “{search.trim()}”</> : null}</>}
         loading={jobs.loading}
         onReload={jobs.read}
         actions={can("repair:flag") ? (
@@ -92,7 +105,26 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
           </button>
         ) : null}
       />
-      <FilterBar label="Filters" activeCount={(state !== "open" ? 1 : 0) + (bucket !== "all" ? 1 : 0)}>
+      <FilterBar
+        label="Filters"
+        activeCount={(state !== "open" ? 1 : 0) + (bucket !== "all" ? 1 : 0)}
+        peek={(
+          <div className="sp4-search-wrap">
+            <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              className="sp4-search"
+              type="text"
+              placeholder="Search reg, ticket or fault…"
+              aria-label="Search jobs"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && <button type="button" className="sp4-search-clear" aria-label="Clear search" onClick={() => setSearch("")}>✕</button>}
+          </div>
+        )}
+      >
         <div className="sp4-filter-group">
           <span className="sp4-filter-label">Jobs</span>
           {[["open", "Open"], ["closed", "Closed"]].map(([id, label]) => (
@@ -119,6 +151,10 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
         <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Jobs">Repair jobs and where each one stands.</EmptyNote>
       ) : rows.length === 0 && jobs.error ? (
         <EmptyNote icon="ti-alert-triangle" tone="error" title="The Jobs Could Not Be Loaded" action={{ label: "Try again", onClick: jobs.read }}>{jobs.error}</EmptyNote>
+      ) : rows.length === 0 && q ? (
+        <EmptyNote icon="ti-search" title="No Jobs Match" action={{ label: "Clear search", onClick: () => setSearch("") }}>
+          Nothing {state === "open" ? "open" : "closed"} matches “{search.trim()}”. The search reads the reg, ticket, fault, stage and who is next.
+        </EmptyNote>
       ) : rows.length === 0 ? (
         <EmptyNote icon="ti-circle-check" title={state === "open" ? "No Open Repairs" : "No Closed Repairs Yet"}
                    action={state === "open" && can("repair:flag") ? { label: "Flag for repair", onClick: () => setFlagging(true) } : null}>
