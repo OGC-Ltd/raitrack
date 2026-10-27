@@ -41,6 +41,12 @@ const AT_TOP_PX = 48;
 /** What happened, as an icon and a tone. Exported for the test. */
 export function feedKind(item) {
   const text = String(item?.text ?? '');
+  // Repair workflow notices (repair, repair_flag, repair_ticket, repair_verified)
+  // wear maintenance tools whatever their wording: "ticket" in a repair line
+  // drew the weighbridge scale (operator, 2026-10-27). Severity keeps its tone.
+  if (String(item?.source ?? '').startsWith('repair')) {
+    return { icon: 'tools', tone: item?.type === 'critical' ? 'critical' : item?.type === 'warning' ? 'warning' : 'depart' };
+  }
   if (item?.type === 'critical') return { icon: 'alert-octagon', tone: 'critical' };
   if (item?.type === 'warning') return { icon: 'alert-triangle', tone: 'warning' };
   if (/refuel|fill(ed|ing)?\b/i.test(text)) return { icon: 'gas-station', tone: 'fuel' };
