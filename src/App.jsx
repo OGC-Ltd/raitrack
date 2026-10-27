@@ -35,6 +35,7 @@ import WorkshopScreen    from './components/screens/WorkshopScreen';
 import FuelReportScreen  from './components/screens/FuelReportScreen';
 import UsageReviewScreen from './components/screens/UsageReviewScreen';
 import AlertsScreen      from './components/screens/AlertsScreen';
+import DashcamIncidentsScreen from './components/screens/DashcamIncidentsScreen';
 
 // Auth + account screens
 import LoginScreen       from './components/screens/LoginScreen';
@@ -157,6 +158,16 @@ function AppShell() {
             </div>
           )}
 
+          {/* Dashcam alarms (Control Tech VSS) — only where the organisation has
+              VSS cameras; see usePermissions 'vss:alarms'. */}
+          {show('dashcam') && (
+            <div className="app-tab-panel app-tab-panel--screen">
+              <ErrorBoundary label="Alarms" fullSection>
+                <DashcamIncidentsScreen />
+              </ErrorBoundary>
+            </div>
+          )}
+
           {show('alerts') && (
             <div className="app-tab-panel app-tab-panel--screen">
               <ErrorBoundary label="Alerts" fullSection>
@@ -269,7 +280,7 @@ function AppShell() {
           // the unit comes back when the list closes.
           // Drivers as well (operator, 2026-10-03: "do the same with the
           // drivers page") — so the panel now takes width on the map only.
-          const panelAllowed = !['alerts', 'drivers', 'analytics', 'maintenance', 'weighbridges', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
+          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'maintenance', 'weighbridges', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
             && !fuelAlertsOpen;
           const selectedVehicle = selectedVehicleId && panelAllowed
             ? _liveVehicles.find(v => v.id === selectedVehicleId) ?? { id: selectedVehicleId }
