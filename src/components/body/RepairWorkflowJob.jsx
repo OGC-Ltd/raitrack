@@ -27,7 +27,7 @@ import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL, PART_STATUS } from "../../api
 import {
   fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, decidePath, assessJob,
   bookJob, cancelBooking, arriveJob, assignWorkshop, classifyDamage, voidWarranty, clearWarranty, addWork,
-  completeJob, verifyJob, voidJob, requestPart, sourcePart, issuePart, fitPart, receivePart,
+  completeJob, verifyJob, voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
   INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, componentLabel, routeOf,
 } from "../../api/repairWorkflow";
@@ -46,19 +46,37 @@ export function jobLabel(job) {
   return CATEGORY_LABEL[job?.faultCategory] ?? (job?.targetKind === "probe" ? "Fuel probe" : "Fault");
 }
 
-/** The six phases as a hairline ladder: done, current, to come. */
-export function PhaseLadder({ stage, compact = false }) {
+/**
+ * The six phases as a hairline ladder: done, current, to come. With `onPick`,
+ * every other phase is a button that moves the job there, back or forward
+ * (operator, 2026-10-27); `picked` marks the one chosen and not yet saved.
+ * `canPick` leaves out phases the job cannot enter (Triage for a mechanical fault).
+ */
+export function PhaseLadder({ stage, compact = false, onPick = null, picked = null, canPick = () => true }) {
   const phase = PHASE_OF_STAGE[stage] ?? "flag";
   const reached = PHASES.findIndex(([k]) => k === phase);
   const closed = stage === "fixed" || stage === "void" || stage === "failed";
   return (
-    <ol className={"wf-ladder" + (compact ? " wf-ladder--compact" : "")} aria-label={`Phase: ${PHASES[reached]?.[1] ?? ""}`}>
+    <ol className={"wf-ladder" + (compact ? " wf-ladder--compact" : "") + (onPick ? " wf-ladder--pick" : "")}
+        aria-label={`Phase: ${PHASES[reached]?.[1] ?? ""}`}>
       {PHASES.map(([k, label], i) => {
         const state = i < reached || (closed && i === reached) ? "done" : i === reached ? "now" : "todo";
-        return (
-          <li key={k} className={`wf-ladder__step wf-ladder__step--${state}`} aria-current={state === "now" ? "step" : undefined}>
+        const pickable = onPick && !closed && i !== reached && canPick(k);
+        const cls = `wf-ladder__step wf-ladder__step--${state}` + (picked === k ? " wf-ladder__step--picked" : "");
+        const body = (
+          <>
             <span className="wf-ladder__tick" aria-hidden="true" />
             {!compact && <span className="wf-ladder__label">{label}</span>}
+          </>
+        );
+        return (
+          <li key={k} className={cls} aria-current={state === "now" ? "step" : undefined}>
+            {pickable ? (
+              <button type="button" className="wf-ladder__btn" onClick={() => onPick(k, label)}
+                      aria-pressed={picked === k} title={`${i < reached ? "Back" : "Forward"} to ${label}`}>
+                {body}
+              </button>
+            ) : body}
           </li>
         );
       })}
@@ -669,10 +687,12 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
 
   // The step chosen but not yet saved. Step buttons call `choose`, not `act`.
   const [pending, setPending] = useState(null);
-  const choose = useCallback((key, fn, ok, label) => {
-    setPending({ key, fn, ok, label: label ?? PENDING_LABEL[key] ?? "This step" });
+  const choose = useCallback((key, fn, ok, label, phase = null) => {
+    setPending({ key, fn, ok, label: label ?? PENDING_LABEL[key] ?? "This step", phase });
     return Promise.resolve(true);
   }, []);
+  // The Control Room that verifies repairs may move an open job to any phase.
+  const canMove = !job.resolvedAt && can("repair:verify");
   // A job that moved, or another job, has nothing staged.
   useEffect(() => { setPending(null); }, [job.id, job.stage]);
   const save = () => {
@@ -768,7 +788,11 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
           : <span className="wf-ticket wf-ticket--none">No ticket yet</span>}
       </header>
 
-      <PhaseLadder stage={s} />
+      <PhaseLadder stage={s}
+                   onPick={canMove ? (k, label) => choose("phase", () => movePhase(orgId, job.id, k), `Moved to ${label}.`, `Move to ${label}`, k) : null}
+                   picked={pending?.key === "phase" ? pending.phase : null}
+                   canPick={(k) => k !== "triage" || job.queue === "controltech"} />
+      {canMove && <p className="wf-muted wf-ladder-hint">Click a phase to move the job back or forward, then save.</p>}
 
       {malicious && (
         <div className="wf-banner" role="note">
@@ -854,7 +878,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       <WorkLog orgId={orgId} job={job} act={act} busy={busy} canWork={canWork} />
       <Trail job={job} />
 
-      {action && !closed && (
+      {(action || canMove) && !closed && (
         <div className="wf-save">
           <span className="wf-save__note">{pending ? `Unsaved: ${pending.label}` : "Choose the next step above, then save it"}</span>
           <button type="button" className="sp4-submit-btn" disabled={!pending || !!busy} onClick={save}>
