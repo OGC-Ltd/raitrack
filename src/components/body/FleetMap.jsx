@@ -37,6 +37,7 @@ import { eventMl } from "../../lib/eventLitres";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useAppFields, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
+import { useVssBadge } from "../../hooks/useVssBadge";
 import COMPANIES from "../../data/companyData";
 import { useEstateZones } from "../../hooks/useEstateZones";
 import { useWeighbridges } from "../../hooks/useWeighbridges";
@@ -2463,7 +2464,11 @@ export default function FleetMap() {
   // Read HERE rather than beside the layer menu that consumes it, because the
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
-  const { can: canDo } = usePermissions();
+  const { can: canDo, orgId: permOrgId } = usePermissions();
+  // Dashcam alarms (Control Tech VSS): the rail's camera button and its count of
+  // today's alarms not yet reviewed. Null where the organisation has no cameras.
+  const dashcamOn = canDo("vss:alarms");
+  const dashcamBadge = useVssBadge(permOrgId, activeCompanyId, dashcamOn);
   const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen, setFuelAlertsOpen } = useMapLayers();
   const { isCompact, isMobile } = useBreakpoint();
   /* Where the side panel exists (desktop) a click selects the unit and the
@@ -7244,6 +7249,10 @@ export default function FleetMap() {
             /* Arrivals at a hub, below Fuel alerts: only where the server's
                Google routing is on, since every answer comes from it. */
             arrivals={googleRouting ? { open: arrivalsOpen, onOpen: () => setArrivalsOpen(v => !v) } : null}
+            /* Dashcam alarms: opens the Alarms page, which has no sidebar entry. */
+            dashcam={dashcamOn
+              ? { count: dashcamBadge?.open ?? 0, critical: dashcamBadge?.critical ?? 0, onOpen: () => setDesktopActiveTab("dashcam") }
+              : null}
           />
         )}
 
