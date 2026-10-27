@@ -172,7 +172,20 @@
 .wf-log__when { color: var(--wf-ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wf-log__kind { color: var(--wf-ink); font-weight: 600; }
 .wf-log__text { color: var(--wf-ink-2); overflow-wrap: anywhere; min-width: 0; }
-.wf-log__by { color: var(--wf-ink-4); white-space: nowrap; }
+.wf-log__by { color: var(--wf-ink-4); white-space: nowrap; display: inline-flex; align-items: center; gap: var(--sp4-xs); justify-content: flex-end; }
+.wf-log__acts { display: inline-flex; align-items: center; gap: 2px; }
+.wf-log__act {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--wf-ink-3); cursor: pointer; font-size: 15px;
+}
+.wf-log__act:hover:not(:disabled) { background: var(--wf-rule); color: var(--wf-ink); }
+.wf-log__act:focus-visible { outline: 2px solid var(--wf-ink-3); outline-offset: 1px; }
+.wf-log__act:disabled { opacity: 0.4; cursor: default; }
+.wf-log__ask { color: var(--wf-ink-2); font-weight: 600; }
+.wf-log__btn { padding: 2px 10px; min-height: 0; }
+.wf-log__e--edit { align-items: start; }
+.wf-log__form { grid-column: 3 / -1; }
+.wf-log__full { margin: var(--sp4-xs) 0 0; }
 
 /* Trail: a timeline, not a table. Day heads break the rail; inside a day the
    rail runs dot to dot (no padding on the row, so the dot cell meets the next
@@ -304,6 +317,7 @@
   .wf-fact dt { margin-top: var(--sp4-2xs); }
   .wf-log__e { grid-template-columns: minmax(0, 1fr) auto; }
   .wf-log__text { grid-column: 1 / -1; }
+  .wf-log__form { grid-column: 1 / -1; }
   .wf-board__row { grid-template-columns: minmax(0, 1fr) auto; }
   .wf-board__fault, .wf-board__tech { grid-column: 1 / -1; }
   .wf-catgroup { flex-direction: column; gap: var(--sp4-2xs); }
