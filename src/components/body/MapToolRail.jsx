@@ -2,7 +2,7 @@
  * The map's left tool rail, beside the sidebar.
  *
  * Eleven tools in three groups — finding (search, names, layers, fit), measuring
- * (ruler, route covered, traffic, geofences, halted, fuel alerts) and the rail's own expander. Desktop only:
+ * (ruler, route covered, traffic, geofences, halted, fuel alerts, dashcam alarms) and the rail's own expander. Desktop only:
  * FleetMap renders it where the sidebar exists (not `isCompact`), because a
  * phone already has its own controls and no room for a second column of them.
  *
@@ -251,6 +251,7 @@ export default function MapToolRail({
   halted,           // { count, open, onOpen } or null without map:filter
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
   arrivals,         // { open, onOpen } or null while Google routing is off
+  dashcam,          // { count, critical, onOpen } or null where there are no VSS cameras
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -349,6 +350,21 @@ export default function MapToolRail({
                 ? `Fuel alerts: ${fuelAlerts.count} ${fuelAlerts.count === 1 ? "unit" : "units"} with an open fuel theft alert`
                 : "Fuel alerts: none open, open the list anyway"}
               on={fuelAlerts.open} count={fuelAlerts.count} tone="alert" expanded={expanded} onClick={fuelAlerts.onOpen}
+            />
+          )}
+          {/* Dashcam alarms, below Fuel alerts (operator, 2026-10-27): opens
+              the Alarms page with each alarm's clip. Only where the
+              organisation's vehicles carry VSS cameras. The count is today's
+              warning and critical alarms not yet reviewed, red while one of
+              them is critical. */}
+          {dashcam && (
+            <RailButton
+              icon="ti-video" label="Dashcam alarms" tour="map-dashcam"
+              title={dashcam.count
+                ? `Dashcam alarms: ${dashcam.count} today not yet reviewed${dashcam.critical ? `, ${dashcam.critical} critical` : ""}`
+                : "Dashcam alarms: nothing waiting today, open the list anyway"}
+              count={dashcam.count} tone={dashcam.critical ? "alert" : "warn"}
+              expanded={expanded} onClick={dashcam.onOpen}
             />
           )}
           {/* Arrivals at a hub: every unit's live drive time in. */}
