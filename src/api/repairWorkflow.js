@@ -164,6 +164,8 @@ export const listWorkflowJobs = (orgId, { status = "open", queue } = {}) => {
   return get(`${base(orgId)}/items?${qs}`).then((d) => d ?? []);
 };
 export const fetchQueue          = (orgId) => get(`${base(orgId)}/queue`).then((d) => d ?? []);
+/** The caller's own jobs, open and closed: assigned to them, or theirs in the workshop. */
+export const fetchMyJobs         = (orgId) => get(`${base(orgId)}/mine`).then((d) => d ?? []);
 export const fetchTicket         = (orgId, itemId) => get(`${base(orgId)}/items/${itemId}/ticket`);
 export const fetchFlaggableUnits = (orgId) => get(`${base(orgId)}/flaggable-units`).then((d) => d ?? []);
 export const fetchServiceStates  = (orgId) => get(`${base(orgId)}/service-states`).then((d) => d ?? []);
