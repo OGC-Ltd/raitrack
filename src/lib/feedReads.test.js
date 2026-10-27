@@ -113,3 +113,15 @@ describe('two tabs', () => {
     expect(summariseUnread([a, b, c], both).unreadCount).toBe(0);
   });
 });
+
+describe('a line the viewer caused', () => {
+  it('is read for them and unread for everyone else', () => {
+    const fresh = { since: 0, ids: new Map() };
+    const mine = { id: 'm', ts: '2026-10-27T06:00:00.000Z', actorId: 'u-1' };
+    expect(isUnread(mine, fresh, 'u-1')).toBe(false);
+    expect(isUnread(mine, fresh, 'u-2')).toBe(true);
+    expect(isUnread(mine, fresh)).toBe(true);
+    expect(summariseUnread([mine], fresh, 'u-1').unreadCount).toBe(0);
+  });
+});
+
