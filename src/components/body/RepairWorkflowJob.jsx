@@ -583,7 +583,11 @@ function DamageRecord({ orgId, job, act, busy, canWork, canSecurity }) {
   );
 }
 
+/** Steps the trail shows folded; the rest open on request, as a long job's trail runs to dozens. */
+const TRAIL_FOLDED = 3;
+
 function Trail({ job }) {
+  const [open, setOpen] = useState(false);
   const events = (Array.isArray(job.stageHistory) ? job.stageHistory : []).filter((e) => e?.stage || e?.kind);
   if (events.length === 0) return null;
   const items = [...events].reverse().map((e) => ({
@@ -596,7 +600,13 @@ function Trail({ job }) {
   }));
   return (
     <Section title="Trail" aside={`${items.length} steps`}>
-      <TrailList items={items} />
+      <TrailList items={open ? items : items.slice(0, TRAIL_FOLDED)} />
+      {items.length > TRAIL_FOLDED && (
+        <button type="button" className="sp4-ghost-btn wf-trail-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <i className={`ti ti-chevron-${open ? "up" : "down"}`} aria-hidden="true" />
+          {open ? "Show the latest only" : `Show all ${items.length} steps`}
+        </button>
+      )}
     </Section>
   );
 }

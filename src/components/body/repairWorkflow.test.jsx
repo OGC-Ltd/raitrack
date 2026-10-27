@@ -190,3 +190,22 @@ describe('the work log opens by stage, to the right person', () => {
     expect(entryOptions(render(mine('awaiting_assessment'), room))).toEqual([]);
   });
 });
+
+describe('the trail folds when long', () => {
+  const steps = (n) => Array.from({ length: n }, (_, i) => ({ stage: 'forwarded', at: `2026-10-2${i % 9}T08:00:00Z`, note: `step ${i}` }));
+  const shown = (html) => (html.match(/wf-trail__e[ "]/g) ?? []).length;
+
+  it('shows the latest three of a long trail, and a way to open the rest', () => {
+    const html = render(job({ stageHistory: steps(8) }), grants());
+    expect(shown(html)).toBe(3);
+    expect(html).toContain('Show all 8 steps');
+    expect(html).toContain('step 7');
+    expect(html).not.toContain('step 0<');
+  });
+
+  it('has nothing to fold in a short trail', () => {
+    const html = render(job({ stageHistory: steps(3) }), grants());
+    expect(shown(html)).toBe(3);
+    expect(html).not.toContain('Show all');
+  });
+});
