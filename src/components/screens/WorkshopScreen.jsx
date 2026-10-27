@@ -68,7 +68,7 @@ function useLive(fetchFn, deps) {
 const since = (iso) => {
   if (!iso) return "-";
   const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
-  return h < 1 ? "under an hour" : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
+  return h < 1 ? `${Math.max(0, Math.floor(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
 };
 
 // ── Jobs ────────────────────────────────────────────────────────────────────

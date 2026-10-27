@@ -533,12 +533,14 @@ function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
   const verifying = kind === "verification";
   const malicious = diagnosing && cls === "suspected_malicious";
   const finishes = diagnosing || (testing && result === "pass") || verifying;
+  // Minutes are labour; a note carries none (operator, 2026-10-27).
+  const timed = !finishes && !testing && kind !== "note";
   const ok = text.trim().length > 0 && (!malicious || damageNote.trim().length > 0);
   const ownRepair = verifying && job.completedById === userId;
 
   const body = {
     kind, text,
-    ...(finishes || testing ? {} : { labourMinutes: mins === "" ? undefined : Number(mins) }),
+    ...(!timed ? {} : { labourMinutes: mins === "" ? undefined : Number(mins) }),
     ...(diagnosing ? { damageClass: cls, damageNote: malicious ? damageNote : undefined } : {}),
     ...(testing ? { testResult: result, recommendation: result === "pass" && rec.trim() ? rec : undefined } : {}),
     ...(verifying ? { verdict } : {}),
@@ -592,7 +594,7 @@ function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
           {verifying && <Choice label="Verdict" value={verdict} onChange={setVerdict} options={[["accept", "Verified"], ["reject", "Rejected"]]} />}
           <Note label={diagnosing ? "Diagnosis" : testing ? "How it was tested" : verifying ? (verdict === "accept" ? "What was checked" : "What does not match") : "What was done"}
                 required value={text} onChange={setText} max={4000} />
-          {!finishes && !testing && (
+          {timed && (
             <label className="sp4-field wf-field wf-qty">
               <span className="sp4-label">Minutes</span>
               <input className="sp4-input" type="number" min={0} value={mins} onChange={(e) => setMins(e.target.value)} />
