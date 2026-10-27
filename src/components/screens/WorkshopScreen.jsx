@@ -6,8 +6,9 @@
  * grant and they are the people who flag, assess, book and verify.
  *
  *   Jobs           every job on the workflow, filtered by who acts next
- *   My jobs        a technician's own jobs: open, sent to the workshop, closed
- *   ControlTech    the queue ControlTech technicians claim from (repair:claim)
+ *   My jobs        a technician's own jobs, open, sent to the workshop and
+ *                  closed; Open also holds the ControlTech queue's unclaimed
+ *                  jobs, to claim (repair:claim)
  *   Workshop day   one day's intake against the 3-a-day cap
  *   Security       investigations opened by suspected malicious damage
  *                  (security_case:read: the Head of Security)
@@ -231,18 +232,36 @@ export const mineGroup = (j) => (j.resolvedAt ? "closed"
   : j.path === "physical" || j.queue === "workshop" || WORKSHOP_STAGES.includes(j.stage) ? "workshop" : "open");
 const MINE_GROUPS = [["open", "Open"], ["workshop", "Sent to the workshop"], ["closed", "Closed"]];
 const MINE_EMPTY = {
-  open: ["No Open Jobs", "No open job is assigned to you. Claim one from the ControlTech queue."],
+  open: ["No Open Jobs", "Nothing is waiting to be claimed, and no open job is assigned to you."],
   workshop: ["None in the Workshop", "None of your jobs has gone on to the workshop."],
   closed: ["None Closed Yet", "None of your jobs has closed yet."],
 };
 
 /**
  * A technician's own jobs (operator, 2026-10-27): what is assigned to them,
- * what went on to the workshop after they had it, and what has closed. The
- * ControlTech queue only holds jobs still at ControlTech.
+ * what went on to the workshop after they had it, and what has closed. Open
+ * also carries the ControlTech queue's unclaimed jobs, each with its Claim
+ * button: the queue is no longer a tab of its own (operator, 2026-10-27).
+ * Jobs another technician has claimed are theirs, not shown here.
  */
-export function MyJobsTab({ orgId, userId, onOpen, openId }) {
-  const jobs = useLive(() => fetchMyJobs(orgId), [orgId]);
+export function MyJobsTab({ orgId, userId, onOpen, openId, onToast }) {
+  const jobs = useLive(() => Promise.all([fetchMyJobs(orgId), fetchQueue(orgId)]).then(([mine, queue]) => {
+    const own = new Set(mine.map((j) => j.id));
+    return [...queue.filter((r) => !r.assignedToId && !own.has(r.id)), ...mine];
+  }), [orgId]);
+  const [busy, setBusy] = useState(null);
+  const claim = async (r) => {
+    setBusy(r.id);
+    try {
+      await claimJob(orgId, r.id);
+      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} is yours.` });
+      onOpen(r.id);
+    } catch (e) {
+      onToast({ tone: "crit", text: e?.message || "Could not claim the job." });
+    } finally {
+      setBusy(null);
+    }
+  };
   const [group, setGroup] = useState("open");
   const [search, setSearch] = useState("");
   // The search narrows before the counts, so each chip says how many match.
@@ -335,83 +354,15 @@ export function MyJobsTab({ orgId, userId, onOpen, openId }) {
                     <td className="sp4-td--left"><span className="wf-mono">{j.ticketNo ?? "-"}</span></td>
                     <td className="sp4-td--left">
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
-                        : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
+                        : !j.assignedToId && !j.workshopTechnicianId ? (
+                          <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
+                                  onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Claiming…" : "Claim"}</button>
+                        ) : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
                     </td>
-                    <td className="sp4-td--right sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.createdAt)}</td>
+                    <td className="sp4-td--right sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.forwardedAt ?? j.createdAt)}</td>
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ── ControlTech queue ───────────────────────────────────────────────────────
-
-function QueueTab({ orgId, userId, onOpen, onToast }) {
-  const q = useLive(() => fetchQueue(orgId), [orgId]);
-  const [busy, setBusy] = useState(null);
-  const rows = q.data ?? [];
-  const unclaimed = rows.filter((r) => !r.assignedToId);
-  const mine = rows.filter((r) => r.assignedToId === userId);
-
-  const claim = async (r) => {
-    setBusy(r.id);
-    try {
-      await claimJob(orgId, r.id);
-      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} is yours.` });
-      onOpen(r.id);
-    } catch (e) {
-      onToast({ tone: "crit", text: e?.message || "Could not claim the job." });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <>
-      <TableToolbar summary={<><b>{unclaimed.length}</b> waiting to be claimed · <b>{mine.length}</b> yours</>} loading={q.loading} onReload={q.read} />
-      {rows.length === 0 && q.loading ? (
-        <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Queue">Jobs forwarded to ControlTech.</EmptyNote>
-      ) : rows.length === 0 && q.error ? (
-        <EmptyNote icon="ti-alert-triangle" tone="error" title="The Queue Could Not Be Loaded" action={{ label: "Try again", onClick: q.read }}>{q.error}</EmptyNote>
-      ) : rows.length === 0 ? (
-        <EmptyNote icon="ti-inbox" title="The Queue Is Empty">Nothing has been forwarded to ControlTech.</EmptyNote>
-      ) : (
-        <div className="sp4-table-scroll">
-          <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable wf-table">
-            <thead>
-              <tr>
-                <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
-                <th className="sp4-th--left">Fault</th>
-                <th className="sp4-th--left">Suspected fault</th>
-                <th className="sp4-th--right">Waiting</th>
-                <th className="sp4-th--left">Claimed by</th>
-                <th className="sp4-th--right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="sp4-tr wf-tr" tabIndex={0} onClick={() => onOpen(r.id)}
-                    onKeyDown={(e) => { if (e.key === "Enter") onOpen(r.id); }}>
-                  <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{r.vehicle?.registrationPlate}</span></td>
-                  <td className="sp4-td--left">{jobLabel(r)}</td>
-                  <td className="sp4-td--left wf-cell-wrap">{r.suspectedFault ?? r.problemNote ?? "-"}</td>
-                  <td className="sp4-td--right sys-num">{since(r.forwardedAt ?? r.createdAt)}</td>
-                  <td className="sp4-td--left">{r.assignedTo?.fullName ?? <span className="sp4-muted">Nobody yet</span>}</td>
-                  <td className="sp4-td--right">
-                    {!r.assignedToId ? (
-                      <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === r.id}
-                              onClick={(e) => { e.stopPropagation(); claim(r); }}>{busy === r.id ? "Claiming…" : "Claim"}</button>
-                    ) : (
-                      <button type="button" className="sp4-ghost-btn" onClick={(e) => { e.stopPropagation(); onOpen(r.id); }}>Open</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
@@ -729,13 +680,12 @@ export default function WorkshopScreen() {
 
   // Jobs and Workshop Day are the Control Room's and the workshop's boards:
   // drawn for whoever holds one of their verbs. A technician holds none, and
-  // sees only the ControlTech queue (operator, 2026-10-26) and their own
-  // jobs (2026-10-27).
+  // sees only My jobs, which holds the ControlTech queue's unclaimed jobs too
+  // (operator, 2026-10-26 and 2026-10-27).
   const board = can("repair:read") && can(BOARD_VERBS);
   const tabs = useMemo(() => [
     { key: "jobs",     label: "Jobs",          allow: board },
     { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
-    { key: "queue",    label: "ControlTech",   allow: can("repair:claim") },
     { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
   ].filter((t) => t.allow), [can, board]);
@@ -785,8 +735,7 @@ export default function WorkshopScreen() {
 
       <div className="sp4-body">
         {active === "jobs" && <JobsTab orgId={orgId} can={can} onOpen={setOpenId} openId={openId} onToast={setToast} />}
-        {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} />}
-        {active === "queue" && <QueueTab orgId={orgId} userId={userId} onOpen={setOpenId} onToast={setToast} />}
+        {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} />}
         {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
         {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
       </div>
