@@ -29,7 +29,7 @@ import {
   bookJob, cancelBooking, arriveJob, assignWorkshop, classifyDamage, voidWarranty, clearWarranty, addWork,
   completeJob, verifyJob, voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
-  INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, componentLabel, routeOf,
+  INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, workKindsFor, componentLabel, routeOf,
 } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
@@ -470,11 +470,14 @@ function Parts({ orgId, job, act, busy, canWork, canIssue, canSource }) {
   );
 }
 
-function WorkLog({ orgId, job, act, busy, canWork }) {
-  const [kind, setKind] = useState("repair");
+function WorkLog({ orgId, job, act, busy, kinds }) {
+  const [picked, setKind] = useState(null);
   const [text, setText] = useState("");
   const [mins, setMins] = useState("");
   const entries = job.workEntries ?? [];
+  // The stage decides what may be logged; a pick the stage no longer opens falls back to its first.
+  const kind = kinds.includes(picked) ? picked : kinds[0];
+  const verifying = kind === "verification";
   return (
     <Section title="Work log" aside={entries.length ? `${entries.length}` : null}>
       {entries.length === 0 && <p className="wf-muted">Nothing logged yet.</p>}
@@ -490,21 +493,22 @@ function WorkLog({ orgId, job, act, busy, canWork }) {
           ))}
         </ol>
       )}
-      {canWork && !job.resolvedAt && (
+      {kinds.length > 0 && (
         <div className="wf-form wf-form--inline">
           <div className="wf-row">
-            <Choice label="Entry" value={kind} onChange={setKind}
-                    options={[["diagnosis", "Diagnosis"], ["repair", "Repair"], ["test", "Test"], ["note", "Note"]]} />
-            <label className="sp4-field wf-field wf-qty">
-              <span className="sp4-label">Minutes</span>
-              <input className="sp4-input" type="number" min={0} value={mins} onChange={(e) => setMins(e.target.value)} />
-            </label>
+            <Choice label="Entry" value={kind} onChange={setKind} options={kinds.map((k) => [k, WORK_KIND_LABEL[k]])} />
+            {!verifying && (
+              <label className="sp4-field wf-field wf-qty">
+                <span className="sp4-label">Minutes</span>
+                <input className="sp4-input" type="number" min={0} value={mins} onChange={(e) => setMins(e.target.value)} />
+              </label>
+            )}
           </div>
-          <Note label="What was done" value={text} onChange={setText} max={4000} />
+          <Note label={verifying ? "What was checked" : "What was done"} value={text} onChange={setText} max={4000} />
           <div className="wf-actions">
             <button type="button" className="sp4-ghost-btn" disabled={!text.trim() || !!busy}
                     onClick={async () => {
-                      if (await act("work", () => addWork(orgId, job.id, { kind, text, labourMinutes: mins === "" ? undefined : Number(mins) }), null)) {
+                      if (await act("work", () => addWork(orgId, job.id, { kind, text, labourMinutes: mins === "" || verifying ? undefined : Number(mins) }), null)) {
                         setText(""); setMins("");
                       }
                     }}>
@@ -875,7 +879,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
                canIssue={can("repair:parts_issue")} canSource={can("repair:parts_source")} />
       )}
 
-      <WorkLog orgId={orgId} job={job} act={act} busy={busy} canWork={canWork} />
+      <WorkLog orgId={orgId} job={job} act={act} busy={busy} kinds={workKindsFor(job, can, userId)} />
       <Trail job={job} />
 
       {(action || canMove) && !closed && (
