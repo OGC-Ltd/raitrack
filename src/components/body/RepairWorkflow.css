@@ -164,28 +164,66 @@
 .wf-part__meta { font-size: var(--sp4-label); color: var(--wf-ink-4); }
 .wf-part__acts { display: flex; gap: var(--sp4-2xs); }
 
-.wf-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* Work log: entries as cards, the kind on a coloured spine (diagnosis warn,
+   repair accent, a passed test or verification ok, a failure crit). This
+   stage's entries first, earlier stages under their own head. Under them, the
+   stage's kinds as slots: done ones ticked, open ones pick what to log. */
+.wf-log__group { display: flex; flex-direction: column; gap: var(--sp4-xs); }
+.wf-log__group + .wf-log__group { margin-top: var(--sp4-sm); }
+.wf-log__h { margin: 0; font-size: var(--sp4-label); font-weight: 600; color: var(--wf-ink-4); }
+.wf-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp4-xs); }
 .wf-log__e {
-  display: grid; grid-template-columns: 104px 92px minmax(0, 1fr) auto; gap: var(--sp4-sm); align-items: baseline;
-  padding: 5px 0; border-bottom: 1px solid var(--wf-rule); font-size: var(--sp4-body);
+  --wf-tone: var(--wf-rule-hi);
+  position: relative; display: flex; flex-direction: column; gap: var(--sp4-2xs); min-width: 0;
+  padding: var(--sp4-xs) var(--sp4-sm); padding-right: 72px;
+  border: 1px solid var(--wf-rule); border-left: 3px solid var(--wf-tone); border-radius: 6px;
+  background: var(--wf-surface); font-size: var(--sp4-body);
 }
-.wf-log__when { color: var(--wf-ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wf-log__e--warn   { --wf-tone: var(--wf-warn); }
+.wf-log__e--accent { --wf-tone: var(--wf-accent); }
+.wf-log__e--ok     { --wf-tone: var(--wf-ok); }
+.wf-log__e--crit   { --wf-tone: var(--wf-crit); }
+.wf-log__head { display: flex; align-items: baseline; gap: var(--sp4-xs); flex-wrap: wrap; min-width: 0; }
 .wf-log__kind { color: var(--wf-ink); font-weight: 600; }
-.wf-log__text { color: var(--wf-ink-2); overflow-wrap: anywhere; min-width: 0; }
-.wf-log__by { color: var(--wf-ink-4); white-space: nowrap; display: inline-flex; align-items: center; gap: var(--sp4-xs); justify-content: flex-end; }
-.wf-log__acts { display: inline-flex; align-items: center; gap: 2px; }
+.wf-log__e--crit .wf-log__kind { color: var(--wf-crit); }
+.wf-log__meta { color: var(--wf-ink-4); font-size: var(--sp4-label); font-variant-numeric: tabular-nums; }
+.wf-log__text { margin: 0; color: var(--wf-ink-2); white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.wf-log__mins { color: var(--wf-ink-4); font-size: var(--sp4-label); font-family: var(--wf-mono); }
+.wf-log__acts { position: absolute; top: 4px; right: 4px; display: inline-flex; gap: 2px; }
 .wf-log__act {
-  display: inline-grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--wf-ink-3); cursor: pointer; font-size: 15px;
+  display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--wf-ink-4); cursor: pointer; font-size: 15px;
 }
-.wf-log__act:hover:not(:disabled) { background: var(--wf-rule); color: var(--wf-ink); }
-.wf-log__act:focus-visible { outline: 2px solid var(--wf-ink-3); outline-offset: 1px; }
+.wf-log__act:hover:not(:disabled) { background: var(--wf-raised); color: var(--wf-ink); }
+.wf-log__act:active:not(:disabled) { transform: translateY(1px); }
+.wf-log__act:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
 .wf-log__act:disabled { opacity: 0.4; cursor: default; }
-.wf-log__ask { color: var(--wf-ink-2); font-weight: 600; }
-.wf-log__btn { padding: 2px 10px; min-height: 0; }
-.wf-log__e--edit { align-items: start; }
-.wf-log__form { grid-column: 3 / -1; }
-.wf-log__full { margin: var(--sp4-xs) 0 0; }
+.wf-log__ask {
+  display: flex; align-items: center; gap: var(--sp4-xs); flex-wrap: wrap; margin-top: var(--sp4-2xs);
+  padding-top: var(--sp4-xs); border-top: 1px solid var(--wf-rule); color: var(--wf-ink-2); font-size: var(--sp4-label);
+}
+.wf-log__ask span { flex: 1 1 12em; }
+.wf-log__btn { padding: 2px 12px; min-height: 0; white-space: nowrap; }
+.wf-log__btn--crit { background: var(--wf-crit); border-color: var(--wf-crit); }
+.wf-log__e--edit { padding-right: var(--sp4-sm); }
+.wf-log__form { margin-top: var(--sp4-2xs); }
+.wf-log__full { margin: 0; }
+
+.wf-log__next { display: flex; flex-direction: column; gap: var(--sp4-2xs); margin-top: var(--sp4-sm); }
+.wf-slots, .wf-slots__open { display: flex; flex-wrap: wrap; gap: var(--sp4-2xs); align-items: center; }
+.wf-slot {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 999px; white-space: nowrap;
+  font: inherit; font-size: var(--sp4-body); color: var(--wf-ink-2); background: transparent;
+  border: 1px dashed var(--wf-rule-hi);
+}
+button.wf-slot { cursor: pointer; }
+button.wf-slot:hover { color: var(--wf-ink); border-style: solid; background: var(--wf-raised); }
+button.wf-slot:active { transform: translateY(1px); }
+button.wf-slot:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
+.wf-slot--on, button.wf-slot--on:hover { border: 1px solid var(--wf-accent); color: var(--wf-ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--wf-accent); background: var(--wf-surface); }
+.wf-slot--done { border-style: solid; border-color: var(--wf-rule); color: var(--wf-ink-4); background: var(--wf-raised); }
+.wf-slot--done .ti { color: var(--wf-ok); }
+.wf-log__compose { margin-top: var(--sp4-xs); }
 
 /* Trail: a timeline, not a table. Day heads break the rail; inside a day the
    rail runs dot to dot (no padding on the row, so the dot cell meets the next
@@ -315,9 +353,6 @@
   .wf-ladder { padding-bottom: 18px; }
   .wf-facts { grid-template-columns: minmax(0, 1fr); }
   .wf-fact dt { margin-top: var(--sp4-2xs); }
-  .wf-log__e { grid-template-columns: minmax(0, 1fr) auto; }
-  .wf-log__text { grid-column: 1 / -1; }
-  .wf-log__form { grid-column: 1 / -1; }
   .wf-board__row { grid-template-columns: minmax(0, 1fr) auto; }
   .wf-board__fault, .wf-board__tech { grid-column: 1 / -1; }
   .wf-catgroup { flex-direction: column; gap: var(--sp4-2xs); }

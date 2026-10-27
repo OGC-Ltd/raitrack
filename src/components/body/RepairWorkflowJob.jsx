@@ -414,11 +414,18 @@ function WorkEntryRow({ orgId, job, e, act, busy, userId }) {
   const deletable = mine && (WORK_KINDS_AT[job.stage] ?? []).includes(e.kind) && loggedThisStage(job, e);
   const key = `entry-${e.id}`;
 
+  const label = WORK_KIND_LABEL[e.kind] ?? e.kind;
+  const head = (
+    <div className="wf-log__head">
+      <span className="wf-log__kind">{label}</span>
+      <span className="wf-log__meta">{[e.byName, at(e.at)].filter(Boolean).join(" · ")}</span>
+    </div>
+  );
+
   if (editing) {
     return (
-      <li className="wf-log__e wf-log__e--edit">
-        <span className="wf-log__when">{at(e.at)}</span>
-        <span className="wf-log__kind">{WORK_KIND_LABEL[e.kind] ?? e.kind}</span>
+      <li className={`wf-log__e wf-log__e--${entryTone(e)} wf-log__e--edit`}>
+        {head}
         <div className="wf-form wf-log__form">
           <Note label="Entry" required value={text} onChange={setText} max={4000} />
           {e.labourMinutes != null && (
@@ -441,38 +448,64 @@ function WorkEntryRow({ orgId, job, e, act, busy, userId }) {
     );
   }
   return (
-    <li className="wf-log__e">
-      <span className="wf-log__when">{at(e.at)}</span>
-      <span className="wf-log__kind">{WORK_KIND_LABEL[e.kind] ?? e.kind}</span>
-      <span className="wf-log__text">{e.text}{e.labourMinutes ? ` · ${e.labourMinutes} min` : ""}</span>
-      <span className="wf-log__by">
-        {e.byName ?? ""}
-        {mine && !confirming && (
-          <span className="wf-log__acts">
-            <button type="button" className="wf-log__act" aria-label={`Edit the ${WORK_KIND_LABEL[e.kind] ?? e.kind} entry`} title="Edit"
-                    disabled={!!busy} onClick={() => setEditing(true)}>
-              <i className="ti ti-pencil" aria-hidden="true" />
+    <li className={`wf-log__e wf-log__e--${entryTone(e)}`}>
+      {head}
+      <p className="wf-log__text">{e.text}</p>
+      {e.labourMinutes ? <span className="wf-log__mins">{e.labourMinutes} min</span> : null}
+      {mine && !confirming && (
+        <span className="wf-log__acts">
+          <button type="button" className="wf-log__act" aria-label={`Edit the ${label} entry`} title="Edit"
+                  disabled={!!busy} onClick={() => setEditing(true)}>
+            <i className="ti ti-pencil" aria-hidden="true" />
+          </button>
+          {deletable && (
+            <button type="button" className="wf-log__act" aria-label={`Delete the ${label} entry`} title="Delete"
+                    disabled={!!busy} onClick={() => setConfirming(true)}>
+              <i className="ti ti-trash" aria-hidden="true" />
             </button>
-            {deletable && (
-              <button type="button" className="wf-log__act" aria-label={`Delete the ${WORK_KIND_LABEL[e.kind] ?? e.kind} entry`} title="Delete"
-                      disabled={!!busy} onClick={() => setConfirming(true)}>
-                <i className="ti ti-trash" aria-hidden="true" />
-              </button>
-            )}
-          </span>
-        )}
-        {confirming && (
-          <span className="wf-log__acts">
-            <span className="wf-log__ask">Delete?</span>
-            <button type="button" className="sp4-ghost-btn wf-log__btn" onClick={() => setConfirming(false)}>No</button>
-            <button type="button" className="sp4-submit-btn wf-log__btn" disabled={!!busy}
-                    onClick={() => act(key, () => deleteWork(orgId, job.id, e.id), "Entry deleted. You can log it again.")}>
-              {busy === key ? "Deleting…" : "Delete"}
-            </button>
-          </span>
-        )}
-      </span>
+          )}
+        </span>
+      )}
+      {confirming && (
+        <div className="wf-log__ask">
+          <span>Delete this entry? The {label.toLowerCase()} opens to be logged again.</span>
+          <button type="button" className="sp4-ghost-btn wf-log__btn" onClick={() => setConfirming(false)}>Keep</button>
+          <button type="button" className="sp4-submit-btn wf-log__btn wf-log__btn--crit" disabled={!!busy}
+                  onClick={() => act(key, () => deleteWork(orgId, job.id, e.id), "Entry deleted. You can log it again.")}>
+            {busy === key ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      )}
     </li>
+  );
+}
+
+/** The colour an entry reads in: its kind, or the outcome a test or verification records. */
+function entryTone(e) {
+  if ((e.kind === "test" && /^Test failed/.test(e.text)) || (e.kind === "verification" && /^Rejected/.test(e.text))) return "crit";
+  return { diagnosis: "warn", repair: "accent", test: "ok", verification: "ok" }[e.kind] ?? "plain";
+}
+
+/**
+ * What the stage asks for, in order: a logged kind shows as done, an open
+ * one is a choice for the form below (one of each per stage).
+ */
+function StageSlots({ stageKinds, loggedHere, kinds, kind, onPick }) {
+  const done = stageKinds.filter((k) => loggedHere.has(k));
+  return (
+    <div className="wf-slots">
+      {done.map((k) => (
+        <span key={k} className="wf-slot wf-slot--done"><i className="ti ti-check" aria-hidden="true" />{WORK_KIND_LABEL[k]}</span>
+      ))}
+      {kinds.length > 0 && (
+        <div className="wf-slots__open" role="radiogroup" aria-label="Entry">
+          {kinds.map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={kind === k}
+                    className={"wf-slot" + (kind === k ? " wf-slot--on" : "")} onClick={() => onPick(k)}>{WORK_KIND_LABEL[k]}</button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -488,7 +521,9 @@ function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
   const entries = job.workEntries ?? [];
   // One of each kind while the job stands at its stage: a kind already
   // logged here is closed until its entry is deleted.
-  const loggedHere = new Set(entries.filter((e) => loggedThisStage(job, e)).map((e) => e.kind));
+  const here = entries.filter((e) => loggedThisStage(job, e));
+  const earlier = entries.filter((e) => !loggedThisStage(job, e));
+  const loggedHere = new Set(here.map((e) => e.kind));
   const kinds = stageKinds.filter((k) => !loggedHere.has(k));
   const allLogged = stageKinds.length > 0 && kinds.length === 0;
   // The stage decides what may be logged; a pick the stage no longer opens falls back to its first.
@@ -520,28 +555,28 @@ function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
   return (
     <Section title="Work log" aside={entries.length ? `${entries.length}` : null}>
       {entries.length === 0 && <p className="wf-muted">Nothing logged yet.</p>}
-      {entries.length > 0 && (
-        <ol className="wf-log">
-          {entries.map((e) => (
-            <WorkEntryRow key={e.id} orgId={orgId} job={job} e={e} act={act} busy={busy} userId={userId} />
-          ))}
-        </ol>
-      )}
+      {[["This stage", here], ["Earlier stages", earlier]].map(([title, list]) => list.length > 0 && (
+        <div key={title} className="wf-log__group">
+          {earlier.length > 0 && <h4 className="wf-log__h">{title}</h4>}
+          <ol className="wf-log">
+            {list.map((e) => (
+              <WorkEntryRow key={e.id} orgId={orgId} job={job} e={e} act={act} busy={busy} userId={userId} />
+            ))}
+          </ol>
+        </div>
+      ))}
       {ownRepair && <p className="wf-muted">You completed this repair. Someone else in the Control Room verifies it.</p>}
+      {stageKinds.length > 0 && !ownRepair && (
+        <div className="wf-log__next">
+          <span className="sp4-label">{allLogged ? "Logged at this stage" : "Log next"}</span>
+          <StageSlots stageKinds={stageKinds} loggedHere={loggedHere} kinds={kinds} kind={kind} onPick={setKind} />
+        </div>
+      )}
       {allLogged && !ownRepair && (
         <p className="wf-muted wf-log__full">Everything for this stage is logged. Edit an entry to change it, or delete one to log it again.</p>
       )}
       {kinds.length > 0 && !ownRepair && (
-        <div className="wf-form wf-form--inline">
-          <div className="wf-row">
-            <Choice label="Entry" value={kind} onChange={setKind} options={kinds.map((k) => [k, WORK_KIND_LABEL[k]])} />
-            {!finishes && !testing && (
-              <label className="sp4-field wf-field wf-qty">
-                <span className="sp4-label">Minutes</span>
-                <input className="sp4-input" type="number" min={0} value={mins} onChange={(e) => setMins(e.target.value)} />
-              </label>
-            )}
-          </div>
+        <div className="wf-form wf-form--inline wf-log__compose">
           {verifying && (
             <dl className="wf-facts wf-facts--tight">
               <Fact label="Completed">{[job.completedByName, at(job.completedAt)].filter(Boolean).join(" · ")}</Fact>
@@ -557,6 +592,12 @@ function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
           {verifying && <Choice label="Verdict" value={verdict} onChange={setVerdict} options={[["accept", "Verified"], ["reject", "Rejected"]]} />}
           <Note label={diagnosing ? "Diagnosis" : testing ? "How it was tested" : verifying ? (verdict === "accept" ? "What was checked" : "What does not match") : "What was done"}
                 required value={text} onChange={setText} max={4000} />
+          {!finishes && !testing && (
+            <label className="sp4-field wf-field wf-qty">
+              <span className="sp4-label">Minutes</span>
+              <input className="sp4-input" type="number" min={0} value={mins} onChange={(e) => setMins(e.target.value)} />
+            </label>
+          )}
           {malicious && (
             <>
               <Note label="Describe the damage" required value={damageNote} onChange={setDamageNote} rows={3} max={2000}
