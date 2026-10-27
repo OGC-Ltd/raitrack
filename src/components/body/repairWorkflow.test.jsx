@@ -158,3 +158,35 @@ describe('several faults in one flag', () => {
     expect(categoriesForProbeRow({ channels: ch('REPORTING', 'REPORTING'), fuelProbe: { state: 'DIED' } })).toEqual(['fuel_probe']);
   });
 });
+
+describe('the work log opens by stage, to the right person', () => {
+  const tech = grants('repair:resolve');
+  const room = grants('repair:resolve', 'repair:work_any', 'repair:verify');
+  const mine = (stage, over = {}) => job({ stage, assignedToId: 'u1', assignmentStatus: 'accepted', ...over });
+  const entryOptions = (html) => [...html.matchAll(/role="radiogroup" aria-label="Entry">(.*?)<\/div>/g)]
+    .flatMap((m) => [...m[1].matchAll(/>([A-Za-z]+)<\/button>/g)].map((x) => x[1]));
+
+  it('gives the technician diagnosis at triage and in the workshop', () => {
+    expect(entryOptions(render(mine('forwarded'), tech))).toEqual(['Diagnosis', 'Note']);
+    expect(entryOptions(render(mine('in_workshop'), tech))).toEqual(['Diagnosis', 'Note']);
+  });
+
+  it('gives the technician repair and test together while fixing', () => {
+    expect(entryOptions(render(mine('fixing'), tech))).toEqual(['Repair', 'Test', 'Note']);
+    expect(entryOptions(render(mine('remote_fix'), tech))).toEqual(['Repair', 'Test', 'Note']);
+  });
+
+  it("keeps the technician's entries from the Control Room, even one that may work any job", () => {
+    expect(entryOptions(render(mine('fixing'), room, 'sup-1'))).toEqual([]);
+    expect(entryOptions(render(mine('in_workshop'), room, 'sup-1'))).toEqual([]);
+  });
+
+  it('gives verification to the Control Room once completed, and nothing to the technician', () => {
+    expect(entryOptions(render(mine('completed'), room, 'sup-1'))).toEqual(['Verification']);
+    expect(entryOptions(render(mine('completed'), tech))).toEqual([]);
+  });
+
+  it('opens nothing while awaiting assessment', () => {
+    expect(entryOptions(render(mine('awaiting_assessment'), room))).toEqual([]);
+  });
+});
