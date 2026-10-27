@@ -87,7 +87,6 @@ import {
   LIVE_TRAFFIC_AVAILABLE, GOOGLE_TRAFFIC_LEGEND, TRAFFIC_REDRAW_MS, addGoogleTraffic,
 } from "../../lib/googleBase";
 import { addWeatherLayer } from "../../lib/weatherLayer";
-import "../../lib/weatherLayer.css";
 import { getWeatherGrid } from "../../api/weather";
 import { pathLengthM, plainPoint, formatDistance } from "../../lib/measure";
 
@@ -4087,7 +4086,7 @@ export default function FleetMap() {
       }),
       note: showWeather ? weatherNote : null,
       legend: null,
-      hint: "Google current weather · hover a reading for rain and wind · blue edge rain, red edge storm",
+      hint: "Google current weather · falling rain, wind waves, storms with lightning",
     });
     return out;
   }, [showTraffic, showWeather, weatherNote, showBridges, hasBridges, bridgesLoading, activeCompanyId,
