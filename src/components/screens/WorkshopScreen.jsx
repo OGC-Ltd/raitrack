@@ -241,28 +241,60 @@ const MINE_EMPTY = {
  * what went on to the workshop after they had it, and what has closed. The
  * ControlTech queue only holds jobs still at ControlTech.
  */
-function MyJobsTab({ orgId, userId, onOpen, openId }) {
+export function MyJobsTab({ orgId, userId, onOpen, openId }) {
   const jobs = useLive(() => fetchMyJobs(orgId), [orgId]);
   const [group, setGroup] = useState("open");
-  const all = jobs.data ?? [];
+  const [search, setSearch] = useState("");
+  // The search narrows before the counts, so each chip says how many match.
+  const q = search.trim().toLowerCase();
+  const all = (jobs.data ?? []).filter((j) => !q || jobText(j).includes(q));
   const counts = Object.fromEntries(MINE_GROUPS.map(([k]) => [k, all.filter((j) => mineGroup(j) === k).length]));
   const rows = all.filter((j) => mineGroup(j) === group);
 
   return (
     <>
-      <TableToolbar summary={<><b>{counts.open}</b> open · <b>{counts.workshop}</b> in the workshop · <b>{counts.closed}</b> closed</>}
-                    loading={jobs.loading} onReload={jobs.read} />
-      <div className="sp4-filter-group wf-mine-groups">
-        {MINE_GROUPS.map(([id, text]) => (
-          <button key={id} type="button" aria-pressed={group === id}
-                  className={"sp4-filter-chip" + (group === id ? " sp4-filter-chip--on" : "")}
-                  onClick={() => setGroup(id)}>{text}<span className="sys-chip-n">{counts[id]}</span></button>
-        ))}
-      </div>
+      <TableToolbar
+        summary={<><b>{rows.length}</b> job{rows.length === 1 ? "" : "s"}{q ? <> matching “{search.trim()}”</> : null}</>}
+        loading={jobs.loading}
+        onReload={jobs.read}
+      />
+      <FilterBar
+        label="Filters"
+        activeCount={group !== "open" ? 1 : 0}
+        peek={(
+          <div className="sp4-search-wrap">
+            <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              className="sp4-search"
+              type="text"
+              placeholder="Search reg, ticket or fault…"
+              aria-label="Search my jobs"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && <button type="button" className="sp4-search-clear" aria-label="Clear search" onClick={() => setSearch("")}>✕</button>}
+          </div>
+        )}
+      >
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Jobs</span>
+          {MINE_GROUPS.map(([id, text]) => (
+            <button key={id} type="button" aria-pressed={group === id}
+                    className={"sp4-filter-chip" + (group === id ? " sp4-filter-chip--on" : "")}
+                    onClick={() => setGroup(id)}>{text}<span className="sys-chip-n">{counts[id]}</span></button>
+          ))}
+        </div>
+      </FilterBar>
       {rows.length === 0 && jobs.loading ? (
         <EmptyNote icon="ti-loader-2" tone="busy" title="Reading Your Jobs">Jobs assigned to you, open and closed.</EmptyNote>
       ) : rows.length === 0 && jobs.error ? (
         <EmptyNote icon="ti-alert-triangle" tone="error" title="Your Jobs Could Not Be Loaded" action={{ label: "Try again", onClick: jobs.read }}>{jobs.error}</EmptyNote>
+      ) : rows.length === 0 && q ? (
+        <EmptyNote icon="ti-search" title="No Jobs Match" action={{ label: "Clear search", onClick: () => setSearch("") }}>
+          None of your jobs here matches “{search.trim()}”. The search reads the reg, ticket, fault and stage.
+        </EmptyNote>
       ) : rows.length === 0 ? (
         <EmptyNote icon="ti-circle-check" title={MINE_EMPTY[group][0]}>{MINE_EMPTY[group][1]}</EmptyNote>
       ) : (

@@ -375,6 +375,3 @@ button.wf-slot:focus-visible { outline: 2px solid var(--wf-accent); outline-offs
 @media (prefers-reduced-motion: reduce) {
   .wf-seg__opt:active, .wf-day:active { transform: none; }
 }
-
-/* My jobs: the three groups sit under the toolbar, above the table. */
-.wf-mine-groups { padding: var(--sp4-xs) 0 var(--sp4-sm); flex-wrap: wrap; }
