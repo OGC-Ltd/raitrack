@@ -270,6 +270,13 @@ describe('logged entries: one of each per stage, changed by their author', () =>
     expect(html).not.toContain('Delete the Diagnosis entry');
   });
 
+  it('heads earlier stages apart, and marks a failed test', () => {
+    const html = render(fixing([e('test', { text: 'Test failed: still 0 L' }), e('diagnosis', { at: '2026-10-27T04:00:00Z' })]), tech);
+    expect(html).toContain('Earlier stages');
+    expect(html).toContain('wf-log__e--crit');
+    expect(html).toMatch(/wf-slot--done[^]*?Test/);
+  });
+
   it("offers nobody else's entries for change", () => {
     const html = render(fixing([e('repair', { byId: 'someone' })]), tech);
     expect(html).not.toContain('Edit the Repair entry');
