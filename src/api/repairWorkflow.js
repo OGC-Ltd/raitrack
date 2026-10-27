@@ -175,6 +175,8 @@ export const addWork        = (orgId, id, w) => post(item(orgId, id, "work"), cl
 export const completeJob    = (orgId, id, c) => post(item(orgId, id, "complete"), clean(c));
 export const verifyJob      = (orgId, id, decision, note) => post(item(orgId, id, "verify"), clean({ decision, note }));
 export const voidJob        = (orgId, id, reason) => post(item(orgId, id, "void"), { reason: reason.trim() });
+/** Back or forward to a phase by hand (flag, triage, assess, workshop, repair, verify). */
+export const movePhase      = (orgId, id, phase, note) => post(item(orgId, id, "phase"), clean({ phase, note }));
 export const requestPart    = (orgId, id, p) => post(item(orgId, id, "parts"), clean({
   name: p.name, quantity: Number(p.quantity) || 1, source: p.source, itemCode: p.itemCode, store: p.store, note: p.note,
 }));
