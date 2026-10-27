@@ -6,7 +6,7 @@
  * grant and they are the people who flag, assess, book and verify.
  *
  *   Jobs           every job on the workflow, filtered by who acts next
- *   My jobs        a technician's own jobs, open, sent to the workshop and
+ *   My jobs        a technician's own jobs: open, assessment, workshop and
  *                  closed; Open also holds the ControlTech queue's unclaimed
  *                  jobs, to claim (repair:claim)
  *   Workshop day   one day's intake against the 3-a-day cap
@@ -226,13 +226,15 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
 // ── My jobs ─────────────────────────────────────────────────────────────────
 
 /** Stages a job reaches only by going physical: assessment, booking, the workshop. */
-const WORKSHOP_STAGES = ["awaiting_assessment", "booked", "towing", "field_inspection", "in_workshop"];
-/** Where one of my jobs stands: still open with me, sent on to the workshop, or closed. */
+const WORKSHOP_STAGES = ["booked", "towing", "field_inspection", "in_workshop"];
+/** Where one of my jobs stands: open with me, waiting on its assessment, sent on to the workshop, or closed. */
 export const mineGroup = (j) => (j.resolvedAt ? "closed"
+  : j.stage === "awaiting_assessment" ? "assessment"
   : j.path === "physical" || j.queue === "workshop" || WORKSHOP_STAGES.includes(j.stage) ? "workshop" : "open");
-const MINE_GROUPS = [["open", "Open"], ["workshop", "Sent to the workshop"], ["closed", "Closed"]];
+const MINE_GROUPS = [["open", "Open"], ["assessment", "Assessment"], ["workshop", "Workshop"], ["closed", "Closed"]];
 const MINE_EMPTY = {
   open: ["No Open Jobs", "Nothing is waiting to be claimed, and no open job is assigned to you."],
+  assessment: ["None Awaiting Assessment", "None of your jobs is waiting on the Control Room to assess the unit."],
   workshop: ["None in the Workshop", "None of your jobs has gone on to the workshop."],
   closed: ["None Closed Yet", "None of your jobs has closed yet."],
 };

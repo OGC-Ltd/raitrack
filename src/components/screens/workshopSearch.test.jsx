@@ -21,10 +21,11 @@ describe('the Jobs search', () => {
 });
 
 describe("a technician's own jobs", () => {
-  it('splits them into open, sent to the workshop, and closed', () => {
+  it('splits them into open, awaiting assessment, sent to the workshop, and closed', () => {
     expect(mineGroup({ stage: 'remote_fix', queue: 'controltech' })).toBe('open');
     expect(mineGroup({ stage: 'forwarded', queue: 'controltech' })).toBe('open');
-    expect(mineGroup({ stage: 'awaiting_assessment', path: 'physical', queue: 'controltech' })).toBe('workshop');
+    expect(mineGroup({ stage: 'awaiting_assessment', path: 'physical', queue: 'controltech' })).toBe('assessment');
+    expect(mineGroup({ stage: 'booked', path: 'physical', queue: 'controltech' })).toBe('workshop');
     expect(mineGroup({ stage: 'fixing', queue: 'workshop' })).toBe('workshop');
     expect(mineGroup({ stage: 'fixed', resolvedAt: '2026-10-26T08:00:00Z', path: 'physical' })).toBe('closed');
   });
