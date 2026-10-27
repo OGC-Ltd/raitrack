@@ -692,10 +692,12 @@ function DamageRecord({ orgId, job, act, busy, canWork, canSecurity }) {
 /** Steps the trail shows folded; the rest open on request, as a long job's trail runs to dozens. */
 const TRAIL_FOLDED = 3;
 
-function Trail({ job }) {
+/** The job's steps, newest first. `lead` sits above them under the same
+ *  heading: Maintenance › Repairs puts the phase ladder there. */
+export function Trail({ job, title = "Trail", lead = null }) {
   const [open, setOpen] = useState(false);
   const events = (Array.isArray(job.stageHistory) ? job.stageHistory : []).filter((e) => e?.stage || e?.kind);
-  if (events.length === 0) return null;
+  if (events.length === 0 && !lead) return null;
   const items = [...events].reverse().map((e) => ({
     at: e.at,
     label: e.stage ? STAGE_LABEL[e.stage] ?? e.stage
@@ -705,8 +707,9 @@ function Trail({ job }) {
     by: e.byName ?? (e.auto ? "Automatic" : ""),
   }));
   return (
-    <Section title="Trail" aside={`${items.length} steps`}>
-      <TrailList items={open ? items : items.slice(0, TRAIL_FOLDED)} />
+    <Section title={title} aside={items.length ? `${items.length} steps` : null}>
+      {lead}
+      {items.length > 0 && <TrailList items={open ? items : items.slice(0, TRAIL_FOLDED)} />}
       {items.length > TRAIL_FOLDED && (
         <button type="button" className="sp4-ghost-btn wf-trail-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
           <i className={`ti ti-chevron-${open ? "up" : "down"}`} aria-hidden="true" />
