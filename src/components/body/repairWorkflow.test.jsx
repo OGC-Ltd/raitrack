@@ -238,3 +238,40 @@ describe('the work log moves the job on', () => {
     expect(html).not.toContain('aria-label="Verdict"');
   });
 });
+
+describe('logged entries: one of each per stage, changed by their author', () => {
+  const since = '2026-10-27T05:00:00Z';
+  const e = (kind, over = {}) => ({ id: kind, kind, text: `${kind} text`, at: '2026-10-27T05:17:00Z', byId: 'u1', byName: 'controltech', ...over });
+  const fixing = (entries) => job({ stage: 'fixing', ticketNo: 'RT-1', assignedToId: 'u1', assignmentStatus: 'accepted', stageChangedAt: since, workEntries: entries });
+  const tech = grants('repair:resolve');
+
+  it('closes the form once every kind of the stage is logged', () => {
+    const html = render(fixing([e('repair'), e('test'), e('note')]), tech);
+    expect(html).toContain('Everything for this stage is logged');
+    expect(html).not.toContain('aria-label="Entry"');
+  });
+
+  it('offers only the kinds not yet logged at this stage', () => {
+    const html = render(fixing([e('repair'), e('note')]), tech);
+    expect(html).toMatch(/aria-label="Entry">.*Test.*<\/div>/);
+    expect(html).not.toMatch(/aria-label="Entry">[^]*?>Repair<\/button>/);
+  });
+
+  it('counts an earlier visit to the stage as done with', () => {
+    const html = render(fixing([e('repair', { at: '2026-10-26T09:00:00Z' })]), tech);
+    expect(html).toMatch(/aria-label="Entry">.*Repair.*<\/div>/);
+  });
+
+  it('lets the author edit and delete an entry of this stage, and only edit an earlier one', () => {
+    const html = render(fixing([e('repair'), e('diagnosis', { at: '2026-10-27T04:00:00Z' })]), tech);
+    expect(html).toContain('Edit the Repair entry');
+    expect(html).toContain('Delete the Repair entry');
+    expect(html).toContain('Edit the Diagnosis entry');
+    expect(html).not.toContain('Delete the Diagnosis entry');
+  });
+
+  it("offers nobody else's entries for change", () => {
+    const html = render(fixing([e('repair', { byId: 'someone' })]), tech);
+    expect(html).not.toContain('Edit the Repair entry');
+  });
+});

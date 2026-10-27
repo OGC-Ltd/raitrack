@@ -29,7 +29,7 @@ import {
   bookJob, cancelBooking, arriveJob, assignWorkshop, voidWarranty, clearWarranty, addWork,
   voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
-  INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, workKindsFor, componentLabel, routeOf,
+  INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, WORK_KINDS_AT, workKindsFor, loggedThisStage, editWork, deleteWork, componentLabel, routeOf,
 } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
@@ -400,7 +400,83 @@ function WorkHint({ children }) {
   return <p className="wf-muted wf-work-hint"><i className="ti ti-arrow-down" aria-hidden="true" /> {children}</p>;
 }
 
-function WorkLog({ orgId, job, act, busy, kinds, userId }) {
+/**
+ * One logged entry. Its author may edit it, from this stage or an earlier
+ * one, and the job stays where it stands; an entry of the stage the job
+ * stands at may also be deleted, which opens its kind to be logged again.
+ */
+function WorkEntryRow({ orgId, job, e, act, busy, userId }) {
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [text, setText] = useState(e.text);
+  const [mins, setMins] = useState(e.labourMinutes ?? "");
+  const mine = !job.resolvedAt && !!e.byId && e.byId === userId;
+  const deletable = mine && (WORK_KINDS_AT[job.stage] ?? []).includes(e.kind) && loggedThisStage(job, e);
+  const key = `entry-${e.id}`;
+
+  if (editing) {
+    return (
+      <li className="wf-log__e wf-log__e--edit">
+        <span className="wf-log__when">{at(e.at)}</span>
+        <span className="wf-log__kind">{WORK_KIND_LABEL[e.kind] ?? e.kind}</span>
+        <div className="wf-form wf-log__form">
+          <Note label="Entry" required value={text} onChange={setText} max={4000} />
+          {e.labourMinutes != null && (
+            <label className="sp4-field wf-field wf-qty">
+              <span className="sp4-label">Minutes</span>
+              <input className="sp4-input" type="number" min={0} value={mins} onChange={(ev) => setMins(ev.target.value)} />
+            </label>
+          )}
+          <div className="wf-actions">
+            <button type="button" className="sp4-ghost-btn" onClick={() => { setEditing(false); setText(e.text); setMins(e.labourMinutes ?? ""); }}>Cancel</button>
+            <button type="button" className="sp4-submit-btn" disabled={!text.trim() || !!busy}
+                    onClick={async () => {
+                      if (await act(key, () => editWork(orgId, job.id, e.id, { text, labourMinutes: mins === "" ? undefined : Number(mins) }), "Entry saved.")) setEditing(false);
+                    }}>
+              {busy === key ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </li>
+    );
+  }
+  return (
+    <li className="wf-log__e">
+      <span className="wf-log__when">{at(e.at)}</span>
+      <span className="wf-log__kind">{WORK_KIND_LABEL[e.kind] ?? e.kind}</span>
+      <span className="wf-log__text">{e.text}{e.labourMinutes ? ` · ${e.labourMinutes} min` : ""}</span>
+      <span className="wf-log__by">
+        {e.byName ?? ""}
+        {mine && !confirming && (
+          <span className="wf-log__acts">
+            <button type="button" className="wf-log__act" aria-label={`Edit the ${WORK_KIND_LABEL[e.kind] ?? e.kind} entry`} title="Edit"
+                    disabled={!!busy} onClick={() => setEditing(true)}>
+              <i className="ti ti-pencil" aria-hidden="true" />
+            </button>
+            {deletable && (
+              <button type="button" className="wf-log__act" aria-label={`Delete the ${WORK_KIND_LABEL[e.kind] ?? e.kind} entry`} title="Delete"
+                      disabled={!!busy} onClick={() => setConfirming(true)}>
+                <i className="ti ti-trash" aria-hidden="true" />
+              </button>
+            )}
+          </span>
+        )}
+        {confirming && (
+          <span className="wf-log__acts">
+            <span className="wf-log__ask">Delete?</span>
+            <button type="button" className="sp4-ghost-btn wf-log__btn" onClick={() => setConfirming(false)}>No</button>
+            <button type="button" className="sp4-submit-btn wf-log__btn" disabled={!!busy}
+                    onClick={() => act(key, () => deleteWork(orgId, job.id, e.id), "Entry deleted. You can log it again.")}>
+              {busy === key ? "Deleting…" : "Delete"}
+            </button>
+          </span>
+        )}
+      </span>
+    </li>
+  );
+}
+
+function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
   const [picked, setKind] = useState(null);
   const [text, setText] = useState("");
   const [mins, setMins] = useState("");
@@ -410,6 +486,11 @@ function WorkLog({ orgId, job, act, busy, kinds, userId }) {
   const [rec, setRec] = useState("");
   const [verdict, setVerdict] = useState("accept");
   const entries = job.workEntries ?? [];
+  // One of each kind while the job stands at its stage: a kind already
+  // logged here is closed until its entry is deleted.
+  const loggedHere = new Set(entries.filter((e) => loggedThisStage(job, e)).map((e) => e.kind));
+  const kinds = stageKinds.filter((k) => !loggedHere.has(k));
+  const allLogged = stageKinds.length > 0 && kinds.length === 0;
   // The stage decides what may be logged; a pick the stage no longer opens falls back to its first.
   const kind = kinds.includes(picked) ? picked : kinds[0];
   const diagnosing = kind === "diagnosis" && (job.stage === "in_workshop" || job.stage === "field_inspection");
@@ -442,16 +523,14 @@ function WorkLog({ orgId, job, act, busy, kinds, userId }) {
       {entries.length > 0 && (
         <ol className="wf-log">
           {entries.map((e) => (
-            <li key={e.id} className="wf-log__e">
-              <span className="wf-log__when">{at(e.at)}</span>
-              <span className="wf-log__kind">{WORK_KIND_LABEL[e.kind] ?? e.kind}</span>
-              <span className="wf-log__text">{e.text}{e.labourMinutes ? ` · ${e.labourMinutes} min` : ""}</span>
-              <span className="wf-log__by">{e.byName ?? ""}</span>
-            </li>
+            <WorkEntryRow key={e.id} orgId={orgId} job={job} e={e} act={act} busy={busy} userId={userId} />
           ))}
         </ol>
       )}
       {ownRepair && <p className="wf-muted">You completed this repair. Someone else in the Control Room verifies it.</p>}
+      {allLogged && !ownRepair && (
+        <p className="wf-muted wf-log__full">Everything for this stage is logged. Edit an entry to change it, or delete one to log it again.</p>
+      )}
       {kinds.length > 0 && !ownRepair && (
         <div className="wf-form wf-form--inline">
           <div className="wf-row">
@@ -578,7 +657,7 @@ function Trail({ job }) {
     at: e.at,
     label: e.stage ? STAGE_LABEL[e.stage] ?? e.stage
       : e.kind === "assignment" ? "Assigned" : e.kind === "assignment_response" ? (e.status === "accepted" ? "Accepted" : "Declined")
-        : e.kind === "escalation" ? "Escalated" : e.kind,
+        : e.kind === "escalation" ? "Escalated" : e.kind === "work_log" ? "Work log" : e.kind,
     note: e.note ?? (e.assignedToName ? `to ${e.assignedToName}` : ""),
     by: e.byName ?? (e.auto ? "Automatic" : ""),
   }));
