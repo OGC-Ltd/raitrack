@@ -3,7 +3,8 @@
  * show weather on the map in real time").
  *
  * Google sells weather by point, not as tiles, so this is a chip per grid
- * point over the view: Google's own condition icon and the temperature, with
+ * point over the view: the temperature (no icon: the animation shows the
+ * weather, and icons cluttered the map, operator 2026-10-27), with
  * rain, thunder and wind on hover. Rain and storms get a coloured edge so they
  * can be picked out from across the map. The points come from fleet-server,
  * which snaps them to a fixed grid and caches each for everyone.
@@ -21,9 +22,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 
 function chipHtml(p) {
   const tone = weatherTone(p);
-  const icon = p.icon ? `<img src="${esc(p.icon)}.svg" alt="" width="22" height="22" onerror="this.remove()" />` : "";
   const temp = p.tempC != null ? `${Math.round(p.tempC)}°` : "–";
-  return `<div class="wx-chip${tone ? ` wx-chip--${tone}` : ""}" title="${esc(weatherTitle(p))}">${icon}<span>${temp}</span></div>`;
+  return `<div class="wx-chip${tone ? ` wx-chip--${tone}` : ""}" title="${esc(weatherTitle(p))}"><span>${temp}</span></div>`;
 }
 
 /**
