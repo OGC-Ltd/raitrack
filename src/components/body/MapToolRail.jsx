@@ -246,6 +246,7 @@ export default function MapToolRail({
   measuring, measureText, onToggleMeasure,
   route,            // { available, on, onToggle, title }
   traffic,          // the "traffic" map layer ({ on, onToggle }) or null
+  weather,          // the "weather" map layer ({ on, onToggle, note }) or null
   zones,            // the "zones" map layer ({ on, onToggle, label }) or null
   halted,           // { count, open, onOpen } or null without map:filter
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
@@ -308,6 +309,14 @@ export default function MapToolRail({
               ? `${traffic.on ? "Hide" : "Show"} live traffic on the map`
               : "Live traffic is not available"}
             on={Boolean(traffic?.on)} disabled={!traffic} expanded={expanded} onClick={traffic?.onToggle}
+          />
+          {/* Weather, the same kind of switch (operator, 2026-10-27). */}
+          <RailButton
+            icon="ti-cloud-rain" label={weather?.on ? "Hide weather" : "Weather"}
+            title={weather
+              ? (weather.on && weather.note ? `Weather: ${weather.note}` : `${weather.on ? "Hide" : "Show"} live weather on the map`)
+              : "Weather is not available"}
+            on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
           />
           {/* Drawn for every company, disabled where no geofence layer is
               offered — a tool that comes and goes between companies reads as

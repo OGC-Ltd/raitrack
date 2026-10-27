@@ -78,7 +78,9 @@ export const ZONE_FALLBACK = ZONE_STYLE.other;
  */
 export function zoneColor(category, base = "osm") {
   const s = ZONE_STYLE[category] ?? ZONE_FALLBACK;
-  return base === "google" ? s.color : (s.osmColor ?? s.color);
+  // Imagery (hybrid, bare satellite) takes the satellite colours; terrain is
+  // pale like OpenStreetMap.
+  return base === "google" || base === "google-satellite" ? s.color : (s.osmColor ?? s.color);
 }
 
 // Legend order — biggest/most meaningful first, so the eye lands on the

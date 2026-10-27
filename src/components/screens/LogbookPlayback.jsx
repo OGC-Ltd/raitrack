@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { loadMapEngine } from "../../lib/mapEngine";
 import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from "../../lib/osmBase";
-import { installGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
+import { installGoogleBase, isGoogleBase, GOOGLE_TYPE_ID, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION } from "../../lib/googleBase";
 import { useVehiclePlayback } from "../../hooks/useVehiclePlayback";
 import { useRoutePlayback } from "../../hooks/useRoutePlayback";
 import { travelledTo, gapsOf, sampleAt, syncReveal, minuteMarks } from "../../lib/playbackPath";
@@ -93,7 +93,7 @@ export default function LogbookPlayback({ date, review, req, vehicle, unitLabel,
   const [ready, setReady] = useState(false);
   const [mapObj, setMapObj] = useState(null);
   const [base, setBase] = useState(() => {
-    try { return GOOGLE_BASE_AVAILABLE && localStorage.getItem(BASE_MAP_KEY) === "google" ? "google" : "osm"; } catch { return "osm"; }
+    try { return GOOGLE_BASE_AVAILABLE && isGoogleBase(localStorage.getItem(BASE_MAP_KEY)) ? "google" : "osm"; } catch { return "osm"; }
   });
 
   useEffect(() => {
