@@ -364,32 +364,38 @@ function Detail({ inc, orgId, company, vehicle, plate, driver, reviewed, onRevie
         </div>
       </header>
 
-      {shown
-        ? <MediaPlayer inc={inc} orgId={orgId} company={company} items={items} shown={shown} plate={plate} onPick={setShownKey} />
-        : (
-          <div className="dci-stage dci-stage--empty">
-            <i className="ti ti-video-off" aria-hidden="true" />
-            <b>No recording for this alarm</b>
-            <span>The camera raised it without attaching a clip or a snapshot.</span>
-          </div>
-        )}
+      <div className="dci-evidence">
+        <div className="dci-evidence__media">
+          {shown
+            ? <MediaPlayer inc={inc} orgId={orgId} company={company} items={items} shown={shown} plate={plate} onPick={setShownKey} />
+            : (
+              <div className="dci-stage dci-stage--empty">
+                <i className="ti ti-video-off" aria-hidden="true" />
+                <b>No recording for this alarm</b>
+                <span>The camera raised it without attaching a clip or a snapshot.</span>
+              </div>
+            )}
+        </div>
 
-      <div className="dci-facts-row">
-        <dl className="dci-facts">
-          <dt>Unit</dt><dd><span className="sp4-reg">{plate}</span>{model ? <span className="dci-dim"> · {model}</span> : null}</dd>
-          <dt>Driver</dt><dd>{driver ?? <span className="dci-dim">Not assigned</span>}</dd>
-          <dt>When</dt><dd>{whenLabel(inc.occurredMs)}</dd>
-          <dt>Speed</dt><dd>{inc.speed != null ? `${inc.speed} km/h` : <span className="dci-dim">Not reported</span>}</dd>
-          <dt>Where</dt><dd>{where ?? <span className="dci-dim">No location</span>}</dd>
-          <dt>Alarm</dt><dd>{inc.label} <span className="dci-dim">· code {inc.code}</span></dd>
-        </dl>
-        <MiniMap lat={inc.lat} lng={inc.lng} severity={inc.severity} />
+        <section className="dci-card dci-card--facts" aria-label="Who and when">
+          <dl className="dci-facts">
+            <dt>Unit</dt><dd><span className="sp4-reg">{plate}</span>{model ? <span className="dci-dim"> · {model}</span> : null}</dd>
+            <dt>Driver</dt><dd>{driver ?? <span className="dci-dim">Not assigned</span>}</dd>
+            <dt>When</dt><dd>{whenLabel(inc.occurredMs)}</dd>
+            <dt>Speed</dt><dd>{inc.speed != null ? `${inc.speed} km/h` : <span className="dci-dim">Not reported</span>}</dd>
+            <dt>Where</dt><dd>{where ?? <span className="dci-dim">No location</span>}</dd>
+            <dt>Alarm</dt><dd>{inc.label} <span className="dci-dim">· code {inc.code}</span></dd>
+          </dl>
+          <button type="button" className="dci-unit-link" onClick={onUnit} disabled={unitFiltered}>
+            {unitFiltered ? `Showing ${plate} only` : `Every alarm from ${plate}`}
+            {!unitFiltered && <i className="ti ti-arrow-right" aria-hidden="true" />}
+          </button>
+        </section>
+
+        <div className="dci-card dci-card--map">
+          <MiniMap lat={inc.lat} lng={inc.lng} severity={inc.severity} />
+        </div>
       </div>
-
-      <button type="button" className="dci-unit-link" onClick={onUnit} disabled={unitFiltered}>
-        {unitFiltered ? `Showing ${plate} only` : `Every alarm from ${plate}`}
-        {!unitFiltered && <i className="ti ti-arrow-right" aria-hidden="true" />}
-      </button>
     </div>
   )
 }
@@ -525,7 +531,13 @@ function MiniMap({ lat, lng, severity }) {
     }).addTo(m)
     m.setView([-0.5, 36.5], 7)
     map.current = m
-    return () => { m.remove(); map.current = null; pin.current = null }
+    // The map spans the footage and the facts, so its height follows the
+    // window; re-measure whenever the box changes or tiles leave a seam.
+    const ro = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => { try { m.invalidateSize() } catch { /* removed */ } })
+      : null
+    ro?.observe(box.current)
+    return () => { ro?.disconnect(); m.remove(); map.current = null; pin.current = null }
   }, [])
 
   useEffect(() => {
