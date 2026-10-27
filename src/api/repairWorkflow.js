@@ -137,7 +137,7 @@ export const WORK_KIND_LABEL = { diagnosis: "Diagnosis", repair: "Repair", test:
 const TECH_DIAGNOSIS = ["diagnosis", "note"], TECH_REPAIR = ["repair", "test", "note"];
 export const WORK_KINDS_AT = {
   forwarded: TECH_DIAGNOSIS, in_workshop: TECH_DIAGNOSIS, field_inspection: TECH_DIAGNOSIS,
-  remote_fix: TECH_REPAIR, fixing: TECH_REPAIR, spare_outsourced: TECH_REPAIR,
+  remote_fix: TECH_REPAIR, fixing: TECH_REPAIR, spare_outsourced: ["repair", "note"],
   completed: ["verification"],
 };
 /** The kinds this person may log on this job now: the job's own technician, or the Control Room at verification. */

@@ -79,7 +79,7 @@ describe('the job panel shows the one next step, to whoever may take it', () => 
     expect(html).toContain('Suspected malicious damage.');
     expect(html).toContain('The repair continues');
     expect(html).toContain('RT-2026-00007');
-    expect(html).toContain('Complete and send to verify');
+    expect(html).toContain('the test completes the job');
     expect(html).toContain('Mark warranty void');
   });
 
@@ -207,5 +207,34 @@ describe('the trail folds when long', () => {
     const html = render(job({ stageHistory: steps(3) }), grants());
     expect(shown(html)).toBe(3);
     expect(html).not.toContain('Show all');
+  });
+});
+
+describe('the work log moves the job on', () => {
+  const mine = (stage, over = {}) => job({ stage, ticketNo: 'RT-1', assignedToId: 'u1', assignmentStatus: 'accepted', ...over });
+
+  it('asks a workshop diagnosis for the damage class, and says it starts the repair', () => {
+    const html = render(mine('in_workshop'), grants('repair:resolve'));
+    expect(html).toContain('aria-label="Damage"');
+    expect(html).toContain('Log and start the repair');
+    expect(html).toContain('it starts the repair');
+  });
+
+  it('logs a triage diagnosis plainly: the path is still to decide', () => {
+    const html = render(mine('forwarded', { queue: 'controltech' }), grants('repair:resolve'));
+    expect(html).not.toContain('aria-label="Damage"');
+    expect(html).toContain('Log it');
+  });
+
+  it('offers the Control Room the verdict, with what was done beside it', () => {
+    const html = render(mine('completed', { completedById: 'u1', fixNote: 'Replaced the probe' }), grants('repair:verify'), 'sup-1');
+    expect(html).toContain('aria-label="Verdict"');
+    expect(html).toContain('Replaced the probe');
+  });
+
+  it('keeps the completer from verifying their own repair', () => {
+    const html = render(mine('completed', { completedById: 'sup-1' }), grants('repair:verify'), 'sup-1');
+    expect(html).toContain('Someone else in the Control Room verifies it');
+    expect(html).not.toContain('aria-label="Verdict"');
   });
 });
