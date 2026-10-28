@@ -33,6 +33,9 @@ import { diagnoseMedia } from '../../lib/mediaDiagnose'
 import { loadMapEngine, maps as mapsNs } from '../../lib/mapEngine'
 import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from '../../lib/osmBase'
 import { getSpeedingIncidents } from '../../api/incidents'
+import { apiFetch } from '../../services/api'
+import { spriteKind } from '../../lib/vehicleMap'
+import { markerIconHtml, makeDomMarkerClass } from '../body/FleetMap'
 import MapStatusBar from '../body/MapStatusBar'
 import TableToolbar from '../body/TableToolbar'
 import FilterBar from '../body/FilterBar'
@@ -388,7 +391,7 @@ function Detail({ inc, orgId, company, vehicle, plate, driver, reviewed, onRevie
             <dt>Driver</dt><dd>{driver ?? <span className="dci-dim">Not assigned</span>}</dd>
             <dt>When</dt><dd>{whenLabel(inc.occurredMs)}</dd>
             <dt>Speed</dt><dd>{inc.speed != null ? `${inc.speed} km/h` : <span className="dci-dim">Not reported</span>}</dd>
-            <dt>Where</dt><dd>{where ?? <span className="dci-dim">No location</span>}</dd>
+            <dt>Where</dt><dd title={where ?? undefined}>{where ?? <span className="dci-dim">No location</span>}</dd>
             <dt>Alarm</dt><dd>{inc.label} <span className="dci-dim">· code {inc.code}</span></dd>
           </dl>
           <button type="button" className="dci-unit-link" onClick={onUnit} disabled={unitFiltered}>
@@ -399,7 +402,9 @@ function Detail({ inc, orgId, company, vehicle, plate, driver, reviewed, onRevie
 
         <div className="dci-side">
           <div className="dci-card dci-card--map">
-            <AlarmMap lat={inc.lat} lng={inc.lng} severity={inc.severity} title={`${inc.label} · ${plate}`} />
+            <AlarmMap orgId={orgId} vehicleId={inc.vehicleId} atMs={inc.occurredMs}
+                      lat={inc.lat} lng={inc.lng} severity={inc.severity} title={`${inc.label} · ${plate}`}
+                      vehicle={vehicle} plate={plate} />
           </div>
           <SpeedingByDay orgId={orgId} vehicleId={inc.vehicleId} plate={plate} />
         </div>
@@ -516,26 +521,72 @@ function MediaPlayer({ inc, orgId, company, items, shown, plate, onPick }) {
   )
 }
 
-/** Pin colours for the map, read from the page's own severity tokens. */
-function pinColour(el, severity) {
-  const name = severity === 'critical' ? '--sp4-crit' : severity === 'warning' ? '--sp4-warn' : '--sp4-accent'
-  return getComputedStyle(el).getPropertyValue(name).trim() || '#dc2626'
+/** The live map's marker state for an alarm's severity: red and pulsing for a
+ *  critical one, amber and pulsing for a warning, plain green otherwise. */
+const ALARM_STATE = { critical: 'theft', warning: 'speeding' }
+
+const ALARM_ZOOM = 13          // no route to frame: a few kilometres round the unit
+const ROUTE_MAX_ZOOM = 16      // a route that barely moved still shows its streets
+const ROUTE_BEFORE_MIN = 30    // the road that led to the alarm...
+const ROUTE_AFTER_MIN = 15     // ...and where the unit went next
+
+/** Compass bearing, degrees, from one fix to the next. */
+function bearing(a, b) {
+  const r = Math.PI / 180
+  const y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r)
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r)
+  return (Math.atan2(y, x) / r + 360) % 360
 }
 
-const ALARM_ZOOM = 13   // a few kilometres round the pin: the place, not the street
+/** Which way the unit faced at the alarm: from its last fix before to the
+ *  alarm point, else from the alarm point to its first fix after. Fixes a few
+ *  metres apart are GPS jitter, not a direction. */
+function headingAt(pos, before, after) {
+  const far = (p) => Math.abs(p.lat - pos.lat) + Math.abs(p.lng - pos.lng) > 0.0002
+  const prev = [...before].reverse().find(far)
+  if (prev) return bearing(prev, pos)
+  const next = after.find(far)
+  return next ? bearing(pos, next) : 0
+}
+
+/** The unit's recorded fixes round the alarm, oldest first, split at it. */
+async function routeAround(orgId, vehicleId, atMs) {
+  const from = new Date(atMs - ROUTE_BEFORE_MIN * 60_000).toISOString()
+  const to = new Date(Math.min(Date.now(), atMs + ROUTE_AFTER_MIN * 60_000)).toISOString()
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/vehicles/${vehicleId}/track?from=${from}&to=${to}`)
+  const pts = (res?.data?.points ?? []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+  const at = (p) => new Date(p.t).getTime()
+  return { before: pts.filter((p) => at(p) <= atMs), after: pts.filter((p) => at(p) >= atMs) }
+}
 
 /**
  * Where the alarm happened, on the same map as Reports › Vehicle analytics:
  * the pastel OpenStreetMap base on the Leaflet engine (lib/mapEngine), +/−,
  * the scale and attribution strip. Square, so the place reads the same at
  * any window width (operator, 2026-10-29).
+ *
+ * The unit is drawn as the live map draws it, its own sprite (truck, tractor,
+ * bus...) rather than a dot, with the road it drove: solid for the half hour
+ * that led to the alarm, dashed for the quarter hour after (operator,
+ * 2026-10-29). VSS gives no heading for an alarm, so the sprite is turned
+ * along the recorded track into the alarm point, and faces its default way
+ * when there is no track.
  */
-function AlarmMap({ lat, lng, severity, title }) {
+function AlarmMap({ orgId, vehicleId, atMs, lat, lng, severity, title, vehicle, plate }) {
   const el = useRef(null)
   const map = useRef(null)
   const pin = useRef(null)
+  const lines = useRef([])
+  const DomMarker = useRef(null)
   const [mapObj, setMapObj] = useState(null)
   const [failed, setFailed] = useState(null)
+
+  const { data: route, isError: routeFailed } = useQuery({
+    queryKey: ['dashcam-route', orgId, vehicleId, atMs],
+    queryFn: () => routeAround(orgId, vehicleId, atMs),
+    enabled: Boolean(orgId && vehicleId && atMs != null),
+    staleTime: 5 * 60_000,
+  })
 
   useEffect(() => {
     let alive = true
@@ -548,6 +599,7 @@ function AlarmMap({ lat, lng, severity, title }) {
         })
         installOsmBase(maps, map.current)
         map.current.setMapTypeId(OSM_TYPE_ID)
+        DomMarker.current = makeDomMarkerClass(maps)
         setMapObj(map.current)
         setFailed(false)
       })
@@ -558,25 +610,64 @@ function AlarmMap({ lat, lng, severity, title }) {
   useEffect(() => {
     const m = map.current
     const maps = mapsNs
-    if (!m || !maps || failed !== false) return
+    if (!m || !maps || !DomMarker.current || failed !== false) return
     pin.current?.setMap(null)
     pin.current = null
+    lines.current.forEach((l) => l.setMap(null))
+    lines.current = []
     if (lat == null || lng == null) return
     const pos = { lat, lng }
-    pin.current = new maps.Marker({
-      map: m, position: pos, title, zIndex: 60,
-      icon: {
-        path: maps.SymbolPath.CIRCLE, scale: 8,
-        fillColor: pinColour(el.current, severity), fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2,
-      },
-    })
-    m.setCenter(pos)
-    m.setZoom(ALARM_ZOOM)
-  }, [lat, lng, severity, title, failed])
 
+    const ink = getComputedStyle(el.current).getPropertyValue('--sp4-accent').trim() || '#2563eb'
+    const before = route?.before ?? []
+    const after = route?.after ?? []
+    // The line runs into the unit, so the road reads as reaching the alarm.
+    if (before.length) {
+      lines.current.push(new maps.Polyline({
+        map: m, path: [...before, pos], zIndex: 20,
+        strokeColor: ink, strokeOpacity: 0.9, strokeWeight: 4,
+      }))
+    }
+    if (after.length) {
+      lines.current.push(new maps.Polyline({
+        map: m, path: [pos, ...after], zIndex: 19, strokeOpacity: 0,
+        icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: ink, strokeOpacity: 0.75, strokeWeight: 3, scale: 3 }, offset: '0', repeat: '12px' }],
+      }))
+    }
+
+    pin.current = new DomMarker.current({
+      position: pos, anchor: 'bottom', zIndex: 60,
+      html: `<div title="${title.replace(/"/g, '&quot;')}">${markerIconHtml(ALARM_STATE[severity] ?? 'ok', {
+        sprite: spriteKind(vehicle ?? { id: plate }), name: plate ?? '', heading: headingAt(pos, before, after),
+      })}</div>`,
+    })
+    pin.current.setMap(m)
+
+    if (before.length || after.length) {
+      const b = new maps.LatLngBounds()
+      ;[...before, pos, ...after].forEach((p) => b.extend(p))
+      m.fitBounds(b, 36)
+      if (m.getZoom() > ROUTE_MAX_ZOOM) m.setZoom(ROUTE_MAX_ZOOM)
+    } else {
+      m.setView(pos, ALARM_ZOOM)
+    }
+  }, [lat, lng, severity, title, vehicle, plate, route, failed])
+
+  const hasRoute = Boolean(route?.before?.length || route?.after?.length)
   return (
     <div className="dci-map">
       <div ref={el} className="dci-map__canvas" />
+      {lat != null && lng != null && !failed && (
+        <div className="dci-map__key">
+          {hasRoute ? (
+            <>
+              <span><i className="dci-map__swatch" aria-hidden="true" />{ROUTE_BEFORE_MIN} min before</span>
+              <span><i className="dci-map__swatch dci-map__swatch--after" aria-hidden="true" />{ROUTE_AFTER_MIN} min after</span>
+            </>
+          ) : routeFailed ? 'Route could not load'
+            : route ? 'No route recorded round the alarm' : null}
+        </div>
+      )}
       <MapStatusBar map={mapObj} attribution={OSM_ATTRIBUTION} className="map-status--panel" />
       {(lat == null || lng == null) && <div className="dci-map__msg">No location</div>}
       {failed && <div className="dci-map__msg">The map could not load: {failed}</div>}
