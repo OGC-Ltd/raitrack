@@ -9,13 +9,13 @@ describe("accessMailNote", () => {
       .toEqual({ state: "sent", text: "Invitation emailed to a@b.c." });
   });
 
-  it("names the quota and the retry time", () => {
+  it("treats a refused send as failed, naming the quota and the retry time", () => {
     const retryAt = new Date(2026, 9, 28, 22, 10).toISOString();
     const n = accessMailNote({ sent: false, reason: "queued", because: "provider-quota", retryAt }, "Invitation", "a@b.c", NOW);
-    expect(n.state).toBe("pending");
-    expect(n.text).toMatch(/daily limit/);
-    expect(n.text).toContain(retryClock(retryAt, NOW));
-    expect(n.text).not.toMatch(/tomorrow/);
+    expect(n.state).toBe("failed");
+    expect(n.text).toBe("Invitation not sent, the mail service's daily limit is reached.");
+    expect(n.retry).toContain(retryClock(retryAt, NOW));
+    expect(n.retry).not.toMatch(/tomorrow/);
   });
 
   it("says tomorrow when the retry crosses midnight", () => {
