@@ -20,7 +20,31 @@ import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { DriversIcon } from "../footer/NavIcons";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
-import { carriesCargo } from "../../lib/vehicleMap";
+import { carriesCargo, fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
+
+// Vehicle-type filter. A driver's type is the class of the unit on their row
+// (last driven, else posted), resolved by the same fleetType the map's Fleets
+// funnel uses, so "Tractor" here means the drivers of the units the map draws
+// as tractors. Drivers with no unit on record get a bucket of their own rather
+// than disappearing from every type: the options must sum to the roster.
+const ALL_TYPES = "all";
+const NO_UNIT = "__none";
+const driverFleetType = (d) =>
+  d.vehicle ? fleetType({ id: d.vehicle, name: d.vehicleName, vehicleType: d.vehicleType }) : NO_UNIT;
+const driverTypeLabel = (kind) => (kind === NO_UNIT ? "No vehicle" : fleetTypeLabel(kind));
+
+/** The roster's own types, biggest first — no row for a machine nobody drives. */
+function driverTypeOptions(drivers) {
+  const counts = new Map();
+  for (const d of drivers) {
+    const k = driverFleetType(d);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([kind, count]) => ({ kind, label: driverTypeLabel(kind), count }))
+    // "No vehicle" last whatever its size: it is a gap, not a class.
+    .sort((a, b) => (a.kind === NO_UNIT) - (b.kind === NO_UNIT) || b.count - a.count || a.label.localeCompare(b.label));
+}
 
 // Report-only. The on-screen charts take their colour from --tone-tonnes /
 // --tone-mileage on .drivers-page; jsPDF cannot resolve a CSS variable, so the
@@ -119,7 +143,8 @@ const GRID_STEP_PHONE = 10;
 // draws a bar in that column against the roster's largest value — the gap
 // between first and fifth is what a ranking is for, and a column of bare
 // figures makes the reader do that subtraction row by row.
-const RANKED_KEYS = new Set(["rating", "trips", "tonnes", "mileageKm", "fuelTheftCases", "overspeedingCases"]);
+const RANKED_KEYS = new Set(["rating", "trips", "tonnes", "mileageKm", "fuelTheftCases", "overspeedingCases",
+  "harshAccelerationCases", "harshBrakingCases"]);
 const BAR_KEYS = new Set(["rating", "trips", "tonnes", "mileageKm"]);
 const GRID_METRICS = [
   { key: "tonnes", label: "Tonnes" },
@@ -188,8 +213,12 @@ function fleetOf(drivers, details, liveVehicles) {
     totals: {
       trips: sum("trips"), tonnes: sum("tonnes"), mileageKm: sum("mileageKm"),
       fuelTheftCases: sum("fuelTheftCases"), overspeedingCases: sum("overspeedingCases"),
+      harshAccelerationCases: sum("harshAccelerationCases"), harshBrakingCases: sum("harshBrakingCases"),
     },
-    involved: { theft: involved("fuelTheftCases"), speed: involved("overspeedingCases") },
+    involved: {
+      theft: involved("fuelTheftCases"), speed: involved("overspeedingCases"),
+      accel: involved("harshAccelerationCases"), brake: involved("harshBrakingCases"),
+    },
   };
 }
 
@@ -223,7 +252,18 @@ export default function DriversScreen() {
     [activeCompanyId],
     { cacheKey: `ft-drivers-ov:${activeCompanyId}` }
   );
-  const drivers = useMemo(() => overview?.drivers ?? [], [overview]);
+  const roster = useMemo(() => overview?.drivers ?? [], [overview]);
+
+  // Vehicle-type filter — the whole page follows it: strip, trends and grid.
+  // A type the current roster no longer has (company switched, refresh) reads
+  // as "all" rather than an empty page with nothing on screen saying why.
+  const [typePick, setTypePick] = useState(ALL_TYPES);
+  const typeOptions = useMemo(() => driverTypeOptions(roster), [roster]);
+  const vehicleType = typeOptions.some((o) => o.kind === typePick) ? typePick : ALL_TYPES;
+  const drivers = useMemo(
+    () => (vehicleType === ALL_TYPES ? roster : roster.filter((d) => driverFleetType(d) === vehicleType)),
+    [roster, vehicleType],
+  );
 
   const [selectedId, setSelectedId] = useState(null);
   // The driver panel: opened by picking a row (operator, 2026-10-13: "when we
@@ -323,6 +363,8 @@ export default function DriversScreen() {
         ["Hours on road",      `${fmt(totals.hoursOnRoad, 1)} h`],
         ["Fuel-theft cases",   fmt(totals.fuelTheftCases)],
         ["Overspeeding cases", fmt(totals.overspeedingCases)],
+        ["Harsh acceleration", fmt(totals.harshAccelerationCases ?? 0)],
+        ["Hard braking",       fmt(totals.harshBrakingCases ?? 0)],
         ["Heaviest load",      heaviestLoad ? `${fmt(heaviestLoad.tonnes, 1)} t · ${fmtDay(heaviestLoad.date)} · ${heaviestLoad.route}` : "-"],
       ],
     });
@@ -337,7 +379,8 @@ export default function DriversScreen() {
     downloadReport(doc, `${activeCompany?.short || "Fleet"}-Driver-Report-${titleCase(driver.fullName).replace(/\s+/g, "")}.pdf`);
   };
 
-  const isEmpty = !loading && drivers.length === 0;
+  const isEmpty = !loading && roster.length === 0;
+  const typeName = vehicleType === ALL_TYPES ? null : driverTypeLabel(vehicleType);
 
   return (
     <div className="drivers-page">
@@ -348,9 +391,28 @@ export default function DriversScreen() {
             <div>
               <h1 className="dr-title">Driver Analytics</h1>
               <div className="dr-subtitle">
-                {loading ? "Loading…" : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
+                {loading
+                  ? "Loading…"
+                  : typeName
+                    ? `${fmt(drivers.length)} of ${fmt(roster.length)} drivers · ${typeName} · ${activeCompany?.name || "Fleet"}`
+                    : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
               </div>
             </div>
+            {typeOptions.length > 1 && (
+              <label className="dr-typepick">
+                <span className="dr-typepick__label">Vehicle type</span>
+                <select
+                  className="dr-typepick__select"
+                  value={vehicleType}
+                  onChange={(e) => setTypePick(e.target.value)}
+                >
+                  <option value={ALL_TYPES}>All types ({fmt(roster.length)})</option>
+                  {typeOptions.map((o) => (
+                    <option key={o.kind} value={o.kind}>{o.label} ({fmt(o.count)})</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {/* The two PDF buttons used to sit here, beside the page title.
                 They are on the TABLE now — see AllDriversSection — because
                 that is what they export and it is where Sensor Monitor keeps
@@ -362,7 +424,7 @@ export default function DriversScreen() {
 
         {error ? (
           <LoadError label="Drivers" onRetry={retry} fullSection />
-        ) : !loading && drivers.length === 0 ? (
+        ) : isEmpty ? (
           <TabEmptyState
             icon={<DriversIcon size={44} />}
             title="Drivers"
@@ -544,7 +606,8 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
         )}
 
         <TheftCases thefts={thefts} count={totals.fuelTheftCases} seen={totals.fuelEventsSeen ?? thefts.length} />
-        <SpeedCases overspeeds={overspeeds} trips={totals.overspeedingCases} />
+        <SpeedCases overspeeds={overspeeds} count={totals.overspeedingCases} />
+        <HarshCases accel={totals.harshAccelerationCases ?? 0} brake={totals.harshBrakingCases ?? 0} />
       </div>
 
       <footer className="dr-panel__foot">
@@ -681,10 +744,10 @@ function TheftCases({ thefts, count, seen }) {
 
 /**
  * Overspeeding: the alerts on their trips, a row per day and unit with each
- * alert's time as a chip. The count in the head is TRIPS with an overspeed,
- * which is what the roster ranks on; the note says how many alerts that was.
+ * alert's time as a chip. The count in the head is every alert, which is what
+ * the roster ranks on and what the rating takes points off for (2026-10-28).
  */
-function SpeedCases({ overspeeds, trips }) {
+function SpeedCases({ overspeeds, count }) {
   const groups = [];
   const byKey = new Map();
   for (const o of overspeeds) {
@@ -698,15 +761,13 @@ function SpeedCases({ overspeeds, trips }) {
     <section className="dr-panel__sec dr-cases-sec dr-cases-sec--speed">
       <h3 className="dr-panel__h">
         Overspeeding
-        <span className={`dr-panel__count${trips ? " dr-panel__count--speed" : ""}`}>{fmt(trips)}</span>
+        <span className={`dr-panel__count${count ? " dr-panel__count--speed" : ""}`}>{fmt(count)}</span>
       </h3>
       {overspeeds.length === 0 ? (
         <p className="dr-panel__note">No overspeeding on their trips.</p>
       ) : (
         <>
-          <p className="dr-panel__note">
-            <b>{fmt(overspeeds.length)} alert{overspeeds.length === 1 ? "" : "s"}</b> on {fmt(trips)} trip{trips === 1 ? "" : "s"}
-          </p>
+          <p className="dr-panel__note">Each case lowers their rating.</p>
           <ul className="dr-cases">
             {shown.map((g) => (
               <li key={g.key} className="dr-case dr-case--on">
@@ -726,6 +787,30 @@ function SpeedCases({ overspeeds, trips }) {
           </ul>
           {more}
         </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Harsh driving: the tracker's harsh acceleration and hard braking reports on
+ * their trips. Counts only — each one lowers the rating; the unit's own
+ * Safety tab has the times.
+ */
+function HarshCases({ accel, brake }) {
+  const total = accel + brake;
+  return (
+    <section className="dr-panel__sec dr-cases-sec dr-cases-sec--speed">
+      <h3 className="dr-panel__h">
+        Harsh driving
+        <span className={`dr-panel__count${total ? " dr-panel__count--speed" : ""}`}>{fmt(total)}</span>
+      </h3>
+      {total === 0 ? (
+        <p className="dr-panel__note">No harsh acceleration or hard braking on their trips.</p>
+      ) : (
+        <p className="dr-panel__note">
+          <b>{fmt(accel)}</b> harsh acceleration · <b>{fmt(brake)}</b> hard braking. Each case lowers their rating.
+        </p>
       )}
     </section>
   );
@@ -971,6 +1056,8 @@ function FleetSummary({ fleet, loading }) {
   const incidents = [
     { name: "Fuel theft", n: totals.fuelTheftCases, who: involved.theft, tone: "theft" },
     { name: "Overspeeding", n: totals.overspeedingCases, who: involved.speed, tone: "speed" },
+    { name: "Harsh acceleration", n: totals.harshAccelerationCases, who: involved.accel, tone: "speed" },
+    { name: "Hard braking", n: totals.harshBrakingCases, who: involved.brake, tone: "speed" },
   ];
   const clean = incidents.every((i) => !i.n);
 
@@ -1159,6 +1246,8 @@ function AllDriversSection({
                 <GridTh label="Mileage" k="mileageKm" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
                 <GridTh label="Fuel theft" k="fuelTheftCases" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
                 <GridTh label="Overspeed" k="overspeedingCases" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <GridTh label="Harsh accel." k="harshAccelerationCases" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <GridTh label="Hard braking" k="harshBrakingCases" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
               </tr>
             </thead>
             <tbody>
@@ -1255,11 +1344,13 @@ function AllDriversSection({
                         the reader to name the hue. */}
                     <IncidentCell n={d.fuelTheftCases} tone="theft" label="Fuel theft" />
                     <IncidentCell n={d.overspeedingCases} tone="speed" label="Overspeed" />
+                    <IncidentCell n={d.harshAccelerationCases ?? 0} tone="speed" label="Harsh accel." />
+                    <IncidentCell n={d.harshBrakingCases ?? 0} tone="speed" label="Hard braking" />
                   </tr>
                 );
               })}
               {sorted.length === 0 && (
-                <tr><td colSpan={10} className="dr-grid__empty">No drivers match.</td></tr>
+                <tr><td colSpan={12} className="dr-grid__empty">No drivers match.</td></tr>
               )}
             </tbody>
           </table>
