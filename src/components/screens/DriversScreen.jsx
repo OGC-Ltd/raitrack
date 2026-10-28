@@ -398,7 +398,10 @@ export default function DriversScreen() {
                     : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
               </div>
             </div>
-            {typeOptions.length > 1 && (
+            {/* Always drawn once the roster is in, even with one type: a filter
+                that comes and goes with the data reads as missing (operator,
+                2026-10-28). */}
+            {roster.length > 0 && (
               <label className="dr-typepick">
                 <span className="dr-typepick__label">Vehicle type</span>
                 <select
