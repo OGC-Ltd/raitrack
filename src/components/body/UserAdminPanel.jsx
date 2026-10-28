@@ -51,6 +51,7 @@ import {
 import TablePager, { PAGE_STEP } from "./TablePager";
 import { toCsv, exportFilename, downloadCsv } from "../../lib/rosterExport";
 import { accountState } from "../../lib/accountState";
+import { accessMailNote } from "../../lib/accessMail";
 import { companyMark } from "../../lib/companyLogos";
 import { maskEmail, maskPhone } from "../../lib/mask";
 import { displayGroupText } from "../../lib/groupDisplay";
@@ -988,9 +989,11 @@ export default function UserAdminPanel() {
    * Everything in this group is still an OUTCOME, so all of it is on the
    * clock. Only `fail` and `flag` below stay up.
    */
-  const say = useCallback((text, undo = null, tone = "ok") => {
+  /* `note` is a second line about a mail: { state: sent|pending|failed, text }.
+     The event and the mail are two facts and they get one line each. */
+  const say = useCallback((text, undo = null, tone = "ok", note = null) => {
     setError("");
-    setToast({ text, undo, tone });
+    setToast({ text, undo, tone, note });
   }, []);
 
   /**
@@ -1435,7 +1438,8 @@ export default function UserAdminPanel() {
   /* The toast clears itself. Long enough to read and reach, short enough that
      it is gone before it becomes furniture. */
   useEffect(() => {
-    if (!toast || toast.tone !== "ok") return undefined;
+    // A mail still waiting stays up: its retry time is the thing to read.
+    if (!toast || toast.tone !== "ok" || toast.note?.state === "pending") return undefined;
     const t = setTimeout(() => setToast(null), 9000);
     return () => clearTimeout(t);
   }, [toast]);
@@ -1492,16 +1496,12 @@ export default function UserAdminPanel() {
 
       if (result?.created === false) {
         say(`That address already has an account. They have been added to ${where}.`, null, "created");
-      } else if (result?.invite?.sent) {
-        say(`Invitation sent to ${form.email.trim()} · added to ${where}.`, null, "created");
-      } else if (result?.invite?.reason === "queued") {
-        /* Queued is NOT the failure branch below, and putting it there would be
-           the worst misreport on this screen: it tells an administrator the
-           person cannot sign in, when the link is in flight with three attempts
-           behind it. It is not the success branch either — nothing has left
-           the building yet, and "sent" is what someone reads before deciding
-           whether to chase it. */
-        say(`Account created and added to ${where}. The invitation to ${form.email.trim()} is queued for delivery.`, null, "created");
+      } else if (result?.invite?.sent || result?.invite?.reason === "queued") {
+        /* The server tries the provider before answering, so this says sent
+           or not-yet-and-when. Queued is NOT the failure branch below: the
+           link is in flight with retries behind it. */
+        say(`Account created and added to ${where}.`, null, "created",
+          accessMailNote(result.invite, "Invitation", form.email.trim()));
       } else if (result && result.invite === undefined) {
         // No `invite` key AT ALL means the API that answered predates
         // invitations — it created the account the old way and sent nothing.
@@ -1555,10 +1555,9 @@ export default function UserAdminPanel() {
     setRowBusy(rowKey(user)); setError("");
     try {
       const invite = await resendInvite(user.scopeOrgId, user.id);
-      if (invite?.sent) {
-        say(`New invitation sent to ${user.email}.`, null, "created");
-      } else if (invite?.reason === "queued") {
-        say(`New invitation to ${user.email} is queued for delivery.`, null, "created");
+      if (invite?.sent || invite?.reason === "queued") {
+        say("New invitation issued, the previous link no longer works.", null, "created",
+          accessMailNote(invite, "Invitation", user.email));
       } else {
         /* Not a toast: nothing was sent, so this is a thing that is still
            wrong rather than a thing that happened. */
@@ -1575,10 +1574,9 @@ export default function UserAdminPanel() {
     setRowBusy(rowKey(user)); setError("");
     try {
       const reset = await sendPasswordReset(user.scopeOrgId, user.id);
-      if (reset?.sent) {
-        say(`Password reset link sent to ${user.email}.`, null, "ok");
-      } else if (reset?.reason === "queued") {
-        say(`Password reset link to ${user.email} is queued for delivery.`, null, "ok");
+      if (reset?.sent || reset?.reason === "queued") {
+        say("Password reset issued, the previous link no longer works.", null, "ok",
+          accessMailNote(reset, "Reset link", user.email));
       } else {
         const why = {
           "recently-sent": "one was sent less than a minute ago",
@@ -3118,7 +3116,14 @@ export default function UserAdminPanel() {
              role={toast.tone === "error" ? "alert" : "status"}
              aria-live={toast.tone === "error" ? "assertive" : "polite"}>
           <ToastMark tone={toast.tone ?? "ok"} />
-          <span className="ua-toast__text">{toast.text}</span>
+          <div className="ua-toast__body">
+            <span className="ua-toast__text">{toast.text}</span>
+            {toast.note && (
+              <span className={`ua-toast__note ua-toast__note--${toast.note.state}`}>
+                {toast.note.text}
+              </span>
+            )}
+          </div>
           {/* Only when there is one. A disabled or absent-action "Undo" on a
               permanent deletion would be the cruellest button on the page. */}
           {toast.undo && (
