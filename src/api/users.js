@@ -235,6 +235,15 @@ export async function resendInvite(orgId, userId) {
   return res.data?.invite ?? { sent: false };
 }
 
+/** Mail a password reset link to an account that already has a password.
+ *  The previous reset link stops working. */
+export async function sendPasswordReset(orgId, userId) {
+  const res = await apiFetch(`${base(orgId)}/${encodeURIComponent(userId)}/send-reset`, {
+    method: "POST",
+  });
+  return res.data?.reset ?? { sent: false };
+}
+
 /** ACTIVE or SUSPENDED. Suspending also ends their sessions server-side. */
 export async function setUserStatus(orgId, userId, status) {
   const res = await apiFetch(`${base(orgId)}/${encodeURIComponent(userId)}/status`, {
