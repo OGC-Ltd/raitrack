@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 
 /* The version the app shows (sidebar foot, login page) — package.json's, so
- * `npm version patch|minor|major` is the one place it changes. The commit is
+ * `npm version patch|minor|major` is the one place it changes. Every deploy
+ * is a release: `npm run release` raises the patch (1.0.0 -> 1.0.1 -> 1.0.2),
+ * commits it as "Release 1.0.1" and tags v1.0.1. The commit is
  * read at build time for support ("which build is that?"); no git, no hash. */
 const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 let APP_COMMIT = ''

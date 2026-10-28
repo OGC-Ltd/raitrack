@@ -295,7 +295,9 @@ jobs:
       - name: stamp the bundle with the commit
         run: |
           set -euo pipefail
-          echo "${GITHUB_SHA} ${GITHUB_REPOSITORY}" > build/DEPLOYED_COMMIT
+          # The version too (npm run release raises it), so the live site
+          # says which release it is as well as which commit.
+          echo "${GITHUB_SHA} ${GITHUB_REPOSITORY} v$(node -p "require('./package.json').version")" > build/DEPLOYED_COMMIT
           cat build/DEPLOYED_COMMIT
 
       - name: back up the live bundle, then publish
