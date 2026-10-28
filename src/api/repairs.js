@@ -481,6 +481,9 @@ export function emailBanner(email) {
   const n = email?.sent?.length ?? 0;
   const total = email?.recipients?.length ?? 0;
   switch (email?.status) {
+    // Reports go to the handlers by Web Push since 2026-10-28.
+    case "pushed":
+      return { tone: "ok", text: `Report filed. ${total} handler${total === 1 ? "" : "s"} notified.` };
     case "sent":
       return { tone: "ok", text: `Report filed. Emailed to ${n} handler${n === 1 ? "" : "s"}.` };
     /* The server hands mail to a queue now and returns without waiting on
@@ -493,7 +496,7 @@ export function emailBanner(email) {
         `Report filed. Queued for delivery to ${total} handler${total === 1 ? "" : "s"}.` };
     case "partial":
       return { tone: "warn", text:
-        `Report filed. Emailed to ${n} of ${total} - ${email.failed.join(", ")} was not reached.` };
+        `Report filed. Reached ${n} of ${total} - ${email.failed.join(", ")} was not reached.` };
     case "unconfigured":
       return { tone: "warn", text:
         "Report filed, but no email was sent: the mail service is not configured on the server. Tell an administrator." };
@@ -501,7 +504,7 @@ export function emailBanner(email) {
       return { tone: "warn", text:
         "Report filed, but no handlers are configured to receive it." };
     case "failed":
-      return { tone: "warn", text: "Report filed, but the email failed to send." };
+      return { tone: "warn", text: "Report filed, but the handlers could not be notified." };
     default:
       return { tone: "ok", text: "Report filed." };
   }
@@ -528,7 +531,7 @@ export function assignmentToast(email, assignedName = "the selected person") {
   if (email?.reason === "queued") {
     return { tone: "ok", text: `Triage assigned to ${assignedName}. Email queued for delivery.` };
   }
-  return { tone: "warn", text: `Triage assigned to ${assignedName}, but the notification email was not sent.` };
+  return { tone: "warn", text: `Triage assigned to ${assignedName}, but the notification was not sent.` };
 }
 
 // ── the estimate ─────────────────────────────────────────────────────────────

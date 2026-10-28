@@ -39,7 +39,7 @@ import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useApiData } from "../../hooks/useApiData";
 import {
-  listUsersAcrossOrgs, listAssignableRoles, createOrgUser, updateOrgUser, resendInvite, setUserStatus,
+  listUsersAcrossOrgs, listAssignableRoles, createOrgUser, updateOrgUser, resendInvite, sendPasswordReset, setUserStatus,
   listUserMemberships, setUserMembership, setUserRole, removeUserMembership,
   deleteOrgUserPermanently,
 } from "../../api/users";
@@ -1571,6 +1571,30 @@ export default function UserAdminPanel() {
     }
   }
 
+  async function handleSendReset(user) {
+    setRowBusy(rowKey(user)); setError("");
+    try {
+      const reset = await sendPasswordReset(user.scopeOrgId, user.id);
+      if (reset?.sent) {
+        say(`Password reset link sent to ${user.email}.`, null, "ok");
+      } else if (reset?.reason === "queued") {
+        say(`Password reset link to ${user.email} is queued for delivery.`, null, "ok");
+      } else {
+        const why = {
+          "recently-sent": "one was sent less than a minute ago",
+          unconfigured: "email is not configured on the server",
+          "send-failed": "the mail server rejected it",
+          "no-email": "the account has no email address",
+        }[reset?.reason] ?? reset?.reason ?? "reason not reported";
+        flag(`Could not send the reset link, ${why}.`);
+      }
+    } catch (err) {
+      fail(firstMessage(err, null, "Could not send a reset link."));
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   /* `next` is a parameter rather than always a flip, because the board drops a
      card ONTO a state: "make this suspended" is the gesture, and a toggle
      would make the outcome depend on what the card was when the drag began
@@ -2732,6 +2756,19 @@ export default function UserAdminPanel() {
                                     onClick={() => handleResend(u)}
                                     disabled={rowBusy === key || !u.email}>
                               Resend invite
+                            </button>
+                          )}
+                          {/* The other half of Resend invite: an account that
+                              can already sign in is mailed a reset link
+                              instead. The server refuses it for a suspended
+                              account or one with no password, so it is only
+                              drawn where it can work. */}
+                          {state.key === "active" && rowCan("user:update") && (
+                            <button type="button" className="ua-action"
+                                    onClick={() => handleSendReset(u)}
+                                    disabled={rowBusy === key || !u.email}
+                                    title={u.email ? `Email a password reset link to ${u.email}` : "No email address on this account"}>
+                              Reset password
                             </button>
                           )}
                           {/* "Edit access" was the honest name while that was

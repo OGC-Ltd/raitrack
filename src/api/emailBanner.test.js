@@ -86,3 +86,11 @@ describe("assignmentToast", () => {
     expect(assignmentToast(undefined).text).toMatch(/the selected person/);
   });
 });
+
+describe("emailBanner — pushed", () => {
+  it("says the handlers were notified, not emailed", () => {
+    const b = emailBanner({ status: "pushed", recipients: ["a@b.c", "d@e.f"], sent: ["a@b.c", "d@e.f"], failed: [] });
+    expect(b.tone).toBe("ok");
+    expect(b.text).toBe("Report filed. 2 handlers notified.");
+  });
+});
