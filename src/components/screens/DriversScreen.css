@@ -210,6 +210,9 @@
 /* Vehicle-type filter, at the head's right edge: it scopes the whole page,
    so it sits above the strip rather than in the grid's own filter row. */
 .dr-typepick { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* In the table toolbar the picker leads the right-hand group, so the search
+   beside it gives up its own auto margin. */
+.dr-typepick + .dr-searchwrap { margin-left: 0; }
 .dr-typepick__label { font-size: 11px; font-weight: 600; color: var(--text-2); }
 .dr-typepick__select {
   background: color-mix(in srgb, var(--ink) 4%, transparent);
