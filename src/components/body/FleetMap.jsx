@@ -89,6 +89,7 @@ import {
   LIVE_TRAFFIC_AVAILABLE, GOOGLE_TRAFFIC_LEGEND, TRAFFIC_REDRAW_MS, addGoogleTraffic,
 } from "../../lib/googleBase";
 import { addWeatherLayer } from "../../lib/weatherLayer";
+import WeatherReadout from "./WeatherReadout";
 import { getWeatherGrid } from "../../api/weather";
 import { pathLengthM, plainPoint, formatDistance } from "../../lib/measure";
 
@@ -2298,6 +2299,7 @@ export default function FleetMap() {
     () => readMapPrefs(activeCompanyId).layers.weather,
   );
   const [weatherNote, setWeatherNote]       = useState(null);
+  const [weatherHere, setWeatherHere]       = useState(null); // the cell the readout shows
   const zonesRequestedRef = useRef(false);  // a toggle is a request; a default is not
   // CAD plan overlay — separate toggle, separate layer, lazily fetched.
   const [showPlan, setShowPlan]             = useState(
@@ -6899,9 +6901,11 @@ export default function FleetMap() {
     setWeatherNote("loading…");
     return addWeatherLayer(map, async (b) => {
       const grid = await getWeatherGrid({ orgId, ...b });
-      setWeatherNote(grid.enabled ? null : "not configured");
+      // Google refusing the key (Weather API off) reads as a bare map
+      // otherwise; the rail button's title says why.
+      setWeatherNote(!grid.enabled ? "not configured" : grid.refused ? `Google refused: ${grid.refused}` : null);
       return grid;
-    }, { onError: () => setWeatherNote("failed") });
+    }, { onError: () => setWeatherNote("failed"), onReadout: setWeatherHere });
   }, [mapReady, showWeather, orgId]);
 
   // ── The pinned unit's routed line ─────────────────────────────────────────
@@ -7135,6 +7139,7 @@ export default function FleetMap() {
             investigation, in its own floating window (IncidentInvestigation). */}
         <InvestigationWindow {...investigation} onClose={closeInvestigation} />
         <ArrivalsWindow arrivals={arrivals} onSelectUnit={handleFocusVehicle} onClose={() => setArrivalsOpen(false)} />
+        {showWeather && <WeatherReadout point={weatherHere} note={weatherNote} />}
         <MapStatusBar
           map={mapReady ? mapRef.current : null}
           attribution={isGoogleBase(baseMap) ? GOOGLE_ATTRIBUTION : OSM_ATTRIBUTION}
@@ -7224,20 +7229,6 @@ export default function FleetMap() {
             measuring={measuring}
             measureText={measureText}
             onToggleMeasure={toggleMeasure}
-            route={(() => {
-              const target = selectedVehicleId ?? routeId;
-              const v = target ? vehicles.find(x => x.id === target) : null;
-              const on = Boolean(target && routeId === target && routeLayerRef.current[target]);
-              return {
-                available: Boolean(v),
-                on,
-                onToggle: () => v && toggleRoute(v.id),
-                title: v
-                  ? `${on ? "Hide" : "Show"} the route covered by ${v.name || v.id}`
-                  : "Select a vehicle to show the route it covered",
-              };
-            })()}
-            zones={mapLayers.find(l => l.id === "zones") ?? null}
             halted={canDo("map:filter")
               ? { count: strandedVehicles.length, open: strandedOpen, onOpen: () => setStrandedOpen(v => !v) }
               : null}
