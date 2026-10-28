@@ -398,24 +398,6 @@ export default function DriversScreen() {
                     : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
               </div>
             </div>
-            {/* Always drawn once the roster is in, even with one type: a filter
-                that comes and goes with the data reads as missing (operator,
-                2026-10-28). */}
-            {roster.length > 0 && (
-              <label className="dr-typepick">
-                <span className="dr-typepick__label">Vehicle type</span>
-                <select
-                  className="dr-typepick__select"
-                  value={vehicleType}
-                  onChange={(e) => setTypePick(e.target.value)}
-                >
-                  <option value={ALL_TYPES}>All types ({fmt(roster.length)})</option>
-                  {typeOptions.map((o) => (
-                    <option key={o.kind} value={o.kind}>{o.label} ({fmt(o.count)})</option>
-                  ))}
-                </select>
-              </label>
-            )}
             {/* The two PDF buttons used to sit here, beside the page title.
                 They are on the TABLE now — see AllDriversSection — because
                 that is what they export and it is where Sensor Monitor keeps
@@ -482,6 +464,9 @@ export default function DriversScreen() {
               selectedName={selectedName}
               onDriverReport={detail?.driver ? handleDriverReport : null}
               onAllDriversReport={handleAllDriversReport}
+              typePicker={
+                <TypePicker value={vehicleType} options={typeOptions} total={roster.length} onChange={setTypePick} />
+              }
             />
           </ErrorBoundary>
         )}
@@ -1098,9 +1083,29 @@ function FleetSummary({ fleet, loading }) {
 // "All drivers" section — mirrors the Maintenance page's vehicle datagrid: a
 // full-width filter row (metric chips + word search) above the edge-to-edge
 // grid card — sticky header, sortable, paginated — which takes the whole row.
+/**
+ * The vehicle type filter. It sits in the table's toolbar beside the search
+ * (operator, 2026-10-28: looked for it there), and is always drawn: a filter
+ * that comes and goes with the data reads as missing. It filters the whole
+ * page, strip and trends included, not only the table.
+ */
+function TypePicker({ value, options, total, onChange }) {
+  return (
+    <label className="dr-typepick">
+      <span className="dr-typepick__label">Vehicle type</span>
+      <select className="dr-typepick__select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value={ALL_TYPES}>All types ({fmt(total)})</option>
+        {options.map((o) => (
+          <option key={o.kind} value={o.kind}>{o.label} ({fmt(o.count)})</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function AllDriversSection({
   drivers, details, selectedId, onSelect,
-  selectedName, onDriverReport, onAllDriversReport,
+  selectedName, onDriverReport, onAllDriversReport, typePicker = null,
 }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("mileageKm");
@@ -1192,6 +1197,7 @@ function AllDriversSection({
             it is the same two elements the Sensor Monitor bar and the User
             accounts roster draw, so the three search fields cannot fall out of
             step with each other. */}
+        {typePicker}
         <div className="dr-searchwrap">
           <svg className="dr-searchwrap__icon" width="13" height="13" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
