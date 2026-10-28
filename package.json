@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "bake:sprites": "node --max-old-space-size=8192 scripts/bake-vehicle-atlas.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "npm version patch --force -m \"Release %s\""
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.13.0",

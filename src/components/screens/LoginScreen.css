@@ -303,7 +303,9 @@
 .login__field > .login__input,
 .login__pwwrap {
   box-sizing: border-box;
-  height: 44px;
+  /* 36px, not 44 (operator, 2026-10-29: "make the email and password of a
+     small size"). Phones keep 44 below: a finger needs the target. */
+  height: 36px;
   border: 1px solid var(--login-field-line);
   border-radius: 6px;
   background: var(--login-field);
@@ -312,9 +314,8 @@
 
 .login__input {
   width: 100%;
-  padding: 0 12px;
-  /* 16px: anything smaller and iOS zooms the page when the field is tapped. */
-  font-size: 16px;
+  padding: 0 10px;
+  font-size: 14px;
   font-family: inherit;
   color: var(--color-text-primary, #0f172a);
   background: transparent;
@@ -372,8 +373,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   color: var(--color-text-muted, #5f6e83);
   background: none;
@@ -408,7 +409,7 @@
  * brightening it with a filter, and disabled is a plain grey, not a washed-out
  * green that looks like a broken version of the real one. */
 .login__submit {
-  height: 44px;
+  height: 36px; /* the fields' height, so the form stays one column */
   margin-top: 2px;
   padding: 0 16px;
   font-size: 14px;
@@ -796,7 +797,7 @@
     .login__shell      { --lt: 0.9; }
     .login__sub        { font-size: calc(13px * max(1, var(--lt) / var(--lz))); }
     .login__label      { font-size: calc(12.5px * max(1, var(--lt) / var(--lz))); }
-    .login__input      { font-size: calc(16px * max(1, var(--lt) / var(--lz))); }
+    .login__input      { font-size: calc(14px * max(1, var(--lt) / var(--lz))); }
     .login__error      { font-size: calc(12.5px * max(1, var(--lt) / var(--lz))); }
     .login__submit     { font-size: calc(14px * max(1, var(--lt) / var(--lz))); }
     .login__link       { font-size: calc(12px * max(1, var(--lt) / var(--lz))); }
@@ -924,4 +925,15 @@
   .login__ic-ring { animation: none; opacity: 0.9; }
   .login__ic-level { animation: none; transform: translateY(28%); }
   .login__ic-road { animation: none; }
+}
+
+/* Touch screens keep the full size: a 44px target for a finger, and 16px type
+   because anything smaller makes iOS zoom the page when the field is tapped. */
+@media (pointer: coarse) {
+  .login__field > .login__input,
+  .login__pwwrap,
+  .login__submit { height: 44px; }
+  .login__field > .login__input,
+  .login__input--pw { font-size: 16px; }
+  .login__eye { width: 32px; height: 32px; }
 }
