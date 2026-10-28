@@ -17,8 +17,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts'
 import '../body/SensorPanel.css'
 import './SystemScreen.css'
 import './DashcamIncidentsScreen.css'
@@ -29,6 +30,10 @@ import { CATEGORIES, RANGES } from '../../lib/dashcamIncidents'
 import { vssIncidentsQuery, ensureVssSession } from '../../api/vssAlarms'
 import { useDashcamReviewed } from '../../lib/dashcamReviewed'
 import { diagnoseMedia } from '../../lib/mediaDiagnose'
+import { loadMapEngine, maps as mapsNs } from '../../lib/mapEngine'
+import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from '../../lib/osmBase'
+import { getSpeedingIncidents } from '../../api/incidents'
+import MapStatusBar from '../body/MapStatusBar'
 import TableToolbar from '../body/TableToolbar'
 import FilterBar from '../body/FilterBar'
 import EmptyNote from '../shared/EmptyNote'
@@ -392,8 +397,11 @@ function Detail({ inc, orgId, company, vehicle, plate, driver, reviewed, onRevie
           </button>
         </section>
 
-        <div className="dci-card dci-card--map">
-          <MiniMap lat={inc.lat} lng={inc.lng} severity={inc.severity} />
+        <div className="dci-side">
+          <div className="dci-card dci-card--map">
+            <AlarmMap lat={inc.lat} lng={inc.lng} severity={inc.severity} title={`${inc.label} · ${plate}`} />
+          </div>
+          <SpeedingByDay orgId={orgId} vehicleId={inc.vehicleId} plate={plate} />
         </div>
       </div>
     </div>
@@ -508,56 +516,186 @@ function MediaPlayer({ inc, orgId, company, items, shown, plate, onPick }) {
   )
 }
 
-/** Pin colours for the mini map, read from the page's own severity tokens. */
+/** Pin colours for the map, read from the page's own severity tokens. */
 function pinColour(el, severity) {
   const name = severity === 'critical' ? '--sp4-crit' : severity === 'warning' ? '--sp4-warn' : '--sp4-accent'
-  return getComputedStyle(el).getPropertyValue(name).trim() || 'currentColor'
+  return getComputedStyle(el).getPropertyValue(name).trim() || '#dc2626'
 }
 
-/** A small, still map with a pin where the alarm happened. */
-function MiniMap({ lat, lng, severity }) {
-  const box = useRef(null)
+const ALARM_ZOOM = 13   // a few kilometres round the pin: the place, not the street
+
+/**
+ * Where the alarm happened, on the same map as Reports › Vehicle analytics:
+ * the pastel OpenStreetMap base on the Leaflet engine (lib/mapEngine), +/−,
+ * the scale and attribution strip. Square, so the place reads the same at
+ * any window width (operator, 2026-10-29).
+ */
+function AlarmMap({ lat, lng, severity, title }) {
+  const el = useRef(null)
   const map = useRef(null)
   const pin = useRef(null)
+  const [mapObj, setMapObj] = useState(null)
+  const [failed, setFailed] = useState(null)
 
   useEffect(() => {
-    if (!box.current || map.current) return undefined
-    const m = L.map(box.current, {
-      zoomControl: false, attributionControl: true, dragging: false, scrollWheelZoom: false,
-      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false,
-    })
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap',
-    }).addTo(m)
-    m.setView([-0.5, 36.5], 7)
-    map.current = m
-    // The map spans the footage and the facts, so its height follows the
-    // window; re-measure whenever the box changes or tiles leave a seam.
-    const ro = typeof ResizeObserver === 'function'
-      ? new ResizeObserver(() => { try { m.invalidateSize() } catch { /* removed */ } })
-      : null
-    ro?.observe(box.current)
-    return () => { ro?.disconnect(); m.remove(); map.current = null; pin.current = null }
+    let alive = true
+    loadMapEngine()
+      .then((maps) => {
+        if (!alive || !el.current || map.current) return
+        map.current = new maps.Map(el.current, {
+          center: { lat: -0.5, lng: 36.5 }, zoom: 7,
+          zoomControl: true, fullscreenControl: false,
+        })
+        installOsmBase(maps, map.current)
+        map.current.setMapTypeId(OSM_TYPE_ID)
+        setMapObj(map.current)
+        setFailed(false)
+      })
+      .catch((e) => alive && setFailed(e.message || 'Map unavailable'))
+    return () => { alive = false }
   }, [])
 
   useEffect(() => {
     const m = map.current
-    if (!m) return
-    if (pin.current) { pin.current.remove(); pin.current = null }
+    const maps = mapsNs
+    if (!m || !maps || failed !== false) return
+    pin.current?.setMap(null)
+    pin.current = null
     if (lat == null || lng == null) return
-    pin.current = L.circleMarker([lat, lng], {
-      radius: 8, color: getComputedStyle(box.current).getPropertyValue('--sp4-surface').trim() || 'white',
-      weight: 2, fillColor: pinColour(box.current, severity), fillOpacity: 1,
-    }).addTo(m)
-    m.setView([lat, lng], 13)
-    // The box can change size with the layout; let Leaflet re-measure.
-    setTimeout(() => { try { m.invalidateSize() } catch { /* unmounted */ } }, 50)
-  }, [lat, lng, severity])
+    const pos = { lat, lng }
+    pin.current = new maps.Marker({
+      map: m, position: pos, title, zIndex: 60,
+      icon: {
+        path: maps.SymbolPath.CIRCLE, scale: 8,
+        fillColor: pinColour(el.current, severity), fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2,
+      },
+    })
+    m.setCenter(pos)
+    m.setZoom(ALARM_ZOOM)
+  }, [lat, lng, severity, title, failed])
 
   return (
-    <div className="dci-mini">
-      <div ref={box} className="dci-mini__map" />
-      {(lat == null || lng == null) && <div className="dci-mini__none">No location</div>}
+    <div className="dci-map">
+      <div ref={el} className="dci-map__canvas" />
+      <MapStatusBar map={mapObj} attribution={OSM_ATTRIBUTION} className="map-status--panel" />
+      {(lat == null || lng == null) && <div className="dci-map__msg">No location</div>}
+      {failed && <div className="dci-map__msg">The map could not load: {failed}</div>}
+    </div>
+  )
+}
+
+// ── overspeeding by day ────────────────────────────────────────────────────
+
+const SPEED_DAYS = 30
+const AVG_DAYS = 7
+const SPEED_PAGES = 5            // 5 × 200 incidents: more than any unit raises in a month
+
+const dayKey = (d) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`
+const dayShort = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+/** Every speeding incident on one unit over the last SPEED_DAYS days. */
+async function speedingForUnit(orgId, vehicleId) {
+  const from = new Date()
+  from.setHours(0, 0, 0, 0)
+  from.setDate(from.getDate() - (SPEED_DAYS - 1))
+  const rows = []
+  let cursor
+  for (let i = 0; i < SPEED_PAGES; i += 1) {
+    const page = await getSpeedingIncidents({ orgId, vehicleId, from: from.toISOString(), to: new Date().toISOString(), cursor, limit: 200 })
+    rows.push(...page.rows)
+    if (!page.hasNextPage || !page.cursor) break
+    cursor = page.cursor
+  }
+  return rows
+}
+
+/**
+ * Overspeeding on this unit, a bar per day for the last 30 days, with the
+ * 7-day average as a line over them: the bars say which days, the line
+ * whether it is getting better or worse. The same speeding incidents the
+ * Alerts page lists, de-escalated ones left out.
+ */
+function SpeedingByDay({ orgId, vehicleId, plate }) {
+  const q = useQuery({
+    queryKey: ['dashcam-speeding-by-day', orgId, vehicleId],
+    queryFn: () => speedingForUnit(orgId, vehicleId),
+    enabled: Boolean(orgId && vehicleId),
+    staleTime: 5 * 60_000,
+  })
+
+  const { days, total, worst } = useMemo(() => {
+    const counts = new Map()
+    for (const r of q.data ?? NONE) {
+      if (r.reviewStatus === 'DEESCALATED') continue
+      const k = dayKey(new Date(r.startedAt))
+      counts.set(k, (counts.get(k) ?? 0) + 1)
+    }
+    const today = new Date()
+    const out = []
+    for (let i = SPEED_DAYS - 1; i >= 0; i -= 1) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)
+      out.push({ key: dayKey(d), label: dayShort(d), n: counts.get(dayKey(d)) ?? 0 })
+    }
+    out.forEach((x, i) => {
+      const win = out.slice(Math.max(0, i - AVG_DAYS + 1), i + 1)
+      x.avg = Math.round((win.reduce((t, w) => t + w.n, 0) / win.length) * 10) / 10
+    })
+    const sum = out.reduce((t, x) => t + x.n, 0)
+    const top = out.reduce((b, x) => (x.n > (b?.n ?? 0) ? x : b), null)
+    return { days: out, total: sum, worst: top }
+  }, [q.data])
+
+  return (
+    <section className="dci-card dci-speed" aria-label={`Overspeeding on ${plate}, last ${SPEED_DAYS} days`}>
+      <header className="dci-speed__head">
+        <h3 className="dci-speed__t">Overspeeding</h3>
+        <span className="dci-speed__span">Last {SPEED_DAYS} days</span>
+      </header>
+      <p className="dci-speed__lead">
+        {q.isPending ? <span className="dci-dim">Loading…</span>
+          : q.isError ? <span className="dci-dim">Could not load the cases.</span>
+          : (
+            <>
+              <b className="dci-speed__n">{total}</b> {total === 1 ? 'case' : 'cases'} on <span className="sp4-reg">{plate}</span>
+              {worst && <span className="dci-dim"> · most on {worst.label} ({worst.n})</span>}
+            </>
+          )}
+      </p>
+      <div className="dci-speed__chart" aria-hidden={q.isPending || undefined}>
+        {!vehicleId ? (
+          <div className="dci-speed__none">This camera is not linked to a unit.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={days} margin={{ top: 6, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
+              <CartesianGrid vertical={false} strokeDasharray="2 4" stroke="var(--sp4-line)" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} interval={6}
+                     tick={{ fontSize: 10, fill: 'var(--sp4-text-3)' }} />
+              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={40}
+                     tick={{ fontSize: 10, fill: 'var(--sp4-text-3)' }} />
+              <Tooltip cursor={{ fill: 'var(--sp4-raised)' }} content={<SpeedTip />} />
+              <Bar dataKey="n" name="Cases" fill="var(--sp4-warn)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+              <Line dataKey="avg" name={`${AVG_DAYS}-day average`} type="monotone" stroke="var(--sp4-text-1)"
+                    strokeWidth={1.75} dot={false} isAnimationActive={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+      <ul className="dci-speed__key" aria-hidden="true">
+        <li><span className="dci-speed__sw dci-speed__sw--bar" />Cases a day</li>
+        <li><span className="dci-speed__sw dci-speed__sw--line" />{AVG_DAYS}-day average</li>
+      </ul>
+    </section>
+  )
+}
+
+function SpeedTip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div className="dci-speed__tip">
+      <b>{p.label}</b>
+      <span>{p.n} {p.n === 1 ? 'case' : 'cases'}</span>
+      <span className="dci-dim">{AVG_DAYS}-day average {p.avg}</span>
     </div>
   )
 }

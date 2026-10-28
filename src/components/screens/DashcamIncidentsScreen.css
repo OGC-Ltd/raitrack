@@ -18,6 +18,12 @@
  *          with its word; the one filled button is "Mark reviewed", in
  *          --sp4-accent, because reviewing is the job of the page.
  *
+ * 2026-10-29 pass (operator): the right column is a SQUARE map on the
+ *   Reports › Vehicle analytics engine (pastel OSM, +/−, scale strip,
+ *   square corners like that map) and, under it, overspeeding a day for the
+ *   last 30 days — bars per day, the 7-day average as a line over them.
+ *   Chart states: loading · error · no unit linked · zero (flat bars).
+ *
  * Everything here is .dci-* so nothing can touch the Alerts page. */
 
 .dci-root {
@@ -140,7 +146,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--dci-map-w);
   grid-template-rows: auto 1fr;
-  grid-template-areas: "media map" "facts map";
+  grid-template-areas: "media side" "facts side";
+  align-items: start;
   gap: var(--sp4-md);
 }
 .dci-evidence__media { grid-area: media; min-width: 0; }
@@ -308,7 +315,11 @@
   background: var(--sp4-surface);
 }
 .dci-card--facts { grid-area: facts; display: flex; flex-direction: column; }
-.dci-card--map   { grid-area: map; display: flex; }
+/* The right column: the square map, the overspeeding chart under it. */
+.dci-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: var(--sp4-md); }
+/* Square-cornered, like the Reports map: the map is a picture cut edge to
+   edge inside its frame, not a rounded card. */
+.dci-card--map { border-radius: 0; }
 .dci-facts {
   margin: 0;
   padding: var(--sp4-md) var(--sp4-lg);
@@ -329,19 +340,55 @@
 .dci-facts dd { margin: 0; color: var(--sp4-text-1); font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .dci-dim { color: var(--sp4-text-4); font-weight: 500; }
 
-.dci-mini {
+.dci-map {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 280px;
+  aspect-ratio: 1 / 1;
+  width: 100%;
   background: var(--sp4-raised);
 }
-.dci-mini__map { position: absolute; inset: 0; }
-.dci-mini__map .leaflet-control-attribution { font-size: 9px; }
-.dci-mini__none {
+.dci-map__canvas { position: absolute; inset: 0; }
+.dci-map__msg {
   position: absolute; inset: 0; z-index: 500;
   display: flex; align-items: center; justify-content: center;
+  padding: var(--sp4-md); text-align: center;
   font-size: var(--sp4-body); color: var(--sp4-text-3);
   background: var(--sp4-raised);
+}
+
+.dci-speed { padding: var(--sp4-md) var(--sp4-lg) var(--sp4-sm); display: flex; flex-direction: column; gap: var(--sp4-2xs); }
+.dci-speed__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp4-sm); }
+.dci-speed__t {
+  margin: 0;
+  font-size: var(--sp4-label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--sp4-text-3);
+}
+.dci-speed__span { font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.dci-speed__lead { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-1); }
+.dci-speed__n { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dci-speed__chart { position: relative; height: 150px; margin-top: var(--sp4-2xs); }
+.dci-speed__none {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--sp4-body); color: var(--sp4-text-3);
+}
+.dci-speed__key {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; gap: var(--sp4-md);
+  font-size: var(--sp4-label); color: var(--sp4-text-3);
+}
+.dci-speed__key li { display: inline-flex; align-items: center; gap: 6px; }
+.dci-speed__sw { display: inline-block; width: 10px; }
+.dci-speed__sw--bar { height: 10px; border-radius: 2px; background: var(--sp4-warn); }
+.dci-speed__sw--line { height: 2px; background: var(--sp4-text-1); }
+.dci-speed__tip {
+  display: grid; gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 6px;
+  background: var(--sp4-surface);
+  font-size: 12px; color: var(--sp4-text-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .dci-unit-link {
@@ -369,9 +416,8 @@
   .dci-evidence {
     grid-template-columns: minmax(0, 1fr) minmax(240px, 42%);
     grid-template-rows: auto auto;
-    grid-template-areas: "media media" "facts map";
+    grid-template-areas: "media media" "facts side";
   }
-  .dci-mini { min-height: 240px; }
 }
 @media (max-width: 1100px) {
   .dci-head { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "when" "actions"; }
@@ -382,8 +428,7 @@
   .dci-list { max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--sp4-line); }
   .dci-detail { overflow: visible; }
   .dci-detail__inner { padding: var(--sp4-md) var(--sp4-gutter); }
-  .dci-evidence { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "map" "facts"; }
-  .dci-mini { min-height: 200px; }
+  .dci-evidence { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "side" "facts"; }
   .dci-unit-link { margin: 0 var(--sp4-md) var(--sp4-md); }
   .dci-facts { padding: var(--sp4-md); gap: var(--sp4-xs) var(--sp4-md); }
 }
