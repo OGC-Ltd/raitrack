@@ -24,6 +24,12 @@
  *   last 30 days — bars per day, the 7-day average as a line over them.
  *   Chart states: loading · error · no unit linked · zero (flat bars).
  *
+ * 2026-10-29 fit pass (operator: "every piece on view"): above 1100px wide the
+ *   alarm fits its pane with no scrolling, frame, summary, map and chart cut
+ *   from the evidence block's own size (see the min-width: 1101px block).
+ *   Map shows the unit's sprite and its route round the alarm.
+ *   pre-emit critique: P4 H5 E5 S4 R5 V4
+ *
  * Everything here is .dci-* so nothing can touch the Alerts page. */
 
 .dci-root {
@@ -33,6 +39,7 @@
   --dci-stage-ink: #e2e8f0;
   --dci-list-w:    clamp(300px, 30%, 400px);
   --dci-map-w:     clamp(320px, 38%, 560px);
+  --dci-speed-min: 168px;   /* the overspeeding card at its smallest: head, lead, a readable chart, key */
 }
 
 /* ── the bench: list | evidence ─────────────────────────────────────────── */
@@ -147,7 +154,6 @@
   grid-template-columns: minmax(0, 1fr) var(--dci-map-w);
   grid-template-rows: auto 1fr;
   grid-template-areas: "media side" "facts side";
-  align-items: start;
   gap: var(--sp4-md);
 }
 .dci-evidence__media { grid-area: media; min-width: 0; }
@@ -244,7 +250,7 @@
   line-height: 1.5;
 }
 .dci-stage__msg { position: absolute; inset: 0; z-index: 2; background: color-mix(in srgb, var(--dci-stage) 94%, transparent); }
-.dci-stage--empty { aspect-ratio: 16 / 6; }
+.dci-stage--empty { aspect-ratio: 16 / 6; box-sizing: border-box; }
 .dci-stage--empty .ti { font-size: 26px; opacity: 0.7; }
 .dci-stage__msg b, .dci-stage--empty b { font-size: var(--sp4-strong); color: var(--sp4-surface); }
 .dci-stage__msg span, .dci-stage--empty span { max-width: 52ch; }
@@ -317,6 +323,44 @@
 .dci-card--facts { grid-area: facts; display: flex; flex-direction: column; }
 /* The right column: the square map, the overspeeding chart under it. */
 .dci-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: var(--sp4-md); }
+/* Wide screens: the whole alarm in one view, no scrolling (operator,
+   2026-10-29). The evidence block is a size container, so its pieces are cut
+   from the space it actually has:
+     frame height F = the smaller of
+       (W - gap) * 9/25   the 16:9 frame plus a square map of side F across W
+       H - below          room left under it for caption + summary, or chart
+   The camera frame is F tall (letterboxed on its dark stage when the height
+   is what binds), the map is F × F beside it so it spans the frame exactly,
+   and the summary and the overspeeding chart share the rest, ending level. */
+@media (min-width: 1101px) {
+  .dci-detail__inner { height: 100%; min-height: 0; box-sizing: border-box; }
+  .dci-evidence {
+    container-type: size;
+    grid-template-columns: minmax(0, 1fr) auto;
+    --dci-below: 248px;   /* caption 35 + gap 16 + summary 191 (three one-line fact rows + the unit link, measured) + 6 slack */
+  }
+  .dci-evidence .dci-stage,
+  .dci-evidence .dci-stage--empty {
+    aspect-ratio: auto;
+    height: max(180px, min((100cqw - var(--sp4-md)) * 9 / 25, 100cqh - var(--dci-below)));
+  }
+  .dci-side { width: max(180px, min((100cqw - var(--sp4-md)) * 9 / 25, 100cqh - var(--dci-below))); }
+  .dci-side .dci-card--map { flex: none; }
+  .dci-speed { flex: 1 1 0; min-height: 0; padding-block: var(--sp4-sm) var(--sp4-xs); }
+  .dci-speed__chart { flex: 1 1 0; height: auto; min-height: 48px; }
+  /* The summary two facts a row, so six facts take three lines, not six,
+     each on ONE line (a long place ends in an ellipsis, full text on hover):
+     its height is then fixed, the frame leaves exactly that, and the card
+     never needs a scrollbar (operator, 2026-10-29). */
+  .dci-card--facts { min-height: 0; overflow: hidden; }
+  .dci-facts dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dci-facts {
+    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+    padding: var(--sp4-sm) var(--sp4-md);
+    gap: var(--sp4-xs) var(--sp4-md);
+  }
+  .dci-card--facts .dci-unit-link { margin: 0 var(--sp4-md) var(--sp4-sm); }
+}
 /* Square-cornered, like the Reports map: the map is a picture cut edge to
    edge inside its frame, not a rounded card. */
 .dci-card--map { border-radius: 0; }
@@ -347,6 +391,21 @@
   background: var(--sp4-raised);
 }
 .dci-map__canvas { position: absolute; inset: 0; }
+/* What the two route lines mean, in the map's top-left corner. */
+.dci-map__key {
+  position: absolute; top: var(--sp4-xs); left: 50px; z-index: 450;
+  display: flex; flex-wrap: wrap; gap: var(--sp4-2xs) var(--sp4-sm);
+  padding: 4px 8px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--sp4-surface) 92%, transparent);
+  font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-2);
+  pointer-events: none;
+}
+.dci-map__key:empty { display: none; }
+.dci-map__key span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.dci-map__swatch { display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--sp4-accent); }
+.dci-map__swatch--after { border-top-style: dashed; opacity: 0.8; }
 .dci-map__msg {
   position: absolute; inset: 0; z-index: 500;
   display: flex; align-items: center; justify-content: center;
@@ -412,7 +471,7 @@
 /* ── narrower screens: the evidence goes under the list ─────────────────── */
 /* Too narrow for the map beside the footage: the footage takes the full
    width, and facts | map share the row under it, the map still on the right. */
-@media (max-width: 1280px) {
+@media (max-width: 1100px) {
   .dci-evidence {
     grid-template-columns: minmax(0, 1fr) minmax(240px, 42%);
     grid-template-rows: auto auto;
