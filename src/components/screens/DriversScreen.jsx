@@ -543,6 +543,7 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
   ];
   const thefts = incidents?.thefts ?? [];
   const overspeeds = incidents?.overspeeds ?? [];
+  const harsh = incidents?.harsh ?? [];
   const daysSub = `${fmt(byDay.length)} active day${byDay.length === 1 ? "" : "s"}`;
 
   return (
@@ -593,9 +594,9 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
           </section>
         )}
 
-        <TheftCases thefts={thefts} count={totals.fuelTheftCases} seen={totals.fuelEventsSeen ?? thefts.length} />
+        <TheftCases key={driver.id} thefts={thefts} count={totals.fuelTheftCases} seen={totals.fuelEventsSeen ?? thefts.length} />
         <SpeedCases overspeeds={overspeeds} count={totals.overspeedingCases} />
-        <HarshCases accel={totals.harshAccelerationCases ?? 0} brake={totals.harshBrakingCases ?? 0} />
+        <HarshCases harsh={harsh} accel={totals.harshAccelerationCases ?? 0} brake={totals.harshBrakingCases ?? 0} />
       </div>
 
       <footer className="dr-panel__foot">
@@ -665,17 +666,34 @@ function useFold(items) {
   };
 }
 
+/** Where one fuel event stands, strongest first: a reviewer's escalation, the
+ *  detector's siphon, a reviewer's clearance, or nothing against the driver. */
+const theftStanding = (t) =>
+  t.review === "confirmed" ? { key: "confirmed", label: "Confirmed theft", on: true }
+  : t.countsAgainstDriver ? { key: "suspected", label: "Suspected", on: true }
+  : t.review === "not_theft" ? { key: "cleared", label: "Cleared" }
+  : t.review === "probe_fault" ? { key: "cleared", label: "Probe fault" }
+  : { key: "none", label: "Not counted" };
+
 /**
- * Fuel theft: every fuel event on their units while they drove, with the ones
- * that count against them (siphons) set apart from the ones that do not. The
- * count in the head is the chargeable one; the switch narrows the list to it.
+ * Fuel theft: every fuel event on their units while they drove. A reviewer's
+ * escalation is a CONFIRMED theft and leads (operator, 2026-10-29); a siphon
+ * nobody has reviewed yet still counts, as suspected; the rest are carried so
+ * the operator sees what the unit did on their watch, and count for nothing.
  */
 function TheftCases({ thefts, count, seen }) {
-  const [only, setOnly] = useState(false);
+  const confirmed = thefts.filter((t) => t.review === "confirmed");
   const counted = thefts.filter((t) => t.countsAgainstDriver);
-  const list = only ? counted : thefts;
+  // A view only where it shows something the next one up does not.
+  const views = [
+    confirmed.length > 0 && { key: "confirmed", label: "Confirmed", list: confirmed },
+    counted.length > confirmed.length && { key: "counted", label: "Counted", list: counted },
+    { key: "all", label: "All", list: thefts },
+  ].filter(Boolean);
+  const [view, setView] = useState(views[0].key);
+  const list = views.find((v) => v.key === view)?.list ?? thefts;
   const { shown, more } = useFold(list);
-  const litres = counted.reduce((n, t) => n + (Number(t.litres) || 0), 0);
+  const litres = confirmed.reduce((n, t) => n + (Number(t.litres) || 0), 0);
   return (
     <section className="dr-panel__sec dr-cases-sec dr-cases-sec--theft">
       <h3 className="dr-panel__h">
@@ -687,41 +705,47 @@ function TheftCases({ thefts, count, seen }) {
       ) : (
         <>
           <p className="dr-panel__note">
-            {count
-              ? <><b>{fmt(litres, 1)} L</b> in {fmt(count)} counted case{count === 1 ? "" : "s"}</>
-              : "None counts against them"}
+            {confirmed.length
+              ? <><b>{fmt(confirmed.length)} confirmed</b>, {fmt(litres, 1)} L</>
+              : "None confirmed"}
+            {counted.length > confirmed.length ? ` · ${fmt(counted.length - confirmed.length)} suspected` : ""}
             {seen > count ? ` · ${fmt(seen)} events on their units in all` : ""}
           </p>
-          {counted.length > 0 && counted.length < thefts.length && (
+          {views.length > 1 && (
             <div className="dr-seg dr-cases__filter" role="group" aria-label="Show fuel events">
-              <button type="button" className={`dr-chip${!only ? " dr-chip--active" : ""}`}
-                      aria-pressed={!only} onClick={() => setOnly(false)}>All {fmt(thefts.length)}</button>
-              <button type="button" className={`dr-chip${only ? " dr-chip--active" : ""}`}
-                      aria-pressed={only} onClick={() => setOnly(true)}>Counted {fmt(counted.length)}</button>
+              {views.map((v) => (
+                <button key={v.key} type="button" className={`dr-chip${view === v.key ? " dr-chip--active" : ""}`}
+                        aria-pressed={view === v.key} onClick={() => setView(v.key)}>
+                  {v.label} {fmt(v.list.length)}
+                </button>
+              ))}
             </div>
           )}
           <ul className="dr-cases">
-            {shown.map((t) => (
-              <li key={t.id} className={`dr-case${t.countsAgainstDriver ? " dr-case--on" : ""}`}>
-                <DayBlock iso={t.at} />
-                <span className="dr-case__body">
-                  <span className="dr-case__line">
-                    <b className="dr-case__qty">−{fmt(t.litres, 1)} L</b>
-                    <span className="dr-case__plate">{t.plate ?? "Unit"}</span>
-                    <span className="dr-case__time">{fmtTime(t.at)}</span>
+            {shown.map((t) => {
+              const st = theftStanding(t);
+              return (
+                <li key={t.id} className={`dr-case${st.on ? " dr-case--on" : ""}`}>
+                  <DayBlock iso={t.at} />
+                  <span className="dr-case__body">
+                    <span className="dr-case__line">
+                      <b className="dr-case__qty">−{fmt(t.litres, 1)} L</b>
+                      <span className="dr-case__plate">{t.plate ?? "Unit"}</span>
+                      <span className="dr-case__time">{fmtTime(t.at)}</span>
+                    </span>
+                    <span className="dr-case__sub" title={t.where ?? undefined}>
+                      {t.fromL != null && t.toL != null ? `${fmt(t.fromL)} → ${fmt(t.toL)} L` : ""}
+                      {t.fromL != null && t.toL != null && t.where ? " · " : ""}
+                      {t.where ? shortPlace(t.where) : ""}
+                    </span>
                   </span>
-                  <span className="dr-case__sub" title={t.where ?? undefined}>
-                    {t.fromL != null && t.toL != null ? `${fmt(t.fromL)} → ${fmt(t.toL)} L` : ""}
-                    {t.fromL != null && t.toL != null && t.where ? " · " : ""}
-                    {t.where ? shortPlace(t.where) : ""}
+                  <span className={`dr-case__tag dr-case__tag--${st.key}`}
+                        title={t.reviewNote ?? t.causeReason ?? t.verdictReason ?? undefined}>
+                    {st.label}
                   </span>
-                </span>
-                <span className={`dr-case__tag${t.countsAgainstDriver ? " dr-case__tag--on" : ""}`}
-                      title={t.causeReason ?? t.verdictReason ?? undefined}>
-                  {t.countsAgainstDriver ? "Counts" : "Not counted"}
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
           {more}
         </>
@@ -780,13 +804,24 @@ function SpeedCases({ overspeeds, count }) {
   );
 }
 
+const HARSH_KIND = { acceleration: "Harsh acceleration", braking: "Hard braking" };
+
 /**
  * Harsh driving: the tracker's harsh acceleration and hard braking reports on
- * their trips. Counts only — each one lowers the rating; the unit's own
- * Safety tab has the times.
+ * their trips, a row per day, unit and kind with each report's time as a chip,
+ * the same grammar as overspeeding. Each one lowers the rating.
  */
-function HarshCases({ accel, brake }) {
+function HarshCases({ harsh, accel, brake }) {
   const total = accel + brake;
+  const groups = [];
+  const byKey = new Map();
+  for (const h of harsh) {
+    const key = `${new Date(h.at).toDateString()}|${h.plate ?? ""}|${h.kind}`;
+    let g = byKey.get(key);
+    if (!g) { g = { key, at: h.at, plate: h.plate, kind: h.kind, times: [] }; byKey.set(key, g); groups.push(g); }
+    g.times.push(h.at);
+  }
+  const { shown, more } = useFold(groups);
   return (
     <section className="dr-panel__sec dr-cases-sec dr-cases-sec--speed">
       <h3 className="dr-panel__h">
@@ -796,9 +831,29 @@ function HarshCases({ accel, brake }) {
       {total === 0 ? (
         <p className="dr-panel__note">No harsh acceleration or hard braking on their trips.</p>
       ) : (
-        <p className="dr-panel__note">
-          <b>{fmt(accel)}</b> harsh acceleration · <b>{fmt(brake)}</b> hard braking. Each case lowers their rating.
-        </p>
+        <>
+          <p className="dr-panel__note">
+            <b>{fmt(accel)}</b> harsh acceleration · <b>{fmt(brake)}</b> hard braking. Each case lowers their rating.
+          </p>
+          <ul className="dr-cases">
+            {shown.map((g) => (
+              <li key={g.key} className="dr-case dr-case--on">
+                <DayBlock iso={g.at} />
+                <span className="dr-case__body">
+                  <span className="dr-case__line">
+                    <span className="dr-case__plate">{g.plate ?? "Unit"}</span>
+                    <span className="dr-case__route">{HARSH_KIND[g.kind] ?? g.kind}</span>
+                  </span>
+                  <span className="dr-case__times">
+                    {g.times.slice().sort().map((t, i) => <span key={i} className="dr-case__chip">{fmtTime(t)}</span>)}
+                  </span>
+                </span>
+                <span className="dr-case__n">{fmt(g.times.length)}×</span>
+              </li>
+            ))}
+          </ul>
+          {more}
+        </>
       )}
     </section>
   );

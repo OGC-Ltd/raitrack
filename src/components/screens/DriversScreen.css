@@ -1946,9 +1946,15 @@
   color: var(--text-2);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
-.dr-case__tag--on {
+.dr-case__tag--suspected {
   color: var(--tone-theft);
   background: color-mix(in srgb, var(--tone-theft) 12%, transparent);
+}
+/* A reviewer's escalation: the one tag drawn solid, so a confirmed theft
+   reads apart from the detector's suspicion at a glance. */
+.dr-case__tag--confirmed {
+  color: #fff;
+  background: var(--tone-theft);
 }
 .dr-case__times { display: flex; flex-wrap: wrap; gap: 4px; }
 .dr-case__chip {
