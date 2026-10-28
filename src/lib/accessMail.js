@@ -6,8 +6,11 @@
  * it tries again — the screen used to say "queued for delivery" for an hour
  * with no reason, which was no answer at all.
  *
- * `state` is sent | pending | failed. Pending is not failure: the retry is
- * automatic and there is nothing to do but know when.
+ * `state` is sent | pending | failed. A mail the provider REFUSED is failed
+ * even though it is retried (operator, 2026-10-29: "this is an error and
+ * should be treated as one"): nobody has the link yet. `retry` then says when
+ * it goes again, for the toast to carry under the error. Pending is left for
+ * an older server that queued without saying why.
  */
 
 const FAILED_WHY = {
@@ -38,12 +41,12 @@ export function accessMailNote(mail, what, to, now = new Date()) {
 
   if (mail?.reason === "queued") {
     const at = mail.retryAt ? retryClock(mail.retryAt, now) : null;
-    const when = at ? `It goes out automatically at ${at}.` : "It will be retried automatically.";
+    const retry = at ? `It goes out automatically at ${at}.` : "It will be retried automatically.";
     if (mail.because === "provider-quota") {
-      return { state: "pending", text: `Not sent yet, the mail service's daily limit is reached. ${when}` };
+      return { state: "failed", text: `${what} not sent, the mail service's daily limit is reached.`, retry };
     }
     if (mail.because === "send-failed") {
-      return { state: "pending", text: `Not sent yet, the mail server did not accept it. ${when}` };
+      return { state: "failed", text: `${what} not sent, the mail server did not accept it.`, retry };
     }
     // An older server that queues first and says nothing more.
     return { state: "pending", text: `${what} to ${to} is waiting to be sent.` };

@@ -1023,6 +1023,22 @@ export default function UserAdminPanel() {
     setToast({ text, undo: null, tone: "warn" });
   }, []);
 
+  /**
+   * The outcome of an access mail. Sent, or merely waiting on an older
+   * server, it is the outcome `say` reports with the mail as its note. Refused
+   * by the provider, it is an error: the headline is what did not happen and
+   * the action that did (the new link, the account) drops to the note with
+   * the retry time, on the error tone, which never expires.
+   */
+  const sayMail = useCallback((done, note, tone = "created") => {
+    if (note.state !== "failed") { say(done, null, tone, note); return; }
+    setError("");
+    setToast({
+      text: note.text, undo: null, tone: "error",
+      note: { state: "failed", text: [done, note.retry].filter(Boolean).join(" ") },
+    });
+  }, [say]);
+
   const canAssignRoles = can("user:assign_role");
   /* NOTE: the typed-confirmation shortcut and the per-row action gates used
      to be computed here, once, from the ACTIVE company. They are now computed
@@ -1500,7 +1516,7 @@ export default function UserAdminPanel() {
         /* The server tries the provider before answering, so this says sent
            or not-yet-and-when. Queued is NOT the failure branch below: the
            link is in flight with retries behind it. */
-        say(`Account created and added to ${where}.`, null, "created",
+        sayMail(`Account created and added to ${where}.`,
           accessMailNote(result.invite, "Invitation", form.email.trim()));
       } else if (result && result.invite === undefined) {
         // No `invite` key AT ALL means the API that answered predates
@@ -1556,7 +1572,7 @@ export default function UserAdminPanel() {
     try {
       const invite = await resendInvite(user.scopeOrgId, user.id);
       if (invite?.sent || invite?.reason === "queued") {
-        say("New invitation issued, the previous link no longer works.", null, "created",
+        sayMail("New invitation issued, the previous link no longer works.",
           accessMailNote(invite, "Invitation", user.email));
       } else {
         /* Not a toast: nothing was sent, so this is a thing that is still
@@ -1575,8 +1591,8 @@ export default function UserAdminPanel() {
     try {
       const reset = await sendPasswordReset(user.scopeOrgId, user.id);
       if (reset?.sent || reset?.reason === "queued") {
-        say("Password reset issued, the previous link no longer works.", null, "ok",
-          accessMailNote(reset, "Reset link", user.email));
+        sayMail("Password reset issued, the previous link no longer works.",
+          accessMailNote(reset, "Reset link", user.email), "ok");
       } else {
         const why = {
           "recently-sent": "one was sent less than a minute ago",
