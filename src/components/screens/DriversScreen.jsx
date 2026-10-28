@@ -766,7 +766,7 @@ function SpeedCases({ overspeeds, count }) {
     const key = `${new Date(o.at).toDateString()}|${o.plate ?? ""}|${o.route ?? ""}`;
     let g = byKey.get(key);
     if (!g) { g = { key, at: o.at, plate: o.plate, route: o.route, times: [] }; byKey.set(key, g); groups.push(g); }
-    g.times.push(o.at);
+    g.times.push(o);
   }
   const { shown, more } = useFold(groups);
   return (
@@ -776,7 +776,7 @@ function SpeedCases({ overspeeds, count }) {
         <span className={`dr-panel__count${count ? " dr-panel__count--speed" : ""}`}>{fmt(count)}</span>
       </h3>
       {overspeeds.length === 0 ? (
-        <p className="dr-panel__note">No overspeeding on their trips.</p>
+        <p className="dr-panel__note">No overspeeding recorded against them.</p>
       ) : (
         <>
           <p className="dr-panel__note">Each case lowers their rating.</p>
@@ -790,7 +790,12 @@ function SpeedCases({ overspeeds, count }) {
                     {g.route && <span className="dr-case__route">{g.route}</span>}
                   </span>
                   <span className="dr-case__times">
-                    {g.times.slice().sort().map((t, i) => <span key={i} className="dr-case__chip">{fmtTime(t)}</span>)}
+                    {g.times.slice().sort((x, y) => x.at.localeCompare(y.at)).map((o) => (
+                      <span key={o.id} className="dr-case__chip"
+                            title={o.peakKmh != null ? `${fmt(o.peakKmh)} km/h in a ${fmt(o.limitKmh)} km/h limit` : undefined}>
+                        {fmtTime(o.at)}
+                      </span>
+                    ))}
                   </span>
                 </span>
                 <span className="dr-case__n">{fmt(g.times.length)}×</span>
