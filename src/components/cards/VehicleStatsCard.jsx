@@ -19,6 +19,7 @@ import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
 import { burnAgainst, overWords } from "../../lib/vehicleDay";
 import { displayPlate } from "../../lib/plate";
+import TripReportButton from "../shared/TripReportButton";
 
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
@@ -737,6 +738,16 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
                 </span>
               )}
             </div>
+            {/* The printable report for this run, or the unit's last one when
+                it is not out on a dispatch. Pinned panel only. */}
+            {withDay && orgId && vehicle.vehicleId && (
+              <div className="vt-report-row">
+                <TripReportButton
+                  report={{ orgId, vehicleId: vehicle.vehicleId, dispatch: vehicle.trip?.externalId ?? null }}
+                  label={hasLeg ? "Trip report" : "Last trip report"}
+                />
+              </div>
+            )}
           </>
         )}
 

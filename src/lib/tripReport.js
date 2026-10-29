@@ -10,13 +10,15 @@
 
 import { haversineM } from './tripProgress';
 
-/** The breach columns, in print order. Seat belt and cornering come only from a dashcam. */
+/**
+ * The driver's conduct for the DAY of the trip, in print order (operator,
+ * 2026-10-29). Escalated fuel theft is a theft case confirmed on review.
+ */
 export const BREACH_KINDS = [
+  { key: 'theft', label: 'Escalated fuel theft' },
+  { key: 'brake', label: 'Harsh braking' },
   { key: 'speed', label: 'Overspeeding' },
   { key: 'accel', label: 'Harsh acceleration' },
-  { key: 'brake', label: 'Harsh braking' },
-  { key: 'turn', label: 'Harsh cornering' },
-  { key: 'seatbelt', label: 'Seat belt' },
 ];
 
 const YARD_RADIUS_M = 800;
@@ -32,7 +34,7 @@ const LONG_STOP_MS = 30 * 60_000;
 /** A reported speed above this is a bad fix, not a truck. */
 const MAX_PLAUSIBLE_KMH = 160;
 
-const ROWS = { stops: 8, fuel: 6, breaches: 6, geo: 6 };
+const ROWS = { stops: 8, fuel: 6, breaches: 6, geo: 6, weighings: 8 };
 const SVG_POINTS = 600;
 
 const pt = (lat, lng) => ({ lat, lng });
@@ -172,21 +174,24 @@ export function buildTripReport(d) {
   });
   const stops = [...allStops].sort((a, b) => b.ms - a.ms).slice(0, ROWS.stops).sort(byTime).map((s, i) => ({ ...s, n: i + 1 }));
 
-  // ── breaches ──
-  const cam = d.camera ?? { fitted: false, alarms: [] };
+  // ── driver conduct, for the day ──
+  const mins = (sec) => `${Math.max(1, Math.round(sec / 60))} min`;
   const breaches = [
+    ...(d.escalatedThefts ?? []).map((x) => ({ t: x.t, key: 'theft', place: x.place ?? null, lat: null, lng: null,
+      detail: `${Math.round(x.litres)} L, confirmed on review` })),
     ...(d.speeding ?? []).map((s) => ({ t: s.t, key: 'speed', lat: s.lat, lng: s.lng,
-      detail: `${Math.round(s.peakKmh)} in a ${Math.round(s.limitKmh)} km/h limit, ${Math.max(1, Math.round(s.durationSec / 60))} min` })),
+      detail: `${Math.round(s.peakKmh)} in ${Math.round(s.limitKmh)}, ${mins(s.durationSec)}${s.distanceM != null ? `, ${round1(s.distanceM / 1000)} km` : ''}` })),
     ...(d.harsh ?? []).map((h) => ({ t: h.t, key: h.type === 'brake' ? 'brake' : 'accel', lat: h.lat, lng: h.lng,
       detail: h.speedKmh != null ? `at ${Math.round(h.speedKmh)} km/h` : null })),
-    ...(cam.alarms ?? []).map((a) => ({ t: a.t, key: a.kind, lat: a.lat, lng: a.lng,
-      detail: a.speed != null ? `Dashcam, at ${a.speed} km/h` : 'Dashcam' })),
   ].map((b) => {
     const p = b.lat != null ? { lat: b.lat, lng: b.lng } : positionAt(track, b.t);
-    return { ...b, ...p, label: BREACH_KINDS.find((k) => k.key === b.key).label, place: where(b.t, p.lat, p.lng).place };
+    return { ...b, ...p, label: BREACH_KINDS.find((k) => k.key === b.key).label, place: b.place || where(b.t, p.lat, p.lng).place };
   }).sort(byTime);
   const counts = Object.fromEntries(BREACH_KINDS.map((k) => [k.key, breaches.filter((b) => b.key === k.key).length]));
   const breachCap = capped(breaches, ROWS.breaches);
+  const overspeedMs = (d.speeding ?? []).reduce((a, s) => a + (s.durationSec ?? 0) * 1000, 0);
+  const measuredKm = (d.speeding ?? []).filter((s) => s.distanceM != null);
+  const overspeedKm = measuredKm.length ? round1(measuredKm.reduce((a, s) => a + s.distanceM, 0) / 1000) : (d.speeding?.length ? null : 0);
 
   // ── geofence ──
   const edge = 60_000;
@@ -198,11 +203,32 @@ export function buildTripReport(d) {
 
   // ── load ──
   const D = d.dispatch;
-  const load = [
-    ...(D.tonnageT != null ? [{ source: 'dispatch', cargo: D.cargoName, bags: D.bags, netKg: D.tonnageT * 1000, ref: D.serialNumber ?? D.externalId }] : []),
-    ...(d.weighments ?? []).map((x) => ({ source: 'weighbridge', cargo: x.cargo, grossKg: x.grossKg, tareKg: x.tareKg, netKg: x.netKg,
-      ticket: x.ticket, bridge: x.bridge, at: new Date(x.at).toISOString(), driver: x.driver })),
-  ];
+  const declared = D.tonnageT != null
+    ? { cargo: D.cargoName, bags: D.bags, netKg: D.tonnageT * 1000, ref: D.serialNumber ?? D.externalId }
+    : null;
+  // Every weighing on every ticket the unit raised that day, in time order,
+  // each with the time since the one before. A weighing whose date is doubtful
+  // at source (stamped before its own ticket) is printed but never measured
+  // against, so it cannot produce a negative or a day-long gap.
+  const tickets = [...(d.weighments ?? [])].sort((a, b) => a.tokenAt - b.tokenAt);
+  const weighings = tickets.flatMap((tk) => {
+    const list = (tk.weighings ?? []).filter((x) => !x.doubtful).sort((a, b) => a.at - b.at);
+    const odd = (tk.weighings ?? []).filter((x) => x.doubtful);
+    return [...list, ...odd].map((x, i, all) => ({
+      ...x, ticket: tk.ticket, cargo: tk.cargo,
+      // The ticket's net goes on its last weighing, where the load is settled.
+      netKg: i === all.length - 1 ? tk.netKg : null,
+    }));
+  });
+  let prev = null;
+  for (const x of weighings) {
+    x.sinceMs = !x.doubtful && prev != null ? x.at - prev : null;
+    x.sameTicketAsPrev = false;
+    if (!x.doubtful) prev = x.at;
+  }
+  for (let i = 1; i < weighings.length; i++) weighings[i].sameTicketAsPrev = weighings[i].ticket === weighings[i - 1].ticket;
+  const weighCap = capped(weighings, ROWS.weighings);
+  const bridges = [...new Set(weighings.map((x) => x.bridge).filter(Boolean))];
 
   return {
     reportNo: reportNumber(d),
@@ -226,11 +252,15 @@ export function buildTripReport(d) {
       maxKmh: speeds.length ? Math.max(...speeds) : null,
       fuelUsedL,
     },
-    load,
+    declared,
+    weighbridge: { rows: weighCap.rows, more: weighCap.more, tickets: tickets.length, weighings: weighings.length,
+      bridges, doubtful: weighings.some((x) => x.doubtful),
+      netKg: tickets.reduce((a, x) => a + (x.netKg ?? 0), 0) },
     stops,
     stopsTotal: allStops.length,
     fuel: { series, hasProbe: !!F.hasProbe, startL, endL, rows: fuelCap.rows, more: fuelCap.more, drainL: round1(drainL) },
-    breaches: { dashcam: !!cam.fitted, counts, total: breaches.length, rows: breachCap.rows, more: breachCap.more },
+    day: d.day ?? { from: w.from, to: w.to },
+    breaches: { counts, total: breaches.length, rows: breachCap.rows, more: breachCap.more, overspeedMs, overspeedKm },
     geo: { rows: geoCap.rows, more: geoCap.more, timedOut: !!d.zones?.timedOut },
   };
 }
