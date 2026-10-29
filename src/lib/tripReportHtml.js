@@ -12,6 +12,9 @@ const fmtHM = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', 
 const fmtDayHM = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 const fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
 const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
+/** "28/10 14:23": the stops table's narrow time cells on a trip over midnight. */
+const fmtDM = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+const shortDayHM = (t) => fmtDM.format(t).replace(',', '');
 
 const dash = '–';
 const num = (v, dp = 0) => (v == null || !Number.isFinite(v) ? dash : v.toLocaleString('en-GB', { minimumFractionDigits: dp, maximumFractionDigits: dp }));
@@ -254,9 +257,10 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
     : '<div class="none">No weighbridge ticket from the start of the day to the end of the trip.</div>';
 
   // ── stops ──
+  const ST = (t) => (t == null ? dash : multi ? shortDayHM(t) : fmtHM.format(t));
   const stops = r.stops.length
-    ? `<table class="lst"><colgroup><col style="width:4mm"><col><col style="width:${multi ? 22 : 11.5}mm"><col style="width:${multi ? 22 : 11.5}mm"><col style="width:17mm"><col style="width:${multi ? 20 : 31}mm"></colgroup><tr><th>#</th><th>Location</th><th>Arrived</th><th>Left</th><th>Duration</th><th>Remark</th></tr>${
-      r.stops.map((s) => `<tr><td>${s.n}</td><td class="pl">${place(s)}</td><td class="nw">${T(s.t)}</td><td class="nw">${T(s.endT)}</td><td class="nw">${dur(s.ms)}</td><td${s.flag ? ' class="flag"' : ''} title="${esc(s.remark)}">${esc(s.remark)}</td></tr>`).join('')}</table>${
+    ? `<table class="lst"><colgroup><col style="width:4mm"><col><col style="width:${multi ? 19.5 : 11.5}mm"><col style="width:${multi ? 19.5 : 11.5}mm"><col style="width:17mm"><col style="width:19mm"></colgroup><tr><th>#</th><th>Location</th><th>Arrived</th><th>Left</th><th>Duration</th><th>Remark</th></tr>${
+      r.stops.map((s) => `<tr><td>${s.n}</td><td class="pl wrap">${place(s)}</td><td class="nw">${ST(s.t)}</td><td class="nw">${ST(s.endT)}</td><td class="nw">${dur(s.ms)}</td><td${s.flag ? ' class="flag"' : ''} title="${esc(s.remark)}">${esc(s.remark)}</td></tr>`).join('')}</table>${
       r.stopsTotal > r.stops.length ? `<div class="more">Showing the ${r.stops.length} longest of ${r.stopsTotal} stops over 5 min.</div>` : ''}`
     : '<div class="none">No stops over 5 minutes.</div>';
 
@@ -298,10 +302,14 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
 
   // ── geofence ──
   const G = r.geo;
+  // Leaving the yard and getting back can fall outside the trip's own day.
+  const gMulti = multi || G.rows.some((g) => dayOf.format(g.t) !== dayOf.format(w.from));
+  const gT = (t) => (gMulti ? fmtDayHM : fmtHM).format(t);
   const geo = G.rows.length
-    ? `<table class="lst"><colgroup><col style="width:${multi ? 22 : 10}mm"><col style="width:27mm"><col></colgroup><tr><th>Time</th><th>Alert</th><th>Zone</th></tr>${
-      G.rows.map((g) => `<tr><td class="nw">${T(g.t)}</td><td${g.flag ? ' class="flag"' : ''}>${esc(g.label)}</td><td class="pl">${esc(g.zone ?? dash)}</td></tr>`).join('')}</table>${
-      G.more ? `<div class="more">+ ${G.more} more zone crossings.</div>` : ''}`
+    ? `<table class="lst"><colgroup><col style="width:${gMulti ? 22 : 10}mm"><col style="width:27mm"><col></colgroup><tr><th>Time</th><th>Alert</th><th>Zone</th></tr>${
+      G.rows.map((g) => `<tr><td class="nw">${gT(g.t)}</td><td${g.flag ? ' class="flag"' : ''}>${esc(g.label)}</td><td class="pl">${esc(g.zone ?? dash)}</td></tr>`).join('')}</table>${
+      G.more ? `<div class="more">+ ${G.more} more zone crossings.</div>` : ''}${
+      G.timedOut ? '<div class="more">Other zone crossings could not be read in time for this report.</div>' : ''}`
     : G.timedOut
       ? '<div class="none">Zone crossings could not be read in time for this report.</div>'
       : '<div class="none">No geofence alerts during this trip.</div>';

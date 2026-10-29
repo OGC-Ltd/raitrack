@@ -62,7 +62,7 @@ describe('buildTripReport', () => {
 
   it('finds stops of 5 minutes or more and names the destination', () => {
     expect(r.stops).toHaveLength(2);
-    expect(r.stops[0].remark).toBe('Unscheduled stop');
+    expect(r.stops[0].remark).toBe('Unscheduled');
     expect(r.stops[0].ms).toBe(20 * MIN);
     expect(r.stops[0].flag).toBe(false);
     expect(r.stops[1].place).toBe('NYAONDO');
@@ -92,8 +92,16 @@ describe('buildTripReport', () => {
     expect(W.bridges).toEqual(['FACTORY · bridge 2', 'FACTORY · bridge 1']);
   });
 
-  it('lists zone crossings inside the window', () => {
-    expect(r.geo.rows.map((g) => g.label)).toEqual(['Entered']);
+  it('marks departure from the yard and arrival at the destination, not the zone at the destination again', () => {
+    expect(r.geo.rows.map((g) => `${g.label} ${g.zone}`)).toEqual(['Departure Ndhiwa', 'Arrival NYAONDO']);
+  });
+
+  it('marks the round trip back: departure, arrival, departure, arrival', () => {
+    const back = [];
+    const last = trackFixture().at(-1);
+    for (let i = 1; i <= 30; i++) back.push([last[0] + i * 2 * MIN, dest.lat - (dest.lat - yard.lat) * (i / 30), yard.lng, 50, 1]);
+    const t = buildTripReport(fixture({ track: [...trackFixture(), ...back], zones: { timedOut: false, visits: [] } }));
+    expect(t.geo.rows.map((g) => `${g.label} ${g.zone}`)).toEqual(['Departure Ndhiwa', 'Arrival NYAONDO', 'Departure NYAONDO', 'Arrival Ndhiwa']);
   });
 
   it('uses the declared load before any weighbridge ticket', () => {
