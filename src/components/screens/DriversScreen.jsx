@@ -689,6 +689,9 @@ function TheftCases({ thefts, count, seen }) {
   const flagged = thefts.filter((t) => t.cause === "SIPHON" || t.review === "confirmed");
   const deescalated = flagged.filter((t) => t.review === "not_theft" || t.review === "probe_fault");
   const counted = thefts.filter((t) => t.countsAgainstDriver);
+  // Cases from before anyone was posted to the unit are shown on the card of
+  // whoever holds it now, but never counted against them.
+  const beforePosting = thefts.filter((t) => t.attributedBy === "posted").length;
   // A view only where it shows something the next one up does not.
   const views = [
     confirmed.length > 0 && { key: "confirmed", label: "Confirmed", list: confirmed },
@@ -722,6 +725,7 @@ function TheftCases({ thefts, count, seen }) {
               : "None confirmed"}
             {counted.length > confirmed.length ? ` · ${fmt(counted.length - confirmed.length)} suspected` : ""}
             {seen > count ? ` · ${fmt(seen)} events on their units in all` : ""}
+            {beforePosting ? ` · ${fmt(beforePosting)} from before they were posted to the unit, not counted against them` : ""}
           </p>
           {views.length > 1 && (
             <div className="dr-seg dr-cases__filter" role="group" aria-label="Show fuel events">
