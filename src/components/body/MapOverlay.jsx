@@ -1387,7 +1387,8 @@ function VehicleDetailPanel({ selectedVehicleId }) {
       </ErrorBoundary>
 
       <ErrorBoundary label="Delivery">
-        <DeliveryCard delivery={delivery} pending={pending} />
+        <DeliveryCard delivery={delivery} pending={pending}
+          report={orgId && v.vehicleId ? { orgId, vehicleId: v.vehicleId, dispatch: trip?.externalId ?? null } : null} />
       </ErrorBoundary>
 
       <ErrorBoundary label="Storage">

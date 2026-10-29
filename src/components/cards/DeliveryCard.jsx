@@ -19,6 +19,8 @@ import { LEG_LABEL, fmtDuration } from "../../lib/tripProgress";
 import ShieldIcon from "../shared/ShieldIcon";
 import { useTrafficRoute, routeTarget, useRoutingAvailable } from "../../hooks/useTrafficRoute";
 import { delayCause } from "../../lib/tomtomTraffic";
+import { useState } from "react";
+import { openTripReport } from "../../api/tripReport";
 
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
@@ -64,6 +66,28 @@ function TrafficEta({ traffic }) {
   );
 }
 
+/**
+ * Opens the printable trip report (api/tripReport) for this run, or for the
+ * unit's latest dispatch when it is not out on one.
+ */
+function TripReportButton({ report, label }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!report) return null;
+  const open = async () => {
+    setBusy(true); setError(null);
+    try { await openTripReport(report); } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" className="dc-report" onClick={open} disabled={busy} title={error ?? "Open the trip report to print or save as PDF"}>
+        {busy ? "Preparing…" : label}
+      </button>
+      {error && <span className="dc-report-err" role="alert">{error}</span>}
+    </>
+  );
+}
+
 const LEG_CLASS = {
   "no-fix":         "dc-leg--silent",
   "at-yard":        "dc-leg--yard",
@@ -73,12 +97,12 @@ const LEG_CLASS = {
   "back":           "dc-leg--back",
 };
 
-export default function DeliveryCard({ delivery, pending }) {
+export default function DeliveryCard({ delivery, pending, report }) {
   const routing = useRoutingAvailable();
   if (!delivery) {
     return (
       <div className="dc-card">
-        <div className="dc-title">Active Trip</div>
+        <div className="dc-title">Active Trip<TripReportButton report={report} label={pending ? "Trip report" : "Last trip report"} /></div>
         <div className="dc-row">
           <span className="dc-dot" style={{ background: pending ? "#f59e0b" : "#94a3b8" }} />
           <span className="dc-place" style={{ color: "var(--text-secondary, #8b949e)" }}>
@@ -114,6 +138,7 @@ export default function DeliveryCard({ delivery, pending }) {
         Active Trip
         <span className={`dc-leg ${LEG_CLASS[leg] ?? ""}`}>{legText ?? LEG_LABEL[leg] ?? leg}</span>
         {status === "OVERDUE" && <span className="dc-overdue">Overdue</span>}
+        <TripReportButton report={report} label="Trip report" />
       </div>
 
       {driver && <div className="dc-driver">{driver}</div>}
