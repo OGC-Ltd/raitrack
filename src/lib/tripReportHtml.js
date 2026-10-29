@@ -102,29 +102,33 @@ function routeOnTiles(r, W, H, PAD) {
   </svg>`;
 }
 
+/**
+ * Fuel level over the trip. The plot stretches to whatever height the left
+ * column leaves (the route column is shorter than stops + fuel + weighbridge),
+ * so lines are drawn in a 0–1000 box with non-scaling strokes and the labels
+ * and drain dots are HTML placed by percentage.
+ */
 function fuelSvg(f, w) {
-  const W = 260, H = 70, pl = 26, pr = 6, pt = 5, pb = 12;
   const pts = f.series;
   if (pts.length < 2) return '';
   const vals = pts.map((p) => p[1]);
   let lo = Math.min(...vals), hi = Math.max(...vals);
   const pad = Math.max(5, (hi - lo) * 0.12); lo = Math.max(0, lo - pad); hi += pad;
-  const X = (t) => pl + ((t - w.from) / Math.max(1, w.to - w.from)) * (W - pl - pr);
-  const Y = (v) => pt + ((hi - v) / (hi - lo)) * (H - pt - pb);
-  const line = pts.map(([t, v]) => `${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const X = (t) => ((t - w.from) / Math.max(1, w.to - w.from)) * 100;
+  const Y = (v) => ((hi - v) / (hi - lo)) * 100;
+  const p = (n) => n.toFixed(2);
+  const line = pts.map(([t, v]) => `${p(X(t) * 10)},${p(Y(v) * 10)}`).join(' ');
   const ticks = [lo + (hi - lo) * 0.2, lo + (hi - lo) * 0.5, lo + (hi - lo) * 0.8].map((v) => Math.round(v / 5) * 5);
-  const grid = ticks.map((v) => `<line x1="${pl}" x2="${W - pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gl"/><text x="${pl - 3}" y="${(Y(v) + 2.5).toFixed(1)}" class="ax" text-anchor="end">${v}</text>`).join('');
+  const grid = ticks.map((v) => `<line x1="0" x2="1000" y1="${p(Y(v) * 10)}" y2="${p(Y(v) * 10)}" class="gl"/>`).join('');
+  const yl = ticks.map((v) => `<span class="ax yl" style="top:${p(Y(v))}%">${v}</span>`).join('');
   const multi = dayOf.format(w.from) !== dayOf.format(w.to);
   const fmt = multi ? fmtDayHM : fmtHM;
-  const tk = [0, 0.5, 1].map((k) => {
-    const t = w.from + (w.to - w.from) * k;
-    return `<text x="${X(t).toFixed(1)}" y="${H - 2}" class="ax" text-anchor="${k === 0 ? 'start' : k === 1 ? 'end' : 'middle'}">${fmt.format(t)}</text>`;
-  }).join('');
+  const xl = [0, 0.5, 1].map((k) => `<span class="ax xl k${k * 2}" style="left:${k * 100}%">${fmt.format(w.from + (w.to - w.from) * k)}</span>`).join('');
   const marks = f.rows.filter((r) => r.kind === 'drain').map((r) => {
-    const near = pts.reduce((b, p) => (Math.abs(p[0] - r.t) < Math.abs(b[0] - r.t) ? p : b), pts[0]);
-    return `<circle cx="${X(r.t).toFixed(1)}" cy="${Y(near[1]).toFixed(1)}" r="2" class="fd"/>`;
+    const near = pts.reduce((b, q) => (Math.abs(q[0] - r.t) < Math.abs(b[0] - r.t) ? q : b), pts[0]);
+    return `<i class="fd" style="left:${p(X(r.t))}%;top:${p(Y(near[1]))}%"></i>`;
   }).join('');
-  return `<div class="sub">Fuel level (litres)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${grid}<line x1="${pl}" x2="${W - pr}" y1="${H - pb}" y2="${H - pb}" class="axl"/><polyline points="${line}" class="fl"/>${marks}${tk}</svg>`;
+  return `<div class="sub">Fuel level (litres)</div><div class="chart"><div class="pa"><svg viewBox="0 0 1000 1000" preserveAspectRatio="none">${grid}<line x1="0" x2="1000" y1="1000" y2="1000" class="axl"/><polyline points="${line}" class="fl"/></svg>${marks}${yl}${xl}</div></div>`;
 }
 
 const CSS = `
@@ -175,10 +179,17 @@ html[data-theme=dark] .tile { filter:invert(1) brightness(.78) contrast(.9) } ht
 .sn { font-size:5.8px; font-weight:700; fill:var(--stt); font-family:Calibri, Carlito, sans-serif }
 .cap { font-size:7pt; color:var(--mut); margin-top:.8mm }
 .sub { font-size:7.4pt; color:var(--mut); margin-top:2.4mm }
-.chart { width:100%; height:22mm; display:block; margin-top:.6mm }
+.lcol { display:flex; flex-direction:column; min-height:0 }
+.chart { flex:1 1 auto; min-height:22mm; position:relative; margin-top:.6mm }
+.chart .pa { position:absolute; left:7.5mm; right:1.5mm; top:1.4mm; bottom:3.6mm }
+.chart svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible }
+.chart line, .chart polyline { vector-effect:non-scaling-stroke }
 .chart .gl { stroke:var(--soft); stroke-width:.5 } .chart .axl { stroke:var(--rule); stroke-width:.6 }
-.chart .ax { font-size:6px; fill:var(--mut); font-family:Calibri, Carlito, sans-serif }
-.chart .fl { fill:none; stroke:var(--route); stroke-width:1.2; stroke-linejoin:round } .chart .fd { fill:var(--flag) }
+.chart .fl { fill:none; stroke:var(--route); stroke-width:1.2; stroke-linejoin:round }
+.chart .ax { position:absolute; font-size:5.6pt; line-height:1; color:var(--mut); white-space:nowrap }
+.chart .yl { right:100%; margin-right:1mm; transform:translateY(-50%) } .chart .xl { top:100%; margin-top:.8mm }
+.chart .xl.k1 { transform:translateX(-50%) } .chart .xl.k2 { transform:translateX(-100%) }
+.chart .fd { position:absolute; width:1.4mm; height:1.4mm; margin:-.7mm 0 0 -.7mm; border-radius:50%; background:var(--flag) }
 .cnt th { font-weight:400; font-size:7.2pt; color:var(--mut); border:.6pt solid var(--rule); padding:.6mm 1mm; text-align:center; background:var(--shade) }
 .cnt td { border:.6pt solid var(--rule); text-align:center; font-weight:700; font-size:10pt; padding:.6mm 0 }
 .cnt td.na { font-weight:400; font-size:7pt; color:var(--mut) }
@@ -238,9 +249,8 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
   const weighbridge = WB.rows.length
     ? `<table class="kv"><tr><th>Weighbridge</th><td>${esc(WB.bridges.join(', ') || dash)}</td></tr><tr><th>Tickets · weighings</th><td>${WB.tickets} · ${WB.weighings}</td></tr><tr><th>Net tonnage</th><td>${t2(WB.netKg)}</td></tr></table>
       <table class="lst" style="margin-top:1mm"><colgroup><col style="width:18mm"><col><col style="width:13mm"><col style="width:22mm"><col style="width:17mm"></colgroup><tr><th>Ticket</th><th>Weighing</th><th class="r">Weight</th><th>Time</th><th>Since prev.</th></tr>${
-      WB.rows.map((x) => `<tr><td class="nw">${x.sameTicketAsPrev ? '' : esc(x.ticket)}</td><td title="${esc(x.bridge ?? '')}">${esc(x.kind)}</td><td class="r">${num(x.kg)}</td><td class="nw${x.doubtful ? ' flag' : ''}"${x.doubtful ? ' title="Stamped before its ticket was raised; the weighbridge clock is wrong"' : ''}>${fmtDayHM.format(x.at)}${x.doubtful ? ' *' : ''}</td><td class="nw">${x.sinceMs != null ? dur(x.sinceMs) : dash}</td></tr>`).join('')}</table>${
-      WB.more ? `<div class="more">+ ${WB.more} more weighings.</div>` : ''}${
-      WB.doubtful ? '<div class="more"><span class="flag">*</span> Weighbridge clock earlier than its own ticket; not used for the time differences.</div>' : ''}`
+      WB.rows.map((x) => `<tr><td class="nw">${x.sameTicketAsPrev ? '' : esc(x.ticket)}</td><td title="${esc(x.bridge ?? '')}">${esc(x.kind)}</td><td class="r">${num(x.kg)}</td><td class="nw${x.doubtful ? ' flag' : ''}"${x.doubtful ? ' title="Stamped before its ticket was raised; the weighbridge clock is wrong"' : ''}>${fmtDayHM.format(x.at)}</td><td class="nw">${x.sinceMs != null ? dur(x.sinceMs) : dash}</td></tr>`).join('')}</table>${
+      WB.more ? `<div class="more">+ ${WB.more} more weighings.</div>` : ''}`
     : '<div class="none">No weighbridge ticket from the start of the day to the end of the trip.</div>';
 
   // ── stops ──
@@ -332,7 +342,7 @@ ${bar}
   ${loadDetails}
 
   <div class="two w">
-    <div><h2>3. Route</h2>${routeSvg(r)}
+    <div class="lcol"><h2>3. Route</h2>${routeSvg(r)}
       <div class="cap">A: departure &nbsp; B: latest position</div>
       ${fuelSvg(r.fuel, w)}</div>
     <div><h2>4. Stops <small>Stopped ${dur(S.stoppedMs)}${S.idleMs != null ? ` · idling ${dur(S.idleMs)}` : ''}</small></h2>
