@@ -66,7 +66,7 @@ describe('buildTripReport', () => {
     expect(r.stops[0].ms).toBe(20 * MIN);
     expect(r.stops[0].flag).toBe(false);
     expect(r.stops[1].place).toBe('NYAONDO');
-    expect(r.stops[1].remark).toBe('At destination, engine running');
+    expect(r.stops[1].remark).toBe('At destination');
   });
 
   it('works out fuel used from the probe, less the drain', () => {
