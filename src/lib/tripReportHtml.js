@@ -294,7 +294,7 @@ ${bar}
   <div class="lines"><div></div><div></div><div></div><div></div></div>
   <div class="sign"><div>Reviewed by</div><div>Signature &amp; date</div></div>
 </div>
-<div class="foot"><span>Times in EAT. Data: GPS tracker, fuel level sensor, weighbridge. Driver conduct and weighbridge run from the start of the day to the end of the trip. Generated ${fmtDate.format(r.generatedAt)} ${fmtHM.format(r.generatedAt)}.</span><span>Page 1 of 1</span></div>
+<div class="foot"><span></span><span>Page 1 of 1</span></div>
 </div>
 <script>
   // One page, whatever the trip: if the content is taller than the sheet,
