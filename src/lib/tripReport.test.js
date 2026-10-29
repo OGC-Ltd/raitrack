@@ -105,7 +105,7 @@ describe('buildTripReport', () => {
     const html = renderTripReportHtml(r, { logos: { rai: 'rai.jpg', ogc: 'ogc.png' } });
     expect(html).toContain('KCP 145P');
     expect(html).toContain('TR-KCP145P-20261028-0800');
-    for (const h of ['1. Trip summary', '2. Weighbridge', '3. Route', '4. Stops', '5. Fuel', '6. Driver conduct', '7. Geofence alerts', '8. Summary']) {
+    for (const h of ['1. Trip summary', '2. Weighbridge', '3. Route', '4. Stops', '5. Fuel', '6. Geofence alerts', '7. Driver conduct', '8. Summary']) {
       expect(html).toContain(h);
     }
     expect(html).toContain('Escalated fuel theft');
@@ -115,5 +115,39 @@ describe('buildTripReport', () => {
   it('says so when the zone timeline could not be read', () => {
     const t = buildTripReport(fixture({ zones: { timedOut: true, visits: [] } }));
     expect(renderTripReportHtml(t, { logos: { rai: '', ogc: '' } })).toContain('could not be read in time');
+  });
+});
+
+describe('dashcam conduct and the map', () => {
+  const cam = { fitted: true, complete: true, alarms: [
+    { t: T0 + 20 * MIN, kind: 'seatbelt', label: 'No seat belt', lat: null, lng: null, speed: 30 },
+    { t: T0 + 50 * MIN, kind: 'phone', label: 'Phone call', lat: null, lng: null, speed: 41 },
+    { t: T0 + 55 * MIN, kind: 'hands', label: 'Both hands off the wheel', lat: null, lng: null, speed: 44 }] };
+
+  it('adds seat belt, phone and hands-off columns only for a unit with a dashcam', () => {
+    const plain = renderTripReportHtml(buildTripReport(fixture()), { logos: { rai: '', ogc: '' } });
+    expect(plain).not.toContain('No seat belt');
+    const r = buildTripReport(fixture({ dashcam: cam }));
+    expect(r.breaches.counts).toMatchObject({ seatbelt: 1, phone: 1, hands: 1 });
+    const html = renderTripReportHtml(r, { logos: { rai: '', ogc: '' } });
+    for (const h of ['No seat belt', 'Phone use while driving', 'Hands off the wheel']) expect(html).toContain(h);
+  });
+
+  it('leaves dashcam columns blank, not zero, when the camera server did not answer', () => {
+    const r = buildTripReport(fixture({ dashcam: { fitted: true, complete: false, alarms: [] } }));
+    expect(renderTripReportHtml(r, { logos: { rai: '', ogc: '' } })).toContain('left blank, not zero');
+  });
+
+  it('puts geofence alerts at 6 and driver conduct at 7', () => {
+    const html = renderTripReportHtml(buildTripReport(fixture()), { logos: { rai: '', ogc: '' } });
+    expect(html.indexOf('6. Geofence alerts')).toBeLessThan(html.indexOf('7. Driver conduct'));
+  });
+
+  it('draws the route over map tiles when the server sends them', () => {
+    const map = { z: 13, x0: 1280000, y0: 1040000, w: 640, h: 320, attribution: '© OpenStreetMap contributors',
+      tiles: [{ x: 5000, y: 4063, src: 'data:image/png;base64,AAAA' }] };
+    const html = renderTripReportHtml(buildTripReport(fixture({ map })), { logos: { rai: '', ogc: '' } });
+    expect(html).toContain('<image href="data:image/png;base64,AAAA"');
+    expect(html).toContain('OpenStreetMap');
   });
 });

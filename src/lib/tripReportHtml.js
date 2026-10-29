@@ -4,7 +4,6 @@
 // printed or saved as PDF by the browser. The layout is the one signed off on
 // 28 Oct 2026 (plain document style, numbered sections, ruled tables).
 
-import { BREACH_KINDS } from './tripReport';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -30,6 +29,7 @@ const place = (x) => esc(x.place ?? coords(x.lat, x.lng));
 function routeSvg(r) {
   const W = 300, H = 150, PAD = 14;
   const pts = r.track;
+  if (r.map && pts.length >= 2) return routeOnTiles(r, W, H, PAD);
   const extra = [r.yard, r.dest].filter(Boolean).map((p) => [p.lat, p.lng]);
   const all = [...pts, ...extra];
   if (pts.length < 2) {
@@ -63,6 +63,42 @@ function routeSvg(r) {
     <rect x="${(bx - 5).toFixed(1)}" y="${(by - 5).toFixed(1)}" width="10" height="10" class="se b"/><text x="${bx.toFixed(1)}" y="${(by + 2.2).toFixed(1)}" class="sn" text-anchor="middle">B</text>
     <line x1="${W - PAD - barPx}" x2="${W - PAD}" y1="${H - 6}" y2="${H - 6}" class="sb"/><text x="${W - PAD}" y="${H - 9}" class="tw" text-anchor="end">${nice} km</text>
     <path d="M${PAD} ${PAD + 10} L${PAD + 3} ${PAD + 2} L${PAD + 6} ${PAD + 10}" class="na"/><text x="${PAD + 3}" y="${PAD - 1}" class="tw" text-anchor="middle">N</text>
+  </svg>`;
+}
+
+// Web Mercator, as the tiles are cut (the Logbook report's own projection).
+const lon2x = (lng, z) => ((lng + 180) / 360) * 256 * 2 ** z;
+const lat2y = (lat, z) => {
+  const s = Math.sin((lat * Math.PI) / 180);
+  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 * 2 ** z;
+};
+
+/** The route over the Logbook report's OpenStreetMap tiles, framed on the trip by the server. */
+function routeOnTiles(r, W, H, PAD) {
+  const m = r.map;
+  const k = W / m.w;
+  const P = ([lat, lng]) => [(lon2x(lng, m.z) - m.x0) * k, (lat2y(lat, m.z) - m.y0) * k];
+  const f = (v) => v.toFixed(1);
+  const tiles = m.tiles.map((t) => `<image href="${t.src}" x="${f((t.x * 256 - m.x0) * k)}" y="${f((t.y * 256 - m.y0) * k)}" width="${f(256 * k + 0.4)}" height="${f(256 * k + 0.4)}" class="tile" preserveAspectRatio="none"/>`).join('');
+  const line = r.track.map((p) => P(p).map(f).join(',')).join(' ');
+  const lat0 = r.track[0][0];
+  const kmPerUnit = (156543.034 * Math.cos((lat0 * Math.PI) / 180)) / 2 ** m.z / 1000 / k;
+  const nice = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200].find((x) => x / kmPerUnit >= W / 6) ?? 200;
+  const barPx = nice / kmPerUnit;
+  const [ax, ay] = P(r.track[0]);
+  const [bx, by] = P(r.track[r.track.length - 1]);
+  const stops = r.stops.filter((x) => x.lat != null).map((x) => {
+    const [x0, y0] = P([x.lat, x.lng]);
+    return `<circle cx="${f(x0)}" cy="${f(y0)}" r="4.6" class="st${x.flag ? ' fl' : ''}"/><text x="${f(x0)}" y="${f(y0 + 2)}" class="sn" text-anchor="middle">${x.n}</text>`;
+  }).join('');
+  const dest = r.dest ? (() => { const [dx, dy] = P([r.dest.lat, r.dest.lng]); return `<circle cx="${f(dx)}" cy="${f(dy)}" r="7" class="dz mapdz"/>`; })() : '';
+  return `<svg class="map" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+    ${tiles}${dest}<polyline points="${line}" class="rt rtb"/><polyline points="${line}" class="rt"/>${stops}
+    <rect x="${f(ax - 5)}" y="${f(ay - 5)}" width="10" height="10" class="se"/><text x="${f(ax)}" y="${f(ay + 2.2)}" class="sn" text-anchor="middle">A</text>
+    <rect x="${f(bx - 5)}" y="${f(by - 5)}" width="10" height="10" class="se b"/><text x="${f(bx)}" y="${f(by + 2.2)}" class="sn" text-anchor="middle">B</text>
+    <rect x="${f(W - PAD - barPx - 3)}" y="${H - 17}" width="${f(barPx + 6)}" height="13" class="sbg"/>
+    <line x1="${f(W - PAD - barPx)}" x2="${W - PAD}" y1="${H - 6}" y2="${H - 6}" class="sb"/><text x="${W - PAD}" y="${H - 9}" class="tw" text-anchor="end">${nice} km</text>
+    <text x="3" y="${H - 3}" class="attr">${esc(m.attribution ?? '')}</text>
   </svg>`;
 }
 
@@ -130,7 +166,10 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .two.w { grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr) }
 .map { width:100%; height:44mm; display:block; border:.6pt solid var(--rule) }
 .rt { fill:none; stroke:var(--route); stroke-width:1.7; stroke-linejoin:round; stroke-linecap:round }
-.dz { fill:var(--dz) } .sb { stroke:var(--mut); stroke-width:1 } .na { fill:none; stroke:var(--mut); stroke-width:1 }
+.dz { fill:var(--dz) } .mapdz { fill:var(--route); fill-opacity:.18; stroke:var(--route); stroke-width:.8; stroke-opacity:.6 }
+.rtb { stroke:var(--bg); stroke-width:3.4; stroke-opacity:.85 }
+.sbg { fill:var(--bg); fill-opacity:.8 } .attr { font-size:4.6px; fill:#555; font-family:Calibri, Carlito, sans-serif }
+html[data-theme=dark] .tile { filter:invert(1) brightness(.78) contrast(.9) } html[data-theme=dark] .attr { fill:#aaa } .sb { stroke:var(--mut); stroke-width:1 } .na { fill:none; stroke:var(--mut); stroke-width:1 }
 .tw { font-size:6.4px; fill:var(--mut); font-family:Calibri, Carlito, sans-serif }
 .st, .se { fill:var(--st) } .st.fl { fill:var(--flag) } .se.b { fill:var(--route) }
 .sn { font-size:5.8px; font-weight:700; fill:var(--stt); font-family:Calibri, Carlito, sans-serif }
@@ -142,7 +181,6 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .chart .fl { fill:none; stroke:var(--route); stroke-width:1.2; stroke-linejoin:round } .chart .fd { fill:var(--flag) }
 .cnt th { font-weight:400; font-size:7.2pt; color:var(--mut); border:.6pt solid var(--rule); padding:.6mm 1mm; text-align:center; background:var(--shade) }
 .cnt td { border:.6pt solid var(--rule); text-align:center; font-weight:700; font-size:10pt; padding:.6mm 0 }
-.cnt tr td:last-child, .cnt tr th:last-child { background:var(--shade) }
 .cnt td.na { font-weight:400; font-size:7pt; color:var(--mut) }
 .none { color:var(--mut); font-style:italic; padding:1mm 0 }
 .more { font-size:7pt; color:var(--mut); margin-top:.8mm }
@@ -220,8 +258,20 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
   // ── driver conduct, for the day ──
   const B = r.breaches;
   const dayT = (t) => fmtDayHM.format(t);
-  const cnt = `<table class="cnt"><tr>${BREACH_KINDS.map((k) => `<th>${k.label}</th>`).join('')}<th>Time overspeeding</th><th>Distance overspeeding</th></tr><tr>${
-    BREACH_KINDS.map((k) => `<td>${B.counts[k.key]}</td>`).join('')}<td>${B.counts.speed ? dur(B.overspeedMs) : '0 min'}</td><td>${B.overspeedKm != null ? `${num(B.overspeedKm, 1)} km` : dash}</td></tr></table>`;
+  const cam = B.dashcam;
+  const camCell = (key) => (cam.complete ? `<td>${B.counts[key]}</td>` : `<td class="na">${dash}</td>`);
+  const cols = [
+    ['Escalated fuel theft', `<td>${B.counts.theft}</td>`],
+    ['Harsh braking', `<td>${B.counts.brake}</td>`],
+    ['Overspeeding', `<td>${B.counts.speed}</td>`],
+    ['Time overspeeding', `<td>${B.counts.speed ? dur(B.overspeedMs) : '0 min'}</td>`],
+    ['Distance overspeeding', `<td>${B.overspeedKm != null ? `${num(B.overspeedKm, 1)} km` : dash}</td>`],
+    ['Harsh acceleration', `<td>${B.counts.accel}</td>`],
+    // A dashcam unit only: no seat belt, phone use, hands off the wheel.
+    ...B.kinds.filter((k) => !['theft', 'brake', 'speed', 'accel'].includes(k.key)).map((k) => [k.label, camCell(k.key)]),
+  ];
+  const cnt = `<table class="cnt"><tr>${cols.map(([h]) => `<th>${h}</th>`).join('')}</tr><tr>${cols.map(([, c]) => c).join('')}</tr></table>${
+    cam.fitted && !cam.complete ? '<div class="more">The dashcam server did not answer in time; its columns are left blank, not zero.</div>' : ''}`;
   const breachRows = B.rows.length
     ? `<table class="lst" style="margin-top:1.4mm"><colgroup><col style="width:22mm"><col style="width:27mm"><col><col style="width:36mm"></colgroup><tr><th>Time</th><th>Event</th><th>Location</th><th>Detail</th></tr>${
       B.rows.map((b) => `<tr><td class="nw">${dayT(b.t)}</td><td class="nw${b.key === 'theft' ? ' flag' : ''}">${b.label}</td><td class="pl">${place(b)}</td><td>${esc(b.detail ?? '')}</td></tr>`).join('')}</table>${
@@ -284,11 +334,11 @@ ${bar}
     </div>
   </div>
 
-  <h2>6. Driver conduct <small>${esc(r.vehicle.driver ?? 'Driver not recorded')} on ${esc(r.vehicle.plate)}, ${span}</small></h2>
-  ${cnt}${breachRows}
-
-  <h2>7. Geofence alerts</h2>
+  <h2>6. Geofence alerts</h2>
   ${geo}
+
+  <h2>7. Driver conduct <small>${esc(r.vehicle.driver ?? 'Driver not recorded')} on ${esc(r.vehicle.plate)}, ${span}</small></h2>
+  ${cnt}${breachRows}
 
   <h2>8. Summary</h2>
   <div class="lines"><div></div><div></div><div></div><div></div></div>
