@@ -175,7 +175,7 @@ export function buildTripReport(d) {
   const allStops = findStops(track, segs).map((s) => {
     const { place, at } = where(s.t, s.lat, s.lng);
     // The bare fact, no extra words (operator, 2026-10-29).
-    const remark = at === 'yard' ? 'At the yard' : at === 'dest' ? 'At destination' : at === 'zone' ? 'In zone' : 'Unscheduled stop';
+    const remark = at === 'yard' ? 'Yard' : at === 'dest' ? 'Destination' : at === 'zone' ? 'In zone' : 'Unscheduled stop';
     return { ...s, place, remark, flag: at == null && s.ms >= LONG_STOP_MS };
   });
   const stops = [...allStops].sort((a, b) => b.ms - a.ms).slice(0, ROWS.stops).sort(byTime).map((s, i) => ({ ...s, n: i + 1 }));
