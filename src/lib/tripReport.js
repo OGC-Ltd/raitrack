@@ -21,6 +21,13 @@ export const BREACH_KINDS = [
   { key: 'accel', label: 'Harsh acceleration' },
 ];
 
+/** Driver-camera alarms, added to the conduct table only for a unit with a dashcam. */
+export const DASHCAM_KINDS = [
+  { key: 'seatbelt', label: 'No seat belt' },
+  { key: 'phone', label: 'Phone use while driving' },
+  { key: 'hands', label: 'Hands off the wheel' },
+];
+
 const YARD_RADIUS_M = 800;
 const arrivalRadiusM = (spreadM) => Math.min(Math.max((spreadM ?? 0) * 2, 800), 3000);
 /** Below this a segment is standing: walking pace, or drift under 40 m. */
@@ -175,6 +182,9 @@ export function buildTripReport(d) {
   const stops = [...allStops].sort((a, b) => b.ms - a.ms).slice(0, ROWS.stops).sort(byTime).map((s, i) => ({ ...s, n: i + 1 }));
 
   // ── driver conduct, for the day ──
+  // Dashcam columns are there only when the unit has a camera (dynamic).
+  const cam = { fitted: false, complete: true, alarms: [], ...(d.dashcam ?? {}) };
+  const kinds = [...BREACH_KINDS, ...(cam.fitted ? DASHCAM_KINDS : [])];
   const mins = (sec) => `${Math.max(1, Math.round(sec / 60))} min`;
   const breaches = [
     ...(d.escalatedThefts ?? []).map((x) => ({ t: x.t, key: 'theft', place: x.place ?? null, lat: null, lng: null,
@@ -183,11 +193,13 @@ export function buildTripReport(d) {
       detail: `${Math.round(s.peakKmh)} in ${Math.round(s.limitKmh)}, ${mins(s.durationSec)}${s.distanceM != null ? `, ${round1(s.distanceM / 1000)} km` : ''}` })),
     ...(d.harsh ?? []).map((h) => ({ t: h.t, key: h.type === 'brake' ? 'brake' : 'accel', lat: h.lat, lng: h.lng,
       detail: h.speedKmh != null ? `at ${Math.round(h.speedKmh)} km/h` : null })),
+    ...(cam.fitted ? cam.alarms ?? [] : []).map((a) => ({ t: a.t, key: a.kind, lat: a.lat, lng: a.lng,
+      detail: [a.label, a.speed != null ? `at ${a.speed} km/h` : null].filter(Boolean).join(', ') })),
   ].map((b) => {
     const p = b.lat != null ? { lat: b.lat, lng: b.lng } : positionAt(track, b.t);
-    return { ...b, ...p, label: BREACH_KINDS.find((k) => k.key === b.key).label, place: b.place || where(b.t, p.lat, p.lng).place };
+    return { ...b, ...p, label: kinds.find((k) => k.key === b.key)?.label ?? b.key, place: b.place || where(b.t, p.lat, p.lng).place };
   }).sort(byTime);
-  const counts = Object.fromEntries(BREACH_KINDS.map((k) => [k.key, breaches.filter((b) => b.key === k.key).length]));
+  const counts = Object.fromEntries(kinds.map((k) => [k.key, breaches.filter((b) => b.key === k.key).length]));
   const breachCap = capped(breaches, ROWS.breaches);
   const overspeedMs = (d.speeding ?? []).reduce((a, s) => a + (s.durationSec ?? 0) * 1000, 0);
   const measuredKm = (d.speeding ?? []).filter((s) => s.distanceM != null);
@@ -242,6 +254,7 @@ export function buildTripReport(d) {
     yard: d.yard ? { lat: d.yard.lat, lng: d.yard.lng } : null,
     dest: d.dest ? { lat: d.dest.lat, lng: d.dest.lng } : null,
     track: thin(track, SVG_POINTS).map((p) => [p[1], p[2]]),
+    map: d.map ?? null,
     summary: {
       distanceKm: track.length > 1 ? round1(distanceM / 1000) : null,
       movingMs: track.length > 1 ? movingMs : null,
@@ -260,7 +273,7 @@ export function buildTripReport(d) {
     stopsTotal: allStops.length,
     fuel: { series, hasProbe: !!F.hasProbe, startL, endL, rows: fuelCap.rows, more: fuelCap.more, drainL: round1(drainL) },
     day: d.day ?? { from: w.from, to: w.to },
-    breaches: { counts, total: breaches.length, rows: breachCap.rows, more: breachCap.more, overspeedMs, overspeedKm },
+    breaches: { kinds, dashcam: { fitted: !!cam.fitted, complete: cam.complete !== false }, counts, total: breaches.length, rows: breachCap.rows, more: breachCap.more, overspeedMs, overspeedKm },
     geo: { rows: geoCap.rows, more: geoCap.more, timedOut: !!d.zones?.timedOut },
   };
 }
