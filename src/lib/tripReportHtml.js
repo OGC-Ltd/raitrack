@@ -185,8 +185,8 @@ html[data-theme=dark] .tile { filter:invert(1) brightness(.78) contrast(.9) } ht
 .none { color:var(--mut); font-style:italic; padding:1mm 0 }
 .more { font-size:7pt; color:var(--mut); margin-top:.8mm }
 .lines div { border-bottom:.6pt solid var(--rule); height:7mm }
-.lines { margin-bottom:3mm }
-.sign { display:grid; grid-template-columns:1fr 1fr; gap:5mm }
+.lines { margin-bottom:9mm }
+.sign { display:grid; grid-template-columns:1fr 1fr; gap:5mm; margin:auto 0 4mm }
 .sign div { border-bottom:.6pt solid var(--ink); height:9mm; font-size:7.4pt; color:var(--mut) }
 .lst td.nw.flag { color:var(--flag) }
 .foot { display:flex; justify-content:space-between; color:var(--mut); font-size:7pt; padding:2mm 13mm 4mm; border-top:.6pt solid var(--rule); flex:none }
@@ -221,19 +221,27 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
   // Conduct and tickets: from the start of the departure day to the end of the trip.
   const span = `${fmtDayHM.format(r.day.from)} to end of trip, ${fmtDayHM.format(r.day.to)}`;
 
-  // ── load: what the dispatch declared, and every weighbridge ticket that day ──
-  const Dl = r.declared;
-  const declared = Dl
-    ? `<table class="kv" style="margin-bottom:1.4mm"><tr><th>Declared load</th><td>${esc(Dl.cargo ?? dash)}${Dl.bags ? `, ${num(Dl.bags)} bags` : ''}, ${Dl.netKg != null ? `${num(Dl.netKg / 1000, 2)} t` : dash} &nbsp;<span style="font-weight:400;color:var(--mut)">dispatch no. ${esc(Dl.ref ?? dash)}</span></td></tr></table>`
-    : '';
+  // ── load details: always printed, what the dispatch says and what was weighed ──
+  const L = r.load;
+  const t2 = (kg) => (kg != null ? `${num(kg / 1000, 2)} t` : dash);
+  const loadDetails = `<table class="cells"><tr>${[
+    ['Cargo', esc(L.cargo ?? dash)],
+    ['Dispatch no.', esc(L.ref ?? dash)],
+    ['Destination', esc(r.to.name ?? dash)],
+    ['Bags', L.bags ? num(L.bags) : dash],
+    ['Declared tonnage', t2(L.declaredKg)],
+    ['Weighed net', t2(L.weighedKg)],
+  ].map(([k, v]) => `<td><span>${k}</span>${v}</td>`).join('')}</tr></table>`;
+
+  // ── weighbridge: every weighing that day, compact to sit in the right column ──
   const WB = r.weighbridge;
-  const load = declared + (WB.rows.length
-    ? `<table class="cells" style="margin-bottom:1.4mm"><tr><td><span>Weighbridge</span>${esc(WB.bridges.join(', ') || dash)}</td><td><span>Tickets</span>${WB.tickets}</td><td><span>Weighings</span>${WB.weighings}</td><td><span>Net tonnage</span>${num(WB.netKg / 1000, 2)} t</td></tr></table>
-      <table class="lst"><colgroup><col style="width:22mm"><col style="width:22mm"><col><col style="width:20mm"><col style="width:24mm"><col style="width:22mm"><col style="width:15mm"></colgroup><tr><th>Ticket</th><th>Weighing</th><th>Weighbridge</th><th class="r">Weight</th><th>Time</th><th>Since previous</th><th class="r">Net</th></tr>${
-      WB.rows.map((x) => `<tr><td class="nw">${x.sameTicketAsPrev ? '' : esc(x.ticket)}</td><td>${esc(x.kind)}</td><td>${esc(x.bridge ?? dash)}</td><td class="r">${num(x.kg)} kg</td><td class="nw${x.doubtful ? ' flag' : ''}"${x.doubtful ? ' title="Stamped before its ticket was raised; the weighbridge clock is wrong"' : ''}>${fmtDayHM.format(x.at)}${x.doubtful ? ' *' : ''}</td><td class="nw">${x.sinceMs != null ? dur(x.sinceMs) : dash}</td><td class="r">${x.netKg != null ? `${num(x.netKg / 1000, 2)} t` : ''}</td></tr>`).join('')}</table>${
+  const weighbridge = WB.rows.length
+    ? `<table class="kv"><tr><th>Weighbridge</th><td>${esc(WB.bridges.join(', ') || dash)}</td></tr><tr><th>Tickets · weighings</th><td>${WB.tickets} · ${WB.weighings}</td></tr><tr><th>Net tonnage</th><td>${t2(WB.netKg)}</td></tr></table>
+      <table class="lst" style="margin-top:1mm"><colgroup><col style="width:18mm"><col><col style="width:13mm"><col style="width:22mm"><col style="width:17mm"></colgroup><tr><th>Ticket</th><th>Weighing</th><th class="r">Weight</th><th>Time</th><th>Since prev.</th></tr>${
+      WB.rows.map((x) => `<tr><td class="nw">${x.sameTicketAsPrev ? '' : esc(x.ticket)}</td><td title="${esc(x.bridge ?? '')}">${esc(x.kind)}</td><td class="r">${num(x.kg)}</td><td class="nw${x.doubtful ? ' flag' : ''}"${x.doubtful ? ' title="Stamped before its ticket was raised; the weighbridge clock is wrong"' : ''}>${fmtDayHM.format(x.at)}${x.doubtful ? ' *' : ''}</td><td class="nw">${x.sinceMs != null ? dur(x.sinceMs) : dash}</td></tr>`).join('')}</table>${
       WB.more ? `<div class="more">+ ${WB.more} more weighings.</div>` : ''}${
-      WB.doubtful ? '<div class="more"><span class="flag">*</span> Time as stamped by the weighbridge, which is before its own ticket was raised; not used for the time differences.</div>' : ''}`
-    : `<div class="none">No weighbridge ticket for this unit, ${span}.</div>`);
+      WB.doubtful ? '<div class="more"><span class="flag">*</span> Weighbridge clock earlier than its own ticket; not used for the time differences.</div>' : ''}`
+    : '<div class="none">No weighbridge ticket from the start of the day to the end of the trip.</div>';
 
   // ── stops ──
   const stops = r.stops.length
@@ -320,27 +328,29 @@ ${bar}
   <h2>1. Trip summary <small>${T(w.from)} to ${T(w.to)}</small></h2>
   <table class="cells"><tr>${summary}</tr></table>
 
-  <h2>2. Weighbridge <small>${span}</small></h2>
-  ${load}
+  <h2>2. Load details</h2>
+  ${loadDetails}
 
   <div class="two w">
     <div><h2>3. Route</h2>${routeSvg(r)}
-      <div class="cap">A: departure &nbsp; B: latest position${r.stops.length ? ` &nbsp; ${r.stops.length > 1 ? `1–${r.stops.length}: stops` : '1: stop'}` : ''}${r.dest ? ' &nbsp; Shaded: destination' : ''}</div>
+      <div class="cap">A: departure &nbsp; B: latest position</div>
       ${fuelSvg(r.fuel, w)}</div>
     <div><h2>4. Stops <small>Stopped ${dur(S.stoppedMs)}${S.idleMs != null ? ` · idling ${dur(S.idleMs)}` : ''}</small></h2>
       ${stops}
       <h2>5. Fuel <small>Used on trip: ${S.fuelUsedL != null ? `${num(S.fuelUsedL, 1)} L` : dash}</small></h2>
       ${fuel}
+      <h2>6. Weighbridge <small>Day start to end of trip</small></h2>
+      ${weighbridge}
     </div>
   </div>
 
-  <h2>6. Geofence alerts</h2>
+  <h2>7. Geofence alerts</h2>
   ${geo}
 
-  <h2>7. Driver conduct <small>${esc(r.vehicle.driver ?? 'Driver not recorded')} on ${esc(r.vehicle.plate)}, ${span}</small></h2>
+  <h2>8. Driver conduct <small>${esc(r.vehicle.driver ?? 'Driver not recorded')} on ${esc(r.vehicle.plate)}, ${span}</small></h2>
   ${cnt}${breachRows}
 
-  <h2>8. Summary</h2>
+  <h2>9. Summary</h2>
   <div class="lines"><div></div><div></div><div></div><div></div></div>
   <div class="sign"><div>Reviewed by</div><div>Signature &amp; date</div></div>
 </div>

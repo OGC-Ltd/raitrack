@@ -105,7 +105,7 @@ describe('buildTripReport', () => {
     const html = renderTripReportHtml(r, { logos: { rai: 'rai.jpg', ogc: 'ogc.png' } });
     expect(html).toContain('KCP 145P');
     expect(html).toContain('TR-KCP145P-20261028-0800');
-    for (const h of ['1. Trip summary', '2. Weighbridge', '3. Route', '4. Stops', '5. Fuel', '6. Geofence alerts', '7. Driver conduct', '8. Summary']) {
+    for (const h of ['1. Trip summary', '2. Load details', '3. Route', '4. Stops', '5. Fuel', '6. Weighbridge', '7. Geofence alerts', '8. Driver conduct', '9. Summary']) {
       expect(html).toContain(h);
     }
     expect(html).toContain('Escalated fuel theft');
@@ -138,9 +138,13 @@ describe('dashcam conduct and the map', () => {
     expect(renderTripReportHtml(r, { logos: { rai: '', ogc: '' } })).toContain('left blank, not zero');
   });
 
-  it('puts geofence alerts at 6 and driver conduct at 7', () => {
-    const html = renderTripReportHtml(buildTripReport(fixture()), { logos: { rai: '', ogc: '' } });
-    expect(html.indexOf('6. Geofence alerts')).toBeLessThan(html.indexOf('7. Driver conduct'));
+  it('puts load details at 2 and the weighbridge after fuel', () => {
+    const r = buildTripReport(fixture());
+    expect(r.load).toMatchObject({ cargo: 'Cane delivery', kind: 'Cane', ref: 'd-1', declaredKg: null, weighedKg: 19160 });
+    const html = renderTripReportHtml(r, { logos: { rai: '', ogc: '' } });
+    expect(html.indexOf('2. Load details')).toBeLessThan(html.indexOf('5. Fuel'));
+    expect(html.indexOf('5. Fuel')).toBeLessThan(html.indexOf('6. Weighbridge'));
+    expect(html.indexOf('7. Geofence alerts')).toBeLessThan(html.indexOf('8. Driver conduct'));
   });
 
   it('draws the route over map tiles when the server sends them', () => {

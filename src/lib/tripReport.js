@@ -240,6 +240,17 @@ export function buildTripReport(d) {
   for (let i = 1; i < weighings.length; i++) weighings[i].sameTicketAsPrev = weighings[i].ticket === weighings[i - 1].ticket;
   const weighCap = capped(weighings, ROWS.weighings);
   const bridges = [...new Set(weighings.map((x) => x.bridge).filter(Boolean))];
+  // Load details are always printed: what the dispatch says, then what was weighed.
+  const kind = D.kind ? D.kind.charAt(0) + D.kind.slice(1).toLowerCase() : null;
+  const load = {
+    cargo: D.cargoName ?? tickets.find((x) => x.cargo)?.cargo ?? kind,
+    kind,
+    // A cane dispatch has no serial, only an internal UUID nobody can quote.
+    ref: D.serialNumber ?? (/^[0-9a-f]{8}-/i.test(D.externalId ?? '') ? null : D.externalId ?? null),
+    bags: D.bags ?? null,
+    declaredKg: D.tonnageT != null ? D.tonnageT * 1000 : null,
+    weighedKg: tickets.some((x) => x.netKg != null) ? tickets.reduce((a, x) => a + (x.netKg ?? 0), 0) : null,
+  };
 
   return {
     reportNo: reportNumber(d),
@@ -265,6 +276,7 @@ export function buildTripReport(d) {
       fuelUsedL,
     },
     declared,
+    load,
     weighbridge: { rows: weighCap.rows, more: weighCap.more, tickets: tickets.length, weighings: weighings.length,
       bridges, doubtful: weighings.some((x) => x.doubtful),
       netKg: tickets.reduce((a, x) => a + (x.netKg ?? 0), 0) },
