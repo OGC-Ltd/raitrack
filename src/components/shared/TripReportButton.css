@@ -1,5 +1,8 @@
 .dc-report       { margin-left: auto; font: inherit; font-size: 11px; font-weight: 600; color: #c9d1d9; background: transparent;
-                   border: 1px solid #3a3f4a; border-radius: 5px; padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+                   border: 1px solid #3a3f4a; border-radius: 5px; padding: 2px 8px; cursor: pointer; white-space: nowrap;
+                   /* The map card's body (.vt-info) is pointer-events:none so a hover
+                      card stays inert; the button only renders on a pinned card. */
+                   pointer-events: auto; }
 .dc-report:hover:not(:disabled) { border-color: #6e7681; color: #f0f4f8; }
 .dc-report:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
 .dc-report:disabled { opacity: .6; cursor: progress; }
