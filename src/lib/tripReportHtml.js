@@ -371,8 +371,17 @@ ${bar}
   // shrink it to fit rather than let the bottom be cut off.
   (function () {
     var b = document.querySelector('.body');
-    var z = b.clientHeight / b.scrollHeight;
-    if (z < 1) b.style.zoom = String(Math.max(0.72, z - 0.01));
+    var h = b.clientHeight, z = h / b.scrollHeight;
+    if (z >= 1) return;
+    // A transform, not CSS zoom: the PDF download draws the page with
+    // html2canvas, which honours transforms and ignores zoom.
+    z = Math.max(0.72, z - 0.01);
+    b.style.flex = 'none';
+    b.style.width = (b.offsetWidth / z) + 'px';
+    b.style.height = (h / z) + 'px';
+    b.style.transformOrigin = '0 0';
+    b.style.transform = 'scale(' + z + ')';
+    b.style.marginBottom = (h - h / z) + 'px';
   })();
 </script></body></html>`;
 }
