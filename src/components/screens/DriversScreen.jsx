@@ -594,7 +594,7 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
           </section>
         )}
 
-        <TheftCases key={driver.id} thefts={thefts} count={totals.fuelTheftCases} seen={totals.fuelEventsSeen ?? thefts.length} />
+        <TheftCases key={driver.id} thefts={thefts} />
         <SpeedCases overspeeds={overspeeds} count={totals.overspeedingCases} />
         <HarshCases harsh={harsh} accel={totals.harshAccelerationCases ?? 0} brake={totals.harshBrakingCases ?? 0} />
       </div>
@@ -671,34 +671,31 @@ function useFold(items) {
 const theftStanding = (t) =>
   t.review === "confirmed" ? { key: "confirmed", label: "Confirmed theft", on: true }
   : t.countsAgainstDriver ? { key: "suspected", label: "Suspected", on: true }
-  : t.review === "not_theft" ? { key: "cleared", label: "Cleared" }
+  : t.review === "not_theft" ? { key: "cleared", label: "De-escalated" }
   : t.review === "probe_fault" ? { key: "cleared", label: "Probe fault" }
   : { key: "none", label: "Not counted" };
 
 /**
- * Fuel theft: every fuel event on their units while they drove. A reviewer's
- * escalation is a CONFIRMED theft and leads (operator, 2026-10-29); a siphon
- * nobody has reviewed yet still counts, as suspected; the rest are carried so
- * the operator sees what the unit did on their watch, and count for nothing.
+ * Fuel theft: the cases flagged as theft on their units -- the detector's
+ * siphon, or a reviewer escalating it -- and where review took each one
+ * (operator, 2026-10-29: "we are interested on the flagged cases only").
+ * Slosh, burn and the other fuel events are left off the card.
  */
-function TheftCases({ thefts, count, seen }) {
+function TheftCases({ thefts: events }) {
+  const thefts = events.filter((t) => t.cause === "SIPHON" || t.review === "confirmed");
   const confirmed = thefts.filter((t) => t.review === "confirmed");
-  // The case's road through review (operator, 2026-10-29): flagged as theft
-  // (the detector's siphon, or a reviewer escalating it), then either
-  // de-escalated (cleared as not theft or a probe fault) or confirmed.
-  const flagged = thefts.filter((t) => t.cause === "SIPHON" || t.review === "confirmed");
-  const deescalated = flagged.filter((t) => t.review === "not_theft" || t.review === "probe_fault");
+  const deescalated = thefts.filter((t) => t.review === "not_theft" || t.review === "probe_fault");
   const counted = thefts.filter((t) => t.countsAgainstDriver);
   // Cases from before anyone was posted to the unit are shown on the card of
   // whoever holds it now, but never counted against them.
   const beforePosting = thefts.filter((t) => t.attributedBy === "posted").length;
-  // A view only where it shows something the next one up does not.
+  // A view only where it narrows the list.
   const views = [
-    confirmed.length > 0 && { key: "confirmed", label: "Confirmed", list: confirmed },
-    counted.length > confirmed.length && { key: "counted", label: "Counted", list: counted },
-    { key: "all", label: "All", list: thefts },
+    { key: "all", label: "Flagged", list: thefts },
+    confirmed.length > 0 && confirmed.length < thefts.length && { key: "confirmed", label: "Confirmed", list: confirmed },
+    deescalated.length > 0 && deescalated.length < thefts.length && { key: "cleared", label: "De-escalated", list: deescalated },
   ].filter(Boolean);
-  const [view, setView] = useState(views[0].key);
+  const [view, setView] = useState("all");
   const list = views.find((v) => v.key === view)?.list ?? thefts;
   const { shown, more } = useFold(list);
   const litres = confirmed.reduce((n, t) => n + (Number(t.litres) || 0), 0);
@@ -706,17 +703,17 @@ function TheftCases({ thefts, count, seen }) {
     <section className="dr-panel__sec dr-cases-sec dr-cases-sec--theft">
       <h3 className="dr-panel__h">
         Fuel Theft
-        <span className={`dr-panel__count${count ? " dr-panel__count--theft" : ""}`}>{fmt(count)}</span>
+        <span className={`dr-panel__count${thefts.length ? " dr-panel__count--theft" : ""}`}>{fmt(thefts.length)}</span>
       </h3>
       <ul className="dr-panel__stats dr-panel__stats--3 dr-theft-tally" aria-label="Theft cases by review">
-        <li><span className="dr-panel__k">Flagged theft</span><b className="dr-panel__v">{fmt(flagged.length)}</b></li>
+        <li><span className="dr-panel__k">Flagged theft</span><b className="dr-panel__v">{fmt(thefts.length)}</b></li>
         <li><span className="dr-panel__k">De-escalated</span>
           <b className="dr-panel__v dr-theft-tally__v--cleared">{fmt(deescalated.length)}</b></li>
         <li><span className="dr-panel__k">Confirmed theft</span>
           <b className={`dr-panel__v${confirmed.length ? " dr-theft-tally__v--confirmed" : ""}`}>{fmt(confirmed.length)}</b></li>
       </ul>
       {thefts.length === 0 ? (
-        <p className="dr-panel__note">No fuel events on their units.</p>
+        <p className="dr-panel__note">No theft flagged on their units.</p>
       ) : (
         <>
           <p className="dr-panel__note">
@@ -724,7 +721,6 @@ function TheftCases({ thefts, count, seen }) {
               ? <><b>{fmt(confirmed.length)} confirmed</b>, {fmt(litres, 1)} L</>
               : "None confirmed"}
             {counted.length > confirmed.length ? ` · ${fmt(counted.length - confirmed.length)} suspected` : ""}
-            {seen > count ? ` · ${fmt(seen)} events on their units in all` : ""}
             {beforePosting ? ` · ${fmt(beforePosting)} from before they were posted to the unit, not counted against them` : ""}
           </p>
           {views.length > 1 && (
