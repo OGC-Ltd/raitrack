@@ -41,7 +41,10 @@ const LONG_STOP_MS = 30 * 60_000;
 /** A reported speed above this is a bad fix, not a truck. */
 const MAX_PLAUSIBLE_KMH = 160;
 
-const ROWS = { stops: 8, fuel: 6, breaches: 6, geo: 6, weighings: 8 };
+const ROWS = { stops: 8, fuel: 6, breaches: 6, geo: 8, weighings: 8 };
+/** Leaving a place is measured at this multiple of its arrival radius, so GPS
+ *  jitter on the boundary cannot read as a string of departures and arrivals. */
+const EXIT_FACTOR = 1.25;
 const SVG_POINTS = 600;
 
 const pt = (lat, lng) => ({ lat, lng });
@@ -119,6 +122,48 @@ function positionAt(track, t) {
   return Math.abs(track[best][0] - t) <= 10 * 60_000 ? { lat: track[best][1], lng: track[best][2] } : { lat: null, lng: null };
 }
 
+/** Every crossing of a place's edge along a track, debounced by EXIT_FACTOR. */
+function crossings(track, c, r) {
+  const out = [];
+  let inside = null;
+  for (const [t, lat, lng] of track) {
+    const m = haversineM(c, pt(lat, lng));
+    const now = inside ? m <= r * EXIT_FACTOR : m <= r;
+    if (inside != null && now !== inside) out.push({ t, arrive: now });
+    inside = now;
+  }
+  return out;
+}
+
+/**
+ * The round trip as four moments (operator, 2026-10-29): left the yard
+ * (Naitiri), arrived at the destination (Raiply), left the destination, got
+ * back to the yard. A departure is the first fix outside the place, an arrival
+ * the first fix inside it. Read from the leg track, which reaches 12 h before
+ * the dispatch and 24 h after it, because a dispatch is often raised once the
+ * truck is already out and closed before it is home.
+ */
+function milestones(d, track, w) {
+  const leg = d.legTrack?.length ? d.legTrack : track;
+  const Y = d.yard ? crossings(leg, d.yard, YARD_RADIUS_M) : [];
+  const D = d.dest ? crossings(leg, d.dest, arrivalRadiusM(d.dest.spreadM)) : [];
+  const yardName = d.yard?.name ?? 'Yard', destName = d.dest?.name ?? 'Destination';
+  const rows = [];
+  // Arrival at the destination: the first one inside the trip window.
+  const destIn = D.find((x) => x.arrive && x.t >= w.from && x.t <= w.to);
+  // Left the yard: the last departure before that arrival (or before the trip ends).
+  const limit = destIn?.t ?? w.to;
+  const yardOut = [...Y].reverse().find((x) => !x.arrive && x.t <= limit && x.t >= w.from - 12 * 3_600_000);
+  if (yardOut) rows.push({ t: yardOut.t, label: 'Departure', zone: yardName });
+  if (destIn) rows.push({ t: destIn.t, label: 'Arrival', zone: destName });
+  const destOut = destIn && D.find((x) => !x.arrive && x.t > destIn.t);
+  if (destOut) rows.push({ t: destOut.t, label: 'Departure', zone: destName });
+  const after = destOut?.t ?? (destIn ? null : yardOut?.t);
+  const yardIn = after != null && Y.find((x) => x.arrive && x.t > after);
+  if (yardIn) rows.push({ t: yardIn.t, label: 'Arrival', zone: yardName });
+  return rows.map((x) => ({ ...x, flag: false }));
+}
+
 const capped = (rows, n) => ({ rows: rows.slice(0, n), more: Math.max(0, rows.length - n) });
 const byTime = (a, b) => a.t - b.t;
 const round1 = (v) => Math.round(v * 10) / 10;
@@ -175,7 +220,7 @@ export function buildTripReport(d) {
   const allStops = findStops(track, segs).map((s) => {
     const { place, at } = where(s.t, s.lat, s.lng);
     // The bare fact, no extra words (operator, 2026-10-29).
-    const remark = at === 'yard' ? 'Yard' : at === 'dest' ? 'Destination' : at === 'zone' ? 'In zone' : 'Unscheduled stop';
+    const remark = at === 'yard' ? 'Yard' : at === 'dest' ? 'Destination' : at === 'zone' ? 'In zone' : 'Unscheduled';
     return { ...s, place, remark, flag: at == null && s.ms >= LONG_STOP_MS };
   });
   const stops = [...allStops].sort((a, b) => b.ms - a.ms).slice(0, ROWS.stops).sort(byTime).map((s, i) => ({ ...s, n: i + 1 }));
@@ -205,11 +250,15 @@ export function buildTripReport(d) {
   const overspeedKm = measuredKm.length ? round1(measuredKm.reduce((a, s) => a + s.distanceM, 0) / 1000) : (d.speeding?.length ? null : 0);
 
   // ── geofence ──
+  // Departure / arrival at the yard and destination first; then any other
+  // zone crossed on the way. A zone crossing at the yard or the destination is
+  // the same event as its milestone, so it is not listed twice.
   const edge = 60_000;
-  const geoRows = (d.zones?.visits ?? []).flatMap((v) => [
+  const atEnds = (t) => { const p = positionAt(track, t); return where(null, p.lat, p.lng).at != null; };
+  const geoRows = [...milestones(d, track, w), ...(d.zones?.visits ?? []).filter((v) => !atEnds(v.enteredAt) && !atEnds(v.leftAt)).flatMap((v) => [
     v.enteredAt > w.from + edge ? { t: v.enteredAt, label: v.enforced ? 'Entered restricted zone' : 'Entered', zone: v.name, flag: v.enforced } : null,
     v.leftAt < w.to - edge ? { t: v.leftAt, label: 'Left', zone: v.name, flag: false } : null,
-  ]).filter(Boolean).sort(byTime);
+  ])].filter(Boolean).sort(byTime);
   const geoCap = capped(geoRows, ROWS.geo);
 
   // ── load ──
