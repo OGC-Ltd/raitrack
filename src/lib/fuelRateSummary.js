@@ -41,7 +41,8 @@ export function fuelRateFindings(drains = []) {
       id: d.id,
       at,
       kind,
-      litres: Number.isFinite(d.stolenMl) ? d.stolenMl / 1000 : null,
+      // Ours, cleaned (no slosh, less the engine's burn) where the drain has one.
+      litres: Number.isFinite(d.cleanDropMl ?? d.stolenMl) ? (d.cleanDropMl ?? d.stolenMl) / 1000 : null,
       detail: fuelRateDetail(d),
       dismissed: d.dismissedAt != null,
       dismissedAt: ms(d.dismissedAt),

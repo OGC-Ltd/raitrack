@@ -3090,7 +3090,7 @@ export default function FleetMap() {
                    : theft.detectedAt ? new Date(theft.detectedAt).getTime() : null;
         const pos  = atMs ? nearestPoint(atMs) : null;
         if (!pos) continue;
-        const ml   = theft.stolenMl ?? null;
+        const ml   = theft.cleanDropMl ?? theft.stolenMl ?? null;
         const html = fuelPinHtml(ml, true, atMs);
         const m = new DomMarker({ position: { lat: pos.lat, lng: pos.lng }, html, anchor: 'center', zIndex: 5 });
         m.setMap(map);
