@@ -223,7 +223,13 @@ function FuelIncidentBody({ incident, vehicleId, cardShowsLevel = false }) {
   // ("Burn rate above the set ceiling") described findings that now go to the
   // daily summary. The rule stays in the tooltip for whoever audits it.
   const title   = theft ? 'Fuel theft alert' : (INCIDENT_TITLE[incident.reason] ?? 'Fuel alert');
-  const num     = (n) => (n == null ? '-' : n % 1 === 0 ? String(n) : n.toFixed(1));
+  // Rounded half up, as the day breakdown's events are: `toFixed` on 12.35
+  // gives "12.3" (12.35 is 12.3499… in binary) where they say 12.4.
+  const num     = (n) => {
+    if (n == null) return '-';
+    const r = Math.round(n * 10) / 10;
+    return r % 1 === 0 ? String(r) : r.toFixed(1);
+  };
   // CONFIRMED when the server is at least 80% sure it was a theft — the cause's
   // own confidence, on a cause allowed to be called one (lib/fuelAlerts). Not
   // "our telemetry watched it", which is what it used to mean and which a
