@@ -19,8 +19,7 @@ import { LEG_LABEL, fmtDuration } from "../../lib/tripProgress";
 import ShieldIcon from "../shared/ShieldIcon";
 import { useTrafficRoute, routeTarget, useRoutingAvailable } from "../../hooks/useTrafficRoute";
 import { delayCause } from "../../lib/tomtomTraffic";
-import { useState } from "react";
-import { openTripReport } from "../../api/tripReport";
+import TripReportButton from "../shared/TripReportButton";
 
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
@@ -63,28 +62,6 @@ function TrafficEta({ traffic }) {
         {" · "}{data.source ?? "TomTom"} live traffic · {ago < 1 ? "just now" : `${ago} m ago`}
       </div>
     </div>
-  );
-}
-
-/**
- * Opens the printable trip report (api/tripReport) for this run, or for the
- * unit's latest dispatch when it is not out on one.
- */
-function TripReportButton({ report, label }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  if (!report) return null;
-  const open = async () => {
-    setBusy(true); setError(null);
-    try { await openTripReport(report); } catch (err) { setError(err.message); } finally { setBusy(false); }
-  };
-  return (
-    <>
-      <button type="button" className="dc-report" onClick={open} disabled={busy} title={error ?? "Open the trip report to print or save as PDF"}>
-        {busy ? "Preparing…" : label}
-      </button>
-      {error && <span className="dc-report-err" role="alert">{error}</span>}
-    </>
   );
 }
 

@@ -124,3 +124,7 @@
 }
 
 .vt-run-since { opacity: 0.72; }
+
+/* Trip report button under the journey (TripReportButton). */
+.vt-report-row { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
+.vt-report-row .dc-report { margin-left: 0; }

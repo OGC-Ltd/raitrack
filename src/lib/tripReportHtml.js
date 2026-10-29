@@ -146,9 +146,11 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .cnt td.na { font-weight:400; font-size:7pt; color:var(--mut) }
 .none { color:var(--mut); font-style:italic; padding:1mm 0 }
 .more { font-size:7pt; color:var(--mut); margin-top:.8mm }
-.remarks { border:.6pt solid var(--rule); height:11mm; padding:1mm 1.6mm; font-size:7.4pt; color:var(--mut); margin:3.2mm 0 2.6mm }
+.lines div { border-bottom:.6pt solid var(--rule); height:7mm }
+.lines { margin-bottom:3mm }
 .sign { display:grid; grid-template-columns:1fr 1fr; gap:5mm }
 .sign div { border-bottom:.6pt solid var(--ink); height:9mm; font-size:7.4pt; color:var(--mut) }
+.lst td.nw.flag { color:var(--flag) }
 .foot { display:flex; justify-content:space-between; color:var(--mut); font-size:7pt; padding:2mm 13mm 4mm; border-top:.6pt solid var(--rule); flex:none }
 .bar { position:fixed; top:0; left:0; right:0; height:44px; display:flex; align-items:center; gap:8px; padding:0 16px;
   background:#1f2328; color:#fff; font:13px "Segoe UI", Arial, sans-serif; z-index:5 }
@@ -178,32 +180,26 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
     ['Fuel used', S.fuelUsedL != null ? `${num(S.fuelUsedL, 1)} L` : dash],
   ].map(([k, v]) => `<td><span>${k}</span>${v}</td>`).join('');
 
-  // ── load ──
-  let load;
-  if (!r.load.length) {
-    load = '<div class="none">No load recorded for this trip: no declared cargo on the dispatch and no weighbridge ticket for this plate.</div>';
-  } else {
-    const L = r.load[0];
-    const left = [['Cargo', L.cargo ?? dash]];
-    const right = [];
-    if (L.source === 'dispatch') {
-      if (L.bags) left.push(['Quantity', `${num(L.bags)} bags`]);
-      left.push(['Net weight', L.netKg != null ? `${num(L.netKg / 1000, 2)} t` : dash]);
-      right.push(['Source', 'Dispatch (sales office)'], ['Dispatch no.', L.ref ?? dash]);
-    } else {
-      left.push(['Gross weight', L.grossKg != null ? `${num(L.grossKg)} kg` : dash], ['Tare weight', L.tareKg != null ? `${num(L.tareKg)} kg` : dash],
-        ['Net weight', L.netKg != null ? `${num(L.netKg / 1000, 2)} t` : dash]);
-      right.push(['Weighbridge ticket', L.ticket ?? dash], ['Weighbridge', L.bridge ?? dash],
-        ['Weighed at', L.at ? fmtDayHM.format(Date.parse(L.at)) : dash], ['Driver on ticket', L.driver ?? dash]);
-    }
-    if (r.load.length > 1) right.push(['Other tickets', `${r.load.length - 1} more, net ${num(r.load.slice(1).reduce((a, x) => a + (x.netKg ?? 0), 0) / 1000, 2)} t`]);
-    const kv = (rows) => rows.map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join('');
-    load = `<div class="two"><table class="kv">${kv(left)}</table><table class="kv">${kv(right)}</table></div>`;
-  }
+  // Conduct and tickets: from the start of the departure day to the end of the trip.
+  const span = `${fmtDayHM.format(r.day.from)} to end of trip, ${fmtDayHM.format(r.day.to)}`;
+
+  // ── load: what the dispatch declared, and every weighbridge ticket that day ──
+  const Dl = r.declared;
+  const declared = Dl
+    ? `<table class="kv" style="margin-bottom:1.4mm"><tr><th>Declared load</th><td>${esc(Dl.cargo ?? dash)}${Dl.bags ? `, ${num(Dl.bags)} bags` : ''}, ${Dl.netKg != null ? `${num(Dl.netKg / 1000, 2)} t` : dash} &nbsp;<span style="font-weight:400;color:var(--mut)">dispatch no. ${esc(Dl.ref ?? dash)}</span></td></tr></table>`
+    : '';
+  const WB = r.weighbridge;
+  const load = declared + (WB.rows.length
+    ? `<table class="cells" style="margin-bottom:1.4mm"><tr><td><span>Weighbridge</span>${esc(WB.bridges.join(', ') || dash)}</td><td><span>Tickets</span>${WB.tickets}</td><td><span>Weighings</span>${WB.weighings}</td><td><span>Net tonnage</span>${num(WB.netKg / 1000, 2)} t</td></tr></table>
+      <table class="lst"><colgroup><col style="width:22mm"><col style="width:22mm"><col><col style="width:20mm"><col style="width:24mm"><col style="width:22mm"><col style="width:15mm"></colgroup><tr><th>Ticket</th><th>Weighing</th><th>Weighbridge</th><th class="r">Weight</th><th>Time</th><th>Since previous</th><th class="r">Net</th></tr>${
+      WB.rows.map((x) => `<tr><td class="nw">${x.sameTicketAsPrev ? '' : esc(x.ticket)}</td><td>${esc(x.kind)}</td><td>${esc(x.bridge ?? dash)}</td><td class="r">${num(x.kg)} kg</td><td class="nw${x.doubtful ? ' flag' : ''}"${x.doubtful ? ' title="Stamped before its ticket was raised; the weighbridge clock is wrong"' : ''}>${fmtDayHM.format(x.at)}${x.doubtful ? ' *' : ''}</td><td class="nw">${x.sinceMs != null ? dur(x.sinceMs) : dash}</td><td class="r">${x.netKg != null ? `${num(x.netKg / 1000, 2)} t` : ''}</td></tr>`).join('')}</table>${
+      WB.more ? `<div class="more">+ ${WB.more} more weighings.</div>` : ''}${
+      WB.doubtful ? '<div class="more"><span class="flag">*</span> Time as stamped by the weighbridge, which is before its own ticket was raised; not used for the time differences.</div>' : ''}`
+    : `<div class="none">No weighbridge ticket for this unit, ${span}.</div>`);
 
   // ── stops ──
   const stops = r.stops.length
-    ? `<table class="lst"><colgroup><col style="width:4mm"><col><col style="width:${multi ? 19 : 11.5}mm"><col style="width:${multi ? 19 : 11.5}mm"><col style="width:17mm"><col style="width:${multi ? 24 : 31}mm"></colgroup><tr><th>#</th><th>Location</th><th>Arrived</th><th>Left</th><th>Duration</th><th>Remark</th></tr>${
+    ? `<table class="lst"><colgroup><col style="width:4mm"><col><col style="width:${multi ? 22 : 11.5}mm"><col style="width:${multi ? 22 : 11.5}mm"><col style="width:17mm"><col style="width:${multi ? 20 : 31}mm"></colgroup><tr><th>#</th><th>Location</th><th>Arrived</th><th>Left</th><th>Duration</th><th>Remark</th></tr>${
       r.stops.map((s) => `<tr><td>${s.n}</td><td class="pl">${place(s)}</td><td class="nw">${T(s.t)}</td><td class="nw">${T(s.endT)}</td><td class="nw">${dur(s.ms)}</td><td${s.flag ? ' class="flag"' : ''} title="${esc(s.remark)}">${esc(s.remark)}</td></tr>`).join('')}</table>${
       r.stopsTotal > r.stops.length ? `<div class="more">Showing the ${r.stops.length} longest of ${r.stopsTotal} stops over 5 min.</div>` : ''}`
     : '<div class="none">No stops over 5 minutes.</div>';
@@ -217,25 +213,25 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
   ].join('');
   const fuel = !F.hasProbe && !F.rows.length
     ? '<div class="none">No fuel level sensor readings for this trip.</div>'
-    : `<table class="lst"><colgroup><col style="width:${multi ? 19 : 10}mm"><col style="width:22mm"><col><col style="width:13mm"><col style="width:12mm"></colgroup><tr><th>Time</th><th>Event</th><th>Location</th><th class="r">Litres</th><th class="r">Level</th></tr>${fuelRows}</table>${
+    : `<table class="lst"><colgroup><col style="width:${multi ? 22 : 10}mm"><col style="width:22mm"><col><col style="width:13mm"><col style="width:12mm"></colgroup><tr><th>Time</th><th>Event</th><th>Location</th><th class="r">Litres</th><th class="r">Level</th></tr>${fuelRows}</table>${
       F.more ? `<div class="more">+ ${F.more} more fuel events.</div>` : ''}${
       F.drainL > 0 ? `<div class="more"><span class="flag">Note:</span> ${num(F.drainL)} L recorded as drained during this trip.</div>` : ''}`;
 
-  // ── breaches ──
+  // ── driver conduct, for the day ──
   const B = r.breaches;
-  const dashOnly = new Set(['seatbelt', 'turn']);
-  const cnt = `<table class="cnt"><tr>${BREACH_KINDS.map((k) => `<th>${k.label}</th>`).join('')}<th>Total</th></tr><tr>${
-    BREACH_KINDS.map((k) => (!B.dashcam && dashOnly.has(k.key) ? '<td class="na">No dashcam</td>' : `<td>${B.counts[k.key]}</td>`)).join('')}<td>${B.total}</td></tr></table>`;
+  const dayT = (t) => fmtDayHM.format(t);
+  const cnt = `<table class="cnt"><tr>${BREACH_KINDS.map((k) => `<th>${k.label}</th>`).join('')}<th>Time overspeeding</th><th>Distance overspeeding</th></tr><tr>${
+    BREACH_KINDS.map((k) => `<td>${B.counts[k.key]}</td>`).join('')}<td>${B.counts.speed ? dur(B.overspeedMs) : '0 min'}</td><td>${B.overspeedKm != null ? `${num(B.overspeedKm, 1)} km` : dash}</td></tr></table>`;
   const breachRows = B.rows.length
-    ? `<table class="lst" style="margin-top:1.4mm"><colgroup><col style="width:${multi ? 19 : 10}mm"><col style="width:25mm"><col><col style="width:27mm"></colgroup><tr><th>Time</th><th>Breach</th><th>Location</th><th>Detail</th></tr>${
-      B.rows.map((b) => `<tr><td class="nw">${T(b.t)}</td><td class="nw">${b.label}</td><td class="pl">${place(b)}</td><td>${esc(b.detail ?? '')}</td></tr>`).join('')}</table>${
-      B.more ? `<div class="more">+ ${B.more} more breaches.</div>` : ''}`
-    : '<div class="none" style="margin-top:1.4mm">No policy breaches recorded.</div>';
+    ? `<table class="lst" style="margin-top:1.4mm"><colgroup><col style="width:22mm"><col style="width:27mm"><col><col style="width:36mm"></colgroup><tr><th>Time</th><th>Event</th><th>Location</th><th>Detail</th></tr>${
+      B.rows.map((b) => `<tr><td class="nw">${dayT(b.t)}</td><td class="nw${b.key === 'theft' ? ' flag' : ''}">${b.label}</td><td class="pl">${place(b)}</td><td>${esc(b.detail ?? '')}</td></tr>`).join('')}</table>${
+      B.more ? `<div class="more">+ ${B.more} more.</div>` : ''}`
+    : '<div class="none" style="margin-top:1.4mm">Nothing recorded against the unit in this time.</div>';
 
   // ── geofence ──
   const G = r.geo;
   const geo = G.rows.length
-    ? `<table class="lst"><colgroup><col style="width:${multi ? 19 : 10}mm"><col style="width:27mm"><col></colgroup><tr><th>Time</th><th>Alert</th><th>Zone</th></tr>${
+    ? `<table class="lst"><colgroup><col style="width:${multi ? 22 : 10}mm"><col style="width:27mm"><col></colgroup><tr><th>Time</th><th>Alert</th><th>Zone</th></tr>${
       G.rows.map((g) => `<tr><td class="nw">${T(g.t)}</td><td${g.flag ? ' class="flag"' : ''}>${esc(g.label)}</td><td class="pl">${esc(g.zone ?? dash)}</td></tr>`).join('')}</table>${
       G.more ? `<div class="more">+ ${G.more} more zone crossings.</div>` : ''}`
     : G.timedOut
@@ -274,7 +270,7 @@ ${bar}
   <h2>1. Trip summary <small>${T(w.from)} to ${T(w.to)}</small></h2>
   <table class="cells"><tr>${summary}</tr></table>
 
-  <h2>2. Load details</h2>
+  <h2>2. Weighbridge <small>${span}</small></h2>
   ${load}
 
   <div class="two w">
@@ -288,14 +284,17 @@ ${bar}
     </div>
   </div>
 
-  <div class="two w">
-    <div><h2>6. Policy breaches <small>${B.total} in total</small></h2>${cnt}${breachRows}</div>
-    <div><h2>7. Geofence alerts</h2>${geo}
-      <div class="remarks">Remarks</div>
-      <div class="sign"><div>Reviewed by</div><div>Signature &amp; date</div></div></div>
-  </div>
+  <h2>6. Driver conduct <small>${esc(r.vehicle.driver ?? 'Driver not recorded')} on ${esc(r.vehicle.plate)}, ${span}</small></h2>
+  ${cnt}${breachRows}
+
+  <h2>7. Geofence alerts</h2>
+  ${geo}
+
+  <h2>8. Summary</h2>
+  <div class="lines"><div></div><div></div><div></div><div></div></div>
+  <div class="sign"><div>Reviewed by</div><div>Signature &amp; date</div></div>
 </div>
-<div class="foot"><span>Times in EAT. Data: GPS tracker, fuel level sensor${B.dashcam ? ', dashcam' : ''}, weighbridge. Generated ${fmtDate.format(r.generatedAt)} ${fmtHM.format(r.generatedAt)}.</span><span>Page 1 of 1</span></div>
+<div class="foot"><span>Times in EAT. Data: GPS tracker, fuel level sensor, weighbridge. Driver conduct and weighbridge run from the start of the day to the end of the trip. Generated ${fmtDate.format(r.generatedAt)} ${fmtHM.format(r.generatedAt)}.</span><span>Page 1 of 1</span></div>
 </div>
 <script>
   // One page, whatever the trip: if the content is taller than the sheet,

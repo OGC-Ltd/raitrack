@@ -30,15 +30,23 @@ function fixture(over = {}) {
     dispatch: { externalId: 'd-1', serialNumber: null, kind: 'CANE', status: 'DISPATCHED', driverName: 'Joel Kibet',
       destination: 'NYAONDO', dispatchedAt: T0, returnedAt: null, tonnageT: null, bags: null, cargoName: null },
     window: { from: T0, to: track[track.length - 1][0], clipped: false },
+    day: { from: Date.parse('2026-10-27T21:00:00Z'), to: Date.parse('2026-10-28T21:00:00Z') },
     yard, dest, arrivedAt: T0 + 140 * MIN,
     track,
     fuel: { hasProbe: true, series: [[T0, 200], [T0 + 80 * MIN, 180], [T0 + 172 * MIN, 150]], usedByCounterL: null,
       fillings: [], drains: [{ t: T0 + 70 * MIN, litres: 12, after: 180, place: null, review: null }] },
-    speeding: [{ t: T0 + 10 * MIN, durationSec: 120, peakKmh: 62, limitKmh: 40, lat: null, lng: null }],
+    speeding: [{ t: T0 + 10 * MIN, durationSec: 120, distanceM: 1900, peakKmh: 62, limitKmh: 40, lat: null, lng: null },
+      { t: T0 + 300 * MIN, durationSec: 60, distanceM: 1100, peakKmh: 55, limitKmh: 40, lat: null, lng: null }],
+    escalatedThefts: [{ t: T0 + 240 * MIN, litres: 18, place: 'Ndhiwa' }],
     harsh: [{ t: T0 + 100 * MIN, type: 'brake', lat: null, lng: null, speedKmh: 38, ms2: 4 }],
-    camera: { fitted: false, complete: true, alarms: [] },
     zones: { timedOut: false, visits: [{ name: 'Nyaondo estate', enteredAt: T0 + 135 * MIN, leftAt: T0 + 180 * MIN, enforced: false }] },
-    weighments: [],
+    weighments: [
+      { ticket: '1000906522', tokenAt: T0, netKg: 9460, cargo: 'Cane delivery', weighings: [
+        { kind: 'Tare', kg: 10440, at: T0 + 30 * MIN, bridge: 'FACTORY · bridge 1', doubtful: false },
+        { kind: 'Gross', kg: 19900, at: T0 - 13 * 60 * MIN, bridge: 'FACTORY · bridge 1', doubtful: true }] },
+      { ticket: '1000906400', tokenAt: T0 - 180 * MIN, netKg: 9700, cargo: 'Cane delivery', weighings: [
+        { kind: 'Gross', kg: 20100, at: T0 - 120 * MIN, bridge: 'FACTORY · bridge 2', doubtful: false },
+        { kind: 'Tare', kg: 10400, at: T0 - 90 * MIN, bridge: 'FACTORY · bridge 2', doubtful: false }] }],
     ...over,
   };
 }
@@ -68,11 +76,20 @@ describe('buildTripReport', () => {
     expect(r.fuel.rows[0]).toMatchObject({ kind: 'drain', label: 'Suspected theft', flag: true });
   });
 
-  it('counts breaches per kind and leaves dashcam columns to the page', () => {
-    expect(r.breaches.counts).toEqual({ speed: 1, accel: 0, brake: 1, turn: 0, seatbelt: 0 });
-    expect(r.breaches.total).toBe(2);
-    expect(r.breaches.dashcam).toBe(false);
+  it("counts the driver's day: escalated theft, harsh braking, overspeeding with time and distance, harsh acceleration", () => {
+    expect(r.breaches.counts).toEqual({ theft: 1, brake: 1, speed: 2, accel: 0 });
+    expect(r.breaches.overspeedMs).toBe(3 * MIN);
+    expect(r.breaches.overspeedKm).toBe(3);
     expect(BREACH_KINDS.map((k) => k.key)).toEqual(Object.keys(r.breaches.counts));
+  });
+
+  it('lists every weighing of the day with the time since the previous one', () => {
+    const W = r.weighbridge;
+    expect(W.rows.map((x) => `${x.ticket} ${x.kind}`)).toEqual(['1000906400 Gross', '1000906400 Tare', '1000906522 Tare', '1000906522 Gross']);
+    expect(W.rows.map((x) => x.sinceMs)).toEqual([null, 30 * MIN, 120 * MIN, null]);
+    expect(W.rows.map((x) => x.netKg)).toEqual([null, 9700, null, 9460]);
+    expect(W).toMatchObject({ tickets: 2, weighings: 4, netKg: 19160, doubtful: true });
+    expect(W.bridges).toEqual(['FACTORY · bridge 2', 'FACTORY · bridge 1']);
   });
 
   it('lists zone crossings inside the window', () => {
@@ -81,17 +98,18 @@ describe('buildTripReport', () => {
 
   it('uses the declared load before any weighbridge ticket', () => {
     const s = buildTripReport(fixture({ dispatch: { ...fixture().dispatch, kind: 'SALES', tonnageT: 29, bags: 580, cargoName: 'Processed Sugar' } }));
-    expect(s.load[0]).toMatchObject({ source: 'dispatch', netKg: 29000, bags: 580 });
+    expect(s.declared).toMatchObject({ netKg: 29000, bags: 580 });
   });
 
   it('renders one page with the plate, report number and every section', () => {
     const html = renderTripReportHtml(r, { logos: { rai: 'rai.jpg', ogc: 'ogc.png' } });
     expect(html).toContain('KCP 145P');
     expect(html).toContain('TR-KCP145P-20261028-0800');
-    for (const h of ['1. Trip summary', '2. Load details', '3. Route', '4. Stops', '5. Fuel', '6. Policy breaches', '7. Geofence alerts']) {
+    for (const h of ['1. Trip summary', '2. Weighbridge', '3. Route', '4. Stops', '5. Fuel', '6. Driver conduct', '7. Geofence alerts', '8. Summary']) {
       expect(html).toContain(h);
     }
-    expect(html).toContain('No dashcam');
+    expect(html).toContain('Escalated fuel theft');
+    expect(html).toContain('1000906522');
   });
 
   it('says so when the zone timeline could not be read', () => {
