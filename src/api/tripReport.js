@@ -1,7 +1,8 @@
-// The trip report for one dispatch, opened in its own window on the letterhead,
-// where the browser prints it or saves it as PDF (lib/tripReportHtml's
-// toolbar). The window is opened BEFORE the request, inside the click, or a
-// pop-up blocker would stop it once the await has broken the user gesture.
+// The trip report for one dispatch on the letterhead: downloaded as a PDF
+// (downloadTripReport, the button's action), or opened in its own window to
+// print (openTripReport). That window is opened BEFORE the request, inside the
+// click, or a pop-up blocker would stop it once the await has broken the user
+// gesture.
 
 import { apiFetch } from "../services/api";
 import { buildTripReport } from "../lib/tripReport";
@@ -36,5 +37,44 @@ export async function openTripReport({ orgId, vehicleId, dispatch, theme = "ligh
     show(html);
   } catch (err) {
     show(notice(`The trip report could not be made: ${err?.message ?? err}`));
+  }
+}
+
+/**
+ * The same report, straight to a PDF download: no window. The page is laid out
+ * in an off-screen frame (so its one-page fit runs), drawn with html2canvas and
+ * put on an A4 sheet with jsPDF. Resolves once the file has been handed to the
+ * browser.
+ */
+export async function downloadTripReport({ orgId, vehicleId, dispatch }) {
+  const data = await getTripReportData({ orgId, vehicleId, dispatch });
+  if (!data) throw new Error("No trip data came back.");
+  const r = buildTripReport(data);
+  const html = renderTripReportHtml(r, { theme: "light", toolbar: false, logos: { rai: abs(raiLogo), ogc: abs(ogcLogo) } });
+
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  // Off screen but rendered: html2canvas skips anything visibility:hidden.
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;height:1300px;border:0;";
+  try {
+    await new Promise((resolve, reject) => {
+      frame.onload = resolve;
+      frame.onerror = () => reject(new Error("The report page could not be laid out."));
+      frame.srcdoc = html;
+      document.body.appendChild(frame);
+    });
+    const doc = frame.contentDocument;
+    await Promise.all([...doc.images].map((img) => (img.complete ? null : img.decode().catch(() => null))));
+    await doc.fonts?.ready;
+    const page = doc.querySelector(".page");
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+    const canvas = await html2canvas(page, { scale: 2.5, backgroundColor: "#ffffff", useCORS: true, logging: false });
+    const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+    const day = new Date(r.window.from).toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
+    pdf.save(`Trip report ${r.vehicle.plate} ${day}.pdf`);
+  } finally {
+    frame.remove();
   }
 }

@@ -1,24 +1,28 @@
-// Opens the printable trip report (api/tripReport) for a dispatch, or for the
-// unit's latest dispatch when `report.dispatch` is null.
+// Downloads the trip report as a PDF (api/tripReport) for a dispatch, or for
+// the unit's latest dispatch when `report.dispatch` is null. A spinner sits on
+// the button while it is made; nothing opens.
 
 import { useState } from "react";
-import { openTripReport } from "../../api/tripReport";
+import { downloadTripReport } from "../../api/tripReport";
 import "./TripReportButton.css";
 
 export default function TripReportButton({ report, label = "Trip report" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   if (!report) return null;
-  const open = async () => {
+  const download = async () => {
+    if (busy) return;
     setBusy(true); setError(null);
-    try { await openTripReport(report); } catch (err) { setError(err.message); } finally { setBusy(false); }
+    try { await downloadTripReport(report); } catch (err) { setError(err?.message ?? String(err)); } finally { setBusy(false); }
   };
   return (
     <>
-      <button type="button" className="dc-report" onClick={open} disabled={busy} title={error ?? "Open the trip report to print or save as PDF"}>
-        {busy ? "Preparing…" : label}
+      <button type="button" className="dc-report" onClick={download} aria-busy={busy} disabled={busy}
+        title={error ?? "Download the trip report as a PDF"}>
+        {busy && <span className="dc-report-spin" aria-hidden="true" />}
+        {busy ? "Preparing PDF…" : label}
       </button>
-      {error && <span className="dc-report-err" role="alert">{error}</span>}
+      {error && <span className="dc-report-err" role="alert">The report could not be made: {error}</span>}
     </>
   );
 }
