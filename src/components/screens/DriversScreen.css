@@ -1712,6 +1712,14 @@
   border-radius: 10px;
 }
 .dr-panel__k { font-size: 11px; font-weight: 600; color: var(--text-2); }
+.dr-panel__stats--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Fuel theft by review: flagged, de-escalated, confirmed. Only a confirmed
+   theft takes the theft colour; a cleared case reads quieter, not green, so
+   it never looks like a good mark against the driver's name. */
+.dr-theft-tally { margin: 0 0 10px; }
+.dr-theft-tally .dr-panel__k { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dr-theft-tally__v--cleared { color: var(--text-2); }
+.dr-theft-tally__v--confirmed { color: var(--tone-theft); }
 .dr-panel__v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .dr-panel__heavy { margin: 10px 0 0; font-size: 12.5px; color: var(--text-2); }
 .dr-panel__heavy b { color: var(--ink); }

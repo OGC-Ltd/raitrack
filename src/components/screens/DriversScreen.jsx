@@ -683,6 +683,11 @@ const theftStanding = (t) =>
  */
 function TheftCases({ thefts, count, seen }) {
   const confirmed = thefts.filter((t) => t.review === "confirmed");
+  // The case's road through review (operator, 2026-10-29): flagged as theft
+  // (the detector's siphon, or a reviewer escalating it), then either
+  // de-escalated (cleared as not theft or a probe fault) or confirmed.
+  const flagged = thefts.filter((t) => t.cause === "SIPHON" || t.review === "confirmed");
+  const deescalated = flagged.filter((t) => t.review === "not_theft" || t.review === "probe_fault");
   const counted = thefts.filter((t) => t.countsAgainstDriver);
   // A view only where it shows something the next one up does not.
   const views = [
@@ -700,6 +705,13 @@ function TheftCases({ thefts, count, seen }) {
         Fuel Theft
         <span className={`dr-panel__count${count ? " dr-panel__count--theft" : ""}`}>{fmt(count)}</span>
       </h3>
+      <ul className="dr-panel__stats dr-panel__stats--3 dr-theft-tally" aria-label="Theft cases by review">
+        <li><span className="dr-panel__k">Flagged theft</span><b className="dr-panel__v">{fmt(flagged.length)}</b></li>
+        <li><span className="dr-panel__k">De-escalated</span>
+          <b className="dr-panel__v dr-theft-tally__v--cleared">{fmt(deescalated.length)}</b></li>
+        <li><span className="dr-panel__k">Confirmed theft</span>
+          <b className={`dr-panel__v${confirmed.length ? " dr-theft-tally__v--confirmed" : ""}`}>{fmt(confirmed.length)}</b></li>
+      </ul>
       {thefts.length === 0 ? (
         <p className="dr-panel__note">No fuel events on their units.</p>
       ) : (
@@ -759,7 +771,17 @@ function TheftCases({ thefts, count, seen }) {
  * alert's time as a chip. The count in the head is every alert, which is what
  * the roster ranks on and what the rating takes points off for (2026-10-28).
  */
+/** How a case reached this driver, for its chip's tooltip. */
+const SPEED_CREDIT = {
+  trip:    "their trip was running",
+  posting: "they were posted to the unit",
+  posted:  "before anyone was posted to the unit; they are posted to it now",
+};
+
 function SpeedCases({ overspeeds, count }) {
+  // Cases from before the unit had a driver posted are credited to the one
+  // posted now; the note says so, so nobody reads them as certain.
+  const viaPosting = overspeeds.filter((o) => o.attributedBy === "posted").length;
   const groups = [];
   const byKey = new Map();
   for (const o of overspeeds) {
@@ -779,7 +801,10 @@ function SpeedCases({ overspeeds, count }) {
         <p className="dr-panel__note">No overspeeding recorded against them.</p>
       ) : (
         <>
-          <p className="dr-panel__note">Each case lowers their rating.</p>
+          <p className="dr-panel__note">
+            Each case lowers their rating.
+            {viaPosting > 0 && ` ${fmt(viaPosting)} from before a driver was posted to the unit, credited to them as its driver now.`}
+          </p>
           <ul className="dr-cases">
             {shown.map((g) => (
               <li key={g.key} className="dr-case dr-case--on">
@@ -792,7 +817,10 @@ function SpeedCases({ overspeeds, count }) {
                   <span className="dr-case__times">
                     {g.times.slice().sort((x, y) => x.at.localeCompare(y.at)).map((o) => (
                       <span key={o.id} className="dr-case__chip"
-                            title={o.peakKmh != null ? `${fmt(o.peakKmh)} km/h in a ${fmt(o.limitKmh)} km/h limit` : undefined}>
+                            title={[
+                              o.peakKmh != null ? `${fmt(o.peakKmh)} km/h in a ${fmt(o.limitKmh)} km/h limit` : null,
+                              SPEED_CREDIT[o.attributedBy] ? `Credited: ${SPEED_CREDIT[o.attributedBy]}` : null,
+                            ].filter(Boolean).join(" · ") || undefined}>
                         {fmtTime(o.at)}
                       </span>
                     ))}
