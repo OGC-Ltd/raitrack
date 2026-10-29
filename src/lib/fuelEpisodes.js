@@ -240,7 +240,9 @@ export function fuelEpisodes({ drains = [], fillings = [], levels = [] } = {}) {
     const ledgerEnd = began + (fellFor ?? Math.max(2 * MIN, (detected ?? began) - began));
     // A FUEL RATE / FUEL DOWN finding carries the alert's figure — what stayed
     // down — and says in its detail how much fell and came back.
-    const amountMl = kind === 'drop' && d.stolenMl > 0 ? d.stolenMl
+    // Since 2026-10-29 that figure is cleanDropMl: no slosh, less the engine's burn.
+    const amountMl = (kind === 'drop' || kind === 'theft') && d.cleanDropMl > 0 ? d.cleanDropMl
+      : kind === 'drop' && d.stolenMl > 0 ? d.stolenMl
       : d.measuredDropMl > 0 ? d.measuredDropMl : d.stolenMl;
     // Slosh is the whole stretch the server measured moving; placing it on
     // one fall would shrink it to its deepest swing. FUEL RATE / FUEL DOWN

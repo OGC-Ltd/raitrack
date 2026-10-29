@@ -65,7 +65,7 @@ export async function pickDefaultUnit({ orgId, vehicleIds, now = Date.now() }) {
     const hit = latestCase(res?.data ?? [], known);
     if (hit) {
       const t0 = dayStart(fleetDayKey(new Date(hit.beganAt)));
-      const litres = (hit.measuredDropMl ?? hit.stolenMl ?? 0) / 1000;
+      const litres = (hit.cleanDropMl ?? hit.measuredDropMl ?? hit.stolenMl ?? 0) / 1000;
       return { unitId: hit.vehicleId, from: t0, to: Math.min(t0 + DAY, now), reason: "theft", at: Date.parse(hit.beganAt), litres };
     }
     if (!res?.hasNextPage || !res?.cursor) break;
