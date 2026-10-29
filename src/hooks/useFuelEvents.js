@@ -139,7 +139,8 @@ export function useFuelEvents(orgId, dayKey = fleetDayKey()) {
           type:       "drain",
           at:         new Date(t.beganAt ?? t.detectedAt).getTime(),
           atIso:      t.beganAt ?? t.detectedAt,
-          litres:     t.stolenMl != null ? +(t.stolenMl / 1000).toFixed(1) : null,
+          // Ours, cleaned (no slosh, less the engine's burn) where the drain has one.
+          litres:     (t.cleanDropMl ?? t.stolenMl) != null ? Math.round((t.cleanDropMl ?? t.stolenMl) / 100) / 10 : null,
           location:   t.initialLocation ?? null,
           speedAtEvent: t.initialSpeedKmh ?? null,
           // ADDED 2026-08-08: the server's verdict on whether the fuel actually
