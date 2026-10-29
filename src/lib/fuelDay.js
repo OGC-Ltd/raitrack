@@ -85,7 +85,9 @@ export function dayBreakdown({ tank, fillings = [], drops = [] }) {
       id: f.id, type: "refuel", at: f.filledAt, litres: L(f.filledMl), verdict: f.verdict,
     })),
     ...drops.map((d) => ({
-      id: d.id, type: "drop", at: d.beganAt, litres: L(d.stolenMl), verdict: d.verdict,
+      // Ours, cleaned (no slosh, less the engine's burn), where the drain has one
+      // (2026-10-29 on) — the figure the alert stated; else the provider's.
+      id: d.id, type: "drop", at: d.beganAt, litres: L(d.cleanDropMl ?? d.stolenMl), verdict: d.verdict,
       cause: d.drainCause, cameBack: L(d.recoveredMl),
     })),
   ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
