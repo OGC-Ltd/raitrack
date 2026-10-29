@@ -60,13 +60,16 @@ const initialsOf = (name = "") =>
 
 // Rating → performance tier (drives the avatar ring + pill colour), mirroring the
 // dash ManagerCard's status pill. A driver who hasn't earned any rating yet
-// (score still at its 0 default) reads as "NEW", not a judgment call. Below
+// (score still at its 0 default) reads as "NEW", not a judgment call -- but a
+// driver whose harsh driving took the rating to 0 has band "Poor" and is a
+// low performer, not new (2026-10-29). Below
 // "FAIR" (rating < 3) never shows a pill — the UI intentionally hides any
 // "Needs Work" style label for low performers.
 // `color` is for the PDF, which cannot resolve a CSS variable; on screen the
 // tier is a TONE name and its colour lives in DriversScreen.css, per theme.
-const ratingTier = (r = 0) => {
-  if (r === 0) return { label: "NEW", color: "#94a3b8", tone: "new" };
+const unrated = (d) => !(Number(d?.rating) > 0) && d?.ratingBand !== "Poor";
+const ratingTier = (r = 0, band) => {
+  if (r === 0 && band !== "Poor") return { label: "NEW", color: "#94a3b8", tone: "new" };
   if (r >= 4.5) return { label: "EXCELLENT", color: "#22c55e", tone: "good" };
   if (r >= 4) return { label: "GOOD", color: "#22c55e", tone: "good" };
   if (r >= 3) return { label: "FAIR", color: "#f59e0b", tone: "fair" };
@@ -196,11 +199,11 @@ function fleetOf(drivers, details, liveVehicles) {
   // On the road: a roster driver named on a unit whose engine is running now,
   // matched the way the panel matches a driver to their unit.
   const live = new Set(liveVehicles.filter((v) => v.driver && v.engine === "on").map((v) => v.driver));
-  const rated = drivers.filter((d) => Number(d.rating) > 0);
+  const rated = drivers.filter((d) => !unrated(d));
   const mix = { good: 0, fair: 0, low: 0, new: 0 };
   for (const d of drivers) {
     const r = Number(d.rating) || 0;
-    mix[r === 0 ? "new" : r >= 4 ? "good" : r >= 3 ? "fair" : "low"] += 1;
+    mix[unrated(d) ? "new" : r >= 4 ? "good" : r >= 3 ? "fair" : "low"] += 1;
   }
   return {
     count: drivers.length,
@@ -338,7 +341,7 @@ export default function DriversScreen() {
   const handleDriverReport = () => {
     if (!detail?.driver) return;
     const { driver, totals, heaviestLoad, byDay = [] } = detail;
-    const tier = ratingTier(driver.rating);
+    const tier = ratingTier(driver.rating, driver.ratingBand);
     const period = byDay.length ? `${fmtDay(byDay[0].day)} – ${fmtDay(byDay.at(-1).day)}` : "no activity";
     const doc = createReport({
       companyName: activeCompany?.name || "Fleet",
@@ -504,7 +507,7 @@ const PANEL_CASES = 6;
  */
 function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
   const { driver, totals, heaviestLoad, byDay = [], incidents } = detail;
-  const tier = ratingTier(driver.rating);
+  const tier = ratingTier(driver.rating, driver.ratingBand);
   const st = statusMeta(row?.status ?? driver.status);
   const w = activeWindow(detail);
   const ref = useRef(null);
@@ -666,14 +669,13 @@ function useFold(items) {
   };
 }
 
-/** Where one fuel event stands, strongest first: a reviewer's escalation, the
- *  detector's siphon, a reviewer's clearance, or nothing against the driver. */
+/** Where one flagged case stands: confirmed (the only kind that counts against
+ *  the driver, 2026-10-29), cleared by a reviewer, or still awaiting review. */
 const theftStanding = (t) =>
   t.review === "confirmed" ? { key: "confirmed", label: "Confirmed theft", on: true }
-  : t.countsAgainstDriver ? { key: "suspected", label: "Suspected", on: true }
   : t.review === "not_theft" ? { key: "cleared", label: "De-escalated" }
   : t.review === "probe_fault" ? { key: "cleared", label: "Probe fault" }
-  : { key: "none", label: "Not counted" };
+  : { key: "suspected", label: "Awaiting review" };
 
 /**
  * Fuel theft: the cases flagged as theft on their units -- the detector's
@@ -685,7 +687,7 @@ function TheftCases({ thefts: events }) {
   const thefts = events.filter((t) => t.cause === "SIPHON" || t.review === "confirmed");
   const confirmed = thefts.filter((t) => t.review === "confirmed");
   const deescalated = thefts.filter((t) => t.review === "not_theft" || t.review === "probe_fault");
-  const counted = thefts.filter((t) => t.countsAgainstDriver);
+  const awaiting = thefts.length - confirmed.length - deescalated.length;
   // Cases from before anyone was posted to the unit are shown on the card of
   // whoever holds it now, but never counted against them.
   const beforePosting = thefts.filter((t) => t.attributedBy === "posted").length;
@@ -720,7 +722,7 @@ function TheftCases({ thefts: events }) {
             {confirmed.length
               ? <><b>{fmt(confirmed.length)} confirmed</b>, {fmt(litres, 1)} L</>
               : "None confirmed"}
-            {counted.length > confirmed.length ? ` · ${fmt(counted.length - confirmed.length)} suspected` : ""}
+            {awaiting > 0 ? ` · ${fmt(awaiting)} awaiting review, not counted until confirmed` : ""}
             {beforePosting ? ` · ${fmt(beforePosting)} from before they were posted to the unit, not counted against them` : ""}
           </p>
           {views.length > 1 && (
@@ -866,7 +868,7 @@ function HarshCases({ harsh, accel, brake }) {
       ) : (
         <>
           <p className="dr-panel__note">
-            <b>{fmt(accel)}</b> harsh acceleration · <b>{fmt(brake)}</b> hard braking. Each case lowers their rating.
+            <b>{fmt(accel)}</b> harsh acceleration · <b>{fmt(brake)}</b> hard braking. Each takes 0.2 off their rating, down to 0.
           </p>
           <ul className="dr-cases">
             {shown.map((g) => (
