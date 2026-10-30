@@ -1975,3 +1975,10 @@
   font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, var(--tone-speed) 75%, var(--ink));
 }
+
+/* Analytics | Scorecard — which view of the page is on screen. */
+.dr-viewswitch { margin-left: auto; display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.dr-viewswitch__btn { font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--card); border: 0; padding: 6px 12px; cursor: pointer; }
+.dr-viewswitch__btn + .dr-viewswitch__btn { border-left: 1px solid var(--border); }
+.dr-viewswitch__btn.is-on { color: #fff; background: var(--accent); }
+@media (max-width: 767px) { .dr-viewswitch { margin-left: 0; align-self: flex-start; } }
