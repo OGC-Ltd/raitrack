@@ -17,6 +17,9 @@ export function nextVersion(current) {
 if (process.argv[1]?.endsWith('release.mjs')) {
   const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   const next = nextVersion(version)
-  // --force because .hallmark/log.json is always dirty.
-  execFileSync('npm', ['version', next, '--force', '-m', 'Release %s'], { stdio: 'inherit', shell: process.platform === 'win32' })
+  // --force because .hallmark/log.json is always dirty. On Windows npm is a
+  // .cmd and has to go through the shell, which splits an unquoted message.
+  const win = process.platform === 'win32'
+  const message = win ? '"Release %s"' : 'Release %s'
+  execFileSync('npm', ['version', next, '--force', '-m', message], { stdio: 'inherit', shell: win })
 }
