@@ -22,7 +22,7 @@
  * .dr-grid-card): nothing is improvised here.
  */
 
-.sc { display: flex; flex-direction: column; gap: 12px; }
+.sc { display: flex; flex-direction: column; gap: 12px; box-shadow: none;}
 /* The roster's toolbar carries its own bottom margin for the grid under it;
    here the section's gap spaces it. */
 .sc > .dr-filters { margin-bottom: 0; }
