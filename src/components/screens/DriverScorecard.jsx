@@ -96,7 +96,7 @@ function manualSentence(items) {
   // An older server sends whole sentences ("Vehicle care (§3.3): …."); show those as they are.
   if (items.some((s) => /\.$/.test(s))) return `Not scored here: ${items.join(" ")}`;
   const list = items.length <= 1 ? items.join("") : `${items.slice(0, -1).join("; ")}; and ${items[items.length - 1]}`;
-  return `The following are not scored here: ${list}.`;
+  return `Not scored here.`;
 }
 
 /** Standing, worst first, as the roster's status badge — dot inside the pill. */
@@ -227,14 +227,14 @@ export default function DriverScorecard() {
                   sub="5+ violations in a month" />
       </section>
 
-      {cov && (
+      {/* {cov && (
         <ul className="sc-notes">
           <li>{coverageSentence(cov, unattributed)}</li>
           {cov.dashcam.note && <li className="sc-notes__warn">{cov.dashcam.note}</li>}
           {rules && <li>{rulesSentence(rules)}</li>}
           {data.manual?.length > 0 && <li className="sc-notes__quiet">{manualSentence(data.manual)}</li>}
         </ul>
-      )}
+      )} */}
 
       {waiting && (
         <p className="sc-status" role="status" aria-live="polite">
