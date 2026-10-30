@@ -1,0 +1,178 @@
+/* Hallmark · redesign · macrostructure: Workbench (in-page view) · tone: utilitarian
+ * · anchor hue: in-project --color-* tokens, preserved · design-system: DriversScreen.css
+ * pre-emit critique: P5 H4 E5 S5 R5 V4
+ *
+ * The scorecard is the second view of the Drivers page, so it borrows the
+ * Analytics roster's grammar whole rather than drawing its own: `dr-filters`
+ * with the segmented `dr-seg`, the `dr-strip` of stat cells, and the
+ * `dr-grid-card` / `dr-grid` datagrid — sticky label band, 10/14 cells, the
+ * avatar + name + sub driver cell, dotted incident counts, the status badge
+ * with its dot inside, and the Prev · Page · Next pager. Its first pass was a
+ * second, rounder table with its own chips and its own search; beside the
+ * roster it read as another product.
+ *
+ * What is the scorecard's own, and only that:
+ *   · point colours — up / down on the page's --tone-up / --tone-down;
+ *   · the notes under the strip — what the scores do and do not cover;
+ *   · the open row's day breakdown;
+ *   · the phone card's areas, because the roster's card rules place cells by
+ *     column number and this grid's columns are different ones.
+ *
+ * Every colour is a token the page already declares (.drivers-page,
+ * .dr-grid-card): nothing is improvised here.
+ */
+
+.sc { display: flex; flex-direction: column; gap: 12px; }
+/* The roster's toolbar carries its own bottom margin for the grid under it;
+   here the section's gap spaces it. */
+.sc > .dr-filters { margin-bottom: 0; }
+.sc-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.sc-up { color: var(--tone-up); }
+.sc-down { color: var(--tone-down); }
+.dr-grid tbody td.sc-up { color: var(--tone-up); }
+.dr-grid tbody td.sc-down { color: var(--tone-down); }
+.dr-grid tbody td.sc-pay { font-weight: 700; }
+
+.sc-notes {
+  margin: 0; padding: 0 0 0 16px;
+  display: grid; gap: 3px;
+  font-size: 11.5px; line-height: 1.45; color: var(--text-2);
+}
+.sc-notes__warn { color: var(--tone-speed); }
+.sc-notes__quiet { color: var(--text-3); }
+
+/* ── The open row ──────────────────────────────────────────────────────────
+ * One band under the row, on the head's surface, so it reads as the row's
+ * own drawer rather than another row of the grid. */
+.dr-grid tbody tr.sc-detail td {
+  background: var(--dg-head);
+  white-space: normal;
+  padding: 12px var(--dg-gutter, 16px) 14px;
+  cursor: default;
+}
+.dr-grid tbody tr.sc-detail:hover { background: none; }
+.sc-days { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.sc-day__head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;
+  font-size: 12px; color: var(--dg-cell);
+}
+.sc-day__date { font-weight: 700; color: var(--ink); min-width: 96px; }
+.sc-events {
+  list-style: none; margin: 6px 0 0; padding: 0 0 0 110px;
+  display: grid; gap: 3px; font-size: 12px; color: var(--dg-cell);
+}
+.sc-events li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.sc-events__time { min-width: 38px; color: var(--dg-label); font-variant-numeric: tabular-nums; }
+.sc-events__what { min-width: 110px; color: var(--ink); font-weight: 600; }
+.sc-events__value { min-width: 96px; font-variant-numeric: tabular-nums; }
+
+/* ── Phones: the roster's card, this grid's areas ───────────────────────────
+ * Same 700px switch and the same card the roster draws; only the AREAS are
+ * re-mapped, because DriversScreen.css names them by column number for its
+ * own twelve columns. Selectors carry `.sc-grid` so they outrank those. */
+@media (max-width: 700px) {
+  .sc-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .dr-grid.sc-grid tbody tr {
+    grid-template-areas:
+      "who  who  status"
+      "rule rule rule"
+      "c2   c3   c4"
+      "c5   c5   c6"
+      "c7   c8   c9"
+      "c10  .    .";
+  }
+  .dr-grid.sc-grid tbody td:nth-child(1)  { grid-area: who; }
+  .dr-grid.sc-grid tbody td:nth-child(2)  { grid-area: c2; }
+  .dr-grid.sc-grid tbody td:nth-child(3)  { grid-area: c3; justify-self: stretch; align-self: auto; }
+  .dr-grid.sc-grid tbody td:nth-child(4)  { grid-area: c4; }
+  .dr-grid.sc-grid tbody td:nth-child(5)  { grid-area: c5; }
+  .dr-grid.sc-grid tbody td:nth-child(6)  { grid-area: c6; }
+  .dr-grid.sc-grid tbody td:nth-child(7)  { grid-area: c7; }
+  .dr-grid.sc-grid tbody td:nth-child(8)  { grid-area: c8; }
+  .dr-grid.sc-grid tbody td:nth-child(9)  { grid-area: c9; }
+  .dr-grid.sc-grid tbody td:nth-child(10) { grid-area: c10; }
+  .dr-grid.sc-grid tbody td:nth-child(11) { grid-area: status; justify-self: end; align-self: center; }
+
+  /* Every figure carries its column's name; the roster labels column 2 and
+     4 onwards, and here 3 is a figure too. The standing badge needs none. */
+  .dr-grid.sc-grid tbody td:nth-child(3)::before {
+    content: attr(data-label);
+    display: block; margin-bottom: 2px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--dg-label);
+  }
+  .dr-grid.sc-grid tbody td:nth-child(3) { font-size: 13px; font-weight: 600; }
+  .dr-grid.sc-grid tbody td:nth-child(11)::before { content: none; }
+  .dr-grid.sc-grid tbody td.sc-up { color: var(--tone-up); }
+  .dr-grid.sc-grid tbody td.sc-down { color: var(--tone-down); }
+
+  /* The drawer is one cell across the whole card. */
+  .dr-grid.sc-grid tbody tr.sc-detail { grid-template-areas: none; display: block; }
+  .dr-grid.sc-grid tbody tr.sc-detail::after { content: none; }
+  .dr-grid.sc-grid tbody tr.sc-detail td { display: block; padding: 4px 0 0; white-space: normal; overflow: visible; background: none; }
+  .dr-grid.sc-grid tbody tr.sc-detail td::before { content: none; }
+  .sc-events { padding-left: 0; }
+}
+
+/* ── Loading ────────────────────────────────────────────────────────────────
+ * First load: placeholder rows in the grid's own shape (avatar, name and
+ * plate, figures, badge), the strip's figures as bars, and one status line
+ * saying why it can take a while — the dashcam check alone can run 25 s.
+ * A period switch keeps the last figures on screen, dimmed, under a thin bar
+ * along the top of the grid, so the table never collapses to nothing.
+ *
+ * The shimmer is the Live feed's, on this page's tokens; reduced motion holds
+ * it still. */
+.sc-status { margin: 0; font-size: 12px; color: var(--dg-label, var(--text-2)); }
+
+.sc-card { position: relative; }
+.sc-card--refreshing tbody { opacity: 0.55; transition: opacity 0.2s ease-out; }
+.sc-progress {
+  position: absolute; inset: 0 0 auto 0; z-index: 2;
+  height: 2px; overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.sc-progress::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 35%;
+  background: var(--accent);
+  animation: sc-progress 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes sc-progress { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+
+.sc-skel__avatar,
+.sc-skel__lines span,
+.sc-skel__bar,
+.sc-skel__pill {
+  display: block;
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--ink) 6%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 12%, transparent) 40%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 80%);
+  background-size: 200% 100%;
+  animation: sc-shimmer 1.3s linear infinite;
+}
+@keyframes sc-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sc-skel__avatar { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; }
+.sc-skel__lines { display: grid; gap: 6px; }
+.sc-skel__lines span { height: 10px; }
+.sc-skel__lines span:last-child { width: 64px; height: 8px; }
+.sc-skel__bar { width: 36px; height: 10px; }
+.sc-skel__bar--figure { display: inline-block; width: 72px; height: 20px; vertical-align: middle; }
+.sc-skel__bar--caption { width: 140px; max-width: 100%; height: 8px; margin-top: 5px; }
+.sc-skel__pill { width: 64px; height: 18px; border-radius: 999px; }
+.dr-grid tbody tr.sc-skel:hover { background: none; }
+.dr-grid tbody tr.sc-skel td { cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-skel__avatar, .sc-skel__lines span, .sc-skel__bar, .sc-skel__pill { animation: none; }
+  .sc-progress::after { animation: none; width: 100%; opacity: 0.6; }
+  .sc-card--refreshing tbody { transition: none; }
+}
+
+/* Phones: a placeholder card is the roster card's frame with the same bars. */
+@media (max-width: 700px) {
+  .dr-grid.sc-grid tbody tr.sc-skel td:nth-child(n + 2)::before { content: none; }
+}

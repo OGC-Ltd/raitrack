@@ -7,6 +7,7 @@
 import { useState, useEffect, useId, useRef, useCallback, useMemo } from "react";
 import "./DriversScreen.css";
 import { getDriversOverview } from "../../api/drivers";
+import DriverScorecard from "./DriverScorecard";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { pendingDriver, clearPendingDriver, driverNameMatches } from "../../lib/driverHandoff";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -276,6 +277,9 @@ export default function DriversScreen() {
   const openDriver = (id) => { setSelectedId(id); setPanelOpen(true); };
   const closeDriver = useCallback(() => setPanelOpen(false), []);
   const [leaderView, setLeaderView] = useState("top"); // "top" | "bottom" 6 by tonnes
+  // "analytics" — the roster and its trends; "scorecard" — the pay proposal's
+  // speed and safety points per driver (DriverScorecard).
+  const [view, setView] = useState("analytics");
 
   // Default to the first driver in the table; keep a valid selection on refresh.
   useEffect(() => {
@@ -389,17 +393,27 @@ export default function DriversScreen() {
     <div className="drivers-page">
       <div className="drivers-page__inner">
         {/* The empty state already names the page — no header needed then. */}
-        {!isEmpty && (
+        {(!isEmpty || view === "scorecard") && (
           <div className="dr-head">
             <div>
-              <h1 className="dr-title">Driver Analytics</h1>
+              <h1 className="dr-title">{view === "scorecard" ? "Driver Scorecard" : "Driver Analytics"}</h1>
               <div className="dr-subtitle">
-                {loading
+                {view === "scorecard"
+                  ? `Speed and safety points per driver · ${activeCompany?.name || "Fleet"}`
+                  : loading
                   ? "Loading…"
                   : typeName
                     ? `${fmt(drivers.length)} of ${fmt(roster.length)} drivers · ${typeName} · ${activeCompany?.name || "Fleet"}`
                     : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
               </div>
+            </div>
+            <div className="dr-viewswitch" role="tablist" aria-label="Drivers view">
+              {[["analytics", "Analytics"], ["scorecard", "Scorecard"]].map(([key, label]) => (
+                <button key={key} type="button" role="tab" aria-selected={view === key}
+                  className={`dr-viewswitch__btn${view === key ? " is-on" : ""}`} onClick={() => setView(key)}>
+                  {label}
+                </button>
+              ))}
             </div>
             {/* The two PDF buttons used to sit here, beside the page title.
                 They are on the TABLE now — see AllDriversSection — because
@@ -410,7 +424,11 @@ export default function DriversScreen() {
           </div>
         )}
 
-        {error ? (
+        {view === "scorecard" ? (
+          <ErrorBoundary label="Driver scorecard">
+            <DriverScorecard />
+          </ErrorBoundary>
+        ) : error ? (
           <LoadError label="Drivers" onRetry={retry} fullSection />
         ) : isEmpty ? (
           <TabEmptyState

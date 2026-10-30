@@ -24,3 +24,17 @@ export async function getDriversOverview({ companyId, days = 90 } = {}) {
   );
   return res.data ?? EMPTY_OVERVIEW;
 }
+
+/**
+ * The pay proposal's driver scorecard: speed (§3.2) and safety points per
+ * driver-day, credited to whoever held the vehicle at each event. `from` and
+ * `to` are fleet days (YYYY-MM-DD), inclusive, at most 31 apart.
+ */
+export async function getDriverScores({ companyId, from, to }) {
+  const orgId = await resolveOrgId(companyId);
+  if (!orgId) return null;
+  const res = await apiFetch(
+    `/api/v1/organisations/${orgId}/analytics/driver-scores?from=${from}&to=${to}`
+  );
+  return res.data ?? null;
+}
