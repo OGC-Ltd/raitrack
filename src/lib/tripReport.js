@@ -11,8 +11,9 @@
 import { haversineM } from './tripProgress';
 
 /**
- * The driver's conduct for the DAY of the trip, in print order (operator,
- * 2026-10-29). Escalated fuel theft is a theft case confirmed on review.
+ * The driver's conduct during the trip, in print order (operator, 2026-10-29;
+ * the trip, not the whole day, since 2026-10-30). Escalated fuel theft is a
+ * theft case confirmed on review.
  */
 export const BREACH_KINDS = [
   { key: 'theft', label: 'Escalated fuel theft' },
@@ -169,17 +170,64 @@ const byTime = (a, b) => a.t - b.t;
 const round1 = (v) => Math.round(v * 10) / 10;
 
 function reportNumber(d) {
+  const prefix = d.mode === 'day' ? 'DR' : 'TR';
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Nairobi', year: 'numeric', month: '2-digit', day: '2-digit' })
     .format(d.dispatch.dispatchedAt).replace(/-/g, '');
   const hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hour12: false })
     .format(d.dispatch.dispatchedAt).replace(':', '');
-  return `TR-${String(d.vehicle.plate).replace(/\s+/g, '')}-${day}-${hm}`;
+  return `${prefix}-${String(d.vehicle.plate).replace(/\s+/g, '')}-${day}-${hm}`;
+}
+
+/** How far before the gate sign-out the yard exit may be and still be the departure. */
+const DEPARTURE_LEAD_MS = 30 * 60_000;
+/** How long before departure the loading ticket may have been weighed. */
+const LOADING_BEFORE_MS = 6 * 3_600_000;
+
+/**
+ * The trip, start to end. It starts at the departure: the gate sign-out, or
+ * the yard exit when the truck crossed the yard edge shortly before the
+ * sign-out was recorded (10:45 out, 10:47 signed out), so the geofence
+ * departure and the header can never disagree. It ends on arrival at the
+ * destination (first fix inside it), or now when the truck has not arrived.
+ */
+export function tripWindow(d, marks) {
+  const signedOut = d.dispatch?.dispatchedAt ?? d.window.from;
+  const yardOut = marks.find((m) => m.label === 'Departure' && m.zone === (d.yard?.name ?? 'Yard'));
+  const from = yardOut && yardOut.t < signedOut && signedOut - yardOut.t <= DEPARTURE_LEAD_MS ? yardOut.t : signedOut;
+  const destIn = marks.find((m) => m.label === 'Arrival' && m.zone === (d.dest?.name ?? 'Destination') && m.t > from);
+  // Arrival is the first fix inside the destination, the same moment the
+  // geofence table prints, so the two cannot disagree; the server's own
+  // arrival time is the fallback when the track shows no crossing.
+  const arrivedAt = destIn?.t ?? (d.arrivedAt != null && d.arrivedAt > from ? d.arrivedAt : null);
+  const to = arrivedAt != null ? Math.min(arrivedAt, d.window.to) : d.window.to;
+  return { from, to, arrived: arrivedAt != null, clipped: !!d.window.clipped };
+}
+
+/**
+ * The tickets that belong to the trip: every ticket weighed during it, and the
+ * loading ticket, the last one weighed before departure (up to 6 h before),
+ * which is the load the truck is carrying. Earlier trips' tickets are left out.
+ */
+export function tripTickets(weighments, w) {
+  const lastAt = (tk) => Math.max(tk.tokenAt ?? 0, ...(tk.weighings ?? []).filter((x) => !x.doubtful).map((x) => x.at));
+  const during = weighments.filter((tk) => (tk.weighings ?? []).some((x) => !x.doubtful && x.at >= w.from && x.at <= w.to));
+  const loading = weighments
+    .filter((tk) => !during.includes(tk) && lastAt(tk) <= w.from && lastAt(tk) >= w.from - LOADING_BEFORE_MS)
+    .sort((a, b) => lastAt(b) - lastAt(a))[0];
+  return [...(loading ? [loading] : []), ...during].sort((a, b) => a.tokenAt - b.tokenAt);
 }
 
 /** @param {object} d  GET /organisations/:orgId/vehicles/:vehicleId/trip-report → data */
 export function buildTripReport(d) {
-  const track = (d.track ?? []).filter((p) => Number.isFinite(p[1]) && Number.isFinite(p[2]));
-  const w = d.window;
+  const fullTrack = (d.track ?? []).filter((p) => Number.isFinite(p[1]) && Number.isFinite(p[2]));
+  // The yard / destination crossings, read on everything the server sent.
+  const marks = milestones(d, fullTrack, d.window);
+  // ONE window for the whole report: departure to arrival (operator,
+  // 2026-10-30: "everything in the trip report should be within the trip
+  // timeline"). Every section below reads only what falls inside it.
+  const w = tripWindow(d, marks);
+  const inTrip = (t) => t != null && t >= w.from && t <= w.to;
+  const track = fullTrack.filter((p) => inTrip(p[0]));
   const segs = segments(track);
   const where = placer(d);
 
@@ -193,8 +241,15 @@ export function buildTripReport(d) {
   const hasIgnition = track.some((p) => p[4] != null);
 
   // ── fuel ──
-  const F = d.fuel ?? { series: [], fillings: [], drains: [], hasProbe: false };
-  const series = F.series ?? [];
+  const F0 = d.fuel ?? { series: [], fillings: [], drains: [], hasProbe: false };
+  const F = {
+    ...F0,
+    fillings: (F0.fillings ?? []).filter((x) => inTrip(x.t)),
+    drains: (F0.drains ?? []).filter((x) => inTrip(x.t)),
+    // A counter reading covers the server's whole window, not the trip.
+    usedByCounterL: w.to === d.window?.to && w.from === d.window?.from ? F0.usedByCounterL ?? null : null,
+  };
+  const series = (F0.series ?? []).filter((p) => inTrip(p[0]));
   const startL = F.hasProbe && series.length ? series[0][1] : null;
   const endL = F.hasProbe && series.length ? series[series.length - 1][1] : null;
   const counted = (x) => x.review !== 'NOT_THEFT' && x.review !== 'PROBE_FAULT' && x.review !== 'DISMISSED';
@@ -230,14 +285,15 @@ export function buildTripReport(d) {
   const cam = { fitted: false, complete: true, alarms: [], ...(d.dashcam ?? {}) };
   const kinds = [...BREACH_KINDS, ...(cam.fitted ? DASHCAM_KINDS : [])];
   const mins = (sec) => `${Math.max(1, Math.round(sec / 60))} min`;
+  const speeding = (d.speeding ?? []).filter((s) => inTrip(s.t));
   const breaches = [
-    ...(d.escalatedThefts ?? []).map((x) => ({ t: x.t, key: 'theft', place: x.place ?? null, lat: null, lng: null,
+    ...(d.escalatedThefts ?? []).filter((x) => inTrip(x.t)).map((x) => ({ t: x.t, key: 'theft', place: x.place ?? null, lat: null, lng: null,
       detail: `${Math.round(x.litres)} L, confirmed on review` })),
-    ...(d.speeding ?? []).map((s) => ({ t: s.t, key: 'speed', lat: s.lat, lng: s.lng,
+    ...speeding.map((s) => ({ t: s.t, key: 'speed', lat: s.lat, lng: s.lng,
       detail: `${Math.round(s.peakKmh)} in ${Math.round(s.limitKmh)}, ${mins(s.durationSec)}${s.distanceM != null ? `, ${round1(s.distanceM / 1000)} km` : ''}` })),
-    ...(d.harsh ?? []).map((h) => ({ t: h.t, key: h.type === 'brake' ? 'brake' : 'accel', lat: h.lat, lng: h.lng,
+    ...(d.harsh ?? []).filter((h) => inTrip(h.t)).map((h) => ({ t: h.t, key: h.type === 'brake' ? 'brake' : 'accel', lat: h.lat, lng: h.lng,
       detail: h.speedKmh != null ? `at ${Math.round(h.speedKmh)} km/h` : null })),
-    ...(cam.fitted ? cam.alarms ?? [] : []).map((a) => ({ t: a.t, key: a.kind, lat: a.lat, lng: a.lng,
+    ...(cam.fitted ? cam.alarms ?? [] : []).filter((a) => inTrip(a.t)).map((a) => ({ t: a.t, key: a.kind, lat: a.lat, lng: a.lng,
       detail: [a.label, a.speed != null ? `at ${a.speed} km/h` : null].filter(Boolean).join(', ') })),
   ].map((b) => {
     const p = b.lat != null ? { lat: b.lat, lng: b.lng } : positionAt(track, b.t);
@@ -245,9 +301,9 @@ export function buildTripReport(d) {
   }).sort(byTime);
   const counts = Object.fromEntries(kinds.map((k) => [k.key, breaches.filter((b) => b.key === k.key).length]));
   const breachCap = capped(breaches, ROWS.breaches);
-  const overspeedMs = (d.speeding ?? []).reduce((a, s) => a + (s.durationSec ?? 0) * 1000, 0);
-  const measuredKm = (d.speeding ?? []).filter((s) => s.distanceM != null);
-  const overspeedKm = measuredKm.length ? round1(measuredKm.reduce((a, s) => a + s.distanceM, 0) / 1000) : (d.speeding?.length ? null : 0);
+  const overspeedMs = speeding.reduce((a, s) => a + (s.durationSec ?? 0) * 1000, 0);
+  const measuredKm = speeding.filter((s) => s.distanceM != null);
+  const overspeedKm = measuredKm.length ? round1(measuredKm.reduce((a, s) => a + s.distanceM, 0) / 1000) : (speeding.length ? null : 0);
 
   // ── geofence ──
   // Departure / arrival at the yard and destination first; then any other
@@ -255,10 +311,10 @@ export function buildTripReport(d) {
   // the same event as its milestone, so it is not listed twice.
   const edge = 60_000;
   const atEnds = (t) => { const p = positionAt(track, t); return where(null, p.lat, p.lng).at != null; };
-  const geoRows = [...milestones(d, track, w), ...(d.zones?.visits ?? []).filter((v) => !atEnds(v.enteredAt) && !atEnds(v.leftAt)).flatMap((v) => [
+  const geoRows = [...marks, ...(d.zones?.visits ?? []).filter((v) => !atEnds(v.enteredAt) && !atEnds(v.leftAt)).flatMap((v) => [
     v.enteredAt > w.from + edge ? { t: v.enteredAt, label: v.enforced ? 'Entered restricted zone' : 'Entered', zone: v.name, flag: v.enforced } : null,
     v.leftAt < w.to - edge ? { t: v.leftAt, label: 'Left', zone: v.name, flag: false } : null,
-  ])].filter(Boolean).sort(byTime);
+  ])].filter((g) => g && inTrip(g.t)).sort(byTime);
   const geoCap = capped(geoRows, ROWS.geo);
 
   // ── load ──
@@ -270,7 +326,7 @@ export function buildTripReport(d) {
   // each with the time since the one before. A weighing whose date is doubtful
   // at source (stamped before its own ticket) is printed but never measured
   // against, so it cannot produce a negative or a day-long gap.
-  const tickets = [...(d.weighments ?? [])].sort((a, b) => a.tokenAt - b.tokenAt);
+  const tickets = tripTickets(d.weighments ?? [], w);
   const weighings = tickets.flatMap((tk) => {
     const list = (tk.weighings ?? []).filter((x) => !x.doubtful).sort((a, b) => a.at - b.at);
     const odd = (tk.weighings ?? []).filter((x) => x.doubtful);
@@ -307,9 +363,12 @@ export function buildTripReport(d) {
     companyName: d.companyName ?? null,
     vehicle: { plate: d.vehicle.plate, type: d.vehicle.type ?? null, driver: D.driverName ?? null },
     window: w,
-    from: { name: d.yard?.name ?? null, at: D.dispatchedAt },
-    to: { name: d.dest?.name ?? D.destination ?? null, arrivedAt: d.arrivedAt ?? null },
-    toDestinationMs: d.arrivedAt != null ? d.arrivedAt - D.dispatchedAt : null,
+    // A dispatch's report, or one built from a day (api/dayReport): a whole
+    // day has no destination, a trip within it is named by where it went.
+    mode: d.mode === 'day' ? 'day' : 'trip',
+    from: { name: d.yard?.name ?? d.fromName ?? null, at: w.from },
+    to: { name: d.dest?.name ?? d.toName ?? D.destination ?? null, arrivedAt: w.arrived ? w.to : null },
+    toDestinationMs: w.arrived ? w.to - w.from : null,
     yard: d.yard ? { lat: d.yard.lat, lng: d.yard.lng } : null,
     dest: d.dest ? { lat: d.dest.lat, lng: d.dest.lng } : null,
     track: thin(track, SVG_POINTS).map((p) => [p[1], p[2]]),
@@ -332,7 +391,9 @@ export function buildTripReport(d) {
     stops,
     stopsTotal: allStops.length,
     fuel: { series, hasProbe: !!F.hasProbe, startL, endL, rows: fuelCap.rows, more: fuelCap.more, drainL: round1(drainL) },
-    day: d.day ?? { from: w.from, to: w.to },
+    // Metres above sea level along the trip (from the day series; may be empty).
+    altitude: thin((d.altitude ?? []).filter((p) => inTrip(p[0]) && Number.isFinite(p[1])), 300),
+    day: { from: w.from, to: w.to },
     breaches: { kinds, dashcam: { fitted: !!cam.fitted, complete: cam.complete !== false }, counts, total: breaches.length, rows: breachCap.rows, more: breachCap.more, overspeedMs, overspeedKm },
     geo: { rows: geoCap.rows, more: geoCap.more, timedOut: !!d.zones?.timedOut },
   };

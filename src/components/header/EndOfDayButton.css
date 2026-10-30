@@ -1,0 +1,24 @@
+.eod            { position: relative; flex-shrink: 0; }
+.eod-btn        { display: flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; color: #475569; background: #fff;
+                  border: 1px solid #e2e8f0; border-radius: 7px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+.eod-btn .ti    { font-size: 15px; color: #64748b; }
+.eod-btn:hover, .eod-btn--open { border-color: #cbd5e1; background: #f8fafc; color: #0f172a; }
+.eod-btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+.eod-pop        { position: absolute; top: calc(100% + 8px); left: 0; width: 280px; max-width: calc(100vw - 32px); z-index: 500;
+                  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.1);
+                  font-size: 12px; color: #334155; }
+.eod-title      { font-weight: 600; font-size: 13px; color: #0f172a; }
+.eod-org        { color: #64748b; margin: 2px 0 10px; }
+.eod-day        { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.eod-day input  { flex: 1; font: inherit; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 8px; }
+.eod-what       { margin: 10px 0; color: #64748b; line-height: 1.4; }
+.eod-go         { width: 100%; display: flex; justify-content: center; align-items: center; gap: 7px; font: inherit; font-weight: 600;
+                  color: #fff; background: #1e6f4e; border: 0; border-radius: 7px; padding: 8px; cursor: pointer; }
+.eod-go:hover:not(:disabled) { background: #173d2f; }
+.eod-go:disabled { opacity: .75; cursor: progress; }
+.eod-spin       { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: eod-spin .7s linear infinite; }
+@keyframes eod-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .eod-spin { animation-duration: 2s; } }
+.eod-err        { margin: 8px 0 0; color: #dc2626; }
+/* Narrow screens: the icon alone. */
+@media (max-width: 900px) { .eod-btn-word { display: none; } }

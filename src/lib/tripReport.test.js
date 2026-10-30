@@ -56,30 +56,31 @@ describe('buildTripReport', () => {
 
   it('measures distance and time from moving segments only', () => {
     expect(r.summary.distanceKm).toBeGreaterThan(10);
-    expect(r.summary.movingMs).toBe(110 * MIN);
+    // Moving up to arrival, the first fix inside the destination (T0+124).
+    expect(r.summary.movingMs).toBe(104 * MIN);
+    expect(r.summary.movingMs + r.summary.stoppedMs).toBe(r.toDestinationMs);
     expect(r.summary.maxKmh).toBe(45);
   });
 
-  it('finds stops of 5 minutes or more and names the destination', () => {
-    expect(r.stops).toHaveLength(2);
+  it('finds stops of 5 minutes or more on the way; the wait at the destination is after arrival', () => {
+    expect(r.stops).toHaveLength(1);
     expect(r.stops[0].remark).toBe('Unscheduled');
     expect(r.stops[0].ms).toBe(20 * MIN);
     expect(r.stops[0].flag).toBe(false);
-    expect(r.stops[1].place).toBe('NYAONDO');
-    expect(r.stops[1].remark).toBe('Destination');
   });
 
-  it('works out fuel used from the probe, less the drain', () => {
+
+  it('works out fuel used from the probe, less the drain, departure to arrival', () => {
     expect(r.fuel.startL).toBe(200);
-    expect(r.fuel.endL).toBe(150);
-    expect(r.summary.fuelUsedL).toBe(38);
+    expect(r.fuel.endL).toBe(180);            // the 150 L reading is after arrival
+    expect(r.summary.fuelUsedL).toBe(8);
     expect(r.fuel.rows[0]).toMatchObject({ kind: 'drain', label: 'Suspected theft', flag: true });
   });
 
-  it("counts the driver's day: escalated theft, harsh braking, overspeeding with time and distance, harsh acceleration", () => {
-    expect(r.breaches.counts).toEqual({ theft: 1, brake: 1, speed: 2, accel: 0 });
-    expect(r.breaches.overspeedMs).toBe(3 * MIN);
-    expect(r.breaches.overspeedKm).toBe(3);
+  it('counts conduct during the trip only: the theft and the second overspeed come after arrival', () => {
+    expect(r.breaches.counts).toEqual({ theft: 0, brake: 1, speed: 1, accel: 0 });
+    expect(r.breaches.overspeedMs).toBe(2 * MIN);
+    expect(r.breaches.overspeedKm).toBe(1.9);
     expect(BREACH_KINDS.map((k) => k.key)).toEqual(Object.keys(r.breaches.counts));
   });
 
@@ -96,12 +97,12 @@ describe('buildTripReport', () => {
     expect(r.geo.rows.map((g) => `${g.label} ${g.zone}`)).toEqual(['Departure Ndhiwa', 'Arrival NYAONDO']);
   });
 
-  it('marks the round trip back: departure, arrival, departure, arrival', () => {
+  it('leaves the journey back out: it is after arrival, outside the trip', () => {
     const back = [];
     const last = trackFixture().at(-1);
     for (let i = 1; i <= 30; i++) back.push([last[0] + i * 2 * MIN, dest.lat - (dest.lat - yard.lat) * (i / 30), yard.lng, 50, 1]);
     const t = buildTripReport(fixture({ track: [...trackFixture(), ...back], zones: { timedOut: false, visits: [] } }));
-    expect(t.geo.rows.map((g) => `${g.label} ${g.zone}`)).toEqual(['Departure Ndhiwa', 'Arrival NYAONDO', 'Departure NYAONDO', 'Arrival Ndhiwa']);
+    expect(t.geo.rows.map((g) => `${g.label} ${g.zone}`)).toEqual(['Departure Ndhiwa', 'Arrival NYAONDO']);
   });
 
   it('uses the declared load before any weighbridge ticket', () => {
@@ -161,5 +162,88 @@ describe('dashcam conduct and the map', () => {
     const html = renderTripReportHtml(buildTripReport(fixture({ map })), { logos: { rai: '', ogc: '' } });
     expect(html).toContain('<image href="data:image/png;base64,AAAA"');
     expect(html).toContain('OpenStreetMap');
+  });
+});
+
+describe('everything inside the trip (KCP 134P, 30 Oct 2026)', () => {
+  // Left the yard 2 min before the gate sign-out, arrived at 140 min, then sat
+  // at the destination for hours before the report was made.
+  const base = fixture();
+  const late = [];
+  const last = base.track.at(-1);
+  for (let i = 1; i <= 120; i++) late.push([last[0] + i * 2 * MIN, dest.lat, dest.lng, 0, 0]);   // 4 h parked at the destination
+  // The gate sign-out was recorded at T0+16, a few minutes after the truck
+  // had already crossed the yard edge (the fixture leaves the yard at T0+12).
+  const signedOut = T0 + 16 * MIN;
+  const d = fixture({
+    dispatch: { ...base.dispatch, dispatchedAt: signedOut },
+    track: [...base.track, ...late],
+    window: { from: T0, to: late.at(-1)[0], clipped: false },
+    harsh: [{ t: T0 - 300 * MIN, type: 'accel', lat: null, lng: null, speedKmh: 33 },     // 07:32, hours before the trip
+      { t: T0 + 100 * MIN, type: 'brake', lat: null, lng: null, speedKmh: 38 }],
+  });
+  const r = buildTripReport(d);
+
+  it('starts at the yard exit just before the sign-out and ends on arrival', () => {
+    expect(r.window.from).toBeLessThan(signedOut);
+    expect(r.window.from).toBeGreaterThanOrEqual(signedOut - 30 * MIN);
+    expect(r.geo.rows[0]).toMatchObject({ label: 'Departure', t: r.window.from });   // header and geofence agree
+    const arrival = r.geo.rows.find((g) => g.label === 'Arrival');
+    expect(r.window.to).toBe(arrival.t);                                             // header and geofence agree
+    expect(r.from.at).toBe(r.window.from);
+    expect(r.toDestinationMs).toBe(r.window.to - r.window.from);
+  });
+  it('moving time plus stopped time is the time taken', () => {
+    expect(r.summary.movingMs + r.summary.stoppedMs).toBe(r.toDestinationMs);
+    expect(r.summary.stoppedMs).toBeLessThan(r.toDestinationMs);
+  });
+  it('lists no stop after arrival', () => {
+    expect(r.stops.every((s) => s.t <= r.window.to && s.endT <= r.window.to)).toBe(true);
+  });
+  it('leaves out conduct from before departure', () => {
+    expect(r.breaches.counts.accel).toBe(0);
+    expect(r.breaches.rows.every((b) => b.t >= r.window.from && b.t <= r.window.to)).toBe(true);
+  });
+  it('every geofence row falls inside the trip', () => {
+    expect(r.geo.rows.length).toBeGreaterThan(0);
+    expect(r.geo.rows.every((g) => g.t >= r.window.from && g.t <= r.window.to)).toBe(true);
+  });
+  it('prints the trip window, not the day, on the page', () => {
+    const html = renderTripReportHtml(r, { logos: { rai: '', ogc: '' } });
+    expect(html).not.toContain('to end of trip');
+    expect(html).toContain('Level on arrival');
+    expect(html).toContain('B: arrival');
+  });
+  it('without an arrival, runs to now', () => {
+    const t = buildTripReport(fixture({ arrivedAt: null, dest: null }));
+    expect(t.window.to).toBe(fixture().window.to);
+    expect(t.to.arrivedAt).toBeNull();
+  });
+});
+
+describe('altitude and tag number', () => {
+  it('draws fuel and altitude on one graph, altitude inside the trip only', () => {
+    const altitude = Array.from({ length: 100 }, (_, i) => [T0 - 60 * MIN + i * 3 * MIN, 1500 + i * 2]);   // starts an hour before departure
+    const r = buildTripReport(fixture({ altitude }));
+    expect(r.altitude.length).toBeGreaterThan(10);
+    expect(r.altitude.every(([t]) => t >= r.window.from && t <= r.window.to)).toBe(true);
+    const html = renderTripReportHtml(r, { logos: { rai: '', ogc: '' } });
+    expect(html).toContain('Fuel level (litres, left)');
+    expect(html).toContain('Altitude (m above sea level, right)');
+    expect(html.match(/class="chart/g)).toHaveLength(1);
+  });
+  it('draws altitude alone when the unit has no fuel probe', () => {
+    const altitude = Array.from({ length: 50 }, (_, i) => [T0 + i * 2 * MIN, 1500 + i]);
+    const r = buildTripReport(fixture({ altitude, fuel: { hasProbe: false, series: [], fillings: [], drains: [] } }));
+    expect(renderTripReportHtml(r, { logos: { rai: '', ogc: '' } })).toContain('Altitude (m above sea level)');
+  });
+  it('leaves the altitude chart out when there are no readings', () => {
+    const html = renderTripReportHtml(buildTripReport(fixture()), { logos: { rai: '', ogc: '' } });
+    expect(html).not.toContain('Altitude (m above sea level)');
+  });
+  it('calls the reference the tag number', () => {
+    const html = renderTripReportHtml(buildTripReport(fixture()), { logos: { rai: '', ogc: '' } });
+    expect(html).toContain('Tag number');
+    expect(html).not.toContain('Dispatch no.');
   });
 });
