@@ -106,32 +106,83 @@ function routeOnTiles(r, W, H, PAD) {
 }
 
 /**
- * Fuel level over the trip. The plot stretches to whatever height the left
- * column leaves (the route column is shorter than stops + fuel + weighbridge),
- * so lines are drawn in a 0–1000 box with non-scaling strokes and the labels
- * and drain dots are HTML placed by percentage.
+ * A line over the trip: fuel level, altitude. The plot stretches to whatever
+ * height the left column leaves (the route column is shorter than stops +
+ * fuel + weighbridge), so lines are drawn in a 0–1000 box with non-scaling
+ * strokes and the labels and drain dots are HTML placed by percentage.
  */
-function fuelSvg(f, w) {
-  const pts = f.series;
+function lineChart(pts, w, { title, step = 5, minPad = 5, floor = 0, marks = [] }) {
   if (pts.length < 2) return '';
   const vals = pts.map((p) => p[1]);
   let lo = Math.min(...vals), hi = Math.max(...vals);
-  const pad = Math.max(5, (hi - lo) * 0.12); lo = Math.max(0, lo - pad); hi += pad;
+  const pad = Math.max(minPad, (hi - lo) * 0.12); lo = floor != null ? Math.max(floor, lo - pad) : lo - pad; hi += pad;
   const X = (t) => ((t - w.from) / Math.max(1, w.to - w.from)) * 100;
   const Y = (v) => ((hi - v) / (hi - lo)) * 100;
   const p = (n) => n.toFixed(2);
   const line = pts.map(([t, v]) => `${p(X(t) * 10)},${p(Y(v) * 10)}`).join(' ');
-  const ticks = [lo + (hi - lo) * 0.2, lo + (hi - lo) * 0.5, lo + (hi - lo) * 0.8].map((v) => Math.round(v / 5) * 5);
+  const ticks = [lo + (hi - lo) * 0.2, lo + (hi - lo) * 0.5, lo + (hi - lo) * 0.8].map((v) => Math.round(v / step) * step);
   const grid = ticks.map((v) => `<line x1="0" x2="1000" y1="${p(Y(v) * 10)}" y2="${p(Y(v) * 10)}" class="gl"/>`).join('');
-  const yl = ticks.map((v) => `<span class="ax yl" style="top:${p(Y(v))}%">${v}</span>`).join('');
+  const yl = ticks.map((v) => `<span class="ax yl" style="top:${p(Y(v))}%">${num(v)}</span>`).join('');
   const multi = dayOf.format(w.from) !== dayOf.format(w.to);
   const fmt = multi ? fmtDayHM : fmtHM;
   const xl = [0, 0.5, 1].map((k) => `<span class="ax xl k${k * 2}" style="left:${k * 100}%">${fmt.format(w.from + (w.to - w.from) * k)}</span>`).join('');
-  const marks = f.rows.filter((r) => r.kind === 'drain').map((r) => {
-    const near = pts.reduce((b, q) => (Math.abs(q[0] - r.t) < Math.abs(b[0] - r.t) ? q : b), pts[0]);
-    return `<i class="fd" style="left:${p(X(r.t))}%;top:${p(Y(near[1]))}%"></i>`;
+  const dots = marks.map((t) => {
+    const near = pts.reduce((b, q) => (Math.abs(q[0] - t) < Math.abs(b[0] - t) ? q : b), pts[0]);
+    return `<i class="fd" style="left:${p(X(t))}%;top:${p(Y(near[1]))}%"></i>`;
   }).join('');
-  return `<div class="sub">Fuel level (litres)</div><div class="chart"><div class="pa"><svg viewBox="0 0 1000 1000" preserveAspectRatio="none">${grid}<line x1="0" x2="1000" y1="1000" y2="1000" class="axl"/><polyline points="${line}" class="fl"/></svg>${marks}${yl}${xl}</div></div>`;
+  return `<div class="sub">${title}</div><div class="chart"><div class="pa"><svg viewBox="0 0 1000 1000" preserveAspectRatio="none">${grid}<line x1="0" x2="1000" y1="1000" y2="1000" class="axl"/><polyline points="${line}" class="fl"/></svg>${dots}${yl}${xl}</div></div>`;
+}
+
+/** Fuel level over the trip, drains marked. */
+function fuelSvg(f, w) {
+  return lineChart(f.series, w, { title: 'Fuel level (litres)', marks: f.rows.filter((r) => r.kind === 'drain').map((r) => r.t) });
+}
+
+/** Altitude over the trip, metres above sea level: climbs explain a higher burn. */
+function altitudeSvg(alt, w) {
+  return lineChart(alt ?? [], w, { title: 'Altitude (m above sea level)', step: 10, minPad: 15, floor: null });
+}
+
+/** A value scale: padded range, three round ticks, and the 0–100 position of a value. */
+function scale(vals, { step, minPad, floor }) {
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max(minPad, (hi - lo) * 0.12);
+  lo = floor != null ? Math.max(floor, lo - pad) : lo - pad; hi += pad;
+  const Y = (v) => ((hi - v) / (hi - lo)) * 100;
+  const ticks = [0.2, 0.5, 0.8].map((k) => Math.round((lo + (hi - lo) * k) / step) * step);
+  return { Y, ticks };
+}
+
+/**
+ * Fuel and altitude on one graph (operator, 2026-10-30): fuel in litres on the
+ * left scale as the line, altitude in metres on the right scale as a shaded
+ * profile behind it, so a fall in the tank can be read against a climb. With
+ * only one of the two, that one is drawn alone.
+ */
+function fuelAltitudeSvg(f, alt, w) {
+  const fuel = f.series ?? [];
+  const terrain = alt ?? [];
+  if (terrain.length < 2) return fuelSvg(f, w);
+  if (fuel.length < 2) return altitudeSvg(terrain, w);
+  const X = (t) => ((t - w.from) / Math.max(1, w.to - w.from)) * 100;
+  const p = (n) => n.toFixed(2);
+  const F = scale(fuel.map((q) => q[1]), { step: 5, minPad: 5, floor: 0 });
+  const A = scale(terrain.map((q) => q[1]), { step: 10, minPad: 15, floor: null });
+  const fuelLine = fuel.map(([t, v]) => `${p(X(t) * 10)},${p(F.Y(v) * 10)}`).join(' ');
+  const altLine = terrain.map(([t, v]) => `${p(X(t) * 10)},${p(A.Y(v) * 10)}`).join(' ');
+  const altArea = `${p(X(terrain[0][0]) * 10)},1000 ${altLine} ${p(X(terrain[terrain.length - 1][0]) * 10)},1000`;
+  const grid = F.ticks.map((v) => `<line x1="0" x2="1000" y1="${p(F.Y(v) * 10)}" y2="${p(F.Y(v) * 10)}" class="gl"/>`).join('');
+  const yl = F.ticks.map((v) => `<span class="ax yl" style="top:${p(F.Y(v))}%">${num(v)}</span>`).join('');
+  const yr = A.ticks.map((v) => `<span class="ax yr" style="top:${p(A.Y(v))}%">${num(v)}</span>`).join('');
+  const multi = dayOf.format(w.from) !== dayOf.format(w.to);
+  const fmt = multi ? fmtDayHM : fmtHM;
+  const xl = [0, 0.5, 1].map((k) => `<span class="ax xl k${k * 2}" style="left:${k * 100}%">${fmt.format(w.from + (w.to - w.from) * k)}</span>`).join('');
+  const dots = f.rows.filter((r) => r.kind === 'drain').map((r) => {
+    const near = fuel.reduce((b, q) => (Math.abs(q[0] - r.t) < Math.abs(b[0] - r.t) ? q : b), fuel[0]);
+    return `<i class="fd" style="left:${p(X(r.t))}%;top:${p(F.Y(near[1]))}%"></i>`;
+  }).join('');
+  return `<div class="sub dualkey"><span><i class="kf"></i>Fuel level (litres, left)</span><span><i class="ka"></i>Altitude (m above sea level, right)</span></div>
+    <div class="chart dual"><div class="pa"><svg viewBox="0 0 1000 1000" preserveAspectRatio="none"><polygon points="${altArea}" class="alt"/><polyline points="${altLine}" class="altl"/>${grid}<line x1="0" x2="1000" y1="1000" y2="1000" class="axl"/><polyline points="${fuelLine}" class="fl"/></svg>${dots}${yl}${yr}${xl}</div></div>`;
 }
 
 const CSS = `
@@ -192,6 +243,11 @@ html[data-theme=dark] .tile { filter:invert(1) brightness(.78) contrast(.9) } ht
 .chart .ax { position:absolute; font-size:5.6pt; line-height:1; color:var(--mut); white-space:nowrap }
 .chart .yl { right:100%; margin-right:1mm; transform:translateY(-50%) } .chart .xl { top:100%; margin-top:.8mm }
 .chart .xl.k1 { transform:translateX(-50%) } .chart .xl.k2 { transform:translateX(-100%) }
+.chart.dual .pa { right:9mm }
+.chart .yr { left:100%; margin-left:1mm; transform:translateY(-50%) }
+.chart .alt { fill:var(--soft); stroke:none; opacity:.85 } .chart .altl { fill:none; stroke:var(--mut); stroke-width:.7; stroke-dasharray:3 2 }
+.dualkey { display:flex; gap:4mm } .dualkey i { display:inline-block; vertical-align:middle; margin-right:1.2mm }
+.dualkey .kf { width:4mm; border-top:1.4px solid var(--route) } .dualkey .ka { width:3.4mm; height:2.2mm; background:var(--soft); border-top:.8px dashed var(--mut) }
 .chart .fd { position:absolute; width:1.4mm; height:1.4mm; margin:-.7mm 0 0 -.7mm; border-radius:50%; background:var(--flag) }
 .cnt th { font-weight:400; font-size:7.2pt; color:var(--mut); border:.6pt solid var(--rule); padding:.6mm 1mm; text-align:center; background:var(--shade) }
 .cnt td { border:.6pt solid var(--rule); text-align:center; font-weight:700; font-size:10pt; padding:.6mm 0 }
@@ -232,29 +288,29 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
     ['Fuel used', S.fuelUsedL != null ? `${num(S.fuelUsedL, 1)} L` : dash],
   ].map(([k, v]) => `<td><span>${k}</span>${v}</td>`).join('');
 
-  // Conduct and tickets: from the start of the departure day to the end of the trip.
-  const span = `${fmtDayHM.format(r.day.from)} to end of trip, ${fmtDayHM.format(r.day.to)}`;
+  // Conduct, like everything else on the page, is the trip: departure to arrival.
+  const span = `${fmtDayHM.format(r.window.from)} to ${r.to.arrivedAt != null ? 'arrival' : r.mode === 'day' ? 'end' : 'now'}, ${fmtDayHM.format(r.window.to)}`;
 
   // ── load details: always printed, what the dispatch says and what was weighed ──
   const L = r.load;
   const t2 = (kg) => (kg != null ? `${num(kg / 1000, 2)} t` : dash);
   const loadDetails = `<table class="cells"><tr>${[
     ['Cargo', esc(L.cargo ?? dash)],
-    ['Dispatch no.', esc(L.ref ?? dash)],
+    ['Tag number', esc(L.ref ?? dash)],
     ['Destination', esc(r.to.name ?? dash)],
     ['Bags', L.bags ? num(L.bags) : dash],
     ['Declared tonnage', t2(L.declaredKg)],
     ['Weighed net', t2(L.weighedKg)],
   ].map(([k, v]) => `<td><span>${k}</span>${v}</td>`).join('')}</tr></table>`;
 
-  // ── weighbridge: every weighing that day, compact to sit in the right column ──
+  // ── weighbridge: the loading ticket and the trip's weighings, compact for the right column ──
   const WB = r.weighbridge;
   const weighbridge = WB.rows.length
     ? `<table class="kv"><tr><th>Weighbridge</th><td>${esc(WB.bridges.join(', ') || dash)}</td></tr><tr><th>Tickets · weighings</th><td>${WB.tickets} · ${WB.weighings}</td></tr><tr><th>Net tonnage</th><td>${t2(WB.netKg)}</td></tr></table>
       <table class="lst" style="margin-top:1mm"><colgroup><col style="width:18mm"><col><col style="width:13mm"><col style="width:22mm"><col style="width:17mm"></colgroup><tr><th>Ticket</th><th>Weighing</th><th class="r">Weight</th><th>Time</th><th>Since prev.</th></tr>${
       WB.rows.map((x) => `<tr><td class="nw">${x.sameTicketAsPrev ? '' : esc(x.ticket)}</td><td title="${esc(x.bridge ?? '')}">${esc(x.kind)}</td><td class="r">${num(x.kg)}</td><td class="nw${x.doubtful ? ' flag' : ''}"${x.doubtful ? ' title="Stamped before its ticket was raised; the weighbridge clock is wrong"' : ''}>${fmtDayHM.format(x.at)}</td><td class="nw">${x.sinceMs != null ? dur(x.sinceMs) : dash}</td></tr>`).join('')}</table>${
       WB.more ? `<div class="more">+ ${WB.more} more weighings.</div>` : ''}`
-    : '<div class="none">No weighbridge ticket from the start of the day to the end of the trip.</div>';
+    : '<div class="none">No loading ticket and no weighing during the trip.</div>';
 
   // ── stops ──
   const ST = (t) => (t == null ? dash : multi ? shortDayHM(t) : fmtHM.format(t));
@@ -269,7 +325,7 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
   const fuelRows = [
     F.startL != null ? `<tr><td class="nw">${T(w.from)}</td><td>Start level</td><td></td><td class="r"></td><td class="r">${num(F.startL)} L</td></tr>` : '',
     ...F.rows.map((x) => `<tr><td class="nw">${T(x.t)}</td><td${x.flag ? ' class="flag"' : ''}>${x.label}</td><td class="pl">${place(x)}</td><td class="r">${x.litres != null ? `${x.kind === 'refill' ? '+' : '−'}${num(x.litres)} L` : dash}</td><td class="r">${x.after != null ? `${num(x.after)} L` : ''}</td></tr>`),
-    F.endL != null ? `<tr><td class="nw">${T(w.to)}</td><td>Level now</td><td></td><td class="r"></td><td class="r">${num(F.endL)} L</td></tr>` : '',
+    F.endL != null ? `<tr><td class="nw">${T(w.to)}</td><td>${r.to.arrivedAt != null ? 'Level on arrival' : r.mode === 'day' ? 'Level at end' : 'Level now'}</td><td></td><td class="r"></td><td class="r">${num(F.endL)} L</td></tr>` : '',
   ].join('');
   const fuel = !F.hasProbe && !F.rows.length
     ? '<div class="none">No fuel level sensor readings for this trip.</div>'
@@ -277,7 +333,7 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
       F.more ? `<div class="more">+ ${F.more} more fuel events.</div>` : ''}${
       F.drainL > 0 ? `<div class="more"><span class="flag">Note:</span> ${num(F.drainL)} L recorded as drained during this trip.</div>` : ''}`;
 
-  // ── driver conduct, for the day ──
+  // ── driver conduct, during the trip ──
   const B = r.breaches;
   const dayT = (t) => fmtDayHM.format(t);
   const cam = B.dashcam;
@@ -314,10 +370,16 @@ export function renderTripReportHtml(r, { theme = 'light', logos, toolbar = true
       ? '<div class="none">Zone crossings could not be read in time for this report.</div>'
       : '<div class="none">No geofence alerts during this trip.</div>';
 
+  const day = r.mode === 'day';
   const arrived = r.to.arrivedAt ? `${r.to.name ?? dash}, arrived ${T(r.to.arrivedAt)}` : `${r.to.name ?? dash} (not yet arrived)`;
   const taken = r.toDestinationMs != null ? dur(r.toDestinationMs) : `${dur(S.durationMs)} so far`;
   const tripDate = w.from ? fmtDate.format(w.from) : dash;
-  const title = `Trip Report ${r.vehicle.plate} ${dayOf.format(w.from)}`;
+  const title = `${day ? 'Day' : 'Trip'} Report ${r.vehicle.plate} ${dayOf.format(w.from)}`;
+  // A whole day has no departure or destination: the right column says which
+  // stretch of the day the page covers instead.
+  const right = day
+    ? [['Period', `${tripDate}, ${fmtHM.format(w.from)} to ${fmtHM.format(w.to)}`], ['', ''], ['', '']]
+    : [['From', `${esc(r.from.name ?? dash)}, departed ${T(r.from.at)}`], ['To', esc(arrived)], ['Time taken', taken]];
 
   const bar = toolbar ? `<div class="bar"><b>${esc(title)}</b>
     <button type="button" data-theme-set="light" aria-pressed="${theme === 'light'}">Light</button>
@@ -336,14 +398,14 @@ ${bar}
 <div class="page">
 <div class="lh"><img class="rai" src="${logos.rai}" alt="RAI Group"><img class="ogc" src="${logos.ogc}" alt="Off-Grid Consulting"></div>
 <div class="body">
-  <div class="title"><h1>TRIP REPORT</h1><div class="ref">Report no. <b>${esc(r.reportNo)}</b> &nbsp;·&nbsp; Trip date <b>${tripDate}</b></div></div>
+  <div class="title"><h1>${day ? 'DAY REPORT' : 'TRIP REPORT'}</h1><div class="ref">Report no. <b>${esc(r.reportNo)}</b> &nbsp;·&nbsp; ${day ? 'Date' : 'Trip date'} <b>${tripDate}</b></div></div>
   <table class="info"><tr>
-    <th>Vehicle</th><td>${esc(r.vehicle.plate)}${r.vehicle.type ? `, ${esc(r.vehicle.type)}` : ''}</td><th>From</th><td>${esc(r.from.name ?? dash)}, departed ${T(r.from.at)}</td></tr><tr>
-    <th>Driver</th><td>${esc(r.vehicle.driver ?? 'Not recorded')}</td><th>To</th><td>${esc(arrived)}</td></tr><tr>
-    <th>Fleet</th><td>${esc(r.companyName ?? dash)}</td><th>Time taken</th><td>${taken}</td></tr></table>
+    <th>Vehicle</th><td>${esc(r.vehicle.plate)}${r.vehicle.type ? `, ${esc(r.vehicle.type)}` : ''}</td><th>${right[0][0]}</th><td>${right[0][1]}</td></tr><tr>
+    <th>Driver</th><td>${esc(r.vehicle.driver ?? 'Not recorded')}</td><th>${right[1][0]}</th><td>${right[1][1]}</td></tr><tr>
+    <th>Fleet</th><td>${esc(r.companyName ?? dash)}</td><th>${right[2][0]}</th><td>${right[2][1]}</td></tr></table>
   ${r.window.clipped ? '<div class="more">This dispatch is older than 7 days; the report covers its last 7 days.</div>' : ''}
 
-  <h2>1. Trip summary <small>${T(w.from)} to ${T(w.to)}</small></h2>
+  <h2>1. ${day ? 'Day' : 'Trip'} summary <small>${T(w.from)} to ${T(w.to)}</small></h2>
   <table class="cells"><tr>${summary}</tr></table>
 
   <h2>2. Load details</h2>
@@ -351,13 +413,13 @@ ${bar}
 
   <div class="two w">
     <div class="lcol"><h2>3. Route</h2>${routeSvg(r)}
-      <div class="cap">A: departure &nbsp; B: latest position</div>
-      ${fuelSvg(r.fuel, w)}</div>
+      <div class="cap">${r.mode === 'day' ? 'A: first fix &nbsp; B: last fix' : `A: departure &nbsp; B: ${r.to.arrivedAt != null ? 'arrival' : 'latest position'}`}</div>
+      ${fuelAltitudeSvg(r.fuel, r.altitude, w)}</div>
     <div><h2>4. Stops <small>Stopped ${dur(S.stoppedMs)}${S.idleMs != null ? ` · idling ${dur(S.idleMs)}` : ''}</small></h2>
       ${stops}
       <h2>5. Fuel <small>Used on trip: ${S.fuelUsedL != null ? `${num(S.fuelUsedL, 1)} L` : dash}</small></h2>
       ${fuel}
-      <h2>6. Weighbridge <small>Day start to end of trip</small></h2>
+      <h2>6. Weighbridge <small>Loading ticket and weighings during the trip</small></h2>
       ${weighbridge}
     </div>
   </div>

@@ -6,6 +6,7 @@
 
 import { apiFetch } from "../services/api";
 import { buildTripReport } from "../lib/tripReport";
+import { loadDay } from "../lib/vehicleDay";
 import { renderTripReportHtml } from "../lib/tripReportHtml";
 import raiLogo from "../assets/rai-group-logo.jpeg";
 import ogcLogo from "../assets/ogc-monitoring-logo.png";
@@ -17,11 +18,37 @@ const notice = (text) => `<!doctype html><html><head><meta charset="utf-8"><titl
 <body style="margin:0;background:#8a8f96;font:14px 'Segoe UI',Arial,sans-serif;color:#1f2328">
 <p style="margin:56px auto;max-width:520px;background:#fff;padding:20px 24px;border-radius:6px">${esc(text)}</p></body></html>`;
 
+const FLEET_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" });
+
+/**
+ * Altitude over the window, [t, metres] — the trip-report route does not carry
+ * it, the vehicle's day series (telemetry/day, the Fuel Report's altitude line)
+ * does. At most a week of days; a day that fails is simply missing.
+ */
+async function altitudeFor(orgId, vehicleId, w) {
+  const days = [];
+  for (let t = w.from; days.length < 8; t += 86_400_000) {
+    const d = FLEET_DAY.format(t);
+    if (!days.includes(d)) days.push(d);
+    if (d >= FLEET_DAY.format(w.to)) break;
+  }
+  const out = [];
+  for (const day of days) {
+    const r = await loadDay(orgId, vehicleId, day).catch(() => null);
+    for (const p of r?.pings ?? []) {
+      if (Number.isFinite(p.altitudeM) && p.t >= w.from && p.t <= w.to) out.push([p.t, p.altitudeM]);
+    }
+  }
+  return out;
+}
+
 /** The ingredients from the server; `dispatch` is a dispatch externalId, or the vehicle's latest. */
 export async function getTripReportData({ orgId, vehicleId, dispatch }) {
   const q = dispatch ? `?dispatch=${encodeURIComponent(dispatch)}` : "";
   const res = await apiFetch(`/api/v1/organisations/${orgId}/vehicles/${encodeURIComponent(vehicleId)}/trip-report${q}`);
-  return res.data ?? null;
+  const data = res.data ?? null;
+  if (data?.window && !data.altitude) data.altitude = await altitudeFor(orgId, vehicleId, data.window).catch(() => []);
+  return data;
 }
 
 /** Call from a click handler. Resolves once the report is in the window, or the reason is. */
@@ -49,6 +76,14 @@ export async function openTripReport({ orgId, vehicleId, dispatch, theme = "ligh
 export async function downloadTripReport({ orgId, vehicleId, dispatch }) {
   const data = await getTripReportData({ orgId, vehicleId, dispatch });
   if (!data) throw new Error("No trip data came back.");
+  await downloadReportPdf(data);
+}
+
+/**
+ * Report data (the trip-report endpoint's shape, or one built from a day by
+ * api/dayReport) laid out on the letterhead and saved as a one-page PDF.
+ */
+export async function downloadReportPdf(data) {
   const r = buildTripReport(data);
   const html = renderTripReportHtml(r, { theme: "light", toolbar: false, logos: { rai: abs(raiLogo), ogc: abs(ogcLogo) } });
 
@@ -73,7 +108,8 @@ export async function downloadTripReport({ orgId, vehicleId, dispatch }) {
     const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
     pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
     const day = new Date(r.window.from).toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
-    pdf.save(`Trip report ${r.vehicle.plate} ${day}.pdf`);
+    const hm = r.mode === "day" ? "" : ` ${new Date(r.window.from).toLocaleTimeString("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", "")}`;
+    pdf.save(`${r.mode === "day" ? "Day" : "Trip"} report ${r.vehicle.plate} ${day}${hm}.pdf`);
   } finally {
     frame.remove();
   }

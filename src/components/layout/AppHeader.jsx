@@ -14,6 +14,7 @@ import StatCarousel from '../header/StatCarousel';
 import LiveFeed from './LiveFeed';
 import { FuelFollowUpHost } from '../body/FuelFollowUp';
 import FilterStrip from '../header/FilterStrip';
+import EndOfDayButton from '../header/EndOfDayButton';
 import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
@@ -361,6 +362,9 @@ export default function AppHeader() {
             </div>
           )}
         </div>
+
+        {/* End-of-day report for this organisation (operator, 2026-10-30). */}
+        {can('analytics:read') && <EndOfDayButton company={activeCompany} />}
 
         {/* No search box here since 2026-10-07: vehicle, driver and place search
             live in the map's tool rail (MapToolRail), beside the sidebar. */}
