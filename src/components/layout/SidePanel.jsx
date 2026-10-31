@@ -62,7 +62,7 @@ export function withShiftReport(items) {
   return at < 0 ? [...items, row] : [...items.slice(0, at), row, ...items.slice(at)];
 }
 
-/** Downloads the end-of-shift report (06:00 to now), which the server makes. */
+/** Downloads the end-of-shift report (today from midnight up to now), which the server makes. */
 function useEndOfShiftReport(orgId) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -81,7 +81,7 @@ function useEndOfShiftReport(orgId) {
   return {
     busy, run,
     label: busy ? 'Making the report…' : error ? 'Could not make the report' : 'End of shift report',
-    title: error ? `The report could not be made: ${error}` : 'Download the end-of-shift report: 06:00 to now',
+    title: error ? `The report could not be made: ${error}` : 'Download the end-of-shift report: today from midnight up to now',
   };
 }
 
