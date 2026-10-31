@@ -1,6 +1,6 @@
-// The end-of-shift report: 06:00 to now, for one organisation. The server
-// gathers the shift, builds the report and draws the PDF (fleet-server
-// reports/end-of-shift); this only asks for it and saves it.
+// The end-of-shift report: today from midnight (Nairobi) up to now, for one
+// organisation. The server gathers the shift, builds the report and draws the
+// PDF (fleet-server reports/end-of-shift); this only asks for it and saves it.
 
 import { apiFetchBlob } from "../services/api";
 import { saveFile } from "./tripReport";
