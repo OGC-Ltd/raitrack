@@ -17,7 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sseUrl } from '../services/api'
 import { fetchSnapshot } from '../services/snapshot'
 import { resolveOrgId } from '../api/org'
-import { mapSnapshotVehicle, applyLiveUpdate, applyDispatchUpdate, applyConnectionRefresh } from '../lib/vehicleMap'
+import { mapSnapshotVehicle, applyLiveUpdate, applyDispatchUpdate, applyConnectionRefresh, applyFuelIncident } from '../lib/vehicleMap'
 import { readCache, writeCache } from '../services/cache'
 import { repairsChanged } from '../api/repairs'
 import { dismissIncident } from '../lib/fuelDismissals'
@@ -339,6 +339,17 @@ export function useFleetLive(companyId, { keepFeed = false } = {}) {
         if (data?.incidentId) dismissIncident(data.incidentId)
       } catch { /* ignore malformed frame */ }
     })
+    /* A unit's open fuel incident changed on the server: a theft raised,
+       retracted, reviewed or aged out (fleet-server fleet-snapshot.cache).
+       The snapshot is the only other place this arrives, and it is read once
+       per page load, so without this the unit stayed as it was — and the
+       CRITICAL count with it — until a reload. */
+    es.addEventListener('fuel_incident', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data?.vehicleId) queue(data.vehicleId, (v) => applyFuelIncident(v, data.fuelIncident))
+      } catch { /* ignore malformed frame */ }
+    })
     /* A follow-up on a deleted fuel alert opened, changed hands or was decided
        (lib/fuelFollowUps). The frame only names it; readers re-read. */
     es.addEventListener('fuel_followup', () => { followUpsChanged() })
@@ -384,8 +395,10 @@ export function useFleetLive(companyId, { keepFeed = false } = {}) {
     // Connection verdicts do NOT arrive on the stream for the units that
     // matter most: a position frame is sent only when a fix time advances, so a
     // parked unit's ONLINE/OFFLINE would freeze at page load. Re-read the
-    // snapshot on a slow timer and take the verdict from it, nothing else —
-    // never its positions, which the stream has since overtaken.
+    // snapshot on a slow timer and take the verdict from it, and the open fuel
+    // incident (a server verdict too, and the backstop for a `fuel_incident`
+    // missed during a reconnect) — never its positions, which the stream has
+    // since overtaken.
     const connTimer = setInterval(() => {
       fetchSnapshot(orgId)
         .then((res) => {
