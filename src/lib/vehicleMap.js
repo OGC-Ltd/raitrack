@@ -1235,10 +1235,20 @@ export function mapSnapshotVehicle(v) {
  */
 export function applyConnectionRefresh(existing, row) {
   const connectionOnline = row?.connectionOnline ?? null
-  if (connectionOnline === existing.connectionOnline) return existing
+  // The open fuel incident is taken from the row as well. Unlike position it
+  // is the SERVER's verdict, never something a newer frame could overtake, and
+  // the snapshot is the only place it is decided — so without this a theft
+  // raised after page load never turned its unit red or moved CRITICAL until
+  // a reload. Rows from an older server without the field leave it alone.
+  const fuelIncident = row && 'fuelIncident' in row
+    ? (isTheftIncident(row.fuelIncident) ? row.fuelIncident : null)
+    : existing.fuelIncident ?? null
+  const incidentSame = sameIncident(fuelIncident, existing.fuelIncident)
+  if (connectionOnline === existing.connectionOnline && incidentSame) return existing
   return {
     ...existing,
     connectionOnline,
+    fuelIncident: incidentSame ? existing.fuelIncident : fuelIncident,
     /* The running-evidence fields come off `existing`, not off `row`: this
        refresh is connection-only by design (see the note above), so the
        freshest thing we hold about ignition and motion is still the frame the
@@ -1250,19 +1260,46 @@ export function applyConnectionRefresh(existing, row) {
       movement: existing.movement,
       capturedAtMs: existing.capturedAtMs,
     }),
-    status: deriveStatus({
-      speedKmh: existing.speed,
-      flags: { overspeeding: existing.status === 'speeding', fuelInconsistency: existing.status === 'theft' },
-      movement: existing.movement,
-      connectionOnline,
-      engineOn: existing.engine === 'on',
-      capturedAtMs: existing.capturedAtMs,
-      // Carried from the snapshot: the limit follows the machine TYPE, which
-      // does not change mid-session, so a live update must not silently drop
-      // back to the fallback and re-grade the unit against 80.
-      speedLimitKmh: existing.speedLimit,
-    }),
+    status: statusWithIncident(existing, connectionOnline, fuelIncident),
   }
+}
+
+/**
+ * A unit's open fuel incident changed on the server (`fuel_incident` on the
+ * stream: raised, retracted, reviewed or aged out). Applied the way the
+ * snapshot applies it, so the marker, the card and the CRITICAL count move
+ * together the moment it happens rather than on the next page load.
+ */
+export function applyFuelIncident(existing, incident) {
+  const fuelIncident = isTheftIncident(incident) ? incident : null
+  if (sameIncident(fuelIncident, existing.fuelIncident)) return existing
+  return {
+    ...existing,
+    fuelIncident,
+    status: statusWithIncident(existing, existing.connectionOnline, fuelIncident),
+  }
+}
+
+/** Same incident, same verdict: nothing to redraw. */
+function sameIncident(a, b) {
+  if (a == null || b == null) return a == b
+  return a === b || JSON.stringify(a) === JSON.stringify(b)
+}
+
+/** `existing`'s status again, with this connection verdict and incident. */
+function statusWithIncident(existing, connectionOnline, fuelIncident) {
+  return deriveStatus({
+    speedKmh: existing.speed,
+    flags: { overspeeding: existing.status === 'speeding', fuelInconsistency: fuelIncident != null },
+    movement: existing.movement,
+    connectionOnline,
+    engineOn: existing.engine === 'on',
+    capturedAtMs: existing.capturedAtMs,
+    // Carried from the snapshot: the limit follows the machine TYPE, which
+    // does not change mid-session, so a live update must not silently drop
+    // back to the fallback and re-grade the unit against 80.
+    speedLimitKmh: existing.speedLimit,
+  })
 }
 
 /**
