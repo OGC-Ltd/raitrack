@@ -137,17 +137,14 @@ export function addSummaryCards(doc, cards) {
 
 // `accentColor` accepted for call-site compatibility; the template's tables
 // use faint uppercase heads and hairline row rules instead of colored fills.
-// `columnStyles` and `fontSize` are optional, for a wide table that needs its
-// first columns kept on one line (the end-of-day safety table).
-export function addTable(doc, { head, body, columnStyles, fontSize = 8.5 }) {
+export function addTable(doc, { head, body }) {
   const pageW = doc.internal.pageSize.getWidth();
   autoTable(doc, {
     startY: doc._cursorY,
     head: [head.map((h) => String(h).toUpperCase())],
     body,
     theme: "plain",
-    styles: { font: "helvetica", fontSize, textColor: C.ink, cellPadding: { top: 6, bottom: 6, left: 6, right: 6 } },
-    ...(columnStyles ? { columnStyles } : {}),
+    styles: { font: "helvetica", fontSize: 8.5, textColor: C.ink, cellPadding: { top: 6, bottom: 6, left: 6, right: 6 } },
     headStyles: { fillColor: false, textColor: C.faint, fontStyle: "bold", fontSize: 6.8 },
     margin: { left: MARGIN, right: MARGIN, top: MARGIN, bottom: FOOTER_H },
     // Pages the table itself adds still need the cream ground.

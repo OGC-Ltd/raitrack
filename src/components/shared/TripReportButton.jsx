@@ -1,10 +1,10 @@
 // Downloads the trip report as a PDF (api/tripReport) for a dispatch, or for
-// the unit's latest dispatch when `report.dispatch` is null. A spinner sits on
-// the button while it is made; nothing opens.
+// the unit's latest dispatch when `report.dispatch` is null. The server makes
+// the report; a spinner sits on the button while it does, and nothing opens.
 //
 // Beside it, a calendar (DayTripsPicker): pick a day, see that day's trips,
 // and download the report for one of them or for the whole day
-// (api/dayReport, built from what Playback already loads).
+// (api/dayReport; the server cuts the day into trips and makes the PDF).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
