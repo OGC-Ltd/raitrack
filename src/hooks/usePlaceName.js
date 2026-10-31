@@ -67,6 +67,18 @@ function lookup(key, lat, lng) {
 }
 
 /**
+ * The same place name, outside React: what the vehicle card shows, from the
+ * same server route and the same cache. Null when there is none.
+ */
+export function placeNameAt(lat, lng) {
+  if (lat == null || lng == null) return Promise.resolve(null)
+  const key = keyOf(lat, lng)
+  const cached = mem.get(key) ?? lsCache()[key]
+  if (cached) return Promise.resolve(cached)
+  return lookup(key, lat, lng)
+}
+
+/**
  * `enabled: false` reads the cache but never asks the network — for rows not
  * yet on screen (see UnitsMenu's location cell).
  */
