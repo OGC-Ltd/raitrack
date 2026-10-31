@@ -133,6 +133,27 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* On a desk the panels are fixed-height columns whose roster is the only
+   thing that scrolls (UserAdminPanel.css, UserGroupsPanel.css). They used to
+   size themselves `height: 100%` — 100% of THIS body, which also holds the
+   Users/Groups strip above them — so each ran the strip's height past the
+   bottom of the screen, and the roster's last row and its bottom margin sat
+   in that hidden band however far the table was scrolled. As a flex column
+   the panel takes what the strip leaves instead. */
+@media (min-width: 768px) {
+  .uadm-page__body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .uadm-page__body > .ua-page,
+  .uadm-page__body > .ug-page {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+}
+
 .uadm-sections {
   flex: 0 0 auto;
   display: flex;
