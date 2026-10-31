@@ -7,6 +7,9 @@
 import { useState, useEffect, useId, useRef, useCallback, useMemo } from "react";
 import "./DriversScreen.css";
 import { getDriversOverview } from "../../api/drivers";
+import { resolveOrgId } from "../../api/org";
+import { loadWeighbridgeCredit } from "../../api/weighbridgeTonnage";
+import { withWeighbridgeTonnes } from "../../lib/weighbridgeTonnage";
 import DriverScorecard from "./DriverScorecard";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { pendingDriver, clearPendingDriver, driverNameMatches } from "../../lib/driverHandoff";
@@ -251,10 +254,21 @@ export default function DriversScreen() {
   // server). Selecting a driver is then a pure in-memory lookup — instant,
   // no per-selection fetch — and the localStorage cache repaints the whole
   // page on revisit without waiting on the network.
-  const { data: overview, loading, error, retry } = useApiData(
+  const { data: serverOverview, loading, error, retry } = useApiData(
     () => getDriversOverview({ companyId: activeCompanyId }),
     [activeCompanyId],
     { cacheKey: `ft-drivers-ov:${activeCompanyId}` }
+  );
+
+  // Cane tonnes from the weighbridge (lib/weighbridgeTonnage). The server
+  // counts only the tonnage typed on a sales run, so every cane driver read
+  // 0 t; each weighbridge ticket is credited to the driver of the trip the
+  // truck was on, or failing that to the driver the ticket names. Read in the
+  // background; the page shows the server's figures until it is in.
+  const wb = useWeighbridgeCredit(activeCompanyId, serverOverview?.drivers);
+  const overview = useMemo(
+    () => withWeighbridgeTonnes(serverOverview, wb.credit),
+    [serverOverview, wb.credit],
   );
   const roster = useMemo(() => overview?.drivers ?? [], [overview]);
 
@@ -405,6 +419,7 @@ export default function DriversScreen() {
                   : typeName
                     ? `${fmt(drivers.length)} of ${fmt(roster.length)} drivers · ${typeName} · ${activeCompany?.name || "Fleet"}`
                     : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
+                {view === "analytics" && !loading && <WeighbridgeNote wb={wb} />}
               </div>
             </div>
             <div className="dr-viewswitch" role="tablist" aria-label="Drivers view">
@@ -523,6 +538,64 @@ const PANEL_CASES = 6;
  * charts, and every fuel and overspeeding case behind the counts. All of it is
  * already in the overview payload, so opening it costs no request.
  */
+/**
+ * Weighbridge tonnes per driver, read once per organisation and roster (the
+ * roster's names are what a ticket without a trip is matched by).
+ */
+function useWeighbridgeCredit(companyId, rosterDrivers) {
+  const [state, setState] = useState({ credit: null, step: null, done: 0, total: 0, error: null, loading: false });
+  const names = useMemo(() => (rosterDrivers ?? []).map((d) => ({ id: d.id, fullName: d.fullName })), [rosterDrivers]);
+  const key = names.length ? `${companyId}|${names.length}|${names[0].id}` : null;
+  const namesRef = useRef(names);
+  namesRef.current = names;
+  useEffect(() => {
+    if (!key) return undefined;
+    let live = true;
+    setState({ credit: null, step: "tickets", done: 0, total: 0, error: null, loading: true });
+    (async () => {
+      try {
+        const orgId = await resolveOrgId(companyId);
+        if (!orgId) throw new Error("No organisation");
+        const credit = await loadWeighbridgeCredit({
+          orgId, drivers: namesRef.current,
+          onProgress: ({ step, done, total }) => { if (live) setState((s) => ({ ...s, step, done, total })); },
+          // Tickets matched by name are shown while the trips are still being read.
+          onPartial: (partial) => { if (live) setState((s) => ({ ...s, credit: partial, step: "trips", done: 0, total: 0 })); },
+        });
+        if (live) setState({ credit, step: null, done: 0, total: 0, error: null, loading: false });
+      } catch (err) {
+        if (live) setState({ credit: null, step: null, done: 0, total: 0, error: err?.message ?? String(err), loading: false });
+      }
+    })();
+    return () => { live = false; };
+  }, [key, companyId]);
+  return state;
+}
+
+/** One line under the page title: where the tonnes come from, and progress. */
+function WeighbridgeNote({ wb }) {
+  if (wb.loading) {
+    const what = wb.step === "trips" ? "matching weighbridge tickets to trips" : "reading weighbridge tickets";
+    return <span className="dr-wbnote"> · Tonnes: {what}{wb.total ? ` (${fmt(wb.done)} of ${fmt(wb.total)})` : "…"}</span>;
+  }
+  if (wb.error) return <span className="dr-wbnote" title={wb.error}> · Weighbridge tonnes could not be read</span>;
+  if (!wb.credit) return null;
+  const s = wb.credit.stats;
+  const used = s.viaTrip + s.viaName;
+  const title = [
+    `${fmt(s.tickets)} weighbridge tickets in the last ${fmt(wb.credit.days)} days.`,
+    `${fmt(s.viaTrip)} credited by the trip the truck was on, ${fmt(s.viaName)} by the driver named on the ticket.`,
+    s.review ? `${fmt(s.review)} set aside: the ticket names a different driver from the trip.` : null,
+    s.unmatched ? `${fmt(s.unmatched)} matched no trip and no single driver.` : null,
+    wb.credit.tripsRead ? null : "Trips could not be read, so tickets were matched by name only.",
+  ].filter(Boolean).join(" ");
+  return (
+    <span className="dr-wbnote" title={title}>
+      {" · "}Tonnes include {fmt(used)} of {fmt(s.tickets)} weighbridge ticket{s.tickets === 1 ? "" : "s"}
+    </span>
+  );
+}
+
 function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
   const { driver, totals, heaviestLoad, byDay = [], incidents } = detail;
   const tier = ratingTier(driver.rating, driver.ratingBand);
@@ -587,6 +660,11 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
               </div>
             ))}
           </dl>
+          {totals.weighbridgeLoads > 0 && (
+            <p className="dr-window__wb">
+              Tonnes include {fmt(totals.weighbridgeTonnes, 1)} t from {fmt(totals.weighbridgeLoads)} weighbridge ticket{totals.weighbridgeLoads === 1 ? "" : "s"}
+            </p>
+          )}
           <ActivityStrip byDay={byDay} days={windowDays} />
           <dl className="dr-window__rates">
             {rates.map((x) => (
@@ -1659,15 +1737,16 @@ function TrendStat({ title, series, valueKey, unit, value, tone, type, sub, load
         {at ? fmt(at[valueKey], decimals) : value}
         {unit && <span className="dr-statchart__unit"> {unit}</span>}
       </div>
-      <div className="dr-statchart__sub">{at ? `${fmtDay(at.day)} · one day` : sub}</div>
+      <div className="dr-statchart__sub">{at ? `${fmtDay(at.day)} · ${at.loads?.length ? `${at.loads.length} load${at.loads.length === 1 ? "" : "s"} weighed` : "one day"}` : sub}</div>
       {type === "line" ? (
         <TrendLine
           series={series} valueKey={valueKey} unit={unit} title={title}
           decimals={decimals} loading={loading} cursor={cursor} onCursor={setCursor}
         />
       ) : (
-        <TrendMini series={series} valueKey={valueKey} unit={unit} loading={loading} />
+        <TrendMini series={series} valueKey={valueKey} unit={unit} loading={loading} cursor={cursor} onCursor={setCursor} />
       )}
+      {type !== "line" && at?.loads?.length > 0 && <DayLoads loads={at.loads} />}
     </div>
   );
 }
@@ -1825,7 +1904,7 @@ function TrendLine({ series, valueKey, unit, title, decimals, loading, cursor, o
 // Per-day tonnes as bars. A bar carries its own hit target and its <title>
 // answers "which day", which is why this one needed no cursor of its own — and
 // why the date ticks came off it too.
-function TrendMini({ series, valueKey, unit, loading }) {
+function TrendMini({ series, valueKey, unit, loading, cursor = null, onCursor }) {
   if (loading) return <div className="dr-chart__empty" aria-busy="true">Loading…</div>;
   if (!series || series.length === 0) return <div className="dr-chart__empty">No activity in window</div>;
   // Every bar zero-height is an empty box, not a chart. Same call as TrendLine.
@@ -1835,23 +1914,54 @@ function TrendMini({ series, valueKey, unit, loading }) {
   const stepX = (W - PAD_X * 2) / n;
   const base = H - PAD_B;
   const max = Math.max(1, ...series.map((s) => s[valueKey]));
+  const decimals = unit === "t" ? 1 : 0;
+  const words = (s) => {
+    const loads = s.loads?.length ? ` · ${s.loads.length} load${s.loads.length === 1 ? "" : "s"}: ${s.loads.map((l) => `${l.where ?? "weighbridge"} ${fmt(l.tonnes, 1)} t`).join(", ")}` : "";
+    return `${fmtDay(s.day)}: ${fmt(s[valueKey], decimals)} ${unit}${loads}`;
+  };
 
   return (
-    <svg className="dr-spark" viewBox={`0 0 ${W} ${H}`} role="img"
-         aria-label={`${fmt(n)} days of tonnage, ${fmtDay(series[0].day)} to ${fmtDay(series.at(-1).day)}, highest ${fmt(max, 1)} ${unit}. Each bar names its own day.`}>
+    <svg className={`dr-spark${cursor != null ? " dr-spark--reading" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img"
+         aria-label={`${fmt(n)} days of tonnage, ${fmtDay(series[0].day)} to ${fmtDay(series.at(-1).day)}, highest ${fmt(max, 1)} ${unit}. Point at a bar for its day.`}
+         onMouseLeave={() => onCursor?.(null)}>
       <line className="dr-spark__base" x1={PAD_X} y1={base} x2={W - PAD_X} y2={base} />
       {series.map((s, i) => {
         const bh = (s[valueKey] / max) * (base - PAD_T);
+        const x = PAD_X + i * stepX;
         return (
-          <rect
-            key={i} className="dr-spark__bar"
-            x={PAD_X + i * stepX + 0.5} y={base - bh}
-            width={Math.max(1, stepX - 1.5)} height={bh} rx="1.5"
-          >
-            <title>{fmtDay(s.day)}: {fmt(s[valueKey], unit === "t" ? 1 : 0)} {unit}</title>
-          </rect>
+          <g key={i}>
+            <rect
+              className={`dr-spark__bar${cursor === i ? " dr-spark__bar--on" : ""}`}
+              x={x + 0.5} y={base - bh} width={Math.max(1, stepX - 1.5)} height={bh} rx="1.5"
+            />
+            {/* The whole column answers, so a short bar is as easy to point at as a tall one. */}
+            <rect
+              className="dr-spark__hit" x={x} y={0} width={stepX} height={H}
+              onMouseEnter={() => onCursor?.(i)} onFocus={() => onCursor?.(i)} onBlur={() => onCursor?.(null)}
+              tabIndex={onCursor ? 0 : undefined}
+            >
+              <title>{words(s)}</title>
+            </rect>
+          </g>
         );
       })}
     </svg>
+  );
+}
+
+/** Under a tonnage chart, while a bar is pointed at: each load that day and where it was weighed. */
+function DayLoads({ loads }) {
+  const shown = loads.slice(0, 4);
+  return (
+    <ul className="dr-dayloads" aria-label="Loads weighed that day">
+      {shown.map((l, i) => (
+        <li key={i}>
+          <span className="dr-dayloads__where">{l.where ? titleCase(l.where) : "Weighbridge"}{l.toMill ? ", net at the mill" : ""}</span>
+          <span className="dr-dayloads__time">{new Date(l.at).toLocaleTimeString("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+          <b>{fmt(l.tonnes, 1)} t</b>
+        </li>
+      ))}
+      {loads.length > shown.length && <li className="dr-dayloads__more">and {loads.length - shown.length} more</li>}
+    </ul>
   );
 }
