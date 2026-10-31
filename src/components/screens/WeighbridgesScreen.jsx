@@ -45,6 +45,7 @@ import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
 import EmptyNote from "../shared/EmptyNote";
+import EndOfShiftButton from "../body/EndOfShiftButton";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -452,6 +453,9 @@ export default function WeighbridgesScreen() {
           bridge before the centre filter narrows the grid, so switching bridge
           tabs never moves them. */}
       <div className="sp4-header">
+        {/* The end-of-shift report, 06:00 to now (operator, 2026-10-31):
+            moved here from the top bar, made by the server. */}
+        {can("analytics:read") && <EndOfShiftButton orgId={orgId} />}
         <div data-tour="page-kpis" className="sp4-header-kpis">
           <div
             className="sp4-kpi sp4-kpi--fleet"
