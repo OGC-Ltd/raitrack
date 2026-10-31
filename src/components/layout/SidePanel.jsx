@@ -15,6 +15,7 @@ import ErrorBoundary from '../shared/ErrorBoundary';
 import { versionLabel, buildDetail } from '../../lib/version';
 import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
+import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
@@ -50,6 +51,39 @@ export const NAV_ITEMS = [
   // 2026-10-26: operator and technician read telemetry but get no Logbook.
   { key: 'usageReview',  label: 'Logbook',      icon: 'car', permission: 'logbook:read', section: 'system' },
 ];
+
+/** The sidebar row for the end-of-shift report: not a page, see navRows. */
+const SHIFT_REPORT = 'endOfShiftReport';
+
+/** The page rows with the report's row just above Weighbridges, or last when Weighbridges is not shown. */
+export function withShiftReport(items) {
+  const row = { key: SHIFT_REPORT };
+  const at = items.findIndex((i) => i.key === 'weighbridges');
+  return at < 0 ? [...items, row] : [...items.slice(0, at), row, ...items.slice(at)];
+}
+
+/** Downloads the end-of-shift report (06:00 to now), which the server makes. */
+function useEndOfShiftReport(orgId) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const run = async () => {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      await downloadEndOfShiftReport({ orgId });
+    } catch (err) {
+      setError(err?.message ?? String(err));
+      setTimeout(() => setError(null), 8000);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return {
+    busy, run,
+    label: busy ? 'Making the report…' : error ? 'Could not make the report' : 'End of shift report',
+    title: error ? `The report could not be made: ${error}` : 'Download the end-of-shift report: 06:00 to now',
+  };
+}
 
 function weatherDesc(code) {
   if (code === 0)              return 'Sunny';
@@ -222,6 +256,15 @@ export default function SidePanel() {
   const { can, flaggedOnly } = usePermissions();
   const mainNavItems = NAV_ITEMS.filter(item => !item.section && can(item.permission));
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
+  const { orgId } = useFleetLiveShared();
+  const shiftReport = useEndOfShiftReport(orgId);
+  // The end-of-shift report sits between Workshop and Weighbridges
+  // (operator, 2026-10-31). It is an action, not a page, so it is not in
+  // NAV_ITEMS: App, the mobile tab bar and the tour read that list as pages.
+  // The server needs both grants to make it.
+  const navRows = can('analytics:read') && can('weighbridge:read') && orgId
+    ? withShiftReport(mainNavItems)
+    : mainNavItems;
   // Open alerts across every organisation held (the Alerts page's default week).
   const alertSummary = useAlertSummary(can(NAV_ITEMS.find(n => n.key === 'alerts')?.permission));
   const openAlerts = alertSummary?.open ?? 0;
@@ -233,7 +276,7 @@ export default function SidePanel() {
   // a map showing the whole fleet again.
   const { applyFilter, activeFilter } = useMapLayers();
 
-  const { vehicles = [], loading, orgId } = useFleetLiveShared();
+  const { vehicles = [], loading } = useFleetLiveShared();
   // The unit picked on the map: the AI card at the foot speaks for it alone.
   const selectedVehicleId = useAppSelector((a) => a.selectedVehicleId);
   const picked = selectedVehicleId != null ? vehicles.find((x) => x.id === selectedVehicleId) : null;
@@ -377,7 +420,25 @@ export default function SidePanel() {
           {/* ── Navigation ── */}
           {mainNavItems.length > 0 && (
             <nav className="sp-nav-box" data-tour="nav">
-              {mainNavItems.map(item => {
+              {navRows.map(item => {
+                if (item.key === SHIFT_REPORT) {
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className="sp-nav-item"
+                      onClick={shiftReport.run}
+                      disabled={shiftReport.busy}
+                      aria-busy={shiftReport.busy}
+                      title={shiftReport.title}
+                    >
+                      {shiftReport.busy
+                        ? <span className="sp-nav-icon sp-nav-spin" aria-hidden="true" />
+                        : <i className="ti ti-clipboard-text sp-nav-icon" aria-hidden="true" />}
+                      <span className="sp-nav-label">{shiftReport.label}</span>
+                    </button>
+                  );
+                }
                 const isActive = desktopActiveTab === item.key;
                 return (
                   <button
@@ -486,7 +547,25 @@ export default function SidePanel() {
       {collapsed && (
         mainNavItems.length > 0 && (
           <nav className="side-panel__nav" aria-label="Main" data-tour="nav">
-            {mainNavItems.map(item => {
+            {navRows.map(item => {
+              if (item.key === SHIFT_REPORT) {
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className="side-panel__nav-item"
+                    onClick={shiftReport.run}
+                    disabled={shiftReport.busy}
+                    aria-busy={shiftReport.busy}
+                    aria-label={shiftReport.label}
+                    title={shiftReport.title}
+                  >
+                    {shiftReport.busy
+                      ? <span className="side-panel__nav-icon sp-nav-spin" aria-hidden="true" />
+                      : <i className="ti ti-clipboard-text side-panel__nav-icon" aria-hidden="true" />}
+                  </button>
+                );
+              }
               const isActive = desktopActiveTab === item.key;
               return (
                 <button
