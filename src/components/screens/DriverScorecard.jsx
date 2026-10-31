@@ -1,8 +1,10 @@
-// Driver scorecard — the pay proposal's speed (§3.2) and safety points per
-// driver, from fleet-server /analytics/driver-scores. Each event is credited
-// to whoever held the vehicle at that moment; what nobody held is counted in
-// the notes rather than dropped. Rates and caps come back with the answer, so
-// this screen never restates a number the server decides.
+// Driver scorecard — pay by the molasses drivers' pay structure (retainer,
+// trip-wise pay, lunch, fuel, speed and safety, zero tolerance), from
+// fleet-server /analytics/driver-scores. Each event is credited to whoever
+// held the vehicle at that moment; what nobody held is counted in the notes
+// rather than dropped. Rates and caps come back with the answer, so this
+// screen never restates a number the server decides. The PDF is made on the
+// server too (driver-scores.pdf): for one driver, the ticked ones, or all.
 //
 // Drawn in the Analytics roster's own grammar (DriversScreen.css): the
 // `dr-filters` toolbar with a segmented `dr-seg` and the drawn search, the
@@ -14,7 +16,8 @@
 
 import { Fragment, useMemo, useState } from "react";
 import "./DriverScorecard.css";
-import { getDriverScores } from "../../api/drivers";
+import { getDriverScores, downloadDriverScoresPdf } from "../../api/drivers";
+import DateRangePicker from "../layout/DateRangePicker";
 import { useAppSelector } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -47,8 +50,10 @@ const KIND_LABEL = {
   harshBrake: "Harsh braking",
 };
 const VIOLATIONS = ["speeding", "seatbelt", "phone", "freewheel", "harshBrake"];
-/** Ten data columns plus the driver: the empty and detail rows span all of them. */
-const COLS = 6 + VIOLATIONS.length;
+/** The tick box, the driver and the figures: the empty and detail rows span all of them. */
+const COLS = 11 + VIOLATIONS.length;
+/** The server scores at most 31 days at once (analytics.schema driverScoresQuerySchema). */
+const MAX_DAYS = 31;
 
 /** Same paging the roster uses: fewer per page where each row is a card. */
 const PAGE = 15;
@@ -107,12 +112,19 @@ function standingOf(d) {
   return { tone: "active", label: "Clear", rank: 0 };
 }
 
+/** Gross for the period; an older server sends only the incentives. */
+const grossOf = (d) => d.pay?.gross ?? d.totalKes;
+
 const SORTS = {
   driver: (d) => d.name.toLowerCase(),
   days: (d) => d.days,
+  trips: (d) => d.trips ?? 0,
+  tripPay: (d) => d.pay?.tripPay ?? 0,
+  fuel: (d) => d.fuelPoints ?? 0,
   speed: (d) => d.speedPoints,
   safety: (d) => d.safetyPoints,
-  pay: (d) => d.totalKes,
+  pay: grossOf,
+  net: (d) => d.pay?.net ?? 0,
   standing: (d) => standingOf(d).rank,
   ...Object.fromEntries(VIOLATIONS.map((k) => [k, (d) => d.violations[k] ?? 0])),
 };
@@ -120,7 +132,13 @@ const SORTS = {
 export default function DriverScorecard() {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const options = useMemo(() => periods(), []);
+  const today = options[0].to;
   const [periodKey, setPeriodKey] = useState("7d");
+  // A day or a range picked on the calendar, when no quick pick is in use.
+  const [custom, setCustom] = useState(null);
+  // Drivers ticked for the PDF; none ticked means all of them.
+  const [picked, setPicked] = useState(() => new Set());
+  const [pdf, setPdf] = useState({ busy: null, error: null });
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(null);
   // Worst pay first: the scorecard's question is "who is losing money, and why".
@@ -129,7 +147,24 @@ export default function DriverScorecard() {
   const [page, setPage] = useState(0);
   const cards = useMediaQuery(CARDS_QUERY);
   const step = cards ? PAGE_PHONE : PAGE;
-  const period = options.find((p) => p.key === periodKey) ?? options[0];
+  const period = custom ?? options.find((p) => p.key === periodKey) ?? options[0];
+  const pickPeriod = (next) => { setPeriodKey(next.key ?? null); setCustom(next.key ? null : next); setOpen(null); setPage(0); setPicked(new Set()); };
+
+  const download = async (driverIds, key) => {
+    if (pdf.busy) return;
+    setPdf({ busy: key, error: null });
+    try {
+      await downloadDriverScoresPdf({ companyId: activeCompanyId, from: period.from, to: period.to, driverIds });
+      setPdf({ busy: null, error: null });
+    } catch (err) {
+      setPdf({ busy: null, error: err?.message ?? "The PDF could not be made." });
+    }
+  };
+  const togglePick = (id) => setPicked((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const { data, loading, stale, error, retry } = useApiData(
     () => getDriverScores({ companyId: activeCompanyId, from: period.from, to: period.to }),
@@ -158,6 +193,10 @@ export default function DriverScorecard() {
       drivers: list.length,
       days: list.reduce((n, d) => n + d.days, 0),
       kes: list.reduce((n, d) => n + d.totalKes, 0),
+      gross: list.reduce((n, d) => n + grossOf(d), 0),
+      net: list.reduce((n, d) => n + (d.pay?.net ?? 0), 0),
+      trips: list.reduce((n, d) => n + (d.trips ?? 0), 0),
+      tripPayKes: list.reduce((n, d) => n + (d.pay?.tripPay ?? 0), 0),
       violations: list.reduce((n, d) => n + VIOLATIONS.reduce((m, k) => m + (d.violations[k] ?? 0), 0), 0),
       tripPay: list.reduce((n, d) => n + d.tripPayDaysLost, 0),
       flagged: list.filter((d) => d.months.some((m) => m.standing !== "ok")).length,
@@ -190,14 +229,28 @@ export default function DriverScorecard() {
               <button
                 key={p.key}
                 type="button"
-                className={`dr-chip${p.key === periodKey ? " dr-chip--active" : ""}`}
-                aria-pressed={p.key === periodKey}
-                onClick={() => { setPeriodKey(p.key); setOpen(null); setPage(0); }}
+                className={`dr-chip${!custom && p.key === periodKey ? " dr-chip--active" : ""}`}
+                aria-pressed={!custom && p.key === periodKey}
+                onClick={() => pickPeriod(p)}
               >
                 {p.label}
               </button>
             ))}
           </span>
+          {/* Any single day, or a range of up to 31 days, on the calendar. */}
+          <DateRangePicker from={period.from} to={period.to} today={today} maxDays={MAX_DAYS} quickPicks={false}
+                           label="Scorecard dates" onChange={(from, to) => pickPeriod({ key: null, from, to })} />
+        </div>
+        <div className="sc-pdf">
+          <button type="button" className="dr-pager__btn" disabled={Boolean(pdf.busy) || !data?.drivers?.length}
+                  aria-busy={pdf.busy === "list"}
+                  onClick={() => download(picked.size ? [...picked] : null, "list")}
+                  title={picked.size ? "Download the scorecard for the ticked drivers" : "Download the scorecard for every driver in the period"}>
+            {pdf.busy === "list" ? "Preparing PDF…" : picked.size ? `Download PDF (${picked.size})` : "Download PDF (all)"}
+          </button>
+          {picked.size > 0 && (
+            <button type="button" className="sc-pdf__clear" onClick={() => setPicked(new Set())}>Clear selection</button>
+          )}
         </div>
         <div className="dr-searchwrap">
           <svg className="dr-searchwrap__icon" width="13" height="13" viewBox="0 0 24 24"
@@ -216,11 +269,13 @@ export default function DriverScorecard() {
         </div>
       </div>
 
+      {pdf.error && <p className="sc-status sc-status--error" role="alert">The PDF could not be made: {pdf.error}</p>}
+
       <section className="dr-strip sc-strip" aria-label="Scorecard totals">
         <StatCell label="Drivers scored" loading={waiting} value={fmt(totals.drivers)}
-                  sub={`${fmt(totals.days)} driver-days · ${period.from} – ${period.to}`} />
-        <StatCell label="Speed + safety pay" loading={waiting} value={kes(totals.kes)} tone={toneOf(totals.kes)}
-                  sub="all drivers, this period" />
+                  sub={`${fmt(totals.days)} driver-days · ${period.from === period.to ? period.from : `${period.from} – ${period.to}`}`} />
+        <StatCell label="Gross pay" loading={waiting} value={kes(totals.gross)}
+                  sub={`est. net ${kes(totals.net)} · ${fmt(totals.trips)} trips, ${kes(totals.tripPayKes)} trip pay`} />
         <StatCell label="Safety violations" loading={waiting} value={fmt(totals.violations)}
                   sub={`${fmt(totals.tripPay)} day${totals.tripPay === 1 ? "" : "s"} of trip pay lost`} />
         <StatCell label="Zero-tolerance" loading={waiting} value={fmt(totals.flagged)} tone={totals.flagged ? "sc-down" : ""}
@@ -248,11 +303,24 @@ export default function DriverScorecard() {
           <table className="dr-grid sc-grid">
             <thead>
               <tr>
+                <th className="sc-pick">
+                  <input type="checkbox" aria-label="Tick every driver on this page for the PDF"
+                         checked={pageRows.length > 0 && pageRows.every((d) => picked.has(d.driverId))}
+                         onChange={(e) => setPicked((prev) => {
+                           const next = new Set(prev);
+                           for (const d of pageRows) { if (e.target.checked) next.add(d.driverId); else next.delete(d.driverId); }
+                           return next;
+                         })} />
+                </th>
                 <SortTh label="Driver" k="driver" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortTh label="Days" k="days" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <SortTh label="Trips" k="trips" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <SortTh label="Trip pay" k="tripPay" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <SortTh label="Fuel pts" k="fuel" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
                 <SortTh label="Speed pts" k="speed" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
                 <SortTh label="Safety pts" k="safety" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
-                <SortTh label="Pay" k="pay" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <SortTh label="Gross" k="pay" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
+                <SortTh label="Est. net" k="net" sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
                 {VIOLATIONS.map((k) => (
                   <SortTh key={k} label={KIND_LABEL[k]} k={k} sortKey={sortKey} dir={sortDir} onClick={toggleSort} num />
                 ))}
@@ -280,6 +348,10 @@ export default function DriverScorecard() {
                       tabIndex={0}
                       aria-expanded={isOpen}
                     >
+                      <td className="sc-pick" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={picked.has(d.driverId)} onChange={() => togglePick(d.driverId)}
+                               aria-label={`Tick ${titleCase(d.name)} for the PDF`} />
+                      </td>
                       <td className="dr-drivercell">
                         <span className="dr-driver">
                           <span className="dr-avatar">{initialsOf(d.name)}</span>
@@ -292,9 +364,18 @@ export default function DriverScorecard() {
                         </span>
                       </td>
                       <td className="dr-num" data-label="Days">{fmt(d.days)}</td>
+                      <td className="dr-num" data-label="Trips">
+                        {fmt(d.trips)}{d.unpricedTrips ? <span className="sc-unpriced" title={`${d.unpricedTrips} on a route the pay table does not name, so unpaid`}>*</span> : null}
+                      </td>
+                      <td className="dr-num" data-label="Trip pay">{d.pay ? kes(d.pay.tripPay) : "–"}</td>
+                      <td className={`dr-num ${toneOf(d.fuelPoints ?? 0)}`} data-label="Fuel pts"
+                          title={d.kmpl != null ? `Average ${d.kmpl} km/L over ${d.fuelDays} day${d.fuelDays === 1 ? "" : "s"}` : "No usable fuel-probe day"}>
+                        {d.fuelPoints == null ? "–" : pts(d.fuelPoints)}
+                      </td>
                       <td className={`dr-num ${toneOf(d.speedPoints)}`} data-label="Speed pts">{pts(d.speedPoints)}</td>
                       <td className={`dr-num ${toneOf(d.safetyPoints)}`} data-label="Safety pts">{pts(d.safetyPoints)}</td>
-                      <td className={`dr-num sc-pay ${toneOf(d.totalKes)}`} data-label="Pay">{kes(d.totalKes)}</td>
+                      <td className="dr-num sc-pay" data-label="Gross">{kes(grossOf(d))}</td>
+                      <td className="dr-num" data-label="Est. net">{d.pay ? kes(d.pay.net) : "–"}</td>
                       {VIOLATIONS.map((k) => (
                         <ViolationCell key={k} n={d.violations[k] ?? 0} label={KIND_LABEL[k]} />
                       ))}
@@ -307,7 +388,10 @@ export default function DriverScorecard() {
                     </tr>
                     {isOpen && (
                       <tr className="sc-detail">
-                        <td colSpan={COLS}><DriverDays days={d.byDay} /></td>
+                        <td colSpan={COLS}>
+                          {d.pay && <PayBreakdown d={d} busy={pdf.busy} onPdf={() => download([d.driverId], d.driverId)} />}
+                          <DriverDays days={d.byDay} />
+                        </td>
                       </tr>
                     )}
                   </Fragment>
@@ -366,13 +450,14 @@ function ViolationCell({ n, label }) {
 function SkeletonRows({ n }) {
   return Array.from({ length: n }, (_, i) => (
     <tr key={i} className="sc-skel" aria-hidden="true">
+      <td className="sc-pick" />
       <td className="dr-drivercell">
         <span className="dr-driver">
           <span className="sc-skel__avatar" />
           <span className="sc-skel__lines"><span style={{ width: `${110 + (i * 37) % 60}px` }} /><span /></span>
         </span>
       </td>
-      {Array.from({ length: COLS - 2 }, (_, j) => (
+      {Array.from({ length: COLS - 3 }, (_, j) => (
         <td key={j} className="dr-num"><span className="sc-skel__bar" /></td>
       ))}
       <td><span className="sc-skel__pill" /></td>
@@ -392,6 +477,41 @@ function StatCell({ label, value, sub, tone = "", loading = false }) {
   );
 }
 
+const FUEL_WHY = {
+  "no-data": "No fuel-probe reading for this day",
+  "short-day": "Too little distance to rate fuel economy",
+  implausible: "The probe reading is not a believable burn",
+  "too-slow": "Average speed below the qualifier, so no fuel bonus",
+};
+
+/** The driver's pay for the period, line by line, with their PDF. */
+function PayBreakdown({ d, busy, onPdf }) {
+  const p = d.pay;
+  const lines = [
+    ["Retainer", p.retainer], ["Trip-wise pay", p.tripPay], ["Lunch", p.lunch],
+    ["Fuel", p.fuelKes], ["Speed", p.speedKes], ["Safety", p.safetyKes],
+    ...(p.suspension ? [["Suspension", p.suspension]] : []),
+  ];
+  return (
+    <div className="sc-paybox">
+      <dl className="sc-pay-lines">
+        {lines.map(([k, v]) => (
+          <div key={k}><dt>{k}</dt><dd className={k === "Retainer" || k === "Trip-wise pay" || k === "Lunch" ? "" : toneOf(v)}>{kes(v)}</dd></div>
+        ))}
+        <div className="sc-pay-lines__total"><dt>Gross</dt><dd>{kes(p.gross)}</dd></div>
+        <div><dt>Est. net (85%)</dt><dd>{kes(p.net)}</dd></div>
+      </dl>
+      <div className="sc-paybox__aside">
+        {p.tripPayLost > 0 && <span className="sc-down">{kes(-p.tripPayLost)} trip pay lost to zero tolerance</span>}
+        {d.kmpl != null && <span>Average {d.kmpl} km/L over {count(d.fuelDays, "day")}</span>}
+        <button type="button" className="dr-pager__btn" disabled={Boolean(busy)} aria-busy={busy === d.driverId} onClick={onPdf}>
+          {busy === d.driverId ? "Preparing PDF…" : "PDF for this driver"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DriverDays({ days }) {
   return (
     <ol className="sc-days">
@@ -402,13 +522,24 @@ function DriverDays({ days }) {
               {new Date(`${d.day}T12:00:00Z`).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" })}
             </span>
             <span className="dr-veh">{d.plates.join(", ") || "–"}</span>
+            {d.trips != null && (
+              <span>{count(d.trips, "trip")}{d.tripPayEarned ? `, ${kes(d.losesTripPay ? 0 : d.tripPay)} trip pay` : ""}{d.lunch ? " + lunch" : ""}</span>
+            )}
+            {d.fuel && (
+              <span className={toneOf(d.fuel.points)}
+                    title={d.fuel.why ? FUEL_WHY[d.fuel.why] : undefined}>
+                Fuel {d.fuel.kmpl != null ? `${d.fuel.kmpl} km/L ` : ""}{d.fuel.why && d.fuel.why !== "too-slow" ? "–" : pts(d.fuel.points)}
+                {d.fuel.why === "too-slow" ? " (below speed qualifier)" : ""}
+              </span>
+            )}
             <span className={toneOf(d.speedPoints)}>Speed {pts(d.speedPoints)}</span>
             <span className={toneOf(d.safetyPoints)}>
               Safety {pts(d.safetyPoints)}{d.safetyRaw !== d.safetyPoints ? ` (capped from ${pts(d.safetyRaw)})` : ""}
             </span>
             {d.losesTripPay && (
-              <span className="dr-grid__badge dr-grid__badge--suspended">
-                <span className="dr-grid__dot" aria-hidden="true" />Trip pay lost
+              <span className="dr-grid__badge dr-grid__badge--suspended"
+                    title={d.tripPayLostFor === "speeding" ? "3rd offence 4–10 km/h over the limit" : "3 or more safety violations"}>
+                <span className="dr-grid__dot" aria-hidden="true" />Trip pay lost{d.tripPayEarned ? ` (${kes(d.tripPayEarned)})` : ""}
               </span>
             )}
           </div>
