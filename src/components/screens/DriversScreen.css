@@ -1982,3 +1982,19 @@
 .dr-viewswitch__btn + .dr-viewswitch__btn { border-left: 1px solid var(--border); }
 .dr-viewswitch__btn.is-on { color: #fff; background: var(--accent); }
 @media (max-width: 767px) { .dr-viewswitch { margin-left: 0; align-self: flex-start; } }
+
+/* Weighbridge tonnes: the note under the title and in the driver panel. */
+.dr-wbnote { color: inherit; opacity: .85; cursor: help; }
+.dr-window__wb { margin: 4px 0 8px; font-size: 11px; color: var(--text-secondary, #64748b); }
+
+/* Tonnage bars: the column under the pointer, and the day's loads under the chart. */
+.dr-spark__hit { fill: transparent; cursor: crosshair; }
+.dr-spark__hit:focus { outline: none; }
+.dr-spark--reading .dr-spark__bar { opacity: 0.4; }
+.dr-spark--reading .dr-spark__bar--on { opacity: 1; }
+.dr-dayloads { list-style: none; margin: 6px 0 0; padding: 6px 0 0; border-top: 1px dashed var(--border); font-size: 11px; display: grid; gap: 3px; }
+.dr-dayloads li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline; }
+.dr-dayloads__where { color: var(--text-1, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-dayloads__time { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.dr-dayloads b { font-variant-numeric: tabular-nums; }
+.dr-dayloads__more { color: var(--text-2); display: block !important; }
