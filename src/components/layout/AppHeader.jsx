@@ -14,7 +14,6 @@ import StatCarousel from '../header/StatCarousel';
 import LiveFeed from './LiveFeed';
 import { FuelFollowUpHost } from '../body/FuelFollowUp';
 import FilterStrip from '../header/FilterStrip';
-import EndOfShiftButton from '../header/EndOfShiftButton';
 import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
@@ -362,9 +361,6 @@ export default function AppHeader() {
             </div>
           )}
         </div>
-
-        {/* End-of-shift report for this organisation, 06:00 to now (operator, 2026-10-31). */}
-        {can('analytics:read') && <EndOfShiftButton company={activeCompany} />}
 
         {/* No search box here since 2026-10-07: vehicle, driver and place search
             live in the map's tool rail (MapToolRail), beside the sidebar. */}
