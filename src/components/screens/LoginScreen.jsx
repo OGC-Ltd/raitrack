@@ -101,7 +101,7 @@ function useFleetPulse() {
 }
 
 export default function LoginScreen() {
-  const { login, error } = useAuth();
+  const { login, error, errorOnCredentials } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -225,7 +225,7 @@ export default function LoginScreen() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={pending}
-                aria-invalid={error ? true : undefined}
+                aria-invalid={errorOnCredentials ? true : undefined}
                 aria-describedby={error ? "login-error" : undefined}
                 required
               />
@@ -242,7 +242,7 @@ export default function LoginScreen() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={pending}
-                  aria-invalid={error ? true : undefined}
+                  aria-invalid={errorOnCredentials ? true : undefined}
                   aria-describedby={error ? "login-error" : undefined}
                   required
                 />
