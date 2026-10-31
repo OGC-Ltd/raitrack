@@ -662,3 +662,16 @@
   .nav-alarm .sp-nav-icon,
   .nav-alarm .side-panel__nav-icon { animation: none; }
 }
+
+/* The End of shift report row while the server makes the file: a ring in
+   place of the icon, sized to the icon it stands in for. */
+.sp-nav-spin {
+  display: inline-block; flex: none; box-sizing: border-box;
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 1.6px solid currentColor; border-right-color: transparent;
+  animation: sp-nav-spin .7s linear infinite;
+}
+.side-panel__nav-icon.sp-nav-spin { width: 18px; height: 18px; }
+@keyframes sp-nav-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sp-nav-spin { animation-duration: 2s; } }
+.sp-nav-item:disabled, .side-panel__nav-item:disabled { cursor: progress; }
