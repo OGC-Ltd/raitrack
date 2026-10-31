@@ -5,7 +5,7 @@
 // rows — an unseeded company resolves to no org and returns empty, so the
 // screen renders empty rather than fabricated numbers.
 
-import { apiFetch } from "../services/api";
+import { apiFetch, apiFetchBlob } from "../services/api";
 import { resolveOrgId } from "./org";
 
 const EMPTY_OVERVIEW = { drivers: [], details: {} };
@@ -26,9 +26,10 @@ export async function getDriversOverview({ companyId, days = 90 } = {}) {
 }
 
 /**
- * The pay proposal's driver scorecard: speed (§3.2) and safety points per
- * driver-day, credited to whoever held the vehicle at each event. `from` and
- * `to` are fleet days (YYYY-MM-DD), inclusive, at most 31 apart.
+ * The driver scorecard and pay, by the molasses drivers' pay structure:
+ * retainer, trip-wise pay, lunch, fuel, speed and safety per driver-day,
+ * credited to whoever held the vehicle. `from` and `to` are fleet days
+ * (YYYY-MM-DD), inclusive, at most 31 apart.
  */
 export async function getDriverScores({ companyId, from, to }) {
   const orgId = await resolveOrgId(companyId);
@@ -37,4 +38,23 @@ export async function getDriverScores({ companyId, from, to }) {
     `/api/v1/organisations/${orgId}/analytics/driver-scores?from=${from}&to=${to}`
   );
   return res.data ?? null;
+}
+
+/**
+ * The scorecard as a PDF, made on the server (fleet-server driver-score.pdf):
+ * every driver in the period, or only `driverIds` when given.
+ */
+export async function downloadDriverScoresPdf({ companyId, from, to, driverIds = null }) {
+  const orgId = await resolveOrgId(companyId);
+  if (!orgId) throw new Error("This company has no backend organisation to report on");
+  const q = new URLSearchParams({ from, to, ...(driverIds?.length ? { drivers: driverIds.join(",") } : {}) });
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/analytics/driver-scores.pdf?${q}`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename ?? `Driver scorecard ${from} to ${to}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
