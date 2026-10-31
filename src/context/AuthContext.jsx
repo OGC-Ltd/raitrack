@@ -18,6 +18,7 @@
 // above AppProvider, whose organisation switcher is built from `orgs`.
 
 import { useCallback, useEffect, useMemo } from "react";
+import { signInError } from "../lib/signInError";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, setAccessToken, setSessionLostHandler, refreshOnce } from "../services/api";
 import { ACCESS_CHANGED } from "../lib/accessChanged";
@@ -155,9 +156,11 @@ export function useAuth() {
   }, [queryClient]);
 
   // The server answers every failed sign-in identically on purpose, so nobody
-  // can probe which addresses exist. Pass that through unchanged.
-  const err = signIn.error;
-  const error = err ? (err.status === 401 ? "Invalid email or password." : (err.message ?? "Sign-in failed.")) : null;
+  // can probe which addresses exist; anything that is not a refusal (the
+  // server down, a rate limit) is said as such. See lib/signInError.
+  const failed = signInError(signIn.error);
+  const error = failed?.text ?? null;
+  const errorOnCredentials = failed?.credentials ?? false;
 
   return useMemo(() => {
     const user = me?.user ?? null;
@@ -171,6 +174,7 @@ export function useAuth() {
       isPlatform: Boolean(me?.isPlatform),
       booting,
       error,
+      errorOnCredentials,
       isAuthenticated: Boolean(user),
       login,
       logout,
@@ -196,7 +200,7 @@ export function useAuth() {
        */
       vehicleScope: (orgId) => byId.get(orgId)?.vehicleIds ?? null,
     };
-  }, [me, booting, error, login, logout, reload]);
+  }, [me, booting, error, errorOnCredentials, login, logout, reload]);
 }
 
 const NO_ORGS = [];
