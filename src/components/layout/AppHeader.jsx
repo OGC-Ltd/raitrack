@@ -14,7 +14,6 @@ import StatCarousel from '../header/StatCarousel';
 import LiveFeed from './LiveFeed';
 import { FuelFollowUpHost } from '../body/FuelFollowUp';
 import FilterStrip from '../header/FilterStrip';
-import MovementsButton from '../header/MovementsButton';
 import './AppHeader.css';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import { companyMark as companyLogo } from '../../lib/companyLogos';
@@ -362,9 +361,6 @@ export default function AppHeader() {
             </div>
           )}
         </div>
-
-        {/* Temporary (operator, 2026-11-01): the movement report, to or from MORL. */}
-        {can('telemetry:read') && <MovementsButton company={activeCompany} />}
 
         {/* No search box here since 2026-10-07: vehicle, driver and place search
             live in the map's tool rail (MapToolRail), beside the sidebar. */}
