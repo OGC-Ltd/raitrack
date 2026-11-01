@@ -40,7 +40,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
 import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
-import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, locationChanged } from '../../lib/movementReport';
+import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, isLoading, locationChanged } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -325,7 +325,7 @@ function MovementsReport({ orgId }) {
                                 style={!out && TINT[state] ? { background: TINT[state] } : undefined}>
                               <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
                               <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
-                              <td className={!out && isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}>
+                              <td className={out ? undefined : isLoading(row) ? 'mvr-cell--loading' : state === 'at' ? 'mvr-cell--morl' : isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}>
                                 <input type="text" className={`mvr-edit${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
                                        value={location} placeholder="-" maxLength={200} disabled={out}
                                        aria-label={`Location of ${row.plate}`}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged } from './movementReport';
+import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -79,6 +79,14 @@ describe('editing the CPO movements report before the PDF', () => {
     expect(isMoving(row('A', 'stopped', { speedKmh: 4 }))).toBe(false);
     expect(isMoving(row('A', 'to', { speedKmh: 60, stale: true }))).toBe(false);
     expect(isMoving(row('A', 'no-fix', { speedKmh: null, lastAt: null }))).toBe(false);
+  });
+
+  it('reads a unit within 1 km of the Mombasa loading point as loading, so its location shows orange', () => {
+    expect(isLoading(row('A', 'stopped', { lat: -4.04579, lng: 39.65165 }))).toBe(true);
+    expect(isLoading(row('A', 'stopped', { lat: -4.0535, lng: 39.65165 }))).toBe(true);   // ~860 m south
+    expect(isLoading(row('A', 'stopped', { lat: -4.0558, lng: 39.65165 }))).toBe(false);  // ~1.1 km south
+    expect(isLoading(row('A', 'stopped', { lat: -4.04579, lng: 39.65165, stale: true }))).toBe(false);
+    expect(isLoading(row('A', 'no-fix', { lat: null, lng: null, lastAt: null }))).toBe(false);
   });
 
   it('follows a corrected direction: a unit set to Stopped is not green', () => {
