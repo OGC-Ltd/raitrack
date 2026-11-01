@@ -6,7 +6,8 @@
 // same visual system.
 
 import { resolveOrgId } from './org'
-import { apiFetchBlob } from '../services/api'
+import { apiFetch, apiFetchBlob } from '../services/api'
+import { saveFile } from './tripReport'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
@@ -38,19 +39,26 @@ export async function downloadOrgReportPdf({ companyId, kind, days = 30, filenam
 }
 
 /**
- * The movement report (fleet-server reports/movement-report): where every unit
- * is now and whether it is heading to or from MORL over the last `hours`
- * (2 or 4). Made on the server; this saves the file.
+ * The movement report (fleet-server reports/movement-report) as data: where
+ * every unit is now and whether it is heading to or from MORL over the last
+ * `hours` (2 or 4), for the Reports page's CPO movements table.
  */
-export async function downloadMovementReport({ orgId, hours }) {
+export async function loadMovementReport({ orgId, hours }) {
   if (!orgId) throw new Error('No organisation selected')
-  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf?hours=${hours}`)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename ?? `Movement report last ${hours} hours.pdf`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/movements?hours=${hours}`)
+  return res.data
+}
+
+/**
+ * The PDF of the movement report as the operator edited it (lib/movementReport
+ * pdfRequest): the server draws it on the letterhead; this saves the file.
+ */
+export async function downloadEditedMovementReport({ orgId, request }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  saveFile(blob, filename ?? `Movement report last ${request.hours} hours.pdf`)
 }
