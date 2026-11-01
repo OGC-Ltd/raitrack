@@ -19,7 +19,7 @@ export const STATES = Object.keys(DIRECTION);
 export const MOVING_KMH = 5;
 
 /**
- * Is the unit moving now? Its location is printed green (operator, 2026-11-02).
+ * Is the unit moving now? Its Location cell is filled green (operator, 2026-11-02).
  * Pass the row as edited: one the operator set to Stopped or No fix is not
  * moving, whatever the last speed said. The server reads it the same way.
  */
