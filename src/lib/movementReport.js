@@ -18,9 +18,14 @@ export const STATES = Object.keys(DIRECTION);
 /** Moving, as the server reads it: this fast or faster on a fix inside the window. */
 export const MOVING_KMH = 5;
 
-/** Is the unit moving now? Its location is printed green (operator, 2026-11-02). */
+/**
+ * Is the unit moving now? Its location is printed green (operator, 2026-11-02).
+ * Pass the row as edited: one the operator set to Stopped or No fix is not
+ * moving, whatever the last speed said. The server reads it the same way.
+ */
 export function isMoving(row) {
-  return row.lastAt != null && !row.stale && (row.speedKmh ?? 0) >= MOVING_KMH;
+  return row.lastAt != null && !row.stale && row.state !== 'stopped' && row.state !== 'no-fix'
+    && (row.speedKmh ?? 0) >= MOVING_KMH;
 }
 
 /** The PDF's tints for the rows heading somewhere or standing at MORL. */
@@ -76,8 +81,22 @@ export function applyEdits(report, edits) {
   return { ...report, groups, counts: countRows(groups) };
 }
 
+/** How many rows the operator changed (location or direction) and left out: printed on the PDF. */
+export function editCounts(report, edits) {
+  let changed = 0;
+  let removed = 0;
+  for (const g of report.groups) {
+    for (const r of g.rows) {
+      const e = edits[r.vehicleId];
+      if (e?.removed) removed += 1;
+      else if (isEdited(r, e)) changed += 1;
+    }
+  }
+  return { changed, removed };
+}
+
 /** What the server needs to draw the edited PDF, and nothing it would ignore. */
 export function pdfRequest(report, edits) {
   const { hours, from, to, morl, groups } = applyEdits(report, edits);
-  return { hours, from, to, morl, groups };
+  return { hours, from, to, morl, groups, edits: editCounts(report, edits) };
 }
