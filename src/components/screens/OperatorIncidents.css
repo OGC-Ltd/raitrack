@@ -1,0 +1,145 @@
+/* The operator incident form and the list of logged incidents (Driver
+ * Behaviour tab). Plain and professional (operator, 1 Nov 2026: no icons):
+ * labelled fields, a row of text options for the choice, the page's own
+ * buttons. The dialog is the shared sp4-modal; only its inside lives here. */
+
+/* ── the form ── */
+.oi-dialog { width: min(560px, 100%); }
+.oi-body { display: grid; gap: 14px; }
+.oi-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.oi-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.oi-grow { flex: 1 1 200px; }
+.oi-label {
+  font-size: var(--sp4-label, 11px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sp4-text-3);
+}
+.oi-when { width: auto; min-width: 200px; font-variant-numeric: tabular-nums; }
+.app--light .oi-when { color-scheme: light; }
+
+/* A row of text options, one chosen. */
+.oi-seg {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.oi-seg__opt {
+  padding: 7px 14px;
+  border: 0;
+  border-right: 1px solid var(--sp4-line-hi);
+  background: transparent;
+  color: var(--sp4-text-2);
+  font: inherit;
+  font-size: var(--sp4-body);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.oi-seg__opt:last-child { border-right: 0; }
+.oi-seg__opt:hover { background: var(--sp4-raised); color: var(--sp4-text-1); }
+.oi-seg__opt:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; }
+.oi-seg__opt--on, .oi-seg__opt--on:hover { background: var(--sp4-text-1); color: var(--sp4-surface); }
+
+.oi-by { margin: 0; color: var(--sp4-text-3); font-size: var(--sp4-body); }
+.oi-by b { color: var(--sp4-text-1); }
+.oi-problem { margin-right: auto; color: var(--sp4-warn); font-size: var(--sp4-body); font-weight: 600; }
+
+/* ── the list ── */
+.oi-panel {
+  margin: 20px var(--sp4-gutter) calc(var(--app-footer-h, 64px) + 16px);
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 8px;
+  background: var(--sp4-surface);
+}
+.oi-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--sp4-line);
+}
+.oi-panel__title { margin: 0; font-size: var(--sp4-strong); font-weight: 800; color: var(--sp4-text-1); }
+.oi-panel__n {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--sp4-raised);
+  color: var(--sp4-text-2);
+  font-size: var(--sp4-body);
+  font-weight: 700;
+}
+.oi-panel__sub { margin: 4px 0 0; max-width: 70ch; color: var(--sp4-text-3); font-size: var(--sp4-body); line-height: 1.45; }
+.oi-panel__tools { display: flex; gap: 8px; align-items: center; }
+.oi-panel__tools .sp4-submit-btn { padding: 6px 14px; }
+.oi-warn, .oi-note { margin: 10px 16px 0; font-size: var(--sp4-body); }
+.oi-warn { color: var(--sp4-warn); font-weight: 600; }
+.oi-note { color: var(--sp4-text-2); }
+.oi-empty { margin: 0; padding: 18px 16px; color: var(--sp4-text-3); font-size: var(--sp4-body); }
+
+.oi-scroll { overflow-x: auto; }
+.oi-table { min-width: 860px; }
+.oi-table td { vertical-align: top; }
+.oi-nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.oi-plate { font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
+.oi-details { max-width: 280px; white-space: normal; line-height: 1.4; }
+.oi-actions { white-space: nowrap; text-align: right; }
+.oi-actions .sp4-ghost-btn + .sp4-ghost-btn { margin-left: 6px; }
+.oi-more { margin: 10px 16px 14px; }
+
+@media (max-width: 600px) {
+  .oi-panel__tools { width: 100%; }
+  .oi-panel__tools .sp4-submit-btn { flex: 1; }
+  .oi-when { min-width: 0; width: 100%; }
+}
+
+/* ── follow-up (FollowUp.jsx): the same parts, a few of its own ── */
+.oi-seg--wrap { border: 0; gap: 6px; overflow: visible; }
+.oi-seg--wrap .oi-seg__opt { border: 1px solid var(--sp4-line-hi); border-radius: 6px; }
+.oi-panel__head .oi-seg__opt { padding: 5px 12px; }
+.fu-facts { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--sp4-line); border-radius: 6px; background: var(--sp4-bg); }
+.fu-facts div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
+.fu-facts dt { color: var(--sp4-text-3); font-size: var(--sp4-body); }
+.fu-facts dd { margin: 0; color: var(--sp4-text-1); font-size: var(--sp4-body); font-weight: 600; }
+.fu-reopen { margin-right: auto; }
+.fu-overdue { margin-left: 6px; background: transparent; border: 1px solid var(--sp4-text-1); color: var(--sp4-text-1); }
+.fu-flag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 4px;
+  color: var(--sp4-text-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+.fu-flag--strong { border-color: var(--sp4-text-1); color: var(--sp4-text-1); }
+.fu-by { color: var(--sp4-text-3); font-weight: 400; }
+.fu-act { padding: 4px 10px; }
+
+/* The report table's follow-up cell: a button when there is a case. */
+.rpt-fu {
+  padding: 2px 8px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sp4-text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rpt-fu:hover { border-color: var(--sp4-text-2); color: var(--sp4-text-1); }
+.rpt-fu:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.rpt-fu--pending, .rpt-fu--overdue { border-color: var(--sp4-text-1); color: var(--sp4-text-1); }
+.rpt-fu--overdue { background: var(--sp4-text-1); color: var(--sp4-surface); }
+.rpt-fu-none { color: var(--sp4-text-4); font-size: 12px; }
