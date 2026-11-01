@@ -28,6 +28,25 @@ export function isMoving(row) {
     && (row.speedKmh ?? 0) >= MOVING_KMH;
 }
 
+/** The Mombasa loading point and its radius (operator, 2026-11-02), as the server has it. */
+export const MOMBASA_LOADING = { lat: -4.04579, lng: 39.65165, radiusM: 1000 };
+
+const rad = (d) => (d * Math.PI) / 180;
+function metres(lat1, lng1, lat2, lng2) {
+  const h = Math.sin(rad(lat2 - lat1) / 2) ** 2
+    + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Is the unit loading in Mombasa? Its last fix, inside the window, is within
+ * 1 km of the loading point: its Location cell is filled orange, ahead of green.
+ */
+export function isLoading(row) {
+  return row.lastAt != null && !row.stale && row.lat != null && row.lng != null
+    && metres(row.lat, row.lng, MOMBASA_LOADING.lat, MOMBASA_LOADING.lng) <= MOMBASA_LOADING.radiusM;
+}
+
 /** The PDF's tints for the rows heading somewhere or standing at MORL. */
 export const TINT = { to: '#e3f1dc', from: '#fbe4d3', at: '#fdf3c9' };
 

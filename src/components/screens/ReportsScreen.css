@@ -130,6 +130,12 @@
 /* A unit moving now: its Location cell filled green, as the PDF prints it. */
 .mvr-table td.mvr-cell--moving { background: #b5dfa6; }
 .mvr-cell--moving .mvr-edit { background: rgba(255, 255, 255, .35); }
+/* Loading in Mombasa (within 1 km of the loading point): orange, ahead of green. */
+.mvr-table td.mvr-cell--loading { background: #f8c08a; }
+.mvr-cell--loading .mvr-edit { background: rgba(255, 255, 255, .35); }
+/* At MORL: yellow, as the operator's sheet has it, stale or not. */
+.mvr-table td.mvr-cell--morl { background: #fbe36b; }
+.mvr-cell--morl .mvr-edit { background: rgba(255, 255, 255, .35); }
 select.mvr-edit { min-width: 110px; }
 .mvr-table td.mvr-silent { color: #dc2626; }
 .mvr-table input.mvr-edit { min-width: 220px; }
