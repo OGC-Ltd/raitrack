@@ -325,8 +325,8 @@ function MovementsReport({ orgId }) {
                                 style={!out && TINT[state] ? { background: TINT[state] } : undefined}>
                               <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
                               <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
-                              <td>
-                                <input type="text" className={`mvr-edit${isMoving({ ...row, state }) ? ' mvr-edit--moving' : ''}${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
+                              <td className={!out && isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}>
+                                <input type="text" className={`mvr-edit${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
                                        value={location} placeholder="-" maxLength={200} disabled={out}
                                        aria-label={`Location of ${row.plate}`}
                                        onChange={(ev) => edit(row.vehicleId, { location: ev.target.value })} />

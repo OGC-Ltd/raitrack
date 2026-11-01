@@ -127,8 +127,9 @@
 .mvr-edit:hover:not(:disabled) { border-color: #cbd5e1; background: #fff; }
 .mvr-edit:focus { outline: none; border-color: #3b82f6; background: #fff; box-shadow: 0 0 0 2px rgba(59, 130, 246, .15); }
 .mvr-edit--changed { border-color: #2563eb; background: #eff6ff; }
-/* A unit moving now: its location in green, as the PDF prints it. */
-.mvr-edit--moving { color: #15803d; font-weight: 600; }
+/* A unit moving now: its Location cell filled green, as the PDF prints it. */
+.mvr-table td.mvr-cell--moving { background: #b5dfa6; }
+.mvr-cell--moving .mvr-edit { background: rgba(255, 255, 255, .35); }
 select.mvr-edit { min-width: 110px; }
 .mvr-table td.mvr-silent { color: #dc2626; }
 .mvr-table input.mvr-edit { min-width: 220px; }
