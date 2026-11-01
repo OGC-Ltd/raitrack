@@ -663,8 +663,31 @@
   .nav-alarm .side-panel__nav-icon { animation: none; }
 }
 
-/* The End of shift report row while the server makes the file: a ring in
-   place of the icon, sized to the icon it stands in for. */
+/* Reports: a parent row that opens End of shift and CPO movements beneath it. */
+.sp-nav-group { border-bottom: 1px solid #f1f5f9; }
+.sp-nav-group:last-child { border-bottom: none; }
+.sp-nav-group .sp-nav-item { border-bottom: none; }
+.sp-nav-chev { margin-left: auto; font-size: 14px; color: #94a3b8; transition: transform .15s ease; }
+.sp-nav-chev--open { transform: rotate(180deg); }
+.sp-nav-sub { display: flex; flex-direction: column; background: #f8fafc; border-top: 1px solid #f1f5f9; }
+.sp-nav-sub-item { padding-left: 28px; }
+.sp-nav-sub-item .sp-nav-label { white-space: nowrap; }
+.sp-nav-sub-item:hover { background: #f1f5f9; }
+.sp-nav-sub-item--static { cursor: default; }
+.sp-nav-sub-item--static:hover { background: transparent; }
+.sp-nav-chips { margin-left: auto; display: flex; gap: 4px; }
+.sp-nav-chip {
+  font: inherit; font-size: 11px; font-weight: 600; color: #1e6f4e;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 5px;
+  padding: 2px 7px; cursor: pointer; white-space: nowrap;
+}
+.sp-nav-chip:hover:not(:disabled) { border-color: #1e6f4e; background: #ecfdf5; }
+.sp-nav-chip:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+.sp-nav-chip:disabled { opacity: .6; cursor: progress; }
+@media (prefers-reduced-motion: reduce) { .sp-nav-chev { transition: none; } }
+
+/* A report row while the server makes the file: a ring in place of the
+   icon, sized to the icon it stands in for. */
 .sp-nav-spin {
   display: inline-block; flex: none; box-sizing: border-box;
   width: 15px; height: 15px; border-radius: 50%;
