@@ -39,7 +39,8 @@ import { casesFromRun, mergeCases, recordAction, periodCases, loadCases, saveCas
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
-import { downloadMovementReport } from '../../api/reports';
+import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
+import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, locationChanged } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -135,46 +136,228 @@ function ShiftReport({ orgId }) {
   );
 }
 
+/** CPO movements tables and their edits, by organisation, while this browser tab is open. */
+const movementsKept = new Map();
+
+/** "5 vehicles", or "4 of 5 vehicles" once some are left out. */
+function groupWords(g, edits) {
+  const kept = g.rows.filter((r) => !edits[r.vehicleId]?.removed).length;
+  const all = g.rows.length;
+  return `${kept === all ? all : `${kept} of ${all}`} vehicle${all === 1 ? '' : 's'}`;
+}
+
 /**
- * CPO movements (was the sidebar's Reports group, operator 2 Nov 2026): where
- * every unit is now and whether it is heading to or from MORL. The server
- * makes the PDF for the last 2 or 4 hours, so the window is the only choice.
+ * CPO movements (operator, 2 Nov 2026): where every unit is now and whether it
+ * is heading to or from MORL over the last 2 or 4 hours, as a table first. The
+ * operator may correct a row's location or direction, or leave a row out,
+ * before the PDF; the server draws the PDF from the table as edited
+ * (lib/movementReport), counting the overview again from what is kept.
  */
 function MovementsReport({ orgId }) {
-  const [busy, setBusy] = useState(null);   // the window being made
-  const [error, setError] = useState(null);
-  const run = async (hours) => {
-    if (busy) return;
-    setBusy(hours); setError(null);
+  // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
+  const [saved] = useState(() => movementsKept.get(orgId));
+  const [hours, setHours] = useState(saved?.hours ?? MOVEMENT_WINDOWS[0]);
+  const [run, setRun] = useState(saved ? { status: 'done', report: saved.report } : { status: 'idle' });
+  const [edits, setEdits] = useState(saved?.edits ?? {});   // by vehicleId: { location?, state?, removed? }
+  const [pdf, setPdf] = useState({ busy: false, error: null });
+  const [confirm, setConfirm] = useState(null);              // { words, go }: waits for the operator's yes
+  const runId = useRef(0);
+
+  const reset = () => { runId.current += 1; setRun({ status: 'idle' }); setEdits({}); };
+
+  // The table and its edits outlive this tab: another report tab or page and
+  // back finds them as they were. Only a finished table is kept.
+  useEffect(() => {
+    if (!orgId) return;
+    if (run.status === 'done') movementsKept.set(orgId, { hours, report: run.report, edits });
+    else movementsKept.delete(orgId);
+  }, [orgId, hours, run, edits]);
+
+  const execute = async () => {
+    if (!orgId) return;
+    const id = ++runId.current;
+    setRun({ status: 'loading' });
     try {
-      await downloadMovementReport({ orgId, hours });
+      const report = await loadMovementReport({ orgId, hours });
+      if (id === runId.current) { setEdits({}); setRun({ status: 'done', report }); }
     } catch (err) {
-      setError(`The report could not be made: ${err?.message ?? err}`);
-    } finally {
-      setBusy(null);
+      if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
+
+  const report = run.status === 'done' ? run.report : null;
+  const kept = useMemo(() => (report ? applyEdits(report, edits) : null), [report, edits]);
+  const changed = report ? report.groups.reduce((n, g) => n + g.rows.filter((r) => isEdited(r, edits[r.vehicleId])).length, 0) : 0;
+  const edit = (vehicleId, patch) => setEdits((e) => ({ ...e, [vehicleId]: { ...e[vehicleId], ...patch } }));
+
+  // Closing or reloading the browser tab would lose them: the browser asks first.
+  useEffect(() => {
+    if (!changed) return undefined;
+    const warn = (ev) => { ev.preventDefault(); ev.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [changed]);
+
+  // A new run or another window replaces the table: with edits on it, ask first.
+  const guard = (words, go) => (changed ? setConfirm({ words, go }) : go());
+
+  const downloadPdf = async () => {
+    if (!report || pdf.busy) return;
+    setPdf({ busy: true, error: null });
+    try {
+      await downloadEditedMovementReport({ orgId, request: pdfRequest(report, edits) });
+      setPdf({ busy: false, error: null });
+    } catch (err) {
+      setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
+    }
+  };
+
+  const n = kept?.counts;
+  const silentCount = n ? n.stale + n['no-fix'] : 0;
+  const kpis = [
+    { label: 'Vehicles', value: n?.total },
+    { label: 'To MORL', value: n?.to, tone: n?.to ? 'live' : undefined },
+    { label: 'From MORL', value: n?.from },
+    { label: 'At MORL', value: n?.at },
+    { label: 'Not reporting', value: silentCount, tone: silentCount ? 'speed' : undefined },
+  ];
+
   return (
     <>
       <div className="sp4-header rpt-header">
-        <p className="rpt-blurb">Where every unit was last seen, its speed, and whether it is heading to or from MORL over the window. The server makes it as a PDF on the letterhead.</p>
+        <p className="rpt-blurb">Where every unit was last seen, its speed, and whether it is heading to or from MORL over the window. Correct a location or a direction, or leave a unit out, then download the PDF.</p>
+        <div className="sp4-header-kpis">
+          {kpis.map((k) => (
+            <Kpi key={k.label} label={k.label} tone={k.tone} value={n ? k.value.toLocaleString('en-GB') : <span className="frp-kpi-none">-</span>} />
+          ))}
+        </div>
       </div>
+
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <span className="rpt-sub">Period: up to now</span>
-        <span className="rpt-windows">
+        <div className="sp4-filter-group" role="group" aria-label="Window">
           {MOVEMENT_WINDOWS.map((h) => (
-            <button key={h} type="button" className="sp4-submit-btn frp-run" onClick={() => run(h)}
-                    disabled={Boolean(busy) || !orgId} aria-busy={busy === h}>
-              {busy === h ? 'Making the report…' : `Last ${h} hours`}
+            <button key={h} type="button" aria-pressed={hours === h}
+                    className={`sp4-filter-chip${hours === h ? ' sp4-filter-chip--on' : ''}`}
+                    onClick={() => { if (h !== hours) guard(`Show the last ${h} hours`, () => { setHours(h); reset(); }); }}>
+              Last {h} hours
             </button>
           ))}
-        </span>
-        {error && <span className="rpt-problem" role="alert">{error}</span>}
+        </div>
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => guard('Run the report again', execute)}
+                disabled={!orgId || run.status === 'loading'}>
+          {run.status === 'loading' ? 'Running…' : 'Run report'}
+        </button>
       </div>
+
+      {confirm && (
+        <div className="mvr-confirm" role="alertdialog" aria-labelledby="mvr-confirm-words">
+          <span id="mvr-confirm-words">{confirm.words} and lose your {changed} edit{changed === 1 ? '' : 's'}?</span>
+          <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setConfirm(null)} autoFocus>Keep editing</button>
+          <button type="button" className="sp4-submit-btn frp-run mvr-confirm__go"
+                  onClick={() => { const { go } = confirm; setConfirm(null); go(); }}>Discard edits</button>
+        </div>
+      )}
+
       <div className="sp4-body rpt-body">
-        <EmptyNote icon="ti-route" title="CPO Movements">
-          Press Last 2 hours or Last 4 hours for the PDF. It takes a few seconds while the server reads the fleet.
-        </EmptyNote>
+        {run.status === 'idle' && (
+          <EmptyNote icon="ti-route" title="CPO Movements">
+            Choose the window, then press Run report.
+          </EmptyNote>
+        )}
+        {run.status === 'loading' && (
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">
+            Reading where every unit is. Up to half a minute while new places are named.
+          </EmptyNote>
+        )}
+        {run.status === 'error' && (
+          <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made"
+                     action={{ label: 'Try again', onClick: execute }}>
+            {run.message}
+          </EmptyNote>
+        )}
+
+        {report && (
+          <>
+            <TableToolbar
+              summary={<>
+                <strong>{kept.counts.total.toLocaleString('en-GB')}</strong> vehicle{kept.counts.total === 1 ? '' : 's'}
+                <span className="rpt-sub"> · {periodText(report.from, report.to)} · {report.morl ? `${report.morl} geofence` : 'no MORL geofence, so no direction'}</span>
+                {changed > 0 && <span className="rpt-edited"> · {changed} edited</span>}
+              </>}
+              onPdf={pdf.busy ? undefined : downloadPdf}
+              actions={<>
+                {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits({})}>Undo edits</button>}
+                {pdf.busy ? <span className="rpt-sub">Making the PDF…</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
+              </>}
+            />
+            {!report.groups.length ? (
+              <EmptyNote icon="ti-circle-check" title="Nothing to Report">No units are tracked for this fleet.</EmptyNote>
+            ) : (
+              <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+                <table className="sp4-table rpt-table mvr-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Grouping</th>
+                      <th scope="col">Last coordinates</th>
+                      <th scope="col">Location</th>
+                      <th scope="col" className="rpt-num">Speed</th>
+                      <th scope="col">Direction</th>
+                      <th scope="col"><span className="mvr-sr">Keep or leave out</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.groups.map((g) => (
+                      <Fragment key={g.name}>
+                        <tr className="rpt-group">
+                          <th colSpan={6} scope="rowgroup">
+                            <span className="rpt-group__name">{g.name}</span>
+                            <span className="rpt-group__meta">{groupWords(g, edits)}</span>
+                          </th>
+                        </tr>
+                        {g.rows.map((row) => {
+                          const e = edits[row.vehicleId];
+                          const out = Boolean(e?.removed);
+                          const state = e?.state ?? row.state;
+                          const location = e?.location ?? row.location ?? '';
+                          const silent = row.stale || row.state === 'no-fix';
+                          return (
+                            <tr key={row.vehicleId} className={`sp4-tr${out ? ' mvr-row--out' : ''}`}
+                                style={!out && TINT[state] ? { background: TINT[state] } : undefined}>
+                              <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
+                              <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
+                              <td>
+                                <input type="text" className={`mvr-edit${isMoving({ ...row, state }) ? ' mvr-edit--moving' : ''}${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
+                                       value={location} placeholder="-" maxLength={200} disabled={out}
+                                       aria-label={`Location of ${row.plate}`}
+                                       onChange={(ev) => edit(row.vehicleId, { location: ev.target.value })} />
+                              </td>
+                              <td className="rpt-num">{row.speedKmh != null ? `${row.speedKmh} km/h` : '-'}</td>
+                              <td>
+                                <select className={`rpt-select mvr-edit${state !== row.state ? ' mvr-edit--changed' : ''}`}
+                                        value={state} disabled={out} aria-label={`Direction of ${row.plate}`}
+                                        onChange={(ev) => edit(row.vehicleId, { state: ev.target.value })}>
+                                  {STATES.map((s) => <option key={s} value={s}>{DIRECTION[s]}</option>)}
+                                </select>
+                              </td>
+                              <td className="mvr-keep">
+                                <button type="button" className="mvr-keep__btn"
+                                        onClick={() => edit(row.vehicleId, { removed: !out })}
+                                        title={out ? 'Put this unit back in the report' : 'Leave this unit out of the PDF'}
+                                        aria-label={out ? `Put ${row.plate} back` : `Leave ${row.plate} out`}>
+                                  <i className={`ti ${out ? 'ti-arrow-back-up' : 'ti-x'}`} aria-hidden="true" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </>
   );
@@ -384,7 +567,7 @@ export default function ReportsScreen() {
         ))}
       </div>
 
-      {key === SHIFT ? <ShiftReport orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport orgId={orgId} /> : (<>
+      {key === SHIFT ? <ShiftReport orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
 
       <div className="sp4-header rpt-header">
         <p className="rpt-blurb">{def.blurb}</p>
