@@ -1,0 +1,113 @@
+// Menengai (MORL) unit groups, from the client's list MORL_FLEET_2.xlsx (1 Nov 2026):
+// one group per tab. Reports for Menengai include only these units, by group.
+// A unit listed in two tabs is kept in the first (KBV 494K: Finished Goods;
+// KTCC 389N and KTCC 390N: Farm Equipment).
+//
+// [plate, type, dashcam] per unit. dashcam is the list's VSS column: 1 = the
+// unit has a dashcam, so its no-seatbelt and on-phone counts mean something.
+// Only these are kept: the list's driver names, ID and phone numbers stay out
+// of the code.
+
+export const FLEET_GROUPS = {
+  MENENGAI: [
+    { name: "Tankers", units: [
+      ["KCH 012A", "Tanker", 1], ["KCK 456G", "Tanker", 1], ["KCA 918P", "Tanker", 1], ["KCF 180A", "Tanker", 1],
+      ["KCF 181A", "Tanker", 1], ["KCF 182A", "Tanker", 1], ["KCF 183A", "Tanker", 1], ["KCF 185A", "Tanker", 1],
+      ["KCF 186A", "Tanker", 1], ["KCF 187A", "Tanker", 0], ["KCH 123B", "Tanker", 1], ["KCH 045A", "Tanker", 1],
+      ["KCK 234F", "Tanker", 1], ["KCK 345G", "Tanker", 1], ["KCC 386Z", "Tanker", 1], ["KCM 123T", "Tanker", 1],
+      ["KCM 234W", "Tanker", 1], ["KCM 234S", "Tanker", 1], ["KCN 901F", "Tanker", 1], ["KCN 902F", "Tanker", 0],
+      ["KCN 903F", "Tanker", 1], ["KCN 904F", "Tanker", 1], ["KCN 906F", "Tanker", 1], ["KCN 907F", "Tanker", 1],
+      ["KCN 908F", "Tanker", 1], ["KCN 909F", "Tanker", 1], ["KCN 910F", "Tanker", 1], ["KCN 911F", "Tanker", 1],
+      ["KCN 912F", "Tanker", 0], ["KCN 913F", "Tanker", 1], ["KCN 914F", "Tanker", 1], ["KCN 916F", "Tanker", 1],
+      ["KCN 345B", "Tanker", 1], ["KCT 507W", "Tanker", 1], ["KCT 508W", "Tanker", 1], ["KCT 509W", "Tanker", 1],
+      ["KCT 510W", "Tanker", 1], ["KCT 511W", "Tanker", 1], ["KCT 512W", "Tanker", 1], ["KCV 029A", "Tanker", 1],
+      ["KCV 033A", "Tanker", 0], ["KCV 036A", "Tanker", 0], ["KCV 039A", "Tanker", 1], ["KCV 041A", "Tanker", 1],
+      ["KCV 042A", "Tanker", 1], ["KCV 044A", "Tanker", 1], ["KCV 051A", "Tanker", 1], ["KCV 052A", "Tanker", 1],
+      ["KCV 053A", "Tanker", 1], ["KCV 056A", "Tanker", 1], ["KCV 070A", "Tanker", 1], ["KCV 071A", "Tanker", 0],
+      ["KCV 901D", "Tanker", 1],
+    ] },
+    { name: "Finished Goods", units: [
+      ["KBT 112R", "FG", 1], ["KBT 113R", "FG", 0], ["KBT 114R", "FG", 1], ["KBT 116R", "FG", 1],
+      ["KBT 119R", "FG", 0], ["KCA 223M", "FG", 1], ["KCA 224M", "FG", 1], ["KCA 225M", "FG", 1],
+      ["KCA 226M", "FG", 1], ["KCA 227M", "FG", 1], ["KBY 003A", "FG", 1], ["KBY 009A", "FG", 0],
+      ["KBY 010A", "FG", 1], ["KBY 011A", "FG", 1], ["KBY 012A", "FG", 1], ["KBY 594Q", "FG", 1],
+      ["KCC 385Z", "FG", 1], ["KCB 303Z", "FG", 1], ["KCA 915P", "FG", 1], ["KCA 917P", "FG", 1],
+      ["KCA 919P", "FG", 1], ["KCF 184A", "FG", 1], ["KCM 810H", "FG", 1], ["KCP 042S", "FG", 1],
+      ["KCP 043S", "FG", 1], ["KCP 044S", "FG", 0], ["KCP 065V", "FG", 1], ["KCP 129P", "FG", 1],
+      ["KCP 131P", "FG", 1], ["KCP 132P", "FG", 1], ["KCP 133P", "FG", 1], ["KCP 134P", "FG", 1],
+      ["KCP 135P", "FG", 1], ["KCP 136P", "FG", 1], ["KCP 145P", "FG", 1], ["KCA 456U", "FG", 1],
+      ["KBT 117R", "FG", 1], ["KBY 006A", "FG", 0], ["KAX 536U", "FH", 1], ["KBE 726E", "FH", 1],
+      ["KBB 161G", "FH", 1], ["KBZ 911V", "FN", 1], ["KBG 388E", "FN", 1], ["KBG 389E", "FN", 1],
+      ["KBB 880A", "FN", 1], ["KDA 258J", "Fuso", 0], ["KCH 463T", "Hino", 1], ["KCS 074M", "Hino", 0],
+      ["KCS 075M", "Hino", 1], ["KCH 137K", "Mancla", 0], ["KCH 297K", "Mancla", 0], ["KCT 346W", "Mancla", 1],
+      ["KCT 347W", "Mancla", 1], ["KCT 348W", "Mancla", 1], ["KCT 358W", "Mancla", 1], ["KCU 258L", "Mancla", 1],
+      ["KCU 259L", "Mancla", 1], ["KCW 193E", "Mancla", 1], ["KCW 475E", "Mancla", 1], ["KBV 493K", "Tata", 0],
+      ["KBV 493A", "Tata", 0], ["KBY 769G", "Tata", 0], ["KCB 101Y", "Tata", 0], ["KBT 255D", "Tata", 0],
+      ["KBY 710G", "Tata", 0], ["KBV 494K", "Tata", 0], ["KCB 100Y", "Tata", 0], ["KBX 668R", "Pick Up", 0],
+      ["KBV 678M", "Pick Up", 0], ["KCC 345A", "Pick Up", 0], ["KCC 348A", "Pick Up", 0], ["KCC 428K", "Pick Up", 0],
+      ["KCC 431K", "Pick Up", 0], ["KCF 483V", "Pick Up", 0],
+    ] },
+    { name: "Van Sales", units: [
+      ["KCH 467T", "Hino", 1], ["KCH 473T", "Hino", 1], ["KCH 474T", "Hino", 1], ["KCH 502T", "Hino", 1],
+      ["KDE 017U", "Hino", 1], ["KDE 018U", "Hino", 1], ["KDE 021U", "Hino", 0], ["KDE 023U", "Hino", 1],
+      ["KDE 228P", "Hino", 1], ["KDE 229P", "Hino", 1], ["KDE 230P", "Hino", 1], ["KDE 231P", "Hino", 1],
+      ["KDE 240P", "Hino", 1], ["KDE 254P", "Hino", 0], ["KDE 264S", "Hino", 1], ["KDE 265S", "Hino", 1],
+      ["KDE 267P", "Hino", 1], ["KDE 268P", "Hino", 1], ["KDE 275S", "Hino", 1], ["KDM 154L", "Hino", 0],
+      ["KDM 139L", "Hino", 0], ["KDM 130L", "Hino", 0], ["KDM 128L", "Hino", 0], ["KDM 135L", "Hino", 0],
+      ["KDM 140L", "Hino", 0], ["KDM 125L", "Hino", 0], ["KDM 129L", "Hino", 0], ["KDM 138L", "Hino", 0],
+      ["KDM 124L", "Hino", 0], ["KDM 127L", "Hino", 0], ["KDM 098L", "Hino", 0], ["KDM 119L", "Hino", 0],
+      ["KDM 144L", "Hino", 0], ["KDM 148L", "Hino", 0], ["KCH 470T", "Hino", 1], ["KCS 071M", "Hino", 1],
+      ["KCS 072M", "Hino", 1], ["KCS 076M", "Hino", 1], ["KCS 077M", "Hino", 1], ["KCS 078M", "Hino", 1],
+      ["KCS 081M", "Hino", 1], ["KCS 082M", "Hino", 1], ["KCS 088M", "Hino", 1], ["KCB 123P", "Hyundai", 1],
+      ["KCB 234J", "Hyundai", 1], ["KCB 345K", "Hyundai", 1], ["KDE 120E", "Hyundai", 0], ["KDE 121E", "Hyundai", 0],
+      ["KDE 122E", "Hyundai", 0], ["KDE 123E", "Hyundai", 0], ["KDE 125E", "Hyundai", 0], ["KDE 126E", "Hyundai", 0],
+      ["KDE 127E", "Hyundai", 0], ["KDE 128E", "Hyundai", 0], ["KDE 129E", "Hyundai", 0], ["KDE 130E", "Hyundai", 0],
+      ["KDE 131E", "Hyundai", 0], ["KDE 132E", "Hyundai", 0], ["KDE 133E", "Hyundai", 0], ["KDE 134E", "Hyundai", 0],
+      ["KDE 135E", "Hyundai", 0], ["KDE 136E", "Hyundai", 0], ["KDE 137E", "Hyundai", 0], ["KDE 138E", "Hyundai", 0],
+      ["KDE 139E", "Hyundai", 0], ["KDE 140E", "Hyundai", 0], ["KDE 141E", "Hyundai", 0], ["KDE 142E", "Hyundai", 0],
+      ["KDE 143E", "Hyundai", 0], ["KDE 144E", "Hyundai", 0], ["KDE 145E", "Hyundai", 0],
+    ] },
+    { name: "Light Vehicles", units: [
+      ["KBZ 043V", "Axio", 0], ["KBD 370G", "Corolla", 0], ["KCA 172G", "Vitz", 0], ["KBT 194H", "Vitz", 0],
+      ["KBT 325L", "Vitz", 0], ["KBT 448X", "Vitz", 0], ["KBY 782T", "Vitz", 0], ["KBS 860S", "Vitz", 0],
+      ["KBH 593U", "Vitz", 0], ["KCX 555U", "Polo", 0], ["KBS 565P", "Platz", 0], ["KCS 840R", "Probox", 0],
+      ["KCS 842R", "Probox", 0], ["KCS 843R", "Probox", 0], ["KCY 074M", "Probox", 0], ["KCY 403S", "Probox", 0],
+      ["KCY 082M", "Probox", 0], ["KCG 527E", "Probox", 0], ["KCG 271A", "Probox", 0], ["KCG 549E", "Probox", 0],
+      ["KCL 234M", "Probox", 0], ["KCL 968R", "Probox", 0], ["KCL 016Z", "Probox", 0], ["KCX 943E", "Probox", 0],
+      ["KCX 740D", "Probox", 0], ["KCX 749D", "Probox", 0], ["KCF 028Q", "Probox", 0], ["KCF 073Q", "Probox", 0],
+      ["KCE 046Q", "Probox", 0], ["KCF 931D", "Probox", 0], ["KCZ 673E", "Probox", 0], ["KCZ 290C", "Probox", 0],
+      ["KCG 638N", "Probox", 0], ["KCF 906D", "Probox", 0], ["KCF 740D", "Probox", 0], ["KCF 851C", "Probox", 0],
+      ["KCG 223A", "Probox", 0], ["KCY 599Z", "Probox", 0], ["KCF 235C", "Probox", 0], ["KCZ 288C", "Probox", 0],
+      ["KCF 186W", "Probox", 0], ["KCE 780B", "Probox", 0], ["KCG 625N", "Probox", 0], ["KCF 567J", "Probox", 0],
+      ["KCD 456X", "Probox", 0], ["KCL 610D", "Probox", 0], ["KCF 750B", "Probox", 0], ["KCH 123T", "Revo", 0],
+      ["KCH 234T", "Revo", 0], ["KCH 345T", "Revo", 0], ["KBX 667R", "Pick Up", 0], ["KBY 345B", "Pick Up", 0],
+      ["KBT 789H", "Pick Up", 0], ["KDD 200V", "Prado", 0], ["KBT 049B", "Pick Up", 0], ["KBT 069B", "Pick Up", 0],
+      ["KBT 678G", "Pick Up", 0],
+    ] },
+    { name: "Equipment", units: [
+      ["KBY 002A", "Tipper", 1], ["KBY 007A", "Tipper", 0], ["KBY 008A", "Tipper", 1], ["KCN 678J", "Tipper", 0],
+      ["KCN 567J", "Tipper", 0], ["KCN 456J", "Tipper", 0], ["KBY 678B", "Tipper", 0], ["KBY 678D", "Tipper", 0],
+      ["KBZ 234E", "Tipper", 0], ["KBX 456A", "Tipper", 0], ["KBV 487K", "Transit Mixer", 0], ["KBY 679F", "Transit Mixer", 0],
+      ["JCB 01", "JCB Backhoe", 0], ["JCB 02", "JCB Backhoe", 0], ["EX 01", "Hyundai Excavator", 0], ["EX 02", "Hitachi Excavator", 0],
+      ["CR 02", "Sany Crane", 0], ["KBV 789M", "Bus", 0], ["KCM 234J", "Bus", 0], ["KCG 345X", "Fire Truck", 0],
+      ["KCG 678W", "Ambulance", 0],
+    ] },
+    { name: "Farm Equipment", units: [
+      ["KTCC 085A", "Case Puma", 0], ["KBJ 510J", "Case Jx90", 0], ["KTCC 150F", "Mahindra 9200", 0], ["KTCC 108F", "Mahindra 9200", 0],
+      ["YUVRAJ 215", "Yuvraj 215", 0], ["KTCB 165Y", "Valtra", 0], ["KTCC 389N", "Mahindra 9200", 0], ["KTCC 390N", "Mahindra 9200", 0],
+      ["KMFG 498D", "Shineray", 0], ["KMFD 500D", "Shineray", 0], ["KMGB 614S", "TVS", 0], ["KMGC 102B", "TVS", 0],
+      ["KMGC 814B", "TVS", 0], ["KMFU 927U", "TVS", 0], ["KTCC 429J", "Valtra", 0], ["FORKLIFT", "Baoli", 0],
+    ] },
+    { name: "RAI MDF FG", units: [
+      ["KCP 070P", "FG", 0], ["KCP 071P", "FG", 0], ["KCP 073P", "FG", 0], ["KCP 075P", "FG", 0],
+      ["KCP 077P", "FG", 0], ["KCP 086P", "FG", 0], ["KCP 104P", "FG", 0], ["KDJ 083J", "Hino", 0],
+      ["KDJ 099J", "Hino", 0], ["KDJ 105J", "Hino", 0], ["KDJ 106J", "Hino", 0], ["KDJ 107J", "Hino", 0],
+      ["KDJ 108J", "Hino", 0],
+    ] },
+    { name: "RAI MDF Equipment", units: [
+      ["FL 01", "Forklift", 0], ["FL 02", "Forklift", 0], ["FL 03", "Forklift", 0], ["FL 04", "Forklift", 0],
+      ["TRACTOR RELIEVER", "", 0], ["WL 01", "Wheel Loader", 0], ["WL 01 RELIEVER", "", 0], ["WL 02", "Wheel Loader", 0],
+      ["WL 02 RELIEVER", "", 0], ["WL 03", "Wheel Loader", 0], ["WL 03 RELIEVER", "", 0], ["KDJ 069X", "Fire Truck", 0],
+    ] },
+  ],
+};
