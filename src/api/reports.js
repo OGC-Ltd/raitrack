@@ -42,9 +42,8 @@ export async function downloadOrgReportPdf({ companyId, kind, days = 30, filenam
  * is now and whether it is heading to or from MORL over the last `hours`
  * (2 or 4). Made on the server; this saves the file.
  */
-export async function downloadMovementReport({ companyId, hours }) {
-  const orgId = await resolveOrgId(companyId)
-  if (!orgId) throw new Error('This company has no backend organisation to report on')
+export async function downloadMovementReport({ orgId, hours }) {
+  if (!orgId) throw new Error('No organisation selected')
   const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf?hours=${hours}`)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
