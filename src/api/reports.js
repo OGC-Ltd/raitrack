@@ -6,6 +6,7 @@
 // same visual system.
 
 import { resolveOrgId } from './org'
+import { apiFetchBlob } from '../services/api'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
@@ -34,4 +35,23 @@ export async function downloadOrgReportPdf({ companyId, kind, days = 30, filenam
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * The movement report (fleet-server reports/movement-report): where every unit
+ * is now and whether it is heading to or from MORL over the last `hours`
+ * (2 or 4). Made on the server; this saves the file.
+ */
+export async function downloadMovementReport({ companyId, hours }) {
+  const orgId = await resolveOrgId(companyId)
+  if (!orgId) throw new Error('This company has no backend organisation to report on')
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf?hours=${hours}`)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename ?? `Movement report last ${hours} hours.pdf`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
