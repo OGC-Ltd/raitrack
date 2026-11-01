@@ -1,0 +1,122 @@
+/* Reports page. The page is the shared sp4 frame (tabs, KPI header, filter bar,
+ * table) that Fuel Report and Maintenance use, so it takes the same theme and
+ * phone layouts; only what that frame has no part for lives here: the group and
+ * night-hour pickers, the group rows, the hour grid's shading and the tags. */
+
+.rpt-root { min-width: 0; }
+.rpt-tabs .sp4-tab .ti { font-size: 16px; }
+
+/* ── header: what the report is, and its figures ── */
+.rpt-header { justify-content: space-between; align-items: center; }
+.rpt-blurb {
+  margin: 0;
+  max-width: 52ch;
+  color: var(--sp4-text-2);
+  font-size: var(--sp4-body);
+  line-height: 1.45;
+}
+
+/* ── filter bar ── */
+.rpt-filterbar { gap: 10px 12px; }
+.rpt-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--sp4-raised);
+  border-radius: 8px;
+  color: var(--sp4-text-1);
+  font-size: var(--sp4-body);
+}
+.rpt-field:focus-within { border-color: var(--sp4-accent); }
+.rpt-field__l { font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-3); }
+.rpt-select {
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--sp4-text-1);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rpt-select:focus { outline: none; }
+.rpt-run { margin-left: auto; }
+/* CPO movements: its two window buttons sit together where Run report sits. */
+.rpt-windows { margin-left: auto; display: flex; gap: 8px; }
+.rpt-problem { color: var(--sp4-warn); font-size: var(--sp4-body); }
+
+/* ── table ── */
+.rpt-sub { color: var(--sp4-text-3); }
+.rpt-warn { color: var(--sp4-warn); }
+.rpt-table th.rpt-num,
+.rpt-table td.rpt-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rpt-unit { font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
+
+/* A group's heading row: its name, how many vehicles, its total. */
+.rpt-table .rpt-group th {
+  padding: 14px 14px 6px var(--sp4-gutter);
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  background: var(--sp4-surface);
+  border-bottom: 1px solid var(--sp4-line-hi);
+}
+.rpt-group__name { font-size: var(--sp4-strong); font-weight: 800; color: var(--sp4-text-1); }
+.rpt-group__meta { margin-left: 10px; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-3); }
+
+/* The hour grid: tight columns, counts shaded by how busy the hour was. */
+/* As wide as its columns, not the page: a short period is a few narrow hour
+   columns rather than one stretched across the screen. */
+.rpt-table--grid { width: auto; min-width: 0; }
+.rpt-table--grid th, .rpt-table--grid td { padding-left: 6px; padding-right: 6px; }
+.rpt-table--grid th.rpt-num, .rpt-table--grid td.rpt-num { width: 46px; min-width: 46px; }
+.rpt-table--grid td.rpt-unit { min-width: 150px; }
+.rpt-heat {
+  background: rgba(220, 38, 38, var(--rpt-heat, 0.15));
+  color: var(--sp4-text-1);
+  font-weight: 700;
+}
+
+.rpt-row--nodata td { color: var(--sp4-text-4); }
+
+.rpt-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--sp4-raised);
+  color: var(--sp4-text-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.rpt-tag--warn { background: rgba(245, 158, 11, 0.16); color: var(--sp4-warn); }
+
+.rpt-missing {
+  margin: 16px var(--sp4-gutter);
+  color: var(--sp4-text-3);
+  font-size: var(--sp4-body);
+}
+.rpt-missing summary { cursor: pointer; font-weight: 600; }
+.rpt-missing p { margin: 8px 0 0; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  /* The header wraps: the description on its own line, the figures under it. */
+  .rpt-blurb { flex: 1 1 100%; max-width: none; }
+  .rpt-header .sp4-header-kpis { flex: 1 1 100%; }
+  .rpt-header .sp4-kpi { flex: 1 1 0; min-width: 0; }
+  .rpt-header .sp4-kpi-n { font-size: 18px; }
+  .rpt-filterbar .frp-range { flex-wrap: wrap; }
+  .rpt-run { flex: 1 0 100%; margin-left: 0; height: var(--m-action, 36px); }
+  .rpt-windows { flex: 1 0 100%; margin-left: 0; }
+  .rpt-windows .frp-run { flex: 1 1 0; height: var(--m-action, 36px); }
+  .rpt-field { flex: 1 1 auto; }
+}
+
+/* The body scrolls as one, so the logged incidents under the report are
+   reached by scrolling past it rather than squeezed beneath a fixed table. */
+.rpt-body { overflow-y: auto; }
+.rpt-body .rpt-scroll { flex: none; overflow: visible; max-height: none; padding-bottom: 8px; }
+.rpt-log { height: 32px; padding: 0 12px; }
+.rpt-body .oi-panel:not(:last-child) { margin-bottom: 0; }
