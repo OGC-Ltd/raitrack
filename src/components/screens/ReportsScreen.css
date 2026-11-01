@@ -42,8 +42,6 @@
 }
 .rpt-select:focus { outline: none; }
 .rpt-run { margin-left: auto; }
-/* CPO movements: its two window buttons sit together where Run report sits. */
-.rpt-windows { margin-left: auto; display: flex; gap: 8px; }
 .rpt-problem { color: var(--sp4-warn); font-size: var(--sp4-body); }
 
 /* ── table ── */
@@ -109,8 +107,6 @@
   .rpt-header .sp4-kpi-n { font-size: 18px; }
   .rpt-filterbar .frp-range { flex-wrap: wrap; }
   .rpt-run { flex: 1 0 100%; margin-left: 0; height: var(--m-action, 36px); }
-  .rpt-windows { flex: 1 0 100%; margin-left: 0; }
-  .rpt-windows .frp-run { flex: 1 1 0; height: var(--m-action, 36px); }
   .rpt-field { flex: 1 1 auto; }
 }
 
@@ -120,3 +116,38 @@
 .rpt-body .rpt-scroll { flex: none; overflow: visible; max-height: none; padding-bottom: 8px; }
 .rpt-log { height: 32px; padding: 0 12px; }
 .rpt-body .oi-panel:not(:last-child) { margin-bottom: 0; }
+
+/* CPO movements: the table the operator edits before the PDF. Rows carry the
+   PDF's tints; an edited cell is outlined; a row left out is struck through. */
+.mvr-table td { vertical-align: middle; }
+.mvr-edit {
+  width: 100%; min-width: 120px; box-sizing: border-box; font: inherit; font-size: 12px; color: #0f172a;
+  background: rgba(255, 255, 255, .7); border: 1px solid transparent; border-radius: 5px; padding: 4px 6px;
+}
+.mvr-edit:hover:not(:disabled) { border-color: #cbd5e1; background: #fff; }
+.mvr-edit:focus { outline: none; border-color: #3b82f6; background: #fff; box-shadow: 0 0 0 2px rgba(59, 130, 246, .15); }
+.mvr-edit--changed { border-color: #2563eb; background: #eff6ff; }
+/* A unit moving now: its location in green, as the PDF prints it. */
+.mvr-edit--moving { color: #15803d; font-weight: 600; }
+select.mvr-edit { min-width: 110px; }
+.mvr-table td.mvr-silent { color: #dc2626; }
+.mvr-table input.mvr-edit { min-width: 220px; }
+.mvr-row--out td { opacity: .45; text-decoration: line-through; }
+.mvr-row--out td.mvr-keep { opacity: 1; text-decoration: none; }
+.mvr-keep { width: 36px; text-align: center; }
+.mvr-keep__btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #64748b; cursor: pointer;
+}
+.mvr-keep__btn:hover { border-color: #cbd5e1; color: #0f172a; }
+.mvr-keep__btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+.mvr-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rpt-edited { color: #2563eb; font-weight: 600; }
+/* Asked before a new run or window replaces an edited table. */
+.mvr-confirm {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px;
+  background: #fffbeb; border-bottom: 1px solid #fde68a; font-size: 12.5px; color: #78350f;
+}
+.mvr-confirm span { margin-right: auto; font-weight: 600; }
+.mvr-confirm__go { background: #b45309; }
+.mvr-confirm__go:hover { background: #92400e; }
