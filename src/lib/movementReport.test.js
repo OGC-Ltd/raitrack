@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts } from './movementReport';
+import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -37,6 +37,14 @@ describe('editing the CPO movements report before the PDF', () => {
 
   it('treats a cleared location as none, so the PDF shows a dash', () => {
     expect(editedRow(row('A', 'to'), { location: '   ' }).location).toBeNull();
+  });
+
+  it('does not count spaces at the ends of a location as a change, on the table or in the count', () => {
+    const a = row('A', 'to');
+    expect(locationChanged(a, 'Mombasa Road  ')).toBe(false);
+    expect(isEdited(a, { location: ' Mombasa Road ' })).toBe(false);
+    expect(locationChanged(a, 'Mombasa Rd')).toBe(true);
+    expect(locationChanged(row('A', 'to', { location: null }), '   ')).toBe(false);
   });
 
   it('knows an edit that changes nothing is not an edit', () => {

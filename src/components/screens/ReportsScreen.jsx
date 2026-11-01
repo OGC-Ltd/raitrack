@@ -40,7 +40,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
 import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
-import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving } from '../../lib/movementReport';
+import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, locationChanged } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -136,6 +136,16 @@ function ShiftReport({ orgId }) {
   );
 }
 
+/** CPO movements tables and their edits, by organisation, while this browser tab is open. */
+const movementsKept = new Map();
+
+/** "5 vehicles", or "4 of 5 vehicles" once some are left out. */
+function groupWords(g, edits) {
+  const kept = g.rows.filter((r) => !edits[r.vehicleId]?.removed).length;
+  const all = g.rows.length;
+  return `${kept === all ? all : `${kept} of ${all}`} vehicle${all === 1 ? '' : 's'}`;
+}
+
 /**
  * CPO movements (operator, 2 Nov 2026): where every unit is now and whether it
  * is heading to or from MORL over the last 2 or 4 hours, as a table first. The
@@ -144,15 +154,24 @@ function ShiftReport({ orgId }) {
  * (lib/movementReport), counting the overview again from what is kept.
  */
 function MovementsReport({ orgId }) {
-  const [hours, setHours] = useState(MOVEMENT_WINDOWS[0]);
-  const [run, setRun] = useState({ status: 'idle' });
-  const [edits, setEdits] = useState({});           // by vehicleId: { location?, state?, removed? }
+  // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
+  const [saved] = useState(() => movementsKept.get(orgId));
+  const [hours, setHours] = useState(saved?.hours ?? MOVEMENT_WINDOWS[0]);
+  const [run, setRun] = useState(saved ? { status: 'done', report: saved.report } : { status: 'idle' });
+  const [edits, setEdits] = useState(saved?.edits ?? {});   // by vehicleId: { location?, state?, removed? }
   const [pdf, setPdf] = useState({ busy: false, error: null });
+  const [confirm, setConfirm] = useState(null);              // { words, go }: waits for the operator's yes
   const runId = useRef(0);
 
   const reset = () => { runId.current += 1; setRun({ status: 'idle' }); setEdits({}); };
-  // A different organisation starts over.
-  useEffect(reset, [orgId]);
+
+  // The table and its edits outlive this tab: another report tab or page and
+  // back finds them as they were. Only a finished table is kept.
+  useEffect(() => {
+    if (!orgId) return;
+    if (run.status === 'done') movementsKept.set(orgId, { hours, report: run.report, edits });
+    else movementsKept.delete(orgId);
+  }, [orgId, hours, run, edits]);
 
   const execute = async () => {
     if (!orgId) return;
@@ -170,6 +189,17 @@ function MovementsReport({ orgId }) {
   const kept = useMemo(() => (report ? applyEdits(report, edits) : null), [report, edits]);
   const changed = report ? report.groups.reduce((n, g) => n + g.rows.filter((r) => isEdited(r, edits[r.vehicleId])).length, 0) : 0;
   const edit = (vehicleId, patch) => setEdits((e) => ({ ...e, [vehicleId]: { ...e[vehicleId], ...patch } }));
+
+  // Closing or reloading the browser tab would lose them: the browser asks first.
+  useEffect(() => {
+    if (!changed) return undefined;
+    const warn = (ev) => { ev.preventDefault(); ev.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [changed]);
+
+  // A new run or another window replaces the table: with edits on it, ask first.
+  const guard = (words, go) => (changed ? setConfirm({ words, go }) : go());
 
   const downloadPdf = async () => {
     if (!report || pdf.busy) return;
@@ -208,16 +238,25 @@ function MovementsReport({ orgId }) {
           {MOVEMENT_WINDOWS.map((h) => (
             <button key={h} type="button" aria-pressed={hours === h}
                     className={`sp4-filter-chip${hours === h ? ' sp4-filter-chip--on' : ''}`}
-                    onClick={() => { if (h !== hours) { setHours(h); reset(); } }}>
+                    onClick={() => { if (h !== hours) guard(`Show the last ${h} hours`, () => { setHours(h); reset(); }); }}>
               Last {h} hours
             </button>
           ))}
         </div>
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => guard('Run the report again', execute)}
                 disabled={!orgId || run.status === 'loading'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
       </div>
+
+      {confirm && (
+        <div className="mvr-confirm" role="alertdialog" aria-labelledby="mvr-confirm-words">
+          <span id="mvr-confirm-words">{confirm.words} and lose your {changed} edit{changed === 1 ? '' : 's'}?</span>
+          <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setConfirm(null)} autoFocus>Keep editing</button>
+          <button type="button" className="sp4-submit-btn frp-run mvr-confirm__go"
+                  onClick={() => { const { go } = confirm; setConfirm(null); go(); }}>Discard edits</button>
+        </div>
+      )}
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
@@ -272,7 +311,7 @@ function MovementsReport({ orgId }) {
                         <tr className="rpt-group">
                           <th colSpan={6} scope="rowgroup">
                             <span className="rpt-group__name">{g.name}</span>
-                            <span className="rpt-group__meta">{g.rows.length} vehicle{g.rows.length === 1 ? '' : 's'}</span>
+                            <span className="rpt-group__meta">{groupWords(g, edits)}</span>
                           </th>
                         </tr>
                         {g.rows.map((row) => {
@@ -287,7 +326,7 @@ function MovementsReport({ orgId }) {
                               <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
                               <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
                               <td>
-                                <input type="text" className={`mvr-edit${isMoving({ ...row, state }) ? ' mvr-edit--moving' : ''}${location !== (row.location ?? '') ? ' mvr-edit--changed' : ''}`}
+                                <input type="text" className={`mvr-edit${isMoving({ ...row, state }) ? ' mvr-edit--moving' : ''}${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
                                        value={location} placeholder="-" maxLength={200} disabled={out}
                                        aria-label={`Location of ${row.plate}`}
                                        onChange={(ev) => edit(row.vehicleId, { location: ev.target.value })} />
@@ -528,7 +567,7 @@ export default function ReportsScreen() {
         ))}
       </div>
 
-      {key === SHIFT ? <ShiftReport orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport orgId={orgId} /> : (<>
+      {key === SHIFT ? <ShiftReport orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
 
       <div className="sp4-header rpt-header">
         <p className="rpt-blurb">{def.blurb}</p>

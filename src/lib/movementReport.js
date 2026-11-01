@@ -53,11 +53,16 @@ export function editedRow(row, edit) {
   };
 }
 
+/** Does this typed location differ from the server's? Spaces at the ends do not count. */
+export function locationChanged(row, typed) {
+  return (String(typed ?? '').trim() || null) !== (row.location ?? null);
+}
+
 /** Has the operator changed anything on this row? */
 export function isEdited(row, edit) {
   if (!edit) return false;
   return Boolean(edit.removed)
-    || (edit.location !== undefined && (edit.location.trim() || null) !== row.location)
+    || (edit.location !== undefined && locationChanged(row, edit.location))
     || (edit.state !== undefined && edit.state !== row.state);
 }
 
