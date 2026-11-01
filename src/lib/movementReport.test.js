@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving } from './movementReport';
+import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -47,8 +47,14 @@ describe('editing the CPO movements report before the PDF', () => {
     expect(isEdited(a, undefined)).toBe(false);
   });
 
-  it('sends the server only what it draws from', () => {
-    expect(Object.keys(pdfRequest(report, {})).sort()).toEqual(['from', 'groups', 'hours', 'morl', 'to']);
+  it('sends the server only what it draws from, and how much was edited', () => {
+    expect(Object.keys(pdfRequest(report, {})).sort()).toEqual(['edits', 'from', 'groups', 'hours', 'morl', 'to']);
+    expect(pdfRequest(report, {}).edits).toEqual({ changed: 0, removed: 0 });
+  });
+
+  it('counts a row left out once, as left out, even if it was changed first', () => {
+    const edits = { A: { location: 'Somewhere else' }, B: { state: 'from' }, C: { state: 'to', removed: true }, D: { removed: true } };
+    expect(editCounts(report, edits)).toEqual({ changed: 1, removed: 2 });
   });
 
   it('counts as the server does', () => {
@@ -65,5 +71,10 @@ describe('editing the CPO movements report before the PDF', () => {
     expect(isMoving(row('A', 'stopped', { speedKmh: 4 }))).toBe(false);
     expect(isMoving(row('A', 'to', { speedKmh: 60, stale: true }))).toBe(false);
     expect(isMoving(row('A', 'no-fix', { speedKmh: null, lastAt: null }))).toBe(false);
+  });
+
+  it('follows a corrected direction: a unit set to Stopped is not green', () => {
+    expect(isMoving(row('A', 'stopped', { speedKmh: 60 }))).toBe(false);
+    expect(isMoving(row('A', 'moving', { speedKmh: 60 }))).toBe(true);
   });
 });
