@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { reportHtml, reportNumber } from './reportLetterhead';
 import { REPORTS } from './reportTables';
-import { sections } from './fleetReports';
+import { sections, overspeedRows } from './fleetReports';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 const unit = (plate, group) => ({ key: plate, plate, type: 'Hino', group, vehicles: [{}] });
@@ -29,6 +29,16 @@ describe('report on the letterhead', () => {
     expect(out.html).toContain('Not tracked on the platform');
     expect(out.html).toContain('Menengai &lt;Oil&gt;');
     expect(out.html).not.toContain('Menengai <Oil>');
+  });
+
+  it('names the one unit an overspeeding report was made for', () => {
+    const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, [{ durationSec: 60, distanceM: 1_400, peakKmh: 83, limitKmh: 80 }]]]));
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
+                   ctx: { from: at('2026-10-30T00:00:00'), to: at('2026-10-31T00:00:00'), unit: 'KDE 132E' }, missing: [], units: 1, failed: 0 };
+    const out = reportHtml(REPORTS.overspeed, done, opts);
+    expect(rows).toHaveLength(1);
+    expect(out.filename).toBe('Overspeeding Report Menengai <Oil> KDE 132E 2026-11-01.pdf');
+    expect(out.html).toMatch(/Unit<\/[^>]+>\s*<[^>]+>KDE 132E/);
   });
 
   it('keeps a short period on a portrait page', () => {

@@ -58,6 +58,9 @@ import './ReportsScreen.css';
 import './OperatorIncidents.css';
 
 const DAY = 86_400_000;
+/** The reports that can be made for one unit (operator, 2 Nov 2026: Overspeeding "by the unit"). */
+const UNIT_REPORTS = new Set(['overspeed']);
+
 /** The reports drawn here that also save as a JPEG; Shift and Movements always do. */
 const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
 
@@ -567,8 +570,13 @@ function PdfPreview({ state, title = 'Movement report', caption, edited, onRetry
  * to match that in the movements"): the picked one ticked, with what it holds
  * beside it where there is something real to say.
  */
-function ChoicePicker({ icon, label, value, options, onChange, align = 'left' }) {
+function ChoicePicker({ icon, label, value, options, onChange, align = 'left', search = false }) {
   const [open, setOpen] = useState(false);
+  // A long list (a fleet's units) takes a search box: typed words narrow it
+  const [term, setTerm] = useState('');
+  useEffect(() => { if (!open) setTerm(''); }, [open]);
+  const needle = term.trim().toLowerCase().replace(/\s+/g, '');
+  const listed = needle ? options.filter((o) => o.value == null || String(o.label).toLowerCase().replace(/\s+/g, '').includes(needle)) : options;
   const rootRef = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -593,8 +601,12 @@ function ChoicePicker({ icon, label, value, options, onChange, align = 'left' })
       </button>
       {open && (
         <div className="drp-pop mvr-types__pop" role="listbox" aria-label={label}>
+          {search && (
+            <input className="sp4-search mvr-types__search" type="text" placeholder={`Search ${label.toLowerCase()}…`}
+                   aria-label={`Search ${label.toLowerCase()}`} value={term} autoFocus onChange={(e) => setTerm(e.target.value)} />
+          )}
           <ul className="mvr-types__list">
-            {options.map((o) => {
+            {listed.map((o) => {
               const on = o.value === value;
               return (
                 <li key={String(o.value)}>
@@ -1059,6 +1071,8 @@ export default function ReportsScreen() {
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key));
   const [group, setGroup] = useState(null);
+  // One unit, on the reports that take it (UNIT_REPORTS); null = every unit in the group
+  const [unit, setUnit] = useState(null);
   const [night, setNight] = useState(NIGHT);
   const [rate, setRate] = useState(DEFAULT_RATE);
   const [run, setRun] = useState({ status: 'idle' });
@@ -1115,6 +1129,7 @@ export default function ReportsScreen() {
     runId.current += 1;
     setRun({ status: 'idle' });
     setGroup(null);
+    setUnit(null);
   }, [orgId]);
 
   const reset = () => { runId.current += 1; setRun({ status: 'idle' }); };
@@ -1126,6 +1141,13 @@ export default function ReportsScreen() {
     setSpan(spanFor(key)); reset();
   }, [key]);
   const conduct = key === 'behaviour';
+  const byUnit = UNIT_REPORTS.has(key);
+  // The units of the group picked, by plate, for the Unit picker
+  const unitChoices = useMemo(() => (byUnit
+    ? scopeUnits(vehicles, groups, group).units
+      .map((u) => ({ value: u.key, label: u.plate, note: u.group ?? undefined }))
+      .sort((x, y) => x.label.localeCompare(y.label, 'en', { numeric: true }))
+    : []), [byUnit, vehicles, groups, group]);
   const today = fleetDay(Date.now());
   // Every report here takes its period on one calendar with the hours under it,
   // as Movements does (operator, 2 Nov): the first day at the start hour to the
@@ -1162,8 +1184,11 @@ export default function ReportsScreen() {
     if (problemFor(sp)) return;
     const id = ++runId.current;
     const live = () => id === runId.current;
-    const ctx = { from: sp.from, to: sp.to, group, night: { ...nt }, rate, rated: rated && key === 'utilisation' };
-    const { units, missing } = scopeUnits(vehicles, groups, group);
+    const scoped = scopeUnits(vehicles, groups, group);
+    const one = byUnit && unit ? scoped.units.find((u) => u.key === unit) : null;
+    const units = one ? [one] : scoped.units;
+    const missing = one ? [] : scoped.missing;
+    const ctx = { from: sp.from, to: sp.to, group, unit: one?.plate ?? null, night: { ...nt }, rate, rated: rated && key === 'utilisation' };
     if (!units.length) {
       setRun({ status: 'done', rows: [], secs: [], ctx, missing, failed: 0, units: 0 });
       return;
@@ -1217,7 +1242,7 @@ export default function ReportsScreen() {
     const fresh = opened.current !== key;
     opened.current = key;
     execute(fresh ? { span: spanFor(key), night } : {});
-  }, [isServer, key, orgId, vehicles.length, run.status, group, rate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isServer, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A behaviour run (and any new operator entry) opens the cases it finds;
   // what operators recorded on cases already there stays.
@@ -1265,7 +1290,8 @@ export default function ReportsScreen() {
   const groupWords = done?.ctx.group ?? (groups ? 'All groups' : 'All vehicles');
   const periodWords = periodText(ctx.from, ctx.to);
   const nightWords = key === 'night' ? `Night hours ${hourLabel((done?.ctx.night ?? night).start)}:00hrs – ${hourLabel((done?.ctx.night ?? night).end)}:00hrs` : null;
-  const slug = `${def.key}-${String(orgCode ?? 'fleet').toLowerCase()}${done?.ctx.group ? `-${done.ctx.group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}`;
+  const slugOf = (w) => `-${w.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const slug = `${def.key}-${String(orgCode ?? 'fleet').toLowerCase()}${done?.ctx.group ? slugOf(done.ctx.group) : ''}${done?.ctx.unit ? slugOf(done.ctx.unit) : ''}`;
 
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState(null);
@@ -1376,7 +1402,13 @@ export default function ReportsScreen() {
           <ChoicePicker icon="ti-users-group" label="Group" value={group}
                         options={[{ value: null, label: 'All groups', note: groups.reduce((n, g) => n + g.units.length, 0) },
                           ...groups.map((g) => ({ value: g.name, label: g.name, note: g.units.length }))]}
-                        onChange={(v) => { setGroup(v); reset(); }} />
+                        onChange={(v) => { setGroup(v); setUnit(null); reset(); }} />
+        )}
+
+        {byUnit && (
+          <ChoicePicker icon="ti-truck" label="Unit" value={unit} search
+                        options={[{ value: null, label: 'All units', note: unitChoices.length }, ...unitChoices]}
+                        onChange={(v) => { setUnit(v); reset(); }} />
         )}
 
         {key === 'utilisation' && !rated && (
@@ -1420,7 +1452,7 @@ export default function ReportsScreen() {
               summary={<>
                 <strong>{done.rows.length.toLocaleString('en-GB')}</strong> vehicle{done.rows.length === 1 ? '' : 's'}
                 {key === 'utilisation' || key === 'night' ? ` of ${done.units.toLocaleString('en-GB')}` : ''}
-                <span className="rpt-sub"> · {periodWords} · {groupWords}{nightWords ? ` · ${nightWords}` : ''}</span>
+                <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
@@ -1447,7 +1479,7 @@ export default function ReportsScreen() {
             />
             {preview && (
               <PdfPreview state={preview} title={`${def.label} report`}
-                          caption={`${periodWords} · ${groupWords}`} onRetry={previewPdf} onClose={closePreview} />
+                          caption={`${periodWords} · ${groupWords}${done.ctx.unit ? ` · ${done.ctx.unit}` : ''}`} onRetry={previewPdf} onClose={closePreview} />
             )}
             {!done.rows.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">{def.empty}</EmptyNote>

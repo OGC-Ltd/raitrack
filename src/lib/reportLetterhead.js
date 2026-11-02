@@ -197,6 +197,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     ['Fleet', esc(companyName)],
     ['Period', esc(periodWords)],
     ['Group', esc(groupWords)],
+    // One unit picked (operator, 2 Nov 2026: "generate by the unit")
+    ...(ctx.unit ? [['Unit', esc(ctx.unit)]] : []),
     ...(def.key === 'utilisation' && ctx.rated ? [['Consumption', 'As rated on the register: L/h for machines, L/km for vehicles']] : []),
     ...(def.key === 'utilisation' && !ctx.rated ? [['Consumption', esc(`${(RATES[ctx.rate] ?? RATES[DEFAULT_RATE]).label} (${(RATES[ctx.rate] ?? RATES[DEFAULT_RATE]).unit})`)]] : []),
     ['Vehicles', `${done.rows.length} reported${def.key === 'utilisation' || def.key === 'night' ? ` of ${done.units}` : ''}`],
@@ -217,5 +219,5 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     landscape,
   });
   const stamp = new Date(now + 3 * 3600_000).toISOString().slice(0, 10);
-  return { html, landscape, filename: `${def.title} ${companyName} ${stamp}.pdf` };
+  return { html, landscape, filename: `${def.title} ${companyName}${ctx.unit ? ` ${ctx.unit}` : ''} ${stamp}.pdf` };
 }
