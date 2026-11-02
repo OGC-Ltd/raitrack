@@ -23,11 +23,11 @@ import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } from '../../api/fleetReports';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
-  presetRange, nightWindows, behaviourRows, overspeedRows, nightRows, utilisationRows, sections, RATED_SECTIONS,
+  presetRange, nightWindows, behaviourRows, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
   NIGHT, hourLabel, periodWords as periodText, fleetDay, dayStart,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -58,6 +58,28 @@ import './ReportsScreen.css';
 import './OperatorIncidents.css';
 
 const DAY = 86_400_000;
+/** One unit's overspeeds, each on its own row, under its totals. */
+function OverspeedEvents({ events, unit }) {
+  const t = overspeedEventTable(events);
+  return (
+    <section className="rpt-events" aria-label="Each overspeed">
+      <h3 className="rpt-events__title">Each overspeed <span className="rpt-sub">· {events.length} · {unit}</span></h3>
+      <table className="sp4-table rpt-table">
+        <thead>
+          <tr>{t.head.map((h, i) => <th key={h} scope="col" className={t.num(i) ? 'rpt-num' : undefined}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {t.rows.map((r) => (
+            <tr key={r[0]} className="sp4-tr">
+              {r.map((c, i) => <td key={i} className={t.num(i) ? 'rpt-num' : undefined}>{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 /** The reports that can be made for one unit (operator, 2 Nov 2026: Overspeeding "by the unit"). */
 const UNIT_REPORTS = new Set(['overspeed']);
 
@@ -1215,6 +1237,8 @@ export default function ReportsScreen() {
         const ids = units.flatMap((u) => u.vehicles.map((v) => v.vehicleId));
         const r = await loadOverspeeds({ orgId, from: ctx.from, to: ctx.to, vehicleIds: ids, onProgress: step('Reading overspeeds, vehicle') });
         rows = overspeedRows(units, r.byVehicle); failed = r.failed;
+        // One unit: each overspeed too
+        if (one) ctx.events = overspeedEvents(one.vehicles.map((v) => r.byVehicle.get(v.vehicleId) ?? []));
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
@@ -1354,7 +1378,9 @@ export default function ReportsScreen() {
 
   const downloadCsv = () => {
     if (!done) return;
-    downloadTableCsv({ ...csvTable(def, done.secs, done.ctx), filenameSlug: slug });
+    // One unit's overspeeds: each event, a row each
+    const t = done.ctx.events?.length ? overspeedEventTable(done.ctx.events) : csvTable(def, done.secs, done.ctx);
+    downloadTableCsv({ head: t.head, body: t.body ?? t.rows, filenameSlug: slug });
   };
 
   return (
@@ -1542,6 +1568,7 @@ export default function ReportsScreen() {
                     ))}
                   </tbody>
                 </table>
+                {done.ctx.events?.length > 0 && <OverspeedEvents events={done.ctx.events} unit={done.ctx.unit} />}
                 {done.missing.length > 0 && (
                   <details className="rpt-missing">
                     <summary>{done.missing.length} unit{done.missing.length === 1 ? '' : 's'} on the list {done.missing.length === 1 ? 'is' : 'are'} not tracked on the platform</summary>

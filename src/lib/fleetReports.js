@@ -303,6 +303,30 @@ export function overspeedRows(units, episodesByVehicle, minSec = OVERSPEED_MIN_S
 }
 
 /**
+ * One unit's overspeeds one by one, oldest first: the report made for one unit
+ * lists each (operator, 2 Nov 2026). `lists` are its trackers' episodes; the
+ * same OVERSPEED_MIN_SEC as the totals, so the list and the totals agree.
+ */
+export function overspeedEvents(lists, minSec = OVERSPEED_MIN_SEC) {
+  const num = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
+  return lists.flat()
+    .filter((e) => Number(e?.durationSec) > minSec)
+    .map((e) => ({
+      startedAt: Date.parse(e.startedAt),
+      endedAt: Date.parse(e.endedAt),
+      durationSec: Number(e.durationSec),
+      peakKmh: num(e.peakKmh),
+      avgKmh: num(e.avgKmh),
+      limitKmh: num(e.limitKmh),
+      km: num(e.distanceM) == null ? null : Number(e.distanceM) / 1000,
+      driver: e.driverName || null,
+      lat: num(e.peakLat),
+      lng: num(e.peakLng),
+    }))
+    .sort((a, b) => a.startedAt - b.startedAt);
+}
+
+/**
  * Distance and time inside `windows`, from one unit's readings: each window
  * is summarised on its own (the vehicle panel's own sums, lib/vehicleDay),
  * then added up, so the gap between two nights is never counted.

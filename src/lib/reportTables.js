@@ -224,3 +224,34 @@ export function csvTable(def, secs, ctx) {
     body: secs.flatMap((s) => s.rows.map((r) => [...(grouped ? [s.name] : []), ...pick(def.cells(r, ctx))])),
   };
 }
+
+// ── One unit's overspeeds, each on its own row ────────────────────────────────
+
+const eventDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+const eventClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+const fmt = (f, ms) => (Number.isFinite(ms) ? f.format(ms).replace(',', '') : '-');
+/** 45 s, 1 min 05 s */
+export function secondsWords(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
+}
+const kmh = (x) => (Number.isFinite(x) ? `${Math.round(x)}` : '-');
+
+/**
+ * The events table of a report made for one unit (lib/fleetReports
+ * overspeedEvents): on the page, the PDF and the CSV. Driver is left out
+ * when no event names one.
+ */
+export function overspeedEventTable(events) {
+  const driver = events.some((e) => e.driver);
+  const head = ['#', 'Started', 'Ended', 'Duration', 'Peak / limit km/h', 'Avg km/h', 'Distance, km', ...(driver ? ['Driver'] : []), 'Where (at the peak)'];
+  const rows = events.map((e, i) => [
+    String(i + 1), fmt(eventDay, e.startedAt), fmt(eventClock, e.endedAt), secondsWords(e.durationSec),
+    `${kmh(e.peakKmh)} / ${kmh(e.limitKmh)}`, kmh(e.avgKmh), e.km == null ? '-' : km2(e.km),
+    ...(driver ? [e.driver ?? '-'] : []),
+    e.lat == null || e.lng == null ? '-' : `${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}`,
+  ]);
+  /** Figures (right-aligned): Duration to Distance */
+  const num = (i) => i >= 3 && i <= 6;
+  return { head, rows, num, driver };
+}

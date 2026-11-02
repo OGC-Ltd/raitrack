@@ -6,7 +6,7 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard } from './reportTables';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from './reportTables';
 import { ACTIONS, incidentWords, isOverdue, needsEscalation, ESCALATE_CASES, ESCALATE_DAYS } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 
@@ -160,6 +160,14 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     flow.push(`<h2>${i + 2}. ${esc(head)} <small>${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'} · ${esc(def.sumWords(s.total))}</small></h2>`);
     flow.push(table(cols, s.rows.map(rowCells)));
   });
+  // A report made for one unit lists each overspeed (operator, 2 Nov 2026)
+  const events = ctx.events?.length ? overspeedEventTable(ctx.events) : null;
+  if (events) {
+    flow.push(`<h2>${done.secs.length + 2}. Each overspeed <small>${events.rows.length} · ${esc(ctx.unit ?? '')}</small></h2>`);
+    const widths = [8, 27, 16, 18, 22, 16, 17, ...(events.driver ? [26] : []), events.driver ? 34 : 60];
+    flow.push(table(events.head.map((h, i) => ({ h: esc(h), w: `${widths[i]}mm`, r: events.num(i) })),
+      events.rows.map((r) => r.map((c) => (c === '-' ? { html: c, cls: 'm' } : esc(c))))));
+  }
 
   const notes = [];
   if (def.key === 'behaviour') {
@@ -178,7 +186,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   if (done.failed) notes.push(`${done.failed} could not be read and ${done.failed === 1 ? 'is' : 'are'} left out.`);
   if (notes.length) flow.push(...notes.map((t) => `<div class="note">${esc(t)}</div>`));
 
-  let next = done.secs.length + 2;
+  let next = done.secs.length + 2 + (events ? 1 : 0);
   const fu = def.key === 'behaviour' ? followUpFlow(done, ctx, now, next, inner) : null;
   if (fu) { flow.push(...fu.flow); next = fu.next; }
 
