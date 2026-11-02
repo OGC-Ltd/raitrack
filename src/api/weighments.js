@@ -159,6 +159,11 @@ export function tonnes(kg) {
   return kg == null ? "-" : `${(kg / 1000).toFixed(2)} t`;
 }
 
+/** A total in tonnes, grouped to one decimal: "1,234.5 t". */
+export function tonnesTotal(kg) {
+  return kg == null ? "-" : `${(kg / 1000).toLocaleString("en-GB", { maximumFractionDigits: 1 })} t`;
+}
+
 /** Kilograms, grouped. The number printed on the ticket. */
 export function kilos(kg) {
   return kg == null ? "-" : `${Math.round(kg).toLocaleString()} kg`;

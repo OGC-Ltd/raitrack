@@ -40,7 +40,7 @@ import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useWeighments, MAX_DAYS } from "../../hooks/useWeighments";
 import { useDispatchedUnits } from "../../hooks/useDispatchedUnits";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
-import { tonnes, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
+import { tonnes, tonnesTotal, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
 import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
@@ -490,6 +490,18 @@ export default function WeighbridgesScreen() {
             <span className="sp4-kpi-n">{stats ? (stats.lightestNetKg != null ? tonnes(stats.lightestNetKg) : "-") : "·"}</span>
             <span className="sp4-kpi-l">Lightest load</span>
           </div>
+          {/* Trucks bring the cane in, tractors go out (operator, 2 Nov 2026):
+              each kind's tonnage over every bridge. A tractor is a KT… plate. */}
+          <div className="sp4-kpi sp4-kpi--stat"
+               title={stats?.trucks ? `${stats.trucks.tickets} truck tickets over every bridge.` : "Net cane the trucks brought in."}>
+            <span className="sp4-kpi-n">{stats?.trucks ? tonnesTotal(stats.trucks.netKg) : "·"}</span>
+            <span className="sp4-kpi-l">Trucks · cane in</span>
+          </div>
+          <div className="sp4-kpi sp4-kpi--stat"
+               title={stats?.tractors ? `${stats.tractors.tickets} tractor tickets (KT… plates) over every bridge.` : "Net weight on the tractors going out."}>
+            <span className="sp4-kpi-n">{stats?.tractors ? tonnesTotal(stats.tractors.netKg) : "·"}</span>
+            <span className="sp4-kpi-l">Tractors · out</span>
+          </div>
         </div>
       </div>
 
@@ -606,6 +618,8 @@ export default function WeighbridgesScreen() {
                 >
                   {c.name}
                   <span className="sp4-tab-n">{c.count}</span>
+                  {/* The bridge's own tonnage (operator, 2 Nov 2026) */}
+                  {c.netKg != null && <span className="wb-tab-t">{tonnesTotal(c.netKg)}</span>}
                 </button>
               ))}
               {centres.length === 0 && (loading || !data) && (
@@ -620,6 +634,20 @@ export default function WeighbridgesScreen() {
                 <span className="sp4-tabs-hint">Loading bridges…</span>
               )}
             </div>
+            {/* The bridge picked, split: trucks bring the cane in, tractors go out */}
+            {(() => {
+              const c = centres.find((x) => x.code === centre);
+              if (!c?.trucks) return null;
+              const n = (k) => `${k.tickets} ticket${k.tickets === 1 ? "" : "s"}`;
+              return (
+                <div className="wb-split" role="status">
+                  <span className="wb-split__name">{c.name}</span>
+                  <span className="wb-split__total">{tonnesTotal(c.netKg)}</span>
+                  <span className="wb-split__kind"><i className="ti ti-truck" aria-hidden="true" />Trucks, cane in <b>{tonnesTotal(c.trucks.netKg)}</b> · {n(c.trucks)}</span>
+                  <span className="wb-split__kind"><i className="ti ti-tractor" aria-hidden="true" />Tractors, out <b>{tonnesTotal(c.tractors.netKg)}</b> · {n(c.tractors)}</span>
+                </div>
+              );
+            })()}
 
             {error ? (
               <EmptyNote icon="ti-cloud-off" tone="error" title="Weighbridge Tickets Unavailable"

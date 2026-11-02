@@ -120,6 +120,11 @@ const shiftKept = new Map();
  * 24:00 is the default: the shift so far.
  */
 /** The shifts the picker offers in one click; Day is the default (operator, 2 Nov: "the default shift is 7:30hrs to 19:30hrs"). */
+/** Night driving's nights in one click: the report's own (19:00–05:00) and the night shift. */
+const NIGHT_PRESETS = [
+  { key: 'night', label: 'Night', start: NIGHT.start, end: NIGHT.end || 24 },
+  { key: 'shift', label: 'Night shift', start: 19.5, end: 7.5 },
+];
 const SHIFT_PRESETS = [
   { key: 'day', label: 'Day', start: 7.5, end: 19.5 },
   { key: 'night', label: 'Night', start: 19.5, end: 7.5 },
@@ -506,18 +511,18 @@ function ClockField({ label, value, isEnd = false, onChange }) {
  * them the day's 24 hours with the shift drawn on it, so a shift over
  * midnight shows as two pieces.
  */
-export function ShiftTime({ start, end, onChange }) {
+export function ShiftTime({ start, end, onChange, title = 'Shift time', presets = SHIFT_PRESETS }) {
   const over = end <= start;
-  const on = SHIFT_PRESETS.find((p) => p.start === start && p.end === end)?.key;
+  const on = presets.find((p) => p.start === start && p.end === end)?.key;
   const pieces = over ? [[start, 24], [0, end]] : [[start, end]];
   return (
-    <div className="stp" role="group" aria-label="Shift time">
+    <div className="stp" role="group" aria-label={title}>
       <div className="stp__head">
-        <span className="stp__title">Shift time</span>
+        <span className="stp__title">{title}</span>
         <span className="stp__span">{spanWords(start, end)}{over && end !== 24 ? ', ends next day' : ''}</span>
       </div>
-      <div className="stp__presets">
-        {SHIFT_PRESETS.map((p) => (
+      <div className="stp__presets" style={{ gridTemplateColumns: `repeat(${presets.length}, minmax(0, 1fr))` }}>
+        {presets.map((p) => (
           <button key={p.key} type="button" className={`drp-chip stp__preset${on === p.key ? ' drp-chip--on' : ''}`}
                   aria-pressed={on === p.key} onClick={() => onChange(p.start, p.end)}>
             {p.label}<span className="stp__preset-t">{p.key === 'whole' ? '24 h' : `${hh(p.start)}–${hh(p.end)}`}</span>
@@ -1431,7 +1436,7 @@ export default function ReportsScreen() {
   const shown = done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i);
   const groupWords = done?.ctx.group ?? (groups ? 'All groups' : 'All vehicles');
   const periodWords = periodText(ctx.from, ctx.to);
-  const nightWords = key === 'night' ? `Night hours ${hourLabel((done?.ctx.night ?? night).start)}:00hrs – ${hourLabel((done?.ctx.night ?? night).end)}:00hrs` : null;
+  const nightWords = key === 'night' ? `Night hours ${hh((done?.ctx.night ?? night).start)}hrs – ${hh((done?.ctx.night ?? night).end || 24)}hrs` : null;
   const slugOf = (w) => `-${w.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   const slug = `${def.key}-${String(orgCode ?? 'fleet').toLowerCase()}${done?.ctx.group ? slugOf(done.ctx.group) : ''}${done?.ctx.unit ? slugOf(done.ctx.unit) : ''}`;
 
@@ -1527,8 +1532,14 @@ export default function ReportsScreen() {
         >
           {({ close }) => (
             <>
-              <HourWindow start={shownDays.start} end={shownDays.end} label={isNight ? 'Night hours' : 'Hours each day'}
-                          onChange={(a, b) => setPicking({ ...shownDays, start: a, end: b })} />
+              {isNight ? (
+                // Night driving takes the Shift's picker: presets, and the night to the minute (operator, 2 Nov 2026)
+                <ShiftTime title="Night hours" presets={NIGHT_PRESETS} start={shownDays.start} end={shownDays.end}
+                           onChange={(a, b) => setPicking({ ...shownDays, start: a, end: b })} />
+              ) : (
+                <HourWindow start={shownDays.start} end={shownDays.end} label="Hours each day"
+                            onChange={(a, b) => setPicking({ ...shownDays, start: a, end: b })} />
+              )}
               <div className="mvr-hours__foot">
                 {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
                 <button type="button" className="sp4-submit-btn frp-run"

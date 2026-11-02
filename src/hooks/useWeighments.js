@@ -66,27 +66,36 @@ function merge(parts, days) {
   const rows = live.flatMap(p => p.rows ?? []);
   rows.sort((a, b) => new Date(b.tokenAt) - new Date(a.tokenAt));
 
-  const counts = new Map();
-  const names  = new Map();
+  // Counts and tonnage add across days, per centre and per kind of unit
+  const addKind = (a, b) => ({ tickets: (a?.tickets ?? 0) + (b?.tickets ?? 0), netKg: (a?.netKg ?? 0) + (b?.netKg ?? 0) });
+  const byCode = new Map();
   for (const p of live) {
     for (const c of p.centres ?? []) {
-      counts.set(c.code, (counts.get(c.code) ?? 0) + c.count);
-      names.set(c.code, c.name);
+      const was = byCode.get(c.code);
+      byCode.set(c.code, {
+        code: c.code, name: c.name,
+        count: (was?.count ?? 0) + c.count,
+        netKg: (was?.netKg ?? 0) + (c.netKg ?? 0),
+        trucks: addKind(was?.trucks, c.trucks),
+        tractors: addKind(was?.tractors, c.tractors),
+      });
     }
   }
-  const centres = [...counts.entries()]
-    .map(([code, count]) => ({ code, name: names.get(code) ?? `Centre ${code}`, count }))
-    .sort((a, b) => a.code - b.code);
+  const centres = [...byCode.values()].sort((a, b) => a.code - b.code);
 
   let heaviest = null;
   let heaviestNetKg = null;
   let lightest = null;
   let lightestNetKg = null;
   let totalNetKg = 0;
+  let trucks = addKind(null, null);
+  let tractors = addKind(null, null);
   for (const p of live) {
     const s = p.stats;
     if (!s) continue;
     totalNetKg += s.totalNetKg ?? 0;
+    trucks = addKind(trucks, s.trucks);
+    tractors = addKind(tractors, s.tractors);
     if (s.heaviestNetKg != null && (heaviestNetKg == null || s.heaviestNetKg > heaviestNetKg)) {
       heaviestNetKg = s.heaviestNetKg;
       heaviest = s.heaviest;
@@ -116,6 +125,8 @@ function merge(parts, days) {
       lightestNetKg,
       lightest,
       totalNetKg,
+      trucks,
+      tractors,
     },
     rows,
     matched: live.reduce((n, p) => n + (p.matched ?? 0), 0),
