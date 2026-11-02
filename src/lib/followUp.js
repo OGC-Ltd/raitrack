@@ -17,11 +17,14 @@
 // A driver with ESCALATE_CASES or more cases in ESCALATE_DAYS is flagged for
 // escalation: the phone call is not working.
 //
-// ## Kept in this browser, for now
+// ## Kept on the server
 //
-// Like the operator log (lib/operatorLog): one list per organisation in this
-// browser, until the database takes over. A case is written when the report
-// is run for its day, so the list holds the days someone has reported on.
+// fleet-server reports/driver-conduct, since 2 Nov 2026 (api/driverConduct):
+// the page works the cases out when it runs the report and sends them; the
+// server folds them in and keeps what operators recorded. Before, each
+// browser kept its own list, so the count beside Reports differed from
+// machine to machine; loadCases reads what a browser still holds, once, to
+// move it over (lib/conductMove).
 
 import { behaviourRows, fleetDay, dayStart, daysCovering } from './fleetReports';
 
@@ -137,10 +140,9 @@ export function periodCases(all, { from, to }) {
   return all.filter((c) => c.day >= first && c.day <= last);
 }
 
-// ── storage ─────────────────────────────────────────────────────────────────
+// ── what a browser held before the server ───────────────────────────────────
 
 const keyFor = (orgId) => `ft-followup-cases:${orgId}`;
-export const CHANGED = 'ft-followup-changed';
 
 export function loadCases(orgId) {
   if (!orgId) return [];
@@ -150,13 +152,14 @@ export function loadCases(orgId) {
   } catch { return []; }
 }
 
-/** Saves, and tells the sidebar's count. False when the browser will not keep it. */
+/** Saves a list in this browser. Only the tests and the move use it now. */
 export function saveCases(orgId, list) {
-  try {
-    localStorage.setItem(keyFor(orgId), JSON.stringify(list));
-    window.dispatchEvent(new Event(CHANGED));
-    return true;
-  } catch { return false; }
+  try { localStorage.setItem(keyFor(orgId), JSON.stringify(list)); return true; } catch { return false; }
+}
+
+/** Forgets this browser's list, once the server holds it. */
+export function forgetCases(orgId) {
+  try { localStorage.removeItem(keyFor(orgId)); } catch { /* nothing kept */ }
 }
 
 export function exportCases(list, orgCode) {

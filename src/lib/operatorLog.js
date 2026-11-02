@@ -2,12 +2,11 @@
 // (operator, 1 Nov 2026: "operator watched it live, it was not in alarms"),
 // logged by hand and counted in the Driver Conduct Report.
 //
-// ## Kept in this browser, for now
+// ## Kept on the server
 //
-// There is no table for these yet, so they live in this browser's storage,
-// one list per organisation: another computer does not see them, and clearing
-// the browser loses them. Export and Import move them between computers until
-// the database takes over; when it does, only load/save here change.
+// fleet-server reports/driver-conduct, since 2 Nov 2026 (api/driverConduct).
+// Before, each browser kept its own list; loadEntries reads what a browser
+// still holds, once, to move it over (lib/conductMove).
 
 export const OPERATOR_KINDS = [
   { key: 'phone', label: 'On phone' },
@@ -59,6 +58,11 @@ export function loadEntries(orgId) {
 /** Saves the list; false when the browser will not keep it (private window, storage full). */
 export function saveEntries(orgId, list) {
   try { localStorage.setItem(keyFor(orgId), JSON.stringify(list)); return true; } catch { return false; }
+}
+
+/** Forgets this browser's list, once the server holds it. */
+export function forgetEntries(orgId) {
+  try { localStorage.removeItem(keyFor(orgId)); } catch { /* nothing kept */ }
 }
 
 /** Add or replace by id. Returns the new list. */
