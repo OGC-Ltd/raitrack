@@ -18,7 +18,9 @@ import { dayStart } from './fleetReports';
  * Menengai, the organisation's own elsewhere ("To Sukari"; operator, 2 Nov).
  */
 export const directionWords = (site = 'MORL') => ({
-  to: `To ${site}`, from: `From ${site}`, at: `At ${site}`, moving: 'Moving', stopped: 'Stopped', 'no-fix': 'No fix',
+  to: `To ${site}`, from: `From ${site}`, at: `At ${site}`, moving: 'Moving', stopped: 'Stopped',
+  // Menengai's silent units stand at RAIMDF (operator, 2 Nov: "remove no fix")
+  'no-fix': site === 'MORL' ? 'At RAIMDF' : 'No fix',
 });
 export const DIRECTION = directionWords('MORL');
 export const STATES = Object.keys(DIRECTION);

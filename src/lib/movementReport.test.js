@@ -72,6 +72,8 @@ describe('editing the Movements report before the PDF', () => {
   it('writes the time as the sheet does, in Nairobi time', () => {
     expect(stamp(Date.UTC(2025, 5, 18, 4, 56, 26))).toBe('18.06.2025 07:56:26');
     expect(stamp(null)).toBe('No fix');
+    expect(directionWords('MORL')['no-fix']).toBe('At RAIMDF');
+    expect(directionWords('Sukari')['no-fix']).toBe('No fix');
   });
 
   it('reads a unit as moving at 5 km/h or more on a fix inside the window, so its location shows green', () => {
