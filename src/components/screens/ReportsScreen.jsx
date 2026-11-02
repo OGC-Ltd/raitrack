@@ -50,7 +50,7 @@ import ReportIcon from '../shared/ReportIcon';
 import PdfPages from '../shared/PdfPages';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport } from '../../lib/reportNav';
-import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -136,6 +136,22 @@ function ShiftSheet({ doc, version, onChange }) {
   const [cut, setCut] = useState(false);
   const sheetRef = useRef(null);
   const [open, setOpen] = useState(false);
+  // Opened, it is zoomed out too (operator, 2 Nov: "zoom-out the shift report
+  // when open full report"): a whole page in the window's height, the rest a
+  // scroll away, every text still editable.
+  const openRef = useRef(null);
+  const [openScale, setOpenScale] = useState(1);
+  useEffect(() => {
+    if (!open) return undefined;
+    const measure = () => {
+      const el = openRef.current;
+      if (!el) return;
+      setOpenScale(Math.min(1, (el.clientHeight - 24) / SHEET_PX.height, el.clientWidth / SHEET_PX.width));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
   useEffect(() => {
     const measure = () => {
       const el = deskRef.current;
@@ -193,8 +209,10 @@ function ShiftSheet({ doc, version, onChange }) {
                 <i className="ti ti-check" aria-hidden="true" /> Done
               </button>
             </header>
-            <div className="sdoc-open__scroll" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
-              <ShiftDocument key={version} doc={doc} onChange={onChange} />
+            <div className="sdoc-open__scroll" ref={openRef} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+              <div className="sdoc-open__sheet" style={{ zoom: openScale }}>
+                <ShiftDocument key={version} doc={doc} onChange={onChange} />
+              </div>
             </div>
           </div>
         </div>
@@ -729,7 +747,7 @@ function MovementsReport({ orgId }) {
   const runDays = () => guard('Make the report for these days', () => execute({ mode: 'days', ...draft }));
 
   const pdfBody = () => {
-    const each = reports.map((r, i) => pdfRequest(onlyTypes(r, picked), edits[i] ?? {}));
+    const each = pdfRequests(reports, edits, picked);
     return each.length === 1 ? each[0] : { reports: each };
   };
   const downloadPdf = async () => {

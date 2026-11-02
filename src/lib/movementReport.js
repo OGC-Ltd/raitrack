@@ -127,6 +127,27 @@ export function pdfRequest(report, edits) {
   return { hours, from, to, morl, groups, edits: editCounts(report, edits) };
 }
 
+/**
+ * Outside Menengai the server groups the report by vehicle type, and each
+ * type is a report of its own in the PDF (operator, 2 Nov: "split the report
+ * into the various types of vehicles. So you should have 3 or 4 reports").
+ * Menengai keeps one report a day, its groupings as sections.
+ */
+export const splitsByType = (report) => !/^MENENGAI$/i.test(String(report?.orgCode ?? ''));
+
+/** The PDF's reports: a day each, or outside Menengai a type a day; only the types picked, none left empty. */
+export function pdfRequests(reports, edits, picked) {
+  return reports.flatMap((r, i) => {
+    const kept = onlyTypes(r, picked);
+    const whole = pdfRequest(kept, edits[i] ?? {});
+    if (!splitsByType(r)) return [whole];
+    const each = kept.groups
+      .map((g) => pdfRequest(onlyTypes(r, [g.name]), edits[i] ?? {}))
+      .filter((q) => q.groups.some((g) => g.rows.length));
+    return each.length ? each : [whole];
+  });
+}
+
 // ── windows and vehicle types (operator, 2026-11-02) ─────────────────────────
 
 const HOUR = 3_600_000;
