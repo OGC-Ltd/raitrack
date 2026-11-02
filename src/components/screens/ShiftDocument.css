@@ -1,0 +1,119 @@
+/* The end-of-shift report as an editable A4 sheet (ShiftDocument). Its
+ * colours are the PDF's (fleet-server lib/pdf/letterhead C), so the sheet
+ * reads as the page it prints as; the tools beside it are the app's. */
+
+.sdoc {
+  --sdoc-ink: #1c1c1c;
+  --sdoc-mut: #5c5c5c;
+  --sdoc-rule: #bfbfbf;
+  --sdoc-soft: #e6e6e6;
+  --sdoc-shade: #f3f3f3;
+  --sdoc-hd: #1f3a5f;
+  --sdoc-flag: #b42318;
+  --sdoc-paper: #ffffff;
+  --sdoc-edit: #2563eb;
+  box-sizing: border-box;
+  width: min(210mm, 100%);
+  margin: 0 auto;
+  padding: 14mm 13mm 10mm;
+  background: var(--sdoc-paper);
+  color: var(--sdoc-ink);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 1px 3px rgb(15 23 42 / .12), 0 8px 24px rgb(15 23 42 / .06);
+  border-radius: 2px;
+}
+
+/* ── click-to-edit text ── */
+.sdoc-ed { outline: none; border-radius: 2px; cursor: text; min-width: 1ch; }
+.sdoc-ed:hover { background: color-mix(in srgb, var(--sdoc-edit) 7%, transparent); }
+.sdoc-ed:focus { background: color-mix(in srgb, var(--sdoc-edit) 9%, transparent); box-shadow: 0 0 0 1.5px var(--sdoc-edit); }
+.sdoc-ed--block { display: block; white-space: pre-wrap; }
+.sdoc-ed:empty::before { content: attr(data-placeholder); color: var(--sdoc-rule); }
+
+.sdoc-b { font-weight: 700; }
+.sdoc-mut { color: var(--sdoc-mut); }
+.sdoc-flag { color: var(--sdoc-flag); }
+
+/* ── title and details ── */
+.sdoc-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 6px; border-bottom: 1.6px solid var(--sdoc-ink);
+}
+.sdoc-title { font-size: 20px; font-weight: 700; letter-spacing: .01em; }
+.sdoc-no { font-size: 11px; font-weight: 700; }
+.sdoc-meta { margin: 8px 0 4px; display: grid; gap: 2px; }
+.sdoc-meta > div { display: grid; grid-template-columns: 23mm minmax(0, 1fr); }
+.sdoc-meta dt { color: var(--sdoc-mut); }
+.sdoc-meta dd { margin: 0; }
+
+/* ── sections ── */
+.sdoc-h2 {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 18px 0 8px; padding: 4px 0; border-bottom: 1px solid var(--sdoc-hd);
+  color: var(--sdoc-hd);
+}
+.sdoc-h2__t { font-size: 14px; font-weight: 700; }
+.sdoc-aside { font-size: 10.5px; color: var(--sdoc-mut); }
+.sdoc-h2 .sdoc-aside { margin-left: auto; }
+.sdoc-h2__tools { display: inline-flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.sdoc-h2:hover .sdoc-h2__tools, .sdoc-h2:focus-within .sdoc-h2__tools { opacity: 1; }
+@media (hover: none) { .sdoc-h2__tools { opacity: 1; } }
+.sdoc-tool {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
+  font: inherit; font-size: 11px; font-weight: 600; color: #475569;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer;
+}
+.sdoc-tool:hover { border-color: var(--sdoc-edit); color: var(--sdoc-edit); }
+.sdoc-tool:focus-visible, .sdoc-x:focus-visible { outline: 2px solid var(--sdoc-edit); outline-offset: 1px; }
+.sdoc-h3 { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 4px; font-size: 11.5px; }
+.sdoc-h3 .sdoc-aside { margin-left: auto; text-align: right; }
+
+/* ── figures ── */
+.sdoc-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(30mm, 1fr)); border: 1px solid var(--sdoc-soft); }
+.sdoc-fig { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-right: 1px solid var(--sdoc-soft); font-size: 10.5px; }
+.sdoc-fig:last-child { border-right: none; }
+.sdoc-fig__v { font-size: 14px; font-weight: 700; }
+
+/* ── tables ── */
+.sdoc-tablewrap { position: relative; }
+.sdoc-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
+.sdoc-table--half { font-size: 10.5px; }
+.sdoc-table th {
+  padding: 4px 5px; text-align: left; font-weight: 700; font-size: 10px;
+  background: var(--sdoc-shade); border-bottom: 1px solid var(--sdoc-rule);
+}
+.sdoc-table td { padding: 3px 5px; border-bottom: 1px solid var(--sdoc-soft); vertical-align: top; overflow-wrap: anywhere; }
+/* Leave a row out: the × sits in the margin right of the row, never in the printed width. */
+.sdoc-table td:last-child { position: relative; }
+.sdoc-x--row { position: absolute; top: 1px; right: -26px; }
+.sdoc-x {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+  padding: 0; border: none; border-radius: 4px; background: transparent; color: #94a3b8; cursor: pointer;
+  opacity: 0; transition: opacity .12s;
+}
+tr:hover .sdoc-x, .sdoc-note:hover .sdoc-x, .sdoc-x:focus-visible { opacity: 1; }
+@media (hover: none) { .sdoc-x { opacity: 1; } }
+.sdoc-x:hover { color: var(--sdoc-flag); background: #fef2f2; }
+
+.sdoc-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6mm; margin-top: 6px; }
+@media (max-width: 640px) { .sdoc-pair { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── lines ── */
+.sdoc-none { padding: 4px 0; color: var(--sdoc-mut); }
+.sdoc-note { position: relative; margin-top: 4px; font-size: 10.5px; color: var(--sdoc-mut); padding-right: 22px; }
+.sdoc-note .sdoc-x { position: absolute; top: 0; right: 0; }
+
+/* ── handover ── */
+.sdoc-handover { display: flex; flex-direction: column; }
+.sdoc-handover__line { display: block; min-height: 8mm; padding: 3mm 1mm 1mm; border-bottom: 1px solid var(--sdoc-rule); font-size: 12px; }
+.sdoc-signs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12mm; margin-top: 16mm; }
+.sdoc-sign { border-top: 1px solid var(--sdoc-ink); padding-top: 3px; font-size: 10.5px; }
+
+.sdoc-foot { margin-top: 14mm; padding-top: 4px; border-top: 1px solid var(--sdoc-soft); font-size: 10px; color: var(--sdoc-mut); }
+
+@media (max-width: 640px) {
+  .sdoc { padding: 16px 28px 16px 12px; }
+  .sdoc-title { font-size: 17px; overflow-wrap: anywhere; min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sdoc-h2__tools, .sdoc-x { transition: none; } }

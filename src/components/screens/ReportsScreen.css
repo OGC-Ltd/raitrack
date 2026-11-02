@@ -5,6 +5,9 @@
 
 .rpt-root { min-width: 0; }
 .rpt-tabs .sp4-tab .ti { font-size: 16px; }
+/* End of shift: the sheet on a grey desk, as a page. */
+.rpt-body.sdoc-desk { background: #eef1f5; padding: 20px 16px 32px; overflow: auto; }
+@media (max-width: 640px) { .rpt-body.sdoc-desk { padding: 8px 0 16px; } }
 /* The report marks (shared/ReportIcon): drawn, not font glyphs; sized like the glyph they replaced. */
 .rpt-tabs .sp4-tab .report-icon { font-size: 17px; flex-shrink: 0; }
 .rpt-body .empty-note__icon .report-icon { font-size: 26px; }
