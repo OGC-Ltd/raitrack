@@ -334,7 +334,7 @@ export const PAGE_TOURS = {
     intro: "Every ticket each scale weighed, and the day across all of them.",
     steps: [
       ["wb-views", "Tickets or Analytics", "<b>Tickets</b>: one row per token. <b>Analytics</b>: the day across every bridge, its flow, the road and the activity."],
-      ["page-kpis", "The Figures", "Weighments, unique vehicles and the heaviest load for the dates picked."],
+      ["page-kpis", "The Figures", "Weighments and the heaviest and lightest loads for the dates picked."],
       ["wb-filters", "Search and Dates", "Search a token, vehicle or driver, and pick the ticket dates."],
       ["page-tabs", "One Scale or All", "Pick a weighbridge, or see them all together."],
       ["page-toolbar", "Tickets and Tonnes", "How many tickets and tonnes are shown. Reload them, or save them as a CSV.", { key: "toolbar" }],

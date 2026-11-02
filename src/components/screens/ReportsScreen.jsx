@@ -250,9 +250,19 @@ function ShiftSheet({ doc, version, onChange }) {
   );
 }
 
-function ShiftReport({ orgId }) {
+function ShiftReport({ orgId, vehicles, groups }) {
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => shiftKept.get(orgId));
+  // A fleet with a list (Menengai) makes it per category (operator, 2 Nov:
+  // "the shift has to be generated per the categories"): the first one to start
+  const [category, setCategory] = useState(() => saved?.category ?? groups?.[0]?.name ?? null);
+  const categoryOf = (name) => {
+    if (!name || !groups) return null;
+    const ids = scopeUnits(vehicles, groups, name).units.flatMap((u) => u.vehicles.map((v) => v.vehicleId)).filter(Boolean);
+    return { name, vehicleIds: [...new Set(ids)] };
+  };
+  // The live list fills after the page opens: wait for it before a category's first run
+  const vehiclesReady = !groups || vehicles.length > 0;
   const today = fleetDay(Date.now());
   const [draft, setDraft] = useState(() => saved?.draft ?? SHIFT_TODAY(today));   // the days and hours on the picker
   const [span, setSpan] = useState(() => saved?.span ?? shiftPeriod(saved?.draft ?? SHIFT_TODAY(today)));
@@ -264,16 +274,17 @@ function ShiftReport({ orgId }) {
   const runId = useRef(0);
   const edited = run.status === 'done' && isDocEdited(run.original, doc);
 
-  const load = async (days) => {
+  const load = async (days, cat = category) => {
     // A period reaching now is made up to the moment it is asked for.
     const period = shiftPeriod(days);
     setDraft(days);
+    setCategory(cat);
     setSpan(period);
     if (shiftProblem(orgId, period)) return;
     const id = ++runId.current;
     setRun({ status: 'loading' }); setPdf({ busy: false, error: null });
     try {
-      const answer = await loadEndOfShiftDoc({ orgId, from: period.from, to: period.to });
+      const answer = await loadEndOfShiftDoc({ orgId, from: period.from, to: period.to, category: categoryOf(cat) });
       if (id !== runId.current) return;
       setRun({ status: 'done', original: answer }); setDoc(answer); setVersion((v) => v + 1);
     } catch (err) {
@@ -281,13 +292,13 @@ function ShiftReport({ orgId }) {
     }
   };
   // Opens made, unless a sheet was kept for this organisation.
-  useEffect(() => { if (!saved && orgId) load(draft); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!saved && orgId && vehiclesReady) load(draft); }, [orgId, vehiclesReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!orgId) return;
-    if (run.status === 'done') shiftKept.set(orgId, { draft, span, original: run.original, doc });
+    if (run.status === 'done') shiftKept.set(orgId, { draft, span, category, original: run.original, doc });
     else shiftKept.delete(orgId);
-  }, [orgId, draft, span, run, doc]);
+  }, [orgId, draft, span, category, run, doc]);
 
   // Closing or reloading the browser tab would lose the edits: the browser asks first.
   useEffect(() => {
@@ -340,7 +351,7 @@ function ShiftReport({ orgId }) {
         >
           {({ close }) => (
             <>
-              <HourWindow start={shown.start} end={shown.end} onChange={(a, b) => setPicking({ ...shown, start: a, end: b })} />
+              <HourWindow minutes start={shown.start} end={shown.end} label="Shift hours" onChange={(a, b) => setPicking({ ...shown, start: a, end: b })} />
               <div className="mvr-hours__foot">
                 {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
                 <button type="button" className="sp4-submit-btn frp-run"
@@ -352,6 +363,12 @@ function ShiftReport({ orgId }) {
             </>
           )}
         </DateRangePicker>
+        {groups && (
+          <ChoicePicker icon="ti-users-group" label="Category" value={category}
+                        options={[{ value: null, label: 'All categories', note: groups.reduce((n, g) => n + g.units.length, 0) },
+                          ...groups.map((g) => ({ value: g.name, label: g.name, note: g.units.length }))]}
+                        onChange={(v) => guard('Make the report for another category', () => load(draft, v))} />
+        )}
         <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => pick(draft, span.live ? 'Make it again up to now' : 'Make it again')}
                 disabled={Boolean(problem) || run.status === 'loading'} title={span.live ? 'Make it again, up to the current time' : 'Make it again'}>
           <i className="ti ti-refresh" aria-hidden="true" /> Refresh
@@ -419,7 +436,24 @@ function groupWords(g, edits) {
 
 const lastWords = (h) => (h === 1 ? 'Last hour' : `Last ${h} hours`);
 // The day's end reads 24:00, so a whole day is 00:00–24:00, not 00:00–00:00
-const hh = (h) => (h === 24 ? '24:00' : `${hourLabel(h % 24)}:00`);
+// Hours may carry minutes (7.5 = 07:30): the Shift picks to the minute (operator, 2 Nov)
+const hh = (h) => {
+  if (h === 24) return '24:00';
+  const m = Math.round(h * 60);
+  return `${hourLabel(Math.floor(m / 60) % 24)}:${String(m % 60).padStart(2, '0')}`;
+};
+/** "07:30" back to 7.5; the end's "00:00" is the day's end, 24. */
+const hoursOf = (text, isEnd = false) => {
+  const [a, b] = String(text).split(':').map(Number);
+  const h = (a || 0) + (b || 0) / 60;
+  return isEnd && h === 0 ? 24 : h;
+};
+/** "1 hour", "8 hours 30 min", over midnight or not. */
+const spanWords = (start, end) => {
+  let min = Math.round(((end - start) % 24 + 24) % 24 * 60) || 24 * 60;
+  const h = Math.floor(min / 60); min %= 60;
+  return [h ? `${h} hour${h === 1 ? '' : 's'}` : null, min ? `${min} min` : null].filter(Boolean).join(' ');
+};
 /** "07:00–20:00", "20:00–06:00 next day". */
 const hoursText = (start, end) => `${hh(start)}–${hh(end)}${end <= start ? ' next day' : ''}`;
 
@@ -430,10 +464,13 @@ const hoursText = (start, end) => `${hh(start)}–${hh(end)}${end <= start ? ' n
  * for the span between them, both hours included. Hours that run past
  * midnight (20:00–06:00) are set in the From and To boxes under it.
  */
-function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
+function HourWindow({ start, end, onChange, label = 'Hours each day', minutes = false }) {
   const [anchor, setAnchor] = useState(null);
-  const lastHour = (end + 23) % 24;
-  const inWindow = (h) => (end > start ? h >= start && h < end : h >= start || h < end);
+  // With minutes, an hour on the ruler is lit when any of it is in the window
+  const lo = Math.floor(start);
+  const hi = Math.ceil(end);
+  const lastHour = (hi + 23) % 24;
+  const inWindow = (h) => (end > start ? h >= lo && h < hi : h >= lo || h < hi);
   const click = (h) => {
     if (anchor == null) { setAnchor(h); onChange(h, h + 1); return; }
     onChange(Math.min(anchor, h), Math.max(anchor, h) + 1);
@@ -452,7 +489,7 @@ function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
         {Array.from({ length: 24 }, (_, h) => {
           const cls = ['mvr-hour',
             inWindow(h) && 'mvr-hour--in',
-            h === start && 'mvr-hour--lo',
+            h === lo && 'mvr-hour--lo',
             h === lastHour && 'mvr-hour--hi',
             anchor === h && 'mvr-hour--anchor'].filter(Boolean).join(' ');
           return (
@@ -464,6 +501,19 @@ function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
         })}
       </div>
       <div className="mvr-hours__exact">
+        {minutes ? (
+          <>
+            {/* Any time to the minute: "07:30", or a whole hour */}
+            <label>From
+              <input type="time" step={60} className="rpt-select mvr-hours__time" value={hh(start)} aria-label="From"
+                     onChange={(e) => e.target.value && exact(hoursOf(e.target.value), end)} />
+            </label>
+            <label>To
+              <input type="time" step={60} className="rpt-select mvr-hours__time" value={end === 24 ? '00:00' : hh(end)} aria-label="To"
+                     onChange={(e) => e.target.value && exact(start, hoursOf(e.target.value, true))} />
+            </label>
+          </>
+        ) : (<>
         <label>From
           <select className="rpt-select" value={start} onChange={(e) => exact(Number(e.target.value), end)}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hh(h)}</option>)}
@@ -474,7 +524,8 @@ function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
             {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => <option key={h} value={h}>{hh(h)}</option>)}
           </select>
         </label>
-        <span className="mvr-hours__span">{span === 1 ? '1 hour' : `${span} hours`}{end <= start ? ', past midnight' : ''}</span>
+        </>)}
+        <span className="mvr-hours__span">{minutes ? spanWords(start, end) : span === 1 ? '1 hour' : `${span} hours`}{end <= start ? ', past midnight' : ''}</span>
       </div>
     </div>
   );
@@ -1385,7 +1436,7 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
         <div className="sp4-header-kpis">
