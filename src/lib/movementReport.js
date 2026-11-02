@@ -9,12 +9,18 @@
 //
 // Pure: no React, no network.
 
+import { unitKey, vehicleKeys } from './fleetGroups';
 import { dayStart } from './fleetReports';
 
 /** The Direction column's words, as the PDF prints them. */
-export const DIRECTION = {
-  to: 'To MORL', from: 'From MORL', at: 'At MORL', moving: 'Moving', stopped: 'Stopped', 'no-fix': 'No fix',
-};
+/**
+ * The Direction column's words, read against the report's site: MORL for
+ * Menengai, the organisation's own elsewhere ("To Sukari"; operator, 2 Nov).
+ */
+export const directionWords = (site = 'MORL') => ({
+  to: `To ${site}`, from: `From ${site}`, at: `At ${site}`, moving: 'Moving', stopped: 'Stopped', 'no-fix': 'No fix',
+});
+export const DIRECTION = directionWords('MORL');
 export const STATES = Object.keys(DIRECTION);
 
 /** Moving, as the server reads it: this fast or faster on a fix inside the window. */
@@ -124,7 +130,7 @@ export function editCounts(report, edits) {
 /** What the server needs to draw the edited PDF, and nothing it would ignore. */
 export function pdfRequest(report, edits) {
   const { hours, from, to, morl, groups } = applyEdits(report, edits);
-  return { hours, from, to, morl, groups, edits: editCounts(report, edits) };
+  return { hours, from, to, morl, site: report.site ?? 'MORL', groups, edits: editCounts(report, edits) };
 }
 
 /**
@@ -191,13 +197,51 @@ export function windowsProblem(sel, now = Date.now()) {
 export function vehicleTypes(reports) {
   const names = new Set();
   for (const r of reports) for (const g of r.groups) names.add(g.name);
+  // Groups from the fleet list keep its order (Tankers, Finished Goods, …), and
+  // vehicle types the server's (the largest first, Other last)
+  if (reports.some((r) => r.byList || splitsByType(r))) return [...names];
   return [...names].sort((a, b) => (/^CPO\b/i.test(a) ? 0 : 1) - (/^CPO\b/i.test(b) ? 0 : 1) || a.localeCompare(b));
 }
 
-/** The types picked when the page opens: the CPO groupings, or every one when there is none. */
+/** The types picked when the page opens: the CPO groupings (Menengai's Tankers), or every one when there is none. */
 export function defaultTypes(types) {
-  const cpo = types.filter((t) => /^CPO\b/i.test(t));
+  const cpo = types.filter((t) => /^(CPO\b|Tankers$)/i.test(t));
   return cpo.length ? cpo : types;
+}
+
+/** Rows within a group, as the server orders them: heading to the site, leaving it, moving, stopped, at it, no fix. */
+const STATE_RANK = { to: 0, from: 1, moving: 2, stopped: 3, at: 4, 'no-fix': 5 };
+export const NOT_ON_LIST = 'Not on the list';
+
+/**
+ * Menengai's report regrouped by the client's fleet list (data/fleetGroups,
+ * MORL FLEET sheet: Tankers, Finished Goods, Van Sales, …; operator, 2 Nov:
+ * "change the dropdown list items to the ones on the screenshot and use the
+ * excel sheet to map the tankers and all other vehicle types"), in the list's
+ * order. A unit matches by its plate or machine name, as the other reports
+ * match it (lib/fleetGroups); one the list does not name goes last, under
+ * NOT_ON_LIST, so none is dropped without a word.
+ */
+export function byFleetList(report, groups) {
+  if (!groups?.length) return report;
+  const groupOf = new Map();
+  for (const g of groups) for (const [label] of g.units) if (!groupOf.has(unitKey(label))) groupOf.set(unitKey(label), g.name);
+  const rows = report.groups.flatMap((g) => g.rows);
+  const buckets = new Map([...groups.map((g) => [g.name, []]), [NOT_ON_LIST, []]]);
+  for (const r of rows) {
+    let name = NOT_ON_LIST;
+    for (const k of vehicleKeys({ regPlate: r.plate, id: r.vehicleId, name: r.grouping })) {
+      if (groupOf.has(k)) { name = groupOf.get(k); break; }
+    }
+    buckets.get(name).push(r);
+  }
+  const ordered = [...buckets.entries()].filter(([, list]) => list.length).map(([name, list]) => ({
+    name,
+    rows: [...list].sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state]
+      || (a.state === 'to' || a.state === 'from' ? (b.speedKmh ?? 0) - (a.speedKmh ?? 0) : (a.lastAt ?? 0) - (b.lastAt ?? 0))
+      || String(a.plate).localeCompare(String(b.plate))),
+  }));
+  return { ...report, groups: ordered, byList: true };
 }
 
 /** The report with only the picked types, counted again. */
