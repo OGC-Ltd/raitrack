@@ -87,4 +87,9 @@ export default defineConfig({
   build: {
     outDir: 'build', // matches the old CRA output folder name, optional
   },
+  // Workers built as ES modules: pdf.js's worker (shared/PdfPages) is one, and
+  // the default iife build cannot bundle a module that exports.
+  worker: {
+    format: 'es',
+  },
 })
