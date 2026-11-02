@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import "./VehicleStatsCard.css";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import { copyText, formatCoords } from "../../lib/copyText";
-import { vehicleActivity, isInTransit, isOnline, equipmentLabel, carriesCargo, maxPayloadTonnes, ACTIVITY_LABELS, ACTIVITY_COLORS, ONLINE_COLORS } from "../../lib/vehicleMap";
+import { vehicleActivity, isInTransit, isOnline, equipmentLabel, carriesCargo, maxPayloadTonnes, menengaiGroup, fleetTypeLabel, ACTIVITY_LABELS, ACTIVITY_COLORS, ONLINE_COLORS } from "../../lib/vehicleMap";
 import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
@@ -445,6 +445,10 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
           ? VEHICLE_TYPE_LABELS[vehicle.vehicleType] ?? vehicle.vehicleType
           : null);
 
+  // Menengai's fleet-list group (Tankers, Van Sales, …), highlighted on the
+  // card (operator, 2 Nov 2026); null for any other organisation's unit.
+  const group = menengaiGroup(vehicle);
+
   // Alerts only. Activity belongs to the one chip below, so it is stated once.
   const stateLabel = STATE_LABELS[vehicle.status];
 
@@ -462,6 +466,11 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
               "Plant" its class says, which every dozer and grader also shows.
               Falls back to the class when the code is not one we can name. */}
           {typeLabel && <span className="vt-type-badge">{typeLabel}</span>}
+          {group && (
+            <span className={`vt-group-badge${group === "mg:" ? " vt-group-badge--none" : ""}`} title="Group on the fleet list">
+              {fleetTypeLabel(group)}
+            </span>
+          )}
         </div>
         <div className="vt-header-right">
           {/* CONNECTION — always rendered, independent of everything else.

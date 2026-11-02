@@ -92,6 +92,25 @@
   gap: 4px 12px;
   margin-top: 8px;
 }
+/* Menengai's fleet-list group (Tankers, Van Sales, …): a blue chip beside
+   the status; amber for a unit the list does not name */
+.vh-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.vh-group .ti { font-size: 13px; }
+.vh-group--none { background: var(--vh-warn-soft); color: var(--vh-warn); border-color: #fde68a; }
+
 .vh-status {
   display: inline-flex;
   align-items: center;

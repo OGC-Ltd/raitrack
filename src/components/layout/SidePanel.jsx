@@ -17,7 +17,7 @@ import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
 import { useFollowUpCount } from '../../hooks/useFollowUpCount';
 import ReportIcon from '../shared/ReportIcon';
-import { REPORT_NODES, reportKeysFor, useCurrentReport, chooseReport } from '../../lib/reportNav';
+import { REPORT_NODES, reportKeysFor, useCurrentReport, chooseReport, firstReport } from '../../lib/reportNav';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
@@ -235,7 +235,7 @@ export default function SidePanel() {
   const reportKeys = reportKeysFor(can);
   const reportNodes = REPORT_NODES.filter((n) => reportKeys.includes(n.key));
   const current = useCurrentReport();
-  const shownReport = reportKeys.includes(current) ? current : reportKeys[0];
+  const shownReport = reportKeys.includes(current) ? current : firstReport(reportKeys);
   const [reportsOpen, setReportsOpen] = useState(desktopActiveTab === 'reports');
   useEffect(() => { if (desktopActiveTab === 'reports') setReportsOpen(true); }, [desktopActiveTab]);
   // Open alerts across every organisation held (the Alerts page's default week).

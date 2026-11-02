@@ -50,7 +50,7 @@ import { saveFile } from '../../api/tripReport';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPages from '../shared/PdfPages';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, STATES, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -119,7 +119,20 @@ const shiftKept = new Map();
  * or before the start, and up to now when it would run past it. Today 00:00 to
  * 24:00 is the default: the shift so far.
  */
-const SHIFT_TODAY = (today) => ({ fromDay: today, toDay: today, start: 0, end: 24 });
+/** The shifts the picker offers in one click; Day is the default (operator, 2 Nov: "the default shift is 7:30hrs to 19:30hrs"). */
+const SHIFT_PRESETS = [
+  { key: 'day', label: 'Day', start: 7.5, end: 19.5 },
+  { key: 'night', label: 'Night', start: 19.5, end: 7.5 },
+  { key: 'whole', label: 'Whole day', start: 0, end: 24 },
+];
+/**
+ * The day shift today, or yesterday's while today's has not begun (before
+ * 07:30 the last day shift is yesterday's).
+ */
+const SHIFT_TODAY = (today, now = Date.now()) => {
+  const day = dayStart(today) + 7.5 * HOUR_MS > now ? fleetDay(dayStart(today) - 12 * HOUR_MS) : today;
+  return { fromDay: day, toDay: day, start: 7.5, end: 19.5 };
+};
 function shiftPeriod(d, now = Date.now()) {
   const from = dayStart(d.fromDay) + d.start * HOUR_MS;
   const to = dayStart(d.toDay) + (d.end > d.start ? d.end : d.end + 24) * HOUR_MS;
@@ -316,6 +329,11 @@ function ShiftReport({ orgId, vehicles, groups }) {
   const [picking, setPicking] = useState(null);
   const shown = picking ?? draft;
   const pickingProblem = shiftProblem(orgId, shiftPeriod(shown));
+  // A one-day shift picked for today that has not begun yet (Night at 10:00)
+  // is last night's: move it back a day rather than refuse it
+  const onlyBegun = (d) => (d.fromDay === d.toDay && d.toDay === today && shiftPeriod(d).from >= Date.now()
+    ? { ...d, fromDay: fleetDay(dayStart(today) - 12 * HOUR_MS), toDay: fleetDay(dayStart(today) - 12 * HOUR_MS) }
+    : d);
 
   const download = async () => {
     if (pdf.busy || !doc) return;
@@ -351,7 +369,7 @@ function ShiftReport({ orgId, vehicles, groups }) {
         >
           {({ close }) => (
             <>
-              <HourWindow minutes start={shown.start} end={shown.end} label="Shift hours" onChange={(a, b) => setPicking({ ...shown, start: a, end: b })} />
+              <ShiftTime start={shown.start} end={shown.end} onChange={(a, b) => setPicking(onlyBegun({ ...shown, start: a, end: b }))} />
               <div className="mvr-hours__foot">
                 {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
                 <button type="button" className="sp4-submit-btn frp-run"
@@ -442,12 +460,6 @@ const hh = (h) => {
   const m = Math.round(h * 60);
   return `${hourLabel(Math.floor(m / 60) % 24)}:${String(m % 60).padStart(2, '0')}`;
 };
-/** "07:30" back to 7.5; the end's "00:00" is the day's end, 24. */
-const hoursOf = (text, isEnd = false) => {
-  const [a, b] = String(text).split(':').map(Number);
-  const h = (a || 0) + (b || 0) / 60;
-  return isEnd && h === 0 ? 24 : h;
-};
 /** "1 hour", "8 hours 30 min", over midnight or not. */
 const spanWords = (start, end) => {
   let min = Math.round(((end - start) % 24 + 24) % 24 * 60) || 24 * 60;
@@ -457,6 +469,78 @@ const spanWords = (start, end) => {
 /** "07:00–20:00", "20:00–06:00 next day". */
 const hoursText = (start, end) => `${hh(start)}–${hh(end)}${end <= start ? ' next day' : ''}`;
 
+const pad2 = (n) => String(n).padStart(2, '0');
+/** 7.5 → { h: 7, m: 30 }; the end's 24 reads 00:00. */
+const hm = (x) => { const t = Math.round(x * 60) % (24 * 60); return { h: Math.floor(t / 60), m: t % 60 }; };
+
+/**
+ * One time of day as an hour and a minute, each its own dropdown, set in
+ * large figures so 07:30 reads as a clock (operator, 2 Nov: "the ability to
+ * pick the minutes too"). The dropdowns are native: type "19" to jump.
+ */
+function ClockField({ label, value, isEnd = false, onChange }) {
+  const { h, m } = hm(value);
+  const set = (nh, nm) => {
+    const x = nh + nm / 60;
+    onChange(isEnd && x === 0 ? 24 : x);
+  };
+  return (
+    <fieldset className="stp-clock">
+      <legend className="stp-clock__l">{label}</legend>
+      <div className="stp-clock__face">
+        <select className="stp-clock__sel" value={h} aria-label={`${label}, hour`} onChange={(e) => set(Number(e.target.value), m)}>
+          {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{pad2(i)}</option>)}
+        </select>
+        <span className="stp-clock__colon" aria-hidden="true">:</span>
+        <select className="stp-clock__sel" value={m} aria-label={`${label}, minutes`} onChange={(e) => set(h, Number(e.target.value))}>
+          {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{pad2(i)}</option>)}
+        </select>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * The shift's start and end, to the minute (operator, 2 Nov 2026): Day,
+ * Night and Whole day in one click; Starts and Ends as clock fields; under
+ * them the day's 24 hours with the shift drawn on it, so a shift over
+ * midnight shows as two pieces.
+ */
+export function ShiftTime({ start, end, onChange }) {
+  const over = end <= start;
+  const on = SHIFT_PRESETS.find((p) => p.start === start && p.end === end)?.key;
+  const pieces = over ? [[start, 24], [0, end]] : [[start, end]];
+  return (
+    <div className="stp" role="group" aria-label="Shift time">
+      <div className="stp__head">
+        <span className="stp__title">Shift time</span>
+        <span className="stp__span">{spanWords(start, end)}{over && end !== 24 ? ', ends next day' : ''}</span>
+      </div>
+      <div className="stp__presets">
+        {SHIFT_PRESETS.map((p) => (
+          <button key={p.key} type="button" className={`drp-chip stp__preset${on === p.key ? ' drp-chip--on' : ''}`}
+                  aria-pressed={on === p.key} onClick={() => onChange(p.start, p.end)}>
+            {p.label}<span className="stp__preset-t">{p.key === 'whole' ? '24 h' : `${hh(p.start)}–${hh(p.end)}`}</span>
+          </button>
+        ))}
+      </div>
+      <div className="stp__clocks">
+        <ClockField label="Starts" value={start} onChange={(x) => onChange(x, end)} />
+        <i className="ti ti-arrow-right stp__arrow" aria-hidden="true" />
+        <ClockField label="Ends" value={end} isEnd onChange={(x) => onChange(start, x)} />
+      </div>
+      <div className="stp__day" aria-hidden="true">
+        <div className="stp__track">
+          {pieces.map(([a, b], i) => (
+            <span key={i} className="stp__fill" style={{ left: `${(a / 24) * 100}%`, width: `${((b - a) / 24) * 100}%` }} />
+          ))}
+        </div>
+        <div className="stp__ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The hours each day, as a ruler of the day's 24 hours (operator, 2 Nov: "a
  * single date picker ... and select a hour window period"). It works as the
@@ -464,13 +548,10 @@ const hoursText = (start, end) => `${hh(start)}–${hh(end)}${end <= start ? ' n
  * for the span between them, both hours included. Hours that run past
  * midnight (20:00–06:00) are set in the From and To boxes under it.
  */
-function HourWindow({ start, end, onChange, label = 'Hours each day', minutes = false }) {
+function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
   const [anchor, setAnchor] = useState(null);
-  // With minutes, an hour on the ruler is lit when any of it is in the window
-  const lo = Math.floor(start);
-  const hi = Math.ceil(end);
-  const lastHour = (hi + 23) % 24;
-  const inWindow = (h) => (end > start ? h >= lo && h < hi : h >= lo || h < hi);
+  const lastHour = (end + 23) % 24;
+  const inWindow = (h) => (end > start ? h >= start && h < end : h >= start || h < end);
   const click = (h) => {
     if (anchor == null) { setAnchor(h); onChange(h, h + 1); return; }
     onChange(Math.min(anchor, h), Math.max(anchor, h) + 1);
@@ -489,7 +570,7 @@ function HourWindow({ start, end, onChange, label = 'Hours each day', minutes = 
         {Array.from({ length: 24 }, (_, h) => {
           const cls = ['mvr-hour',
             inWindow(h) && 'mvr-hour--in',
-            h === lo && 'mvr-hour--lo',
+            h === start && 'mvr-hour--lo',
             h === lastHour && 'mvr-hour--hi',
             anchor === h && 'mvr-hour--anchor'].filter(Boolean).join(' ');
           return (
@@ -501,19 +582,6 @@ function HourWindow({ start, end, onChange, label = 'Hours each day', minutes = 
         })}
       </div>
       <div className="mvr-hours__exact">
-        {minutes ? (
-          <>
-            {/* Any time to the minute: "07:30", or a whole hour */}
-            <label>From
-              <input type="time" step={60} className="rpt-select mvr-hours__time" value={hh(start)} aria-label="From"
-                     onChange={(e) => e.target.value && exact(hoursOf(e.target.value), end)} />
-            </label>
-            <label>To
-              <input type="time" step={60} className="rpt-select mvr-hours__time" value={end === 24 ? '00:00' : hh(end)} aria-label="To"
-                     onChange={(e) => e.target.value && exact(start, hoursOf(e.target.value, true))} />
-            </label>
-          </>
-        ) : (<>
         <label>From
           <select className="rpt-select" value={start} onChange={(e) => exact(Number(e.target.value), end)}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hh(h)}</option>)}
@@ -524,8 +592,7 @@ function HourWindow({ start, end, onChange, label = 'Hours each day', minutes = 
             {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => <option key={h} value={h}>{hh(h)}</option>)}
           </select>
         </label>
-        </>)}
-        <span className="mvr-hours__span">{minutes ? spanWords(start, end) : span === 1 ? '1 hour' : `${span} hours`}{end <= start ? ', past midnight' : ''}</span>
+        <span className="mvr-hours__span">{span === 1 ? '1 hour' : `${span} hours`}{end <= start ? ', past midnight' : ''}</span>
       </div>
     </div>
   );
@@ -1138,8 +1205,8 @@ export default function ReportsScreen() {
   // lists the same and picks among them too.
   const tabs = reportKeysFor(can);
   // End of shift first, where the grants allow it.
-  const chosen = useCurrentReport() ?? tabs[0];
-  const key = tabs.includes(chosen) ? chosen : tabs[0];
+  const chosen = useCurrentReport() ?? firstReport(tabs);
+  const key = tabs.includes(chosen) ? chosen : firstReport(tabs);
   const isServer = Boolean(SERVER_TABS[key]);
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key));
