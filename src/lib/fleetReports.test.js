@@ -176,7 +176,7 @@ describe('distance inside windows', () => {
                          ['v2', { km: 0.1, readings: 50 }], ['v3', { km: 0, readings: 0 }]]);
     expect(nightRows(units, per).map((r) => r.unit.plate)).toEqual(['KCS 082M']);
     const u = utilisationRows(units, per);
-    expect(u.map((r) => [r.unit.plate, r.km, r.noData])).toEqual([['KCS 082M', 120, false], ['KCN 901F', 0.1, false], ['FL 01', 0, true]]);
+    expect(u.map((r) => [r.unit.plate, r.km, r.noData])).toEqual([['FL 01', 0, true], ['KCN 901F', 0.1, false], ['KCS 082M', 120, false]]);   // A–Z by plate
     const s = sections(u, groups.map((g) => g.name), (r) => r.km);
     expect(s.map((x) => [x.name, x.rows.length, x.total])).toEqual([['Van Sales', 1, 120], ['Tankers', 1, 0.1], ['RAI MDF Equipment', 1, 0]]);
   });

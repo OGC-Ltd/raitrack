@@ -136,6 +136,11 @@ export function minutesWords(min) {
 // ── shaping ─────────────────────────────────────────────────────────────────
 
 /** For each unit, the value from the tracker with the largest `measure`. */
+/** Plates A–Z, numbers in order: "KCA 9" before "KCA 10". */
+export const byPlate = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'en', { numeric: true, sensitivity: 'base' });
+/** Report rows A–Z by their unit's plate (operator, 2 Nov 2026: "organize the nodes in ascending order"). */
+export const unitOrder = (a, b) => byPlate(a.unit?.plate, b.unit?.plate);
+
 function bestPerUnit(units, perVehicle, measure) {
   const rows = [];
   for (const u of units) {
@@ -271,7 +276,7 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     r.firstAt = firstAt.get(u.key) ?? null;
     if (r.total > 0 || inScope.some((e) => e.unit.key === u.key)) rows.push(r);
   }
-  rows.sort((a, b) => b.total - a.total);
+  rows.sort(unitOrder);
   return Object.assign(rows, { logged: inScope.sort((a, b) => a.at - b.at) });
 }
 
@@ -299,7 +304,7 @@ export function overspeedRows(units, episodesByVehicle, minSec = OVERSPEED_MIN_S
   }
   return bestPerUnit(units, perVehicle, (r) => r.count)
     .filter((r) => r.count > 0)
-    .sort((a, b) => b.km - a.km || b.seconds - a.seconds);
+    .sort(unitOrder);
 }
 
 /**
@@ -352,11 +357,11 @@ export function summariseWindows(pings, windows) {
   return out;
 }
 
-/** Units that covered ground at night, farthest first. */
+/** Units that covered ground at night, A–Z by plate. */
 export function nightRows(units, perVehicle, { minKm = 0.5 } = {}) {
   return bestPerUnit(units, perVehicle, (r) => r.km)
     .filter((r) => (r.km ?? 0) >= minKm)
-    .sort((a, b) => b.km - a.km);
+    .sort(unitOrder);
 }
 
 /** Every unit, the stationary ones included (they are the point). */
@@ -366,8 +371,7 @@ export function utilisationRows(units, perVehicle, { rated = false } = {}) {
       const row = { ...r, km: r.km ?? 0, engineOnMin: r.engineOnMin ?? 0, noData: !r.readings };
       return rated ? { ...row, ...burnAgainstRegister(row, ratedOf(r.unit)) } : row;
     })
-    // Machines are measured by the hour, so the busiest machine leads its table.
-    .sort((a, b) => (a.basis === 'HOURS' && b.basis === 'HOURS' ? b.engineOnMin - a.engineOnMin : b.km - a.km));
+    .sort(unitOrder);
 }
 
 // ── Burn against the register (Mufindi, operator 1 Nov 2026) ───────────────
