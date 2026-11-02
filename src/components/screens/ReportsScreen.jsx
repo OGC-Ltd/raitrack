@@ -1131,7 +1131,7 @@ function MovementsReport({ orgId }) {
                   {plateSearch && <button type="button" className="sp4-search-clear" aria-label="Clear the search" onClick={() => setPlateSearch('')}>✕</button>}
                 </div>
                 {needle && (
-                  <span className="rpt-sub" role="status">
+                  <span className={`mvr-find__note${shownCount ? '' : ' mvr-find__note--none'}`} role="status">
                     {shownCount ? `${shownCount} of ${report.groups.reduce((n, g) => n + g.rows.length, 0)} units shown. The PDF keeps them all.` : 'No unit matches that plate.'}
                   </span>
                 )}
