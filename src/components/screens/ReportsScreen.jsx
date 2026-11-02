@@ -1025,7 +1025,7 @@ function MovementsReport({ orgId }) {
                             <tr key={row.vehicleId} className={`sp4-tr${out ? ' mvr-row--out' : ''}`}
                                 style={!out && TINT[state] ? { background: TINT[state] } : undefined}>
                               <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
-                              <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
+                              <td className={row.stale ? 'mvr-silent' : undefined}>{row.lastAt == null && site === 'MORL' ? '-' : stamp(row.lastAt)}</td>
                               <td className={out ? undefined : isLoading(row) ? 'mvr-cell--loading' : state === 'at' ? 'mvr-cell--morl' : isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}>
                                 <input type="text" className={`mvr-edit${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
                                        value={location} placeholder="-" maxLength={200} disabled={out}
