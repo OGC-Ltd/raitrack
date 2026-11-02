@@ -17,8 +17,14 @@ import './PdfPages.css';
 
 let lib = null;
 function pdfjs() {
-  lib ??= Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')])
-    .then(([m, worker]) => { m.GlobalWorkerOptions.workerSrc = worker.default; return m; });
+  // The worker is started here, through Vite's worker build, which names it
+  // .js. As a `?url` asset it kept pdf.js's .mjs name, and the live server
+  // sends .mjs as application/octet-stream, which no browser will run as a
+  // worker ("Setting up fake worker failed", operator, 2 Nov).
+  lib ??= import('pdfjs-dist').then((m) => {
+    m.GlobalWorkerOptions.workerPort = new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), { type: 'module' });
+    return m;
+  });
   return lib;
 }
 
