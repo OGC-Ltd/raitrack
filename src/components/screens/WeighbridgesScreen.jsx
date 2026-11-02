@@ -478,6 +478,18 @@ export default function WeighbridgesScreen() {
             <span className="sp4-kpi-n">{stats ? tonnes(stats.heaviestNetKg) : "·"}</span>
             <span className="sp4-kpi-l">Heaviest load</span>
           </div>
+          {/* The smallest load beside it (operator, 2 Nov 2026) */}
+          <div
+            className="sp4-kpi sp4-kpi--stat"
+            title={
+              stats?.lightest
+                ? `Token ${stats.lightest.token} - ${stats.lightest.vehicleNo} at ${stats.lightest.centerName}.`
+                : "The smallest net load recorded on any bridge on this day."
+            }
+          >
+            <span className="sp4-kpi-n">{stats ? (stats.lightestNetKg != null ? tonnes(stats.lightestNetKg) : "-") : "·"}</span>
+            <span className="sp4-kpi-l">Lightest load</span>
+          </div>
         </div>
       </div>
 

@@ -7,9 +7,21 @@ import { saveFile } from "./tripReport";
 
 const periodQuery = (from, to) => (Number.isFinite(from) && Number.isFinite(to) ? `?from=${Math.round(from)}&to=${Math.round(to)}` : "");
 
-/** The report as the document the PDF is drawn from (lib/shiftDoc), for the Reports page to paint and edit. */
-export async function loadEndOfShiftDoc({ orgId, from, to }) {
+/**
+ * The report as the document the PDF is drawn from (lib/shiftDoc), for the Reports page to paint and edit.
+ * `category` ({ name, vehicleIds }): one category of the fleet list only (Menengai: Tankers, …), sent in a body.
+ */
+export async function loadEndOfShiftDoc({ orgId, from, to, category = null }) {
   if (!orgId) throw new Error("No organisation selected");
+  if (category) {
+    const period = Number.isFinite(from) && Number.isFinite(to) ? { from: Math.round(from), to: Math.round(to) } : {};
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/end-of-shift`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...period, category: category.name, vehicleIds: category.vehicleIds }),
+    });
+    return res.data;
+  }
   const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/end-of-shift${periodQuery(from, to)}`);
   return res.data;
 }

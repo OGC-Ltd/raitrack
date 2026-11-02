@@ -80,6 +80,8 @@ function merge(parts, days) {
 
   let heaviest = null;
   let heaviestNetKg = null;
+  let lightest = null;
+  let lightestNetKg = null;
   let totalNetKg = 0;
   for (const p of live) {
     const s = p.stats;
@@ -88,6 +90,11 @@ function merge(parts, days) {
     if (s.heaviestNetKg != null && (heaviestNetKg == null || s.heaviestNetKg > heaviestNetKg)) {
       heaviestNetKg = s.heaviestNetKg;
       heaviest = s.heaviest;
+    }
+    // The lightest of the days' lightest, its ticket with it
+    if (s.lightestNetKg != null && (lightestNetKg == null || s.lightestNetKg < lightestNetKg)) {
+      lightestNetKg = s.lightestNetKg;
+      lightest = s.lightest;
     }
   }
 
@@ -106,6 +113,8 @@ function merge(parts, days) {
       uniqueVehicles: countVehicles(rows),
       heaviestNetKg,
       heaviest,
+      lightestNetKg,
+      lightest,
       totalNetKg,
     },
     rows,
