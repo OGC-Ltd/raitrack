@@ -29,7 +29,7 @@ import {
 import { addDays } from '../../lib/dayRange';
 import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
-import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
+import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -1347,8 +1347,7 @@ export default function ReportsScreen() {
         companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
       });
-      const file = await saveLetterheadPdf(html, { filename, landscape, keep: true });
-      await savePdfAsJpeg(file.blob, file.filename);
+      await saveLetterheadJpeg(html, { filename, landscape });
     } catch (err) {
       setPdfError(`The JPEG could not be made: ${err?.message ?? err}`);
     } finally {
