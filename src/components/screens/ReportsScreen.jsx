@@ -724,6 +724,8 @@ function MovementsReport({ orgId }) {
   const reports = run.status === 'done' ? run.reports : null;
   const allTypes = useMemo(() => (reports ? vehicleTypes(reports) : []), [reports]);
   const picked = useMemo(() => types ?? [], [types]);
+  // Menengai's fleet list, when its report is grouped by it: the menu lists every group of it
+  const fleetList = reports?.some((r) => r.byList) ? groupsFor(reports[0].orgCode) : null;
   // Vehicles of each type on the day shown, before the type filter
   const typeCounts = useMemo(() => Object.fromEntries((reports?.[day] ?? reports?.[0])?.groups.map((g) => [g.name, g.rows.length]) ?? []), [reports, day]);
   const report = useMemo(() => (reports ? onlyTypes(reports[day] ?? reports[0], picked) : null), [reports, day, picked]);
@@ -840,7 +842,16 @@ function MovementsReport({ orgId }) {
           )}
         </DateRangePicker>
 
-        {allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
+        {fleetList ? (
+          // Menengai: one group at a time from its fleet list, every group listed even with no
+          // unit tracked (operator, 2 Nov: "ensure the list has these items"); All groups also
+          // shows the units the list does not name, last
+          <ChoicePicker icon="ti-users-group" label="Group" align="right"
+                        value={picked.length === 1 && fleetList.some((g) => g.name === picked[0]) ? picked[0] : null}
+                        options={[{ value: null, label: 'All groups', note: Object.values(typeCounts).reduce((a, b) => a + b, 0) },
+                          ...fleetList.map((g) => ({ value: g.name, label: g.name, note: typeCounts[g.name] ?? 0 }))]}
+                        onChange={(v) => setTypes(v == null ? allTypes : [v])} />
+        ) : allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
 
         <button type="button" className="sp4-submit-btn frp-run rpt-run"
                 onClick={daysOpen ? runDays : () => guard('Run the report again', () => execute(sel))}
@@ -909,7 +920,9 @@ function MovementsReport({ orgId }) {
             {preview && <PdfPreview state={preview} caption={previewCaption} edited={changed} onRetry={previewPdf} onClose={closePreview} />}
             {!report.groups.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">
-                {picked.length ? 'No units of the types picked.' : 'Pick a vehicle type.'}
+                {fleetList && picked.length === 1 && !typeCounts[picked[0]]
+                  ? `None of the ${picked[0]} units on the list is tracked on the platform.`
+                  : picked.length ? 'No units of the types picked.' : 'Pick a vehicle type.'}
               </EmptyNote>
             ) : (
               <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
