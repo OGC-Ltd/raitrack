@@ -1,10 +1,12 @@
 // A letterhead report (lib/letterhead) into a PDF: the page is laid out in an
 // off-screen frame, its own script deals the flow onto A4 pages, and each page
 // is drawn into the PDF as one image. The same route the End of shift report
-// took, so the two come out looking alike.
+// took, so the two come out looking alike. The JPEG takes the same pages,
+// drawn sharper and straight to the image (api/pdfJpeg).
 
 import raiLogo from '../assets/rai-group-logo.jpeg';
 import ogcLogo from '../assets/ogc-monitoring-logo.png';
+import { savePagesAsJpeg } from './pdfJpeg';
 
 /** The logos as absolute URLs: the frame's document has no base of its own. */
 export const letterheadLogos = () => ({
@@ -12,13 +14,15 @@ export const letterheadLogos = () => ({
   ogc: new URL(ogcLogo, window.location.href).href,
 });
 
+const PDF_SCALE = 2.2;
+// The JPEG is looked at zoomed in, on a phone: an A4 page 2382 px wide (~290 dpi)
+const JPEG_SCALE = 3;
+
 /**
- * @param {string} html  from renderLetterheadHtml
- * @param {{ filename: string, landscape?: boolean, onProgress?: (words: string) => void, keep?: boolean }} o
- *   `keep` hands back `{ blob, filename }` instead of saving it, for a preview
- *   whose Download then saves that same file.
+ * The report's A4 pages drawn to canvases, laid out in an off-screen frame.
+ * @returns {Promise<HTMLCanvasElement[]>}
  */
-export async function saveLetterheadPdf(html, { filename, landscape = false, onProgress, keep = false }) {
+async function drawPages(html, { landscape, scale, onProgress }) {
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
   frame.tabIndex = -1;
@@ -34,19 +38,40 @@ export async function saveLetterheadPdf(html, { filename, landscape = false, onP
     await Promise.all([...doc.images].map((img) => (img.complete ? null : img.decode().catch(() => null))));
     await doc.fonts?.ready;
     const pages = [...doc.querySelectorAll('.page')];
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait', compress: true });
-    const [w, h] = landscape ? [297, 210] : [210, 297];
+    const { default: html2canvas } = await import('html2canvas');
+    const out = [];
     for (let i = 0; i < pages.length; i++) {
       onProgress?.(`Drawing page ${i + 1} of ${pages.length}`);
-      const canvas = await html2canvas(pages[i], { scale: 2.2, backgroundColor: '#ffffff', useCORS: true, logging: false });
-      if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h);
+      out.push(await html2canvas(pages[i], { scale, backgroundColor: '#ffffff', useCORS: true, logging: false }));
     }
-    if (keep) return { blob: pdf.output('blob'), filename };
-    pdf.save(filename);
-    return null;
+    return out;
   } finally {
     frame.remove();
   }
+}
+
+/**
+ * @param {string} html  from renderLetterheadHtml
+ * @param {{ filename: string, landscape?: boolean, onProgress?: (words: string) => void, keep?: boolean }} o
+ *   `keep` hands back `{ blob, filename }` instead of saving it, for a preview
+ *   whose Download then saves that same file.
+ */
+export async function saveLetterheadPdf(html, { filename, landscape = false, onProgress, keep = false }) {
+  const pages = await drawPages(html, { landscape, scale: PDF_SCALE, onProgress });
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait', compress: true });
+  const [w, h] = landscape ? [297, 210] : [210, 297];
+  pages.forEach((canvas, i) => {
+    if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h);
+  });
+  if (keep) return { blob: pdf.output('blob'), filename };
+  pdf.save(filename);
+  return null;
+}
+
+/** The same report as a JPEG: the pages drawn once, at JPEG_SCALE, never through the PDF. */
+export async function saveLetterheadJpeg(html, { filename, landscape = false, onProgress }) {
+  const pages = await drawPages(html, { landscape, scale: JPEG_SCALE, onProgress });
+  await savePagesAsJpeg(pages, filename);
 }
