@@ -18,6 +18,11 @@
  * `maxDays`, whichever of those fit. `quickPicks={false}` leaves them out of
  * the calendar, for a screen that sets them as buttons of its own. Days are fleet
  * day keys ('YYYY-MM-DD'), laid out by lib/dayRange monthGrid.
+ *
+ * A screen that asks for more than days (Movements: the hours each day)
+ * puts it under the calendar as `children({ close })`; the calendar then stays
+ * open after a range is drawn, and the screen closes it. `text` replaces what
+ * the field reads, and `on` marks it as the window in use.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -42,7 +47,7 @@ export function pickedText(from, to, today) {
  * `from`/`to` are the picked days; `onChange(from, to)` picks others. `align`
  * is the side of the field the calendar lines up with.
  */
-export default function DateRangePicker({ from, to, today, maxDays = 14, onChange, align = 'left', label = 'Dates', minDay = null, spans = null, quickPicks = true }) {
+export default function DateRangePicker({ from, to, today, maxDays = 14, onChange, align = 'left', label = 'Dates', minDay = null, spans = null, quickPicks = true, text = null, on = false, disabled = false, children = null }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState(null);   // a first click waiting for a second
   const [hover, setHover] = useState(null);
@@ -74,8 +79,9 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
     const [f, t] = rangeFromClicks(anchor, d);
     pick(f, t);
     setAnchor(null);
-    setOpen(false);
+    if (!children) setOpen(false);
   };
+  const shown = text ?? pickedText(from, to, today);
   const quick = [
     { label: 'Today', f: today, t: today },
     { label: 'Yesterday', f: addDays(today, -1), t: addDays(today, -1) },
@@ -93,14 +99,15 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
     <div className={`drp drp--${align}`} ref={rootRef}>
       <button
         type="button"
-        className={`drp-field${open ? ' drp-field--open' : ''}`}
+        className={`drp-field${open ? ' drp-field--open' : ''}${on ? ' drp-field--on' : ''}`}
         onClick={() => setOpen(o => !o)}
+        disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${label}: ${pickedText(from, to, today)}. Pick a day or a range.`}
+        aria-label={`${label}: ${shown}. Pick a day or a range.`}
       >
         <i className="ti ti-calendar" aria-hidden="true" />
-        <span className="drp-text">{pickedText(from, to, today)}</span>
+        <span className="drp-text">{shown}</span>
         <i className="ti ti-chevron-down drp-caret" aria-hidden="true" />
       </button>
 
@@ -157,9 +164,10 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
 
           <p className="drp-hint" aria-live="polite">
             {anchor != null
-              ? `${dayText(anchor)} is picked. Click a second day for a range, or close this to keep the one day.`
+              ? `${dayText(anchor)} is picked. Click a second day for a range${children ? '' : ', or close this to keep the one day'}.`
               : `Click a day, or two days for a range of up to ${maxDays}.`}
           </p>
+          {children && <div className="drp-more">{children({ close: () => setOpen(false) })}</div>}
         </div>
       )}
     </div>

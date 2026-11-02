@@ -205,7 +205,7 @@ export function buildTourSteps({ can = () => true, firstName = "", orgName = "",
   const reports = [
     can("logbook:read")      && "<b>Logbook</b>: how one unit was used over a period, with a PDF and a workbook",
     can("fuel_audit:read")   && "<b>Fuel Audit</b>: fuel alerts found to be a faulty probe, and their repairs",
-    can("fuel_filling:read") && "<b>Fuel Report</b>: one unit's fuel over a period, fillings and drains included",
+    can("fuel_filling:read") && "<b>Fuel Metrics</b>: one unit's fuel over a period, fillings and drains included",
   ].filter(Boolean);
   add("app:fleets", first("fleets"), {
     title: "Fleets and Reports",
@@ -357,7 +357,7 @@ export const PAGE_TOURS = {
     ],
   },
   fuelReport: {
-    title: "Fuel Report",
+    title: "Fuel Metrics",
     intro: "The fleet's fuel against its standard, and any one unit's fuel over a period.",
     steps: [
       ["page-modes", "Two Views", "<b>Performance</b> reviews the whole fleet; <b>Vehicle analytics</b> is one unit's report."],

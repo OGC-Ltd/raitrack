@@ -65,13 +65,13 @@ export const REPORTS = {
     key: 'behaviour',
     /** Columns from this index on are figures: right-aligned. */
     num: 3,
-    label: 'Driver behaviour',
-    title: 'Driver Behaviour Report',
+    // Driver conduct, was Driver behaviour (operator, 2 Nov: "rename it to driver conduct")
+    label: 'Driver conduct',
+    title: 'Driver Conduct Report',
     preset: 'today',
     maxDays: 7,
     /** The dashcam keeps its alarms 7 days, so a period must start within them. */
     reachDays: 7,
-    blurb: 'Each vehicle’s harsh acceleration and braking, and its no-seatbelt, on-phone and camera-covered incidents: from the dashcams and from what operators logged.',
     columns: () => ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'No seatbelt', 'On phone', 'Camera covered', 'Total', 'Follow-up'],
     /** Columns of words after the figures: left-aligned. */
     text: ['Follow-up'],
@@ -110,7 +110,6 @@ export const REPORTS = {
     title: 'Night Driving Report',
     preset: 'lastNight',
     maxDays: 7,
-    blurb: 'Each vehicle that drove during the night hours, and how far.',
     columns: () => ['Vehicle', 'Type', 'Night distance, km', 'Time moving'],
     cells: (r) => [vehicleCell(r), typeOf(r), km1(r.km), minutesWords(r.movingMin)],
     sum: (r) => r.km,
@@ -131,7 +130,6 @@ export const REPORTS = {
     title: 'Overspeeding Report',
     preset: 'yesterday',
     maxDays: 31,
-    blurb: `Overspeeding that lasted more than ${OVERSPEED_MIN_SEC / 60} minutes without a break, and the distance covered while overspeeding.`,
     columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit'],
     cells: (r) => [
       vehicleCell(r), typeOf(r), clean(r.driver), String(r.count), minutesWords(r.seconds / 60),
@@ -156,7 +154,6 @@ export const REPORTS = {
     title: 'Vehicle Utilization Report',
     preset: 'yesterday',
     maxDays: 7,
-    blurb: 'Every vehicle, the distance it covered and the fuel it used, stationary vehicles included.',
     // Mufindi (ctx.rated): each unit against the register, in its own basis.
     columns: (ctx) => (ctx?.rated
       ? ['Vehicle', 'Type', 'Distance, km', 'Engine hours', 'Fuel used, L', 'Standard', 'Consumption', 'Against standard']

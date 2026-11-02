@@ -14,9 +14,11 @@ export const letterheadLogos = () => ({
 
 /**
  * @param {string} html  from renderLetterheadHtml
- * @param {{ filename: string, landscape?: boolean, onProgress?: (words: string) => void }} o
+ * @param {{ filename: string, landscape?: boolean, onProgress?: (words: string) => void, keep?: boolean }} o
+ *   `keep` hands back `{ blob, filename }` instead of saving it, for a preview
+ *   whose Download then saves that same file.
  */
-export async function saveLetterheadPdf(html, { filename, landscape = false, onProgress }) {
+export async function saveLetterheadPdf(html, { filename, landscape = false, onProgress, keep = false }) {
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
   frame.tabIndex = -1;
@@ -41,7 +43,9 @@ export async function saveLetterheadPdf(html, { filename, landscape = false, onP
       if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h);
     }
+    if (keep) return { blob: pdf.output('blob'), filename };
     pdf.save(filename);
+    return null;
   } finally {
     frame.remove();
   }

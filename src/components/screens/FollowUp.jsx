@@ -1,5 +1,5 @@
 /*
- * Follow-up on the Driver Behaviour tab (lib/followUp): the form that records
+ * Follow-up on the Driver conduct tab (lib/followUp): the form that records
  * what was done about a case, and the list operators work down.
  * Plain and professional, the same parts as the incident form (no icons).
  */

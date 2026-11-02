@@ -1,7 +1,7 @@
 // What the Reports page reads. All of it already exists on the server; nothing
 // new is asked of the backend.
 //
-//   Driver behaviour    GET /notifications?alertType=HARSH_ACCELERATION,HARSH_BRAKING&day=…
+//   Driver conduct      GET /notifications?alertType=HARSH_ACCELERATION,HARSH_BRAKING&day=…
 //                       a fleet day at a time, paged; and the dashcam alarms,
 //                       GET /vss/alarms?org=…&since=… (no seatbelt, on phone),
 //                       which reach back 7 days

@@ -1578,7 +1578,7 @@ export default function FuelReportScreen() {
   return (
     <div className="sp4-root frp-shell">
       {canReview && (
-        <div data-tour="page-modes" className="frp-modes" role="tablist" aria-label="Fuel report view">
+        <div data-tour="page-modes" className="frp-modes" role="tablist" aria-label="Fuel metrics view">
           {[["review", "Performance"], ["unit", "Vehicle analytics"]].map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={mode === k}
                     className={`frp-mode${mode === k ? " frp-mode--on" : ""}`} onClick={() => setMode(k)}>{label}</button>

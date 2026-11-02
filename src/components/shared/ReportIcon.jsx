@@ -21,7 +21,7 @@ const MARKS = {
       <path d="M12 10.5v1.6M8 12.4l1 1M16 12.4l-1 1" />
     </>
   ),
-  // CPO movements: a tanker, tank behind the cab, on the move.
+  // Movements: a tanker, tank behind the cab, on the move.
   movements: (
     <>
       <rect x="2.5" y="7.5" width="11" height="6.5" rx="3.25" />
@@ -32,7 +32,7 @@ const MARKS = {
       <path d="M16 9.5v2.5h3" />
     </>
   ),
-  // Driver behaviour: the wheel, three spokes to the hub.
+  // Driver conduct: the wheel, three spokes to the hub.
   behaviour: (
     <>
       <circle cx="12" cy="12" r="8.5" />

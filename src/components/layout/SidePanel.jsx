@@ -49,7 +49,7 @@ export const NAV_ITEMS = [
   // Fuel > Audit: cases found to be a faulty probe, and their repairs.
   { key: 'audit',        label: 'Fuel Audit',   icon: 'clipboard-check', permission: 'fuel_audit:read', section: 'system' },
   // Fuel > Report: advanced fuel analysis for one unit over a period.
-  { key: 'fuelReport',   label: 'Fuel Report',  icon: 'report-analytics', permission: 'fuel_filling:read', section: 'system' },
+  { key: 'fuelReport',   label: 'Fuel Metrics', icon: 'report-analytics', permission: 'fuel_filling:read', section: 'system' },
   // Logbook (was Highlights): how one unit was used over a period — drive hours, km, fuel,
   // where it spent its time — with the workbook and a PDF. Its own slug since
   // 2026-10-26: operator and technician read telemetry but get no Logbook.
@@ -241,7 +241,7 @@ export default function SidePanel() {
   // Open alerts across every organisation held (the Alerts page's default week).
   const alertSummary = useAlertSummary(can(NAV_ITEMS.find(n => n.key === 'alerts')?.permission));
   const openAlerts = alertSummary?.open ?? 0;
-  // Driver Behaviour cases nobody has acted on yet (lib/followUp).
+  // Driver conduct cases nobody has acted on yet (lib/followUp).
   const pendingCases = useFollowUpCount(orgId);
   // A new fuel theft alert: the Alerts button shakes in red until the page is opened.
   const fuelAlarm = useFuelAlarm(alertSummary);
@@ -411,7 +411,7 @@ export default function SidePanel() {
                         <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
                         <span className="sp-nav-label">{item.label}</span>
                         {pendingCases > 0 && (
-                          <span className="sp-nav-count" title={`${pendingCases} driver behaviour case${pendingCases === 1 ? '' : 's'} waiting for follow-up`}>
+                          <span className="sp-nav-count" title={`${pendingCases} driver conduct case${pendingCases === 1 ? '' : 's'} waiting for follow-up`}>
                             {badgeText(pendingCases)}
                           </span>
                         )}
@@ -459,7 +459,7 @@ export default function SidePanel() {
                       </span>
                     )}
                     {item.key === 'reports' && pendingCases > 0 && (
-                      <span className="sp-nav-count" title={`${pendingCases} driver behaviour case${pendingCases === 1 ? '' : 's'} waiting for follow-up`}>
+                      <span className="sp-nav-count" title={`${pendingCases} driver conduct case${pendingCases === 1 ? '' : 's'} waiting for follow-up`}>
                         {badgeText(pendingCases)}
                       </span>
                     )}
@@ -563,7 +563,11 @@ export default function SidePanel() {
                     isActive ? 'side-panel__nav-item--active'   : '',
                     item.key === 'alerts' && fuelAlarm ? 'nav-alarm' : '',
                   ].filter(Boolean).join(' ')}
-                  onClick={() => handleNav(item.key)}
+                  // Reports has no tab strip: its icon opens the menu on the Reports tree.
+                  onClick={() => {
+                    handleNav(item.key);
+                    if (item.key === 'reports') { setUserCollapsed(false); setReportsOpen(true); }
+                  }}
                   aria-current={isActive ? 'page' : undefined}
                   // The label is the only thing naming this button when the
                   // sidebar is a 56px icon rail, so it has to be readable to a

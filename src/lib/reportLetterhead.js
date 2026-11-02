@@ -22,7 +22,7 @@ export function reportNumber(prefix, orgCode, now) {
 /** The closing line of every report. */
 export const CONTACT_LINE = 'This is a system-generated report. For any queries about its contents, please contact OGC Monitoring at operations@offgridconsultingltd.com.';
 
-const PREFIX = { behaviour: 'DB', night: 'ND', overspeed: 'OS', utilisation: 'VU' };
+const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU' };
 
 /**
  * Column widths in mm, by report, for the page's inner width. Only the columns
@@ -56,7 +56,7 @@ const fmtAt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day
 const fmtDayWords = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric' });
 
 /**
- * The Driver Behaviour Report's follow-up: how many cases were actioned, the
+ * The Driver Conduct Report's follow-up: how many cases were actioned, the
  * pending ones oldest first, what was done, and the actions by type.
  * ctx.cases: the period's cases; ctx.allCases: every stored case (escalation
  * and the last 7 days of actions look beyond the period).

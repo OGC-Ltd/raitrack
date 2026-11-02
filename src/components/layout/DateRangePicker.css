@@ -21,6 +21,12 @@
 .drp-field:hover { border-color: #b8c1cb; }
 .drp-field:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
 .drp-field--open { border-color: var(--vdp-navy, #0f2542); }
+/* The window in use, beside chips of the same row */
+.drp-field--on { border-color: var(--vdp-navy, #0f2542); background: var(--vdp-navy, #0f2542); color: #fff; }
+.drp-field.drp-field--on .ti { color: #fff; }
+.drp-field--on:hover { border-color: var(--vdp-navy, #0f2542); }
+.drp-field:active:not(:disabled) { transform: translateY(1px); }
+.drp-field:disabled { opacity: 0.5; cursor: default; }
 .drp-field .ti { font-size: 15px; color: var(--vdp-ink2, #4a545e); }
 .drp-text { font-weight: 500; font-variant-numeric: tabular-nums; }
 .drp-caret { font-size: 13px !important; margin-left: -2px; }
@@ -102,6 +108,8 @@
 .drp-day--today:not(.drp-day--lo):not(.drp-day--hi) { font-weight: 700; box-shadow: inset 0 -2px 0 var(--vdp-navy, #0f2542); }
 
 .drp-hint { margin: 8px 2px 0; font-size: 11px; line-height: 1.35; color: var(--vdp-mut, #6b757f); }
+/* What a screen asks for beyond the days, under a hairline */
+.drp-more { margin: 10px -10px 0; padding: 10px 10px 0; border-top: 1px solid var(--vdp-border, #dfe4ea); }
 
 @media (max-width: 720px) {
   .drp-field { height: 32px; }

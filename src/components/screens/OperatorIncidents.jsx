@@ -1,6 +1,6 @@
 /*
  * Incidents an operator saw on a live camera (lib/operatorLog): the form that
- * logs one, and the list of what has been logged, on the Driver Behaviour tab.
+ * logs one, and the list of what has been logged, on the Driver conduct tab.
  *
  * Only what an eye can see goes in here (operator, 1 Nov 2026): on phone, no
  * seatbelt, camera covered, or something else described. Harsh acceleration

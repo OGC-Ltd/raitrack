@@ -1,4 +1,4 @@
-// The CPO movements report as a table the operator can edit before the PDF
+// The Movements report as a table the operator can edit before the PDF
 // (operator, 2026-11-02). The server answers the report as data
 // (reports/movements); the operator may change a row's location or direction,
 // or leave a row out; the edited report goes back to the server, which draws
@@ -8,6 +8,8 @@
 // dropping them and the server's answer is never changed in place.
 //
 // Pure: no React, no network.
+
+import { dayStart } from './fleetReports';
 
 /** The Direction column's words, as the PDF prints them. */
 export const DIRECTION = {
@@ -123,4 +125,63 @@ export function editCounts(report, edits) {
 export function pdfRequest(report, edits) {
   const { hours, from, to, morl, groups } = applyEdits(report, edits);
   return { hours, from, to, morl, groups, edits: editCounts(report, edits) };
+}
+
+// ── windows and vehicle types (operator, 2026-11-02) ─────────────────────────
+
+const HOUR = 3_600_000;
+/** A range of days at most this long: one PDF of them stays under the server's body limit. */
+export const MAX_MOVEMENT_DAYS = 7;
+/** The last-hours windows, shortest first: the page opens on the first. */
+export const LAST_HOURS = [1, 2, 4];
+
+/**
+ * The windows a choice covers, oldest first: the last `hours` up to now, or
+ * the same hours on every day of a range ("07:00 to 08:00" each day; an end at
+ * or before the start runs past midnight into the next day). A window still
+ * running stops at now; one not yet begun is left out.
+ * @param {{ mode: 'last', hours: number } | { mode: 'days', fromDay: string, toDay: string, start: number, end: number }} sel
+ */
+export function movementWindows(sel, now = Date.now()) {
+  if (sel.mode === 'last') return [{ from: now - sel.hours * HOUR, to: now }];
+  const out = [];
+  for (let d = sel.fromDay; d <= sel.toDay && out.length < MAX_MOVEMENT_DAYS; d = nextDay(d)) {
+    const from = dayStart(d) + sel.start * HOUR;
+    const to = dayStart(d) + (sel.end > sel.start ? sel.end : sel.end + 24) * HOUR;
+    if (from < now) out.push({ from, to: Math.min(to, now) });
+  }
+  return out;
+}
+const nextDay = (key) => new Date(Date.parse(`${key}T12:00:00Z`) + 24 * HOUR).toISOString().slice(0, 10);
+
+/** Why a days-and-hours choice cannot run, or null. */
+export function windowsProblem(sel, now = Date.now()) {
+  if (sel.mode === 'last') return null;
+  if (!sel.fromDay || !sel.toDay) return 'Pick the first and last day';
+  if (sel.toDay < sel.fromDay) return 'The last day is before the first';
+  const days = Math.round((dayStart(sel.toDay) - dayStart(sel.fromDay)) / (24 * HOUR)) + 1;
+  if (days > MAX_MOVEMENT_DAYS) return `${MAX_MOVEMENT_DAYS} days at most`;
+  if (sel.start === sel.end % 24 && !(sel.start === 0 && sel.end === 24)) return 'The hours start and end at the same time';
+  if (!movementWindows(sel, now).length) return 'These hours have not begun yet';
+  return null;
+}
+
+/** The vehicle types the reports hold: their groupings ("CPO - Menengai"), CPO first. */
+export function vehicleTypes(reports) {
+  const names = new Set();
+  for (const r of reports) for (const g of r.groups) names.add(g.name);
+  return [...names].sort((a, b) => (/^CPO\b/i.test(a) ? 0 : 1) - (/^CPO\b/i.test(b) ? 0 : 1) || a.localeCompare(b));
+}
+
+/** The types picked when the page opens: the CPO groupings, or every one when there is none. */
+export function defaultTypes(types) {
+  const cpo = types.filter((t) => /^CPO\b/i.test(t));
+  return cpo.length ? cpo : types;
+}
+
+/** The report with only the picked types, counted again. */
+export function onlyTypes(report, types) {
+  const keep = new Set(types);
+  const groups = report.groups.filter((g) => keep.has(g.name));
+  return { ...report, groups, counts: countRows(groups) };
 }

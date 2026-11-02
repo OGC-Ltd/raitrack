@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading } from './movementReport';
+import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -13,7 +13,7 @@ const report = {
   ],
 };
 
-describe('editing the CPO movements report before the PDF', () => {
+describe('editing the Movements report before the PDF', () => {
   it('leaves the report as the server sent it when nothing is edited', () => {
     const out = applyEdits(report, {});
     expect(out.groups).toEqual(report.groups);
@@ -92,5 +92,49 @@ describe('editing the CPO movements report before the PDF', () => {
   it('follows a corrected direction: a unit set to Stopped is not green', () => {
     expect(isMoving(row('A', 'stopped', { speedKmh: 60 }))).toBe(false);
     expect(isMoving(row('A', 'moving', { speedKmh: 60 }))).toBe(true);
+  });
+});
+
+describe('the windows and vehicle types of the Movements report', () => {
+  const at = (iso) => Date.parse(`${iso}+03:00`);
+  const now = at('2026-11-02T10:30:00');
+
+  it('opens on the last hour up to now', () => {
+    expect(movementWindows({ mode: 'last', hours: 1 }, now)).toEqual([{ from: now - 3_600_000, to: now }]);
+  });
+
+  it('runs the same hours on every day of a range, stopping at now, leaving out what has not begun', () => {
+    const w = movementWindows({ mode: 'days', fromDay: '2026-10-31', toDay: '2026-11-02', start: 7, end: 20 }, now);
+    expect(w).toEqual([
+      { from: at('2026-10-31T07:00:00'), to: at('2026-10-31T20:00:00') },
+      { from: at('2026-11-01T07:00:00'), to: at('2026-11-01T20:00:00') },
+      { from: at('2026-11-02T07:00:00'), to: now },
+    ]);
+    expect(movementWindows({ mode: 'days', fromDay: '2026-11-02', toDay: '2026-11-02', start: 11, end: 12 }, now)).toEqual([]);
+  });
+
+  it('runs past midnight when the hours end at or before they start', () => {
+    expect(movementWindows({ mode: 'days', fromDay: '2026-10-31', toDay: '2026-10-31', start: 20, end: 6 }, now))
+      .toEqual([{ from: at('2026-10-31T20:00:00'), to: at('2026-11-01T06:00:00') }]);
+  });
+
+  it('says why a choice cannot run', () => {
+    const sel = { mode: 'days', fromDay: '2026-10-25', toDay: '2026-11-02', start: 7, end: 8 };
+    expect(windowsProblem(sel, now)).toBe('7 days at most');
+    expect(windowsProblem({ ...sel, fromDay: '2026-11-03', toDay: '2026-11-02' }, now)).toBe('The last day is before the first');
+    expect(windowsProblem({ ...sel, fromDay: '2026-11-01', start: 7, end: 7 }, now)).toBe('The hours start and end at the same time');
+    expect(windowsProblem({ ...sel, fromDay: '2026-11-01', start: 0, end: 24 }, now)).toBeNull();
+    expect(windowsProblem({ ...sel, fromDay: '2026-11-02', start: 11, end: 12 }, now)).toBe('These hours have not begun yet');
+  });
+
+  it('lists the vehicle types CPO first, opens on CPO, and keeps only the picked ones', () => {
+    const r = { ...report, groups: [{ name: 'FG - Menengai', rows: [row('F', 'to')] }, ...report.groups] };
+    const types = vehicleTypes([r]);
+    expect(types).toEqual(['CPO - Menengai', 'FG - Menengai']);
+    expect(defaultTypes(types)).toEqual(['CPO - Menengai']);
+    expect(defaultTypes(['FG - Menengai'])).toEqual(['FG - Menengai']);
+    const cpo = onlyTypes(r, ['CPO - Menengai']);
+    expect(cpo.groups.map((g) => g.name)).toEqual(['CPO - Menengai']);
+    expect(cpo.counts.total).toBe(3);
   });
 });

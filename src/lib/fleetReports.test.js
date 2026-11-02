@@ -79,7 +79,7 @@ describe('fleet time', () => {
   });
 });
 
-describe('driver behaviour', () => {
+describe('driver conduct', () => {
   const day = { from: at('2026-11-01T00:00:00'), to: at('2026-11-02T00:00:00') };
   const ev = (vehicleId, ts, alertType = 'HARSH_ACCELERATION') => ({ vehicleId, alertType, ts: new Date(at(ts)).toISOString() });
   const alarm = (vehicleId, ts, code) => ({ vehicleId, code, occurredMs: at(ts) });
