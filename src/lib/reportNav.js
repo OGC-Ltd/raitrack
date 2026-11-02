@@ -9,15 +9,15 @@ import { REPORTS, REPORT_ORDER } from './reportTables';
 
 /** Every report, in the page's tab order. The first two are made by the server. */
 export const REPORT_NODES = [
-  { key: 'shift', label: 'End of shift' },
-  { key: 'movements', label: 'CPO movements' },
+  { key: 'shift', label: 'Shift' },
+  { key: 'movements', label: 'Movements' },
   ...REPORT_ORDER.map((k) => ({ key: k, label: REPORTS[k].label })),
 ];
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));
 
 /**
  * The reports this user may open: the server needs analytics and weighbridge
- * grants for End of shift, telemetry for CPO movements; the rest are read here.
+ * grants for End of shift, telemetry for Movements; the rest are read here.
  */
 export function reportKeysFor(can) {
   return REPORT_NODES.map((n) => n.key).filter((k) =>

@@ -40,25 +40,33 @@ export async function downloadOrgReportPdf({ companyId, kind, days = 30, filenam
 
 /**
  * The movement report (fleet-server reports/movement-report) as data: where
- * every unit is now and whether it is heading to or from MORL over the last
- * `hours` (2 or 4), for the Reports page's CPO movements table.
+ * every unit was when the window ended and whether it was heading to or from
+ * MORL over it, for the Reports page's Movements table. A window is
+ * from–to (epoch ms, a day at most): the last hours, or one day's hours.
  */
-export async function loadMovementReport({ orgId, hours }) {
+export async function loadMovementReport({ orgId, from, to }) {
   if (!orgId) throw new Error('No organisation selected')
-  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/movements?hours=${hours}`)
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/movements?from=${Math.round(from)}&to=${Math.round(to)}`)
   return res.data
 }
 
 /**
  * The PDF of the movement report as the operator edited it (lib/movementReport
- * pdfRequest): the server draws it on the letterhead; this saves the file.
+ * pdfRequest), or of several ({ reports }: one window a day over a range of
+ * days): the server draws it on the letterhead; this saves the file.
  */
-export async function downloadEditedMovementReport({ orgId, request }) {
+/** The PDF of the movement report as edited, `{ blob, filename }`: to preview, then save. */
+export async function makeEditedMovementReport({ orgId, request }) {
   if (!orgId) throw new Error('No organisation selected')
   const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   })
-  saveFile(blob, filename ?? `Movement report last ${request.hours} hours.pdf`)
+  return { blob, filename: filename ?? 'Movement report.pdf' }
+}
+
+export async function downloadEditedMovementReport({ orgId, request }) {
+  const { blob, filename } = await makeEditedMovementReport({ orgId, request })
+  saveFile(blob, filename)
 }

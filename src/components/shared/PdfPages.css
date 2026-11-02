@@ -1,0 +1,20 @@
+/* PdfPages — the sheets one under another, centred, a hairline at their edge (no desk behind them) */
+.pdfp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+  overflow: auto;
+  /* Room for the scrollbar from the start, so the width measured is the width left once pages fill it */
+  scrollbar-gutter: stable;
+  /* Opens on the top of the first page: a sheet taking its size must not carry the view down with it */
+  overflow-anchor: none;
+  box-sizing: border-box;
+}
+.pdfp__page {
+  flex: none;
+  display: block;
+  background: #fff;
+  border: 1px solid #e2e7ed;
+}

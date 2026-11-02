@@ -4,23 +4,52 @@
  * night-hour pickers, the group rows, the hour grid's shading and the tags. */
 
 .rpt-root { min-width: 0; }
-.rpt-tabs .sp4-tab .ti { font-size: 16px; }
 /* End of shift: the sheet on a grey desk, as a page. */
 .rpt-body.sdoc-desk { background: #eef1f5; padding: 20px 16px 32px; overflow: auto; }
+/* The shift sheet on the page: scaled so a whole page is in view, opened to edit
+   on the dimmed page (ShiftSheet). The desk keeps its height; the sheet scrolls in it. */
+.rpt-body.sdoc-desk:has(> .sdoc-fit) { padding: 0; overflow: hidden; }
+.sdoc-fit { height: 100%; box-sizing: border-box; padding: 20px 16px; overflow: hidden; }
+.sdoc-thumb { position: relative; width: 210mm; margin: 0 auto; cursor: zoom-in; border-radius: 2px; overflow: hidden; }
+/* Cut at the view (Hallmark · component: cue · genre: modern-minimal · theme: the app's navy and slate
+ * states: default · hover · focus (on the sheet) · active (the sheet) · disabled n/a · loading n/a)
+ * The sheet fades into its own paper, a perforation marks the cut, and under it the way in.
+ * Sized in the sheet's own px: the sheet is zoomed. */
+.sdoc-thumb--cut .sdoc-tear::before {
+  /* Ends above the perforation (the tear's border sits outside its padding box), not over it */
+  content: ""; position: absolute; left: 0; right: 0; bottom: calc(100% + 3px); height: 160px; pointer-events: none;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0), #fff);
+}
+.sdoc-tear {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: flex-end; padding: 24px 13mm 28px;
+  background: #fff; border-top: 3px dashed #9aa5b1;
+}
+.sdoc-tear__go {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 700;
+  color: var(--vdp-navy, #0f2542); white-space: nowrap; border-bottom: 2px solid transparent; padding-bottom: 2px;
+}
+.sdoc-tear__go .ti { font-size: 22px; transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
+.sdoc-thumb:hover .sdoc-tear__go, .sdoc-thumb:focus-visible .sdoc-tear__go { border-bottom-color: currentColor; }
+.sdoc-thumb:hover .sdoc-tear__go .ti { transform: translate(2px, -2px); }
+@media (prefers-reduced-motion: reduce) { .sdoc-tear__go .ti { transition: none; } }
+.sdoc-thumb .sdoc { width: 210mm; }
+.sdoc-thumb:hover .sdoc { box-shadow: 0 0 0 2px #93c5fd, 0 8px 24px rgb(15 23 42 / .10); }
+.sdoc-thumb:focus-visible { outline: 3px solid #3b82f6; outline-offset: 4px; }
+.sdoc-thumb:active { transform: translateY(1px); }
+.sdoc-open { align-items: stretch; padding: 16px 24px 0; }
+.sdoc-open__frame { display: flex; flex-direction: column; width: min(860px, 100%); height: 100%; margin: 0 auto; }
+.sdoc-open__head { flex: none; }
+.sdoc-open__scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 24px; }
+.sdoc-open__scroll .sdoc { box-shadow: 0 10px 34px rgb(0 0 0 / .4); }
+@media (max-width: 720px) { .sdoc-open { padding: 12px 12px 0; } }
+
 @media (max-width: 640px) { .rpt-body.sdoc-desk { padding: 8px 0 16px; } }
 /* The report marks (shared/ReportIcon): drawn, not font glyphs; sized like the glyph they replaced. */
-.rpt-tabs .sp4-tab .report-icon { font-size: 17px; flex-shrink: 0; }
 .rpt-body .empty-note__icon .report-icon { font-size: 26px; }
 
-/* ── header: what the report is, and its figures ── */
+/* ── header: the report's figures ── */
 .rpt-header { justify-content: space-between; align-items: center; }
-.rpt-blurb {
-  margin: 0;
-  max-width: 52ch;
-  color: var(--sp4-text-2);
-  font-size: var(--sp4-body);
-  line-height: 1.45;
-}
 
 /* ── filter bar ── */
 .rpt-filterbar { gap: 10px 12px; }
@@ -107,7 +136,6 @@
 
 @media (max-width: 760px) {
   /* The header wraps: the description on its own line, the figures under it. */
-  .rpt-blurb { flex: 1 1 100%; max-width: none; }
   .rpt-header .sp4-header-kpis { flex: 1 1 100%; }
   .rpt-header .sp4-kpi { flex: 1 1 0; min-width: 0; }
   .rpt-header .sp4-kpi-n { font-size: 18px; }
@@ -123,7 +151,7 @@
 .rpt-log { height: 32px; padding: 0 12px; }
 .rpt-body .oi-panel:not(:last-child) { margin-bottom: 0; }
 
-/* CPO movements: the table the operator edits before the PDF. Rows carry the
+/* Movements: the table the operator edits before the PDF. Rows carry the
    PDF's tints; an edited cell is outlined; a row left out is struck through. */
 .mvr-table td { vertical-align: middle; }
 .mvr-edit {
@@ -164,3 +192,119 @@ select.mvr-edit { min-width: 110px; }
 .mvr-confirm span { margin-right: auto; font-weight: 600; }
 .mvr-confirm__go { background: #b45309; }
 .mvr-confirm__go:hover { background: #92400e; }
+
+/* ── Movements: days and hours, vehicle types, a tab a day (operator, 2026-11-02) ── */
+/* Hours each day, under the calendar: a ruler of 24 hours drawn like the days above it */
+.mvr-hours__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.mvr-hours__l { font-size: 13px; font-weight: 600; color: var(--vdp-ink, #12181f); }
+.mvr-hours__ruler { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); row-gap: 2px; }
+.mvr-hour {
+  height: 28px; padding: 0; border: 0; background: transparent; color: var(--vdp-ink, #12181f);
+  font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.mvr-hour:hover { background: #eef2f7; border-radius: 4px; }
+.mvr-hour:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; border-radius: 4px; }
+.mvr-hour:active { transform: translateY(1px); }
+.mvr-hour--in { background: #e6ecf5; }
+.mvr-hour--lo, .mvr-hour--hi { background: var(--vdp-navy, #0f2542); color: #fff; }
+.mvr-hour--lo { border-radius: 4px 0 0 4px; }
+.mvr-hour--hi { border-radius: 0 4px 4px 0; }
+.mvr-hour--lo.mvr-hour--hi { border-radius: 4px; }
+.mvr-hour--lo:hover, .mvr-hour--hi:hover { background: var(--vdp-navy, #0f2542); }
+.mvr-hour--anchor { box-shadow: inset 0 0 0 2px #93c5fd; }
+.mvr-hours__exact { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--vdp-mut, #6b757f); }
+.mvr-hours__exact label { display: inline-flex; align-items: center; gap: 5px; }
+.mvr-hours__exact .rpt-select { height: 26px; font-size: 12px; }
+.mvr-hours__span { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mvr-hours__foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 10px -10px 0; padding: 10px 10px 0; border-top: 1px solid var(--vdp-border, #dfe4ea); }
+.mvr-hours__foot .rpt-problem { margin-right: auto; font-size: 11.5px; }
+.mvr-hours__foot .frp-run { white-space: nowrap; }
+/* Vehicle types: the calendar's field and card, a checked row per type with its vehicles */
+.mvr-types__v { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+.mvr-types__pop { width: 280px; max-width: calc(100vw - 32px); }
+.mvr-types__list { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; }
+.mvr-type {
+  display: flex; align-items: center; gap: 9px; width: 100%; height: 32px; padding: 0 6px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--vdp-ink, #12181f);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.mvr-type:hover { background: #eef2f7; }
+.mvr-type:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
+.mvr-type:active { transform: translateY(1px); }
+.mvr-type__box {
+  display: grid; place-items: center; flex: none; width: 16px; height: 16px;
+  border: 1.5px solid #b8c1cb; border-radius: 3px; background: #fff; color: transparent; font-size: 12px;
+}
+.mvr-type--on .mvr-type__box { border-color: var(--vdp-navy, #0f2542); background: var(--vdp-navy, #0f2542); color: #fff; }
+.mvr-type__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mvr-type--on .mvr-type__name { font-weight: 600; }
+.mvr-type__n { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--vdp-mut, #6b757f); }
+.drp-chip:disabled { opacity: 0.45; cursor: default; }
+.drp-chip:disabled:hover { background: #fff; }
+.mvr-daytabs { padding: 8px 16px 0; flex-wrap: wrap; }
+
+/* PDF preview — Hallmark · component: modal · genre: modern-minimal · theme: the app's navy and slate
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * No window of its own (operator, 2 Nov: the PDF to "sit ontop of that
+ * background instead of its parent background"): the sheet lies straight on
+ * the dimmed page, the head above it in white. */
+.mvr-pv-overlay { padding: 16px 24px 24px; }
+.mvr-pv {
+  display: flex; flex-direction: column; width: min(1000px, 100%); height: 100%;
+  background: transparent; border: 0; box-shadow: none;
+}
+.mvr-pv__head { display: flex; align-items: center; gap: 12px; padding: 0 0 12px; }
+.mvr-pv__icon { flex: none; font-size: 26px; color: #fff; }
+.mvr-pv__what { flex: 1; min-width: 0; }
+.mvr-pv__title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.25; color: #fff; }
+.mvr-pv__facts { display: flex; flex-wrap: wrap; margin: 2px 0 0; font-size: 12px; color: rgb(255 255 255 / .78); font-variant-numeric: tabular-nums; }
+.mvr-pv__facts span:not(:last-child)::after { content: "·"; margin: 0 7px; color: rgb(255 255 255 / .5); }
+.mvr-pv__tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.mvr-pv__tool {
+  display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 4px;
+  background: transparent; color: #fff; font-size: 18px; text-decoration: none; cursor: pointer;
+}
+.mvr-pv__tool:hover { background: rgb(255 255 255 / .14); color: #fff; }
+.mvr-pv__tool:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.mvr-pv__tool:active { transform: translateY(1px); }
+.mvr-pv__tool:disabled, .mvr-pv__tool.is-off { opacity: 0.35; pointer-events: none; }
+.mvr-pv__save { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px 0 6px; white-space: nowrap; }
+.mvr-pv__x { display: grid; place-items: center; width: 34px; height: 34px; margin-left: 0; padding: 0; font-size: 18px; color: #fff; }
+.mvr-pv__x:hover { background: rgb(255 255 255 / .14); color: #fff; }
+.mvr-pv__desk { position: relative; flex: 1; min-height: 0; background: transparent; }
+/* On the dimmed page a shadow, not a hairline, marks the sheet's edge */
+.mvr-pv .pdfp__page { border: 0; box-shadow: 0 10px 34px rgb(0 0 0 / .4); }
+.mvr-pv__doc { display: block; width: 100%; height: 100%; border: 0; }
+.mvr-pv__note {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 24px; font-size: 13px; color: #fff; text-align: center;
+}
+.mvr-pv__note--error { flex-direction: row; flex-wrap: wrap; gap: 10px; color: #fed7aa; }
+.mvr-pv__note--error .ti { font-size: 18px; }
+/* A blank sheet with its lines filling in, while the server draws the real one */
+.mvr-pv__sheet { display: flex; flex-direction: column; gap: 9px; width: 120px; height: 160px; padding: 18px 14px; background: #fff; border-radius: 2px; box-shadow: 0 2px 10px rgb(15 23 42 / .12); }
+.mvr-pv__sheet i { display: block; height: 6px; border-radius: 2px; background: #dfe4ea; animation: mvr-pv-line 1.2s var(--ease-in-out, cubic-bezier(.65,0,.35,1)) infinite alternate; }
+.mvr-pv__sheet i:nth-child(1) { width: 60%; height: 9px; background: #c9d1db; }
+.mvr-pv__sheet i:nth-child(2) { animation-delay: .15s; }
+.mvr-pv__sheet i:nth-child(3) { width: 85%; animation-delay: .3s; }
+.mvr-pv__sheet i:nth-child(4) { animation-delay: .45s; }
+.mvr-pv__sheet i:nth-child(5) { width: 70%; animation-delay: .6s; }
+@keyframes mvr-pv-line { from { opacity: .45; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .mvr-pv__sheet i { animation: none; } }
+@media (max-width: 720px) {
+  .mvr-pv-overlay { padding: 12px; }
+  .mvr-pv { height: 100%; }
+  .mvr-pv__icon, .mvr-pv__tools a.mvr-pv__tool { display: none; }
+}
+
+/* Driver conduct: the total leads the figures, drivers read on one line, and
+   a zero steps back so the incidents stand out */
+.rpt-header--conduct .sp4-kpi:first-child .sp4-kpi-n { color: var(--vdp-navy, #0f2542); }
+.rpt-header--conduct .sp4-kpi-l { white-space: normal; line-height: 1.2; }
+.rpt-driver { white-space: nowrap; }
+.rpt-zero { color: #b3bcc6; }
+
+/* One choice from a list (ChoicePicker): the Type list's rows, a tick on the one picked */
+.mvr-type--one .mvr-type__tick { flex: none; width: 16px; font-size: 15px; color: transparent; }
+.mvr-type--one.mvr-type--on .mvr-type__tick { color: var(--vdp-navy, #0f2542); }
+.mvr-type--one.mvr-type--on .mvr-type__name { font-weight: 600; }

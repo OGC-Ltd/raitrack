@@ -196,7 +196,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               )}
               {can('fuel_filling:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuelReport'); setUserOpen(false); }}>
-                  <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel report
+                  <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel metrics
                 </button>
               )}
               {can('logbook:read') && (

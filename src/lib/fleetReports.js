@@ -179,7 +179,7 @@ export const SAME_INCIDENT_MS = 5 * 60_000;
 const alarmKind = (code) => (PHONE_CODES.has(code) ? 'phone' : SEATBELT_CODES.has(code) ? 'seatbelt' : COVER_CODES.has(code) ? 'covered' : null);
 
 /**
- * The Driver Behaviour Report (operator, 1 Nov 2026): per unit, its harsh
+ * The Driver Conduct Report, was Driver Behaviour (operator, 1 Nov 2026): per unit, its harsh
  * accelerations and brakes (trackers), and its no-seatbelt, on-phone and
  * camera-covered incidents (dashcam alarms, and what operators logged by hand).
  *

@@ -1,4 +1,4 @@
-// How many Driver Behaviour follow-up cases are pending for the organisation
+// How many Driver conduct follow-up cases are pending for the organisation
 // (lib/followUp), for the count beside Reports in the sidebar. The cases live
 // in this browser for now, so it listens for this tab's saves and other tabs'.
 

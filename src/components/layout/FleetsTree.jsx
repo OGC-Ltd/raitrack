@@ -225,7 +225,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
             {report && (
               <OpenRow
                 icon="report-analytics"
-                label="Report"
+                label="Metrics"
                 current={report.active}
                 onClick={report.open}
                 title="Advanced fuel analysis, one unit over a period: statistics, fuel graph, fillings, drains, trips and the track"

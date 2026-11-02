@@ -13,16 +13,16 @@ describe('report on the letterhead', () => {
     expect(reportNumber('HA', 'MENENGAI', at('2026-11-01T13:20:00'))).toBe('HA-MENENGAI-20261101-1320');
   });
 
-  it('puts the Driver Behaviour Report on the letterhead', () => {
+  it('puts the Driver Conduct Report on the letterhead', () => {
     const rows = [{ unit: unit('KCS 082M', 'Van Sales'), accel: 3, brake: 1, seatbelt: 2, phone: 0, total: 6, dashcam: true, suspect: true, driver: 'Osero' },
                   { unit: unit('KDE 140E', 'Van Sales'), accel: 1, brake: 0, seatbelt: 0, phone: 0, total: 1, dashcam: false, suspect: false, driver: null }];
     const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.total), ctx: { from: at('2026-11-01T00:00:00'), to: at('2026-11-01T13:20:00'), dashcams: true },
                    missing: [{ plate: 'KDE 1', group: 'Van Sales' }], units: 2, failed: 0 };
     const out = reportHtml(REPORTS.behaviour, done, opts);
     expect(out.landscape).toBe(false);
-    expect(out.filename).toBe('Driver Behaviour Report Menengai <Oil> 2026-11-01.pdf');
-    expect(out.html).toContain('DRIVER BEHAVIOUR REPORT');
-    expect(out.html).toContain('DB-MENENGAI-20261101-1320');
+    expect(out.filename).toBe('Driver Conduct Report Menengai <Oil> 2026-11-01.pdf');
+    expect(out.html).toContain('DRIVER CONDUCT REPORT');
+    expect(out.html).toContain('DC-MENENGAI-20261101-1320');
     expect(out.html).toContain('2. Van Sales');
     expect(out.html).toContain('Check sensor');
     expect(out.html).toContain('has no dashcam');

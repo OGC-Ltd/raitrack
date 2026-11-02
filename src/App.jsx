@@ -235,7 +235,7 @@ function AppShell() {
 
           {show('fuelReport') && (
             <div className="app-tab-panel app-tab-panel--screen">
-              <ErrorBoundary label="Fuel Report" fullSection>
+              <ErrorBoundary label="Fuel Metrics" fullSection>
                 <FuelReportScreen />
               </ErrorBoundary>
             </div>

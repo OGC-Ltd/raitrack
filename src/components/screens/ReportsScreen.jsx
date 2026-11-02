@@ -2,7 +2,7 @@
  * Reports (operator, 1 Nov 2026): four fleet reports on one page, each for a
  * period the reader picks, by the organisation's groups where it has them.
  *
- *   Driver behaviour     harsh acceleration, harsh braking, no seatbelt and on phone, per vehicle
+ *   Driver conduct       harsh acceleration, harsh braking, no seatbelt and on phone, per vehicle
  *   Night driving        distance covered in the night hours (19:00–05:00 unless changed)
  *   Overspeeding         overspeeds lasting more than 5 minutes unbroken, and their distance
  *   Vehicle utilisation  every vehicle's distance, time moving and fuel, stationary ones included
@@ -24,8 +24,9 @@ import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } fro
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, overspeedRows, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  toLocalInput, fromLocalInput, whenWords, NIGHT, hourLabel, periodWords as periodText,
+  NIGHT, hourLabel, periodWords as periodText, fleetDay, dayStart,
 } from '../../lib/fleetReports';
+import { addDays } from '../../lib/dayRange';
 import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
@@ -41,67 +42,64 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift } from '../../api/endOfShiftReport';
 import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
 import ShiftDocument from './ShiftDocument';
-import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
+import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
+import { saveFile } from '../../api/tripReport';
 import ReportIcon from '../shared/ReportIcon';
-import { reportKeysFor, useCurrentReport, chooseReport as pickReport } from '../../lib/reportNav';
-import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, isLoading, locationChanged } from '../../lib/movementReport';
+import PdfPages from '../shared/PdfPages';
+import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
+import { reportKeysFor, useCurrentReport } from '../../lib/reportNav';
+import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
 import './OperatorIncidents.css';
 
 const DAY = 86_400_000;
-/** The End of Shift and CPO movements tabs: made by the server, not from REPORTS. */
+/** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
 const SERVER_TABS = {
-  [SHIFT]: { label: 'End of shift' },
-  [MOVEMENTS]: { label: 'CPO movements' },
+  [SHIFT]: { label: 'Shift' },
+  [MOVEMENTS]: { label: 'Movements' },
 };
-/** The movement report's windows, in hours. */
-const MOVEMENT_WINDOWS = [2, 4];
 
-const PRESETS = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  lastNight: 'Last night',
-  week: 'Last 7 days',
-};
-const presetsFor = (key) => (key === 'night' ? ['lastNight', 'yesterday', 'week'] : ['today', 'yesterday', 'week']);
+
+/** The days and hours a report's period stands for, for the picker. */
+function daysOf(key, span, night) {
+  if (key === 'night') return { fromDay: fleetDay(span.from), toDay: fleetDay(Math.max(span.from, span.to - 1 - 12 * HOUR_MS)), start: night.start, end: night.end || 24 };
+  return { fromDay: fleetDay(span.from), toDay: fleetDay(Math.max(span.from, span.to - 1)), start: 0, end: 24 };
+}
 
 const spanFor = (key) => {
   const id = (REPORTS[key] ?? REPORTS.behaviour).preset;
   return { id, ...presetRange(id) };
 };
 
-/** A period end, as the datetime picker face shows it. */
-function WhenField({ label, value, onChange, min, max }) {
-  const open = (e) => { try { e.currentTarget.showPicker?.(); } catch { /* typing still works */ } };
-  return (
-    <label className="frp-when">
-      <span className="frp-when__l">{label}</span>
-      <span className="frp-when__v">{Number.isFinite(value) ? whenWords(value) : '-'}</span>
-      <i className="ti ti-calendar frp-when__i" aria-hidden="true" />
-      <input type="datetime-local" className="frp-when__input" aria-label={label}
-             value={Number.isFinite(value) ? toLocalInput(value) : ''}
-             min={Number.isFinite(min) ? toLocalInput(min) : undefined}
-             max={Number.isFinite(max) ? toLocalInput(max) : undefined}
-             onClick={open}
-             onChange={(e) => { const t = fromLocalInput(e.target.value); if (Number.isFinite(t)) onChange(t); }} />
-    </label>
-  );
-}
 
-/** The end-of-shift report's periods: today up to now (the default), or yesterday. */
-const SHIFT_PRESETS = ['today', 'yesterday'];
 /** The longest period the server makes it for (fleet-server END_OF_SHIFT_MAX_DAYS). */
 const SHIFT_MAX_DAYS = 7;
 /** End-of-shift sheets and their edits, by organisation, while this browser tab is open. */
 const shiftKept = new Map();
 
+/**
+ * The shift's period from days and hours, as Movements picks them (operator,
+ * 2 Nov: "let it be like what we have in movements"): the first day at the
+ * start hour to the last day at the end hour, past midnight when the end is at
+ * or before the start, and up to now when it would run past it. Today 00:00 to
+ * 24:00 is the default: the shift so far.
+ */
+const SHIFT_TODAY = (today) => ({ fromDay: today, toDay: today, start: 0, end: 24 });
+function shiftPeriod(d, now = Date.now()) {
+  const from = dayStart(d.fromDay) + d.start * HOUR_MS;
+  const to = dayStart(d.toDay) + (d.end > d.start ? d.end : d.end + 24) * HOUR_MS;
+  return { from, to: Math.min(to, now), live: to >= now };
+}
+const HOUR_MS = 3_600_000;
+
 /** Why a period cannot be made, or null. */
 function shiftProblem(orgId, span, now = Date.now()) {
   return !orgId ? 'Waiting for the organisation to load'
+    : span.from >= now ? 'These hours have not begun yet'
     : !(span.to > span.from) ? 'The period ends before it starts'
     : span.to > now + 60_000 ? 'The period cannot end in the future'
     : span.to - span.from > SHIFT_MAX_DAYS * DAY ? `${SHIFT_MAX_DAYS} days at most for this report`
@@ -115,10 +113,100 @@ function shiftProblem(orgId, span, now = Date.now()) {
  * another period, a week at most, makes it again; Download PDF has the server
  * draw the sheet as edited (operator, 2 Nov 2026).
  */
+/** An A4 page at full size, px: the sheet is 210 mm wide and reads a page at a time. */
+const SHEET_PX = { width: 794, height: 1123 };
+
+/**
+ * The shift sheet as it sits on the page (operator, 2 Nov: "zoomed out by
+ * default but when I need to edit it I will click on it and fully open on a
+ * dim layer then edit it"): scaled down so a whole A4 page is in view, and
+ * not editable here. A click, or Enter, opens it at full size on the dimmed
+ * page to edit; Done, Escape or a click on the dim layer puts it back with
+ * the edits on it.
+ *
+ * A sheet longer than the view is cut where the view ends, faded, rather than
+ * scrolled (operator: "cut it to about a section"): opening it shows all of
+ * it, and Download PDF prints all of it, cut here or not.
+ */
+function ShiftSheet({ doc, version, onChange }) {
+  const deskRef = useRef(null);
+  const [fit, setFit] = useState(null);           // { scale, height }: the view, in the sheet's own px
+  const [cut, setCut] = useState(false);
+  const sheetRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const measure = () => {
+      const el = deskRef.current;
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const scale = Math.min(1, w / SHEET_PX.width, h / SHEET_PX.height);
+      setFit({ scale, height: h / scale });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  // Cut when the sheet runs past the view
+  useEffect(() => {
+    if (fit && sheetRef.current) setCut(sheetRef.current.scrollHeight > fit.height + 1);
+  }, [fit, doc, version, open]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [open]);
+
+  return (
+    <div className="sdoc-fit" ref={deskRef}>
+      {fit != null && (
+        <div className={`sdoc-thumb${cut ? ' sdoc-thumb--cut' : ''}`} role="button" tabIndex={0}
+             aria-label={cut ? 'Open the full shift report to read and edit it' : 'Open the shift report to edit it'}
+             title="Click to open and edit" style={{ zoom: fit.scale, maxHeight: `${fit.height}px` }}
+             onClick={() => setOpen(true)}
+             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true); } }}>
+          <div inert="" ref={sheetRef}>
+            <ShiftDocument key={version} doc={doc} onChange={onChange} />
+          </div>
+          {cut && (
+            // Where the sheet is cut: a perforation, and the way to the rest (operator: only "Open the full report")
+            <div className="sdoc-tear" aria-hidden="true">
+              <span className="sdoc-tear__go">Open the full report <i className="ti ti-arrow-up-right" /></span>
+            </div>
+          )}
+        </div>
+      )}
+      {open && (
+        <div className="sp4-modal-overlay sdoc-open" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div className="sdoc-open__frame" role="dialog" aria-modal="true" aria-labelledby="sdoc-open-title">
+            <header className="mvr-pv__head sdoc-open__head">
+              <i className="ti ti-file-text mvr-pv__icon" aria-hidden="true" />
+              <div className="mvr-pv__what">
+                <h2 id="sdoc-open-title" className="mvr-pv__title">Shift report</h2>
+                <p className="mvr-pv__facts"><span>Click any text to change it</span></p>
+              </div>
+              <button type="button" className="sp4-submit-btn frp-run mvr-pv__save" onClick={() => setOpen(false)} autoFocus>
+                <i className="ti ti-check" aria-hidden="true" /> Done
+              </button>
+            </header>
+            <div className="sdoc-open__scroll" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+              <ShiftDocument key={version} doc={doc} onChange={onChange} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ShiftReport({ orgId }) {
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => shiftKept.get(orgId));
-  const [span, setSpan] = useState(() => saved?.span ?? { id: 'today', ...presetRange('today') });
+  const today = fleetDay(Date.now());
+  const [draft, setDraft] = useState(() => saved?.draft ?? SHIFT_TODAY(today));   // the days and hours on the picker
+  const [span, setSpan] = useState(() => saved?.span ?? shiftPeriod(saved?.draft ?? SHIFT_TODAY(today)));
   const [run, setRun] = useState(() => (saved ? { status: 'done', original: saved.original } : { status: 'idle' }));
   const [doc, setDoc] = useState(saved?.doc ?? null);
   const [version, setVersion] = useState(0);              // a new sheet: the editable texts start over
@@ -127,9 +215,10 @@ function ShiftReport({ orgId }) {
   const runId = useRef(0);
   const edited = run.status === 'done' && isDocEdited(run.original, doc);
 
-  const load = async (next) => {
-    // Today is made up to the moment it is asked for.
-    const period = next.id === 'today' ? { id: 'today', ...presetRange('today') } : next;
+  const load = async (days) => {
+    // A period reaching now is made up to the moment it is asked for.
+    const period = shiftPeriod(days);
+    setDraft(days);
     setSpan(period);
     if (shiftProblem(orgId, period)) return;
     const id = ++runId.current;
@@ -143,13 +232,13 @@ function ShiftReport({ orgId }) {
     }
   };
   // Opens made, unless a sheet was kept for this organisation.
-  useEffect(() => { if (!saved && orgId) load(span); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!saved && orgId) load(draft); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!orgId) return;
-    if (run.status === 'done') shiftKept.set(orgId, { span, original: run.original, doc });
+    if (run.status === 'done') shiftKept.set(orgId, { draft, span, original: run.original, doc });
     else shiftKept.delete(orgId);
-  }, [orgId, span, run, doc]);
+  }, [orgId, draft, span, run, doc]);
 
   // Closing or reloading the browser tab would lose the edits: the browser asks first.
   useEffect(() => {
@@ -161,8 +250,12 @@ function ShiftReport({ orgId }) {
 
   // A new period replaces the sheet: with edits on it, ask first.
   const guard = (words, go) => (edited ? setConfirm({ words, go }) : go());
-  const pick = (next, words) => guard(words, () => load(next));
+  const pick = (days, words) => guard(words, () => load(days));
   const problem = shiftProblem(orgId, span);
+  // What the picker holds, before it is made
+  const [picking, setPicking] = useState(null);
+  const shown = picking ?? draft;
+  const pickingProblem = shiftProblem(orgId, shiftPeriod(shown));
 
   const download = async () => {
     if (pdf.busy || !doc) return;
@@ -178,22 +271,29 @@ function ShiftReport({ orgId }) {
   return (
     <>
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <div className="sp4-filter-group" role="group" aria-label="Period">
-          {SHIFT_PRESETS.map((id) => (
-            <button key={id} type="button" aria-pressed={span.id === id}
-                    className={`sp4-filter-chip${span.id === id ? ' sp4-filter-chip--on' : ''}`}
-                    onClick={() => pick({ id, ...presetRange(id) }, `Make the report for ${PRESETS[id].toLowerCase()}`)}>{PRESETS[id]}</button>
-          ))}
-        </div>
-        <div className="frp-range">
-          <WhenField label="From" value={span.from} max={span.to}
-                     onChange={(t) => pick({ ...span, id: null, from: t }, 'Make the report for the new period')} />
-          <span className="frp-range__dash" aria-hidden="true">–</span>
-          <WhenField label="To" value={span.to} min={span.from} max={Date.now()}
-                     onChange={(t) => pick({ ...span, id: null, to: t }, 'Make the report for the new period')} />
-        </div>
-        <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => pick(span, span.id === 'today' ? 'Make it again up to now' : 'Make it again')}
-                disabled={Boolean(problem) || run.status === 'loading'} title={span.id === 'today' ? 'Make it again, up to the current time' : 'Make it again'}>
+        {/* One field for the period: the days on the calendar, the hours under it, as Movements has it */}
+        <DateRangePicker
+          from={shown.fromDay} to={shown.toDay} today={today} maxDays={SHIFT_MAX_DAYS} spans={[SHIFT_MAX_DAYS]}
+          label="Shift period" on
+          text={`${pickedText(draft.fromDay, draft.toDay, today)} · ${span.live ? `${hh(draft.start)}–now` : hoursText(draft.start, draft.end)}`}
+          onChange={(f, t) => setPicking({ ...shown, fromDay: f, toDay: t })}
+        >
+          {({ close }) => (
+            <>
+              <HourWindow start={shown.start} end={shown.end} onChange={(a, b) => setPicking({ ...shown, start: a, end: b })} />
+              <div className="mvr-hours__foot">
+                {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
+                <button type="button" className="sp4-submit-btn frp-run"
+                        disabled={run.status === 'loading' || Boolean(pickingProblem)}
+                        onClick={() => { close(); setPicking(null); pick(shown, 'Make the report for the new period'); }}>
+                  Make report
+                </button>
+              </div>
+            </>
+          )}
+        </DateRangePicker>
+        <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => pick(draft, span.live ? 'Make it again up to now' : 'Make it again')}
+                disabled={Boolean(problem) || run.status === 'loading'} title={span.live ? 'Make it again, up to the current time' : 'Make it again'}>
           <i className="ti ti-refresh" aria-hidden="true" /> Refresh
         </button>
         {edited && (
@@ -221,7 +321,7 @@ function ShiftReport({ orgId }) {
 
       <div className="sp4-body rpt-body sdoc-desk">
         {run.status === 'idle' && (
-          <EmptyNote icon={<ReportIcon name={SHIFT} />} title="End of Shift Report">
+          <EmptyNote icon={<ReportIcon name={SHIFT} />} title="Shift">
             {problem ?? 'Pick the period.'}
           </EmptyNote>
         )}
@@ -232,17 +332,17 @@ function ShiftReport({ orgId }) {
         )}
         {run.status === 'error' && (
           <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made"
-                     action={{ label: 'Try again', onClick: () => load(span) }}>
+                     action={{ label: 'Try again', onClick: () => load(draft) }}>
             {run.message}
           </EmptyNote>
         )}
-        {run.status === 'done' && doc && <ShiftDocument key={version} doc={doc} onChange={setDoc} />}
+        {run.status === 'done' && doc && <ShiftSheet doc={doc} version={version} onChange={setDoc} />}
       </div>
     </>
   );
 }
 
-/** CPO movements tables and their edits, by organisation, while this browser tab is open. */
+/** Movements tables and their edits, by organisation, while this browser tab is open. */
 const movementsKept = new Map();
 
 /** "5 vehicles", or "4 of 5 vehicles" once some are left out. */
@@ -252,49 +352,365 @@ function groupWords(g, edits) {
   return `${kept === all ? all : `${kept} of ${all}`} vehicle${all === 1 ? '' : 's'}`;
 }
 
+const lastWords = (h) => (h === 1 ? 'Last hour' : `Last ${h} hours`);
+// The day's end reads 24:00, so a whole day is 00:00–24:00, not 00:00–00:00
+const hh = (h) => (h === 24 ? '24:00' : `${hourLabel(h % 24)}:00`);
+/** "07:00–20:00", "20:00–06:00 next day". */
+const hoursText = (start, end) => `${hh(start)}–${hh(end)}${end <= start ? ' next day' : ''}`;
+
 /**
- * CPO movements (operator, 2 Nov 2026): where every unit is now and whether it
- * is heading to or from MORL over the last 2 or 4 hours, as a table first. The
- * operator may correct a row's location or direction, or leave a row out,
- * before the PDF; the server draws the PDF from the table as edited
- * (lib/movementReport), counting the overview again from what is kept.
+ * The hours each day, as a ruler of the day's 24 hours (operator, 2 Nov: "a
+ * single date picker ... and select a hour window period"). It works as the
+ * calendar above it does: click an hour for that one hour, then a second hour
+ * for the span between them, both hours included. Hours that run past
+ * midnight (20:00–06:00) are set in the From and To boxes under it.
+ */
+function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
+  const [anchor, setAnchor] = useState(null);
+  const lastHour = (end + 23) % 24;
+  const inWindow = (h) => (end > start ? h >= start && h < end : h >= start || h < end);
+  const click = (h) => {
+    if (anchor == null) { setAnchor(h); onChange(h, h + 1); return; }
+    onChange(Math.min(anchor, h), Math.max(anchor, h) + 1);
+    setAnchor(null);
+  };
+  const exact = (s, e) => { setAnchor(null); onChange(s, e); };
+  const span = ((end - start + 23) % 24) + 1;
+  return (
+    <div className="mvr-hours" role="group" aria-label={label}>
+      <div className="mvr-hours__head">
+        <span className="mvr-hours__l">{label}</span>
+        <button type="button" className={`drp-chip${start === 0 && end === 24 ? ' drp-chip--on' : ''}`}
+                onClick={() => exact(0, 24)}>Whole day</button>
+      </div>
+      <div className="mvr-hours__ruler">
+        {Array.from({ length: 24 }, (_, h) => {
+          const cls = ['mvr-hour',
+            inWindow(h) && 'mvr-hour--in',
+            h === start && 'mvr-hour--lo',
+            h === lastHour && 'mvr-hour--hi',
+            anchor === h && 'mvr-hour--anchor'].filter(Boolean).join(' ');
+          return (
+            <button key={h} type="button" className={cls} onClick={() => click(h)}
+                    aria-pressed={inWindow(h)} aria-label={`${hh(h)} to ${hh(h + 1)}`}>
+              {hourLabel(h)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mvr-hours__exact">
+        <label>From
+          <select className="rpt-select" value={start} onChange={(e) => exact(Number(e.target.value), end)}>
+            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hh(h)}</option>)}
+          </select>
+        </label>
+        <label>To
+          <select className="rpt-select" value={end} onChange={(e) => exact(start, Number(e.target.value))}>
+            {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => <option key={h} value={h}>{hh(h)}</option>)}
+          </select>
+        </label>
+        <span className="mvr-hours__span">{span === 1 ? '1 hour' : `${span} hours`}{end <= start ? ', past midnight' : ''}</span>
+      </div>
+    </div>
+  );
+}
+/** "Sat 1 Nov", in Nairobi time. */
+const dayWords = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', weekday: 'short', day: 'numeric', month: 'short' }).format(ms);
+
+/** The vehicle types to show: a dropdown of checkboxes, with All and CPO only. */
+/** Prints a PDF from a frame of its own, out of sight, that goes once it has printed. */
+function printPdf(url) {
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  f.src = url;
+  f.onload = () => { f.contentWindow?.focus(); f.contentWindow?.print(); setTimeout(() => f.remove(), 60_000); };
+  document.body.appendChild(f);
+}
+const kb = (bytes) => (bytes < 1_000_000 ? `${Math.max(1, Math.round(bytes / 1000))} KB` : `${(bytes / 1_000_000).toFixed(1)} MB`);
+
+/**
+ * The PDF as the server makes it, edits and all, shown on the page before it
+ * is saved (operator, 2 Nov: "add a pdf preview"). Download saves this same
+ * file, so what was looked at is what is filed.
+ *
+ * It opens at once and is made inside it. The pages are drawn to fill the
+ * window's width (shared/PdfPages), not left to the browser's PDF viewer,
+ * whose zoom differs from one browser to another; print, a tab of its own and
+ * download sit in the head with what the file is: its window, pages, size and
+ * edits.
+ */
+function PdfPreview({ state, title = 'Movement report', caption, edited, onRetry, onClose }) {
+  const [url, setUrl] = useState(null);
+  const [pages, setPages] = useState(null);
+  const [drawError, setDrawError] = useState(null);
+  const file = state.status === 'done' ? state : null;
+  useEffect(() => {
+    if (!file) return undefined;
+    const u = URL.createObjectURL(file.blob);
+    setUrl(u);
+    setPages(null);
+    setDrawError(null);
+    return () => { URL.revokeObjectURL(u); setUrl(null); };
+  }, [file]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  const facts = [caption,
+    pages && `${pages} page${pages === 1 ? '' : 's'}`,
+    file && kb(file.blob.size),
+    edited > 0 && `${edited} edit${edited === 1 ? '' : 's'} included`].filter(Boolean);
+  return (
+    <div className="sp4-modal-overlay mvr-pv-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="mvr-pv" role="dialog" aria-modal="true" aria-labelledby="mvr-pv-title" aria-describedby="mvr-pv-facts">
+        <header className="mvr-pv__head">
+          <i className="ti ti-file-type-pdf mvr-pv__icon" aria-hidden="true" />
+          <div className="mvr-pv__what">
+            <h2 id="mvr-pv-title" className="mvr-pv__title">{title}</h2>
+            <p id="mvr-pv-facts" className="mvr-pv__facts">
+              {facts.map((f, i) => <span key={i}>{f}</span>)}
+            </p>
+          </div>
+          <div className="mvr-pv__tools">
+            <button type="button" className="mvr-pv__tool" disabled={!url} title="Print"
+                    onClick={() => printPdf(url)}>
+              <i className="ti ti-printer" aria-hidden="true" /><span className="mvr-sr">Print</span>
+            </button>
+            <a className={`mvr-pv__tool${url ? '' : ' is-off'}`} href={url ?? undefined} target="_blank" rel="noreferrer"
+               title="Open in a tab of its own" aria-disabled={!url}>
+              <i className="ti ti-external-link" aria-hidden="true" /><span className="mvr-sr">Open in a new tab</span>
+            </a>
+            <button type="button" className="sp4-submit-btn frp-run mvr-pv__save" disabled={!file} autoFocus
+                    onClick={() => saveFile(file.blob, file.filename)}>
+              <i className="ti ti-download" aria-hidden="true" /> Download
+            </button>
+            <button type="button" className="sp4-modal-x mvr-pv__x" onClick={onClose} aria-label="Close the preview">
+              <i className="ti ti-x" aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <div className="mvr-pv__desk" aria-busy={state.status === 'loading'}>
+          {state.status === 'loading' && (
+            <div className="mvr-pv__note" role="status">
+              <span className="mvr-pv__sheet" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+              Making the PDF…
+            </div>
+          )}
+          {state.status === 'error' && (
+            <div className="mvr-pv__note mvr-pv__note--error" role="alert">
+              <i className="ti ti-alert-triangle" aria-hidden="true" />
+              <span>The PDF could not be made: {state.message}</span>
+              <button type="button" className="sp4-ghost-btn" onClick={onRetry}>Try again</button>
+            </div>
+          )}
+          {file && !drawError && (
+            <PdfPages blob={file.blob} gutter={0} onLoad={setPages} onError={(err) => setDrawError(err?.message ?? String(err))} />
+          )}
+          {drawError && (
+            <div className="mvr-pv__note mvr-pv__note--error" role="alert">
+              <i className="ti ti-alert-triangle" aria-hidden="true" />
+              <span>The PDF was made but could not be shown here: {drawError}. Download or open it in a tab.</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One choice from a short list (a group, a consumption unit), in the field and
+ * card the Type list uses (operator, 2 Nov: "the drop down list on each node
+ * to match that in the movements"): the picked one ticked, with what it holds
+ * beside it where there is something real to say.
+ */
+function ChoicePicker({ icon, label, value, options, onChange, align = 'left' }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+  const picked = options.find((o) => o.value === value) ?? options[0];
+  return (
+    <div className={`drp drp--${align} mvr-types`} ref={rootRef}>
+      <button type="button" className={`drp-field${open ? ' drp-field--open' : ''}`}
+              onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open}
+              aria-label={`${label}: ${picked.label}`}>
+        <i className={`ti ${icon}`} aria-hidden="true" />
+        <span className="drp-text mvr-types__v">{picked.label}</span>
+        <i className="ti ti-chevron-down drp-caret" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="drp-pop mvr-types__pop" role="listbox" aria-label={label}>
+          <ul className="mvr-types__list">
+            {options.map((o) => {
+              const on = o.value === value;
+              return (
+                <li key={String(o.value)}>
+                  <button type="button" role="option" aria-selected={on}
+                          className={`mvr-type mvr-type--one${on ? ' mvr-type--on' : ''}`}
+                          onClick={() => { onChange(o.value); setOpen(false); }}>
+                    <span className="mvr-type__name">{o.label}</span>
+                    {o.note != null && <span className="mvr-type__n">{o.note}</span>}
+                    <i className="ti ti-check mvr-type__tick" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TypePicker({ types, picked, counts, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const set = new Set(picked);
+  const cpo = defaultTypes(types);
+  const all = picked.length === types.length;
+  const onlyCpo = picked.length === cpo.length && cpo.every((t) => set.has(t));
+  const label = !picked.length ? 'No types' : all ? 'All types' : picked.length === 1 ? picked[0] : `${picked.length} of ${types.length} types`;
+  const vehicles = picked.reduce((n, t) => n + (counts[t] ?? 0), 0);
+
+  // A press outside closes it, and Escape, as the calendar beside it does.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  const toggle = (t) => onChange(set.has(t) ? picked.filter((x) => x !== t) : types.filter((x) => set.has(x) || x === t));
+  return (
+    <div className="drp drp--right mvr-types" ref={rootRef}>
+      <button type="button" className={`drp-field${open ? ' drp-field--open' : ''}`}
+              onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open}
+              aria-label={`Vehicle types: ${label}`}>
+        <i className="ti ti-truck" aria-hidden="true" />
+        <span className="drp-text mvr-types__v">{label}</span>
+        <i className="ti ti-chevron-down drp-caret" aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div className="drp-pop mvr-types__pop" role="group" aria-label="Vehicle types">
+          <div className="drp-quick">
+            <button type="button" className={`drp-chip${all ? ' drp-chip--on' : ''}`} onClick={() => onChange(types)}>All types</button>
+            {cpo.length < types.length && (
+              <button type="button" className={`drp-chip${onlyCpo && !all ? ' drp-chip--on' : ''}`} onClick={() => onChange(cpo)}>CPO only</button>
+            )}
+            <button type="button" className="drp-chip" onClick={() => onChange([])} disabled={!picked.length}>Clear</button>
+          </div>
+          <ul className="mvr-types__list">
+            {types.map((t) => (
+              <li key={t}>
+                <button type="button" role="menuitemcheckbox" aria-checked={set.has(t)}
+                        className={`mvr-type${set.has(t) ? ' mvr-type--on' : ''}`} onClick={() => toggle(t)}>
+                  <span className="mvr-type__box" aria-hidden="true"><i className="ti ti-check" /></span>
+                  <span className="mvr-type__name">{t}</span>
+                  <span className="mvr-type__n">{counts[t] ?? 0}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="drp-hint" aria-live="polite">
+            {picked.length ? `${vehicles.toLocaleString('en-GB')} vehicle${vehicles === 1 ? '' : 's'} in the table and the PDF.` : 'Pick a type to fill the table.'}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Movements (operator, 2 Nov 2026): where every unit was and whether it
+ * was heading to or from MORL over a window, as a table first. The page opens
+ * made for the last hour; the last 2 or 4 hours, or the same hours on every
+ * day of a range (07:00 to 08:00, 07:00 to 20:00…, a week at most) make it
+ * again, one table a day. The vehicle types (the units' groupings, CPO by
+ * default) pick what the table and the PDF show. The operator may correct a
+ * row's location or direction, or leave a row out, before the PDF; the server
+ * draws the PDF from the tables as edited (lib/movementReport), one day after
+ * another, counting each overview again from what is kept.
  */
 function MovementsReport({ orgId }) {
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => movementsKept.get(orgId));
-  const [hours, setHours] = useState(saved?.hours ?? MOVEMENT_WINDOWS[0]);
-  const [run, setRun] = useState(saved ? { status: 'done', report: saved.report } : { status: 'idle' });
-  const [edits, setEdits] = useState(saved?.edits ?? {});   // by vehicleId: { location?, state?, removed? }
+  const today = fleetDay(Date.now());
+  const [sel, setSel] = useState(saved?.sel ?? { mode: 'last', hours: LAST_HOURS[0] });
+  const [draft, setDraft] = useState(saved?.draft ?? { fromDay: today, toDay: today, start: 7, end: 20 });
+  const [daysOpen, setDaysOpen] = useState(saved?.sel?.mode === 'days');
+  const [run, setRun] = useState(saved ? { status: 'done', reports: saved.reports } : { status: 'idle' });
+  const [edits, setEdits] = useState(saved?.edits ?? []);   // per day: by vehicleId { location?, state?, removed? }
+  const [day, setDay] = useState(saved?.day ?? 0);
+  const [types, setTypes] = useState(saved?.types ?? null);
   const [pdf, setPdf] = useState({ busy: false, error: null });
   const [confirm, setConfirm] = useState(null);              // { words, go }: waits for the operator's yes
   const runId = useRef(0);
 
-  const reset = () => { runId.current += 1; setRun({ status: 'idle' }); setEdits({}); };
-
-  // The table and its edits outlive this tab: another report tab or page and
-  // back finds them as they were. Only a finished table is kept.
+  // The tables and their edits outlive this page: another report or page and
+  // back finds them as they were. Only finished tables are kept.
   useEffect(() => {
     if (!orgId) return;
-    if (run.status === 'done') movementsKept.set(orgId, { hours, report: run.report, edits });
+    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types });
     else movementsKept.delete(orgId);
-  }, [orgId, hours, run, edits]);
+  }, [orgId, sel, draft, run, edits, day, types]);
 
-  const execute = async () => {
+  const execute = async (next) => {
     if (!orgId) return;
+    const windows = movementWindows(next);
+    if (!windows.length) return;
     const id = ++runId.current;
-    setRun({ status: 'loading' });
+    setSel(next);
+    setRun({ status: 'loading', done: 0, of: windows.length });
     try {
-      const report = await loadMovementReport({ orgId, hours });
-      if (id === runId.current) { setEdits({}); setRun({ status: 'done', report }); }
+      const reports = [];
+      for (const w of windows) {
+        reports.push(await loadMovementReport({ orgId, from: w.from, to: w.to }));
+        if (id !== runId.current) return;
+        setRun({ status: 'loading', done: reports.length, of: windows.length });
+      }
+      const all = vehicleTypes(reports);
+      setTypes((t) => (t?.some((x) => all.includes(x)) ? t.filter((x) => all.includes(x)) : defaultTypes(all)));
+      setEdits(reports.map(() => ({})));
+      setDay(reports.length - 1);
+      setRun({ status: 'done', reports });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
+  // Opens made for the last hour, unless tables were kept for this organisation.
+  useEffect(() => { if (!saved && orgId) execute(sel); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const report = run.status === 'done' ? run.report : null;
-  const kept = useMemo(() => (report ? applyEdits(report, edits) : null), [report, edits]);
-  const changed = report ? report.groups.reduce((n, g) => n + g.rows.filter((r) => isEdited(r, edits[r.vehicleId])).length, 0) : 0;
-  const edit = (vehicleId, patch) => setEdits((e) => ({ ...e, [vehicleId]: { ...e[vehicleId], ...patch } }));
+  const reports = run.status === 'done' ? run.reports : null;
+  const allTypes = useMemo(() => (reports ? vehicleTypes(reports) : []), [reports]);
+  const picked = useMemo(() => types ?? [], [types]);
+  // Vehicles of each type on the day shown, before the type filter
+  const typeCounts = useMemo(() => Object.fromEntries((reports?.[day] ?? reports?.[0])?.groups.map((g) => [g.name, g.rows.length]) ?? []), [reports, day]);
+  const report = useMemo(() => (reports ? onlyTypes(reports[day] ?? reports[0], picked) : null), [reports, day, picked]);
+  const dayEdits = useMemo(() => edits[day] ?? {}, [edits, day]);
+  const kept = useMemo(() => (report ? applyEdits(report, dayEdits) : null), [report, dayEdits]);
+  const changed = reports
+    ? reports.reduce((n, r, i) => n + r.groups.reduce((m, g) => m + g.rows.filter((x) => isEdited(x, edits[i]?.[x.vehicleId])).length, 0), 0)
+    : 0;
+  const edit = (vehicleId, patch) => setEdits((all) => all.map((e, i) => (i === day ? { ...e, [vehicleId]: { ...e[vehicleId], ...patch } } : e)));
 
   // Closing or reloading the browser tab would lose them: the browser asks first.
   useEffect(() => {
@@ -304,19 +720,43 @@ function MovementsReport({ orgId }) {
     return () => window.removeEventListener('beforeunload', warn);
   }, [changed]);
 
-  // A new run or another window replaces the table: with edits on it, ask first.
+  // A new run replaces the tables: with edits on them, ask first.
   const guard = (words, go) => (changed ? setConfirm({ words, go }) : go());
+  const daysProblem = windowsProblem({ mode: 'days', ...draft });
+  const problem = daysOpen ? daysProblem : null;
+  const runDays = () => guard('Make the report for these days', () => execute({ mode: 'days', ...draft }));
 
+  const pdfBody = () => {
+    const each = reports.map((r, i) => pdfRequest(onlyTypes(r, picked), edits[i] ?? {}));
+    return each.length === 1 ? each[0] : { reports: each };
+  };
   const downloadPdf = async () => {
-    if (!report || pdf.busy) return;
+    if (!reports || pdf.busy) return;
     setPdf({ busy: true, error: null });
     try {
-      await downloadEditedMovementReport({ orgId, request: pdfRequest(report, edits) });
+      await downloadEditedMovementReport({ orgId, request: pdfBody() });
       setPdf({ busy: false, error: null });
     } catch (err) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
     }
   };
+  const [preview, setPreview] = useState(null);   // { status: loading | done (blob, filename) | error }
+  const previewId = useRef(0);
+  const previewPdf = async () => {
+    if (!reports) return;
+    const id = ++previewId.current;
+    setPreview({ status: 'loading' });
+    try {
+      const file = await makeEditedMovementReport({ orgId, request: pdfBody() });
+      if (id === previewId.current) setPreview({ status: 'done', ...file });
+    } catch (err) {
+      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
+    }
+  };
+  const closePreview = () => { previewId.current++; setPreview(null); };
+  const previewCaption = !reports ? null : reports.length === 1
+    ? periodText(reports[0].from, reports[0].to)
+    : `${reports.length} days, ${dayWords(reports[0].from)} – ${dayWords(reports[reports.length - 1].from)}`;
 
   const n = kept?.counts;
   const silentCount = n ? n.stale + n['no-fix'] : 0;
@@ -331,7 +771,6 @@ function MovementsReport({ orgId }) {
   return (
     <>
       <div className="sp4-header rpt-header">
-        <p className="rpt-blurb">Where every unit was last seen, its speed, and whether it is heading to or from MORL over the window. Correct a location or a direction, or leave a unit out, then download the PDF.</p>
         <div className="sp4-header-kpis">
           {kpis.map((k) => (
             <Kpi key={k.label} label={k.label} tone={k.tone} value={n ? k.value.toLocaleString('en-GB') : <span className="frp-kpi-none">-</span>} />
@@ -341,18 +780,49 @@ function MovementsReport({ orgId }) {
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <div className="sp4-filter-group" role="group" aria-label="Window">
-          {MOVEMENT_WINDOWS.map((h) => (
-            <button key={h} type="button" aria-pressed={hours === h}
-                    className={`sp4-filter-chip${hours === h ? ' sp4-filter-chip--on' : ''}`}
-                    onClick={() => { if (h !== hours) guard(`Show the last ${h} hours`, () => { setHours(h); reset(); }); }}>
-              Last {h} hours
-            </button>
-          ))}
+          {LAST_HOURS.map((h) => {
+            const on = !daysOpen && sel.mode === 'last' && sel.hours === h;
+            return (
+              <button key={h} type="button" aria-pressed={on}
+                      className={`sp4-filter-chip${on ? ' sp4-filter-chip--on' : ''}`}
+                      onClick={() => { setDaysOpen(false); guard(`Show the ${lastWords(h).toLowerCase()}`, () => execute({ mode: 'last', hours: h })); }}>
+                {lastWords(h)}
+              </button>
+            );
+          })}
         </div>
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => guard('Run the report again', execute)}
-                disabled={!orgId || run.status === 'loading'}>
+
+        {/* One field for the days and the hours: a day or a range on the calendar, the hours under it */}
+        <DateRangePicker
+          from={draft.fromDay} to={draft.toDay} today={today} maxDays={MAX_MOVEMENT_DAYS} spans={[MAX_MOVEMENT_DAYS]}
+          label="Days and hours" on={daysOpen} disabled={!orgId}
+          text={`${pickedText(draft.fromDay, draft.toDay, today)} · ${hoursText(draft.start, draft.end)}`}
+          onChange={(f, t) => { setDaysOpen(true); setDraft((d) => ({ ...d, fromDay: f, toDay: t })); }}
+        >
+          {({ close }) => (
+            <>
+              <HourWindow start={draft.start} end={draft.end}
+                          onChange={(s, e) => { setDaysOpen(true); setDraft((d) => ({ ...d, start: s, end: e })); }} />
+              <div className="mvr-hours__foot">
+                {daysProblem && <span className="rpt-problem" role="status">{daysProblem}</span>}
+                <button type="button" className="sp4-submit-btn frp-run"
+                        disabled={run.status === 'loading' || Boolean(daysProblem)}
+                        onClick={() => { close(); runDays(); }}>
+                  {run.status === 'loading' ? 'Running…' : 'Run report'}
+                </button>
+              </div>
+            </>
+          )}
+        </DateRangePicker>
+
+        {allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
+
+        <button type="button" className="sp4-submit-btn frp-run rpt-run"
+                onClick={daysOpen ? runDays : () => guard('Run the report again', () => execute(sel))}
+                disabled={!orgId || run.status === 'loading' || Boolean(problem)} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
+        {problem && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
 
       {confirm && (
@@ -366,24 +836,35 @@ function MovementsReport({ orgId }) {
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
-          <EmptyNote icon={<ReportIcon name={MOVEMENTS} />} title="CPO Movements">
-            Choose the window, then press Run report.
+          <EmptyNote icon={<ReportIcon name={MOVEMENTS} />} title="Movements">
+            {orgId ? 'Choose the window, then press Run report.' : 'Waiting for the organisation to load.'}
           </EmptyNote>
         )}
         {run.status === 'loading' && (
-          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">
-            Reading where every unit is. Up to half a minute while new places are named.
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report"
+                     progress={run.of > 1 ? run.done / run.of : null}>
+            {run.of > 1 ? `Day ${Math.min(run.done + 1, run.of)} of ${run.of}. ` : ''}Reading where every unit was. Up to half a minute while new places are named.
           </EmptyNote>
         )}
         {run.status === 'error' && (
           <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made"
-                     action={{ label: 'Try again', onClick: execute }}>
+                     action={{ label: 'Try again', onClick: () => execute(sel) }}>
             {run.message}
           </EmptyNote>
         )}
 
         {report && (
           <>
+            {reports.length > 1 && (
+              <div className="sp4-filter-group mvr-daytabs" role="tablist" aria-label="Day">
+                {reports.map((r, i) => (
+                  <button key={r.from} type="button" role="tab" aria-selected={i === day}
+                          className={`sp4-filter-chip${i === day ? ' sp4-filter-chip--on' : ''}`} onClick={() => setDay(i)}>
+                    {dayWords(r.from)}
+                  </button>
+                ))}
+              </div>
+            )}
             <TableToolbar
               summary={<>
                 <strong>{kept.counts.total.toLocaleString('en-GB')}</strong> vehicle{kept.counts.total === 1 ? '' : 's'}
@@ -392,12 +873,19 @@ function MovementsReport({ orgId }) {
               </>}
               onPdf={pdf.busy ? undefined : downloadPdf}
               actions={<>
-                {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits({})}>Undo edits</button>}
+                {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits((all) => all.map(() => ({})))}>Undo edits</button>}
                 {pdf.busy ? <span className="rpt-sub">Making the PDF…</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
+                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={pdf.busy || !kept.counts.total}
+                        title="See the PDF, with your edits, before you download it">
+                  <i className="ti ti-eye" aria-hidden="true" /> Preview
+                </button>
               </>}
             />
+            {preview && <PdfPreview state={preview} caption={previewCaption} edited={changed} onRetry={previewPdf} onClose={closePreview} />}
             {!report.groups.length ? (
-              <EmptyNote icon="ti-circle-check" title="Nothing to Report">No units are tracked for this fleet.</EmptyNote>
+              <EmptyNote icon="ti-circle-check" title="Nothing to Report">
+                {picked.length ? 'No units of the types picked.' : 'Pick a vehicle type.'}
+              </EmptyNote>
             ) : (
               <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
                 <table className="sp4-table rpt-table mvr-table">
@@ -417,11 +905,11 @@ function MovementsReport({ orgId }) {
                         <tr className="rpt-group">
                           <th colSpan={6} scope="rowgroup">
                             <span className="rpt-group__name">{g.name}</span>
-                            <span className="rpt-group__meta">{groupWords(g, edits)}</span>
+                            <span className="rpt-group__meta">{groupWords(g, dayEdits)}</span>
                           </th>
                         </tr>
                         {g.rows.map((row) => {
-                          const e = edits[row.vehicleId];
+                          const e = dayEdits[row.vehicleId];
                           const out = Boolean(e?.removed);
                           const state = e?.state ?? row.state;
                           const location = e?.location ?? row.location ?? '';
@@ -535,30 +1023,51 @@ export default function ReportsScreen() {
   }, [orgId]);
 
   const reset = () => { runId.current += 1; setRun({ status: 'idle' }); };
-  // Picked here or in the sidebar: the new report starts on its own period.
+  // Picked in the sidebar's Reports tree: the new report starts on its own period.
   const showing = useRef(key);
   useEffect(() => {
     if (showing.current === key) return;
     showing.current = key;
     setSpan(spanFor(key)); reset();
   }, [key]);
-  const chooseReport = (k) => { if (k !== key) pickReport(k); };
-  const choosePreset = (id) => { setSpan({ id, ...presetRange(id) }); reset(); };
-  const setFrom = (t) => { setSpan((s) => ({ ...s, id: null, from: t })); reset(); };
-  const setTo = (t) => { setSpan((s) => ({ ...s, id: null, to: t })); reset(); };
+  const conduct = key === 'behaviour';
+  const today = fleetDay(Date.now());
+  // Every report here takes its period on one calendar with the hours under it,
+  // as Movements does (operator, 2 Nov): the first day at the start hour to the
+  // last day at the end hour, up to now. Night driving's hours are the night
+  // itself, and a day picked there runs from its noon to the next noon.
+  const isNight = key === 'night';
+  const [days, setDays] = useState(() => daysOf(key, span, night));
+  const [picking, setPicking] = useState(null);
+  const shownDays = picking ?? days;
+  useEffect(() => { setDays(daysOf(key, spanFor(key), night)); setPicking(null); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const periodOf = (d) => (isNight
+    ? { from: dayStart(d.fromDay) + 12 * HOUR_MS, to: Math.min(Date.now(), dayStart(d.toDay) + 36 * HOUR_MS) }
+    : shiftPeriod(d));
+  const applyDays = (d) => {
+    const sp = { id: null, ...periodOf(d) };
+    const nt = isNight ? { ...night, start: d.start, end: d.end % 24 } : night;
+    setDays(d); setPicking(null); setSpan(sp); setNight(nt);
+    execute({ span: sp, night: nt });
+  };
 
-  const days = (span.to - span.from) / DAY;
-  const problem = !orgId ? 'Waiting for the organisation to load'
-    : !(span.to > span.from) ? 'The period ends before it starts'
-    : days > def.maxDays ? `${def.maxDays} days at most for this report`
-    : def.reachDays && span.from < Date.now() - def.reachDays * DAY ? `The dashcam keeps its alarms ${def.reachDays} days: start the period within them`
-    : null;
+  const problemFor = (sp) => (!orgId ? 'Waiting for the organisation to load'
+    : sp.from >= Date.now() ? 'These hours have not begun yet'
+    : !(sp.to > sp.from) ? 'The period ends before it starts'
+    : (sp.to - sp.from) / DAY > def.maxDays + (isNight ? 1 : 0) ? `${def.maxDays} days at most for this report`
+    : def.reachDays && sp.from < Date.now() - def.reachDays * DAY ? `The dashcam keeps its alarms ${def.reachDays} days: start the period within them`
+    : null);
+  const problem = problemFor(span);
+  const pickingProblem = problemFor(periodOf(shownDays));
 
-  const execute = async () => {
-    if (problem) return;
+  // `over` carries a period (and night) just picked, before the state has it
+  const execute = async (over = {}) => {
+    const sp = over.span ?? span;
+    const nt = over.night ?? night;
+    if (problemFor(sp)) return;
     const id = ++runId.current;
     const live = () => id === runId.current;
-    const ctx = { from: span.from, to: span.to, group, night: { ...night }, rate, rated: rated && key === 'utilisation' };
+    const ctx = { from: sp.from, to: sp.to, group, night: { ...nt }, rate, rated: rated && key === 'utilisation' };
     const { units, missing } = scopeUnits(vehicles, groups, group);
     if (!units.length) {
       setRun({ status: 'done', rows: [], secs: [], ctx, missing, failed: 0, units: 0 });
@@ -601,6 +1110,20 @@ export default function ReportsScreen() {
     }
   };
 
+  // Every report here opens made for its own default period, once the units
+  // are in, as Movements does (operator, 2 Nov: "able to generate a report by
+  // default just like movements"). A report is only emptied by opening it, a
+  // new organisation, or a new group or consumption unit, and each of those
+  // makes it again at once. Opening one passes its own period: on a switch
+  // from another report the state still holds that one's.
+  const opened = useRef(null);
+  useEffect(() => {
+    if (isServer || !orgId || !vehicles.length || run.status !== 'idle') return;
+    const fresh = opened.current !== key;
+    opened.current = key;
+    execute(fresh ? { span: spanFor(key), night } : {});
+  }, [isServer, key, orgId, vehicles.length, run.status, group, rate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // A behaviour run (and any new operator entry) opens the cases it finds;
   // what operators recorded on cases already there stays.
   useEffect(() => {
@@ -631,7 +1154,11 @@ export default function ReportsScreen() {
   };
   const actingCase = acting ? cases.find((c) => c.id === acting) : null;
   const ctx = done?.ctx ?? { from: span.from, to: span.to };
-  const kpis = def.kpis(done?.rows ?? []);
+  const allKpis = def.kpis(done?.rows ?? []);
+  // Driver conduct leads with the total, and leaves the vehicles to the line over the table.
+  const kpis = conduct
+    ? [...allKpis.filter((k) => k.label === 'Total incidents'), ...allKpis.filter((k) => k.label !== 'Total incidents' && k.label !== 'Vehicles')]
+    : allKpis;
   const columns = def.columns(ctx);
   // Type or Driver blank for every vehicle (e.g. all "UNSPECIFIED"): left out.
   const shown = done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i);
@@ -659,27 +1186,37 @@ export default function ReportsScreen() {
     }
   };
 
+  // The PDF on screen before it is saved (operator, 2 Nov), as Movements has it.
+  const [preview, setPreview] = useState(null);
+  const previewId = useRef(0);
+  const previewPdf = async () => {
+    if (!done) return;
+    const id = ++previewId.current;
+    setPreview({ status: 'loading' });
+    try {
+      const { html, landscape, filename } = reportHtml(def, done, {
+        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
+      });
+      const file = await saveLetterheadPdf(html, { filename, landscape, keep: true });
+      if (id === previewId.current) setPreview({ status: 'done', ...file });
+    } catch (err) {
+      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
+    }
+  };
+  const closePreview = () => { previewId.current++; setPreview(null); };
+
   const downloadCsv = () => {
     if (!done) return;
     downloadTableCsv({ ...csvTable(def, done.secs, done.ctx), filenameSlug: slug });
   };
 
   return (
-    <div className="sp4-root rpt-root">
-      <div className="sp4-tabs rpt-tabs" role="tablist" aria-label="Report">
-        {tabs.map((k) => (
-          <button key={k} type="button" role="tab" aria-selected={key === k}
-                  className={`sp4-tab${key === k ? ' sp4-tab--on' : ''}`} onClick={() => chooseReport(k)}>
-            <ReportIcon name={k} />
-            {(SERVER_TABS[k] ?? REPORTS[k]).label}
-          </button>
-        ))}
-      </div>
-
+    <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
+      {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
       {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
 
-      <div className="sp4-header rpt-header">
-        <p className="rpt-blurb">{def.blurb}</p>
+      <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
         <div className="sp4-header-kpis">
           {kpis.map((k) => (
             <Kpi key={k.label} label={k.label} tone={k.tone} value={done ? k.value : <span className="frp-kpi-none">-</span>} />
@@ -688,59 +1225,50 @@ export default function ReportsScreen() {
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <div className="sp4-filter-group" role="group" aria-label="Period">
-          {presetsFor(key).map((id) => (
-            <button key={id} type="button" aria-pressed={span.id === id}
-                    className={`sp4-filter-chip${span.id === id ? ' sp4-filter-chip--on' : ''}`}
-                    onClick={() => choosePreset(id)}>{PRESETS[id]}</button>
-          ))}
-        </div>
-        <div className="frp-range">
-          <WhenField label="From" value={span.from} max={span.to} onChange={setFrom} />
-          <span className="frp-range__dash" aria-hidden="true">–</span>
-          <WhenField label="To" value={span.to} min={span.from} onChange={setTo} />
-        </div>
-
-        {key === 'utilisation' && !rated && (
-          <label className="rpt-field">
-            <span className="rpt-field__l">Consumption</span>
-            <select className="rpt-select" value={rate}
-                    onChange={(e) => { setRate(e.target.value); reset(); }}>
-              {Object.entries(RATES).map(([k, r]) => <option key={k} value={k}>{r.label} ({r.unit})</option>)}
-            </select>
-          </label>
-        )}
-
-        {key === 'night' && (
-          <div className="rpt-field" role="group" aria-label="Night hours">
-            <span className="rpt-field__l">Night</span>
-            <select className="rpt-select" value={night.start} aria-label="Night starts"
-                    onChange={(e) => { setNight((n) => ({ ...n, start: Number(e.target.value) })); reset(); }}>
-              {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}:00</option>)}
-            </select>
-            <span className="frp-range__dash" aria-hidden="true">–</span>
-            <select className="rpt-select" value={night.end} aria-label="Night ends"
-                    onChange={(e) => { setNight((n) => ({ ...n, end: Number(e.target.value) })); reset(); }}>
-              {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}:00</option>)}
-            </select>
-          </div>
-        )}
+        {/* One field for the period: days on the calendar, hours under it, as Movements has it */}
+        <DateRangePicker
+          from={shownDays.fromDay} to={shownDays.toDay} today={today}
+          maxDays={def.reachDays ?? def.maxDays} spans={[def.reachDays ?? def.maxDays]}
+          minDay={def.reachDays ? addDays(today, -(def.reachDays - 1)) : null}
+          label="Period" on
+          text={isNight
+            ? `${pickedText(days.fromDay, days.toDay, today)} · nights ${hoursText(night.start, night.end || 24)}`
+            : `${pickedText(days.fromDay, days.toDay, today)} · ${span.to >= Date.now() - 60_000 && days.toDay === today ? `${hh(days.start)}–now` : hoursText(days.start, days.end)}`}
+          onChange={(f, t) => setPicking({ ...shownDays, fromDay: f, toDay: t })}
+        >
+          {({ close }) => (
+            <>
+              <HourWindow start={shownDays.start} end={shownDays.end} label={isNight ? 'Night hours' : 'Hours each day'}
+                          onChange={(a, b) => setPicking({ ...shownDays, start: a, end: b })} />
+              <div className="mvr-hours__foot">
+                {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
+                <button type="button" className="sp4-submit-btn frp-run"
+                        disabled={run.status === 'loading' || Boolean(pickingProblem)}
+                        onClick={() => { close(); applyDays(shownDays); }}>
+                  {run.status === 'loading' ? 'Running…' : 'Run report'}
+                </button>
+              </div>
+            </>
+          )}
+        </DateRangePicker>
 
         {groups && (
-          <label className="rpt-field">
-            <span className="rpt-field__l">Group</span>
-            <select className="rpt-select" value={group ?? ''}
-                    onChange={(e) => { setGroup(e.target.value || null); reset(); }}>
-              <option value="">All groups</option>
-              {groups.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
-            </select>
-          </label>
+          <ChoicePicker icon="ti-users-group" label="Group" value={group}
+                        options={[{ value: null, label: 'All groups', note: groups.reduce((n, g) => n + g.units.length, 0) },
+                          ...groups.map((g) => ({ value: g.name, label: g.name, note: g.units.length }))]}
+                        onChange={(v) => { setGroup(v); reset(); }} />
+        )}
+
+        {key === 'utilisation' && !rated && (
+          <ChoicePicker icon="ti-gas-station" label="Consumption" value={rate}
+                        options={Object.entries(RATES).map(([k, r]) => ({ value: k, label: r.label, note: r.unit }))}
+                        onChange={(v) => { setRate(v); reset(); }} />
         )}
 
         {key === 'behaviour' && (
           <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog({})}>Log incident</button>
         )}
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => execute()}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
@@ -761,7 +1289,7 @@ export default function ReportsScreen() {
         )}
         {run.status === 'error' && (
           <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made"
-                     action={{ label: 'Try again', onClick: execute }}>
+                     action={{ label: 'Try again', onClick: () => execute() }}>
             {run.message}
           </EmptyNote>
         )}
@@ -779,9 +1307,21 @@ export default function ReportsScreen() {
               </>}
               onCsv={done.rows.length ? downloadCsv : undefined}
               onPdf={pdfBusy ? undefined : downloadPdf}
-              actions={pdfBusy ? <span className="rpt-sub">Making the PDF…</span>
-                : pdfError ? <span className="rpt-warn">{pdfError}</span> : null}
+              actions={<>
+                {pdfBusy ? <span className="rpt-sub">Making the PDF…</span>
+                  : pdfError ? <span className="rpt-warn">{pdfError}</span> : null}
+                {conduct && (
+                  <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={pdfBusy}
+                          title="See the PDF before you download it">
+                    <i className="ti ti-eye" aria-hidden="true" /> Preview
+                  </button>
+                )}
+              </>}
             />
+            {preview && (
+              <PdfPreview state={preview} title={`${def.label} report`}
+                          caption={`${periodWords} · ${groupWords}`} onRetry={previewPdf} onClose={closePreview} />
+            )}
             {!done.rows.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">{def.empty}</EmptyNote>
             ) : (
@@ -831,7 +1371,10 @@ export default function ReportsScreen() {
                                     </td>
                                   );
                                 }
-                                return <td key={i} className={isFigure(def, columns, i) ? 'rpt-num' : undefined}>{c}</td>;
+                                const cls = [isFigure(def, columns, i) && 'rpt-num',
+                                  conduct && columns[i] === 'Driver' && 'rpt-driver',
+                                  conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero'].filter(Boolean).join(' ');
+                                return <td key={i} className={cls || undefined}>{c}</td>;
                               })}
                             </tr>
                           );
