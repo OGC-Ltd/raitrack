@@ -6,6 +6,10 @@
 
 import { isTheftIncident } from './fuelAlerts'
 import { plateIn } from './plate';
+import { groupsFor, unitKey, vehicleKeys } from './fleetGroups';
+
+/** Menengai's units the client's fleet list does not name (movementReport's NOT_ON_LIST). */
+const NOT_ON_LIST = 'Not on the list'
 
 /**
  * The limit to use when the server did not send one.
@@ -537,6 +541,33 @@ export const FLEET_TYPE_LABELS = {
 }
 
 /**
+ * Menengai's fleets are the groups of the client's fleet list (operator,
+ * 2026-11-02: "for fleets in menengai use the All groups"), matched by plate
+ * or machine name exactly as the Movement report's Group picker matches them
+ * (lib/fleetGroups, movementReport.byFleetList), so the chips and that picker
+ * count the same. A Menengai unit the list does not name is "Not on the
+ * list". Null for any unit that is not Menengai's: the list's machine names
+ * ("WL 01", "FL 01") would match other estates' machines too.
+ */
+const MENENGAI_UNIT = /MENENGAI|RAIMDF|\bMORL\b/
+const MENENGAI_LIST = groupsFor('MENENGAI') ?? []
+let menengaiIndex = null
+export function menengaiGroup(vehicle) {
+  if (!MENENGAI_UNIT.test(String(vehicle?.name ?? '').toUpperCase())) return null
+  if (!menengaiIndex) {
+    menengaiIndex = new Map()
+    for (const g of MENENGAI_LIST) for (const [label] of g.units) {
+      const k = unitKey(label)
+      if (!menengaiIndex.has(k)) menengaiIndex.set(k, `mg:${g.name}`)
+    }
+  }
+  for (const k of vehicleKeys({ regPlate: vehicle.regPlate, id: vehicle.id, name: vehicle.name })) {
+    if (menengaiIndex.has(k)) return menengaiIndex.get(k)
+  }
+  return 'mg:'
+}
+
+/**
  * Fold a live frame's movement record into the one we already hold.
  *
  * ## `exact: false` is an ABSENCE of evidence, and must not overwrite evidence
@@ -587,12 +618,14 @@ function mergeMovement(existing, incoming) {
  *  same reasoning as machineCategoryLabel: a filter must be able to OFFER a
  *  unit it cannot name, or the parts stop summing to the whole. */
 export function fleetTypeLabel(kind) {
+  if (typeof kind === 'string' && kind.startsWith('mg:')) return kind.slice(3) || NOT_ON_LIST
   return FLEET_TYPE_LABELS[kind] ?? String(kind ?? '')
 }
 
-/** The vehicle's fleet type. Never null — see spriteKind. */
+/** The vehicle's fleet type. Never null — see spriteKind; Menengai's units
+ *  go by their group — see menengaiGroup. */
 export function fleetType(vehicle) {
-  return spriteKind(vehicle)
+  return menengaiGroup(vehicle) ?? spriteKind(vehicle)
 }
 
 /**

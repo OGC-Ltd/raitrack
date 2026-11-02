@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { fleetTypeOptions, matchesTypeFilter, fleetType, fleetTypeLabel } from "./vehicleMap";
+import { fleetTypeOptions, matchesTypeFilter, fleetType, fleetTypeLabel, spriteKind } from "./vehicleMap";
 
 /** Mufindi's shape: the equipment code lives in `id`. */
 const coded = (id) => ({ id, name: id });
@@ -39,11 +39,23 @@ describe("fleetType", () => {
     expect(fleetType(plated("KMFA 123B", "Honda Motorbike"))).toBe("mc");
     expect(fleetType(plated("KMFA 124B", "Boxer", "MOTORCYCLE"))).toBe("mc");
     expect(fleetType(plated("KMGJ 333W", "West Sugar-Bike-KMGJ 333W"))).toBe("mc");
-    expect(fleetType(plated("KMFU 927U", "Menengai - KMFU 927U"))).toBe("mc");
+    expect(spriteKind(plated("KMFU 927U", "Menengai - KMFU 927U"))).toBe("mc");
     expect(fleetType(plated("KMHA 326X", "WKS - Naitiri - SAME 9358 (KMHA 326X)"))).toBe("mtr");
-    expect(fleetType(plated("KDA 123A", "Menengai - KDA 123A"))).toBe("truck");
+    expect(spriteKind(plated("KDA 123A", "Menengai - KDA 123A"))).toBe("truck");
     expect(fleetTypeLabel("gen")).toBe("Generator");
     expect(fleetTypeLabel("mc")).toBe("Motorbike");
+  });
+
+  it("puts Menengai's units in the groups of the client's fleet list, as the Movement picker does", () => {
+    const g = (id, name) => fleetTypeLabel(fleetType(plated(id, name)));
+    expect(g("KCV 039A", "CPO - Menengai - KCV 039A")).toBe("Tankers");
+    expect(g("KCN 678J", "CIVIL - Menengai - KCN 678J")).toBe("Equipment");
+    expect(g("KMFU 927U", "Menengai - KMFU 927U")).toBe("Farm Equipment");
+    expect(g("WL02", "WL - RAIMDF - WLOADER02")).toBe("RAI MDF Equipment");
+    expect(g("EXC1", "CIVIL - Menengai - EXCAVATOR001")).toBe("Equipment");
+    expect(g("KZZ 999Z", "FG - Menengai - KZZ 999Z")).toBe("Not on the list");
+    // Not Menengai's: the machine class, even where the list's machine names would match.
+    expect(fleetType(coded("MUFINDI: WL 01"))).toBe("wl");
   });
 
   it("never returns null, an unrecognisable unit is still offered as a truck", () => {
