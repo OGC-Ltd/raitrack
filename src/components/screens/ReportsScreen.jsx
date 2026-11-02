@@ -38,7 +38,9 @@ import { ActionDialog, FollowUpPanel } from './FollowUp';
 import { casesFromRun, mergeCases, recordAction, periodCases, loadCases, saveCases } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
+import { loadEndOfShiftDoc, downloadEditedEndOfShift } from '../../api/endOfShiftReport';
+import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
+import ShiftDocument from './ShiftDocument';
 import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
 import ReportIcon from '../shared/ReportIcon';
 import { reportKeysFor, useCurrentReport, chooseReport as pickReport } from '../../lib/reportNav';
@@ -94,72 +96,147 @@ function WhenField({ label, value, onChange, min, max }) {
 const SHIFT_PRESETS = ['today', 'yesterday'];
 /** The longest period the server makes it for (fleet-server END_OF_SHIFT_MAX_DAYS). */
 const SHIFT_MAX_DAYS = 7;
+/** End-of-shift sheets and their edits, by organisation, while this browser tab is open. */
+const shiftKept = new Map();
 
-/**
- * The end-of-shift report (moved here from the sidebar, operator 1 Nov 2026).
- * The server gathers the shift and draws the PDF. It opens on today from
- * midnight with To at the current time, kept current while Today is picked;
- * any other period can be picked, a week at most (operator, 2 Nov 2026).
- */
-function ShiftReport({ orgId }) {
-  const [span, setSpan] = useState(() => ({ id: 'today', ...presetRange('today') }));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  // Today runs up to now: To follows the clock.
-  useEffect(() => {
-    if (span.id !== 'today') return undefined;
-    const tick = setInterval(() => setSpan({ id: 'today', ...presetRange('today') }), 30_000);
-    return () => clearInterval(tick);
-  }, [span.id]);
-  const now = Date.now();
-  const problem = !orgId ? 'Waiting for the organisation to load'
+/** Why a period cannot be made, or null. */
+function shiftProblem(orgId, span, now = Date.now()) {
+  return !orgId ? 'Waiting for the organisation to load'
     : !(span.to > span.from) ? 'The period ends before it starts'
     : span.to > now + 60_000 ? 'The period cannot end in the future'
     : span.to - span.from > SHIFT_MAX_DAYS * DAY ? `${SHIFT_MAX_DAYS} days at most for this report`
     : null;
-  const pick = (next) => { setSpan(next); setError(null); };
-  const run = async () => {
-    if (busy || problem) return;
-    // Today is made up to the moment the button is pressed.
-    const period = span.id === 'today' ? presetRange('today') : span;
-    setBusy(true); setError(null);
+}
+
+/**
+ * The end-of-shift report (moved here from the sidebar, operator 1 Nov 2026).
+ * It opens made: today from midnight up to the current time, painted as the
+ * page it prints as (ShiftDocument), every text on it editable. Picking
+ * another period, a week at most, makes it again; Download PDF has the server
+ * draw the sheet as edited (operator, 2 Nov 2026).
+ */
+function ShiftReport({ orgId }) {
+  // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
+  const [saved] = useState(() => shiftKept.get(orgId));
+  const [span, setSpan] = useState(() => saved?.span ?? { id: 'today', ...presetRange('today') });
+  const [run, setRun] = useState(() => (saved ? { status: 'done', original: saved.original } : { status: 'idle' }));
+  const [doc, setDoc] = useState(saved?.doc ?? null);
+  const [version, setVersion] = useState(0);              // a new sheet: the editable texts start over
+  const [confirm, setConfirm] = useState(null);           // { words, go }
+  const [pdf, setPdf] = useState({ busy: false, error: null });
+  const runId = useRef(0);
+  const edited = run.status === 'done' && isDocEdited(run.original, doc);
+
+  const load = async (next) => {
+    // Today is made up to the moment it is asked for.
+    const period = next.id === 'today' ? { id: 'today', ...presetRange('today') } : next;
+    setSpan(period);
+    if (shiftProblem(orgId, period)) return;
+    const id = ++runId.current;
+    setRun({ status: 'loading' }); setPdf({ busy: false, error: null });
     try {
-      await downloadEndOfShiftReport({ orgId, from: period.from, to: period.to });
+      const answer = await loadEndOfShiftDoc({ orgId, from: period.from, to: period.to });
+      if (id !== runId.current) return;
+      setRun({ status: 'done', original: answer }); setDoc(answer); setVersion((v) => v + 1);
     } catch (err) {
-      setError(`The report could not be made: ${err?.message ?? err}`);
-    } finally {
-      setBusy(false);
+      if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
+  // Opens made, unless a sheet was kept for this organisation.
+  useEffect(() => { if (!saved && orgId) load(span); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (run.status === 'done') shiftKept.set(orgId, { span, original: run.original, doc });
+    else shiftKept.delete(orgId);
+  }, [orgId, span, run, doc]);
+
+  // Closing or reloading the browser tab would lose the edits: the browser asks first.
+  useEffect(() => {
+    if (!edited) return undefined;
+    const warn = (ev) => { ev.preventDefault(); ev.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [edited]);
+
+  // A new period replaces the sheet: with edits on it, ask first.
+  const guard = (words, go) => (edited ? setConfirm({ words, go }) : go());
+  const pick = (next, words) => guard(words, () => load(next));
+  const problem = shiftProblem(orgId, span);
+
+  const download = async () => {
+    if (pdf.busy || !doc) return;
+    setPdf({ busy: true, error: null });
+    try {
+      await downloadEditedEndOfShift({ orgId, doc: pdfDoc(doc) });
+      setPdf({ busy: false, error: null });
+    } catch (err) {
+      setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
+    }
+  };
+
   return (
     <>
-      <div className="sp4-header rpt-header">
-        <p className="rpt-blurb">The shift at a glance for the whole fleet, for the period picked: today from midnight up to now unless you change it. The server makes it as a PDF on the letterhead.</p>
-      </div>
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <div className="sp4-filter-group" role="group" aria-label="Period">
           {SHIFT_PRESETS.map((id) => (
             <button key={id} type="button" aria-pressed={span.id === id}
                     className={`sp4-filter-chip${span.id === id ? ' sp4-filter-chip--on' : ''}`}
-                    onClick={() => pick({ id, ...presetRange(id) })}>{PRESETS[id]}</button>
+                    onClick={() => pick({ id, ...presetRange(id) }, `Make the report for ${PRESETS[id].toLowerCase()}`)}>{PRESETS[id]}</button>
           ))}
         </div>
         <div className="frp-range">
-          <WhenField label="From" value={span.from} max={span.to} onChange={(t) => pick({ ...span, id: null, from: t })} />
+          <WhenField label="From" value={span.from} max={span.to}
+                     onChange={(t) => pick({ ...span, id: null, from: t }, 'Make the report for the new period')} />
           <span className="frp-range__dash" aria-hidden="true">–</span>
-          <WhenField label="To" value={span.to} min={span.from} max={now} onChange={(t) => pick({ ...span, id: null, to: t })} />
+          <WhenField label="To" value={span.to} min={span.from} max={Date.now()}
+                     onChange={(t) => pick({ ...span, id: null, to: t }, 'Make the report for the new period')} />
         </div>
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={run}
-                disabled={busy || Boolean(problem)} aria-busy={busy} title={problem ?? 'Make the report'}>
-          {busy ? 'Making the report…' : 'Download PDF'}
+        <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => pick(span, span.id === 'today' ? 'Make it again up to now' : 'Make it again')}
+                disabled={Boolean(problem) || run.status === 'loading'} title={span.id === 'today' ? 'Make it again, up to the current time' : 'Make it again'}>
+          <i className="ti ti-refresh" aria-hidden="true" /> Refresh
+        </button>
+        {edited && (
+          <button type="button" className="sp4-ghost-btn rpt-log"
+                  onClick={() => { setDoc(run.original); setVersion((v) => v + 1); }}>
+            Undo edits
+          </button>
+        )}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={download}
+                disabled={pdf.busy || run.status !== 'done'} aria-busy={pdf.busy}>
+          {pdf.busy ? 'Making the PDF…' : 'Download PDF'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
-        {error && <span className="rpt-problem" role="alert">{error}</span>}
+        {pdf.error && <span className="rpt-problem" role="alert">{pdf.error}</span>}
       </div>
-      <div className="sp4-body rpt-body">
-        <EmptyNote icon={<ReportIcon name={SHIFT} />} title="End of Shift Report">
-          Press Download PDF. It takes a few seconds while the server gathers the shift.
-        </EmptyNote>
+
+      {confirm && (
+        <div className="mvr-confirm" role="alertdialog" aria-labelledby="sdoc-confirm-words">
+          <span id="sdoc-confirm-words">{confirm.words} and lose your edits?</span>
+          <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setConfirm(null)} autoFocus>Keep editing</button>
+          <button type="button" className="sp4-submit-btn frp-run mvr-confirm__go"
+                  onClick={() => { const { go } = confirm; setConfirm(null); go(); }}>Discard edits</button>
+        </div>
+      )}
+
+      <div className="sp4-body rpt-body sdoc-desk">
+        {run.status === 'idle' && (
+          <EmptyNote icon={<ReportIcon name={SHIFT} />} title="End of Shift Report">
+            {problem ?? 'Pick the period.'}
+          </EmptyNote>
+        )}
+        {run.status === 'loading' && (
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">
+            The server is gathering the shift. It takes a few seconds.
+          </EmptyNote>
+        )}
+        {run.status === 'error' && (
+          <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made"
+                     action={{ label: 'Try again', onClick: () => load(span) }}>
+            {run.message}
+          </EmptyNote>
+        )}
+        {run.status === 'done' && doc && <ShiftDocument key={version} doc={doc} onChange={setDoc} />}
       </div>
     </>
   );
@@ -599,7 +676,7 @@ export default function ReportsScreen() {
         ))}
       </div>
 
-      {key === SHIFT ? <ShiftReport orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
 
       <div className="sp4-header rpt-header">
         <p className="rpt-blurb">{def.blurb}</p>
