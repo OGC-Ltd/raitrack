@@ -5,6 +5,9 @@
 
 .rpt-root { min-width: 0; }
 .rpt-tabs .sp4-tab .ti { font-size: 16px; }
+/* The report marks (shared/ReportIcon): drawn, not font glyphs; sized like the glyph they replaced. */
+.rpt-tabs .sp4-tab .report-icon { font-size: 17px; flex-shrink: 0; }
+.rpt-body .empty-note__icon .report-icon { font-size: 26px; }
 
 /* ── header: what the report is, and its figures ── */
 .rpt-header { justify-content: space-between; align-items: center; }

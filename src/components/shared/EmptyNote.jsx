@@ -16,7 +16,7 @@ export default function EmptyNote({ icon, title, children, tone = "ok", progress
   const buttons = (actions ?? (action ? [action] : [])).filter(Boolean);
   return (
     <div className={`empty-note empty-note--${tone} ${className}`} role={tone === "error" ? "alert" : "status"}>
-      <span className="empty-note__icon" aria-hidden="true"><i className={`ti ${icon}`} /></span>
+      <span className="empty-note__icon" aria-hidden="true">{typeof icon === "string" ? <i className={`ti ${icon}`} /> : icon}</span>
       <div className="empty-note__title">{title}</div>
       {children && <p className="empty-note__sub">{children}</p>}
       {progress != null && (
