@@ -40,6 +40,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
 import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
+import ReportIcon from '../shared/ReportIcon';
 import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, isLoading, locationChanged } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -51,8 +52,8 @@ const DAY = 86_400_000;
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
 const SERVER_TABS = {
-  [SHIFT]: { label: 'End of shift', icon: 'ti-clipboard-text' },
-  [MOVEMENTS]: { label: 'CPO movements', icon: 'ti-route' },
+  [SHIFT]: { label: 'End of shift' },
+  [MOVEMENTS]: { label: 'CPO movements' },
 };
 /** The movement report's windows, in hours. */
 const MOVEMENT_WINDOWS = [2, 4];
@@ -128,7 +129,7 @@ function ShiftReport({ orgId }) {
         {error && <span className="rpt-problem" role="alert">{error}</span>}
       </div>
       <div className="sp4-body rpt-body">
-        <EmptyNote icon="ti-clipboard-text" title="End of Shift Report">
+        <EmptyNote icon={<ReportIcon name={SHIFT} />} title="End of Shift Report">
           Press Download PDF. It takes a few seconds while the server gathers the shift.
         </EmptyNote>
       </div>
@@ -260,7 +261,7 @@ function MovementsReport({ orgId }) {
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
-          <EmptyNote icon="ti-route" title="CPO Movements">
+          <EmptyNote icon={<ReportIcon name={MOVEMENTS} />} title="CPO Movements">
             Choose the window, then press Run report.
           </EmptyNote>
         )}
@@ -561,7 +562,7 @@ export default function ReportsScreen() {
         {tabs.map((k) => (
           <button key={k} type="button" role="tab" aria-selected={key === k}
                   className={`sp4-tab${key === k ? ' sp4-tab--on' : ''}`} onClick={() => chooseReport(k)}>
-            <i className={`ti ${(SERVER_TABS[k] ?? REPORTS[k]).icon}`} aria-hidden="true" />
+            <ReportIcon name={k} />
             {(SERVER_TABS[k] ?? REPORTS[k]).label}
           </button>
         ))}
@@ -640,7 +641,7 @@ export default function ReportsScreen() {
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
-          <EmptyNote icon={def.icon} title={def.title}>
+          <EmptyNote icon={<ReportIcon name={def.key} />} title={def.title}>
             Choose the period{groups ? ' and group' : ''}, then press Run report.
           </EmptyNote>
         )}
