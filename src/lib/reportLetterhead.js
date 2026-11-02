@@ -8,6 +8,7 @@
 import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
 import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard } from './reportTables';
 import { ACTIONS, incidentWords, isOverdue, needsEscalation, ESCALATE_CASES, ESCALATE_DAYS } from './followUp';
+import { OVERSPEED_MIN_SEC } from './fleetReports';
 
 const fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtGenerated = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -173,7 +174,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       ? 'Check sensor: a vehicle covered 50 km or more, or a machine ran 2 hours or more, but its fuel level hardly moved. Most likely a stuck or faulty fuel sensor.'
       : 'Check sensor: the vehicle covered 50 km or more but its fuel level hardly moved. Most likely a stuck or faulty fuel sensor.');
   }
-  if (def.key === 'overspeed') notes.push('Only overspeeding that lasted more than 5 minutes without a break is counted.');
+  if (def.key === 'overspeed') notes.push(`Only overspeeding that lasted more than ${OVERSPEED_MIN_SEC} seconds without a break is counted.`);
   if (done.failed) notes.push(`${done.failed} could not be read and ${done.failed === 1 ? 'is' : 'are'} left out.`);
   if (notes.length) flow.push(...notes.map((t) => `<div class="note">${esc(t)}</div>`));
 

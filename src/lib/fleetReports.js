@@ -3,7 +3,7 @@
 //
 //   Harsh acceleration  per unit, per hour of the day
 //   Night driving       distance covered inside the night hours
-//   Overspeeding        overspeeds lasting MORE than 5 minutes, unbroken,
+//   Overspeeding        overspeeds lasting MORE than 5 seconds, unbroken,
 //                       and the distance covered during them
 //   Utilisation         distance, moving and engine time for every unit,
 //                       including those that did not move
@@ -16,8 +16,8 @@ const HOUR = 3600_000;
 const DAY = 24 * HOUR;
 const OFFSET = 3 * HOUR;
 
-/** An overspeed must last longer than this to count (operator, 1 Nov 2026: continuous). */
-export const OVERSPEED_MIN_SEC = 5 * 60;
+/** An overspeed must last longer than this to count (operator, 1 Nov 2026: continuous; 2 Nov 2026: 5 s, was 5 min). */
+export const OVERSPEED_MIN_SEC = 5;
 /** Night hours, by default 19:00 to 05:00. */
 export const NIGHT = { start: 19, end: 5 };
 /** Harsh accelerations per day above which the count reads as a sensor fault, not driving. */

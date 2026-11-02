@@ -139,11 +139,11 @@ export const REPORTS = {
     sumWords: (t) => `${km2(t)} km`,
     kpis: (rows) => [
       { label: 'Vehicles', value: n(rows.length) },
-      { label: `Overspeeds over ${OVERSPEED_MIN_SEC / 60} min`, value: n(rows.reduce((s, r) => s + r.count, 0)) },
+      { label: `Overspeeds over ${OVERSPEED_MIN_SEC} s`, value: n(rows.reduce((s, r) => s + r.count, 0)) },
       { label: 'Time over', value: minutesWords(rows.reduce((s, r) => s + r.seconds, 0) / 60) },
       { label: 'Distance overspeeding', value: `${km2(rows.reduce((s, r) => s + r.km, 0))} km` },
     ],
-    empty: `No overspeeding longer than ${OVERSPEED_MIN_SEC / 60} minutes in this period.`,
+    empty: `No overspeeding longer than ${OVERSPEED_MIN_SEC} seconds in this period.`,
   },
 
   utilisation: {

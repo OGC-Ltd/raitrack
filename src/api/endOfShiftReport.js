@@ -14,13 +14,19 @@ export async function loadEndOfShiftDoc({ orgId, from, to }) {
   return res.data;
 }
 
-/** The document as the operator edited it, drawn as the PDF by the server; this saves the file. */
-export async function downloadEditedEndOfShift({ orgId, doc }) {
+/** The document as the operator edited it, drawn as the PDF by the server: `{ blob, filename }`. */
+export async function makeEditedEndOfShift({ orgId, doc }) {
   if (!orgId) throw new Error("No organisation selected");
   const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/end-of-shift.pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(doc),
   });
-  saveFile(blob, filename ?? "End of shift report.pdf");
+  return { blob, filename: filename ?? "End of shift report.pdf" };
+}
+
+/** The same PDF, saved. */
+export async function downloadEditedEndOfShift({ orgId, doc }) {
+  const { blob, filename } = await makeEditedEndOfShift({ orgId, doc });
+  saveFile(blob, filename);
 }
