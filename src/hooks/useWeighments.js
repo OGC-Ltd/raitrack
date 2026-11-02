@@ -78,6 +78,7 @@ function merge(parts, days) {
         netKg: (was?.netKg ?? 0) + (c.netKg ?? 0),
         trucks: addKind(was?.trucks, c.trucks),
         tractors: addKind(was?.tractors, c.tractors),
+        fromCentres: addKind(was?.fromCentres, c.fromCentres),
       });
     }
   }

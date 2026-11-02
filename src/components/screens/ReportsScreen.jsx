@@ -857,6 +857,9 @@ function MovementsReport({ orgId }) {
   const [run, setRun] = useState(saved ? { status: 'done', reports: saved.reports } : { status: 'idle' });
   const [edits, setEdits] = useState(saved?.edits ?? []);   // per day: by vehicleId { location?, state?, removed? }
   const [day, setDay] = useState(saved?.day ?? 0);
+  // Find a unit by its plate (operator, 3 Nov 2026): narrows the table only;
+  // the PDF and JPEG keep every unit
+  const [plateSearch, setPlateSearch] = useState('');
   const [types, setTypes] = useState(saved?.types ?? null);
   const [pdf, setPdf] = useState({ busy: false, error: null });
   const [confirm, setConfirm] = useState(null);              // { words, go }: waits for the operator's yes
@@ -908,6 +911,15 @@ function MovementsReport({ orgId }) {
   const report = useMemo(() => (reports ? onlyTypes(reports[day] ?? reports[0], picked) : null), [reports, day, picked]);
   const dayEdits = useMemo(() => edits[day] ?? {}, [edits, day]);
   const kept = useMemo(() => (report ? applyEdits(report, dayEdits) : null), [report, dayEdits]);
+  // "kcb 101", "KCB101A" and "101a" all find KCB 101A; the grouping name ("CPO - Menengai 12") too
+  const needle = plateSearch.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const shownGroups = useMemo(() => {
+    if (!report) return [];
+    if (!needle) return report.groups;
+    const hit = (row) => [row.plate, row.grouping].some((t) => String(t ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(needle));
+    return report.groups.map((g) => ({ ...g, rows: g.rows.filter(hit) })).filter((g) => g.rows.length);
+  }, [report, needle]);
+  const shownCount = shownGroups.reduce((n, g) => n + g.rows.length, 0);
   const changed = reports
     ? reports.reduce((n, r, i) => n + r.groups.reduce((m, g) => m + g.rows.filter((x) => isEdited(x, edits[i]?.[x.vehicleId])).length, 0), 0)
     : 0;
@@ -1110,6 +1122,21 @@ function MovementsReport({ orgId }) {
               </>}
             />
             {preview && <PdfPreview state={preview} caption={previewCaption} edited={changed} onRetry={previewPdf} onClose={closePreview} />}
+            {report.groups.length > 0 && (
+              <div className="mvr-find">
+                <div className="sp4-search-wrap mvr-find__box">
+                  <i className="ti ti-search sp4-search-icon" aria-hidden="true" />
+                  <input className="sp4-search" type="search" value={plateSearch} placeholder="Find a unit by plate, e.g. KCB 101A"
+                         aria-label="Find a unit by its registration plate" onChange={(e) => setPlateSearch(e.target.value)} />
+                  {plateSearch && <button type="button" className="sp4-search-clear" aria-label="Clear the search" onClick={() => setPlateSearch('')}>✕</button>}
+                </div>
+                {needle && (
+                  <span className="rpt-sub" role="status">
+                    {shownCount ? `${shownCount} of ${report.groups.reduce((n, g) => n + g.rows.length, 0)} units shown. The PDF keeps them all.` : 'No unit matches that plate.'}
+                  </span>
+                )}
+              </div>
+            )}
             {!report.groups.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">
                 {fleetList && picked.length === 1 && !typeCounts[picked[0]]
@@ -1130,7 +1157,7 @@ function MovementsReport({ orgId }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {report.groups.map((g) => (
+                    {shownGroups.map((g) => (
                       <Fragment key={g.name}>
                         <tr className="rpt-group">
                           <th colSpan={6} scope="rowgroup">
