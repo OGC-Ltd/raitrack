@@ -10,7 +10,7 @@
 // Pure: no React, no network.
 
 import { unitKey, vehicleKeys } from './fleetGroups';
-import { dayStart } from './fleetReports';
+import { dayStart, byPlate } from './fleetReports';
 
 /** The Direction column's words, as the PDF prints them. */
 /**
@@ -211,8 +211,6 @@ export function defaultTypes(types) {
   return cpo.length ? cpo : types;
 }
 
-/** Rows within a group, as the server orders them: heading to the site, leaving it, moving, stopped, at it, no fix. */
-const STATE_RANK = { to: 0, from: 1, moving: 2, stopped: 3, at: 4, 'no-fix': 5 };
 export const NOT_ON_LIST = 'Not on the list';
 
 /**
@@ -239,9 +237,7 @@ export function byFleetList(report, groups) {
   }
   const ordered = [...buckets.entries()].filter(([, list]) => list.length).map(([name, list]) => ({
     name,
-    rows: [...list].sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state]
-      || (a.state === 'to' || a.state === 'from' ? (b.speedKmh ?? 0) - (a.speedKmh ?? 0) : (a.lastAt ?? 0) - (b.lastAt ?? 0))
-      || String(a.plate).localeCompare(String(b.plate))),
+    rows: [...list].sort((a, b) => byPlate(a.plate, b.plate)),
   }));
   return { ...report, groups: ordered, byList: true };
 }
