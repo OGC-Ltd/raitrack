@@ -26,7 +26,7 @@ import {
   presetRange, nightWindows, behaviourRows, overspeedRows, nightRows, utilisationRows, sections, RATED_SECTIONS,
   toLocalInput, fromLocalInput, whenWords, NIGHT, hourLabel, periodWords as periodText,
 } from '../../lib/fleetReports';
-import { REPORTS, REPORT_ORDER, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -41,6 +41,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { downloadEndOfShiftReport } from '../../api/endOfShiftReport';
 import { loadMovementReport, downloadEditedMovementReport } from '../../api/reports';
 import ReportIcon from '../shared/ReportIcon';
+import { reportKeysFor, useCurrentReport, chooseReport as pickReport } from '../../lib/reportNav';
 import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequest, isEdited, isMoving, isLoading, locationChanged } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -57,7 +58,6 @@ const SERVER_TABS = {
 };
 /** The movement report's windows, in hours. */
 const MOVEMENT_WINDOWS = [2, 4];
-const PREF = 'ft-reports-kind';
 
 const PRESETS = {
   today: 'Today',
@@ -66,13 +66,6 @@ const PRESETS = {
   week: 'Last 7 days',
 };
 const presetsFor = (key) => (key === 'night' ? ['lastNight', 'yesterday', 'week'] : ['today', 'yesterday', 'week']);
-
-function readPref() {
-  try { const k = localStorage.getItem(PREF); return REPORTS[k] || SERVER_TABS[k] ? k : null; } catch { return null; }
-}
-function savePref(k) {
-  try { localStorage.setItem(PREF, k); } catch { /* the choice just is not remembered */ }
-}
 
 const spanFor = (key) => {
   const id = (REPORTS[key] ?? REPORTS.behaviour).preset;
@@ -97,19 +90,41 @@ function WhenField({ label, value, onChange, min, max }) {
   );
 }
 
+/** The end-of-shift report's periods: today up to now (the default), or yesterday. */
+const SHIFT_PRESETS = ['today', 'yesterday'];
+/** The longest period the server makes it for (fleet-server END_OF_SHIFT_MAX_DAYS). */
+const SHIFT_MAX_DAYS = 7;
+
 /**
  * The end-of-shift report (moved here from the sidebar, operator 1 Nov 2026).
- * The server gathers the shift and draws the PDF, always today from midnight
- * up to now, so there is nothing to pick: one button.
+ * The server gathers the shift and draws the PDF. It opens on today from
+ * midnight with To at the current time, kept current while Today is picked;
+ * any other period can be picked, a week at most (operator, 2 Nov 2026).
  */
 function ShiftReport({ orgId }) {
+  const [span, setSpan] = useState(() => ({ id: 'today', ...presetRange('today') }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Today runs up to now: To follows the clock.
+  useEffect(() => {
+    if (span.id !== 'today') return undefined;
+    const tick = setInterval(() => setSpan({ id: 'today', ...presetRange('today') }), 30_000);
+    return () => clearInterval(tick);
+  }, [span.id]);
+  const now = Date.now();
+  const problem = !orgId ? 'Waiting for the organisation to load'
+    : !(span.to > span.from) ? 'The period ends before it starts'
+    : span.to > now + 60_000 ? 'The period cannot end in the future'
+    : span.to - span.from > SHIFT_MAX_DAYS * DAY ? `${SHIFT_MAX_DAYS} days at most for this report`
+    : null;
+  const pick = (next) => { setSpan(next); setError(null); };
   const run = async () => {
-    if (busy) return;
+    if (busy || problem) return;
+    // Today is made up to the moment the button is pressed.
+    const period = span.id === 'today' ? presetRange('today') : span;
     setBusy(true); setError(null);
     try {
-      await downloadEndOfShiftReport({ orgId });
+      await downloadEndOfShiftReport({ orgId, from: period.from, to: period.to });
     } catch (err) {
       setError(`The report could not be made: ${err?.message ?? err}`);
     } finally {
@@ -119,13 +134,26 @@ function ShiftReport({ orgId }) {
   return (
     <>
       <div className="sp4-header rpt-header">
-        <p className="rpt-blurb">The shift at a glance for the whole fleet: today from midnight up to now. The server makes it as a PDF on the letterhead.</p>
+        <p className="rpt-blurb">The shift at a glance for the whole fleet, for the period picked: today from midnight up to now unless you change it. The server makes it as a PDF on the letterhead.</p>
       </div>
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <span className="rpt-sub">Period: today, 00:00hrs up to now</span>
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={run} disabled={busy || !orgId} aria-busy={busy}>
+        <div className="sp4-filter-group" role="group" aria-label="Period">
+          {SHIFT_PRESETS.map((id) => (
+            <button key={id} type="button" aria-pressed={span.id === id}
+                    className={`sp4-filter-chip${span.id === id ? ' sp4-filter-chip--on' : ''}`}
+                    onClick={() => pick({ id, ...presetRange(id) })}>{PRESETS[id]}</button>
+          ))}
+        </div>
+        <div className="frp-range">
+          <WhenField label="From" value={span.from} max={span.to} onChange={(t) => pick({ ...span, id: null, from: t })} />
+          <span className="frp-range__dash" aria-hidden="true">–</span>
+          <WhenField label="To" value={span.to} min={span.from} max={now} onChange={(t) => pick({ ...span, id: null, to: t })} />
+        </div>
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={run}
+                disabled={busy || Boolean(problem)} aria-busy={busy} title={problem ?? 'Make the report'}>
           {busy ? 'Making the report…' : 'Download PDF'}
         </button>
+        {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
         {error && <span className="rpt-problem" role="alert">{error}</span>}
       </div>
       <div className="sp4-body rpt-body">
@@ -383,13 +411,12 @@ export default function ReportsScreen() {
   const rated = String(orgCode ?? '').toUpperCase() === 'KASULU';
 
   const { can } = usePermissions();
-  // The server needs both grants to make the end-of-shift report, and
-  // telemetry:read for the movement report.
-  const canShift = can('analytics:read') && can('weighbridge:read');
-  const canMovements = can('telemetry:read');
-  const tabs = [...(canShift ? [SHIFT] : []), ...(canMovements ? [MOVEMENTS] : []), ...REPORT_ORDER];
-  const [chosen, setKey] = useState(() => readPref() ?? 'behaviour');
-  const key = tabs.includes(chosen) ? chosen : 'behaviour';
+  // Which tabs the grants allow (lib/reportNav); the sidebar's Reports tree
+  // lists the same and picks among them too.
+  const tabs = reportKeysFor(can);
+  // End of shift first, where the grants allow it.
+  const chosen = useCurrentReport() ?? tabs[0];
+  const key = tabs.includes(chosen) ? chosen : tabs[0];
   const isServer = Boolean(SERVER_TABS[key]);
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key));
@@ -431,10 +458,14 @@ export default function ReportsScreen() {
   }, [orgId]);
 
   const reset = () => { runId.current += 1; setRun({ status: 'idle' }); };
-  const chooseReport = (k) => {
-    if (k === key) return;
-    setKey(k); savePref(k); setSpan(spanFor(k)); reset();
-  };
+  // Picked here or in the sidebar: the new report starts on its own period.
+  const showing = useRef(key);
+  useEffect(() => {
+    if (showing.current === key) return;
+    showing.current = key;
+    setSpan(spanFor(key)); reset();
+  }, [key]);
+  const chooseReport = (k) => { if (k !== key) pickReport(k); };
   const choosePreset = (id) => { setSpan({ id, ...presetRange(id) }); reset(); };
   const setFrom = (t) => { setSpan((s) => ({ ...s, id: null, from: t })); reset(); };
   const setTo = (t) => { setSpan((s) => ({ ...s, id: null, to: t })); reset(); };
