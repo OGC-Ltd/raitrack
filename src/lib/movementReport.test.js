@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
+import { applyEdits, pdfRequest, pdfRequests, splitsByType, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -136,5 +136,26 @@ describe('the windows and vehicle types of the Movements report', () => {
     const cpo = onlyTypes(r, ['CPO - Menengai']);
     expect(cpo.groups.map((g) => g.name)).toEqual(['CPO - Menengai']);
     expect(cpo.counts.total).toBe(3);
+  });
+});
+
+describe('the PDF outside Menengai: a report a vehicle type', () => {
+  const row = (id) => ({ vehicleId: id, plate: id, grouping: id, lastAt: 1, lat: -1, lng: 36, location: 'Road', speedKmh: 0, state: 'stopped', kmToMorl: null, closerKm: null, stale: false });
+  const day = (orgCode) => ({
+    orgCode, hours: 1, from: 0, to: 3_600_000, morl: null,
+    groups: [{ name: 'Trucks', rows: [row('T1'), row('T2')] }, { name: 'Tractors', rows: [row('R1')] }, { name: 'Other', rows: [row('O1')] }],
+  });
+
+  it('splits by type for every organisation but Menengai', () => {
+    expect(splitsByType(day('SUKARI'))).toBe(true);
+    expect(splitsByType(day('MENENGAI'))).toBe(false);
+    expect(pdfRequests([day('MENENGAI')], [{}], ['Trucks', 'Tractors', 'Other'])).toHaveLength(1);
+    const each = pdfRequests([day('SUKARI')], [{}], ['Trucks', 'Tractors', 'Other']);
+    expect(each.map((q) => q.groups.map((g) => g.name))).toEqual([['Trucks'], ['Tractors'], ['Other']]);
+  });
+
+  it('takes only the types picked, a type a day, and none emptied by leaving its units out', () => {
+    const each = pdfRequests([day('SUKARI'), day('SUKARI')], [{ R1: { removed: true } }, {}], ['Trucks', 'Tractors']);
+    expect(each.map((q) => q.groups[0].name)).toEqual(['Trucks', 'Trucks', 'Tractors']);
   });
 });
