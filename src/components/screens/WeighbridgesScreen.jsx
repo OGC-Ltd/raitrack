@@ -35,7 +35,7 @@
 // how the bridges themselves count, and it is the only count under which "how
 // many did this lorry do" has an answer.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useWeighments, MAX_DAYS } from "../../hooks/useWeighments";
 import { useDispatchedUnits } from "../../hooks/useDispatchedUnits";
@@ -374,6 +374,18 @@ export default function WeighbridgesScreen() {
   useEffect(() => { setPage(0); }, [from, to, centre, search]);
 
   const openRow = useCallback((row) => setSelected(row), []);
+  // The heaviest or lightest ticket, from the strip: its side panel opens
+  // whichever bridge it was on. The panel lives in the Tickets view, so from
+  // Analytics the view changes first, then the panel opens.
+  const pendingTicket = useRef(null);
+  const showTicket = useCallback((row) => {
+    if (!row) return;
+    if (view === "analytics") { pendingTicket.current = row; setView("tickets"); }
+    else setSelected(row);
+  }, [view]);
+  useEffect(() => {
+    if (view !== "analytics" && pendingTicket.current) { setSelected(pendingTicket.current); pendingTicket.current = null; }
+  }, [view]);
   const closeRow = useCallback(() => setSelected(null), []);
   const selectedRow = useMemo(
     () => (selected ? rows.find(r => r.id === selected.id) ?? selected : null),
@@ -467,29 +479,36 @@ export default function WeighbridgesScreen() {
             <span className="sp4-kpi-n">{stats ? stats.uniqueVehicles : "·"}</span>
             <span className="sp4-kpi-l">Unique vehicles</span>
           </div> */}
-          <div
-            className="sp4-kpi sp4-kpi--stat"
+          {/* A click opens the ticket's side panel (operator, 3 Nov 2026), as Lightest load does */}
+          <button
+            type="button"
+            className="sp4-kpi sp4-kpi--stat wb-kpi-btn"
+            disabled={!stats?.heaviest?.row}
+            onClick={() => showTicket(stats.heaviest.row)}
             title={
               stats?.heaviest
-                ? `Token ${stats.heaviest.token} - ${stats.heaviest.vehicleNo} at ${stats.heaviest.centerName}. Total weighed in today: ${tonnes(stats.totalNetKg)}.`
+                ? `Token ${stats.heaviest.token} - ${stats.heaviest.vehicleNo} at ${stats.heaviest.centerName}. Total weighed in today: ${tonnes(stats.totalNetKg)}. Click to open the ticket.`
                 : "The largest net load recorded on any bridge on this day."
             }
           >
             <span className="sp4-kpi-n">{stats ? tonnes(stats.heaviestNetKg) : "·"}</span>
             <span className="sp4-kpi-l">Heaviest load</span>
-          </div>
+          </button>
           {/* The smallest load beside it (operator, 2 Nov 2026) */}
-          <div
-            className="sp4-kpi sp4-kpi--stat"
+          <button
+            type="button"
+            className="sp4-kpi sp4-kpi--stat wb-kpi-btn"
+            disabled={!stats?.lightest?.row}
+            onClick={() => showTicket(stats.lightest.row)}
             title={
               stats?.lightest
-                ? `Token ${stats.lightest.token} - ${stats.lightest.vehicleNo} at ${stats.lightest.centerName}.`
+                ? `Token ${stats.lightest.token} - ${stats.lightest.vehicleNo} at ${stats.lightest.centerName}. Click to open the ticket.`
                 : "The smallest net load recorded on any bridge on this day."
             }
           >
             <span className="sp4-kpi-n">{stats ? (stats.lightestNetKg != null ? tonnes(stats.lightestNetKg) : "-") : "·"}</span>
             <span className="sp4-kpi-l">Lightest load</span>
-          </div>
+          </button>
           {/* Trucks bring the cane in, tractors go out (operator, 2 Nov 2026):
               each kind's tonnage over every bridge. A tractor is a KT… plate. */}
           <div className="sp4-kpi sp4-kpi--stat"

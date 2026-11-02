@@ -763,3 +763,12 @@
 .wb-split__kind { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .wb-split__kind .ti { align-self: center; font-size: 15px; }
 .wb-split__kind b { color: var(--sp4-text-1); font-weight: 700; }
+
+/* Heaviest and Lightest load open their ticket (operator, 3 Nov 2026) */
+.wb-kpi-btn { border: 0; font: inherit; color: inherit; cursor: pointer; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1); }
+.wb-kpi-btn:hover:not(:disabled) { background: var(--sp4-surface-2, rgba(127,127,127,0.12)); }
+.wb-kpi-btn:hover:not(:disabled) .sp4-kpi-l { text-decoration: underline; text-underline-offset: 2px; }
+.wb-kpi-btn:focus-visible { outline: 2px solid var(--sp4-accent, #3b82f6); outline-offset: -2px; }
+.wb-kpi-btn:active:not(:disabled) { transform: translateY(1px); }
+.wb-kpi-btn:disabled { cursor: default; }
+@media (prefers-reduced-motion: reduce) { .wb-kpi-btn { transition: none; } .wb-kpi-btn:active:not(:disabled) { transform: none; } }
