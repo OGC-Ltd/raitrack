@@ -34,8 +34,30 @@ export function vehicleKeys(v) {
     // "RAIMDF - FL 01" / "MUFINDI: EX 11" → the part after the last separator.
     const tail = /(?:\s-\s|:|-)\s*([^:-]+)$/.exec(String(label ?? ''));
     if (tail) { const t = keyOf(tail[1]); if (t.length >= 3) keys.add(t); }
+    const short = machineKey(label);
+    if (short) keys.add(short);
   }
   return keys;
+}
+
+/**
+ * A machine the platform names in full, under the short name the client's
+ * list uses: "WLOADER 01" → WL 01, "FORKLIFT 04" → FL 04, "EXCAVATOR001" →
+ * EX 01, "JCB 1 H00052413" → JCB 01 (Menengai's MORL FLEET sheet, 2 Nov).
+ */
+const MACHINE_SHORT = [
+  [/\b(?:W(?:HEEL)?\s*LOADER)\s*0*(\d{1,2})\b/i, 'WL'],
+  [/\bFORK\s*LIFT\s*0*(\d{1,2})\b/i, 'FL'],
+  [/\bEXCAVATOR\s*0*(\d{1,2})\b/i, 'EX'],
+  [/\bJCB\s*0*(\d{1,2})\b/i, 'JCB'],
+];
+export function machineKey(label) {
+  const s = String(label ?? '');
+  for (const [re, short] of MACHINE_SHORT) {
+    const m = re.exec(s);
+    if (m) return keyOf(`${short} ${m[1].padStart(2, '0')}`);
+  }
+  return null;
 }
 
 /** The unit's display plate: the registration where it has one. */

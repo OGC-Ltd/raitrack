@@ -50,7 +50,7 @@ import ReportIcon from '../shared/ReportIcon';
 import PdfPages from '../shared/PdfPages';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport } from '../../lib/reportNav';
-import { DIRECTION, STATES, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, STATES, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -703,7 +703,9 @@ function MovementsReport({ orgId }) {
     try {
       const reports = [];
       for (const w of windows) {
-        reports.push(await loadMovementReport({ orgId, from: w.from, to: w.to }));
+        const r = await loadMovementReport({ orgId, from: w.from, to: w.to });
+        // Menengai by its fleet list (Tankers, Finished Goods, …); the others come by vehicle type
+        reports.push(splitsByType(r) ? r : byFleetList(r, groupsFor(r.orgCode)));
         if (id !== runId.current) return;
         setRun({ status: 'loading', done: reports.length, of: windows.length });
       }
@@ -778,13 +780,16 @@ function MovementsReport({ orgId }) {
     ? periodText(reports[0].from, reports[0].to)
     : `${reports.length} days, ${dayWords(reports[0].from)} – ${dayWords(reports[reports.length - 1].from)}`;
 
+  // The site the directions read against: MORL for Menengai, the organisation's own elsewhere
+  const site = report?.site ?? 'MORL';
+  const words = directionWords(site);
   const n = kept?.counts;
   const silentCount = n ? n.stale + n['no-fix'] : 0;
   const kpis = [
     { label: 'Vehicles', value: n?.total },
-    { label: 'To MORL', value: n?.to, tone: n?.to ? 'live' : undefined },
-    { label: 'From MORL', value: n?.from },
-    { label: 'At MORL', value: n?.at },
+    { label: `To ${site}`, value: n?.to, tone: n?.to ? 'live' : undefined },
+    { label: `From ${site}`, value: n?.from },
+    { label: `At ${site}`, value: n?.at },
     { label: 'Not reporting', value: silentCount, tone: silentCount ? 'speed' : undefined },
   ];
 
@@ -888,7 +893,7 @@ function MovementsReport({ orgId }) {
             <TableToolbar
               summary={<>
                 <strong>{kept.counts.total.toLocaleString('en-GB')}</strong> vehicle{kept.counts.total === 1 ? '' : 's'}
-                <span className="rpt-sub"> · {periodText(report.from, report.to)} · {report.morl ? `${report.morl} geofence` : 'no MORL geofence, so no direction'}</span>
+                <span className="rpt-sub"> · {periodText(report.from, report.to)} · {report.morl ? `${report.morl} geofence` : `no ${site} geofence, so no direction`}</span>
                 {changed > 0 && <span className="rpt-edited"> · {changed} edited</span>}
               </>}
               onPdf={pdf.busy ? undefined : downloadPdf}
@@ -950,7 +955,7 @@ function MovementsReport({ orgId }) {
                                 <select className={`rpt-select mvr-edit${state !== row.state ? ' mvr-edit--changed' : ''}`}
                                         value={state} disabled={out} aria-label={`Direction of ${row.plate}`}
                                         onChange={(ev) => edit(row.vehicleId, { state: ev.target.value })}>
-                                  {STATES.map((s) => <option key={s} value={s}>{DIRECTION[s]}</option>)}
+                                  {STATES.map((s) => <option key={s} value={s}>{words[s]}</option>)}
                                 </select>
                               </td>
                               <td className="mvr-keep">

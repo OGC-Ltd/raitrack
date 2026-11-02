@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, pdfRequests, splitsByType, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
+import { applyEdits, pdfRequest, pdfRequests, splitsByType, byFleetList, NOT_ON_LIST, directionWords, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -56,7 +56,7 @@ describe('editing the Movements report before the PDF', () => {
   });
 
   it('sends the server only what it draws from, and how much was edited', () => {
-    expect(Object.keys(pdfRequest(report, {})).sort()).toEqual(['edits', 'from', 'groups', 'hours', 'morl', 'to']);
+    expect(Object.keys(pdfRequest(report, {})).sort()).toEqual(['edits', 'from', 'groups', 'hours', 'morl', 'site', 'to']);
     expect(pdfRequest(report, {}).edits).toEqual({ changed: 0, removed: 0 });
   });
 
@@ -157,5 +157,33 @@ describe('the PDF outside Menengai: a report a vehicle type', () => {
   it('takes only the types picked, a type a day, and none emptied by leaving its units out', () => {
     const each = pdfRequests([day('SUKARI'), day('SUKARI')], [{ R1: { removed: true } }, {}], ['Trucks', 'Tractors']);
     expect(each.map((q) => q.groups[0].name)).toEqual(['Trucks', 'Trucks', 'Tractors']);
+  });
+});
+
+describe('Menengai by its fleet list', () => {
+  const r = (plate, state = 'stopped', name = `CPO - Menengai - ${plate}`) => ({ vehicleId: plate.replace(/\s/g, ''), plate, grouping: name, lastAt: 1, lat: -1, lng: 36, location: 'x', speedKmh: 0, state, kmToMorl: null, closerKm: null, stale: false });
+  const list = [
+    { name: 'Tankers', units: [['KCK 345G', 'Tanker', 1], ['KCH 012A', 'Tanker', 1]] },
+    { name: 'Finished Goods', units: [['KBT 114R', 'FG', 1]] },
+    { name: 'RAI MDF Equipment', units: [['FL 01', 'Forklift', 0]] },
+  ];
+  const report = { orgCode: 'MENENGAI', site: 'MORL', groups: [
+    { name: 'CPO - Menengai', rows: [r('KCK 345G', 'at'), r('KCH 012A', 'to')] },
+    { name: 'FG - Menengai', rows: [r('KBT 114R'), r('KXX 999Z')] },
+    { name: 'RAIMDF', rows: [r('RAIMDF - FL 01', 'stopped', 'RAIMDF - FL 01')] },
+  ] };
+
+  it('groups the units as the list does, in its order, the rest last', () => {
+    const out = byFleetList(report, list);
+    expect(out.groups.map((g) => g.name)).toEqual(['Tankers', 'Finished Goods', 'RAI MDF Equipment', NOT_ON_LIST]);
+    expect(out.groups[0].rows.map((x) => x.plate)).toEqual(['KCH 012A', 'KCK 345G']);   // heading to MORL first
+    expect(out.groups[3].rows.map((x) => x.plate)).toEqual(['KXX 999Z']);
+    expect(vehicleTypes([out])).toEqual(['Tankers', 'Finished Goods', 'RAI MDF Equipment', NOT_ON_LIST]);
+    expect(defaultTypes(vehicleTypes([out]))).toEqual(['Tankers']);
+  });
+
+  it('reads directions against the site of the report', () => {
+    expect(directionWords('Sukari')).toMatchObject({ to: 'To Sukari', at: 'At Sukari' });
+    expect(pdfRequest({ ...report, groups: [] }, {}).site).toBe('MORL');
   });
 });
