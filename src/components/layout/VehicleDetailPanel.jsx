@@ -20,6 +20,7 @@ import { createReport, addSectionTitle, addSummaryCards, addTable, downloadRepor
 import { usePlaceName } from '../../hooks/usePlaceName';
 import { fleetDayKey } from '../../hooks/useFuelEvents';
 import { vehicleReadings } from '../../lib/vehicleReadings';
+import { menengaiGroup, fleetTypeLabel } from '../../lib/vehicleMap';
 import { burnAgainst, burnRate, cachedDay, dayBounds, loadDay, overWords, summariseDay, movingSpans } from '../../lib/vehicleDay';
 import { useFuelEpisodes, useVehicleFuelEventsRange } from '../../hooks/useVehicleFuelEvents';
 import { clampRange, daysBetween, joinDays, rangeWords } from '../../lib/dayRange';
@@ -796,6 +797,12 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           <span className={`vh-status vh-status--${tag.tone}`}>
             <span className="vh-status-dot" aria-hidden="true" />{tag.text}
           </span>
+          {/* Menengai's fleet-list group, highlighted (operator, 2 Nov 2026) */}
+          {menengaiGroup(vehicle) && (
+            <span className={`vh-group${menengaiGroup(vehicle) === 'mg:' ? ' vh-group--none' : ''}`} title="Group on the fleet list">
+              <i className="ti ti-users-group" aria-hidden="true" />{fleetTypeLabel(menengaiGroup(vehicle))}
+            </span>
+          )}
           <span className="vh-fact" title="Driver">
             <i className="ti ti-user" aria-hidden="true" />{vehicle.driver ?? 'Unassigned'}
           </span>

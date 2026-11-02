@@ -19,6 +19,26 @@
 }
 .app--light .vt-type-badge { color: #64748b; }
 
+/* Menengai's fleet-list group (Tankers, Van Sales, …): a filled chip, so the
+   group a unit belongs to reads at a glance (operator, 2 Nov 2026). */
+.vt-group-badge {
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.18);
+  border: 1px solid rgba(37, 99, 235, 0.35);
+}
+.app--light .vt-group-badge { color: #1d4ed8; background: rgba(37, 99, 235, 0.10); }
+/* A Menengai unit the list does not name: "Not on the list", in amber */
+.vt-group-badge--none { color: #fbbf24; background: rgba(217, 119, 6, 0.14); border-color: rgba(217, 119, 6, 0.35); }
+.app--light .vt-group-badge--none { color: #b45309; background: rgba(217, 119, 6, 0.10); }
+
 /* ── Header right: connection above state ────────────────────────────────────
    Two chips, because they answer two independent questions. Connection is
    ALWAYS rendered; the state badge only when there is an alert or activity to

@@ -7,12 +7,19 @@
 import { useSyncExternalStore } from 'react';
 import { REPORTS, REPORT_ORDER } from './reportTables';
 
-/** Every report, in the page's tab order. The first two are made by the server. */
+/**
+ * Every report, A–Z by name, in the sidebar and on the page (operator,
+ * 2 Nov 2026: "arranged in ascending order"). Shift and Movements are made by
+ * the server.
+ */
 export const REPORT_NODES = [
   { key: 'shift', label: 'Shift' },
   { key: 'movements', label: 'Movements' },
   ...REPORT_ORDER.map((k) => ({ key: k, label: REPORTS[k].label })),
-];
+].sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }));
+
+/** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
+export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));
 
 /**
