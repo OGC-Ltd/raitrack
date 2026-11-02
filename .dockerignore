@@ -1,0 +1,17 @@
+# Vite reads .env* at build time: keep every one of them out of the context,
+# so only the BuildKit secrets can supply keys.
+.env
+.env.*
+node_modules
+build
+build.*
+dist
+coverage
+.git
+.github
+.claude
+.hallmark
+*.patch
+*.pem
+*.log
+nul*
