@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { reportHtml, reportNumber } from './reportLetterhead';
-import { REPORTS } from './reportTables';
-import { sections, overspeedRows } from './fleetReports';
+import { REPORTS, overspeedEventTable } from './reportTables';
+import { sections, overspeedRows, overspeedEvents } from './fleetReports';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 const unit = (plate, group) => ({ key: plate, plate, type: 'Hino', group, vehicles: [{}] });
@@ -39,6 +39,28 @@ describe('report on the letterhead', () => {
     expect(rows).toHaveLength(1);
     expect(out.filename).toBe('Overspeeding Report Menengai <Oil> KDE 132E 2026-11-01.pdf');
     expect(out.html).toMatch(/Unit<\/[^>]+>\s*<[^>]+>KDE 132E/);
+  });
+
+  it('lists each overspeed of the one unit, oldest first, past the 5 s floor', () => {
+    const ep = (start, sec, peak, extra = {}) => ({ startedAt: `${start}+03:00`, endedAt: new Date(at(start) + sec * 1000).toISOString(),
+      durationSec: sec, peakKmh: peak, avgKmh: peak - 2, limitKmh: 80, distanceM: sec * 23, peakLat: -0.29412, peakLng: 36.07215, ...extra });
+    const list = [ep('2026-10-30T14:56:00', 60, 83), ep('2026-10-30T09:10:05', 228, 91, { driverName: 'Osero' }), ep('2026-10-30T11:00:00', 4, 99)];
+    const events = overspeedEvents([list]);
+    expect(events.map((e) => e.peakKmh)).toEqual([91, 83]);   // 4 s is under the floor; oldest first
+
+    const t = overspeedEventTable(events);
+    expect(t.head).toContain('Driver');
+    expect(t.rows[0]).toEqual(['1', '30 Oct 09:10:05', '09:13:53', '3 min 48 s', '91 / 80', '89', '5.24', 'Osero', '-0.29412, 36.07215']);
+    expect(t.rows[1][3]).toBe('1 min 00 s');
+    expect(t.rows[1][7]).toBe('-');
+
+    const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, list]]));
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
+                   ctx: { from: at('2026-10-30T00:00:00'), to: at('2026-10-31T00:00:00'), unit: 'KDE 132E', events }, missing: [], units: 1, failed: 0 };
+    const html = reportHtml(REPORTS.overspeed, done, opts).html;
+    expect(html).toContain('3. Each overspeed');
+    expect(html).toContain('30 Oct 09:10:05');
+    expect(html).toContain('3 min 48 s');
   });
 
   it('keeps a short period on a portrait page', () => {

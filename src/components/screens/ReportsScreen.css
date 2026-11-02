@@ -311,3 +311,7 @@ select.mvr-edit { min-width: 110px; }
 .mvr-type--one .mvr-type__tick { flex: none; width: 16px; font-size: 15px; color: transparent; }
 .mvr-type--one.mvr-type--on .mvr-type__tick { color: var(--vdp-navy, #0f2542); }
 .mvr-type--one.mvr-type--on .mvr-type__name { font-weight: 600; }
+
+/* One unit's overspeeds, each on its own row (Overspeeding made for one unit) */
+.rpt-events { margin-top: 20px; }
+.rpt-events__title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
