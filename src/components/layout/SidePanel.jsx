@@ -16,6 +16,8 @@ import { versionLabel, buildDetail } from '../../lib/version';
 import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
 import { useFollowUpCount } from '../../hooks/useFollowUpCount';
+import ReportIcon from '../shared/ReportIcon';
+import { REPORT_NODES, reportKeysFor, useCurrentReport, chooseReport } from '../../lib/reportNav';
 import './SidePanel.css';
 
 export const NAV_ITEMS = [
@@ -228,6 +230,14 @@ export default function SidePanel() {
   const { orgId } = useFleetLiveShared();
   // The end-of-shift report is a tab on the Reports page (operator, 2026-11-01).
   const navRows = mainNavItems;
+  // Reports is a tree: a node per report the grants allow, each opening the
+  // page on that report (operator, 2026-11-02). Open while on the page.
+  const reportKeys = reportKeysFor(can);
+  const reportNodes = REPORT_NODES.filter((n) => reportKeys.includes(n.key));
+  const current = useCurrentReport();
+  const shownReport = reportKeys.includes(current) ? current : reportKeys[0];
+  const [reportsOpen, setReportsOpen] = useState(desktopActiveTab === 'reports');
+  useEffect(() => { if (desktopActiveTab === 'reports') setReportsOpen(true); }, [desktopActiveTab]);
   // Open alerts across every organisation held (the Alerts page's default week).
   const alertSummary = useAlertSummary(can(NAV_ITEMS.find(n => n.key === 'alerts')?.permission));
   const openAlerts = alertSummary?.open ?? 0;
@@ -387,6 +397,49 @@ export default function SidePanel() {
             <nav className="sp-nav-box" data-tour="nav">
               {navRows.map(item => {
                 const isActive = desktopActiveTab === item.key;
+                if (item.key === 'reports') {
+                  return (
+                    <div key={item.key} className="sp-nav-group">
+                      <button
+                        type="button"
+                        className={`sp-nav-item${isActive ? ' sp-nav-item--active' : ''}`}
+                        onClick={() => { if (isActive) setReportsOpen((o) => !o); else { handleNav('reports'); setReportsOpen(true); } }}
+                        aria-expanded={reportsOpen}
+                        aria-controls="sp-reports"
+                      >
+                        {isActive && !reportsOpen && <span className="sp-nav-bar" />}
+                        <i className={`ti ti-${item.icon} sp-nav-icon`} aria-hidden="true" />
+                        <span className="sp-nav-label">{item.label}</span>
+                        {pendingCases > 0 && (
+                          <span className="sp-nav-count" title={`${pendingCases} driver behaviour case${pendingCases === 1 ? '' : 's'} waiting for follow-up`}>
+                            {badgeText(pendingCases)}
+                          </span>
+                        )}
+                        <i className={`ti ti-chevron-down sp-nav-chev${reportsOpen ? ' sp-nav-chev--open' : ''}`} aria-hidden="true" />
+                      </button>
+                      {reportsOpen && (
+                        <div id="sp-reports" className="sp-nav-sub" role="group" aria-label="Reports">
+                          {reportNodes.map((n) => {
+                            const on = isActive && shownReport === n.key;
+                            return (
+                              <button
+                                key={n.key}
+                                type="button"
+                                className={`sp-nav-item sp-nav-sub-item${on ? ' sp-nav-item--active' : ''}`}
+                                onClick={() => { chooseReport(n.key); handleNav('reports'); }}
+                                aria-current={on ? 'page' : undefined}
+                              >
+                                {on && <span className="sp-nav-bar" />}
+                                <span className="sp-nav-icon"><ReportIcon name={n.key} /></span>
+                                <span className="sp-nav-label">{n.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
                 return (
                   <button
                     key={item.key}

@@ -366,6 +366,20 @@
   flex-shrink: 0;
 }
 .sp-nav-item--active .sp-nav-icon { color: #2563eb; }
+/* Reports: a tree, a node per report under it (operator, 2026-11-02). */
+.sp-nav-group { border-bottom: 1px solid #f1f5f9; }
+.sp-nav-group:last-child { border-bottom: none; }
+.sp-nav-group .sp-nav-item { border-bottom: none; }
+.sp-nav-chev { margin-left: auto; font-size: 14px; color: #94a3b8; transition: transform .15s ease; }
+.sp-nav-count + .sp-nav-chev { margin-left: 6px; }
+.sp-nav-chev--open { transform: rotate(180deg); }
+.sp-nav-sub { display: flex; flex-direction: column; background: #f8fafc; border-top: 1px solid #f1f5f9; padding: 2px 0; }
+.sp-nav-sub-item { padding-left: 28px; }
+.sp-nav-sub-item .sp-nav-label { white-space: nowrap; }
+.sp-nav-sub-item:hover { background: #f1f5f9; }
+.sp-nav-sub-item.sp-nav-item--active { background: #eff6ff; }
+.sp-nav-sub-item .sp-nav-icon { display: inline-flex; justify-content: center; font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .sp-nav-chev { transition: none; } }
 
 .sp-nav-label {
   font-size: 12px;
