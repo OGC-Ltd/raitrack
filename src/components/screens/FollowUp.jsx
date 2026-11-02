@@ -132,7 +132,7 @@ export function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, n
           </h3>
           <p className="oi-panel__sub">
             One case per vehicle per day with a phone, seatbelt or covered-camera incident, or {`5`} or more harsh events.
-            Record what was done; a case open for more than 24 hours is overdue. Kept in this browser until the database is ready.
+            Record what was done; a case open for more than 24 hours is overdue.
           </p>
         </div>
         <div className="oi-panel__tools">
@@ -147,7 +147,7 @@ export function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, n
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={doImport} />
         </div>
       </header>
-      {saveFailed && <p className="oi-warn" role="alert">This browser is not keeping the follow-up (private window or storage full). Export it before closing.</p>}
+      {saveFailed && <p className="oi-warn" role="alert">{saveFailed}</p>}
       {note && <p className="oi-note" role="status">{note}</p>}
 
       {list.length === 0 ? (

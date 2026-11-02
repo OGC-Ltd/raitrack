@@ -203,7 +203,7 @@ export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onR
         <div>
           <h3 className="oi-panel__title">Logged by operators <span className="oi-panel__n">{entries.length}</span></h3>
           <p className="oi-panel__sub">
-            Incidents seen on the live cameras. Kept in this browser until the database is ready: use Export to pass them to another computer.
+            Incidents seen on the live cameras.
           </p>
         </div>
         <div className="oi-panel__tools">
@@ -213,7 +213,7 @@ export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onR
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={doImport} />
         </div>
       </header>
-      {saveFailed && <p className="oi-warn" role="alert">This browser is not keeping the entries (private window or storage full). Export them before closing.</p>}
+      {saveFailed && <p className="oi-warn" role="alert">{saveFailed}</p>}
       {note && <p className="oi-note" role="status">{note}</p>}
 
       {entries.length === 0 ? (

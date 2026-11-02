@@ -34,9 +34,11 @@ import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import { IncidentDialog, LoggedIncidents } from './OperatorIncidents';
-import { loadEntries, saveEntries, upsert, remove } from '../../lib/operatorLog';
+import { upsert, remove } from '../../lib/operatorLog';
+import * as conductApi from '../../api/driverConduct';
+import { moveBrowserFollowUp } from '../../lib/conductMove';
 import { ActionDialog, FollowUpPanel } from './FollowUp';
-import { casesFromRun, mergeCases, recordAction, periodCases, loadCases, saveCases } from '../../lib/followUp';
+import { casesFromRun, periodCases } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift } from '../../api/endOfShiftReport';
@@ -994,26 +996,48 @@ export default function ReportsScreen() {
   // Incidents operators logged by hand (lib/operatorLog), kept in this browser.
   const me = useAuth().user;
   const by = me?.name || me?.email || '';
-  const [entries, setEntries] = useState(() => loadEntries(orgId));
-  const [saveFailed, setSaveFailed] = useState(false);
+  // The follow-up cases and the incidents operators logged, on the server
+  // (api/driverConduct) so every machine sees the same; what this browser
+  // kept before is moved there first (lib/conductMove). Read again when the
+  // window comes back into view and every minute, for other machines' work.
+  const [entries, setEntries] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [storeError, setStoreError] = useState(null);
   const [dialog, setDialog] = useState(null);   // null | { entry? }
-  useEffect(() => { setEntries(loadEntries(orgId)); }, [orgId]);
-  const keep = (list) => { setEntries(list); setSaveFailed(!saveEntries(orgId, list)); };
-
-  // Follow-up cases (lib/followUp), kept in this browser like the log.
-  const [cases, setCases] = useState(() => loadCases(orgId));
-  const [casesFailed, setCasesFailed] = useState(false);
   const [acting, setActing] = useState(null);   // the case id in the action form
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { setCases(loadCases(orgId)); }, [orgId]);
+  const failed = (what) => (err) => setStoreError(`${what}: ${err?.message ?? err}`);
   useEffect(() => {
-    // Another tab, or the import, changed them; and "open for" moves on.
-    const reload = () => setCases(loadCases(orgId));
-    const tick = setInterval(() => setNow(Date.now()), 60_000);
-    window.addEventListener('storage', reload);
-    return () => { clearInterval(tick); window.removeEventListener('storage', reload); };
-  }, [orgId]);
-  const keepCases = (list) => { setCases(list); setCasesFailed(!saveCases(orgId, list)); };
+    if (!orgId) { setEntries([]); setCases([]); return undefined; }
+    let live = true;
+    const read = () => Promise.all([conductApi.listCases(orgId), conductApi.listIncidents(orgId)])
+      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setStoreError(null); } })
+      .catch((err) => { if (live) failed('The follow-up could not be read')(err); });
+    moveBrowserFollowUp(orgId).catch((err) => { if (live) failed('What this browser kept could not be moved to the server; it is kept here and tried again next time')(err); })
+      .finally(read);
+    const onShow = () => { if (document.visibilityState === 'visible') read(); };
+    const tick = setInterval(() => { setNow(Date.now()); read(); }, 60_000);
+    document.addEventListener('visibilitychange', onShow);
+    return () => { live = false; clearInterval(tick); document.removeEventListener('visibilitychange', onShow); };
+  }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveEntry = (e) => {
+    const entry = upsert([], e)[0];   // checked, with an id
+    if (!entry) return;
+    conductApi.saveIncident(orgId, entry).then((saved) => setEntries((l) => upsert(l, saved))).catch(failed('The incident could not be saved'));
+  };
+  const dropEntry = (id) => {
+    conductApi.deleteIncident(orgId, id).then(() => setEntries((l) => remove(l, id))).catch(failed('The incident could not be deleted'));
+  };
+  const importEntries = (list) => {
+    conductApi.importIncidents(orgId, list).then((r) => setEntries(r.entries)).catch(failed('The incidents could not be imported'));
+  };
+  const importCaseList = (list) => {
+    conductApi.importCases(orgId, list).then((r) => setCases(r.cases)).catch(failed('The follow-up could not be imported'));
+  };
+  const saveAction = (id, a) => {
+    conductApi.recordAction(orgId, id, a).then((c) => setCases((l) => l.map((x) => (x.id === c.id ? c : x)))).catch(failed('The action could not be saved'));
+  };
 
   // A different organisation starts over: its groups and units differ.
   useEffect(() => {
@@ -1126,13 +1150,18 @@ export default function ReportsScreen() {
 
   // A behaviour run (and any new operator entry) opens the cases it finds;
   // what operators recorded on cases already there stays.
+  // Sent only when what was found changes: the entries are read again every
+  // minute, and the same cases need not go to the server each time.
+  const sentFound = useRef('');
   useEffect(() => {
     if (run.status !== 'done' || !run.raw || !orgId) return;
     const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries });
-    const merged = mergeCases(loadCases(orgId), found);
-    setCases(merged);
-    setCasesFailed(!saveCases(orgId, merged));
-  }, [run, entries, orgId]);
+    const sig = `${orgId}:${JSON.stringify(found)}`;
+    if (sig === sentFound.current || !found.length) return;
+    sentFound.current = sig;
+    // The server folds them in, keeping what operators recorded, and answers with every case
+    conductApi.sendFound(orgId, found).then(setCases).catch((err) => { sentFound.current = ''; failed('The follow-up cases could not be saved')(err); });
+  }, [run, entries, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = useMemo(() => {
     if (run.status !== 'done') return null;
@@ -1395,13 +1424,13 @@ export default function ReportsScreen() {
         )}
 
         {key === 'behaviour' && (
-          <FollowUpPanel cases={cases} orgCode={orgCode} now={now} saveFailed={casesFailed}
-                         onOpen={(c) => setActing(c.id)} onReplace={keepCases} />
+          <FollowUpPanel cases={cases} orgCode={orgCode} now={now} saveFailed={storeError}
+                         onOpen={(c) => setActing(c.id)} onReplace={importCaseList} />
         )}
         {key === 'behaviour' && (
-          <LoggedIncidents entries={entries} orgCode={orgCode} saveFailed={saveFailed}
+          <LoggedIncidents entries={entries} orgCode={orgCode} saveFailed={storeError}
                            onLog={() => setDialog({})} onEdit={(entry) => setDialog({ entry })}
-                           onDelete={(id) => keep(remove(entries, id))} onReplace={keep} />
+                           onDelete={dropEntry} onReplace={importEntries} />
         )}
       </div>
 
@@ -1409,12 +1438,12 @@ export default function ReportsScreen() {
 
       {actingCase && (
         <ActionDialog key={actingCase.id} kase={actingCase} by={by} onClose={() => setActing(null)}
-                      onSave={(a) => { keepCases(recordAction(cases, actingCase.id, { ...a, at: Date.now() })); setActing(null); }} />
+                      onSave={(a) => { saveAction(actingCase.id, a); setActing(null); }} />
       )}
       {dialog && (
         <IncidentDialog vehicles={vehicles} entry={dialog.entry} by={by}
                         onClose={() => setDialog(null)}
-                        onSave={(e) => { keep(upsert(entries, e)); setDialog(null); }} />
+                        onSave={(e) => { saveEntry(e); setDialog(null); }} />
       )}
     </div>
   );
