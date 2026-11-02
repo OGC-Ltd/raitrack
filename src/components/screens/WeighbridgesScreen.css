@@ -748,27 +748,3 @@
     justify-content: center;
   }
 }
-
-/* Each bridge's tonnage in its tab, and the picked bridge split by trucks
-   (cane in) and tractors (out) under the tabs (operator, 2 Nov 2026). */
-.wb-tab-t { margin-left: 6px; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-2, inherit); font-variant-numeric: tabular-nums; }
-.sp4-tab--on .wb-tab-t { color: var(--sp4-text-1); }
-.wb-split {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
-  padding: 8px 16px; border-bottom: 1px solid var(--sp4-border, rgba(127,127,127,0.2));
-  font-size: var(--sp4-body); color: var(--sp4-text-2, inherit); font-variant-numeric: tabular-nums;
-}
-.wb-split__name { font-weight: 700; color: var(--sp4-text-1); }
-.wb-split__total { font-weight: 700; color: var(--sp4-text-1); margin-left: -10px; }
-.wb-split__kind { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-.wb-split__kind .ti { align-self: center; font-size: 15px; }
-.wb-split__kind b { color: var(--sp4-text-1); font-weight: 700; }
-
-/* Heaviest and Lightest load open their ticket (operator, 3 Nov 2026) */
-.wb-kpi-btn { border: 0; font: inherit; color: inherit; cursor: pointer; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1); }
-.wb-kpi-btn:hover:not(:disabled) { background: var(--sp4-surface-2, rgba(127,127,127,0.12)); }
-.wb-kpi-btn:hover:not(:disabled) .sp4-kpi-l { text-decoration: underline; text-underline-offset: 2px; }
-.wb-kpi-btn:focus-visible { outline: 2px solid var(--sp4-accent, #3b82f6); outline-offset: -2px; }
-.wb-kpi-btn:active:not(:disabled) { transform: translateY(1px); }
-.wb-kpi-btn:disabled { cursor: default; }
-@media (prefers-reduced-motion: reduce) { .wb-kpi-btn { transition: none; } .wb-kpi-btn:active:not(:disabled) { transform: none; } }

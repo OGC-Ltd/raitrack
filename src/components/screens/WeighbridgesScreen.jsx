@@ -38,9 +38,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useWeighments, MAX_DAYS } from "../../hooks/useWeighments";
+import WeighbridgeTotals from "../body/WeighbridgeTotals";
 import { useDispatchedUnits } from "../../hooks/useDispatchedUnits";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
-import { tonnes, tonnesTotal, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
+import { tonnes, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
 import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
@@ -457,72 +458,21 @@ export default function WeighbridgesScreen() {
           two crumbs read as chrome and everything under it as the page. */}
       <hr className="wb-rule" />
 
-      {/* --- Header ----------------------------------------------------
-          The day's three numbers, and they hold for both views because both
-          are about the same day: the grid reads one bridge of it, the board
-          reads every bridge at once. All three are computed across EVERY
-          bridge before the centre filter narrows the grid, so switching bridge
-          tabs never moves them. */}
-      <div className="sp4-header">
-        <div data-tour="page-kpis" className="sp4-header-kpis">
-          <div
-            className="sp4-kpi sp4-kpi--fleet"
-            title="Tickets raised across all four bridges on the day being viewed. A ticket is one token, the lorry crossing empty and laden, not one trip over a scale."
-          >
-            <span className="sp4-kpi-n">{stats ? stats.weighments : "·"}</span>
-            <span className="sp4-kpi-l">Weighments {spanLabel(from, to)}</span>
-          </div>
-          {/* <div
-            className="sp4-kpi sp4-kpi--live"
-            title="Distinct lorries that weighed anywhere on this day, matched on the plate with its spacing removed so one machine typed two ways counts once."
-          >
-            <span className="sp4-kpi-n">{stats ? stats.uniqueVehicles : "·"}</span>
-            <span className="sp4-kpi-l">Unique vehicles</span>
-          </div> */}
-          {/* A click opens the ticket's side panel (operator, 3 Nov 2026), as Lightest load does */}
-          <button
-            type="button"
-            className="sp4-kpi sp4-kpi--stat wb-kpi-btn"
-            disabled={!stats?.heaviest?.row}
-            onClick={() => showTicket(stats.heaviest.row)}
-            title={
-              stats?.heaviest
-                ? `Token ${stats.heaviest.token} - ${stats.heaviest.vehicleNo} at ${stats.heaviest.centerName}. Total weighed in today: ${tonnes(stats.totalNetKg)}. Click to open the ticket.`
-                : "The largest net load recorded on any bridge on this day."
-            }
-          >
-            <span className="sp4-kpi-n">{stats ? tonnes(stats.heaviestNetKg) : "·"}</span>
-            <span className="sp4-kpi-l">Heaviest load</span>
-          </button>
-          {/* The smallest load beside it (operator, 2 Nov 2026) */}
-          <button
-            type="button"
-            className="sp4-kpi sp4-kpi--stat wb-kpi-btn"
-            disabled={!stats?.lightest?.row}
-            onClick={() => showTicket(stats.lightest.row)}
-            title={
-              stats?.lightest
-                ? `Token ${stats.lightest.token} - ${stats.lightest.vehicleNo} at ${stats.lightest.centerName}. Click to open the ticket.`
-                : "The smallest net load recorded on any bridge on this day."
-            }
-          >
-            <span className="sp4-kpi-n">{stats ? (stats.lightestNetKg != null ? tonnes(stats.lightestNetKg) : "-") : "·"}</span>
-            <span className="sp4-kpi-l">Lightest load</span>
-          </button>
-          {/* Trucks bring the cane in, tractors go out (operator, 2 Nov 2026):
-              each kind's tonnage over every bridge. A tractor is a KT… plate. */}
-          <div className="sp4-kpi sp4-kpi--stat"
-               title={stats?.trucks ? `${stats.trucks.tickets} truck tickets over every bridge.` : "Net cane the trucks brought in."}>
-            <span className="sp4-kpi-n">{stats?.trucks ? tonnesTotal(stats.trucks.netKg) : "·"}</span>
-            <span className="sp4-kpi-l">Trucks · cane in</span>
-          </div>
-          <div className="sp4-kpi sp4-kpi--stat"
-               title={stats?.tractors ? `${stats.tractors.tickets} tractor tickets (KT… plates) over every bridge.` : "Net weight on the tractors going out."}>
-            <span className="sp4-kpi-n">{stats?.tractors ? tonnesTotal(stats.tractors.netKg) : "·"}</span>
-            <span className="sp4-kpi-l">Tractors · out</span>
-          </div>
-        </div>
-      </div>
+      {/* --- Figures ----------------------------------------------------
+          The day across every bridge, then a card per bridge that also picks
+          the bridge the tickets show (operator, 3 Nov 2026: "fix the
+          weighbridges ui"). The day's figures cover EVERY bridge whatever
+          bridge is picked, so picking one never moves them. */}
+      <WeighbridgeTotals
+        stats={stats}
+        centres={centres}
+        loading={loading || !data}
+        periodLabel={spanLabel(from, to)}
+        showBridges={view === "tickets"}
+        centre={centre}
+        onPickCentre={setCentre}
+        onOpenTicket={showTicket}
+      />
 
       {/* ── Filter bar ─────────────────────────────────────── */}
       <div data-tour="wb-filters" className="sp4-filterbar">
@@ -628,45 +578,6 @@ export default function WeighbridgesScreen() {
           </div>
         ) : (
           <>
-            <div data-tour="page-tabs" className="sp4-tabs">
-              {centres.map(c => (
-                <button
-                  key={c.code}
-                  className={"sp4-tab" + (centre === c.code ? " sp4-tab--on" : "")}
-                  onClick={() => setCentre(c.code)}
-                >
-                  {c.name}
-                  <span className="sp4-tab-n">{c.count}</span>
-                  {/* The bridge's own tonnage (operator, 2 Nov 2026) */}
-                  {c.netKg != null && <span className="wb-tab-t">{tonnesTotal(c.netKg)}</span>}
-                </button>
-              ))}
-              {centres.length === 0 && (loading || !data) && (
-                // Before the first response there is nothing to draw tabs
-                // from, and inventing four from a hardcoded list would show
-                // bridges we have not confirmed exist on this day.
-                //
-                // Gated on `loading` as well as on emptiness: a company with
-                // no bridges also has no tabs, and it sat under "Loading
-                // bridges…" for ever — a spinner for something that is never
-                // going to arrive. That case is now the state block below.
-                <span className="sp4-tabs-hint">Loading bridges…</span>
-              )}
-            </div>
-            {/* The bridge picked, split: trucks bring the cane in, tractors go out */}
-            {(() => {
-              const c = centres.find((x) => x.code === centre);
-              if (!c?.trucks) return null;
-              const n = (k) => `${k.tickets} ticket${k.tickets === 1 ? "" : "s"}`;
-              return (
-                <div className="wb-split" role="status">
-                  <span className="wb-split__name">{c.name}</span>
-                  <span className="wb-split__total">{tonnesTotal(c.netKg)}</span>
-                  <span className="wb-split__kind"><i className="ti ti-truck" aria-hidden="true" />Trucks, cane in <b>{tonnesTotal(c.trucks.netKg)}</b> · {n(c.trucks)}</span>
-                  <span className="wb-split__kind"><i className="ti ti-tractor" aria-hidden="true" />Tractors, out <b>{tonnesTotal(c.tractors.netKg)}</b> · {n(c.tractors)}</span>
-                </div>
-              );
-            })()}
 
             {error ? (
               <EmptyNote icon="ti-cloud-off" tone="error" title="Weighbridge Tickets Unavailable"
