@@ -4,7 +4,7 @@
  *
  *   Driver conduct       harsh acceleration, harsh braking, no seatbelt and on phone, per vehicle
  *   Night driving        distance covered in the night hours (19:00–05:00 unless changed)
- *   Overspeeding         overspeeds lasting more than 5 minutes unbroken, and their distance
+ *   Overspeeding         overspeeds lasting more than 5 seconds unbroken, and their distance
  *   Vehicle utilisation  every vehicle's distance, time moving and fuel, stationary ones included
  *
  * The figures come from records the server already keeps (api/fleetReports);
@@ -41,7 +41,8 @@ import { ActionDialog, FollowUpPanel } from './FollowUp';
 import { casesFromRun, periodCases } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { loadEndOfShiftDoc, downloadEditedEndOfShift } from '../../api/endOfShiftReport';
+import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } from '../../api/endOfShiftReport';
+import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
 import ShiftDocument from './ShiftDocument';
 import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
@@ -57,6 +58,9 @@ import './ReportsScreen.css';
 import './OperatorIncidents.css';
 
 const DAY = 86_400_000;
+/** The reports drawn here that also save as a JPEG; Shift and Movements always do. */
+const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
+
 /** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
@@ -287,6 +291,17 @@ function ShiftReport({ orgId }) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
     }
   };
+  const downloadJpeg = async () => {
+    if (pdf.busy || !doc) return;
+    setPdf({ busy: 'jpeg', error: null });
+    try {
+      const { blob, filename } = await makeEditedEndOfShift({ orgId, doc: pdfDoc(doc) });
+      await savePdfAsJpeg(blob, filename);
+      setPdf({ busy: false, error: null });
+    } catch (err) {
+      setPdf({ busy: false, error: `The JPEG could not be made: ${err?.message ?? err}` });
+    }
+  };
 
   return (
     <>
@@ -322,9 +337,14 @@ function ShiftReport({ orgId }) {
             Undo edits
           </button>
         )}
+        <button type="button" className="sp4-ghost-btn rpt-log" onClick={downloadJpeg}
+                disabled={Boolean(pdf.busy) || run.status !== 'done'} aria-busy={pdf.busy === 'jpeg'}
+                title="The PDF report as an image">
+          <i className="ti ti-photo" aria-hidden="true" /> {pdf.busy === 'jpeg' ? 'Making the JPEG…' : 'JPEG'}
+        </button>
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={download}
-                disabled={pdf.busy || run.status !== 'done'} aria-busy={pdf.busy}>
-          {pdf.busy ? 'Making the PDF…' : 'Download PDF'}
+                disabled={Boolean(pdf.busy) || run.status !== 'done'} aria-busy={pdf.busy === true}>
+          {pdf.busy === true ? 'Making the PDF…' : 'Download PDF'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
         {pdf.error && <span className="rpt-problem" role="alert">{pdf.error}</span>}
@@ -764,6 +784,17 @@ function MovementsReport({ orgId }) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
     }
   };
+  const downloadJpeg = async () => {
+    if (!reports || pdf.busy) return;
+    setPdf({ busy: 'jpeg', error: null });
+    try {
+      const { blob, filename } = await makeEditedMovementReport({ orgId, request: pdfBody() });
+      await savePdfAsJpeg(blob, filename);
+      setPdf({ busy: false, error: null });
+    } catch (err) {
+      setPdf({ busy: false, error: `The JPEG could not be made: ${err?.message ?? err}` });
+    }
+  };
   const [preview, setPreview] = useState(null);   // { status: loading | done (blob, filename) | error }
   const previewId = useRef(0);
   const previewPdf = async () => {
@@ -910,8 +941,12 @@ function MovementsReport({ orgId }) {
               onPdf={pdf.busy ? undefined : downloadPdf}
               actions={<>
                 {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits((all) => all.map(() => ({})))}>Undo edits</button>}
-                {pdf.busy ? <span className="rpt-sub">Making the PDF…</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
-                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={pdf.busy || !kept.counts.total}
+                {pdf.busy ? <span className="rpt-sub">{pdf.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
+                <button type="button" className="sp4-ghost-btn" onClick={downloadJpeg} disabled={Boolean(pdf.busy) || !kept.counts.total}
+                        title="The PDF report, with your edits, as an image">
+                  <i className="ti ti-photo" aria-hidden="true" /> JPEG
+                </button>
+                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(pdf.busy) || !kept.counts.total}
                         title="See the PDF, with your edits, before you download it">
                   <i className="ti ti-eye" aria-hidden="true" /> Preview
                 </button>
@@ -1251,6 +1286,26 @@ export default function ReportsScreen() {
     }
   };
 
+  // The same PDF as an image (operator, 2 Nov), on the reports named for it.
+  const [jpegBusy, setJpegBusy] = useState(false);
+  const downloadJpeg = async () => {
+    if (!done || pdfBusy || jpegBusy) return;
+    setJpegBusy(true);
+    setPdfError(null);
+    try {
+      const { html, landscape, filename } = reportHtml(def, done, {
+        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
+      });
+      const file = await saveLetterheadPdf(html, { filename, landscape, keep: true });
+      await savePdfAsJpeg(file.blob, file.filename);
+    } catch (err) {
+      setPdfError(`The JPEG could not be made: ${err?.message ?? err}`);
+    } finally {
+      setJpegBusy(false);
+    }
+  };
+
   // The PDF on screen before it is saved (operator, 2 Nov), as Movements has it.
   const [preview, setPreview] = useState(null);
   const previewId = useRef(0);
@@ -1371,10 +1426,17 @@ export default function ReportsScreen() {
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
               </>}
               onCsv={done.rows.length ? downloadCsv : undefined}
-              onPdf={pdfBusy ? undefined : downloadPdf}
+              onPdf={pdfBusy || jpegBusy ? undefined : downloadPdf}
               actions={<>
                 {pdfBusy ? <span className="rpt-sub">Making the PDF…</span>
+                  : jpegBusy ? <span className="rpt-sub">Making the JPEG…</span>
                   : pdfError ? <span className="rpt-warn">{pdfError}</span> : null}
+                {JPEG_REPORTS.has(key) && (
+                  <button type="button" className="sp4-ghost-btn" onClick={downloadJpeg} disabled={pdfBusy || jpegBusy}
+                          title="The PDF report as an image">
+                    <i className="ti ti-photo" aria-hidden="true" /> JPEG
+                  </button>
+                )}
                 {conduct && (
                   <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={pdfBusy}
                           title="See the PDF before you download it">

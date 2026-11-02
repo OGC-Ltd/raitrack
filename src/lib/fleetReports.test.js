@@ -142,16 +142,16 @@ describe('driver conduct', () => {
   });
 });
 
-describe('overspeeding over 5 minutes', () => {
+describe('overspeeding over 5 seconds', () => {
   const { units } = scopeUnits(vehicles, groups);
-  it('counts only unbroken overspeeds longer than 5 minutes, with their distance', () => {
+  it('counts only unbroken overspeeds longer than 5 seconds, with their distance', () => {
     const rows = overspeedRows(units, new Map([
       ['v1', [
         { durationSec: 301, distanceM: 7_500, peakKmh: 92, limitKmh: 80, driverName: 'Osero' },
-        { durationSec: 300, distanceM: 6_000, peakKmh: 99, limitKmh: 80 },   // exactly 5 min: out
+        { durationSec: 5, distanceM: 120, peakKmh: 99, limitKmh: 80 },       // exactly 5 s: out
         { durationSec: 600, distanceM: 15_000, peakKmh: 88, limitKmh: 80 },
       ]],
-      ['v4', [{ durationSec: 120, distanceM: 2_000, peakKmh: 70, limitKmh: 60 }]],
+      ['v4', [{ durationSec: 4, distanceM: 70, peakKmh: 70, limitKmh: 60 }]],
     ]));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ count: 2, seconds: 901, km: 22.5, peakKmh: 92, driver: 'Osero' });
