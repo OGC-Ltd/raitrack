@@ -11,6 +11,7 @@
 // (useWeighments). Nothing here is computed beyond a share for a bar.
 
 import { tonnes, tonnesTotal } from "../../api/weighments";
+import { isFactoryName } from "../../lib/weighbridgeBoard";
 import "./WeighbridgeTotals.css";
 
 const plural = (n, one) => `${n.toLocaleString("en-GB")} ${one}${n === 1 ? "" : "s"}`;
@@ -88,11 +89,16 @@ export default function WeighbridgeTotals({ stats, centres, loading, periodLabel
           {centres.map((c) => {
             const on = centre === c.code;
             const from = c.fromCentres?.tickets > 0 ? c.fromCentres : null;
+            // Cane comes IN at the factory and goes OUT from the centres (operator, 3 Nov 2026)
+            const dir = isFactoryName(c.name) ? "in" : "out";
             return (
               <button key={c.code} type="button" aria-pressed={on}
                       className={`wbt-bridge${on ? " wbt-bridge--on" : ""}`} onClick={() => onPickCentre(c.code)}>
                 <span className="wbt-bridge__head">
-                  <span className="wbt-bridge__name">{c.name}</span>
+                  <span className="wbt-bridge__id">
+                    <span className="wbt-bridge__name">{c.name}</span>
+                    <span className={`wbt-bridge__dir wbt-bridge__dir--${dir}`}>{dir === "in" ? "In" : "Out"}</span>
+                  </span>
                   <span className="wbt-bridge__count">{plural(c.count, "ticket")}</span>
                 </span>
                 <span className="wbt-bridge__n">{c.netKg != null ? tonnesTotal(c.netKg) : "-"}</span>

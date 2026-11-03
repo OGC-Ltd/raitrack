@@ -150,6 +150,8 @@
    reached by scrolling past it rather than squeezed beneath a fixed table. */
 .rpt-body { overflow-y: auto; }
 .rpt-body .rpt-scroll { flex: none; overflow: visible; max-height: none; padding-bottom: 8px; }
+/* Overspeeding ends on its last table, flush with the panel's foot (operator, 3 Nov 2026) */
+.rpt-body .rpt-scroll--overspeed { padding-bottom: 32px; }
 .rpt-log { height: 32px; padding: 0 12px; }
 .rpt-body .oi-panel:not(:last-child) { margin-bottom: 0; }
 
