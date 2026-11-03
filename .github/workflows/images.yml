@@ -56,7 +56,9 @@ jobs:
           context: .
           load: true
           tags: ${{ env.IMAGE }}:${{ github.sha }}
-          build-args: GIT_SHA=${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           secret-envs: |
             VITE_GOOGLE_MAPS_API_KEY=VITE_GOOGLE_MAPS_API_KEY
             VITE_MYTOMTOM_API_KEY=VITE_MYTOMTOM_API_KEY
@@ -115,7 +117,9 @@ jobs:
           sbom: true
           provenance: mode=max
           tags: ${{ steps.ecr.outputs.registry }}/ghala:raitrack-${{ github.sha }}
-          build-args: GIT_SHA=${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           secret-envs: |
             VITE_GOOGLE_MAPS_API_KEY=VITE_GOOGLE_MAPS_API_KEY
             VITE_MYTOMTOM_API_KEY=VITE_MYTOMTOM_API_KEY
