@@ -18,7 +18,7 @@ import { dayStart, byPlate } from './fleetReports';
  * Menengai, the organisation's own elsewhere ("To Sukari"; operator, 2 Nov).
  */
 export const directionWords = (site = 'MORL') => ({
-  to: `To ${site}`, from: `From ${site}`, at: `At ${site}`, moving: 'Moving', stopped: 'Stopped',
+  to: `To ${site}`, from: `From ${site}`, at: `At ${site}`, moving: '-', stopped: 'Stopped',
   // Menengai's silent units stand at RAIMDF, the others are not reporting
   // (operator, 2 Nov / 3 Nov: "remove no fix")
   'no-fix': site === 'MORL' ? 'At RAIMDF' : 'Not reporting',
@@ -26,10 +26,12 @@ export const directionWords = (site = 'MORL') => ({
 export const DIRECTION = directionWords('MORL');
 export const STATES = Object.keys(DIRECTION);
 /**
- * The Direction dropdown's choices (operator, 3 Nov: "remove the no fix"): a
- * silent unit's own state stays on its row, but is not offered on the others.
+ * The Direction dropdown's choices (operator, 3 Nov: "remove the no fix", "we
+ * do not need the moving at all"): a silent unit's state, or a moving one's
+ * with no direction ("-"), stays on its own row but is not offered on others.
  */
-export const statesFor = (row) => STATES.filter((s) => s !== 'no-fix' || row.state === 'no-fix');
+const UNOFFERED = new Set(['no-fix', 'moving']);
+export const statesFor = (row) => STATES.filter((s) => !UNOFFERED.has(s) || row.state === s);
 
 /** Moving, as the server reads it: this fast or faster on a fix inside the window. */
 export const MOVING_KMH = 5;
