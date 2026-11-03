@@ -21,7 +21,8 @@ const cacheKey = (orgId) => `ft-zones:${orgId}`
 // several components ask for it.
 const inflight = new Map()
 
-function loadZones(orgId) {
+/** The organisation's geofences as GeoJSON, fetched once per page load (the Tankers Report reads MORL's). */
+export function loadZones(orgId) {
   if (!inflight.has(orgId)) {
     inflight.set(
       orgId,

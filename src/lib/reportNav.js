@@ -6,6 +6,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { REPORTS, REPORT_ORDER } from './reportTables';
+import { isTemplated, templateFor } from './reportTemplates';
 
 /**
  * Every report, A–Z by name, in the sidebar and on the page (operator,
@@ -15,6 +16,12 @@ import { REPORTS, REPORT_ORDER } from './reportTables';
 export const REPORT_NODES = [
   { key: 'shift', label: 'Shift' },
   { key: 'movements', label: 'Movements' },
+  // Menengai's tankers out of MORL, 4 hours at a time (operator, 2–3 Nov 2026)
+  { key: 'tankers', label: 'Tankers' },
+  // Every visit to a geofence over a period: West Kenya's first (operator, 3 Nov 2026)
+  { key: 'geofences', label: 'Geofences' },
+  // Trackers that have stopped sending, by the day of their last message (operator, 3 Nov 2026)
+  { key: 'offline', label: 'Non-Updating Assets' },
   ...REPORT_ORDER.map((k) => ({ key: k, label: REPORTS[k].label })),
 ].sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }));
 
@@ -25,12 +32,15 @@ const KEYS = new Set(REPORT_NODES.map((n) => n.key));
 /**
  * The reports this user may open: the server needs analytics and weighbridge
  * grants for End of shift, telemetry for Movements; the rest are read here.
+ * Templated reports (Tankers, Geofences) are for the organisations that
+ * lib/reportTemplates gives them to, and read the vehicles' positions.
  */
-export function reportKeysFor(can) {
+export function reportKeysFor(can, orgCode = null) {
   return REPORT_NODES.map((n) => n.key).filter((k) =>
     k === 'shift' ? can('analytics:read') && can('weighbridge:read')
       : k === 'movements' ? can('telemetry:read')
-        : true);
+        : isTemplated(k) ? can('telemetry:read') && templateFor(k, orgCode) != null
+          : true);
 }
 
 let current = null;

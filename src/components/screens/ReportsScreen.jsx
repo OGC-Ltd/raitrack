@@ -24,7 +24,7 @@ import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } fro
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  NIGHT, hourLabel, periodWords as periodText, fleetDay, dayStart,
+  NIGHT, hourLabel, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
 import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from '../../lib/reportTables';
@@ -45,6 +45,9 @@ import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } fro
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
 import ShiftDocument from './ShiftDocument';
+import TankersReport from './TankersReport';
+import GeofenceReport from './GeofenceReport';
+import OfflineReport from './OfflineReport';
 import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import ReportIcon from '../shared/ReportIcon';
@@ -89,9 +92,16 @@ const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
 /** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
+const TANKERS = 'tankers';
+const GEOFENCES = 'geofences';
+const OFFLINE = 'offline';
+/** The pages with a form of their own, not made from REPORTS. */
 const SERVER_TABS = {
   [SHIFT]: { label: 'Shift' },
   [MOVEMENTS]: { label: 'Movements' },
+  [TANKERS]: { label: 'Tankers' },
+  [GEOFENCES]: { label: 'Geofences' },
+  [OFFLINE]: { label: 'Non-Updating Assets' },
 };
 
 
@@ -139,6 +149,11 @@ const SHIFT_TODAY = (today, now = Date.now()) => {
   return { fromDay: day, toDay: day, start: 7.5, end: 19.5 };
 };
 function shiftPeriod(d, now = Date.now()) {
+  // A custom range (operator, 3 Nov 2026): any start and end, to the minute; no end is up to now
+  if (d.custom) {
+    const end = d.custom.to ?? now;
+    return { from: d.custom.from, to: Math.min(end, now), live: end >= now };
+  }
   const from = dayStart(d.fromDay) + d.start * HOUR_MS;
   const to = dayStart(d.toDay) + (d.end > d.start ? d.end : d.end + 24) * HOUR_MS;
   return { from, to: Math.min(to, now), live: to >= now };
@@ -336,7 +351,7 @@ function ShiftReport({ orgId, vehicles, groups }) {
   const pickingProblem = shiftProblem(orgId, shiftPeriod(shown));
   // A one-day shift picked for today that has not begun yet (Night at 10:00)
   // is last night's: move it back a day rather than refuse it
-  const onlyBegun = (d) => (d.fromDay === d.toDay && d.toDay === today && shiftPeriod(d).from >= Date.now()
+  const onlyBegun = (d) => (!d.custom && d.fromDay === d.toDay && d.toDay === today && shiftPeriod(d).from >= Date.now()
     ? { ...d, fromDay: fleetDay(dayStart(today) - 12 * HOUR_MS), toDay: fleetDay(dayStart(today) - 12 * HOUR_MS) }
     : d);
 
@@ -369,12 +384,14 @@ function ShiftReport({ orgId, vehicles, groups }) {
         <DateRangePicker
           from={shown.fromDay} to={shown.toDay} today={today} maxDays={SHIFT_MAX_DAYS} spans={[SHIFT_MAX_DAYS]}
           label="Shift period" on
-          text={`${pickedText(draft.fromDay, draft.toDay, today)} · ${span.live ? `${hh(draft.start)}–now` : hoursText(draft.start, draft.end)}`}
-          onChange={(f, t) => setPicking({ ...shown, fromDay: f, toDay: t })}
+          text={draft.custom ? customText(span) : `${pickedText(draft.fromDay, draft.toDay, today)} · ${span.live ? `${hh(draft.start)}–now` : hoursText(draft.start, draft.end)}`}
+          onChange={(f, t) => setPicking({ ...shown, fromDay: f, toDay: t, custom: undefined })}
         >
           {({ close }) => (
             <>
-              <ShiftTime start={shown.start} end={shown.end} onChange={(a, b) => setPicking(onlyBegun({ ...shown, start: a, end: b }))} />
+              <ShiftTime start={shown.start} end={shown.end} custom={Boolean(shown.custom)} onChange={(a, b) => setPicking(onlyBegun({ ...shown, start: a, end: b, custom: undefined }))} />
+              <CustomRange period={shiftPeriod(shown)} on={Boolean(shown.custom)}
+                           onChange={(a, b) => setPicking({ ...shown, fromDay: fleetDay(a), toDay: fleetDay(Math.max(a, (b ?? Date.now()) - 1)), custom: { from: a, to: b } })} />
               <div className="mvr-hours__foot">
                 {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
                 <button type="button" className="sp4-submit-btn frp-run"
@@ -478,6 +495,43 @@ const pad2 = (n) => String(n).padStart(2, '0');
 /** 7.5 → { h: 7, m: 30 }; the end's 24 reads 00:00. */
 const hm = (x) => { const t = Math.round(x * 60) % (24 * 60); return { h: Math.floor(t / 60), m: t % 60 }; };
 
+const dmyHm = (ms) => { const s = toLocalInput(ms); return `${s.slice(8, 10)}/${s.slice(5, 7)} ${s.slice(11, 16)}`; };
+/** "02/11 14:00 → 03/11 10:00", or "→ now". */
+const customText = (span) => `${dmyHm(span.from)} → ${span.live ? 'now' : dmyHm(span.to)}`;
+
+/**
+ * A custom range under the shift's hours (operator, 3 Nov 2026: "able to have
+ * it a custom range"): the start and the end each a date and a time, to the
+ * minute, rather than the same hours on each day. The end may be left at now.
+ * Picking a day or a shift above puts it back to days and hours.
+ */
+export function CustomRange({ period, on, onChange }) {
+  const now = Date.now();
+  const end = on && period.live ? null : period.to;
+  return (
+    <div className={`stp stp-custom${on ? ' stp-custom--on' : ''}`} role="group" aria-label="Custom range">
+      <div className="stp__head">
+        <span className="stp__title">Custom range</span>
+        <span className="stp__span">{on ? customText(period) : 'Any start and end, to the minute'}</span>
+      </div>
+      <div className="stp__clocks">
+        <label className="stp-clock stp-custom__f">
+          <span className="stp-clock__l">From</span>
+          <input type="datetime-local" className="rpt-select tkr-when" value={toLocalInput(period.from)} max={toLocalInput(now)}
+                 onChange={(e) => { const t = fromLocalInput(e.target.value); if (Number.isFinite(t)) onChange(t, end); }} />
+        </label>
+        <label className="stp-clock stp-custom__f">
+          <span className="stp-clock__l">To</span>
+          <input type="datetime-local" className="rpt-select tkr-when" value={toLocalInput(period.to)} max={toLocalInput(now)}
+                 onChange={(e) => { const t = fromLocalInput(e.target.value); if (Number.isFinite(t)) onChange(period.from, t >= now - 60_000 ? null : t); }} />
+        </label>
+      </div>
+      <button type="button" className={`drp-chip stp-custom__now${on && period.live ? ' drp-chip--on' : ''}`}
+              onClick={() => onChange(period.from, null)}>Up to now</button>
+    </div>
+  );
+}
+
 /**
  * One time of day as an hour and a minute, each its own dropdown, set in
  * large figures so 07:30 reads as a clock (operator, 2 Nov: "the ability to
@@ -511,9 +565,10 @@ function ClockField({ label, value, isEnd = false, onChange }) {
  * them the day's 24 hours with the shift drawn on it, so a shift over
  * midnight shows as two pieces.
  */
-export function ShiftTime({ start, end, onChange, title = 'Shift time', presets = SHIFT_PRESETS }) {
+export function ShiftTime({ start, end, onChange, title = 'Shift time', presets = SHIFT_PRESETS, custom = false }) {
   const over = end <= start;
-  const on = presets.find((p) => p.start === start && p.end === end)?.key;
+  // A custom range below is picked: no shift is
+  const on = custom ? null : presets.find((p) => p.start === start && p.end === end)?.key;
   const pieces = over ? [[start, 24], [0, end]] : [[start, end]];
   return (
     <div className="stp" role="group" aria-label={title}>
@@ -1235,7 +1290,7 @@ export default function ReportsScreen() {
   const { can } = usePermissions();
   // Which tabs the grants allow (lib/reportNav); the sidebar's Reports tree
   // lists the same and picks among them too.
-  const tabs = reportKeysFor(can);
+  const tabs = reportKeysFor(can, orgCode);
   // End of shift first, where the grants allow it.
   const chosen = useCurrentReport() ?? firstReport(tabs);
   const key = tabs.includes(chosen) ? chosen : firstReport(tabs);
@@ -1535,7 +1590,10 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} /> : (<>
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} />
+        : key === TANKERS ? <TankersReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} />
+        : key === GEOFENCES ? <GeofenceReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} />
+        : key === OFFLINE ? <OfflineReport key={orgId ?? 'none'} orgId={orgId} orgCode={orgCode} companyName={activeCompany?.name} /> : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
         <div className="sp4-header-kpis">
