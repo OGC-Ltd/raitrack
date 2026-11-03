@@ -20,15 +20,18 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+# The context has no .git, so vite.config.js gets the short commit the
+# sidebar shows from APP_COMMIT instead of `git rev-parse`.
+ARG GIT_SHA=unknown
 RUN --mount=type=secret,id=VITE_GOOGLE_MAPS_API_KEY,env=VITE_GOOGLE_MAPS_API_KEY \
     --mount=type=secret,id=VITE_MYTOMTOM_API_KEY,env=VITE_MYTOMTOM_API_KEY \
     test -n "${VITE_GOOGLE_MAPS_API_KEY}" \
+ && if [ "${GIT_SHA}" != unknown ]; then export APP_COMMIT="$(printf %s "${GIT_SHA}" | cut -c1-7)"; fi \
  && npm run build \
  && grep -rqF "${VITE_GOOGLE_MAPS_API_KEY}" build/assets \
  && test -f build/index.html
 # Same stamp the rsync deploy writes; the deploy workflow reads it back to
 # prove which build is being served.
-ARG GIT_SHA=unknown
 RUN printf '%s OGC-Ltd/raitrack v%s\n' "${GIT_SHA}" "$(node -p "require('./package.json').version")" > build/DEPLOYED_COMMIT
 
 FROM ${NGINX_IMAGE} AS runtime
@@ -47,7 +50,8 @@ RUN echo "apk refresh: ${APK_REFRESH}" \
  && apk del --no-cache nginx-module-image-filter nginx-module-xslt nginx-module-geoip nginx-module-njs curl \
  && apk upgrade --no-cache \
  && nginx -t \
- && rm -rf /var/cache/apk/*
+ && rm -rf /var/cache/apk/* /usr/share/nginx/html/*
+# (The base image's own pages go too: the site below is the whole web root.)
 USER 101
 COPY --chmod=644 deploy/web.conf /etc/nginx/conf.d/default.conf
 # Files owned by root and read-only to nginx (uid 101): the server cannot alter the site.
