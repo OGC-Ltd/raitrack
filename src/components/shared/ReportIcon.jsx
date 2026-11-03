@@ -11,6 +11,34 @@
  * EmptyNote disc sets its size and colour.
  */
 const MARKS = {
+  // Non-updating assets: a tracker's signal, struck through.
+  offline: (
+    <>
+      <path d="M5 9.5a10 10 0 0 1 14 0M7.6 12.4a6.2 6.2 0 0 1 8.8 0M10.2 15.2a2.4 2.4 0 0 1 3.6 0" />
+      <circle cx="12" cy="18.2" r=".9" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
+  // Geofences: a fenced area, and a pin inside it.
+  geofences: (
+    <>
+      <path d="M3.5 7.5l5-3 7 2 5-2v12l-5 2-7-2-5 3z" strokeDasharray="2.2 1.8" />
+      <path d="M12 15.5s-3-3-3-5.2a3 3 0 0 1 6 0c0 2.2-3 5.2-3 5.2z" />
+      <circle cx="12" cy="10.3" r="1" />
+    </>
+  ),
+  // Tankers: the tanker, and a clock for its four hours.
+  tankers: (
+    <>
+      <rect x="2.5" y="9" width="9.5" height="5.5" rx="2.75" />
+      <path d="M12 14.5v-3.5h2.6a1 1 0 0 1 .9.6l1.2 2.9v2.5h-1.2" />
+      <path d="M2.5 17h1.6M7.2 17h6.4" />
+      <circle cx="5.6" cy="17.2" r="1.4" />
+      <circle cx="14.8" cy="17.2" r="1.4" />
+      <circle cx="18.5" cy="6.5" r="3.6" />
+      <path d="M18.5 4.8v1.7l1.2.8" />
+    </>
+  ),
   // End of shift: a clipboard, and on it the sun setting on a line.
   shift: (
     <>
