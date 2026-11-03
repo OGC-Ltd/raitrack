@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { setAt, removeRow, removeSection, removeBlock, addNote, sectionEnd, isEdited, pdfDoc } from './shiftDoc';
+import { setAt, removeRow, removeSection, removeBlock, addNote, sectionEnd, isEdited, pdfDoc, fitTable, textMm } from './shiftDoc';
 
 const doc = {
   title: 'END OF SHIFT REPORT', reportNo: 'ES-1', date: '02/11/2026',
@@ -46,5 +46,30 @@ describe('editing the end-of-shift document', () => {
   it('knows when the document was edited', () => {
     expect(isEdited(doc, JSON.parse(JSON.stringify(doc)))).toBe(false);
     expect(isEdited(doc, setAt(doc, ['blocks', 6, 'lines', 0], 'All units in'))).toBe(true);
+  });
+});
+
+describe('registrations printed whole', () => {
+  const plates = ['MUFINDI - KDA 123B', 'MUFINDI: KCX 456Y', 'MUFINDI - KCB 220M'];
+  const t = (head, cols) => ({ kind: 'table', size: 7.4, cols, head,
+    rows: plates.map((p) => [{ text: p, bold: true }, { text: 'Not recorded' }, ...head.slice(2).map(() => ({ text: '6', bold: true }))]) });
+  const longest = (size) => Math.max(...plates.map((p) => textMm(p, size, true)));
+
+  it('widens the Unit column to the longest registration, and makes the type smaller only when it must', () => {
+    const doc = { blocks: [{ kind: 'pair', halves: [
+      { title: 'Overspeeding', body: t(['Unit', 'Driver', 'Time over', 'Avg over', 'Top / limit'], [{ w: 16 }, { w: 0 }, { w: 17 }, { w: 15 }, { w: 16 }]) },
+      { title: 'No seatbelt', body: t(['Unit', 'Driver', 'Times'], [{ w: 18 }, { w: 0 }, { w: 13 }]) },
+    ] }] };
+    const [speed, belt] = pdfDoc(doc).blocks[0].halves.map((h) => h.body);
+    expect(belt.size).toBe(7.4);
+    expect(belt.cols[0].w).toBeGreaterThan(longest(7.4) + 2.8);
+    expect(speed.size).toBeLessThan(7.4);
+    expect(speed.size).toBeGreaterThanOrEqual(6);
+    expect(speed.cols[0].w).toBeGreaterThan(longest(speed.size) + 2.8);
+  });
+
+  it('leaves a table alone when its registrations already fit', () => {
+    const b = { kind: 'table', cols: [{ w: 40 }, { w: 0 }], head: ['Unit', 'Driver'], rows: [[{ text: 'KDA 123B', bold: true }, { text: 'A' }]] };
+    expect(fitTable(b, 184)).toBe(b);
   });
 });

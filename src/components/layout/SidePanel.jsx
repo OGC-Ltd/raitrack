@@ -17,6 +17,7 @@ import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
 import { useFuelAlarm } from '../../hooks/useFuelAlarm';
 import { useFollowUpCount } from '../../hooks/useFollowUpCount';
 import ReportIcon from '../shared/ReportIcon';
+import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { REPORT_NODES, reportKeysFor, useCurrentReport, chooseReport, firstReport } from '../../lib/reportNav';
 import './SidePanel.css';
 
@@ -232,7 +233,7 @@ export default function SidePanel() {
   const navRows = mainNavItems;
   // Reports is a tree: a node per report the grants allow, each opening the
   // page on that report (operator, 2026-11-02). Open while on the page.
-  const reportKeys = reportKeysFor(can);
+  const reportKeys = reportKeysFor(can, activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null);
   const reportNodes = REPORT_NODES.filter((n) => reportKeys.includes(n.key));
   const current = useCurrentReport();
   const shownReport = reportKeys.includes(current) ? current : firstReport(reportKeys);
