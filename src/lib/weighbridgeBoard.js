@@ -135,7 +135,7 @@ const at = (iso) => (iso ? new Date(iso).getTime() : null);
  * gets a stock line it should not have, rather than the board losing its
  * destination.
  */
-const isFactoryName = (name) => /factory|mill/i.test(name ?? "");
+export const isFactoryName = (name) => /factory|mill/i.test(name ?? "");
 
 function emptySite(code, name) {
   return {

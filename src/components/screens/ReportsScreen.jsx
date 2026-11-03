@@ -1665,7 +1665,7 @@ export default function ReportsScreen() {
             {!done.rows.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">{def.empty}</EmptyNote>
             ) : (
-              <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+              <div className={`sp4-table-scroll sp4-keep-table rpt-scroll${key === 'overspeed' ? ' rpt-scroll--overspeed' : ''}`}>
                 <table className={`sp4-table rpt-table${def.wide ? ' rpt-table--grid' : ''}`}>
                   <thead>
                     <tr>
