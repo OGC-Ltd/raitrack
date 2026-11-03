@@ -3,29 +3,25 @@
  * the Mombasa depot to MORL, where each is at the report time, how far it went
  * in the 4 hours before it, and how far since it left the depot. Rows coloured
  * as the operator's sheet is: white in transit, green trip completed (reached
- * MORL in the last 24 hours; the operator leaves out those already reported), red under half of what the middle tanker covered. lib/tankersReport does the reading; this is the
- * page, its report time, and the PDF, JPEG and CSV.
+ * MORL in the last 24 hours; the operator leaves out those already reported), red under half of what the middle tanker covered. The server makes the rows
+ * (fleet-server reports/tankers-report.service); this is the page, its report
+ * time, and the PDF, JPEG and CSV (lib/tankersReport).
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import {
-  TANKER_GROUP, WINDOW_MS, ROW_TINT, STATUS_WORDS, COLUMNS, LOOKBACK_DAYS, DEPOT, DEPOT_WORDS, DAY_MS,
-  findMorlFence, tankerRows, sortRows, markSlow, rowCells, counts, periodWords, csvTable, tankersHtml,
+  TANKER_GROUP, WINDOW_MS, ROW_TINT, STATUS_WORDS, COLUMNS, DEPOT_WORDS,
+  rowCells, counts, periodWords, csvTable, tankersHtml,
 } from '../../lib/tankersReport';
-import { loadPings } from '../../api/fleetReports';
-import { loadMovementReport } from '../../api/reports';
-import { loadZones } from '../../hooks/useEstateZones';
+import { loadTankersReport } from '../../api/reports';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
-
-/** Read first: the last two days, which hold most trips under way. More only for the tankers that need it. */
-const FIRST_READ_MS = 2 * DAY_MS;
 
 function Kpi({ value, label, tone }) {
   return (
@@ -63,48 +59,14 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
     try {
       const { units, missing } = scopeUnits(vehicles, groupsFor('MENENGAI'), TANKER_GROUP);
       if (!units.length) { setRun({ status: 'done', rows: [], ctx, missing, failed: 0, tankers: 0 }); return; }
-      setRun({ status: 'loading', words: 'Finding MORL', done: 0, total: 0 });
-      const [zones, moves] = await Promise.all([loadZones(orgId), loadMovementReport({ orgId, from, to })]);
-      // MORL is where a trip from Mombasa ends; without it a trip still reads, it never completes
-      const morl = findMorlFence(zones, moves?.morl);
+      // The server finds each tanker's trip from the depot (fleet-server reports/tankers-report.service)
+      setRun({ status: 'loading', words: `Finding when tankers left the ${DEPOT_WORDS}` });
+      const r = await loadTankersReport({
+        orgId, to,
+        units: units.map((u) => ({ key: u.key, plate: u.plate, vehicleIds: u.vehicles.map((v) => v.vehicleId) })),
+      });
       if (!live()) return;
-      // Where each tracker was at the report time, as Movements names it
-      const place = new Map((moves?.groups ?? []).flatMap((g) => g.rows).map((row) => [row.vehicleId, row]));
-      const placeOf = (unit) => unit.vehicles.map((v) => place.get(v.vehicleId)).filter(Boolean)
-        .sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0))[0]?.location ?? null;
-
-      // The last two days for every tanker, then a day further back at a
-      // time for those whose readings do not yet reach their last visit to
-      // the depot, up to LOOKBACK_DAYS.
-      const held = new Map();
-      const failedIds = new Set();
-      const read = async (list, a, b, words) => {
-        const r = await loadPings({
-          orgId, vehicles: list.flatMap((u) => u.vehicles), from: a, to: b,
-          onProgress: ({ done, total }) => { if (live()) setRun({ status: 'loading', words, done, total }); },
-        });
-        for (const [vid, pings] of r.pings) held.set(vid, [...pings, ...(held.get(vid) ?? [])]);
-        r.failed.forEach((x) => failedIds.add(x));
-      };
-      let start = to - FIRST_READ_MS;
-      await read(units, start, to, 'Reading each tanker’s last two days');
-      if (!live()) return;
-      let found = tankerRows(units, (vid) => held.get(vid), DEPOT, morl, ctx, placeOf);
-      const rows = [...found.rows];
-      let need = found.need;
-      for (let back = 3; back <= LOOKBACK_DAYS && need.length; back++) {
-        await read(need, start - DAY_MS, start - 1, `Finding when tankers left the ${DEPOT_WORDS}, ${back} days back`);
-        if (!live()) return;
-        start -= DAY_MS;
-        found = tankerRows(need, (vid) => held.get(vid), DEPOT, morl, ctx, placeOf);
-        rows.push(...found.rows);
-        need = found.need;
-      }
-      sortRows(rows);
-      // Red: under half of what the middle tanker covered (operator, 3 Nov 2026)
-      const slow = markSlow(rows);
-      const failed = units.filter((u) => u.vehicles.every((v) => failedIds.has(v.vehicleId))).length;
-      setRun({ status: 'done', rows, ctx, missing, failed, tankers: units.length, noMorl: !morl, slow });
+      setRun({ status: 'done', rows: r.rows, ctx, missing, failed: r.failed, tankers: r.tankers, noMorl: !r.morl, slow: r.slow });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }

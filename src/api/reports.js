@@ -51,6 +51,20 @@ export async function loadMovementReport({ orgId, from, to }) {
 }
 
 /**
+ * The Tankers Report at `to` (operator, 2–4 Nov 2026), made on the server:
+ * `units` are the tankers off the fleet list, { key, plate, vehicleIds }.
+ */
+export async function loadTankersReport({ orgId, units, to }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/tankers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ units, ...(to != null ? { to: Math.round(to) } : {}) }),
+  })
+  return res.data
+}
+
+/**
  * The PDF of the movement report as the operator edited it (lib/movementReport
  * pdfRequest), or of several ({ reports }: one window a day over a range of
  * days): the server draws it on the letterhead; this saves the file.
