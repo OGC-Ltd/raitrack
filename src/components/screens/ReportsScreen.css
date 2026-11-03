@@ -402,3 +402,48 @@ select.mvr-edit { min-width: 110px; }
   .mvr-find__box .sp4-search { transition: none; }
   .mvr-find__box .sp4-search-clear:active { transform: none; }
 }
+
+/* Tankers: rows coloured as the operator's sheet is (white in transit, green
+   trip completed, red no movement), so a coloured row reads in dark text. */
+.tkr-time { gap: 6px; }
+.tkr-time .sp4-filter-chip { height: 24px; padding: 0 10px; }
+.tkr-when { color-scheme: dark; font-variant-numeric: tabular-nums; }
+.app--light .tkr-when { color-scheme: light; }
+.tkr-window { white-space: nowrap; }
+.tkr-table tr.tkr-row--tinted td,
+.tkr-table tr.tkr-row--tinted td.rpt-unit { color: #1c1c1c; }
+.tkr-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 10px var(--sp4-gutter) 0; color: var(--sp4-text-3); font-size: var(--sp4-body); }
+.tkr-key__sw { display: inline-block; width: 14px; height: 10px; margin-right: -8px; border: 1px solid var(--sp4-line-hi); border-radius: 2px; background: #fff; vertical-align: -1px; }
+
+
+/* Tankers: every column centred, as the operator's sheet is (3 Nov 2026) */
+.tkr-table th, .tkr-table td, .tkr-table th.rpt-num, .tkr-table td.rpt-num { text-align: center; }
+
+/* Geofence Report (operator, 3 Nov 2026): the period's From and To, and the pickers beside them */
+.gfr-period { gap: 6px; flex-wrap: wrap; }
+.gfr-period .sp4-filter-chip { height: 24px; padding: 0 10px; }
+.gfr-when { display: inline-flex; align-items: center; gap: 5px; }
+.gfr-pick .drp-field { min-width: 150px; max-width: 240px; }
+.gfr-pick__q { width: calc(100% - 16px); margin: 0 8px 6px; }
+.gfr-table td:nth-child(3), .gfr-table td:nth-child(4) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* End of shift's custom range (operator, 3 Nov 2026) */
+.stp-custom { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--sp4-line, rgba(127,127,127,.25)); }
+.stp-custom__f { display: flex; flex-direction: column; gap: 3px; }
+.stp-custom__f input { width: 100%; min-width: 0; }
+.stp-custom__now { margin-top: 8px; }
+.stp-custom .stp__clocks { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.stp-custom__f { flex-direction: row; align-items: center; justify-content: space-between; }
+.stp-custom__f input { width: auto; flex: 1 1 auto; max-width: 230px; }
+
+/* Non-Updating Assets (operator, 3 Nov 2026): the sheet's section bars */
+.ofl-table .ofl-bar th { color: #0b1f2a; font-weight: 700; text-align: center; letter-spacing: .04em; padding: 6px 10px; position: relative; }
+.ofl-bar__n { position: absolute; right: 10px; font-weight: 400; letter-spacing: 0; opacity: .8; }
+.ofl-table .ofl-head th { text-align: left; }
+.ofl-table td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ofl-none { font-style: italic; }
+
+/* Tankers: leaving a row out before the PDF (operator, 3 Nov 2026) */
+.tkr-table th.mvr-keep, .tkr-table td.mvr-keep { width: 34px; text-align: center; }
+.tkr-table tr.mvr-row--out td { background: transparent; }
+.tkr-putback { margin-left: 6px; padding: 0; border: 0; background: none; color: var(--sp4-accent, #2563eb); font: inherit; text-decoration: underline; cursor: pointer; }

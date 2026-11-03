@@ -148,3 +148,32 @@ export async function loadDistances({ orgId, vehicles, windows, onProgress = () 
   }
   return { perVehicle, failed: failedUnits.size };
 }
+
+/**
+ * Every reading of each tracker over [from, to], sorted, from its days of
+ * telemetry (the Tankers Report reads a trip from them). `failed`: trackers
+ * whose readings could not all be read.
+ */
+export async function loadPings({ orgId, vehicles, from, to, onProgress = () => {} }) {
+  const days = daysCovering(from, to);
+  const jobs = [];
+  for (const v of vehicles) for (const day of days) jobs.push({ v, day });
+  let done = 0;
+  onProgress({ done, total: jobs.length });
+  const parts = await settleLimited(jobs, 6, async ({ v, day }) => {
+    const r = await loadDay(orgId, v.vehicleId, day);
+    done += 1;
+    if (done % 5 === 0 || done === jobs.length) onProgress({ done, total: jobs.length });
+    return r.pings;
+  });
+  const pings = new Map();
+  const failed = new Set();
+  parts.forEach((p, i) => {
+    const id = jobs[i].v.vehicleId;
+    if (!pings.has(id)) pings.set(id, []);
+    if (p.status !== 'fulfilled') { failed.add(id); return; }
+    pings.get(id).push(...p.value.filter((x) => x.t >= from && x.t <= to));
+  });
+  for (const list of pings.values()) list.sort((a, b) => a.t - b.t);
+  return { pings, failed };
+}
