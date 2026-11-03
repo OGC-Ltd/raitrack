@@ -26,10 +26,10 @@ export async function loadEndOfShiftDoc({ orgId, from, to, category = null }) {
   return res.data;
 }
 
-/** The document as the operator edited it, drawn as the PDF by the server: `{ blob, filename }`. */
-export async function makeEditedEndOfShift({ orgId, doc }) {
+/** The document as the operator edited it, drawn as the PDF by the server: `{ blob, filename }`; `landscape` turns the pages on their side. */
+export async function makeEditedEndOfShift({ orgId, doc, landscape = false }) {
   if (!orgId) throw new Error("No organisation selected");
-  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/end-of-shift.pdf`, {
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/end-of-shift.pdf${landscape ? "?landscape=1" : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(doc),
