@@ -172,3 +172,27 @@ export function zoneTestFor(featureCollection) {
     return insideAnyFence({ lat, lng }, features);
   };
 }
+
+const CIRCLE_POINTS = 32;
+const METRES_PER_DEGREE = 111320;
+
+/** A circular fence as a closed [lng, lat] ring, for a map that draws polygons.
+ *  Empty where the fence has no usable centre or radius. */
+export function circleRing(center, radiusM) {
+  const [lng, lat] = center ?? [];
+  if (!Number.isFinite(lng) || !Number.isFinite(lat) || !(radiusM > 0)) return [];
+  const dLat = radiusM / METRES_PER_DEGREE;
+  const dLng = dLat / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  const ring = [];
+  for (let i = 0; i < CIRCLE_POINTS; i++) {
+    const a = (i / CIRCLE_POINTS) * 2 * Math.PI;
+    ring.push([lng + dLng * Math.cos(a), lat + dLat * Math.sin(a)]);
+  }
+  ring.push(ring[0]);
+  return ring;
+}
+
+/** A circle's area in whole hectares, as the server rounds a polygon's. */
+export function circleAreaHa(radiusM) {
+  return radiusM > 0 ? Math.round((Math.PI * radiusM * radiusM) / 10000) : 0;
+}

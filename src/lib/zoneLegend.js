@@ -18,11 +18,16 @@ export const ZONE_STYLE = {
   rainfed:    { color: "#fb923c", label: "Rain-fed"     },
   factory:    { color: "#22d3ee", label: "Factory"      },
   logistics:  { color: "#e879f9", label: "Logistics"    },
-  facility:   { color: "#e2e8f0", label: "Facility"     },
+  /* Near-white for imagery, and invisible on OpenStreetMap's pale land. */
+  facility:   { color: "#e2e8f0", osmColor: "#0d9488", label: "Facility" },
   wetland:    { color: "#38bdf8", label: "Wetland"      },
   water:      { color: "#3b82f6", label: "River"        },
   drain:      { color: "#818cf8", label: "Drain"        },
   road:       { color: "#fde047", label: "Haulage road" },
+  /* The trading fences. Menengai's are nearly all of these (5,840 van-sales
+     shops of 6,169 zones) and drew in the unclassified grey until 2026-11-04. */
+  shop:       { color: "#8b5cf6", label: "Van-sales shop" },
+  customer:   { color: "#db2777", label: "Customer"       },
 
   // ── Works-site categories ──────────────────────────────────────────────
   //
@@ -63,6 +68,11 @@ export const ZONE_STYLE = {
    * as a big fuel station. */
   perimeter:  { color: "#f1f5f9", osmColor: "#ea580c", label: "Site perimeter" },
 
+  /* The geofence layer colours by shape, not purpose (operator, 2026-11-04): one
+     colour for circles, one for everything else. The popup still gives the purpose. */
+  circle:     { color: "#386641", label: "Circular fence" },
+  fence:      { color: "#a7c957", label: "Drawn fence"    },
+
   other:      { color: "#94a3b8", label: "Other"        },
 };
 export const ZONE_FALLBACK = ZONE_STYLE.other;
@@ -89,7 +99,7 @@ export function zoneColor(category, base = "osm") {
 // that under nine land uses is a legend read too late.
 export const ZONE_LEGEND = ["restricted", "gate", "perimeter", "farm", "nursery", "commercial",
                      "rainfed", "factory", "process", "yard", "parking", "workshop", "fuel", "storage",
-                     "weighing", "logistics", "facility", "wetland", "water", "drain",
+                     "weighing", "logistics", "circle", "fence", "customer", "shop", "facility", "wetland", "water", "drain",
                      "road", "other"];
 
 /**

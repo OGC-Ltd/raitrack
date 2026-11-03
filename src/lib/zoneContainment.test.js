@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { fenceContains, containingFences, insideAnyFence, zoneTestFor } from "./zoneContainment";
+import { fenceContains, containingFences, insideAnyFence, zoneTestFor, circleRing, circleAreaHa } from "./zoneContainment";
 
 /** A square about 1.1 km on a side, near Mufindi. */
 const square = {
@@ -192,5 +192,27 @@ describe("zoneTestFor, the three states", () => {
     // shape to read, fall through to the geometry we can see for ourselves.
     const legacy = { lat: -4.000, lng: 30.000, zones: { known: true, inside: [{ id: "z1", name: "Depot" }] } };
     expect(zoneTestFor(fc)(legacy)).toBe(false);   // decided by geometry: outside
+  });
+});
+
+describe("drawing a circular fence", () => {
+  it("makes a closed ring the containment test agrees with", () => {
+    const center = [35.2, -0.3];
+    const ring = circleRing(center, 500);
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+    const polygon = { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
+    expect(fenceContains({ lat: -0.3, lng: 35.2 }, polygon)).toBe(true);
+    expect(fenceContains({ lat: -0.3, lng: 35.21 }, polygon)).toBe(false);
+  });
+
+  it("draws nothing without a centre or a radius", () => {
+    expect(circleRing([35.2, -0.3], 0)).toEqual([]);
+    expect(circleRing([35.2, -0.3], null)).toEqual([]);
+    expect(circleRing(null, 500)).toEqual([]);
+  });
+
+  it("gives the area in hectares", () => {
+    expect(circleAreaHa(1000)).toBe(314);
+    expect(circleAreaHa(null)).toBe(0);
   });
 });

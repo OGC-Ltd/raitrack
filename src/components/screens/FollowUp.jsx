@@ -130,10 +130,6 @@ export function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, n
             Follow-up <span className="oi-panel__n">{pending.length} pending</span>
             {overdue > 0 && <span className="oi-panel__n fu-overdue">{overdue} overdue</span>}
           </h3>
-          <p className="oi-panel__sub">
-            One case per vehicle per day with a phone, seatbelt or covered-camera incident, or {`5`} or more harsh events.
-            Record what was done; a case open for more than 24 hours is overdue.
-          </p>
         </div>
         <div className="oi-panel__tools">
           <div className="oi-seg" role="radiogroup" aria-label="Show">
