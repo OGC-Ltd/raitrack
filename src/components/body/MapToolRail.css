@@ -104,7 +104,34 @@
 }
 .mtr-btn__count--alert { background: #ef4444; color: #ffffff; }
 .mtr-btn__count[data-digits="2"] { font-size: 8px; letter-spacing: -0.02em; }
-.mtr-btn__count[data-digits="3"] { font-size: 7px; letter-spacing: -0.04em; }
+
+/* Past 20 (RailButton's COUNT_MAX) a number no longer fits the corner: a red
+   dot, its ring rippling out, says "many" and the title carries the count. */
+.mtr-btn__dot {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 1.5px #ffffff;
+}
+.mtr-btn__dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: mtr-dot-ripple 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes mtr-dot-ripple {
+  from { transform: scale(1); opacity: 0.6; }
+  to { transform: scale(2.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mtr-btn__dot::after { animation: none; }
+}
 
 .mtr-btn__label {
   overflow: hidden;

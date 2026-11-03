@@ -24,6 +24,10 @@ import "./MapToolRail.css";
    per client, which the 600 ms debounce on typing respects. */
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
+/** The most a rail badge writes; beyond it the badge is a red dot that
+ *  ripples (operator, 3 Nov 2026: "172" spilled off the camera's corner). */
+const COUNT_MAX = 20;
+
 // `tour`: the first-time tour's mark for this button (lib/productTour).
 function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn", tour }) {
   return (
@@ -34,14 +38,16 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
       onClick={onClick}
       disabled={disabled}
       aria-pressed={on}
-      aria-label={label}
-      title={title ?? label}
+      aria-label={count > 0 ? `${label}, ${count}` : label}
+      title={count > COUNT_MAX ? `${title ?? label} (${count})` : title ?? label}
     >
       {count > 0 ? (
         // The count rides the icon's corner, as on the Maps button.
         <span className="mtr-btn__icon">
           <i className={`ti ${icon}`} aria-hidden="true" />
-          <span className={`mtr-btn__count mtr-btn__count--${tone}`} data-digits={String(count).length}>{count}</span>
+          {count > COUNT_MAX
+            ? <span className="mtr-btn__dot" aria-hidden="true" />
+            : <span className={`mtr-btn__count mtr-btn__count--${tone}`} data-digits={String(count).length}>{count}</span>}
         </span>
       ) : (
         <i className={`ti ${icon}`} aria-hidden="true" />

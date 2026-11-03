@@ -1,5 +1,6 @@
 /*
- * Non-Updating Assets Report (operator, 3 Nov 2026; West Kenya's sheet,
+ * Dormant Assets Report, a tab under Movements (operator, 3 Nov 2026; was
+ * Non-Updating Assets, a report of its own; West Kenya's sheet,
  * Menengai too): the vehicles whose trackers have stopped sending, in three
  * sections by the day of their last message: offline yesterday, for 48 hrs,
  * for over 48 hrs. A template (lib/reportTemplates): each organisation that
@@ -32,7 +33,7 @@ function Kpi({ value, label, tone }) {
   );
 }
 
-export default function OfflineReport({ orgId, orgCode, companyName }) {
+export default function OfflineReport({ orgId, orgCode, companyName, active = true }) {
   const { code, picked, several, orgIdOf, nameOf, fleetWords, picker } = useReportOrgs('offline', { orgId, orgCode, companyName });
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
@@ -60,8 +61,8 @@ export default function OfflineReport({ orgId, orgCode, companyName }) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
-  // Opens made, for this organisation: there is nothing to pick first
-  useEffect(() => { if (orgId && run.status === 'idle') execute(); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Opens made, for this organisation, once its tab is first shown: there is nothing to pick first
+  useEffect(() => { if (active && orgId && run.status === 'idle') execute(); }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = run.status === 'done' ? run : null;
   const rep = done?.rep;
@@ -88,7 +89,7 @@ export default function OfflineReport({ orgId, orgCode, companyName }) {
   };
   const saveCsv = () => {
     if (!done) return;
-    downloadTableCsv({ ...csvTable(rep), filenameSlug: `non-updating-${new Date(done.now + 3 * 3600_000).toISOString().slice(0, 10)}` });
+    downloadTableCsv({ ...csvTable(rep), filenameSlug: `dormant-assets-${new Date(done.now + 3 * 3600_000).toISOString().slice(0, 10)}` });
   };
 
   return (
@@ -114,7 +115,7 @@ export default function OfflineReport({ orgId, orgCode, companyName }) {
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
-          <EmptyNote icon={<ReportIcon name="offline" />} title="Non-Updating Assets">
+          <EmptyNote icon={<ReportIcon name="offline" />} title="Dormant Assets">
             The vehicles whose trackers have stopped sending, by the day of their last message.
           </EmptyNote>
         )}
@@ -133,7 +134,7 @@ export default function OfflineReport({ orgId, orgCode, companyName }) {
           <>
             <TableToolbar
               summary={<>
-                Non-Updating Assets · <strong>{offlineCount(rep)}</strong> of {rep.total} vehicles
+                Dormant Assets · <strong>{offlineCount(rep)}</strong> of {rep.total} vehicles
                 <span className="rpt-sub"> · {fleetWords(done.orgs)} · as at {asAtWords(done.now)}</span>
                 {done.unread.length > 0 && <span className="rpt-warn"> · {done.unread.join(', ')} could not be opened</span>}
               </>}
@@ -151,23 +152,27 @@ export default function OfflineReport({ orgId, orgCode, companyName }) {
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table ofl-table">
                 <colgroup><col style={{ width: '30%' }} /><col style={{ width: '18%' }} /><col /></colgroup>
+                <thead>
+                  <tr>{COLUMNS.map((h) => <th key={h} scope="col">{h}</th>)}</tr>
+                </thead>
                 <tbody>
                   {SECTIONS.map((s) => {
                     const list = rep.sections[s.key];
                     return (
                       <Fragment key={s.key}>
-                        <tr className="ofl-bar">
-                          <th colSpan={3} scope="colgroup" style={{ background: BAR }}>
-                            {s.title}<span className="ofl-bar__n">{sectionDays(s, done.now)} · {list.length}</span>
+                        {/* A section is a group row, as in Movements, in the sheet's blue */}
+                        <tr className="rpt-group ofl-group">
+                          <th colSpan={3} scope="rowgroup" style={{ background: BAR }}>
+                            <span className="rpt-group__name">{s.words}</span>
+                            <span className="rpt-group__meta">{sectionDays(s, done.now)} · {list.length} vehicle{list.length === 1 ? '' : 's'}</span>
                           </th>
                         </tr>
-                        <tr className="ofl-head">{COLUMNS.map((h) => <th key={h} scope="col">{h}</th>)}</tr>
                         {list.length ? list.map((r) => (
                           <tr key={r.vehicleId} className="sp4-tr">
                             {rowCells(r).map((v, i) => <td key={i} className={i === 0 ? 'rpt-unit' : undefined}>{v}</td>)}
                           </tr>
                         )) : (
-                          <tr><td colSpan={3} className="rpt-sub ofl-none">None.</td></tr>
+                          <tr><td colSpan={3} className="rpt-sub ofl-none">No vehicle.</td></tr>
                         )}
                       </Fragment>
                     );

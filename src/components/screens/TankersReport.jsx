@@ -7,7 +7,7 @@
  * page, its report time, and the PDF, JPEG and CSV.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import {
@@ -38,7 +38,7 @@ function Kpi({ value, label, tone }) {
 
 const dmy = (ms) => new Date(ms + 3 * 3600_000).toISOString().slice(0, 10).split('-').reverse().join('/');
 
-export default function TankersReport({ orgId, vehicles, orgCode, companyName }) {
+export default function TankersReport({ orgId, vehicles, orgCode, companyName, active = true }) {
   const [at, setAt] = useState(null);                       // the report time; null = now
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
@@ -109,6 +109,10 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName })
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
+  // Made on opening the tab (operator, 3 Nov 2026: "run it by default"), once the fleet has loaded
+  useEffect(() => {
+    if (active && orgId && vehicles?.length && run.status === 'idle') execute();
+  }, [active, orgId, vehicles?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = run.status === 'done' ? run : null;
   // What the PDF, JPEG, CSV and the figures hold: the rows not left out

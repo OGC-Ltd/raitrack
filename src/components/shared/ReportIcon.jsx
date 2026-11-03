@@ -11,7 +11,7 @@
  * EmptyNote disc sets its size and colour.
  */
 const MARKS = {
-  // Non-updating assets: a tracker's signal, struck through.
+  // Dormant assets: a tracker's signal, struck through.
   offline: (
     <>
       <path d="M5 9.5a10 10 0 0 1 14 0M7.6 12.4a6.2 6.2 0 0 1 8.8 0M10.2 15.2a2.4 2.4 0 0 1 3.6 0" />
