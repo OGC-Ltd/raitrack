@@ -19,18 +19,24 @@ import { dayStart, byPlate } from './fleetReports';
  */
 export const directionWords = (site = 'MORL') => ({
   to: `To ${site}`, from: `From ${site}`, at: `At ${site}`, moving: 'Moving', stopped: 'Stopped',
-  // Menengai's silent units stand at RAIMDF (operator, 2 Nov: "remove no fix")
-  'no-fix': site === 'MORL' ? 'At RAIMDF' : 'No fix',
+  // Menengai's silent units stand at RAIMDF, the others are not reporting
+  // (operator, 2 Nov / 3 Nov: "remove no fix")
+  'no-fix': site === 'MORL' ? 'At RAIMDF' : 'Not reporting',
 });
 export const DIRECTION = directionWords('MORL');
 export const STATES = Object.keys(DIRECTION);
+/**
+ * The Direction dropdown's choices (operator, 3 Nov: "remove the no fix"): a
+ * silent unit's own state stays on its row, but is not offered on the others.
+ */
+export const statesFor = (row) => STATES.filter((s) => s !== 'no-fix' || row.state === 'no-fix');
 
 /** Moving, as the server reads it: this fast or faster on a fix inside the window. */
 export const MOVING_KMH = 5;
 
 /**
  * Is the unit moving now? Its Location cell is filled green (operator, 2026-11-02).
- * Pass the row as edited: one the operator set to Stopped or No fix is not
+ * Pass the row as edited: one the operator set to Stopped or not reporting is not
  * moving, whatever the last speed said. The server reads it the same way.
  */
 export function isMoving(row) {
@@ -67,7 +73,7 @@ const parts = (ms) => Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
 
 /** "18.06.2025 07:56:26", as the PDF and the operator's sheet write it. */
 export function stamp(ms) {
-  if (ms == null) return 'No fix';
+  if (ms == null) return '-';
   const p = parts(ms);
   return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}:${p.second}`;
 }

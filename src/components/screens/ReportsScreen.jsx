@@ -51,7 +51,7 @@ import ReportIcon from '../shared/ReportIcon';
 import PdfPages from '../shared/PdfPages';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport } from '../../lib/reportNav';
-import { directionWords, byFleetList, splitsByType, STATES, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -1104,7 +1104,7 @@ function MovementsReport({ orgId }) {
             <TableToolbar
               summary={<>
                 <strong>{kept.counts.total.toLocaleString('en-GB')}</strong> vehicle{kept.counts.total === 1 ? '' : 's'}
-                <span className="rpt-sub"> · {periodText(report.from, report.to)} · {report.morl ? `${report.morl} geofence` : `no ${site} geofence, so no direction`}</span>
+                <span className="rpt-sub"> · {periodText(report.from, report.to)}{report.morl ? ` · ${report.morl} geofence` : ''}</span>
                 {changed > 0 && <span className="rpt-edited"> · {changed} edited</span>}
               </>}
               onPdf={pdf.busy ? undefined : downloadPdf}
@@ -1175,7 +1175,7 @@ function MovementsReport({ orgId }) {
                             <tr key={row.vehicleId} className={`sp4-tr${out ? ' mvr-row--out' : ''}`}
                                 style={!out && TINT[state] ? { background: TINT[state] } : undefined}>
                               <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
-                              <td className={row.stale ? 'mvr-silent' : undefined}>{row.lastAt == null && site === 'MORL' ? '-' : stamp(row.lastAt)}</td>
+                              <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
                               <td className={out ? undefined : isLoading(row) ? 'mvr-cell--loading' : state === 'at' ? 'mvr-cell--morl' : isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}>
                                 <input type="text" className={`mvr-edit${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
                                        value={location} placeholder="-" maxLength={200} disabled={out}
@@ -1187,7 +1187,7 @@ function MovementsReport({ orgId }) {
                                 <select className={`rpt-select mvr-edit${state !== row.state ? ' mvr-edit--changed' : ''}`}
                                         value={state} disabled={out} aria-label={`Direction of ${row.plate}`}
                                         onChange={(ev) => edit(row.vehicleId, { state: ev.target.value })}>
-                                  {STATES.map((s) => <option key={s} value={s}>{words[s]}</option>)}
+                                  {statesFor(row).map((s) => <option key={s} value={s}>{words[s]}</option>)}
                                 </select>
                               </td>
                               <td className="mvr-keep">
