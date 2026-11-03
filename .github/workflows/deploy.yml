@@ -146,6 +146,8 @@ jobs:
     name: publish to the box
     needs: build
     runs-on: ubuntu-latest
+    # Long enough for fleet-web to wait for the image CI is still pushing.
+    timeout-minutes: 40
     environment: production
     env:
       # How many bundle backups the box keeps, including the one this run makes.
@@ -352,6 +354,22 @@ jobs:
           rsync -az --delete -e 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes' \
             build/ "ubuntu@${HOST}:/home/ubuntu/prod/dash/build/"
           echo "DASH_BACKUP=build.bak-${stamp}" >> "$GITHUB_ENV"
+
+      # Phase 3 of fleet-server's docs/containerization-plan.md. Once the box
+      # serves `/` from the web container (fleet-web switch), this commit's
+      # image is what has to go live; the files published above stay current
+      # as the way back (fleet-web back). images.yml pushes the image, and the
+      # box waits for it.
+      - name: update the web container, if the site is served from it
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          mode=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "ubuntu@${HOST}" 'sudo -n /usr/local/sbin/fleet-web mode 2>/dev/null || echo static')
+          echo "site mode: ${mode}"
+          [ "${mode}" = container ] || { echo "the published files are what is served"; exit 0; }
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "ubuntu@${HOST}" \
+            "sudo -n PULL_WAIT_S=1200 /usr/local/sbin/fleet-web up ${GITHUB_SHA}"
 
       - name: confirm the site serves the new bundle
         env:
