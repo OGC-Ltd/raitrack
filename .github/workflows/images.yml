@@ -2,7 +2,7 @@
 # publish the `web` image. Deploys nothing: deploy.yml still rsyncs the build
 # to the box until phase 3.
 #
-#   <account>.dkr.ecr.af-south-1.amazonaws.com/raitrack:<sha>   private ECR,
+#   <account>.dkr.ecr.af-south-1.amazonaws.com/ghala:raitrack-<sha>   private ECR,
 #   immutable tags; pushed only after it serves as non-root and Trivy finds no
 #   fixable HIGH or CRITICAL issue. AWS access is per run via GitHub OIDC (the
 #   role in the repository variable AWS_ECR_PUSH_ROLE_ARN; main branch only).
@@ -105,7 +105,7 @@ jobs:
           push: true
           sbom: true
           provenance: mode=max
-          tags: ${{ steps.ecr.outputs.registry }}/raitrack:${{ github.sha }}
+          tags: ${{ steps.ecr.outputs.registry }}/ghala:raitrack-${{ github.sha }}
           build-args: GIT_SHA=${{ github.sha }}
           secret-envs: |
             VITE_GOOGLE_MAPS_API_KEY=VITE_GOOGLE_MAPS_API_KEY
