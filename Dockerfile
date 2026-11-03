@@ -32,13 +32,21 @@ ARG GIT_SHA=unknown
 RUN printf '%s OGC-Ltd/raitrack v%s\n' "${GIT_SHA}" "$(node -p "require('./package.json').version")" > build/DEPLOYED_COMMIT
 
 FROM ${NGINX_IMAGE} AS runtime
-# Alpine's security updates at build time: the pinned base trails them, and
-# the scan in CI refuses fixable HIGH/CRITICAL findings (49 on 2026-11-03:
-# openssl, curl, brotli, c-ares...). curl goes too: nothing here uses it (the
-# healthcheck is busybox wget), and it carried most of those findings.
+# Only what serving static files needs, then Alpine's security updates: the
+# pinned base trails them, and the scan in CI refuses fixable HIGH/CRITICAL
+# findings (49 on 2026-11-03: openssl, curl, brotli, c-ares, then libexpat).
+#   - The four dynamic modules are installed but never loaded (no load_module
+#     anywhere); removing them purges 47 packages: gd, fontconfig, libexpat,
+#     libxml2, libxslt, image libraries...  `nginx -t` passes without them.
+#   - curl: nothing uses it (the healthcheck is busybox wget).
+# ARG APK_REFRESH changes every CI run, so this layer is never reused from
+# cache and each image gets the updates published up to its build.
 USER root
-RUN apk upgrade --no-cache \
- && apk del --no-cache curl \
+ARG APK_REFRESH=manual
+RUN echo "apk refresh: ${APK_REFRESH}" \
+ && apk del --no-cache nginx-module-image-filter nginx-module-xslt nginx-module-geoip nginx-module-njs curl \
+ && apk upgrade --no-cache \
+ && nginx -t \
  && rm -rf /var/cache/apk/*
 USER 101
 COPY --chmod=644 deploy/web.conf /etc/nginx/conf.d/default.conf
