@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, pdfRequests, splitsByType, byFleetList, NOT_ON_LIST, directionWords, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
+import { applyEdits, pdfRequest, pdfRequests, splitsByType, byFleetList, NOT_ON_LIST, directionWords, statesFor, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -74,6 +74,12 @@ describe('editing the Movements report before the PDF', () => {
     expect(stamp(null)).toBe('-');
     expect(directionWords('MORL')['no-fix']).toBe('At RAIMDF');
     expect(directionWords('Sukari')['no-fix']).toBe('Not reporting');
+  });
+
+  it('offers neither Moving nor No fix in the dropdown, except on a row already in it', () => {
+    expect(statesFor(row('A', 'to'))).toEqual(['to', 'from', 'at', 'stopped']);
+    expect(statesFor(row('A', 'moving'))).toContain('moving');
+    expect(directionWords('MORL').moving).toBe('-');
   });
 
   it('reads a unit as moving at 5 km/h or more on a fix inside the window, so its location shows green', () => {
