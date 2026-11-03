@@ -2,8 +2,11 @@
 # publish the `web` image. Deploys nothing: deploy.yml still rsyncs the build
 # to the box until phase 3.
 #
-#   ghcr.io/ogc-ltd/raitrack:<sha>   private; pushed only after Trivy finds no
-#                                    fixable HIGH or CRITICAL issue
+#   <account>.dkr.ecr.af-south-1.amazonaws.com/raitrack:<sha>   private ECR,
+#   immutable tags; pushed only after it serves as non-root and Trivy finds no
+#   fixable HIGH or CRITICAL issue. AWS access is per run via GitHub OIDC (the
+#   role in the repository variable AWS_ECR_PUSH_ROLE_ARN; main branch only).
+#   Without that variable the run builds, tests and scans, then skips the push.
 name: images
 
 on:
@@ -19,7 +22,8 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/ogc-ltd/raitrack
+  IMAGE: raitrack              # local name for build, test and scan
+  AWS_REGION: af-south-1
   TRIVY_IMAGE: aquasec/trivy:0.58.1
 
 jobs:
@@ -28,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      id-token: write          # GitHub OIDC token, exchanged for the ECR push role
     env:
       VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
       VITE_MYTOMTOM_API_KEY: ${{ secrets.VITE_MYTOMTOM_API_KEY }}
@@ -72,21 +76,36 @@ jobs:
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
             "${IMAGE}:${GITHUB_SHA}"
 
-      - name: log in to GHCR
-        uses: docker/login-action@v3
+      - name: AWS push role configured?
+        id: gate
+        env:
+          ROLE: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+        run: |
+          if [ -n "${ROLE}" ]; then echo "push=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::AWS_ECR_PUSH_ROLE_ARN is not set: image built, tested and scanned, not pushed"; fi
+
+      - name: sign in to AWS (OIDC, this run only)
+        if: steps.gate.outputs.push == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+          role-session-name: raitrack-images-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: log in to ECR
+        if: steps.gate.outputs.push == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: push with SBOM and provenance
+        if: steps.gate.outputs.push == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           sbom: true
           provenance: mode=max
-          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          tags: ${{ steps.ecr.outputs.registry }}/raitrack:${{ github.sha }}
           build-args: GIT_SHA=${{ github.sha }}
           secret-envs: |
             VITE_GOOGLE_MAPS_API_KEY=VITE_GOOGLE_MAPS_API_KEY
