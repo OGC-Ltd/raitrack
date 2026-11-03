@@ -11,7 +11,7 @@
 #   docker build \
 #     --secret id=VITE_GOOGLE_MAPS_API_KEY,env=VITE_GOOGLE_MAPS_API_KEY \
 #     --secret id=VITE_MYTOMTOM_API_KEY,env=VITE_MYTOMTOM_API_KEY \
-#     -t <account>.dkr.ecr.af-south-1.amazonaws.com/raitrack:<sha> .
+#     -t <account>.dkr.ecr.af-south-1.amazonaws.com/ghala:raitrack-<sha> .
 ARG NODE_IMAGE=node:24.18.0-bookworm-slim
 ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.28.0-alpine
 
