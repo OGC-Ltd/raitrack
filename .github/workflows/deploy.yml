@@ -30,6 +30,17 @@ name: build and deploy
 on:
   push:
     branches: [main]
+    # Container and CI files the rsync deploy never reads: changing only these
+    # must not republish the live site. This file is listed too, so editing the
+    # workflow alone does not deploy; use "Run workflow" when one is wanted.
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/images.yml'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'deploy/**'
+      - 'docs/**'
+      - '*.md'          # root only: public/ ships its own .md files
   workflow_dispatch:
 
 concurrency:
