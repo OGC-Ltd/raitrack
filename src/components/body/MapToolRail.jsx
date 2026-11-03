@@ -2,9 +2,10 @@
  * The map's left tool rail, beside the sidebar.
  *
  * Tools in three groups — finding (search, names, layers, fit), measuring
- * (ruler, traffic, weather, halted, fuel alerts, dashcam alarms) and the rail's own expander.
- * Route covered and geofences left the rail on 2026-10-28 (operator): the
- * route opens from the unit itself, geofences are a row in the Maps panel. Desktop only:
+ * (ruler, traffic, weather, geofences, halted, fuel alerts, dashcam alarms) and the rail's own expander.
+ * Route covered left the rail on 2026-10-28 (operator): the route opens from
+ * the unit itself. Geofences came back on 2026-11-04 (operator); their row in
+ * the Maps panel stays, since it carries the colour key. Desktop only:
  * FleetMap renders it where the sidebar exists (not `isCompact`), because a
  * phone already has its own controls and no room for a second column of them.
  *
@@ -46,7 +47,7 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
         <span className="mtr-btn__icon">
           <i className={`ti ${icon}`} aria-hidden="true" />
           {count > COUNT_MAX
-            ? <span className="mtr-btn__dot" aria-hidden="true" />
+            ? <span className={`mtr-btn__dot mtr-btn__dot--${tone}`} aria-hidden="true" />
             : <span className={`mtr-btn__count mtr-btn__count--${tone}`} data-digits={String(count).length}>{count}</span>}
         </span>
       ) : (
@@ -254,7 +255,8 @@ export default function MapToolRail({
   measuring, measureText, onToggleMeasure,
   traffic,          // the "traffic" map layer ({ on, onToggle }) or null
   weather,          // the "weather" map layer ({ on, onToggle, note }) or null
-  halted,           // { count, open, onOpen } or null without map:filter
+  zones,            // the "zones" map layer ({ on, onToggle }) or null
+  halted,          // { count, open, onOpen } or null without map:filter
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
   arrivals,         // { open, onOpen } or null while Google routing is off
   dashcam,          // { count, critical, onOpen } or null where there are no VSS cameras
@@ -320,6 +322,16 @@ export default function MapToolRail({
               ? (weather.on && weather.note ? `Weather: ${weather.note}` : `${weather.on ? "Hide" : "Show"} live weather on the map`)
               : "Weather is not available"}
             on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
+          />
+          {/* Drawn for every company, disabled where no geofence layer is
+              offered: a tool that comes and goes between companies reads as
+              a broken rail. */}
+          <RailButton
+            icon="ti-map-pins" label={zones?.on ? "Hide geofences" : "Show geofences"}
+            title={zones
+              ? `${zones.on ? "Hide" : "Show"} geofences on the map`
+              : "No geofences are drawn for this company"}
+            on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
           />
           </>)}
           {/* Halted (operator, 2026-10-07: "right below geofences"): units

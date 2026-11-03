@@ -1479,6 +1479,78 @@ html[data-theme="light"] #root {
      plate alone can't guarantee contrast — the outline does. */
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
+/* A fence's name while the pointer is over it, lifted clear of the pointer.
+   White text with the colour on the edge: a dark fence colour such as the
+   circles' green cannot be read as text on this plate. */
+.zone-label--hover {
+  margin-bottom: 8px;
+  border: 1.5px solid var(--zone-color);
+  background: rgba(15, 23, 42, 0.88);
+  color: #f1f5f9;
+  font-size: 11.5px;
+}
+/* Hallmark · component: tooltip · genre: modern-minimal · theme: project tokens, the shared .mapcard
+ * states: default · open · below · slid along an edge · dismissed (rows carry no action)
+ * Host for the fence group's card: where it sits and its tail. The surface,
+ * hairlines and type are .mapcard's. Sizes match the FENCE_TIP constants. */
+.fence-tip {
+  position: relative;
+  display: flex;
+  width: 276px;
+  max-width: calc(100vw - 32px);
+  max-height: 309px;
+  margin-bottom: 11px;
+  padding-bottom: 9px;
+  box-sizing: border-box;
+  cursor: auto;
+  pointer-events: auto;
+}
+.fence-tip--below {
+  margin-top: 11px;
+  margin-bottom: 0;
+  padding-top: 9px;
+  padding-bottom: 0;
+}
+.fence-tip--below .fence-tip__tail {
+  top: 2px;
+  bottom: auto;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+/* Geofences too small to draw, standing in as one icon. See fenceClusterHtml. */
+.fence-cluster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--fence-disc);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.fence-cluster:hover { transform: scale(1.1); }
+.fence-cluster__count {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1.5px solid #fff;
+  border-radius: 9px;
+  box-sizing: border-box;
+  background: var(--fence-badge);
+  color: #1b3320;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  white-space: nowrap;
+}
 .zone-label-area {
   font-size: 9px;
   font-weight: 600;
@@ -1780,6 +1852,35 @@ html[data-theme="light"] #root {
 }
 .mapcard__foot--notes { flex-direction: column; gap: 2px; line-height: 1.35; }
 .mapcard__muted { color: var(--mc-quiet); }
+
+/* The fences in a group. As long as it needs to be: the card keeps its height and
+   this part scrolls, with the scrollbar in the card's right padding. */
+.mapcard--fences {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: 0;
+}
+.mapcard__names {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  margin: 0 -10px 0 0;
+  padding: 0 10px 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  list-style: none;
+}
+.mapcard__name {
+  flex: none;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
 
 /* A scale with nothing in the window is not a broken marker, and the card has
    to say which of the two it is. */

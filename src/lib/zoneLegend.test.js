@@ -67,6 +67,15 @@ describe("legendFor", () => {
     for (const key of ZONE_LEGEND) expect(ZONE_STYLE[key], key).toBeDefined();
   });
 
+  /* The server files 5,840 of Menengai's fences as `shop`; without a style they
+   * all drew in the unclassified grey. */
+  it("draws the trading fences in their own colours, not the grey", () => {
+    const colors = ["shop", "customer"].map((k) => zoneColor(k, "osm"));
+    expect(new Set(colors).size).toBe(2);
+    expect(colors).not.toContain(ZONE_STYLE.other.color);
+    expect(keys(["shop", "customer"])).toEqual(["customer", "shop"]);
+  });
+
   it("carries the site vocabulary a mill needs", () => {
     expect(labels(["yard", "parking", "workshop", "weighing", "gate"]))
       .toEqual(["Gate", "Yard", "Vehicle park", "Workshop", "Weighbridge"]);
@@ -76,6 +85,14 @@ describe("legendFor", () => {
 /* The site fence was white for satellite imagery, and white on OpenStreetMap's
  * pale land drew nothing at all (operator, 2026-10-09). */
 describe("zoneColor", () => {
+  it("draws the geofence layer's two shapes in one colour each on every base map", () => {
+    for (const base of ["osm", "google", "google-satellite"]) {
+      expect(zoneColor("circle", base)).toBe("#386641");
+      expect(zoneColor("fence", base)).toBe("#a7c957");
+    }
+    expect(keys(["fence", "circle"])).toEqual(["circle", "fence"]);
+  });
+
   it("draws the site perimeter orange on OpenStreetMap, white on satellite", () => {
     expect(zoneColor("perimeter", "osm")).toBe("#ea580c");
     expect(zoneColor("perimeter", "google")).toBe(ZONE_STYLE.perimeter.color);

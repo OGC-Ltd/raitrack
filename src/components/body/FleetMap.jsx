@@ -40,6 +40,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useVssBadge } from "../../hooks/useVssBadge";
 import COMPANIES from "../../data/companyData";
 import { useEstateZones } from "../../hooks/useEstateZones";
+import { circleRing, circleAreaHa } from "../../lib/zoneContainment";
 import { useWeighbridges } from "../../hooks/useWeighbridges";
 import { spokenSiteName } from "../../lib/spokenName";
 import { weighbridgeCard, bridgeTitle } from "../../lib/weighbridgeCard";
@@ -103,6 +104,7 @@ import { useGoogleRoutingOn } from "../../lib/googleRouting";
 import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
+import { fenceExtent, clusterFences, fenceBadgeLabel, fenceNames } from "../../lib/fenceCluster";
 import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
@@ -199,8 +201,13 @@ const TRUCK_ROW_FOR = { stationary: "ok", "signal-lost": "ok" };
 // REMOVED 2026-10-20 (operator: "remove the estate plan, we remain with the
 // planning area"): no org draws the Estate areas layer any more; Kasulu keeps
 // the planting plan. The geometry is still fetched for the stranded-stop test
-// and playback. Set back to "kasulu" to restore the layer.
-const ZONE_AREAS_COMPANY = null;
+// and playback.
+//
+// BACK 2026-11-04, for every organisation (operator: "we can pull the geofences
+// from server"), as a switch on the tool rail that starts off. The drawing is
+// the fences /geofences/geojson serves, so it also has to carry Menengai's 6,169:
+// built on first use and on canvas. The operator asked for colour by purpose and
+// no standing names: a fence's name shows while the pointer is over it.
 
 // The 67 `VES-nnn` sample points are omitted from the overlay. They are
 // 1 km-radius circles that blanket the whole estate and would bury the
@@ -217,12 +224,11 @@ const zoneKey = (name) => (name ?? "")
   .replace(/\s+/g, " ")
   .trim();
 
-// Zones dropped from the overlay entirely — no shape, no plate, no click, and
+// Zones dropped from the overlay entirely — no shape, no click, and
 // excluded from the layer's camera-fit bounds.
 //
-// These three are not on the surveyor's 2026-27 sheet, and unlike the wet-land
-// plates (suppressed by name below, shapes kept) they are not wanted on the map
-// at all. Measured against the DWG's recovered UTM-36S extent they have ZERO
+// These three are not on the surveyor's 2026-27 sheet and are not wanted on the
+// map at all. Measured against the DWG's recovered UTM-36S extent they have ZERO
 // overlap with the drawing: FARM#212 sits 17.6 km west, FARM#213 25.1 km west
 // and 6.3 km south, FARM#214 12.8 km south — 3,000+ ha apiece, off the sheet in
 // every direction. Their siblings stay: FARM#210 (16 % overlap), FARM#211
@@ -233,42 +239,6 @@ const zoneKey = (name) => (name ?? "")
 // them; it does not decide whether they are real parcels outside this season's
 // plan. See fleet-server/docs/estate-areas-overlay.md §6.
 const ZONE_EXCLUDE = new Set(["FARM#212", "FARM#213", "FARM#214"]);
-
-// EVERY zone carries a name plate — but not at every zoom.
-//
-// The estate's zones NEST — FARM#211's 16,374 ha envelope contains the factory,
-// the 2500 Ha block and both nurseries — so at estate-wide zoom their centroids
-// land within a few pixels of each other. The ladder plus the declutter pass is
-// what keeps that from stacking into an unreadable pile. Shapes always draw;
-// only the text waits.
-const ZONE_LABEL_TIERS = [
-  { minHa: 1000, minZoom: 11 },   // ZONE 4, the farm envelopes, Rain-fed
-  { minHa: 100,  minZoom: 12 },   // factory, nurseries, labour camp, swamps
-  { minHa: 10,   minZoom: 14 },   // Logistic centre2, Swamp area3
-  { minHa: 0,    minZoom: 15 },   // workshops, dispensary, staff residence
-];
-
-// Corridors have no area to fit text inside — a drain is metres wide at any
-// zoom — so they get a single midpoint plate once the camera is close enough
-// for the corridor itself to be more than a hairline.
-const ZONE_CORRIDOR_LABEL_MIN_ZOOM = 13;
-
-/** Lowest zoom at which a zone of this size is allowed a name plate. */
-function zoneLabelMinZoom(areaHa) {
-  const ha = areaHa ?? 0;
-  for (const t of ZONE_LABEL_TIERS) if (ha >= t.minHa) return t.minZoom;
-  return ZONE_LABEL_TIERS[ZONE_LABEL_TIERS.length - 1].minZoom;
-}
-
-// Plates suppressed by name, shapes left alone.
-//
-// The wet-land plates are not wanted on the overlay. They are also the two
-// zones the surveyor's drawing cannot corroborate — both sit ~12 km WEST of the
-// plan's extent, and the drawing's only wet-ground class is WET FIELDS 6.21 ha
-// inside Nursery B, three orders of magnitude off "Wet land2" at 1,110 ha. The
-// polygons still draw and still answer a click; they just do not shout a name
-// the plan does not back.
-const ZONE_LABEL_SUPPRESS = new Set(["Wet area1", "Wet land2"]);
 
 // The surveyor's own designation, for the zones the 2026-27 planting drawing
 // covers. Wialon carries the operators' names ("2500 Ha Area"); the printed
@@ -287,55 +257,6 @@ const ZONE_PLAN_ALIAS = {
   "Reservoir site":        { plan: "RESEVOIR",     planHa: 4.5 },
   "Logistic centre2":      { plan: "LOGISTICS 2",  planHa: 20.99 },
 };
-
-/** Centroid of a ring, for label placement. Good enough for convex-ish blocks. */
-function ringCentroid(ring) {
-  let lat = 0, lng = 0;
-  // The closing vertex repeats the first — skip it so it isn't double-weighted.
-  const n = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0]
-                            && ring[0][1] === ring[ring.length - 1][1]
-    ? ring.length - 1 : ring.length;
-  for (let i = 0; i < n; i++) { lng += ring[i][0]; lat += ring[i][1]; }
-  return { lat: lat / n, lng: lng / n };
-}
-
-/**
- * Point half way ALONG a corridor, by length rather than by vertex index.
- *
- * Vertex spacing is wildly uneven — `Main river malagarasi3` carries 2,414
- * points, dense through the meanders and sparse on the straights — so the
- * middle vertex is not the middle of the river. Walking cumulative length puts
- * the plate where a reader would point at it.
- */
-function pathMidpoint(path) {
-  let total = 0;
-  const seg = [];
-  for (let i = 1; i < path.length; i++) {
-    const d = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
-    seg.push(d);
-    total += d;
-  }
-  let run = 0;
-  for (let i = 0; i < seg.length; i++) {
-    if (run + seg[i] >= total / 2) {
-      const t = seg[i] ? (total / 2 - run) / seg[i] : 0;
-      const [x0, y0] = path[i], [x1, y1] = path[i + 1];
-      return { lat: y0 + (y1 - y0) * t, lng: x0 + (x1 - x0) * t };
-    }
-    run += seg[i];
-  }
-  const mid = path[Math.floor(path.length / 2)];
-  return { lat: mid[1], lng: mid[0] };
-}
-
-function zoneLabelHtml(name, color, detail, plan) {
-  const sub  = detail ? `<span class="zone-label-area">${detail}</span>` : "";
-  // The drawing's designation, only where it differs from the operators' name —
-  // repeating "Nursery A / NURSERY A" on the plate is noise.
-  const alias = plan && plan.toUpperCase() !== name.toUpperCase()
-    ? `<span class="zone-label-plan">${plan}</span>` : "";
-  return `<div class="zone-label" style="--zone-color:${color}">${name}${alias}${sub}</div>`;
-}
 
 // ── Estate PLAN overlay (the CAD drawing) ──────────────────────────────────
 //
@@ -572,7 +493,7 @@ const ZONE_LABEL_NUDGE_STEPS = [0, 1, -1, 2, -2];
  * comparison only cares about relative positions. Sizes come off the live nodes
  * rather than an estimate, because the plates are variable-width text.
  */
-function declutterLabels(map, maps, entries, obstacles) {
+function declutterLabels(map, maps, entries) {
   const proj = map.getProjection?.();
   if (!proj) return;      // pre-first-idle: leave the ladder's decision alone
   const zoom = map.getZoom();
@@ -590,17 +511,7 @@ function declutterLabels(map, maps, entries, obstacles) {
     };
   };
 
-  // Plates belonging to the OTHER layer are immovable here: whichever set ran
-  // first has already committed its positions, and a plan label must not land on
-  // an authoritative zone name. Both sets re-run on idle, so this converges.
   const placed = [];
-  for (const o of obstacles ?? []) {
-    if (!o.attached || !o.shown) continue;
-    const size = o.marker.getDivSize();
-    if (!size) continue;
-    const box = boxAt(o, size, o.dy ?? 0);
-    if (box) placed.push(box);
-  }
 
   for (const e of entries) {
     const size = e.marker.getDivSize();
@@ -737,7 +648,7 @@ function hoverWindow(maps, map, { openDelay = 140, closeDelay = 220 } = {}) {
  * OverlayView builds its node on the map's schedule, not synchronously, so a
  * freshly attached plate measures as nothing and cannot be decluttered yet.
  */
-function labelApplier(map, maps, entries, on, obstacles) {
+function labelApplier(map, maps, entries, on) {
   let raf = 0;
   const apply = (deferred = false) => {
     const zoom = map.getZoom();
@@ -755,7 +666,7 @@ function labelApplier(map, maps, entries, on, obstacles) {
       else l.shown = false;
     }
     if (!on) return;
-    declutterLabels(map, maps, entries, obstacles?.());
+    declutterLabels(map, maps, entries);
     if (attachedAny && !deferred) {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => apply(true));
@@ -1918,6 +1829,55 @@ function clusterIconHtml(count, { sprite = "truck", status = "parked" } = {}) {
 }
 
 /**
+ * The icon standing in for geofences too small to draw: two strands of barbed
+ * wire. The count badge is left off for a single fence.
+ */
+function fenceClusterHtml(count) {
+  const label = fenceBadgeLabel(count);
+  return `
+    <div class="fence-cluster" style="--fence-disc:${zoneColor("circle")};--fence-badge:${zoneColor("fence")}">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" d="M1 8h22M1 16h22M5.5 4.8l5 6.4M10.5 4.8l-5 6.4M13.5 12.8l5 6.4M18.5 12.8l-5 6.4"/>
+      </svg>
+      ${count > 1 ? `<span class="fence-cluster__count" data-len="${label.length}">${label}</span>` : ""}
+    </div>`;
+}
+
+// The card a fence group shows on hover. Sizes match .fence-tip in FleetMap.css.
+const FENCE_TIP_W = 276;
+const FENCE_TIP_MAX_H = 300;
+const FENCE_TIP_ROW_H = 19;
+const FENCE_TIP_HEAD_H = 61;
+const FENCE_TIP_GAP = 20;
+// Clear of the tool rail on the map's left edge.
+const FENCE_TIP_LEFT_INSET = 72;
+const FENCE_TIP_RIGHT_INSET = 12;
+// The weighbridge card's timings (hoverWindow): a pass across the map opens
+// nothing, and there is time to cross from the icon to the card.
+const FENCE_TIP_OPEN_MS = 140;
+const FENCE_TIP_CLOSE_MS = 220;
+
+/**
+ * The shared .mapcard block the weighbridge card uses. The count sits where that
+ * card's chip does, as a figure: the chip is kept for categories.
+ * `tailShift` keeps the tail on the icon when the card slides along an edge.
+ */
+function fenceTipHtml(names, below, tailShift) {
+  const rows = names.map((n) => `<li class="mapcard__name">${esc(n)}</li>`).join("");
+  return `
+    <div class="fence-tip${below ? " fence-tip--below" : ""}">
+      <article class="mapcard mapcard--fences">
+        <header class="mapcard__head">
+          <h3 class="mapcard__title">${names.length === 1 ? "Geofence" : "Geofences"}</h3>
+          <span class="mapcard__v">${names.length.toLocaleString()}</span>
+        </header>
+        <ul class="mapcard__names">${rows}</ul>
+      </article>
+      <div class="map-iw__tc fence-tip__tail" style="left:calc(50% - ${tailShift}px)"></div>
+    </div>`;
+}
+
+/**
  * How far a cluster click is allowed to zoom.
  *
  * A cluster of units parked on ONE spot has zero-area bounds, and fitBounds on
@@ -1981,8 +1941,9 @@ const visibleUnderFilter = matchesFilter;
 // so every FleetMap.css rule keeps working.
 function makeDomMarkerClass(maps) {
   return class DomMarker extends maps.OverlayView {
-    constructor({ position, html, anchor = "bottom", zIndex = 0, onClick, onOver, onOut }) {
+    constructor({ position, html, anchor = "bottom", zIndex = 0, onClick, onOver, onOut, passThrough = false }) {
       super();
+      this._passThrough = passThrough;
       this._pos     = position;
       this._html    = html;
       this._anchor  = anchor;
@@ -1996,7 +1957,9 @@ function makeDomMarkerClass(maps) {
       // Anchoring half of the transform, fixed for the marker's lifetime.
       this._baseTransform = anchor === "center"
         ? "translate(-50%, -50%)"
-        : "translate(-50%, -100%)";
+        : anchor === "top"
+          ? "translate(-50%, 0)"
+          : "translate(-50%, -100%)";
       // Last drawn pixel position, so draw() can skip no-op writes.
       this._px = null;
       this._py = null;
@@ -2024,6 +1987,8 @@ function makeDomMarkerClass(maps) {
       div.style.willChange = "transform";
       div.style.transform = this._baseTransform;
       div.style.cursor    = this._onClick ? "pointer" : "";
+      // A plate that follows the pointer must never become what it is over.
+      if (this._passThrough) div.style.pointerEvents = "none";
       div.innerHTML       = this._html;
       if (!this._visible || this._clustered) div.style.display = "none";
 
@@ -2280,14 +2245,16 @@ export default function FleetMap() {
   const bridgeMarkersRef = useRef(null);    // google.maps.Marker[] | null
   const bridgeWinRef     = useRef(null);
   /* The estate's surveyed boundaries — the provider's geofences, drawn for
-   * Mufindi alone. See ZONE_AREAS_COMPANY for why this layer exists on one org
-   * and nowhere else. The shapes are built once from geometry that is already
-   * fetched for every org (the stranded-stop test reads it), so the switch
-   * costs a render, not a request. */
+   * every org, off until asked for. The shapes are built once, the first time
+   * the switch goes on, from geometry that is already fetched for every org (the
+   * stranded-stop test reads it), so the switch costs a render, not a request. */
   const [showZones, setShowZones]           = useState(
     () => readMapPrefs(activeCompanyId).layers.zones,
   );
-  const zoneLayerRef      = useRef(null);   // { shapes[], labels[], info, bounds } | null
+  // Latched: switching off keeps the built shapes, so the next on is instant.
+  const [zonesWanted, setZonesWanted]       = useState(false);
+  if (showZones && !zonesWanted) setZonesWanted(true);
+  const zoneLayerRef      = useRef(null);   // { shapes[], info, bounds, clearHover } | null
   /* Live traffic (Google's TrafficLayer, lib/googleBase) over the base map,
    * and the pinned unit's routed line. TomTom's tiles were switched off
    * 2026-10-09 and replaced by Google's 2026-10-27. */
@@ -2622,11 +2589,10 @@ export default function FleetMap() {
   }, [sitePlanLinks, setSitePlanLinks]);
 
   // And so do the surveyed boundaries beside it.
-  const zonesAllowed = activeCompanyId === ZONE_AREAS_COMPANY;
-  const hasZones = zonesAllowed && (zones?.features?.length ?? 0) > 0;
+  const hasZones = (zones?.features?.length ?? 0) > 0;
 
   /**
-   * The categories this organisation actually has on the map, for the key.
+   * The fence shapes this organisation actually has on the map, for the key.
    *
    * Read from the features AFTER the same two exclusions the layer draws by —
    * ZONE_SKIP_CATEGORIES and ZONE_EXCLUDE — because a key is a reading of what
@@ -2639,7 +2605,7 @@ export default function FleetMap() {
       const p = f.properties ?? {};
       if (ZONE_SKIP_CATEGORIES.has(p.category)) continue;
       if (ZONE_EXCLUDE.has(zoneKey(p.name))) continue;
-      seen.add(p.category && ZONE_STYLE[p.category] ? p.category : "other");
+      seen.add(f.geometry?.type === "Point" ? "circle" : "fence");
     }
     return [...seen];
   }, [zones]);
@@ -4014,13 +3980,10 @@ export default function FleetMap() {
           : "Names appear as you zoom in · click a place for detail",
       });
     }
-    if (zonesAllowed && hasZones) {
+    if (hasZones) {
       out.push({
         id: "zones",
-        // "Estate areas", not "Geofences": an operator navigates by the ground,
-        // and what these rows are to the violation engine is not what they are
-        // on a map.
-        label: "Estate areas",
+        label: "Geofences",
         on: showZones,
         onToggle: () => setShowZones(v => {
           zonesRequestedRef.current = !v;
@@ -4029,7 +3992,7 @@ export default function FleetMap() {
         }),
         note: null,
         legend: legendFor(zoneCategories, baseMap),
-        hint: "Names appear as you zoom in, smaller zones need a closer look · click a zone for detail",
+        hint: "Hover a group to list its fences · click it to zoom in · click a fence for detail",
       });
     }
     if (planAllowed) {
@@ -4078,7 +4041,7 @@ export default function FleetMap() {
     });
     return out;
   }, [showTraffic, showWeather, weatherNote, showBridges, hasBridges, bridgesLoading, activeCompanyId,
-      showZones, zonesAllowed, hasZones, zoneCategories,
+      showZones, hasZones, zoneCategories,
       showPlan, planAllowed, planState,
       sitePlans, siteOn, siteStatus, siteCats, canDo, baseMap]);
 
@@ -4606,28 +4569,95 @@ export default function FleetMap() {
   // here before; see the mousemove re-render storm that made this view
   // unusable.
   //
-  // Gated on `zonesAllowed`, not merely on having geometry: every org's fences
-  // are fetched (`zoneTestFor` reads them for the stranded-stop flag, `zonesAt`
-  // for playback), and drawing them everywhere is precisely what was removed on
-  // 2026-09-13. This draws Mufindi's.
+  // Waits for the switch, not merely for geometry: every org's fences are
+  // fetched (`zoneTestFor` reads them for the stranded-stop flag, `zonesAt` for
+  // playback), and an operator who never asks for them should not pay for
+  // thousands of shapes.
   useEffect(() => {
     const map  = mapRef.current;
     const maps = mapsLibRef.current;
     const DomMarker = DomMarkerRef.current;
     if (!mapReady || !map || !maps || !DomMarker || !zones?.features) return;
-    if (!zonesAllowed) return;                      // wrong org — never build
+    if (!zonesWanted) return;                       // not asked for yet
     if (zoneLayerRef.current) return;               // already built for this map
 
     const shapes = [];
-    const labels = [];
-    // Each shape with its category, so a base-map switch can recolour it in
-    // place (zoneColor) rather than rebuild the layer.
-    const tinted = [];
+    // The one name on show: the fence under the pointer.
+    let hoverPlate = null;
+    // The group whose list is open, and the delay before it closes.
+    let listKey = null;
+    let listTimer = null;
+    const clearHover = () => {
+      clearTimeout(listTimer);
+      listKey = null;
+      hoverPlate?.setMap(null);
+      hoverPlate = null;
+    };
+    const closeListSoon = () => {
+      clearTimeout(listTimer);
+      listTimer = setTimeout(clearHover, FENCE_TIP_CLOSE_MS);
+    };
+    // Every fence in a group. The pointer can move into it to scroll, so it takes
+    // pointer events and keeps them from the map underneath.
+    const showFenceList = (iconEl, key, position, names) => {
+      if (listKey === key && hoverPlate) { clearTimeout(listTimer); return; }
+      // Going from one open card to the next does not wait, as on a weighbridge.
+      const delay = hoverPlate ? 0 : FENCE_TIP_OPEN_MS;
+      clearHover();
+      if (delay) listTimer = setTimeout(() => openFenceList(iconEl, key, position, names), delay);
+      else openFenceList(iconEl, key, position, names);
+    };
+    const openFenceList = (iconEl, key, position, names) => {
+      const icon = iconEl.getBoundingClientRect();
+      const area = map.getDiv().getBoundingClientRect();
+      const height = Math.min(FENCE_TIP_MAX_H, FENCE_TIP_HEAD_H + names.length * FENCE_TIP_ROW_H);
+      const roomAbove = icon.top - area.top;
+      const below = roomAbove < height + FENCE_TIP_GAP && area.bottom - icon.bottom > roomAbove;
+      const centre = (icon.left + icon.right) / 2;
+      const half = FENCE_TIP_W / 2;
+      // Slid along the map's edge when the group sits close to it.
+      const slide = Math.max(0, area.left + FENCE_TIP_LEFT_INSET + half - centre)
+        || Math.min(0, area.right - FENCE_TIP_RIGHT_INSET - half - centre);
+      hoverPlate = new DomMarker({
+        position,
+        html: fenceTipHtml(names, below, slide),
+        anchor: below ? "top" : "bottom",
+        zIndex: 9000,
+        passThrough: true,
+      });
+      hoverPlate._ox = slide;
+      hoverPlate.setMap(map);
+      listKey = key;
+      const tip = hoverPlate._div?.querySelector(".fence-tip");
+      tip?.addEventListener("mouseenter", () => clearTimeout(listTimer));
+      tip?.addEventListener("mouseleave", closeListSoon);
+      for (const type of ["wheel", "mousedown", "pointerdown", "touchstart", "click", "dblclick"]) {
+        tip?.addEventListener(type, (e) => e.stopPropagation());
+      }
+    };
+    const showHover = (position, name, color) => {
+      clearHover();
+      hoverPlate = new DomMarker({
+        position,
+        html: `<div class="zone-label zone-label--hover" style="--zone-color:${color}">${esc(name)}</div>`,
+        zIndex: 7,
+        passThrough: true,
+      });
+      hoverPlate.setMap(map);
+    };
+    // Dismissible with Escape, like the weighbridge card.
+    const onFenceListKey = (e) => { if (e.key === "Escape" && listKey) clearHover(); };
+    document.addEventListener("keydown", onFenceListKey);
+    // Each drawn shape with where it is and how big, for the grouping pass.
+    const fences = [];
     const info   = new maps.InfoWindow();
     // Accumulated while building, so the shared camera fit can frame the layer.
     const bounds = new maps.LatLngBounds();
 
-    for (const f of zones.features) {
+    // Biggest first, so a fence inside another is drawn on top of it and the
+    // pointer can reach it.
+    const fenceSize = (f) => f.properties?.areaHa ?? circleAreaHa(f.properties?.radiusM);
+    for (const f of [...zones.features].sort((a, b) => fenceSize(b) - fenceSize(a))) {
       const p = f.properties ?? {};
       if (ZONE_SKIP_CATEGORIES.has(p.category)) continue;
       // Ahead of every bounds.extend below, so an excluded zone cannot drag the
@@ -4635,30 +4665,26 @@ export default function FleetMap() {
       const key = zoneKey(p.name);
       if (ZONE_EXCLUDE.has(key)) continue;
 
-      // The outline and fill follow the base map; the name plate does not. It
-      // sits on its own dark backing whatever is under it, which is what the
-      // satellite palette was chosen against.
-      const color = zoneColor(p.category, baseMapRef.current);
-      const plateColor = (ZONE_STYLE[p.category] ?? ZONE_FALLBACK).color;
       const geom  = f.geometry;
+      // One colour for circles, one for every other shape, on every base map.
+      const color = zoneColor(geom?.type === "Point" ? "circle" : "fence");
       const alias = ZONE_PLAN_ALIAS[key];
       let shape = null;
-      // Where the plate goes, and the lowest zoom it may appear at. Left null
-      // for a zone that gets no plate at all.
-      let labelAt = null, labelMinZoom = 0;
+      // A circular fence arrives as its centre and radius; drawn as its ring.
+      const isCircle = geom?.type === "Point";
+      const isArea = geom?.type === "Polygon" || isCircle;
+      const areaHa = isCircle ? circleAreaHa(p.radiusM) : p.areaHa;
 
-      if (geom?.type === "Polygon") {
-        const ring = geom.coordinates?.[0] ?? [];
+      if (isArea) {
+        const ring = isCircle ? circleRing(geom.coordinates, p.radiusM) : geom.coordinates?.[0] ?? [];
         if (ring.length < 3) continue;
         for (const [lng, lat] of ring) bounds.extend({ lat, lng });
         shape = new maps.Polygon({
           paths: ring.map(([lng, lat]) => ({ lat, lng })),
           strokeColor: color, strokeWeight: 2, strokeOpacity: 0.95,
           fillColor: color, fillOpacity: 0.14,
-          clickable: true, zIndex: 1,
+          clickable: true, zIndex: 1, canvas: true,
         });
-        labelAt      = ringCentroid(ring);
-        labelMinZoom = zoneLabelMinZoom(p.areaHa);
       } else if (geom?.type === "LineString") {
         const path = geom.coordinates ?? [];
         if (path.length < 2) continue;
@@ -4669,15 +4695,13 @@ export default function FleetMap() {
         shape = new maps.Polyline({
           path: path.map(([lng, lat]) => ({ lat, lng })),
           strokeColor: color, strokeWeight: 2.5, strokeOpacity: 0.9,
-          clickable: true, zIndex: 2,
+          clickable: true, zIndex: 2, canvas: true,
         });
-        labelAt      = pathMidpoint(path);
-        labelMinZoom = ZONE_CORRIDOR_LABEL_MIN_ZOOM;
       }
       if (!shape) continue;
 
-      const detail = geom.type === "Polygon"
-        ? `${(p.areaHa ?? 0).toLocaleString()} ha`
+      const detail = isArea
+        ? `${(areaHa ?? 0).toLocaleString()} ha`
         : `corridor · ${p.widthM ?? "?"} m wide`;
       // What the printed plan says, next to what our geometry measures. The two
       // disagree by design (envelope vs plantable subset) and by accident
@@ -4692,7 +4716,7 @@ export default function FleetMap() {
       shape.addListener("click", (e) => {
         info.setContent(
           `<div class="zone-info">
-             <strong>${p.name}</strong>
+             <strong>${esc(p.name)}</strong>
              <span>${(ZONE_STYLE[p.category] ?? ZONE_FALLBACK).label} · ${detail}</span>
              ${planLine}
              <span class="zone-info-state">${p.isActive ? "Enforced" : "Not enforced"}</span>
@@ -4701,72 +4725,96 @@ export default function FleetMap() {
         info.setPosition(e.latLng);
         info.open(map);
       });
-
-      // The plate's second line is shorter than the popup's: "3 m wide", not
-      // "corridor · 3 m wide", and nothing at all for the yard-sized zones that
-      // round to 0 ha — a plate reading "Dispensary / 0 ha" states something
-      // false, and every pixel of plate width is a pixel that can collide.
-      const labelSub = geom.type === "Polygon"
-        ? ((p.areaHa ?? 0) >= 1 ? `${p.areaHa.toLocaleString()} ha` : "")
-        : `${p.widthM ?? "?"} m wide`;
-
-      if (labelAt && !ZONE_LABEL_SUPPRESS.has(key)) {
-        labels.push({
-          marker: new DomMarker({
-            position: labelAt,
-            html: zoneLabelHtml(p.name, plateColor, labelSub, alias?.plan),
-            anchor: "center",
-            // Above the plan's linework and its plates — see the plan label
-            // effect, which now yields to these.
-            zIndex: 3,
-          }),
-          pos: labelAt,
-          minZoom: labelMinZoom,
-          // Declutter priority. Area first so the significant zone keeps its
-          // name; corridors last because a river's plate can sit anywhere along
-          // it, while a block's belongs at its centre.
-          priority: geom.type === "Polygon" ? (p.areaHa ?? 0) : -1,
-        });
-      }
+      shape.addListener("mouseover", (e) =>
+        showHover({ lat: e.latLng.lat(), lng: e.latLng.lng() }, p.name, color));
+      shape.addListener("mouseout", clearHover);
 
       shapes.push(shape);
-      tinted.push({ shape, category: p.category, filled: geom.type === "Polygon" });
+      fences.push({
+        id: fences.length, name: p.name, shape, shown: false,
+        ...fenceExtent(isArea ? (isCircle ? circleRing(geom.coordinates, p.radiusM) : geom.coordinates[0]) : geom.coordinates),
+      });
     }
 
-    labels.sort((a, b) => b.priority - a.priority);
-
-    zoneLayerRef.current = { shapes, labels, info, bounds, tinted };
+    zoneLayerRef.current = { shapes, fences, info, bounds, clearHover, showHover, showFenceList, closeListSoon };
 
     // Built hidden; the visibility effect below puts it on the map if the
     // toggle is already on.
     return () => {
       for (const s of shapes) { maps.event.clearInstanceListeners(s); s.setMap(null); }
-      for (const l of labels) l.marker.setMap(null);
+      document.removeEventListener("keydown", onFenceListKey);
+      clearHover();
       info.close();
       zoneLayerRef.current = null;
     };
-  }, [mapReady, zones, zonesAllowed]);
+  }, [mapReady, zones, zonesWanted]);
 
   // Show/hide the built layer. Cheap — no geometry is created or destroyed.
-  //
-  // Shapes follow the toggle; labels additionally require enough zoom to be
-  // legible, and are re-evaluated as the camera settles — a pan changes the
-  // answer on its own, since a plate suppressed by a neighbour is a candidate
-  // again once that neighbour scrolls off screen.
   useEffect(() => {
     const map   = mapRef.current;
-    const maps  = mapsLibRef.current;
     const layer = zoneLayerRef.current;
-    if (!map || !maps || !layer) return;
+    if (!map || !layer) return;
 
-    const on = showZones && zonesAllowed;
-    for (const s of layer.shapes) s.setMap(on ? map : null);
-    if (!on) layer.info.close();
+    const maps = mapsLibRef.current;
+    const DomMarker = DomMarkerRef.current;
+    const on = showZones;
+    // Off-screen groups stay off the page; each pass brings on what moved in.
+    const icons = new Map();
+    const dropIcons = (keep) => {
+      for (const [key, m] of icons) if (!keep?.has(key)) { m.setMap(null); icons.delete(key); }
+    };
+    const zoomTo = (g) => {
+      const z = map.getZoom();
+      map.fitBounds(new maps.LatLngBounds({ lat: g.s, lng: g.w }, { lat: g.n, lng: g.e }), 90);
+      maps.event.addListenerOnce(map, "idle", () => {
+        if (map.getZoom() > CLUSTER_MAX_ZOOM) map.setZoom(CLUSTER_MAX_ZOOM);
+        // A group already wider than the frame: a click must still move inward.
+        else if (map.getZoom() <= z) map.setView({ lat: g.lat, lng: g.lng }, z + 2);
+      });
+      // Claim the camera, as a vehicle cluster click does.
+      fittedCompanyRef.current = activeCompanyId;
+      pendingFitRef.current = false;
+    };
+    const pass = () => {
+      layer.clearHover();
+      const { drawn, groups } = clusterFences(layer.fences, map.getZoom());
+      // In list order, biggest first, so a fence inside another stays on top.
+      for (const f of layer.fences) {
+        const want = drawn.has(f);
+        if (want !== f.shown) { f.shape.setMap(want ? map : null); f.shown = want; }
+      }
+      const view = map.getBounds();
+      const keep = new Set();
+      for (const g of groups) {
+        if (!view?.contains({ lat: g.lat, lng: g.lng })) continue;
+        const key = `${g.key}:${g.members.length}`;
+        keep.add(key);
+        if (icons.has(key)) continue;
+        const count = g.members.length;
+        const icon = new DomMarker({
+          position: { lat: g.lat, lng: g.lng },
+          html: fenceClusterHtml(count),
+          anchor: "center",
+          zIndex: 1,
+          onClick: () => zoomTo(g),
+          onOver: (e) => layer.showFenceList(e.currentTarget, key, { lat: g.lat, lng: g.lng }, fenceNames(g.members)),
+          onOut: layer.closeListSoon,
+        });
+        icon.setMap(map);
+        icons.set(key, icon);
+      }
+      dropIcons(keep);
+    };
 
-    // Zone plates go down first and yield to nobody — they are the
-    // authoritative names, and the plan layer's labels defer to them.
-    const { apply, cancel } = labelApplier(map, maps, layer.labels, on);
-    apply();
+    let idle = null;
+    if (on) {
+      pass();
+      idle = map.addListener("idle", pass);
+    } else {
+      for (const f of layer.fences) { f.shape.setMap(null); f.shown = false; }
+      layer.info.close();
+      layer.clearHover();
+    }
 
     // A deliberate toggle takes the camera to the estate; arriving with the
     // layer already on does not. The map opens on the whole fleet, which for
@@ -4776,13 +4824,9 @@ export default function FleetMap() {
     // itself is the shared one, so switching this on while the plan is up
     // frames both rather than stealing the view from it.
     if (on && zonesRequestedRef.current) fitPlaceLayersRef.current();
-
-    if (!on) return cancel;
-
-    const idleListener = map.addListener("idle", () => apply());
-    const zoomListener = map.addListener("zoom_changed", () => apply());
-    return () => { zoomListener.remove(); idleListener.remove(); cancel(); };
-  }, [showZones, zonesAllowed, mapReady, zones]);
+    return () => { idle?.remove(); dropIcons(); };
+    // zonesWanted: the layer is built by the effect above once the switch first goes on.
+  }, [showZones, mapReady, zones, zonesWanted, activeCompanyId]);
 
   // The GEOMETRY IS STILL FETCHED FOR EVERY ORG, and deliberately — this layer
   // is a reader of it, not its owner. Two things read the same rows and neither
@@ -5011,14 +5055,7 @@ export default function FleetMap() {
     }
 
     const on = showPlan && planAllowed;
-    // The plan's macro plates yield to the estate's zone plates, which are the
-    // names operators use — where the two collide the fence's name is the one
-    // worth reading. Read lazily: the zone plates move as the camera
-    // does, and this needs where they are NOW.
-    const { apply, cancel } = labelApplier(
-      map, maps, planLabelsRef.current, on,
-      () => zoneLayerRef.current?.labels,
-    );
+    const { apply, cancel } = labelApplier(map, maps, planLabelsRef.current, on);
     apply();
     if (!on) return cancel;
 
@@ -5289,15 +5326,6 @@ export default function FleetMap() {
       if (slot.data && slot.style) slot.data.setStyle(slot.style);
     }
   }, [hasBridges, baseMap]);
-
-  // The estate zones' outlines, recoloured in place on a base-map switch for
-  // the same reason. A layer built after the switch already read the new base.
-  useEffect(() => {
-    for (const t of zoneLayerRef.current?.tinted ?? []) {
-      const color = zoneColor(t.category, baseMap);
-      t.shape.setOptions(t.filled ? { strokeColor: color, fillColor: color } : { strokeColor: color });
-    }
-  }, [baseMap]);
 
   // Hide without discarding — same reasoning as the plan layer.
   useEffect(() => {
@@ -6289,6 +6317,7 @@ export default function FleetMap() {
     setSiteOn(siteOnFor(activeCompanyId));
     setShowBridges(layers.bridges);
     setShowZones(layers.zones);
+    setZonesWanted(false);
     setShowTraffic(LIVE_TRAFFIC_AVAILABLE && layers.traffic);
     setShowWeather(layers.weather);
     bridgeRequestedRef.current = false;
@@ -7221,6 +7250,7 @@ export default function FleetMap() {
             layers={mapLayers.filter(l => l.id !== "traffic" && l.id !== "weather")}
             traffic={mapLayers.find(l => l.id === "traffic") ?? null}
             weather={mapLayers.find(l => l.id === "weather") ?? null}
+            zones={mapLayers.find(l => l.id === "zones") ?? null}
             bases={GOOGLE_BASE_AVAILABLE ? BASE_MAPS : null}
             base={baseMap}
             onBase={chooseBase}

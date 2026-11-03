@@ -28,16 +28,14 @@ beforeEach(() => localStorage.clear());
 
 describe("defaults", () => {
   it("opens Mufindi on its planting plan", () => {
-    // The Estate areas layer was removed 2026-10-20; the plan is what is left.
+    // The plan is what Kasulu opens on; geofences wait for the rail's switch.
     expect(defaultPrefs("kasulu").layers.plan).toBe(true);
     expect(LAYER_DEFAULTS.kasulu.plan).toBe(true);
     expect(LAYER_DEFAULTS.kasulu.zones).toBeUndefined();
   });
 
   it("leaves the estate areas off for every other company", () => {
-    // `zones` is drawn from provider geofences every org has rows in, and it
-    // is gated in FleetMap by ZONE_AREAS_COMPANY. A default here would be the
-    // wrong kind of insurance: two places to say "not this org".
+    // `zones` is drawn from the fences every org has rows in, on request.
     for (const id of ["westsugar", "sukari", "menengai"]) {
       expect(defaultPrefs(id).layers.zones, id).toBe(false);
     }

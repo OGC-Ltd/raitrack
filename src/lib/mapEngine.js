@@ -695,7 +695,12 @@ class Shape extends Evented {
   }
   _sync() {
     const want = this._map && this._visible;
-    if (want && !this._l._map) { this._l.addTo(this._map._l); this._map._stack(this); }
+    if (want && !this._l._map) {
+      // `canvas`: on the data layer's shared canvas, for layers of thousands of
+      // shapes. It sits below the SVG vectors, so it needs no stacking.
+      if (this._o.canvas) { this._l.options.renderer = this._map._dataRenderer; this._l.addTo(this._map._l); return; }
+      this._l.addTo(this._map._l); this._map._stack(this);
+    }
     else if (!want && this._l._map) this._l.remove();
   }
   setMap(map) { this._map = map || null; if (this._l._map && this._l._map !== this._map?._l) this._l.remove(); this._sync(); }
