@@ -32,6 +32,15 @@ ARG GIT_SHA=unknown
 RUN printf '%s OGC-Ltd/raitrack v%s\n' "${GIT_SHA}" "$(node -p "require('./package.json').version")" > build/DEPLOYED_COMMIT
 
 FROM ${NGINX_IMAGE} AS runtime
+# Alpine's security updates at build time: the pinned base trails them, and
+# the scan in CI refuses fixable HIGH/CRITICAL findings (49 on 2026-11-03:
+# openssl, curl, brotli, c-ares...). curl goes too: nothing here uses it (the
+# healthcheck is busybox wget), and it carried most of those findings.
+USER root
+RUN apk upgrade --no-cache \
+ && apk del --no-cache curl \
+ && rm -rf /var/cache/apk/*
+USER 101
 COPY --chmod=644 deploy/web.conf /etc/nginx/conf.d/default.conf
 # Files owned by root and read-only to nginx (uid 101): the server cannot alter the site.
 COPY --from=build /app/build /usr/share/nginx/html
