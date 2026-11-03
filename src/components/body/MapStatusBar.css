@@ -5,7 +5,10 @@
  * Placement is per screen (the modifier classes at the bottom). */
 .map-status {
   position: absolute;
-  z-index: 440;
+  /* One step over the map, no more: the map (.leaflet-container) is isolated,
+     so it stacks as a single block and 1 clears it. 440 also cleared the live
+     feed drawer (150) and the strip showed over the feed (operator, 3 Nov 2026). */
+  z-index: 1;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;

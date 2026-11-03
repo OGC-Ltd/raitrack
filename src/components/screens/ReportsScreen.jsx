@@ -53,7 +53,7 @@ import { saveFile } from '../../api/tripReport';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPages from '../shared/PdfPages';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasTankersTab, hasDormantTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -92,16 +92,12 @@ const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
 /** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
-const TANKERS = 'tankers';
 const GEOFENCES = 'geofences';
-const OFFLINE = 'offline';
 /** The pages with a form of their own, not made from REPORTS. */
 const SERVER_TABS = {
   [SHIFT]: { label: 'Shift' },
   [MOVEMENTS]: { label: 'Movements' },
-  [TANKERS]: { label: 'Tankers' },
   [GEOFENCES]: { label: 'Geofences' },
-  [OFFLINE]: { label: 'Non-Updating Assets' },
 };
 
 
@@ -384,7 +380,7 @@ function ShiftReport({ orgId, vehicles, groups }) {
         <DateRangePicker
           from={shown.fromDay} to={shown.toDay} today={today} maxDays={SHIFT_MAX_DAYS} spans={[SHIFT_MAX_DAYS]}
           label="Shift period" on
-          text={draft.custom ? customText(span) : `${pickedText(draft.fromDay, draft.toDay, today)} · ${span.live ? `${hh(draft.start)}–now` : hoursText(draft.start, draft.end)}`}
+          text={draft.custom ? customText(span) : `${pickedText(draft.fromDay, draft.toDay, today)} · ${span.live ? `${hh(draft.start)}/now` : hoursText(draft.start, draft.end)}`}
           onChange={(f, t) => setPicking({ ...shown, fromDay: f, toDay: t, custom: undefined })}
         >
           {({ close }) => (
@@ -488,8 +484,8 @@ const spanWords = (start, end) => {
   const h = Math.floor(min / 60); min %= 60;
   return [h ? `${h} hour${h === 1 ? '' : 's'}` : null, min ? `${min} min` : null].filter(Boolean).join(' ');
 };
-/** "07:00–20:00", "20:00–06:00 next day". */
-const hoursText = (start, end) => `${hh(start)}–${hh(end)}${end <= start ? ' next day' : ''}`;
+/** "07:00/20:00", "20:00/06:00 next day" (operator, 3 Nov: "07:30/19:30"). */
+const hoursText = (start, end) => `${hh(start)}/${hh(end)}${end <= start ? ' next day' : ''}`;
 
 const pad2 = (n) => String(n).padStart(2, '0');
 /** 7.5 → { h: 7, m: 30 }; the end's 24 reads 00:00. */
@@ -580,7 +576,7 @@ export function ShiftTime({ start, end, onChange, title = 'Shift time', presets 
         {presets.map((p) => (
           <button key={p.key} type="button" className={`drp-chip stp__preset${on === p.key ? ' drp-chip--on' : ''}`}
                   aria-pressed={on === p.key} onClick={() => onChange(p.start, p.end)}>
-            {p.label}<span className="stp__preset-t">{p.key === 'whole' ? '24 h' : `${hh(p.start)}–${hh(p.end)}`}</span>
+            {p.label}<span className="stp__preset-t">{p.key === 'whole' ? '24 h' : `${hh(p.start)}/${hh(p.end)}`}</span>
           </button>
         ))}
       </div>
@@ -902,6 +898,45 @@ function TypePicker({ types, picked, counts, onChange }) {
  * draws the PDF from the tables as edited (lib/movementReport), one day after
  * another, counting each overview again from what is kept.
  */
+/**
+ * Movements, with Tankers and Dormant Assets as tabs beside it for the
+ * organisations that have them (operator, 3 Nov 2026: "the Tankers page should
+ * be a tab under movements", then Dormant Assets too). Every tab stays mounted
+ * so a run on one survives a look at another.
+ */
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, dormant }) {
+  const [tab, setTab] = useState('hourly');
+  if (!tankers && !dormant) return <MovementsReport orgId={orgId} />;
+  const TABS = [
+    { key: 'hourly', label: 'Movements' },
+    tankers && { key: 'tankers', label: 'Tankers' },
+    dormant && { key: 'dormant', label: 'Dormant Assets' },
+  ].filter(Boolean);
+  return (
+    <>
+      <div className="sp4-tabs" role="tablist" aria-label="Movements">
+        {TABS.map((t) => (
+          <button key={t.key} type="button" role="tab" id={`mvt-${t.key}`} aria-selected={tab === t.key} aria-controls={`mvt-${t.key}-panel`}
+                  className={`sp4-tab${tab === t.key ? ' sp4-tab--on' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
+        ))}
+      </div>
+      <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
+        <MovementsReport orgId={orgId} />
+      </div>
+      {tankers && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-tankers-panel" aria-labelledby="mvt-tankers" hidden={tab !== 'tankers'}>
+        <TankersReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} active={tab === 'tankers'} />
+      </div>
+      )}
+      {dormant && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-dormant-panel" aria-labelledby="mvt-dormant" hidden={tab !== 'dormant'}>
+        <OfflineReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'dormant'} />
+      </div>
+      )}
+    </>
+  );
+}
+
 function MovementsReport({ orgId }) {
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => movementsKept.get(orgId));
@@ -1590,10 +1625,8 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsReport key={orgId ?? 'none'} orgId={orgId} />
-        : key === TANKERS ? <TankersReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} />
-        : key === GEOFENCES ? <GeofenceReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} />
-        : key === OFFLINE ? <OfflineReport key={orgId ?? 'none'} orgId={orgId} orgCode={orgCode} companyName={activeCompany?.name} /> : (<>
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
+        : key === GEOFENCES ? <GeofenceReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} /> : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
         <div className="sp4-header-kpis">
@@ -1612,7 +1645,7 @@ export default function ReportsScreen() {
           label="Period" on
           text={isNight
             ? `${pickedText(days.fromDay, days.toDay, today)} · nights ${hoursText(night.start, night.end || 24)}`
-            : `${pickedText(days.fromDay, days.toDay, today)} · ${span.to >= Date.now() - 60_000 && days.toDay === today ? `${hh(days.start)}–now` : hoursText(days.start, days.end)}`}
+            : `${pickedText(days.fromDay, days.toDay, today)} · ${span.to >= Date.now() - 60_000 && days.toDay === today ? `${hh(days.start)}/now` : hoursText(days.start, days.end)}`}
           onChange={(f, t) => setPicking({ ...shownDays, fromDay: f, toDay: t })}
         >
           {({ close }) => (

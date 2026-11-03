@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { sectionOf, offlineReport, offlineCount, rowCells, sectionDays, SECTIONS, csvTable, offlineHtml } from './offlineReport';
-import { reportKeysFor } from './reportNav';
+import { reportKeysFor, hasDormantTab } from './reportNav';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 // Made on 31 Oct, as their sheet was
 const NOW = at('2026-10-31T09:00:00');
 const row = (id, name, last, location = 'D267, Kenya, 1.84 km from Kambi-Mwanza') => ({ vehicleId: id, grouping: name, lastAt: last == null ? null : at(last), location });
 
-describe('Non-Updating Assets Report', () => {
+describe('Dormant Assets Report', () => {
   it('puts a vehicle in its section by the day of its last message', () => {
     expect(sectionOf(at('2026-10-31T00:30:00'), NOW)).toBeNull();          // today: not yet
     expect(sectionOf(at('2026-10-30T23:59:00'), NOW)).toBe('yesterday');
@@ -39,10 +39,10 @@ describe('Non-Updating Assets Report', () => {
     expect(csvTable(rep).body[0][0]).toBe('Offline yesterday');
 
     const { html, filename } = offlineHtml(rep, { fleet: 'West Kenya', orgCode: 'KABRAS', logos: { rai: '', ogc: '' }, now: NOW });
-    expect(html).toContain('NON-UPDATING ASSETS REPORT');
+    expect(html).toContain('DORMANT ASSETS REPORT');
     for (const s of SECTIONS) expect(html).toContain(s.title);
     expect(html).toContain('1 vehicle has never reported');
-    expect(filename).toBe('Non-Updating Assets Report West Kenya 2026-10-31.pdf');
+    expect(filename).toBe('Dormant Assets Report West Kenya 2026-10-31.pdf');
   });
 
   it('names the days each section covers', () => {
@@ -50,8 +50,12 @@ describe('Non-Updating Assets Report', () => {
   });
 
   it('is West Kenya’s and Menengai’s', () => {
-    for (const org of ['WESTSUGAR', 'KABRAS', 'NZOIA', 'MENENGAI']) expect(reportKeysFor(() => true, org)).toContain('offline');
-    expect(reportKeysFor(() => true, 'KASULU')).not.toContain('offline');
+    // A tab under Movements, not a report of its own (operator, 3 Nov 2026)
+    for (const org of ['WESTSUGAR', 'KABRAS', 'NZOIA', 'MENENGAI']) {
+      expect(hasDormantTab(() => true, org)).toBe(true);
+      expect(reportKeysFor(() => true, org)).not.toContain('offline');
+    }
+    expect(hasDormantTab(() => true, 'KASULU')).toBe(false);
     expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('geofences');
   });
 });

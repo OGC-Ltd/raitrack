@@ -4,7 +4,7 @@
 // together (operator, 3 Nov 2026: "each organization have its report but in
 // case we want all then we can generate it").
 //
-// Shared by the Geofence and Non-Updating Assets reports.
+// Shared by the Geofence and Dormant Assets reports.
 
 import { useMemo, useRef, useState } from 'react';
 import { useCompanies } from '../context/AppContext';

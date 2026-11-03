@@ -1,4 +1,4 @@
-// The Non-Updating Assets Report (operator, 3 Nov 2026; West Kenya's sheet,
+// The Dormant Assets Report (operator, 3 Nov 2026; was Non-Updating Assets; West Kenya's sheet,
 // Menengai too): the vehicles whose trackers have stopped sending, in three
 // sections by the calendar day of their last message, counted back from the
 // day the report is made, as the sheet has them:
@@ -103,7 +103,7 @@ export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now() }) {
       ...SECTIONS.map((s) => [s.words, String(rep.sections[s.key].length)]),
       ['Not updating', `<b>${n}</b> of ${rep.total}`],
     ]),
-    '<h2>2. Non-Updating Assets</h2>',
+    '<h2>2. Dormant Assets</h2>',
   ];
   const cols = [{ h: 'Registration', w: '52mm' }, { h: 'Last message', w: '32mm' }, { h: 'Location', w: '100mm' }];
   for (const s of SECTIONS) {
@@ -116,7 +116,7 @@ export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now() }) {
   flow.push('<div class="note">A tracker that stopped sending today is not listed yet: it shows tomorrow, as offline yesterday.</div>');
 
   const html = renderLetterheadHtml({
-    title: 'NON-UPDATING ASSETS REPORT',
+    title: 'DORMANT ASSETS REPORT',
     reportNo: reportNumber('NU', orgCode, now),
     date: dmyhm(now).slice(0, 10),
     companyName: fleet,
@@ -127,8 +127,8 @@ export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now() }) {
       ['Not updating', `${n}`],
     ],
     flow,
-    footNote: `${fleet} · Non-Updating Assets Report · ${asAtWords(now)}`,
+    footNote: `${fleet} · Dormant Assets Report · ${asAtWords(now)}`,
     logos,
   });
-  return { html, filename: `Non-Updating Assets Report ${fleet} ${new Date(now + OFFSET).toISOString().slice(0, 10)}.pdf` };
+  return { html, filename: `Dormant Assets Report ${fleet} ${new Date(now + OFFSET).toISOString().slice(0, 10)}.pdf` };
 }

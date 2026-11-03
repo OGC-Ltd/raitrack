@@ -3,7 +3,7 @@ import {
   placesIn, placeNames, visitsOf, geofenceRows, rowCells, counts, periodProblem, durationWords, stampWords, geofenceHtml,
 } from './geofenceReport';
 import { templateFor, familyOf } from './reportTemplates';
-import { reportKeysFor } from './reportNav';
+import { reportKeysFor, hasTankersTab } from './reportNav';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 // Khalaba Station: a square; Magut: a circle 300 m round; a road that is no place
@@ -76,7 +76,9 @@ describe('Geofence Report', () => {
     expect(familyOf('geofences', 'NZOIA').orgs).toEqual(['WESTSUGAR', 'KABRAS', 'NZOIA']);
     expect(reportKeysFor(() => true, 'KABRAS')).toContain('geofences');
     expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('geofences');
-    expect(reportKeysFor(() => true, 'MENENGAI')).toContain('tankers');
-    expect(reportKeysFor(() => true, 'KABRAS')).not.toContain('tankers');
+    // Tankers is a tab under Movements, Menengai's only (operator, 3 Nov 2026)
+    expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('tankers');
+    expect(hasTankersTab(() => true, 'MENENGAI')).toBe(true);
+    expect(hasTankersTab(() => true, 'KABRAS')).toBe(false);
   });
 });
