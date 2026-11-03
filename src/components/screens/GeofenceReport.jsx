@@ -19,8 +19,8 @@ import {
 } from '../../lib/geofenceReport';
 import { loadPings } from '../../api/fleetReports';
 import { loadZones } from '../../hooks/useEstateZones';
-import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
-import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -128,16 +128,15 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
     ...(stillShown || !done ? [{ label: 'Still inside', value: c?.still, tone: c?.still ? 'live' : undefined }] : []),
   ];
 
-  const save = async (as) => {
+  const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
       const { html, filename } = geofenceHtml(done.rows, {
-        ...done.ctx, fleet: fleetWords(done.orgs), orgCode: code, logos: letterheadLogos(), places: done.places, failed: done.failed,
+        ...done.ctx, fleet: fleetWords(done.orgs), orgCode: code, logos: letterheadLogos(), places: done.places, failed: done.failed, landscape,
       });
       if (as === 'jpeg') {
-        const pdf = await saveLetterheadPdf(html, { filename, keep: true });
-        await savePdfAsJpeg(pdf.blob, pdf.filename);
+        await saveLetterheadJpeg(html, { filename, landscape });
       } else {
         await saveLetterheadPdf(html, { filename });
       }
@@ -235,10 +234,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
               actions={<>
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-                <button type="button" className="sp4-ghost-btn" onClick={() => save('jpeg')} disabled={Boolean(file.busy)}
-                        title="The PDF report as an image">
-                  <i className="ti ti-photo" aria-hidden="true" /> JPEG
-                </button>
+                <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
               </>}
             />
             {!done.rows.length ? (

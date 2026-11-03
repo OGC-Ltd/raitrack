@@ -176,7 +176,7 @@ export function csvTable(rows, ctx) {
  * The PDF on the letterhead: the figures, then one table a row a visit.
  * `fleet`: the organisation, or the family when made for several.
  */
-export function geofenceHtml(rows, { from, to, fleet, orgCode, logos, places = null, failed = 0, now = Date.now() }) {
+export function geofenceHtml(rows, { from, to, fleet, orgCode, logos, places = null, failed = 0, now = Date.now(), landscape = false }) {
   const c = counts(rows);
   const ctx = { from, to, now };
   const flow = [
@@ -196,6 +196,7 @@ export function geofenceHtml(rows, { from, to, fleet, orgCode, logos, places = n
 
   const date = dmyhm(Math.max(from, to - 1)).slice(0, 10);
   const html = renderLetterheadHtml({
+    landscape,
     title: 'GEOFENCE REPORT',
     reportNo: reportNumber('GF', orgCode, now),
     date,
@@ -215,5 +216,5 @@ export function geofenceHtml(rows, { from, to, fleet, orgCode, logos, places = n
   const d = (ms) => new Date(ms + OFFSET).toISOString().slice(0, 10);
   const last = d(Math.max(from, to - 1));
   const span = d(from) === last ? d(from) : `${d(from)} to ${last}`;
-  return { html, filename: `Geofence Report ${fleet} ${span}.pdf` };
+  return { html, landscape, filename: `Geofence Report ${fleet} ${span}.pdf` };
 }

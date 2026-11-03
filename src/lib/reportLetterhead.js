@@ -124,13 +124,13 @@ function followUpFlow(done, ctx, now, start, inner) {
 /**
  * @param {object} def   REPORTS[key]
  * @param {object} done  the page's finished run { rows, secs, ctx, missing, units, failed }
- * @param {object} o     { companyName, orgCode, groupWords, periodWords, nightWords, logos, now }
+ * @param {object} o     { companyName, orgCode, groupWords, periodWords, nightWords, logos, now, landscape }
  * @returns {{ html: string, landscape: boolean, filename: string }}
  */
-export function reportHtml(def, done, { companyName, orgCode, groupWords, periodWords, nightWords, logos, now = Date.now() }) {
+export function reportHtml(def, done, { companyName, orgCode, groupWords, periodWords, nightWords, logos, now = Date.now(), landscape = false }) {
   const { ctx } = done;
-  const landscape = false;
-  const inner = 184;
+  // The page's inner width in mm: A4 less 13 mm a side, upright or on its side
+  const inner = landscape ? 271 : 184;
   const keep = shownColumns(def, done.rows, ctx);
   const cols = columnsFor(def, ctx, keep, inner);
   const reportNo = reportNumber(PREFIX[def.key] ?? 'RP', orgCode, now);

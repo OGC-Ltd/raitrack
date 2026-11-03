@@ -72,7 +72,7 @@ export function csvTable(rows, from, to) {
 const dmy = (ms) => new Date(ms + 3 * 3600_000).toISOString().slice(0, 10).split('-').reverse().join('/');
 
 /** The PDF, on the letterhead: the figures, then one table, coloured as the sheet is. */
-export function tankersHtml(rows, { from, to, companyName, orgCode, logos, now = Date.now(), failed = 0, slowLine = null }) {
+export function tankersHtml(rows, { from, to, companyName, orgCode, logos, now = Date.now(), failed = 0, slowLine = null, landscape = false }) {
   const c = counts(rows);
   const tint = (r) => (ROW_TINT[r.status] ? `background:${ROW_TINT[r.status]}` : undefined);
   const flow = [
@@ -101,6 +101,7 @@ export function tankersHtml(rows, { from, to, companyName, orgCode, logos, now =
   // No "not tracked" note and no system-generated line on this report (operator, 3 Nov 2026)
 
   const html = renderLetterheadHtml({
+    landscape,
     title: 'TANKERS REPORT',
     reportNo: reportNumber('TK', orgCode, now),
     date: dmy(to),
@@ -118,6 +119,6 @@ export function tankersHtml(rows, { from, to, companyName, orgCode, logos, now =
     logos,
   });
   const d = new Date(to + 3 * 3600_000).toISOString().slice(0, 10);
-  return { html, filename: `Tankers Report ${companyName} ${d} ${periodWords(from, to).replace(/:/g, '')}.pdf` };
+  return { html, landscape, filename: `Tankers Report ${companyName} ${d} ${periodWords(from, to).replace(/:/g, '')}.pdf` };
 }
 

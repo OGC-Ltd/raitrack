@@ -8,7 +8,7 @@
  * time, and the PDF, JPEG and CSV (lib/tankersReport).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import {
@@ -16,8 +16,9 @@ import {
   rowCells, counts, periodWords, csvTable, tankersHtml,
 } from '../../lib/tankersReport';
 import { loadTankersReport } from '../../api/reports';
-import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
-import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import JpegButton from '../shared/JpegButton';
+import PdfPreview from '../shared/PdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -86,17 +87,17 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
     { label: 'Trip completed', value: c?.completed, tone: c?.completed ? 'live' : undefined },
   ];
 
-  const save = async (as) => {
+  const sheet = (landscape = false) => tankersHtml(kept, {
+    ...done.ctx, companyName: companyName ?? 'Menengai', orgCode, logos: letterheadLogos(),
+    failed: done.failed, slowLine: done.slow?.line ?? null, landscape,
+  });
+  const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { html, filename } = tankersHtml(kept, {
-        ...done.ctx, companyName: companyName ?? 'Menengai', orgCode, logos: letterheadLogos(),
-        failed: done.failed, slowLine: done.slow?.line ?? null,
-      });
+      const { html, filename } = sheet(landscape);
       if (as === 'jpeg') {
-        const pdf = await saveLetterheadPdf(html, { filename, keep: true });
-        await savePdfAsJpeg(pdf.blob, pdf.filename);
+        await saveLetterheadJpeg(html, { filename, landscape });
       } else {
         await saveLetterheadPdf(html, { filename });
       }
@@ -105,6 +106,22 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
     }
   };
+  // The PDF on screen before it is saved (operator, 4 Nov 2026), as the other reports have it
+  const [preview, setPreview] = useState(null);
+  const previewId = useRef(0);
+  const previewPdf = async () => {
+    if (!done) return;
+    const id = ++previewId.current;
+    setPreview({ status: 'loading' });
+    try {
+      const { html, filename } = sheet();
+      const made = await saveLetterheadPdf(html, { filename, keep: true });
+      if (id === previewId.current) setPreview({ status: 'done', ...made });
+    } catch (err) {
+      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
+    }
+  };
+  const closePreview = useCallback(() => { previewId.current++; setPreview(null); }, []);
   const saveCsv = () => {
     if (!done) return;
     downloadTableCsv({ ...csvTable(kept, done.ctx.from, done.ctx.to), filenameSlug: `tankers-${new Date(done.ctx.to + 3 * 3600_000).toISOString().slice(0, 10)}` });
@@ -174,12 +191,17 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
               actions={<>
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-                <button type="button" className="sp4-ghost-btn" onClick={() => save('jpeg')} disabled={Boolean(file.busy)}
-                        title="The PDF report as an image">
-                  <i className="ti ti-photo" aria-hidden="true" /> JPEG
+                <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
+                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(file.busy) || preview?.status === 'loading'}
+                        title="See the PDF before you download it">
+                  <i className="ti ti-eye" aria-hidden="true" /> Preview
                 </button>
               </>}
             />
+            {preview && (
+              <PdfPreview state={preview} title="Tankers report" onRetry={previewPdf} onClose={closePreview}
+                          caption={`${dmy(done.ctx.to)} · ${periodWords(done.ctx.from, done.ctx.to)} · ${kept.length} tanker${kept.length === 1 ? '' : 's'}`} />
+            )}
             {!done.rows.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">
                 No tanker is on the road from the {DEPOT_WORDS} at the report time.

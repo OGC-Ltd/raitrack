@@ -13,8 +13,8 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useReportOrgs } from '../../hooks/useReportOrgs';
 import { loadMovementReport } from '../../api/reports';
 import { SECTIONS, COLUMNS, BAR, offlineReport, offlineCount, rowCells, sectionDays, asAtWords, csvTable, offlineHtml } from '../../lib/offlineReport';
-import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
-import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -71,14 +71,13 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
     { label: 'Not updating', value: rep ? offlineCount(rep) : undefined },
   ];
 
-  const save = async (as) => {
+  const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { html, filename } = offlineHtml(rep, { fleet: fleetWords(done.orgs), orgCode: code, logos: letterheadLogos(), now: done.now });
+      const { html, filename } = offlineHtml(rep, { fleet: fleetWords(done.orgs), orgCode: code, logos: letterheadLogos(), now: done.now, landscape });
       if (as === 'jpeg') {
-        const pdf = await saveLetterheadPdf(html, { filename, keep: true });
-        await savePdfAsJpeg(pdf.blob, pdf.filename);
+        await saveLetterheadJpeg(html, { filename, landscape });
       } else {
         await saveLetterheadPdf(html, { filename });
       }
@@ -143,10 +142,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
               actions={<>
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-                <button type="button" className="sp4-ghost-btn" onClick={() => save('jpeg')} disabled={Boolean(file.busy)}
-                        title="The PDF report as an image">
-                  <i className="ti ti-photo" aria-hidden="true" /> JPEG
-                </button>
+                <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
               </>}
             />
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">

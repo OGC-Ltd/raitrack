@@ -94,7 +94,7 @@ export function csvTable(rep) {
 }
 
 /** The PDF on the letterhead: the figures, then the three sections as the sheet has them. */
-export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now() }) {
+export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now(), landscape = false }) {
   const n = offlineCount(rep);
   const flow = [
     `<style>.ofl-bar{background:${BAR};color:#0b1f2a;font-weight:700;text-align:center;padding:1.1mm;margin:4mm 0 0;font-size:8.4pt;letter-spacing:.04em}.ofl-bar small{float:right;font-weight:400;letter-spacing:0;font-size:7.4pt}</style>`,
@@ -116,6 +116,7 @@ export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now() }) {
   flow.push('<div class="note">A tracker that stopped sending today is not listed yet: it shows tomorrow, as offline yesterday.</div>');
 
   const html = renderLetterheadHtml({
+    landscape,
     title: 'DORMANT ASSETS REPORT',
     reportNo: reportNumber('NU', orgCode, now),
     date: dmyhm(now).slice(0, 10),
@@ -130,5 +131,5 @@ export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now() }) {
     footNote: `${fleet} · Dormant Assets Report · ${asAtWords(now)}`,
     logos,
   });
-  return { html, filename: `Dormant Assets Report ${fleet} ${new Date(now + OFFSET).toISOString().slice(0, 10)}.pdf` };
+  return { html, landscape, filename: `Dormant Assets Report ${fleet} ${new Date(now + OFFSET).toISOString().slice(0, 10)}.pdf` };
 }

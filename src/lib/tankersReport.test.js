@@ -32,6 +32,15 @@ describe('Tankers Report: the sheet', () => {
     expect(filename).toBe('Tankers Report Menengai Oil Refineries Ltd 2026-11-03 0830-1230.pdf');
   });
 
+  it('lays the pages on their side when asked', () => {
+    const o = { ...ctx, companyName: 'Menengai Oil Refineries Ltd', orgCode: 'MENENGAI', logos: { rai: '', ogc: '' }, now: to };
+    expect(tankersHtml(rows, o).html).toContain('size: A4 portrait');
+    const wide = tankersHtml(rows, { ...o, landscape: true });
+    expect(wide.landscape).toBe(true);
+    expect(wide.html).toContain('size: A4 landscape');
+    expect(wide.html).toContain('width:297mm');
+  });
+
   it('speaks the sheet’s words', () => {
     expect(leftWords(at('2026-11-02T15:54:53'))).toBe('02.11.2026 15:54:53');
     expect(periodWords(at('2026-09-17T08:30:00'), at('2026-09-17T12:30:00'))).toBe('08:30-12:30');

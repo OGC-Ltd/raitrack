@@ -70,9 +70,9 @@ export async function loadTankersReport({ orgId, units, to }) {
  * days): the server draws it on the letterhead; this saves the file.
  */
 /** The PDF of the movement report as edited, `{ blob, filename }`: to preview, then save. */
-export async function makeEditedMovementReport({ orgId, request }) {
+export async function makeEditedMovementReport({ orgId, request, landscape = false }) {
   if (!orgId) throw new Error('No organisation selected')
-  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf`, {
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/movements.pdf${landscape ? '?landscape=1' : ''}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),

@@ -49,9 +49,9 @@ import TankersReport from './TankersReport';
 import GeofenceReport from './GeofenceReport';
 import OfflineReport from './OfflineReport';
 import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
-import { saveFile } from '../../api/tripReport';
 import ReportIcon from '../shared/ReportIcon';
-import PdfPages from '../shared/PdfPages';
+import PdfPreview from '../shared/PdfPreview';
+import JpegButton from '../shared/JpegButton';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasTankersTab, hasDormantTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
@@ -361,11 +361,11 @@ function ShiftReport({ orgId, vehicles, groups }) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
     }
   };
-  const downloadJpeg = async () => {
+  const downloadJpeg = async (landscape) => {
     if (pdf.busy || !doc) return;
     setPdf({ busy: 'jpeg', error: null });
     try {
-      const { blob, filename } = await makeEditedEndOfShift({ orgId, doc: pdfDoc(doc) });
+      const { blob, filename } = await makeEditedEndOfShift({ orgId, doc: pdfDoc(doc), landscape });
       await savePdfAsJpeg(blob, filename);
       setPdf({ busy: false, error: null });
     } catch (err) {
@@ -415,11 +415,8 @@ function ShiftReport({ orgId, vehicles, groups }) {
             Undo edits
           </button>
         )}
-        <button type="button" className="sp4-ghost-btn rpt-log" onClick={downloadJpeg}
-                disabled={Boolean(pdf.busy) || run.status !== 'done'} aria-busy={pdf.busy === 'jpeg'}
-                title="The PDF report as an image">
-          <i className="ti ti-photo" aria-hidden="true" /> {pdf.busy === 'jpeg' ? 'Making the JPEG…' : 'JPEG'}
-        </button>
+        <JpegButton className="sp4-ghost-btn rpt-log" onSave={downloadJpeg}
+                    disabled={Boolean(pdf.busy) || run.status !== 'done'} busy={pdf.busy === 'jpeg'} />
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={download}
                 disabled={Boolean(pdf.busy) || run.status !== 'done'} aria-busy={pdf.busy === true}>
           {pdf.busy === true ? 'Making the PDF…' : 'Download PDF'}
@@ -657,109 +654,6 @@ function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
 const dayWords = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', weekday: 'short', day: 'numeric', month: 'short' }).format(ms);
 
 /** The vehicle types to show: a dropdown of checkboxes, with All and CPO only. */
-/** Prints a PDF from a frame of its own, out of sight, that goes once it has printed. */
-function printPdf(url) {
-  const f = document.createElement('iframe');
-  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  f.src = url;
-  f.onload = () => { f.contentWindow?.focus(); f.contentWindow?.print(); setTimeout(() => f.remove(), 60_000); };
-  document.body.appendChild(f);
-}
-const kb = (bytes) => (bytes < 1_000_000 ? `${Math.max(1, Math.round(bytes / 1000))} KB` : `${(bytes / 1_000_000).toFixed(1)} MB`);
-
-/**
- * The PDF as the server makes it, edits and all, shown on the page before it
- * is saved (operator, 2 Nov: "add a pdf preview"). Download saves this same
- * file, so what was looked at is what is filed.
- *
- * It opens at once and is made inside it. The pages are drawn to fill the
- * window's width (shared/PdfPages), not left to the browser's PDF viewer,
- * whose zoom differs from one browser to another; print, a tab of its own and
- * download sit in the head with what the file is: its window, pages, size and
- * edits.
- */
-function PdfPreview({ state, title = 'Movement report', caption, edited, onRetry, onClose }) {
-  const [url, setUrl] = useState(null);
-  const [pages, setPages] = useState(null);
-  const [drawError, setDrawError] = useState(null);
-  const file = state.status === 'done' ? state : null;
-  useEffect(() => {
-    if (!file) return undefined;
-    const u = URL.createObjectURL(file.blob);
-    setUrl(u);
-    setPages(null);
-    setDrawError(null);
-    return () => { URL.revokeObjectURL(u); setUrl(null); };
-  }, [file]);
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
-
-  const facts = [caption,
-    pages && `${pages} page${pages === 1 ? '' : 's'}`,
-    file && kb(file.blob.size),
-    edited > 0 && `${edited} edit${edited === 1 ? '' : 's'} included`].filter(Boolean);
-  return (
-    <div className="sp4-modal-overlay mvr-pv-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="mvr-pv" role="dialog" aria-modal="true" aria-labelledby="mvr-pv-title" aria-describedby="mvr-pv-facts">
-        <header className="mvr-pv__head">
-          <i className="ti ti-file-type-pdf mvr-pv__icon" aria-hidden="true" />
-          <div className="mvr-pv__what">
-            <h2 id="mvr-pv-title" className="mvr-pv__title">{title}</h2>
-            <p id="mvr-pv-facts" className="mvr-pv__facts">
-              {facts.map((f, i) => <span key={i}>{f}</span>)}
-            </p>
-          </div>
-          <div className="mvr-pv__tools">
-            <button type="button" className="mvr-pv__tool" disabled={!url} title="Print"
-                    onClick={() => printPdf(url)}>
-              <i className="ti ti-printer" aria-hidden="true" /><span className="mvr-sr">Print</span>
-            </button>
-            <a className={`mvr-pv__tool${url ? '' : ' is-off'}`} href={url ?? undefined} target="_blank" rel="noreferrer"
-               title="Open in a tab of its own" aria-disabled={!url}>
-              <i className="ti ti-external-link" aria-hidden="true" /><span className="mvr-sr">Open in a new tab</span>
-            </a>
-            <button type="button" className="sp4-submit-btn frp-run mvr-pv__save" disabled={!file} autoFocus
-                    onClick={() => saveFile(file.blob, file.filename)}>
-              <i className="ti ti-download" aria-hidden="true" /> Download
-            </button>
-            <button type="button" className="sp4-modal-x mvr-pv__x" onClick={onClose} aria-label="Close the preview">
-              <i className="ti ti-x" aria-hidden="true" />
-            </button>
-          </div>
-        </header>
-
-        <div className="mvr-pv__desk" aria-busy={state.status === 'loading'}>
-          {state.status === 'loading' && (
-            <div className="mvr-pv__note" role="status">
-              <span className="mvr-pv__sheet" aria-hidden="true"><i /><i /><i /><i /><i /></span>
-              Making the PDF…
-            </div>
-          )}
-          {state.status === 'error' && (
-            <div className="mvr-pv__note mvr-pv__note--error" role="alert">
-              <i className="ti ti-alert-triangle" aria-hidden="true" />
-              <span>The PDF could not be made: {state.message}</span>
-              <button type="button" className="sp4-ghost-btn" onClick={onRetry}>Try again</button>
-            </div>
-          )}
-          {file && !drawError && (
-            <PdfPages blob={file.blob} gutter={0} onLoad={setPages} onError={(err) => setDrawError(err?.message ?? String(err))} />
-          )}
-          {drawError && (
-            <div className="mvr-pv__note mvr-pv__note--error" role="alert">
-              <i className="ti ti-alert-triangle" aria-hidden="true" />
-              <span>The PDF was made but could not be shown here: {drawError}. Download or open it in a tab.</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /**
  * One choice from a short list (a group, a consumption unit), in the field and
  * card the Type list uses (operator, 2 Nov: "the drop down list on each node
@@ -1043,11 +937,11 @@ function MovementsReport({ orgId }) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
     }
   };
-  const downloadJpeg = async () => {
+  const downloadJpeg = async (landscape) => {
     if (!reports || pdf.busy) return;
     setPdf({ busy: 'jpeg', error: null });
     try {
-      const { blob, filename } = await makeEditedMovementReport({ orgId, request: pdfBody() });
+      const { blob, filename } = await makeEditedMovementReport({ orgId, request: pdfBody(), landscape });
       await savePdfAsJpeg(blob, filename);
       setPdf({ busy: false, error: null });
     } catch (err) {
@@ -1201,10 +1095,8 @@ function MovementsReport({ orgId }) {
               actions={<>
                 {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits((all) => all.map(() => ({})))}>Undo edits</button>}
                 {pdf.busy ? <span className="rpt-sub">{pdf.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
-                <button type="button" className="sp4-ghost-btn" onClick={downloadJpeg} disabled={Boolean(pdf.busy) || !kept.counts.total}
-                        title="The PDF report, with your edits, as an image">
-                  <i className="ti ti-photo" aria-hidden="true" /> JPEG
-                </button>
+                <JpegButton onSave={downloadJpeg} disabled={Boolean(pdf.busy) || !kept.counts.total}
+                            title="The PDF report, with your edits, as an image" />
                 <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(pdf.busy) || !kept.counts.total}
                         title="See the PDF, with your edits, before you download it">
                   <i className="ti ti-eye" aria-hidden="true" /> Preview
@@ -1578,14 +1470,14 @@ export default function ReportsScreen() {
 
   // The same PDF as an image (operator, 2 Nov), on the reports named for it.
   const [jpegBusy, setJpegBusy] = useState(false);
-  const downloadJpeg = async () => {
+  const downloadJpeg = async (turned) => {
     if (!done || pdfBusy || jpegBusy) return;
     setJpegBusy(true);
     setPdfError(null);
     try {
       const { html, landscape, filename } = reportHtml(def, done, {
         companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
-        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
+        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
       });
       await saveLetterheadJpeg(html, { filename, landscape });
     } catch (err) {
@@ -1736,10 +1628,7 @@ export default function ReportsScreen() {
                   : jpegBusy ? <span className="rpt-sub">Making the JPEG…</span>
                   : pdfError ? <span className="rpt-warn">{pdfError}</span> : null}
                 {JPEG_REPORTS.has(key) && (
-                  <button type="button" className="sp4-ghost-btn" onClick={downloadJpeg} disabled={pdfBusy || jpegBusy}
-                          title="The PDF report as an image">
-                    <i className="ti ti-photo" aria-hidden="true" /> JPEG
-                  </button>
+                  <JpegButton onSave={downloadJpeg} disabled={pdfBusy || jpegBusy} />
                 )}
                 {conduct && (
                   <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={pdfBusy}

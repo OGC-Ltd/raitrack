@@ -1,0 +1,21 @@
+/* The JPEG button's Portrait / Landscape menu (shared/JpegButton). */
+
+.jpg-btn { position: relative; display: inline-flex; }
+.jpg-btn__caret { margin-left: 2px; font-size: 0.85em; opacity: 0.7; }
+.jpg-btn__pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  display: grid; gap: 2px; min-width: 220px; padding: 6px;
+  border: 1px solid var(--sp4-line-hi); border-radius: 10px;
+  background: var(--sp4-surface);
+  box-shadow: 0 10px 30px rgb(15 23 42 / 14%), 0 2px 6px rgb(15 23 42 / 8%);
+}
+.jpg-btn__item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 9px;
+  border: 0; border-radius: 6px; background: none; color: var(--sp4-text-1);
+  font: inherit; font-size: var(--sp4-body); text-align: left; cursor: pointer;
+}
+.jpg-btn__item > .ti { font-size: 18px; color: var(--sp4-text-3); }
+.jpg-btn__item span { display: grid; gap: 1px; }
+.jpg-btn__item small { font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.jpg-btn__item:hover { background: var(--sp4-raised); }
+.jpg-btn__item:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
