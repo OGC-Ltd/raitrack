@@ -1,9 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { familyMembers, familyOf, familyRuns, templateFor } from './reportTemplates';
 
-const REPORTS = ['geofences', 'tatFuel', 'offline', 'speedReport'];
+const REPORTS = ['geofences', 'offline', 'speedReport'];
 const family = familyOf('geofences', 'WESTSUGAR');
 const canSee = () => true;
+
+describe('TAT and Fuel lists the sites too', () => {
+  const tat = familyOf('tatFuel', 'WESTSUGAR');
+  it('after the organisations', () => {
+    expect(familyMembers(tat, canSee).map((m) => m.label)).toEqual(['Sukari', 'Kabras', 'Nzoia', 'Olepito', 'Naitiri', 'Amuka', 'Khalaba', 'Lake Agro', 'Magut', 'Misikhu', 'Nairobi', 'Selia']);
+  });
+  it('a site is read from West Sugar, its units alone', () => {
+    const [run, ...rest] = familyRuns(tat, ['SELIA'], canSee);
+    expect(rest).toEqual([]);
+    expect(run.code).toBe('WESTSUGAR');
+    expect(run.unit.test('Selia')).toBe(true);
+    expect(run.unit.test('Misikhu')).toBe(false);
+  });
+  it('all of them still reads West Sugar whole', () => {
+    expect(familyRuns(tat, null, canSee)[0]).toEqual({ code: 'WESTSUGAR', unit: null });
+  });
+});
 
 describe('who picks what', () => {
   it('lists the five under West Kenya, in every report', () => {
