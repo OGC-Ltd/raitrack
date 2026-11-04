@@ -19,6 +19,10 @@ import { loadTankersReport } from '../../api/reports';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import JpegButton from '../shared/JpegButton';
 import PdfPreview from '../shared/PdfPreview';
+import { saveFile } from '../../api/tripReport';
+import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { useReportEditor } from './ReportEditor';
+import { flowDoc } from '../../lib/reportDocs';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -91,10 +95,18 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
     ...done.ctx, companyName: companyName ?? 'Menengai', orgCode, logos: letterheadLogos(),
     failed: done.failed, slowLine: done.slow?.line ?? null, landscape,
   });
+  const editor = useReportEditor({ orgId, source: `${done ? run.ctx?.to ?? '' : ''}|${[...out].join()}|${Boolean(done)}`, build: () => flowDoc(sheet()) });
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
+      if (editor.edited) {
+        const made = await editor.make(landscape);
+        if (as === 'jpeg') await savePdfAsJpeg(made.blob, made.filename);
+        else saveFile(made.blob, made.filename);
+        setFile({ busy: false, error: null });
+        return;
+      }
       const { html, filename } = sheet(landscape);
       if (as === 'jpeg') {
         await saveLetterheadJpeg(html, { filename, landscape });
@@ -115,7 +127,7 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
     setPreview({ status: 'loading' });
     try {
       const { html, filename } = sheet();
-      const made = await saveLetterheadPdf(html, { filename, keep: true });
+      const made = editor.edited ? await editor.make() : await saveLetterheadPdf(html, { filename, keep: true });
       if (id === previewId.current) setPreview({ status: 'done', ...made });
     } catch (err) {
       if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
@@ -149,12 +161,14 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
                  onChange={(e) => { const t = fromLocalInput(e.target.value); if (Number.isFinite(t)) setAt(t); }} />
         </div>
         <span className="rpt-sub tkr-window">4 hours: {periodWords((at ?? now) - WINDOW_MS, at ?? now)}</span>
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
+
+      {editor.overlay}
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
@@ -180,7 +194,7 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
               summary={<>
                 Tankers Movement · <strong>{kept.length}</strong> of {done.tankers} tankers from Mombasa
                 {out.size > 0 && (
-                  <span className="rpt-sub"> · {out.size} left out <button type="button" className="tkr-putback" onClick={() => setOut(new Set())}>Put all back</button></span>
+                  <span className="rpt-sub"> · {out.size} left out <button type="button" className="tkr-putback" onClick={() => editor.guard('Change the tankers listed', () => setOut(new Set()))}>Put all back</button></span>
                 )}
                 <span className="rpt-sub"> · {dmy(done.ctx.to)} · {periodWords(done.ctx.from, done.ctx.to)}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
@@ -189,6 +203,7 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
               onCsv={kept.length ? saveCsv : undefined}
               onPdf={file.busy ? undefined : () => save('pdf')}
               actions={<>
+                {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
@@ -229,7 +244,7 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
                             </td>
                           ))}
                           <td className="mvr-keep">
-                            <button type="button" className="mvr-keep__btn" onClick={() => toggleOut(r.unit.key)}
+                            <button type="button" className="mvr-keep__btn" onClick={() => editor.guard('Change the tankers listed', () => toggleOut(r.unit.key))}
                                     title={left ? 'Put this tanker back in the report' : 'Leave this tanker out of the PDF, JPEG and CSV'}
                                     aria-label={left ? `Put ${r.unit.plate} back` : `Leave ${r.unit.plate} out`}>
                               <i className={`ti ${left ? 'ti-arrow-back-up' : 'ti-x'}`} aria-hidden="true" />

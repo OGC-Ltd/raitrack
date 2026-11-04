@@ -215,17 +215,9 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     ...(fu ? [['Follow-up', esc(fu.words)]] : []),
   ];
 
-  const html = renderLetterheadHtml({
-    title: def.title.toUpperCase(),
-    reportNo,
-    date,
-    companyName,
-    info,
-    flow,
-    footNote: `${companyName} · ${def.title} · ${periodWords}`,
-    logos,
-    landscape,
-  });
+  const footNote = `${companyName} · ${def.title} · ${periodWords}`;
+  const title = def.title.toUpperCase();
+  const html = renderLetterheadHtml({ title, reportNo, date, companyName, info, flow, footNote, logos, landscape });
   const stamp = new Date(now + 3 * 3600_000).toISOString().slice(0, 10);
-  return { html, landscape, filename: `${def.title} ${companyName}${ctx.unit ? ` ${ctx.unit}` : ''} ${stamp}.pdf` };
+  return { html, landscape, parts: { title, reportNo, date, info, flow, footNote }, filename: `${def.title} ${companyName}${ctx.unit ? ` ${ctx.unit}` : ''} ${stamp}.pdf` };
 }

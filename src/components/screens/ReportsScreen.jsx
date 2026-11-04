@@ -43,8 +43,11 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } from '../../api/endOfShiftReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { saveFile } from '../../api/tripReport';
 import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
 import ShiftDocument from './ShiftDocument';
+import { useReportEditor } from './ReportEditor';
+import { flowDoc } from '../../lib/reportDocs';
 import TankersReport from './TankersReport';
 import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
@@ -1400,11 +1403,23 @@ export default function ReportsScreen() {
 
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState(null);
+  const editor = useReportEditor({
+    orgId, source: done,
+    build: () => flowDoc(reportHtml(def, done, {
+      companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+      orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
+    })),
+  });
   const downloadPdf = async () => {
     if (!done || pdfBusy) return;
     setPdfBusy(true);
     setPdfError(null);
     try {
+      if (editor.edited) {
+        const made = await editor.make();
+        saveFile(made.blob, made.filename);
+        return;
+      }
       const { html, landscape, filename } = reportHtml(def, done, {
         companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
@@ -1424,6 +1439,11 @@ export default function ReportsScreen() {
     setJpegBusy(true);
     setPdfError(null);
     try {
+      if (editor.edited) {
+        const made = await editor.make(turned);
+        await savePdfAsJpeg(made.blob, made.filename);
+        return;
+      }
       const { html, landscape, filename } = reportHtml(def, done, {
         companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
@@ -1448,7 +1468,7 @@ export default function ReportsScreen() {
         companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
       });
-      const file = await saveLetterheadPdf(html, { filename, landscape, keep: true });
+      const file = editor.edited ? await editor.make() : await saveLetterheadPdf(html, { filename, landscape, keep: true });
       if (id === previewId.current) setPreview({ status: 'done', ...file });
     } catch (err) {
       if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
@@ -1533,7 +1553,7 @@ export default function ReportsScreen() {
         {key === 'behaviour' && (
           <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog({})}>Log incident</button>
         )}
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => execute()}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', () => execute())}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
@@ -1573,6 +1593,7 @@ export default function ReportsScreen() {
               onCsv={done.rows.length ? downloadCsv : undefined}
               onPdf={pdfBusy || jpegBusy ? undefined : downloadPdf}
               actions={<>
+                {editor.button}
                 {pdfBusy ? <span className="rpt-sub">Making the PDF…</span>
                   : jpegBusy ? <span className="rpt-sub">Making the JPEG…</span>
                   : pdfError ? <span className="rpt-warn">{pdfError}</span> : null}
@@ -1587,6 +1608,7 @@ export default function ReportsScreen() {
                 )}
               </>}
             />
+            {editor.overlay}
             {preview && (
               <PdfPreview state={preview} title={`${def.label} report`}
                           caption={`${periodWords} · ${groupWords}${done.ctx.unit ? ` · ${done.ctx.unit}` : ''}`} onRetry={previewPdf} onClose={closePreview} />

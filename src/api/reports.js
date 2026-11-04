@@ -92,6 +92,17 @@ export async function makeReportPdf({ orgId, kind, body, landscape = false }) {
   return { blob, filename: filename ?? 'Report.pdf' }
 }
 
+/** A report as edited on its page (lib/reportDocs), drawn from the sheet: `{ blob, filename }`. */
+export async function makeReportDoc({ orgId, doc, landscape = false }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/document.pdf${landscape ? '?landscape=1' : ''}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc),
+  })
+  return { blob, filename: filename ?? `${doc.filename}.pdf` }
+}
+
 /**
  * The PDF of the movement report as the operator edited it (lib/movementReport
  * pdfRequest), or of several ({ reports }: one window a day over a range of

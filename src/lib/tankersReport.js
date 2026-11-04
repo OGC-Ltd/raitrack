@@ -100,12 +100,10 @@ export function tankersHtml(rows, { from, to, companyName, orgCode, logos, now =
   if (failed) flow.push(`<div class="note">${esc(`${failed} tanker${failed === 1 ? '' : 's'} could not be read and ${failed === 1 ? 'is' : 'are'} left out.`)}</div>`);
   // No "not tracked" note and no system-generated line on this report (operator, 3 Nov 2026)
 
-  const html = renderLetterheadHtml({
-    landscape,
+  const parts = {
     title: 'TANKERS REPORT',
     reportNo: reportNumber('TK', orgCode, now),
     date: dmy(to),
-    companyName,
     info: [
       ['Fleet', esc(companyName)],
       ['Group', esc(TANKER_GROUP)],
@@ -116,9 +114,9 @@ export function tankersHtml(rows, { from, to, companyName, orgCode, logos, now =
     ],
     flow,
     footNote: `${companyName} · Tankers Report · ${dmy(to)} · ${periodWords(from, to)}`,
-    logos,
-  });
+  };
+  const html = renderLetterheadHtml({ landscape, companyName, logos, ...parts });
   const d = new Date(to + 3 * 3600_000).toISOString().slice(0, 10);
-  return { html, landscape, filename: `Tankers Report ${companyName} ${d} ${periodWords(from, to).replace(/:/g, '')}.pdf` };
+  return { html, landscape, parts, filename: `Tankers Report ${companyName} ${d} ${periodWords(from, to).replace(/:/g, '')}.pdf` };
 }
 

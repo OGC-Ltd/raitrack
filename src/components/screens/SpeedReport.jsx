@@ -18,6 +18,8 @@ import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
 import CheckPicker from './CheckPicker';
+import { useReportEditor } from './ReportEditor';
+import { speedDoc } from '../../lib/reportDocs';
 import DateRangePicker from '../layout/DateRangePicker';
 
 function Kpi({ value, label }) {
@@ -83,11 +85,13 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
     ? [fmt(s.units), fmt(s.occurrences), s.fastest ? fmt(Math.round(s.fastest)) : '-', fmt(Math.round(s.overKm)), fmt(Math.round(s.km))]
     : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
 
+  const editor = useReportEditor({ orgId, source: rows, build: () => speedDoc(rows, { day: done.rep.day, fleet, group, orgCode }) });
+
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { blob, filename } = await makeReportPdf({ orgId, kind: 'speed', body: speedPdfBody(rows, { day: done.rep.day, fleet, group }), landscape });
+      const { blob, filename } = editor.edited ? await editor.make(landscape) : await makeReportPdf({ orgId, kind: 'speed', body: speedPdfBody(rows, { day: done.rep.day, fleet, group }), landscape });
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -110,19 +114,21 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
         {groups.length > 1 && (
           <label className="rpt-sub tat-field">
             Units
-            <select className="tat-input" value={group} onChange={(e) => setGroup(e.target.value)}>
+            <select className="tat-input" value={group} onChange={(e) => { const v = e.target.value; editor.guard('Show other units', () => setGroup(v)); }}>
               <option value="all">All</option>
               {groups.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </label>
         )}
         {picker && <CheckPicker {...picker} />}
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for this day'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
+
+      {editor.overlay}
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
@@ -156,6 +162,7 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
               onCsv={saveCsv}
               onPdf={file.busy ? undefined : () => save('pdf')}
               actions={<>
+                {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />

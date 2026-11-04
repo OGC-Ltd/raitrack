@@ -21,6 +21,8 @@ import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import CheckPicker from './CheckPicker';
+import { useReportEditor } from './ReportEditor';
+import { dormantDoc } from '../../lib/reportDocs';
 import DateRangePicker from '../layout/DateRangePicker';
 import ReportIcon from '../shared/ReportIcon';
 
@@ -76,11 +78,13 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
     { label: 'Not updating', value: rep ? offlineCount(rep) : undefined },
   ];
 
+  const editor = useReportEditor({ orgId, source: done, build: () => dormantDoc(rep, { fleet: done.fleet, now: done.now, orgCode }) });
+
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { blob, filename } = await makeReportPdf({ orgId, kind: 'dormant-assets', body: offlinePdfBody(rep, { fleet: done.fleet, now: done.now }), landscape });
+      const { blob, filename } = editor.edited ? await editor.make(landscape) : await makeReportPdf({ orgId, kind: 'dormant-assets', body: offlinePdfBody(rep, { fleet: done.fleet, now: done.now }), landscape });
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -108,12 +112,14 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
         <DateRangePicker from={day} to={day} today={today} maxDays={1} spans={[]} label="As at" on onChange={(d) => setDay(d)} />
         <span className="rpt-sub">As at {done ? asAtWords(done.now) : 'now'}</span>
         {picker && <CheckPicker {...picker} />}
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report as at this day'}>
           {run.status === 'loading' ? 'Running…' : done?.day === day ? 'Refresh' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
+
+      {editor.overlay}
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
@@ -143,6 +149,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
               onCsv={offlineCount(rep) ? saveCsv : undefined}
               onPdf={file.busy ? undefined : () => save('pdf')}
               actions={<>
+                {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />

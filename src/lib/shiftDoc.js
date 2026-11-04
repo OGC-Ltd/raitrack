@@ -41,6 +41,14 @@ export function removeSection(doc, i) {
   return out;
 }
 
+/** The document without the bar `i` and what stands under it, to the next bar or heading. */
+export function removeBar(doc, i) {
+  const out = clone(doc);
+  const next = out.blocks.findIndex((b, k) => k > i && (b.kind === 'h2' || b.kind === 'bar' || b.kind === 'note'));
+  out.blocks.splice(i, (next < 0 ? out.blocks.length : next) - i);
+  return out;
+}
+
 /** The document without block `i`. */
 export function removeBlock(doc, i) {
   const out = clone(doc);
