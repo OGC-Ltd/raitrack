@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findStorages, customersIn, tripOf, deliveries, deliveryRow, rowCells, csvTable, deliveriesHtml, stamp, notLeftWords, readOrders } from './deliveriesReport';
+import { findStorages, customersIn, tripOf, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders } from './deliveriesReport';
 import { addVehicle, removeVehicle, setCustomers, emptyPlan } from './deliveryPlan';
 import { reportKeysFor, hasDeliveriesTab } from './reportNav';
 
@@ -106,16 +106,14 @@ describe('Deliveries Report', () => {
     expect(rowCells(r)).toEqual(['KCP 136P', '30.10.2026 04:05:02 (MORL)', '1/2', 'Thanju', '']);
     expect(r.customers.map((c) => Boolean(c.at))).toEqual([true, false]);
     expect(csvTable([r]).body[0].slice(-2)).toEqual(['JOJAC INVESTMENTS 06:00', 'THANJU SHOP']);
-    const { html, filename } = deliveriesHtml([r], { at: at('2026-10-30T10:00:00'), companyName: 'Menengai Oil Refineries Ltd', orgCode: 'MENENGAI', logos: { rai: '', ogc: '' } });
-    expect(html).toContain('DELIVERIES REPORT');
-    expect(html).toContain('1/2');
-    expect(filename).toBe('Deliveries Report Menengai Oil Refineries Ltd 2026-10-30 1000.pdf');
-    expect(html).toContain('Customers by vehicle');
-    const bare = deliveriesHtml([r], { at: at('2026-10-30T10:00:00'), companyName: 'Menengai Oil Refineries Ltd', orgCode: 'MENENGAI', logos: { rai: '', ogc: '' }, stops: false }).html;
-    expect(bare).toContain('30.10.2026');
-    expect(bare).toContain('Thanju');
-    expect(bare).not.toContain('Customers by vehicle');
-    expect(bare).not.toContain('Overview');
+    const body = deliveriesPdfBody([r], { from: at('2026-10-30T07:00:00'), at: at('2026-10-30T10:00:00'), fleet: 'Menengai Oil Refineries Ltd' });
+    expect(body).toMatchObject({ fleet: 'Menengai Oil Refineries Ltd', group: 'all', stops: true });
+    expect(body.rows[0]).toMatchObject({ plate: 'KCP 136P', fulfilled: 1, planned: 2, place: 'Thanju', notLeft: null, arrivedAt: null, arrivedTo: null });
+    expect(body.rows[0].leftFrom).toEqual({ short: 'MORL', label: 'MORL' });
+    expect(body.rows[0].customers.map((c) => c.label)).toEqual(['JOJAC INVESTMENTS', 'THANJU SHOP']);
+    // Only what the server's schema names: no geofence shapes go up with the customers
+    expect(Object.keys(body.rows[0].customers[0]).sort()).toEqual(['at', 'label']);
+    expect(deliveriesPdfBody([r], { from: 1, at: 2, fleet: 'M', group: 'Van Sales', stops: false })).toMatchObject({ group: 'Van Sales', stops: false });
   });
 
   it('keeps the day’s list: vehicles once each, their customers', () => {
@@ -140,5 +138,23 @@ describe('Deliveries Report', () => {
     expect(hasDeliveriesTab(() => true, 'MENENGAI')).toBe(true);
     expect(hasDeliveriesTab(() => true, 'KABRAS')).toBe(false);
     expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('deliveries');
+  });
+});
+
+describe('the report window', () => {
+  const storages = findStorages(zones);
+  const byName = new Map(customersIn(zones, storages).map((c) => [c.name, c]));
+  const plan = { plate: 'KDE 127E', customers: ['MENENGAI_VS: JOJAC INVESTMENTS'] };
+  const pings = [
+    { t: at('2026-11-03T07:00:00'), ...MORL }, { t: at('2026-11-03T08:00:00'), ...ROAD },
+    { t: at('2026-11-03T09:00:00'), ...A }, { t: at('2026-11-03T09:05:00'), ...A }, { t: at('2026-11-03T10:00:00'), ...ROAD },
+    { t: at('2026-11-04T10:00:00'), ...ROAD },
+  ];
+  const to = at('2026-11-04T12:00:00');
+  it('counts a delivery inside the window', () => {
+    expect(deliveryRow(plan, pings, storages, byName, { to }).fulfilled).toBe(1);
+  });
+  it('does not count one before the window', () => {
+    expect(deliveryRow(plan, pings, storages, byName, { from: at('2026-11-04T07:00:00'), to }).fulfilled).toBe(0);
   });
 });

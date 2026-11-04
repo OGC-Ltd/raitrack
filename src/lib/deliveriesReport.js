@@ -13,8 +13,6 @@
 
 import { fenceContains } from './zoneContainment';
 import { metresToFence } from './movementDepots';
-import { renderLetterheadHtml, table, cells, esc } from './letterhead';
-import { reportNumber } from './reportLetterhead';
 
 /** At least this long inside a customer's geofence is a delivery. */
 export const STOP_MS = 90_000;
@@ -180,8 +178,9 @@ export function deliveries(pings, customers, { from, to }) {
  * One row: the vehicle's trip, its customers ticked off, where it is.
  * @param {object} plan     { plate, customers: [names] }
  * @param {object[]} pings  its readings, sorted
+ * @param {number} [o.from]  the report's window starts here: a delivery before it does not count
  */
-export function deliveryRow(plan, pings, storages, customerByName, { to, place = null, lastFix = null, atMorl = false, unread = false }) {
+export function deliveryRow(plan, pings, storages, customerByName, { from = -Infinity, to, place = null, lastFix = null, atMorl = false, unread = false }) {
   // Its last position as Movements has it, when newer than the readings: a
   // parked tracker can go quiet for days
   const all = lastFix && Number.isFinite(lastFix.lat) && Number.isFinite(lastFix.t) && lastFix.t <= to
@@ -198,7 +197,7 @@ export function deliveryRow(plan, pings, storages, customerByName, { to, place =
     ...(plan.customers ?? []).map((n) => customerByName.get(n) ?? { name: n, label: n, missing: true }),
   ];
   const known = picked.filter((c) => !c.missing);
-  const done = trip.leftAt != null ? deliveries(pings, known, { from: trip.leftAt, to: trip.arrivedAt ?? to }) : new Map();
+  const done = trip.leftAt != null ? deliveries(pings, known, { from: Math.max(trip.leftAt, from), to: trip.arrivedAt ?? to }) : new Map();
   const last = [...(pings ?? [])].reverse().find((p) => p.t <= to && Number.isFinite(p.lat));
   return {
     plate: plan.plate, vehicleId: plan.vehicleId, trip, place,
@@ -256,42 +255,27 @@ export function csvTable(rows) {
   };
 }
 
-/** The PDF (or one long page, for the JPEG): the sheet's table, then each vehicle's customers. */
 /**
+ * What the server draws the PDF from (POST reports/deliveries.pdf, the JPEG
+ * comes from that PDF). Rows, not figures to work out again: the trips are read
+ * here, and an operator may have typed over the orders.
  * `stops: false` (operator, 4 Nov 2026: "I should be able to select if I want
- * the pick up locations to be shown on the report or not"): the letterhead and
- * the sheet's table under its date bar, as the operator's sheet, and nothing else.
+ * the pick up locations to be shown on the report or not"): the table alone.
  */
-export function deliveriesHtml(rows, { at, companyName, orgCode, logos, now = Date.now(), landscape = false, continuous = false, stops = true }) {
-  const cols = [{ h: 'Reg', w: '22mm' }, { h: 'Time left MORL/STO', w: '42mm' }, { h: 'Orders fulfilled', w: '24mm', r: true },
-    { h: 'Current location', w: '60mm' }, { h: 'Time arrived MORL/STO', w: '36mm' }];
-  const fulfilled = rows.reduce((s, r) => s + r.fulfilled, 0);
-  const planned = rows.reduce((s, r) => s + r.planned, 0);
-  const sheet = table(cols, rows.map((r) => rowCells(r).map((v, i) => ({ html: esc(v), cls: i === 0 ? 'b' : i === 3 ? 'wrap' : undefined }))));
-  const flow = !stops ? [
-    `<div style="background:#00b0f0;color:#0b1f2a;font-weight:700;text-align:center;padding:1.2mm 0;margin-top:2mm">${esc(stamp(at).slice(0, 10))}</div>`,
-    sheet,
-  ] : [
-    `<h2>1. Overview <small>as at ${esc(stamp(at))}</small></h2>`,
-    cells([['Vehicles', String(rows.length)], ['Out on delivery', String(rows.filter((r) => r.trip.leftAt != null && r.trip.arrivedAt == null).length)],
-      ['Back at storage', String(rows.filter((r) => r.trip.arrivedAt != null).length)], ['Orders fulfilled', `${fulfilled}/${planned}`]]),
-    `<h2>2. Deliveries <small>${esc(dayWords(at))}</small></h2>`,
-    sheet,
-    '<h2>3. Customers by vehicle</h2>',
-  ];
-  for (const r of stops ? rows : []) {
-    flow.push(`<h2 style="font-size:8pt;text-transform:none;letter-spacing:0">${esc(r.plate)} <small>${r.fulfilled}/${r.planned} delivered${r.trip.leftFrom ? ` · left ${esc(r.trip.leftFrom.label)} ${esc(hm(r.trip.leftAt))}` : ''}</small></h2>`);
-    if (!r.customers.length) { flow.push('<div class="none">No customers given.</div>'); continue; }
-    flow.push(table([{ h: 'Customer', w: '120mm' }, { h: 'Delivered', w: '64mm' }], r.customers.map((c) => [
-      { html: esc(c.label), cls: 'wrap' },
-      { html: c.missing ? 'Not on the platform' : c.at ? `✓ ${esc(hm(c.at))}` : '✗ Not yet', style: c.at ? 'color:#2e7d32;font-weight:700' : 'color:#c62828' },
-    ])));
-  }
-  const html = renderLetterheadHtml({
-    title: 'DELIVERIES REPORT', reportNo: reportNumber('DL', orgCode, now), date: dayWords(at), companyName,
-    info: [['Fleet', esc(companyName)], ['As at', esc(stamp(at))], ['Vehicles', String(rows.length)], ['Orders fulfilled', `${fulfilled}/${planned}`]],
-    flow, footNote: `${companyName} · Deliveries Report · ${stamp(at)}`, logos, landscape, continuous,
-  });
-  const d = new Date(at + OFFSET).toISOString();
-  return { html, filename: `Deliveries Report ${companyName} ${d.slice(0, 10)} ${d.slice(11, 16).replace(':', '')}.pdf` };
+export function deliveriesPdfBody(rows, { from, at, fleet, group = null, stops = true }) {
+  return {
+    fleet, from: Math.round(from), at: Math.round(at), group: group ?? 'all', stops,
+    rows: rows.map((r) => ({
+      plate: r.plate,
+      leftAt: r.trip.leftAt ?? null,
+      leftFrom: r.trip.leftFrom ? { short: r.trip.leftFrom.short, label: r.trip.leftFrom.label } : null,
+      notLeft: r.trip.leftAt != null ? null : notLeftWords(r.trip),
+      fulfilled: r.fulfilled,
+      planned: r.planned,
+      place: r.place ?? null,
+      arrivedAt: r.trip.arrivedAt ?? null,
+      arrivedTo: r.trip.arrivedTo?.label ?? null,
+      customers: r.customers.map((c) => ({ label: c.label, at: c.at ?? null, ...(c.missing ? { missing: true } : {}) })),
+    })),
+  };
 }
