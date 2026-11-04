@@ -5,8 +5,10 @@
  * lib/deliveryPlan); a run reads each vehicle's positions and says when it
  * left MORL or the Nairobi depot, how many of its customers it delivered to
  * (stood 1½ minutes in their geofence, within the window), where it is, and
- * when it came back. The bar is Movements': the last hours or a day's hours, a
- * group, Run report; then JPEG, Preview, CSV and PDF over the group picked.
+ * when it came back. Stops are geofences, or points pasted as coordinates, and
+ * the vehicle's whole route in the window is run against them. The bar is
+ * Movements': the last hours or days and the same hours on each (with the first
+ * day's list), a group, Run report; then JPEG, Preview, CSV and PDF over the group picked.
  * lib/deliveriesReport does the reading; this is the page, and the PDF, JPEG
  * and CSV.
  */
@@ -14,11 +16,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords } from '../../lib/fleetReports';
-import { LAST_HOURS, movementWindows, windowsProblem } from '../../lib/movementReport';
+import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, tripOf, findStorages, customersIn, deliveryRow, rowCells, stamp, dayWords, csvTable, deliveriesPdfBody,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody,
 } from '../../lib/deliveriesReport';
-import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, emptyPlan } from '../../lib/deliveryPlan';
+import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, emptyPlan, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { loadZones } from '../../hooks/useEstateZones';
@@ -46,11 +48,64 @@ function Kpi({ value, label, tone }) {
   );
 }
 
+/** Delivery points pasted for one vehicle: the box, what it could not read, and the points held. */
+function PinPaste({ vehicle, onChange }) {
+  const [text, setText] = useState('');
+  const [radius, setRadius] = useState(PIN_RADIUS_M);
+  const [told, setTold] = useState(null);                 // { added, bad }
+  const pins = vehicle.pins ?? [];
+  const add = () => {
+    const { pins: read, bad } = readCoordinates(text, radius);
+    if (read.length) onChange(mergePins(pins, read));
+    setTold({ added: read.length, bad: bad.length });
+    setText(bad.join('\n'));                              // what did not read stays, to be put right
+  };
+  return (
+    <div className="dlv-paste">
+      <textarea className="dlv-paste__box" rows={4} value={text} spellCheck={false}
+                aria-label={`Delivery coordinates for ${vehicle.plate}`}
+                placeholder={'One delivery point a line, from a sheet or a map:\nNaivas Nakuru, -0.28802, 36.04494\n-1.30294, 36.86609'}
+                onChange={(e) => { setText(e.target.value); setTold(null); }} />
+      <div className="dlv-paste__foot">
+        <label className="dlv-paste__radius">
+          Within
+          <input type="number" min={PIN_RADIUS_MIN_M} max={PIN_RADIUS_MAX_M} step={10} value={radius}
+                 onChange={(e) => setRadius(e.target.value)} /> m
+        </label>
+        <button type="button" className="sp4-ghost-btn" disabled={!text.trim()} onClick={add}>
+          <i className="ti ti-plus" aria-hidden="true" /> Add points
+        </button>
+        {told && (
+          <span className={told.bad ? 'rpt-warn' : 'rpt-sub'} role="status">
+            {told.added} added{told.bad ? `; ${told.bad} line${told.bad === 1 ? '' : 's'} left in the box had no coordinates` : ''}
+          </span>
+        )}
+        {pins.length > 0 && (
+          <button type="button" className="sp4-ghost-btn dlv-paste__clear" onClick={() => onChange([])}>Remove all {pins.length}</button>
+        )}
+      </div>
+      {pins.length > 0 && (
+        <ul className="dlv-paste__pins">
+          {pins.map((p) => (
+            <li key={`${p.lat},${p.lng}`} className="dlv-paste__pin" title={`${p.lat}, ${p.lng}, within ${p.radiusM} m`}>
+              <span>{p.name || `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`}</span>
+              <span className="rpt-sub">{p.radiusM} m</span>
+              <button type="button" aria-label={`Remove ${p.name || 'this point'}`} onClick={() => onChange(pins.filter((x) => x !== p))}>
+                <i className="ti ti-x" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName }) {
   const now = Date.now();
   const today = fleetDay(now);
-  // The window, as Movements': the last hours, or the hours of a day. One day:
-  // the list of vehicles is a day's
+  // The window, as Movements': the last hours, or days and hours. The list of
+  // vehicles is a day's: a range of days runs its first day's list
   const [sel, setSel] = useState({ mode: 'last', hours: LAST_HOURS[0] });
   const [draft, setDraft] = useState({ fromDay: today, toDay: today, start: 7, end: 20 });
   const [daysOpen, setDaysOpen] = useState(true);
@@ -100,6 +155,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const [open, setOpen] = useState(() => new Set());
+  const [pasting, setPasting] = useState(() => new Set()); // vehicles with the coordinates box open
   const [showStops, setShowStops] = useState(true);       // the pick-up locations on the PDF and JPEG
   const runId = useRef(0);
 
@@ -115,7 +171,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     const runPlan = loadPlan(orgCode, dayOf(next));
     setSel(next);
     if (!orgId || !windows.length || !runPlan.vehicles.length) return;
-    const { from: windowFrom, to } = windows[0];
+    const windowFrom = windows[0].from;
+    const { to } = windows[windows.length - 1];
     const id = ++runId.current;
     const live = () => id === runId.current;
     try {
@@ -148,7 +205,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       };
       // A vehicle with two trackers: the one that reported most
       const best = (v) => [...v.vehicleIds].sort((a, b) => (held.get(b)?.length ?? 0) - (held.get(a)?.length ?? 0))[0];
-      let start = to - LOOKBACK_DAYS * DAY;
+      let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
       await read(planned.flatMap((v) => v.vehicleIds), start, to, 'Reading each vehicle’s positions');
       if (!live()) return;
       for (let back = LOOKBACK_DAYS + 1; back <= MAX_LOOKBACK_DAYS; back++) {
@@ -163,7 +220,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         const mv = v.vehicleIds.map((id) => moveRow.get(id)).find(Boolean) ?? null;
         const id = mv?.vehicleId ?? best(v);
         const row = deliveryRow(v, held.get(id) ?? [], storages, byName, {
-          from: windowFrom, to, place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
+          from: windowFrom, to, windows, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
         return { ...row, group: unitOf(v.key)?.group ?? null };
@@ -225,8 +282,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     }
   };
   const closePreview = () => { previewId.current++; setPreview(null); };
-  const saveCsv = () => done && downloadTableCsv({ ...csvTable(done.rows), filenameSlug: `deliveries-${fleetDay(done.at)}` });
-  const toggle = (k) => setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const saveCsv = () => done && downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` });
+  const flip = (s, k) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; };
+  const toggle = (k) => setOpen((s) => flip(s, k));
 
 
   return (
@@ -254,10 +312,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         </div>
 
         <DateRangePicker
-          from={draft.fromDay} to={draft.fromDay} today={today} maxDays={1} quickPicks={false}
-          label="Day and hours" on={daysOpen} disabled={!orgId}
-          text={`${pickedText(draft.fromDay, draft.fromDay, today)} · ${hoursText(draft.start, draft.end)}`}
-          onChange={(f) => { setDaysOpen(true); setDraft((d) => ({ ...d, fromDay: f, toDay: f })); }}
+          from={draft.fromDay} to={draft.toDay} today={today} maxDays={MAX_MOVEMENT_DAYS} quickPicks={false}
+          label="Days and hours" on={daysOpen} disabled={!orgId}
+          text={`${pickedText(draft.fromDay, draft.toDay, today)} · ${hoursText(draft.start, draft.end)}`}
+          onChange={(f, t) => { setDaysOpen(true); setDraft((d) => ({ ...d, fromDay: f, toDay: t ?? f })); }}
         >
           {({ close }) => (
             <>
@@ -292,7 +350,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         {/* The day's list: the vehicles shared, each with its customers */}
         <section className="dlv-plan" aria-label="Today’s vehicles">
           <div className="dlv-plan__head">
-            <h3 className="dlv-plan__title">Vehicles shared on {dayWords(Date.parse(`${day}T09:00:00+03:00`))}</h3>
+            <h3 className="dlv-plan__title">
+              {daysOpen && draft.toDay !== draft.fromDay ? 'Vehicles and stops for ' : 'Vehicles shared on '}
+              {periodDays(Date.parse(`${day}T09:00:00+03:00`), Date.parse(`${daysOpen ? draft.toDay : day}T09:00:00+03:00`))}
+            </h3>
             <span className="rpt-sub">Kept in this browser.</span>
           </div>
           {zones.status === 'done' && !customers.length && (
@@ -302,7 +363,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           {plan.vehicles.length > 0 && (
             <ul className="dlv-plan__list">
               {plan.vehicles.map((v) => {
-                const picked = v.customers.length;
+                const picked = v.customers.length + (v.pins?.length ?? 0);
+                const isPasting = pasting.has(v.key);
                 const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
                 return (
                   <li key={v.key} className="dlv-plan__veh">
@@ -311,11 +373,15 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
                                  options={options} picked={v.customers}
                                  onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
+                    <button type="button" className="sp4-ghost-btn" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
+                      <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste coordinates{v.pins?.length ? ` (${v.pins.length})` : ''}
+                    </button>
                     <span className="rpt-sub">{picked} stop{picked === 1 ? '' : 's'}{near ? ` · ${near} at storage` : ''}</span>
                     <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
                             aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
+                    {isPasting && <PinPaste vehicle={v} onChange={(pins) => change(setPins(plan, v.key, pins))} />}
                   </li>
                 );
               })}
@@ -353,7 +419,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         </section>
 
         {run.status === 'idle' && plan.vehicles.length > 0 && (
-          <EmptyNote icon="ti-truck-delivery" title="Deliveries">Give each vehicle its stops (customers or any geofence), choose the window, then press Run report.</EmptyNote>
+          <EmptyNote icon="ti-truck-delivery" title="Deliveries">Give each vehicle its stops (geofences or pasted coordinates), choose the window, then press Run report.</EmptyNote>
         )}
         {run.status === 'loading' && (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report" progress={run.total ? run.done / run.total : null}>
@@ -391,13 +457,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             />
             {preview && <PdfPreview state={preview} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={previewPdf} onClose={closePreview} />}
             <p className="mvr-depots" role="note">
-              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min inside the customer’s geofence, within the window.</span>
+              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
               <span>Storage: {done.storages.join(', ') || 'none found'}.</span>
             </p>
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table dlv-table">
                 <thead>
-                  <tr><th colSpan={COLUMNS.length + 1} className="dlv-day">{dayWords(done.at)}</th></tr>
+                  <tr><th colSpan={COLUMNS.length + 1} className="dlv-day">{periodDays(done.from, done.at)}</th></tr>
                   <tr>{COLUMNS.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col"><span className="mvr-sr">Customers</span></th></tr>
                 </thead>
                 <tbody>
@@ -428,10 +494,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                               {!r.customers.length ? <span className="rpt-sub">No customers given.</span> : (
                                 <ul>
                                   {r.customers.map((c) => (
-                                    <li key={c.name} className={c.at ? 'dlv-cust--done' : 'dlv-cust--no'}>
-                                      <i className={`ti ${c.at ? 'ti-circle-check' : 'ti-circle-x'}`} aria-hidden="true" />
+                                    <li key={c.name} className={c.at ? 'dlv-cust--done' : c.reachedAt ? 'dlv-cust--near' : 'dlv-cust--no'}>
+                                      <i className={`ti ${c.at ? 'ti-circle-check' : c.reachedAt ? 'ti-alert-circle' : 'ti-circle-x'}`} aria-hidden="true" />
                                       {c.label}
-                                      <span className="rpt-sub"> {c.missing ? 'not on the platform' : c.at ? stamp(c.at).slice(11, 16) : 'not yet'}{c.nearStorage ? ' · at storage' : ''}</span>
+                                      <span className="rpt-sub"> {stopWords(c, spansDays(done.from, done.at))}{c.nearStorage ? ' · at storage' : ''}</span>
                                     </li>
                                   ))}
                                 </ul>
