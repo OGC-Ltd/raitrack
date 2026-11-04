@@ -491,7 +491,16 @@ select.mvr-edit { min-width: 110px; }
 .dlv-cust td { background: color-mix(in srgb, var(--sp4-text-1, #000) 3%, transparent); }
 .dlv-cust ul { list-style: none; margin: 0; padding: 4px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
 .dlv-cust li { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.dlv-cust--done i { color: #2e7d32; } .dlv-cust--no i { color: #c62828; }
+.dlv-cust--done i { color: #2e7d32; } .dlv-cust--no i { color: #c62828; } .dlv-cust--near i { color: #b26a00; }
+.dlv-paste { flex: 1 0 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0 10px; }
+.dlv-paste__box { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, var(--sp4-text-1, #000) 18%, transparent); border-radius: 8px; }
+.dlv-paste__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.dlv-paste__radius { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.dlv-paste__radius input { width: 68px; padding: 4px 6px; font: inherit; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, var(--sp4-text-1, #000) 18%, transparent); border-radius: 6px; }
+.dlv-paste__clear { margin-left: auto; }
+.dlv-paste__pins { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.dlv-paste__pin { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 8px; font-size: 12px; border-radius: 999px; background: color-mix(in srgb, var(--sp4-text-1, #000) 6%, transparent); }
+.dlv-paste__pin button { padding: 0 4px; border: 0; background: none; color: inherit; cursor: pointer; }
 .dlv-find { position: relative; flex: 1 1 320px; max-width: 420px; }
 .dlv-find__list { position: static; list-style: none; margin: 4px 0 0; padding: 4px; max-height: 320px; overflow: auto;
   background: var(--sp4-surface, #fff); border: 1px solid var(--sp4-line, rgba(127,127,127,.3)); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
