@@ -6550,7 +6550,7 @@ export default function FleetMap() {
       const pin = new DomMarker({
         position: { lat: place.lat, lng: place.lng }, anchor: "bottom", zIndex: 890,
         html: place.label
-          ? `<div class="mtr-place-pin-named"><div class="zone-label zone-label--hover" style="--zone-color:${place.labelColor}">${esc(place.label)}</div><div class="mtr-place-pin"><i class="ti ti-map-pin-filled"></i></div></div>`
+          ? `<div class="zone-label zone-label--hover mtr-fence-name" style="--zone-color:${place.labelColor}">${esc(place.label)}</div>`
           : `<div class="mtr-place-pin" title="${esc(place.detail ?? place.name)}"><i class="ti ti-map-pin-filled"></i></div>`,
       });
       pin.setMap(map);
@@ -6561,7 +6561,7 @@ export default function FleetMap() {
   // A pin belongs to the organisation it was picked in.
   useEffect(() => () => { placePinRef.current?.setMap(null); placePinRef.current = null; }, [activeCompanyId]);
 
-  // A picked geofence: the layer on, the fence framed, its name on a pin.
+  // A picked geofence: the layer on, the fence framed, its name just above its centre.
   const handlePickFence = useCallback((feature) => {
     const g = feature?.geometry, p = feature?.properties ?? {};
     const isCircle = g?.type === "Point";
