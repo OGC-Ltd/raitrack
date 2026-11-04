@@ -14,7 +14,7 @@ import { CONTACT_LINE, reportNumber } from './reportLetterhead';
 import { textMm } from './shiftDoc';
 import { SECTIONS, offlineCount, rowCells as dormantCells, sectionDays, asAtWords } from './offlineReport';
 import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCells as geofenceCells } from './geofenceReport';
-import { dayWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
+import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
 
 const OFFSET = 3 * 3600_000;
@@ -105,10 +105,11 @@ const TAT_HEADS = ['Reg No', 'Trip Duration', 'Initial (L)', 'Top Ups (L)', 'Tot
 const TAT_WIDTHS = [20, 48, 14, 17, 14, 20, 15, 14, 25, 10, 11, 13, 30, 14];
 const TAT_COLS = { figures: new Set([2, 3, 4, 5, 6, 7, 9, 10, 11]), wrap: new Set([0, 1, 8, 12, 13]) };
 
-export function tatDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.now() }) {
+export function tatDoc(rows, { day, to = day, fleet, group = 'all', orgCode, now = Date.now() }) {
   const s = tatSummary(rows);
-  const date = day.split('-').reverse().join('/');
-  const words = dayWords(day);
+  const several = to !== day;
+  const date = to.split('-').reverse().join('/');
+  const words = periodWords(day, to);
   const cols = columns(TAT_WIDTHS, LANDSCAPE_MM, TAT_COLS);
   const blocks = [
     { kind: 'h2', title: '1. Overview', aside: words },
@@ -125,11 +126,11 @@ export function tatDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.no
   blocks.push({ kind: 'note', text: CONTACT_LINE });
   return {
     title: 'TAT AND FUEL REPORT', docName: `TAT and Fuel Report ${fleet}`, pairs: true, landscape: true,
-    filename: `TAT and Fuel Report ${fleet} ${day}`,
+    filename: `TAT and Fuel Report ${fleet} ${day}${several ? ` to ${to}` : ''}`,
     reportNo: reportNumber('TF', orgCode, now), date,
-    meta: meta([['Fleet', fleet], ['Units', group === 'all' ? 'All units' : group], ['Day', words], ['Trips', `Finished on the day (${fmt(s.trips)})`]]),
+    meta: meta([['Fleet', fleet], ['Units', group === 'all' ? 'All units' : group], [several ? 'Days' : 'Day', words], ['Trips', `Finished ${several ? 'on these days' : 'on the day'} (${fmt(s.trips)})`]]),
     blocks,
-    footer: `${fleet} · TAT and Fuel Report · ${date}`,
+    footer: `${fleet} · TAT and Fuel Report · ${several ? words : date}`,
   };
 }
 

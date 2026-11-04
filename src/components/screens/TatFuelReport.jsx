@@ -12,7 +12,7 @@ import { useReportOrgs } from '../../hooks/useReportOrgs';
 import { loadTatFuelReport, makeReportPdf } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
-import { COLUMNS, FIGURES, csvTable, dayWords, mergeRows, rowCells, rowsOfGroup, sections, summary, tatPdfBody, yesterday } from '../../lib/tatFuelReport';
+import { COLUMNS, FIGURES, MAX_DAYS, csvTable, dayWords, daysFrom, mergeRows, periodWords, rowCells, rowsOfGroup, rowsOverDays, sections, summary, tatPdfBody, yesterday } from '../../lib/tatFuelReport';
 import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
@@ -37,32 +37,38 @@ const KPI_LABELS = ['Trips', 'Fuel used, L', 'Distance, km', 'Rate, km/L', 'Not 
 
 export default function TatFuelReport({ orgId, orgCode, companyName, active = true }) {
   const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
-  const [day, setDay] = useState(() => yesterday());
+  const [days, setDays] = useState(() => ({ from: yesterday(), to: yesterday() }));
   const [group, setGroup] = useState('all');
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
   const today = yesterday(Date.now() + 86_400_000);
-  const problem = !orgId ? 'Waiting for the organisation to load' : !day ? 'Pick a day' : day > today ? 'That day has not happened yet' : null;
+  const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : days.to > today ? 'That day has not happened yet' : null;
 
   const execute = async () => {
     if (problem) return;
     const id = ++runId.current;
-    setRun({ status: 'loading' });
+    const { from, to } = days;
+    setRun({ status: 'loading', days: daysFrom(from, to).length });
     try {
       const reports = [];
       const unread = [];
       for (const c of picked) {
         const oid = await orgIdOf(c);
         if (!oid) { unread.push(nameOf(c)); continue; }
-        const rep = await loadTatFuelReport({ orgId: oid, day });
-        reports.push({ ...rep, rows: rep.rows.filter((r) => keepUnit(c, r.base)) });
+        // One at a time: a closed day is kept on the server, so only new days cost
+        const sheets = [];
+        for (const day of daysFrom(from, to)) sheets.push(await loadTatFuelReport({ orgId: oid, day }));
+        reports.push({
+          failed: sheets.reduce((n, r) => n + r.failed, 0),
+          rows: rowsOverDays(sheets.map((r) => r.rows)).filter((r) => keepUnit(c, r.base)),
+        });
       }
       if (id !== runId.current) return;
       setGroup('all');
       setRun({
-        status: 'done', day, fleet: pickedWords, unread,
-        rep: { day, failed: reports.reduce((n, r) => n + r.failed, 0), rows: mergeRows(reports.map((r) => r.rows)) },
+        status: 'done', fleet: pickedWords, unread,
+        rep: { day: from, to, failed: reports.reduce((n, r) => n + r.failed, 0), rows: mergeRows(reports.map((r) => r.rows)) },
       });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
@@ -81,13 +87,13 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
     ? [fmt(s.trips), fmt(Math.round(s.litres)), fmt(Math.round(s.km)), s.rate == null ? '-' : s.rate.toFixed(2), fmt(s.notUpdating)]
     : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
 
-  const editor = useReportEditor({ orgId, source: rows, build: () => tatDoc(rows, { day: done.rep.day, fleet, group, orgCode }) });
+  const editor = useReportEditor({ orgId, source: rows, build: () => tatDoc(rows, { day: done.rep.day, to: done.rep.to, fleet, group, orgCode }) });
 
   const save = async (as) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { blob, filename } = editor.edited ? await editor.make() : await makeReportPdf({ orgId, kind: 'tat-fuel', body: tatPdfBody(rows, { day: done.rep.day, fleet, group }) });
+      const { blob, filename } = editor.edited ? await editor.make() : await makeReportPdf({ orgId, kind: 'tat-fuel', body: tatPdfBody(rows, { day: done.rep.day, to: done.rep.to, fleet, group }) });
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -95,7 +101,7 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
     }
   };
-  const saveCsv = () => done && downloadTableCsv({ ...csvTable(rows), filenameSlug: `tat-fuel-${done.rep.day}` });
+  const saveCsv = () => done && downloadTableCsv({ ...csvTable(rows), filenameSlug: `tat-fuel-${done.rep.day}${done.rep.to !== done.rep.day ? `-to-${done.rep.to}` : ''}` });
 
   return (
     <>
@@ -106,7 +112,7 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <DateRangePicker from={day} to={day} today={today} maxDays={1} spans={[]} label="Day" on onChange={(d) => setDay(d)} />
+        <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[]} label="Days" on onChange={(from, to) => setDays({ from, to: to ?? from })} />
         {groups.length > 1 && (
           <label className="rpt-sub tat-field">
             Units
@@ -118,7 +124,7 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
         )}
         {picker && <CheckPicker {...picker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
-                disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for this day'}>
+                disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
@@ -129,11 +135,11 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
           <EmptyNote icon={<ReportIcon name="tatFuel" />} title="TAT and Fuel">
-            Each trip finished on a day, with its fuel and distance.
+            Each trip finished on the days picked, with its fuel and distance.
           </EmptyNote>
         )}
         {run.status === 'loading' && (
-          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">{several ? `${picked.length} organisations. ` : ''}Reading each trip’s fuel and distance…</EmptyNote>
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">{several ? `${picked.length} organisations. ` : ''}{run.days > 1 ? `${run.days} days. ` : ''}Reading each trip’s fuel and distance…</EmptyNote>
         )}
         {run.status === 'error' && (
           <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made" action={{ label: 'Try again', onClick: execute }}>
@@ -142,7 +148,7 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
         )}
         {done && !rows.length && (
           <EmptyNote icon={<ReportIcon name="tatFuel" />} title="No Units">
-            No unit was dispatched or ticketed in the 30 days up to {dayWords(done.rep.day)}.
+            No unit was dispatched or ticketed in the 30 days up to {dayWords(done.rep.to)}.
           </EmptyNote>
         )}
         {done && rows.length > 0 && (
@@ -150,8 +156,8 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
             <TableToolbar
               summary={<>
                 TAT and Fuel · <strong>{fmt(s.trips)}</strong> trip{s.trips === 1 ? '' : 's'} by {fmt(s.units)} of {fmt(new Set(rows.map((r) => r.vehicleId)).size)} units
-                <span className="rpt-sub"> · {fleet} · {dayWords(done.rep.day)}</span>
-                {done.rep.failed > 0 && <span className="rpt-warn"> · {done.rep.failed} unit{done.rep.failed === 1 ? '' : 's'} could not be read</span>}
+                <span className="rpt-sub"> · {fleet} · {periodWords(done.rep.day, done.rep.to)}</span>
+                {done.rep.failed > 0 && <span className="rpt-warn"> · {done.rep.failed} unit{done.rep.to !== done.rep.day ? ' day' : ''}{done.rep.failed === 1 ? '' : 's'} could not be read</span>}
                 {done.unread.length > 0 && <span className="rpt-warn"> · {done.unread.join(', ')} could not be opened</span>}
               </>}
               onCsv={saveCsv}

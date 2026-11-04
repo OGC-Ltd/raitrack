@@ -55,6 +55,13 @@ describe('reports as documents', () => {
     expect(d.blocks.find((b) => b.kind === 'h2' && b.title.endsWith('CANE'))).toBeTruthy();
   });
 
+  it('TAT and Fuel over several days says so, and names its file for them', () => {
+    const d = tatDoc([tatRow], { day: '2026-11-01', to: '2026-11-03', fleet: 'West Kenya', orgCode: 'WK', now: NOW });
+    expect(d.filename).toBe('TAT and Fuel Report West Kenya 2026-11-01 to 2026-11-03');
+    expect(d.blocks[0].aside).toBe('1 to 3 November 2026');
+    expect(d.footer).toContain('1 to 3 November 2026');
+  });
+
   it('Speed keeps the link to where the peak happened', () => {
     const row = { vehicleId: 'a', name: 'WSL 01', group: 'CANE', km: 90, maxKmh: 102.4, limitKmh: 80, overByKmh: 22.4, overKm: 3.2, occurrences: 4, peak: { lat: 0.5, lng: 34.5 } };
     const d = speedDoc([row], { day: '2026-11-03', fleet: 'West Kenya', orgCode: 'WK', now: NOW });

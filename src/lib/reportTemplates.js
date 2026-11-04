@@ -30,6 +30,24 @@ const WEST_KENYA = {
   ],
 };
 
+/**
+ * The sheet also lists West Sugar's other sites beside them (operator, 4 Nov
+ * 2026: they were under its Units list, which now says the kind of vehicle).
+ */
+const WEST_KENYA_SITES = {
+  ...WEST_KENYA,
+  members: [
+    ...WEST_KENYA.members,
+    { key: 'AMUKA', label: 'Amuka', unit: /amuka/i },
+    { key: 'KHALABA', label: 'Khalaba', unit: /khalaba/i },
+    { key: 'LAKE_AGRO', label: 'Lake Agro', unit: /lake/i },
+    { key: 'MAGUT', label: 'Magut', unit: /magut/i },
+    { key: 'MISIKHU', label: 'Misikhu', unit: /misikhu/i },
+    { key: 'NAIROBI', label: 'Nairobi', unit: /nairobi/i },
+    { key: 'SELIA', label: 'Selia', unit: /seli/i },
+  ],
+};
+
 export const TEMPLATES = {
   // Menengai's tankers on the road from the Mombasa depot to MORL (TankersReport)
   tankers: {
@@ -45,7 +63,7 @@ export const TEMPLATES = {
   // (TatFuelReport): West Kenya's daily sheet, Sukari too (operator, 4 Nov 2026).
   tatFuel: {
     orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {}, NZOIA: {} },
-    families: [WEST_KENYA],
+    families: [WEST_KENYA_SITES],
   },
   // Each unit over its limit on a day (SpeedReport): West Kenya's daily sheet,
   // Sukari, Kabras and Nzoia too (operator, 4 Nov 2026).

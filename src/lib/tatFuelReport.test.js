@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { durationWords, mergeRows, rowCells, rowsOfGroup, sections, summary, tatPdfBody, yesterday, COLUMNS } from "./tatFuelReport";
+import { daysFrom, durationWords, mergeRows, periodWords, rowCells, rowsOverDays, rowsOfGroup, sections, summary, tatPdfBody, yesterday, COLUMNS } from "./tatFuelReport";
 
 const at = (s) => Date.parse(`${s}+03:00`);
 const fuel = { initial: 209.7, topUps: 40.91, total: 250.61, consumption: 33.48, theft: 0, final: 217.12 };
@@ -75,5 +75,36 @@ describe("mergeRows with prime movers", () => {
   it("puts them first", () => {
     const r = (group, plate) => ({ group, plate, leftAt: 1 });
     expect(mergeRows([[r("Trucks", "A")], [r("Prime Movers", "B"), r("Tractors", "C")]]).map((x) => x.group)).toEqual(["Prime Movers", "Trucks", "Tractors"]);
+  });
+});
+
+describe("several days", () => {
+  const trip = (vehicleId, returnedAt) => ({ vehicleId, returnedAt, comment: "PROBE OK" });
+  const idle = (vehicleId, comment) => ({ vehicleId, returnedAt: null, comment });
+
+  it("keeps every trip, and drops a unit's idle days once it has a trip", () => {
+    const out = rowsOverDays([[trip("a", 1), idle("b", "NO TRIP")], [idle("a", "NO TRIP"), trip("b", 2), trip("a", 3)]]);
+    expect(out).toEqual([trip("a", 1), trip("b", 2), trip("a", 3)]);
+  });
+  it("lists a unit with no trip once, for the reason its last day gives", () => {
+    expect(rowsOverDays([[idle("a", "NO TRIP")], [idle("a", "NOT UPDATING")]])).toEqual([idle("a", "NOT UPDATING")]);
+  });
+  it("leaves a single day's rows alone", () => {
+    const day = [trip("a", 1), trip("a", 2), idle("b", "NO TRIP")];
+    expect(rowsOverDays([day])).toEqual(day);
+  });
+  it("counts the days, both ends included, across a month", () => {
+    expect(daysFrom("2026-10-30", "2026-11-02")).toEqual(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"]);
+    expect(daysFrom("2026-11-03", "2026-11-03")).toEqual(["2026-11-03"]);
+  });
+  it("says the period as briefly as it can", () => {
+    expect(periodWords("2026-11-03")).toBe("3 November 2026");
+    expect(periodWords("2026-11-01", "2026-11-03")).toBe("1 to 3 November 2026");
+    expect(periodWords("2026-10-28", "2026-11-03")).toBe("28 October to 3 November 2026");
+    expect(periodWords("2026-12-30", "2027-01-02")).toBe("30 December 2026 to 2 January 2027");
+  });
+  it("sends the last day to the PDF only when there are several", () => {
+    expect(tatPdfBody([], { day: "2026-11-03", fleet: "F" })).toEqual({ day: "2026-11-03", fleet: "F", group: "all", rows: [] });
+    expect(tatPdfBody([], { day: "2026-11-01", to: "2026-11-03", fleet: "F" }).to).toBe("2026-11-03");
   });
 });
