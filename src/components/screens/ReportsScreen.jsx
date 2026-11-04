@@ -24,7 +24,7 @@ import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } fro
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  NIGHT, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
+  NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
 import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from '../../lib/reportTables';
@@ -108,9 +108,15 @@ function daysOf(key, span, night) {
   return { fromDay: fleetDay(span.from), toDay: fleetDay(Math.max(span.from, span.to - 1)), start: 0, end: 24 };
 }
 
-const spanFor = (key) => {
+const spanFor = (key, night = NIGHT) => {
   const id = (REPORTS[key] ?? REPORTS.behaviour).preset;
-  return { id, ...presetRange(id) };
+  const range = presetRange(id);
+  // Night driving: the night itself, which is what the report then says it covers
+  if (key === 'night') {
+    const { from, to } = shiftPeriod(daysOf(key, range, night));
+    return { id, from, to };
+  }
+  return { id, ...range };
 };
 
 
@@ -119,13 +125,6 @@ const SHIFT_MAX_DAYS = 7;
 /** End-of-shift sheets and their edits, by organisation, while this browser tab is open. */
 const shiftKept = new Map();
 
-/**
- * The shift's period from days and hours, as Movements picks them (operator,
- * 2 Nov: "let it be like what we have in movements"): the first day at the
- * start hour to the last day at the end hour, past midnight when the end is at
- * or before the start, and up to now when it would run past it. Today 00:00 to
- * 24:00 is the default: the shift so far.
- */
 /** The shifts the picker offers in one click; Day is the default (operator, 2 Nov: "the default shift is 7:30hrs to 19:30hrs"). */
 /** Night driving's nights in one click: the report's own (19:00–05:00) and the night shift. */
 const NIGHT_PRESETS = [
@@ -145,16 +144,6 @@ const SHIFT_TODAY = (today, now = Date.now()) => {
   const day = dayStart(today) + 7.5 * HOUR_MS > now ? fleetDay(dayStart(today) - 12 * HOUR_MS) : today;
   return { fromDay: day, toDay: day, start: 7.5, end: 19.5 };
 };
-function shiftPeriod(d, now = Date.now()) {
-  // A custom range (operator, 3 Nov 2026): any start and end, to the minute; no end is up to now
-  if (d.custom) {
-    const end = d.custom.to ?? now;
-    return { from: d.custom.from, to: Math.min(end, now), live: end >= now };
-  }
-  const from = dayStart(d.fromDay) + d.start * HOUR_MS;
-  const to = dayStart(d.toDay) + (d.end > d.start ? d.end : d.end + 24) * HOUR_MS;
-  return { from, to: Math.min(to, now), live: to >= now };
-}
 const HOUR_MS = 3_600_000;
 
 /** Why a period cannot be made, or null. */
@@ -1254,8 +1243,8 @@ export default function ReportsScreen() {
   useEffect(() => {
     if (showing.current === key) return;
     showing.current = key;
-    setSpan(spanFor(key)); reset();
-  }, [key]);
+    setSpan(spanFor(key, night)); reset();
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const conduct = key === 'behaviour';
   const byUnit = UNIT_REPORTS.has(key);
   // The units of the group picked, by plate, for the Unit picker
@@ -1268,15 +1257,13 @@ export default function ReportsScreen() {
   // Every report here takes its period on one calendar with the hours under it,
   // as Movements does (operator, 2 Nov): the first day at the start hour to the
   // last day at the end hour, up to now. Night driving's hours are the night
-  // itself, and a day picked there runs from its noon to the next noon.
+  // itself: each day picked is the night that starts on it.
   const isNight = key === 'night';
   const [days, setDays] = useState(() => daysOf(key, span, night));
   const [picking, setPicking] = useState(null);
   const shownDays = picking ?? days;
-  useEffect(() => { setDays(daysOf(key, spanFor(key), night)); setPicking(null); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const periodOf = (d) => (isNight
-    ? { from: dayStart(d.fromDay) + 12 * HOUR_MS, to: Math.min(Date.now(), dayStart(d.toDay) + 36 * HOUR_MS) }
-    : shiftPeriod(d));
+  useEffect(() => { setDays(daysOf(key, spanFor(key, night), night)); setPicking(null); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const periodOf = (d) => shiftPeriod(d);
   const applyDays = (d) => {
     const sp = { id: null, ...periodOf(d) };
     const nt = isNight ? { ...night, start: d.start, end: d.end % 24 } : night;
@@ -1359,7 +1346,7 @@ export default function ReportsScreen() {
     if (isServer || !orgId || !vehicles.length || run.status !== 'idle') return;
     const fresh = opened.current !== key;
     opened.current = key;
-    execute(fresh ? { span: spanFor(key), night } : {});
+    execute(fresh ? { span: spanFor(key, night), night } : {});
   }, [isServer, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A behaviour run (and any new operator entry) opens the cases it finds;
