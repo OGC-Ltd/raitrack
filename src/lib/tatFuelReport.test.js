@@ -70,3 +70,10 @@ describe("tatPdfBody", () => {
     expect(COLUMNS).toHaveLength(14);
   });
 });
+
+describe("mergeRows with prime movers", () => {
+  it("puts them first", () => {
+    const r = (group, plate) => ({ group, plate, leftAt: 1 });
+    expect(mergeRows([[r("Trucks", "A")], [r("Prime Movers", "B"), r("Tractors", "C")]]).map((x) => x.group)).toEqual(["Prime Movers", "Trucks", "Tractors"]);
+  });
+});

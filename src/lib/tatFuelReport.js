@@ -45,8 +45,11 @@ export function rowCells(r) {
   ];
 }
 
+/** Prime movers come first, as on the server. */
+const rank = (g) => (g === 'Prime Movers' ? 0 : 1);
+
 /** Reports for several organisations as one: a unit's rows together, in the server's order. */
-export const mergeRows = (lists) => lists.flat().sort((a, b) => b.group.localeCompare(a.group)
+export const mergeRows = (lists) => lists.flat().sort((a, b) => rank(a.group) - rank(b.group) || b.group.localeCompare(a.group)
   || a.plate.localeCompare(b.plate) || (a.leftAt ?? 0) - (b.leftAt ?? 0));
 
 /** Only these units, or all of them for 'all'. */
