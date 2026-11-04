@@ -16,7 +16,8 @@
  * drawn the days further than `maxDays` from its first day cannot either.
  * `spans` names the "Last N days" quick picks; it defaults to 7, 30 and
  * `maxDays`, whichever of those fit. `quickPicks={false}` leaves them out of
- * the calendar, for a screen that sets them as buttons of its own. Days are fleet
+ * the calendar, for a screen that sets them as buttons of its own. `maxDays={1}`
+ * is a report made for one day: a click picks it, and there is no range. Days are fleet
  * day keys ('YYYY-MM-DD'), laid out by lib/dayRange monthGrid.
  *
  * A screen that asks for more than days (Movements: the hours each day)
@@ -74,7 +75,9 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
   }, [open]);
 
   const pick = (f, t) => { onChange(f, t); };
+  const oneDay = maxDays === 1;
   const clickDay = (d) => {
+    if (oneDay) { pick(d, d); if (!children) setOpen(false); return; }
     if (anchor == null) { setAnchor(d); pick(d, d); return; }
     const [f, t] = rangeFromClicks(anchor, d);
     pick(f, t);
@@ -163,7 +166,7 @@ export default function DateRangePicker({ from, to, today, maxDays = 14, onChang
           </div>
 
           <p className="drp-hint" aria-live="polite">
-            {anchor != null
+            {oneDay ? 'Click a day.' : anchor != null
               ? `${dayText(anchor)} is picked. Click a second day for a range${children ? '' : ', or close this to keep the one day'}.`
               : `Click a day, or two days for a range of up to ${maxDays}.`}
           </p>

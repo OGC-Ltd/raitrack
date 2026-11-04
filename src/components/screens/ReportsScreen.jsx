@@ -24,7 +24,7 @@ import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } fro
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  NIGHT, hourLabel, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
+  NIGHT, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
 import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from '../../lib/reportTables';
@@ -46,6 +46,7 @@ import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
 import ShiftDocument from './ShiftDocument';
 import TankersReport from './TankersReport';
+import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
 import TatFuelReport from './TatFuelReport';
 import SpeedReport from './SpeedReport';
@@ -468,21 +469,12 @@ function groupWords(g, edits) {
 }
 
 const lastWords = (h) => (h === 1 ? 'Last hour' : `Last ${h} hours`);
-// The day's end reads 24:00, so a whole day is 00:00–24:00, not 00:00–00:00
-// Hours may carry minutes (7.5 = 07:30): the Shift picks to the minute (operator, 2 Nov)
-const hh = (h) => {
-  if (h === 24) return '24:00';
-  const m = Math.round(h * 60);
-  return `${hourLabel(Math.floor(m / 60) % 24)}:${String(m % 60).padStart(2, '0')}`;
-};
 /** "1 hour", "8 hours 30 min", over midnight or not. */
 const spanWords = (start, end) => {
   let min = Math.round(((end - start) % 24 + 24) % 24 * 60) || 24 * 60;
   const h = Math.floor(min / 60); min %= 60;
   return [h ? `${h} hour${h === 1 ? '' : 's'}` : null, min ? `${min} min` : null].filter(Boolean).join(' ');
 };
-/** "07:00/20:00", "20:00/06:00 next day" (operator, 3 Nov: "07:30/19:30"). */
-const hoursText = (start, end) => `${hh(start)}/${hh(end)}${end <= start ? ' next day' : ''}`;
 
 const pad2 = (n) => String(n).padStart(2, '0');
 /** 7.5 → { h: 7, m: 30 }; the end's 24 reads 00:00. */
@@ -601,55 +593,6 @@ export function ShiftTime({ start, end, onChange, title = 'Shift time', presets 
  * for the span between them, both hours included. Hours that run past
  * midnight (20:00–06:00) are set in the From and To boxes under it.
  */
-function HourWindow({ start, end, onChange, label = 'Hours each day' }) {
-  const [anchor, setAnchor] = useState(null);
-  const lastHour = (end + 23) % 24;
-  const inWindow = (h) => (end > start ? h >= start && h < end : h >= start || h < end);
-  const click = (h) => {
-    if (anchor == null) { setAnchor(h); onChange(h, h + 1); return; }
-    onChange(Math.min(anchor, h), Math.max(anchor, h) + 1);
-    setAnchor(null);
-  };
-  const exact = (s, e) => { setAnchor(null); onChange(s, e); };
-  const span = ((end - start + 23) % 24) + 1;
-  return (
-    <div className="mvr-hours" role="group" aria-label={label}>
-      <div className="mvr-hours__head">
-        <span className="mvr-hours__l">{label}</span>
-        <button type="button" className={`drp-chip${start === 0 && end === 24 ? ' drp-chip--on' : ''}`}
-                onClick={() => exact(0, 24)}>Whole day</button>
-      </div>
-      <div className="mvr-hours__ruler">
-        {Array.from({ length: 24 }, (_, h) => {
-          const cls = ['mvr-hour',
-            inWindow(h) && 'mvr-hour--in',
-            h === start && 'mvr-hour--lo',
-            h === lastHour && 'mvr-hour--hi',
-            anchor === h && 'mvr-hour--anchor'].filter(Boolean).join(' ');
-          return (
-            <button key={h} type="button" className={cls} onClick={() => click(h)}
-                    aria-pressed={inWindow(h)} aria-label={`${hh(h)} to ${hh(h + 1)}`}>
-              {hourLabel(h)}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mvr-hours__exact">
-        <label>From
-          <select className="rpt-select" value={start} onChange={(e) => exact(Number(e.target.value), end)}>
-            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hh(h)}</option>)}
-          </select>
-        </label>
-        <label>To
-          <select className="rpt-select" value={end} onChange={(e) => exact(start, Number(e.target.value))}>
-            {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => <option key={h} value={h}>{hh(h)}</option>)}
-          </select>
-        </label>
-        <span className="mvr-hours__span">{span === 1 ? '1 hour' : `${span} hours`}{end <= start ? ', past midnight' : ''}</span>
-      </div>
-    </div>
-  );
-}
 /** "Sat 1 Nov", in Nairobi time. */
 const dayWords = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', weekday: 'short', day: 'numeric', month: 'short' }).format(ms);
 

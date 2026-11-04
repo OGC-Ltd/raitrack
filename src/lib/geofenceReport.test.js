@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  placesIn, placeNames, visitsOf, geofenceRows, rowCells, counts, periodProblem, durationWords, stampWords, geofencePdfBody,
+  placesIn, placeNames, visitsOf, geofenceRows, rowCells, counts, periodProblem, pickedPeriod, durationWords, stampWords, geofencePdfBody,
 } from './geofenceReport';
 import { templateFor, familyOf } from './reportTemplates';
 import { reportKeysFor, hasTankersTab, hasGeofencesTab } from './reportNav';
@@ -83,5 +83,24 @@ describe('Geofence Report', () => {
     expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('tankers');
     expect(hasTankersTab(() => true, 'MENENGAI')).toBe(true);
     expect(hasTankersTab(() => true, 'KABRAS')).toBe(false);
+  });
+});
+
+describe('the period the picker holds', () => {
+  const NOW = at('2026-11-04T10:30:00');
+  it('runs to now while today is not over', () => {
+    expect(pickedPeriod({ fromDay: '2026-11-04', toDay: '2026-11-04', start: 0, end: 24 }, NOW)).toEqual({ from: at('2026-11-04T00:00:00'), to: null });
+  });
+  it('takes a whole past day to its midnight', () => {
+    expect(pickedPeriod({ fromDay: '2026-11-03', toDay: '2026-11-03', start: 0, end: 24 }, NOW)).toEqual({ from: at('2026-11-03T00:00:00'), to: at('2026-11-04T00:00:00') });
+  });
+  it('is one stretch over a range, not those hours each day', () => {
+    expect(pickedPeriod({ fromDay: '2026-11-01', toDay: '2026-11-03', start: 7, end: 20 }, NOW)).toEqual({ from: at('2026-11-01T07:00:00'), to: at('2026-11-03T20:00:00') });
+  });
+  it('runs past midnight when the end is before the start', () => {
+    expect(pickedPeriod({ fromDay: '2026-11-02', toDay: '2026-11-02', start: 20, end: 6 }, NOW)).toEqual({ from: at('2026-11-02T20:00:00'), to: at('2026-11-03T06:00:00') });
+  });
+  it('keeps an hour already over today', () => {
+    expect(pickedPeriod({ fromDay: '2026-11-04', toDay: '2026-11-04', start: 6, end: 9 }, NOW)).toEqual({ from: at('2026-11-04T06:00:00'), to: at('2026-11-04T09:00:00') });
   });
 });

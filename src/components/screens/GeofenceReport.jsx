@@ -12,10 +12,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchSnapshot } from '../../services/snapshot';
 import { mapSnapshotVehicle } from '../../lib/vehicleMap';
-import { dayStart, fleetDay, toLocalInput, fromLocalInput } from '../../lib/fleetReports';
+import { fleetDay } from '../../lib/fleetReports';
 import { useReportOrgs } from '../../hooks/useReportOrgs';
 import {
-  LEAD_MS, MAX_DAYS, COLUMNS, placesIn, placeNames, geofenceRows, rowCells, counts, periodProblem, periodWords, endsNow, csvTable, geofencePdfBody,
+  LEAD_MS, MAX_DAYS, COLUMNS, placesIn, placeNames, geofenceRows, rowCells, counts, periodProblem, periodWords, pickedPeriod, endsNow, csvTable, geofencePdfBody,
   vehicleName,
 } from '../../lib/geofenceReport';
 import { loadPings } from '../../api/fleetReports';
@@ -29,8 +29,8 @@ import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
 import CheckPicker from './CheckPicker';
-
-const DAY = 86_400_000;
+import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
+import HourWindow, { hh, hoursText } from './HourWindow';
 
 function Kpi({ value, label, tone }) {
   return (
@@ -47,9 +47,9 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
 
   // The period: from today's midnight to now, unless picked
   const today = fleetDay(Date.now());
-  const [from, setFrom] = useState(() => dayStart(today));
-  const [to, setTo] = useState(null);               // null: now
+  const [days, setDays] = useState({ fromDay: today, toDay: today, start: 0, end: 24 });
   const now = Date.now();
+  const { from, to } = pickedPeriod(days, now);     // to null: now
   const period = { from, to: to ?? now };
 
   // The geofences of the organisations picked, for the geofence picker
@@ -149,12 +149,6 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
     downloadTableCsv({ ...csvTable(done.rows, done.ctx), filenameSlug: `geofences-${fleetDay(done.ctx.from)}` });
   };
 
-  const quick = [
-    { key: 'today', label: 'Today', on: to == null && from === dayStart(today), go: () => { setFrom(dayStart(today)); setTo(null); } },
-    { key: 'yesterday', label: 'Yesterday', on: from === dayStart(today) - DAY && to === dayStart(today),
-      go: () => { setFrom(dayStart(today) - DAY); setTo(dayStart(today)); } },
-  ];
-
   return (
     <>
       <div className="sp4-header rpt-header">
@@ -167,28 +161,28 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <div className="rpt-field gfr-period" role="group" aria-label="Period">
-          <span className="rpt-field__l">Period</span>
-          {quick.map((q) => (
-            <button key={q.key} type="button" aria-pressed={q.on}
-                    className={`sp4-filter-chip${q.on ? ' sp4-filter-chip--on' : ''}`} onClick={q.go}>{q.label}</button>
-          ))}
-          <label className="gfr-when">
-            <span className="rpt-sub">From</span>
-            <input type="datetime-local" className="rpt-select tkr-when" aria-label="Period starts"
-                   value={toLocalInput(from)} max={toLocalInput(now)}
-                   onChange={(e) => { const t = fromLocalInput(e.target.value); if (Number.isFinite(t)) setFrom(t); }} />
-          </label>
-          <label className="gfr-when">
-            <span className="rpt-sub">To</span>
-            <input type="datetime-local" className="rpt-select tkr-when" aria-label="Period ends"
-                   value={toLocalInput(to ?? now)} max={toLocalInput(now)}
-                   onChange={(e) => { const t = fromLocalInput(e.target.value); if (Number.isFinite(t)) setTo(t >= now - 60_000 ? null : t); }} />
-          </label>
-          <button type="button" aria-pressed={to == null}
-                  className={`sp4-filter-chip${to == null ? ' sp4-filter-chip--on' : ''}`} onClick={() => setTo(null)}
-                  title="The period runs up to the moment the report is made">Up to now</button>
-        </div>
+        {/* One field for the period: days on the calendar, hours under it, as Movements has it */}
+        <DateRangePicker
+          from={days.fromDay} to={days.toDay} today={today} maxDays={MAX_DAYS} spans={[MAX_DAYS]}
+          label="Period" on
+          text={`${pickedText(days.fromDay, days.toDay, today)} · ${to == null ? `${hh(days.start)}/now` : hoursText(days.start, days.end)}`}
+          onChange={(f, t) => setDays((d) => ({ ...d, fromDay: f, toDay: t }))}
+        >
+          {({ close }) => (
+            <>
+              <HourWindow start={days.start} end={days.end} label={days.fromDay === days.toDay ? 'Hours' : 'First day from, last day to'}
+                          onChange={(a, b) => setDays((d) => ({ ...d, start: a, end: b }))} />
+              <div className="mvr-hours__foot">
+                {problem && <span className="rpt-problem" role="status">{problem}</span>}
+                <button type="button" className="sp4-submit-btn frp-run"
+                        disabled={run.status === 'loading' || Boolean(problem)}
+                        onClick={() => { close(); execute(); }}>
+                  {run.status === 'loading' ? 'Running…' : 'Run report'}
+                </button>
+              </div>
+            </>
+          )}
+        </DateRangePicker>
         {picker && <CheckPicker {...picker} />}
         <CheckPicker icon="ti-map-pin" label="Geofences" noun="geofences" allWord="All geofences" search
                      options={names.map((n) => ({ value: n, label: n }))} picked={places}

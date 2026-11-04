@@ -30,6 +30,12 @@ export const COLUMNS = ['Registration', 'Last message', 'Location'];
 /** The sheet's section bars. */
 export const BAR = '#00b0f0';
 
+/** The moment a report for a day is made as at: now for today, else that day's last moment. */
+export function asAtOf(day, now = Date.now()) {
+  const end = Date.parse(`${day}T00:00:00Z`) - OFFSET + DAY - 1;
+  return end >= now ? now : end;
+}
+
 /** The calendar day (Nairobi) a time falls on, as a day number. */
 const dayNo = (ms) => Math.floor((ms + OFFSET) / DAY);
 /** How many calendar days before `now` the time falls: 0 today, 1 yesterday. */
