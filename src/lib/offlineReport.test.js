@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionOf, offlineReport, offlineCount, rowCells, sectionDays, SECTIONS, csvTable, offlinePdfBody } from './offlineReport';
+import { asAtOf, sectionOf, offlineReport, offlineCount, rowCells, sectionDays, SECTIONS, csvTable, offlinePdfBody } from './offlineReport';
 import { reportKeysFor, hasDormantTab } from './reportNav';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -56,5 +56,18 @@ describe('Dormant Assets Report', () => {
     }
     expect(hasDormantTab(() => true, 'KASULU')).toBe(false);
     expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('geofences');
+  });
+});
+
+describe('Dormant Assets as at a day', () => {
+  it('is now for today, and the last moment of a past day', () => {
+    expect(asAtOf('2026-10-31', NOW)).toBe(NOW);
+    expect(asAtOf('2026-10-30', NOW)).toBe(at('2026-10-31T00:00:00') - 1);
+  });
+  it('counts its sections back from that day', () => {
+    const asAt = asAtOf('2026-10-29', NOW);
+    const rep = offlineReport([row('a', 'A', '2026-10-28T10:00:00'), row('b', 'B', '2026-10-29T10:00:00')], asAt);
+    expect(rep.sections.yesterday.map((r) => r.name)).toEqual(['A']);
+    expect(offlineCount(rep)).toBe(1);
   });
 });

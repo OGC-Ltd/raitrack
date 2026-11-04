@@ -14,15 +14,17 @@ import { useReportOrgs } from '../../hooks/useReportOrgs';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
-import { SECTIONS, COLUMNS, BAR, offlineReport, offlineCount, rowCells, sectionDays, asAtWords, csvTable, offlinePdfBody } from '../../lib/offlineReport';
+import { fleetDay } from '../../lib/fleetReports';
+import { SECTIONS, COLUMNS, BAR, asAtOf, offlineReport, offlineCount, rowCells, sectionDays, asAtWords, csvTable, offlinePdfBody } from '../../lib/offlineReport';
 import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import CheckPicker from './CheckPicker';
+import DateRangePicker from '../layout/DateRangePicker';
 import ReportIcon from '../shared/ReportIcon';
 
-/** The window asked of Movements: only where each unit is now matters here. */
+/** The window asked of Movements: only where each unit last was matters here. */
 const WINDOW_MS = 3600_000;
 
 function Kpi({ value, label, tone }) {
@@ -36,6 +38,8 @@ function Kpi({ value, label, tone }) {
 
 export default function OfflineReport({ orgId, orgCode, companyName, active = true }) {
   const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('offline', { orgId, orgCode, companyName });
+  const today = fleetDay(Date.now());
+  const [day, setDay] = useState(today);
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
@@ -45,7 +49,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
     if (problem) return;
     const id = ++runId.current;
     const live = () => id === runId.current;
-    const now = Date.now();
+    const now = asAtOf(day);
     const rows = [];
     const unread = [];
     try {
@@ -57,7 +61,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
         if (!live()) return;
         rows.push(...(moves?.groups ?? []).flatMap((g) => g.rows ?? []).filter((r) => keepUnit(c, r.grouping ?? r.plate)));
       }
-      setRun({ status: 'done', rep: offlineReport(rows, now), now, fleet: pickedWords, unread });
+      setRun({ status: 'done', rep: offlineReport(rows, now), now, day, fleet: pickedWords, unread });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
@@ -101,11 +105,12 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
+        <DateRangePicker from={day} to={day} today={today} maxDays={1} spans={[]} label="As at" on onChange={(d) => setDay(d)} />
         <span className="rpt-sub">As at {done ? asAtWords(done.now) : 'now'}</span>
         {picker && <CheckPicker {...picker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
-                disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report again, as at now'}>
-          {run.status === 'loading' ? 'Running…' : done ? 'Refresh' : 'Run report'}
+                disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report as at this day'}>
+          {run.status === 'loading' ? 'Running…' : done?.day === day ? 'Refresh' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
@@ -179,7 +184,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
                   <p>{rep.never.map((m) => m.name).join(', ')}</p>
                 </details>
               )}
-              <p className="tkr-key">A tracker that stopped sending today is not listed yet: it shows tomorrow, as offline yesterday.</p>
+              <p className="tkr-key">A tracker that stopped sending on the day of the report is not listed yet: it shows the next day, as offline yesterday.</p>
             </div>
           </>
         )}

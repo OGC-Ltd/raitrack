@@ -421,9 +421,6 @@ select.mvr-edit { min-width: 110px; }
 .tkr-table th, .tkr-table td, .tkr-table th.rpt-num, .tkr-table td.rpt-num { text-align: center; }
 
 /* Geofence Report (operator, 3 Nov 2026): the period's From and To, and the pickers beside them */
-.gfr-period { gap: 6px; flex-wrap: wrap; }
-.gfr-period .sp4-filter-chip { height: 24px; padding: 0 10px; }
-.gfr-when { display: inline-flex; align-items: center; gap: 5px; }
 .gfr-pick .drp-field { min-width: 150px; max-width: 240px; }
 .gfr-pick__q { width: calc(100% - 16px); margin: 0 8px 6px; }
 .gfr-table td:nth-child(3), .gfr-table td:nth-child(4) { font-variant-numeric: tabular-nums; white-space: nowrap; }

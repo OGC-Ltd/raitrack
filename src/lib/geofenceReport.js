@@ -23,6 +23,16 @@ import { fenceContains } from './zoneContainment';
 
 /** Read this long before the period too, to know who was already inside when it began. */
 export const LEAD_MS = 2 * 3600_000;
+/**
+ * The period the picker holds: from the hour on the first day to the hour on the
+ * last, one stretch, not those hours each day. `to` is null where it runs to now.
+ */
+export function pickedPeriod({ fromDay, toDay, start, end }, now = Date.now()) {
+  const at = (key, h) => Date.parse(`${key}T00:00:00Z`) - 3 * 3600_000 + h * 3600_000;
+  const to = at(toDay, end <= start ? end + 24 : end);
+  return { from: at(fromDay, start), to: to >= now ? null : to };
+}
+
 /** The longest period it is made for, days. */
 export const MAX_DAYS = 7;
 /** A period ending this close to now ends "now": who is inside is still inside. */

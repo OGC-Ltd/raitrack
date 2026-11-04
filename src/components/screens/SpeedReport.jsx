@@ -18,6 +18,7 @@ import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
 import CheckPicker from './CheckPicker';
+import DateRangePicker from '../layout/DateRangePicker';
 
 function Kpi({ value, label }) {
   return (
@@ -105,10 +106,7 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
-        <label className="rpt-sub tat-field">
-          Day
-          <input type="date" className="tat-input" value={day} max={today} onChange={(e) => setDay(e.target.value)} />
-        </label>
+        <DateRangePicker from={day} to={day} today={today} maxDays={1} spans={[]} label="Day" on onChange={(d) => setDay(d)} />
         {groups.length > 1 && (
           <label className="rpt-sub tat-field">
             Units
