@@ -27,6 +27,14 @@ const MARKS = {
       <circle cx="12" cy="10.3" r="1" />
     </>
   ),
+  // TAT and fuel: a fuel drop, and a clock for the turnaround.
+  tatFuel: (
+    <>
+      <path d="M8 3.5s-4.5 5-4.5 8.2a4.5 4.5 0 0 0 9 0C12.500 8.500 8 3.500 8 3.500z" />
+      <circle cx="16.500" cy="16.500" r="4.500" />
+      <path d="M16.500 14v2.500l1.700 1" />
+    </>
+  ),
   // Tankers: the tanker, and a clock for its four hours.
   tankers: (
     <>

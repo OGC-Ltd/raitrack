@@ -23,6 +23,12 @@ export const TEMPLATES = {
     orgs: { WESTSUGAR: {}, KABRAS: {}, NZOIA: {} },
     families: [{ name: 'West Kenya', orgs: ['WESTSUGAR', 'KABRAS', 'NZOIA'] }],
   },
+  // Each trip signed back in on a day, with its fuel and distance
+  // (TatFuelReport): West Kenya's daily sheet, Sukari too (operator, 4 Nov 2026).
+  tatFuel: {
+    orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {}, NZOIA: {} },
+    families: [{ name: 'West Kenya', orgs: ['WESTSUGAR', 'KABRAS', 'NZOIA'] }],
+  },
   // The vehicles whose trackers have stopped sending (OfflineReport): West
   // Kenya's sheet, and Menengai's too (operator, 3 Nov 2026).
   offline: {
