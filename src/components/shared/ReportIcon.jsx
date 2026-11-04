@@ -84,6 +84,15 @@ const MARKS = {
       <path d="M12 13.5v1.5M12 18v2.5" />
     </>
   ),
+  // Speed Report: a dial, and the rows of a day's sheet under it.
+  speedReport: (
+    <>
+      <path d="M5.5 13a6.5 6.5 0 0 1 13 0" />
+      <path d="m12 13 4-3" />
+      <circle cx="12" cy="13" r="1.1" />
+      <path d="M4.5 17h15M4.5 20.500h15" />
+    </>
+  ),
   // Overspeeding: a dial, its needle pinned past the last mark.
   overspeed: (
     <>

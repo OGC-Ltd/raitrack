@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { durationWords, mergeRows, rowCells, rowsOfGroup, sections, summary, tatHtml, yesterday, COLUMNS, PDF_COLUMNS } from "./tatFuelReport";
+import { durationWords, mergeRows, rowCells, rowsOfGroup, sections, summary, tatPdfBody, yesterday, COLUMNS } from "./tatFuelReport";
 
 const at = (s) => Date.parse(`${s}+03:00`);
 const fuel = { initial: 209.7, topUps: 40.91, total: 250.61, consumption: 33.48, theft: 0, final: 217.12 };
@@ -63,21 +63,10 @@ it("reads yesterday in Nairobi", () => {
   expect(yesterday(at("2026-11-04T01:00"))).toBe("2026-11-03");
 });
 
-describe("tatHtml", () => {
-  const { html, filename } = tatHtml([trip, idle], { day: "2026-11-03", fleet: "Sukari Industries", orgCode: "SUKARI", logos: {}, now: at("2026-11-04T08:00") });
-  it("is landscape, titled, and names the day", () => {
-    expect(html).toContain("A4 landscape");
-    expect(html).toContain("TAT AND FUEL REPORT");
-    expect(html).toContain("3 November 2026");
-    expect(filename).toBe("TAT and Fuel Report Sukari Industries 2026-11-03.pdf");
-  });
-  it("draws every column heading and both sections", () => {
-    expect(PDF_COLUMNS).toHaveLength(COLUMNS.length);
-    for (const h of PDF_COLUMNS) expect(html).toContain(h);
-    expect(html).toContain("<h3>Trucks</h3>");
-    expect(html).toContain("<h3>Tractors</h3>");
-  });
-  it("escapes what comes from outside", () => {
-    expect(tatHtml([{ ...trip, station: "<b>X" }], { day: "2026-11-03", fleet: "S", orgCode: "S", logos: {} }).html).toContain("&lt;b&gt;X");
+describe("tatPdfBody", () => {
+  it("sends the rows shown, for the server to draw", () => {
+    expect(tatPdfBody([trip, idle], { day: "2026-11-03", fleet: "Sukari Industries", group: "Trucks" }))
+      .toEqual({ day: "2026-11-03", fleet: "Sukari Industries", group: "Trucks", rows: [trip, idle] });
+    expect(COLUMNS).toHaveLength(14);
   });
 });

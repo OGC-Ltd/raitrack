@@ -16,10 +16,6 @@ import { isTemplated, templateFor } from './reportTemplates';
 export const REPORT_NODES = [
   { key: 'shift', label: 'Shift' },
   { key: 'movements', label: 'Movements' },
-  // Every visit to a geofence over a period: West Kenya's first (operator, 3 Nov 2026)
-  { key: 'geofences', label: 'Geofences' },
-  // Each trip's turnaround, fuel and distance, a day at a time (operator, 4 Nov 2026)
-  { key: 'tatFuel', label: 'TAT and Fuel' },
   ...REPORT_ORDER.map((k) => ({ key: k, label: REPORTS[k].label })),
 ].sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }));
 
@@ -37,6 +33,24 @@ export const hasTankersTab = (can, orgCode) => can('telemetry:read') && template
  */
 export const hasDormantTab = (can, orgCode) => can('telemetry:read') && templateFor('offline', orgCode) != null;
 
+/**
+ * Does Movements carry a Geofences tab (every visit to a geofence over a
+ * period)? Moved under Movements (operator, 4 Nov 2026).
+ */
+export const hasGeofencesTab = (can, orgCode) => can('telemetry:read') && templateFor('geofences', orgCode) != null;
+
+/**
+ * Does Movements carry a TAT and Fuel tab (each trip's turnaround, fuel and
+ * distance, a day at a time)? Moved under Movements (operator, 4 Nov 2026).
+ */
+export const hasTatFuelTab = (can, orgCode) => can('telemetry:read') && templateFor('tatFuel', orgCode) != null;
+
+/**
+ * Does Movements carry a Speed Report tab (each unit over its limit, a day at
+ * a time)? Moved under Movements (operator, 4 Nov 2026).
+ */
+export const hasSpeedTab = (can, orgCode) => can('telemetry:read') && templateFor('speedReport', orgCode) != null;
+
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));
@@ -44,7 +58,7 @@ const KEYS = new Set(REPORT_NODES.map((n) => n.key));
 /**
  * The reports this user may open: the server needs analytics and weighbridge
  * grants for End of shift, telemetry for Movements; the rest are read here.
- * Templated reports (Geofences) are for the organisations that
+ * Templated reports are for the organisations that
  * lib/reportTemplates gives them to, and read the vehicles' positions.
  */
 export function reportKeysFor(can, orgCode = null) {
