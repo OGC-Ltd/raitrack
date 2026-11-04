@@ -47,6 +47,7 @@ import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
 import ShiftDocument from './ShiftDocument';
 import TankersReport from './TankersReport';
 import GeofenceReport from './GeofenceReport';
+import TatFuelReport from './TatFuelReport';
 import OfflineReport from './OfflineReport';
 import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
 import ReportIcon from '../shared/ReportIcon';
@@ -93,11 +94,13 @@ const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
 const GEOFENCES = 'geofences';
+const TAT_FUEL = 'tatFuel';
 /** The pages with a form of their own, not made from REPORTS. */
 const SERVER_TABS = {
   [SHIFT]: { label: 'Shift' },
   [MOVEMENTS]: { label: 'Movements' },
   [GEOFENCES]: { label: 'Geofences' },
+  [TAT_FUEL]: { label: 'TAT and Fuel' },
 };
 
 
@@ -1518,7 +1521,8 @@ export default function ReportsScreen() {
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
       {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
-        : key === GEOFENCES ? <GeofenceReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} /> : (<>
+        : key === GEOFENCES ? <GeofenceReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} />
+        : key === TAT_FUEL ? <TatFuelReport key={orgId ?? 'none'} orgId={orgId} orgCode={orgCode} companyName={activeCompany?.name} /> : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
         <div className="sp4-header-kpis">

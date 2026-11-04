@@ -463,3 +463,8 @@ select.mvr-edit { min-width: 110px; }
 /* Movements' tabs (Movements · Tankers): each panel lays out as the page did */
 .mvt-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .mvt-panel[hidden] { display: none; }
+
+/* TAT and Fuel: the day and the units, and the sheet's fourteen columns on one line a row. */
+.tat-field { display: inline-flex; align-items: center; gap: 6px; }
+.tat-input { height: 30px; padding: 0 8px; border: 1px solid var(--sp4-line-hi); border-radius: 6px; background: transparent; color: var(--sp4-text-1); font: inherit; }
+.tat-table td { white-space: nowrap; }

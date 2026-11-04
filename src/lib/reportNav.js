@@ -18,6 +18,8 @@ export const REPORT_NODES = [
   { key: 'movements', label: 'Movements' },
   // Every visit to a geofence over a period: West Kenya's first (operator, 3 Nov 2026)
   { key: 'geofences', label: 'Geofences' },
+  // Each trip's turnaround, fuel and distance, a day at a time (operator, 4 Nov 2026)
+  { key: 'tatFuel', label: 'TAT and Fuel' },
   ...REPORT_ORDER.map((k) => ({ key: k, label: REPORTS[k].label })),
 ].sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }));
 

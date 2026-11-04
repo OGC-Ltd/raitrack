@@ -50,6 +50,13 @@ export async function loadMovementReport({ orgId, from, to }) {
   return res.data
 }
 
+/** Each trip signed back in on a fleet day (YYYY-MM-DD), with its fuel and distance. */
+export async function loadTatFuelReport({ orgId, day }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/tat-fuel?day=${encodeURIComponent(day)}`)
+  return res.data
+}
+
 /**
  * The Tankers Report at `to` (operator, 2–4 Nov 2026), made on the server:
  * `units` are the tankers off the fleet list, { key, plate, vehicleIds }.
