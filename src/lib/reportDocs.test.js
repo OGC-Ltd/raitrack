@@ -89,7 +89,7 @@ describe('the Deliveries Report as a document', () => {
     expect(sheet.rows[0][2].text).toBe('1/3');
     expect(stops.rows.map((r) => r[1].text)).toEqual(['Delivered 03.11 10:26', 'Not reached, closest 2.2 km at 03.11 09:00', 'Not on the platform']);
     expect(stops.rows.map((r) => r[1].tone)).toEqual([undefined, 'flag', 'mut']);
-    expect(d.blocks.find((b) => b.kind === 'h3')).toMatchObject({ title: 'KDE 136E', aside: '1/3 delivered · left Nairobi depot 03.11 08:33' });
+    expect(d.blocks.find((b) => b.kind === 'h3')).toMatchObject({ title: 'KDE 136E', aside: '1/3 delivered · left Nairobi depot 03.11 08:33 · back Nairobi depot 03.11 16:23 · 2 not delivered' });
     expect(d.filename).toBe('Deliveries Report Menengai 2026-11-03');
   });
   it('is the table alone when the stops are left out, under the days', () => {

@@ -16,6 +16,8 @@ import { metresToFence } from './movementDepots';
 
 /** At least this long inside a customer's geofence is a delivery. */
 export const STOP_MS = 90_000;
+/** Standing, for that: at this speed or under. A truck driving through a town-sized geofence is inside for minutes, and delivers nothing. */
+export const STAND_KMH = 5;
 /** Out of storage and back within this is the fix wandering at the gate, not a trip. */
 export const BLIP_MS = 10 * 60_000;
 /** Shorter than this in a storage's circle is driving past it, not coming back to it: the road runs through the 1 km. */
@@ -103,12 +105,13 @@ export function middleOf(f) {
 
 /**
  * The stops a vehicle can be given: every geofence of the organisation
- * (operator, 4 Nov 2026: "pull all geofences"), the storages left out, A–Z.
+ * (operator, 4 Nov 2026: "pull all geofences"), MORL left out, A–Z. The Nairobi
+ * depot stays: a truck from MORL can be sent there.
  * Customer points (MENENGAI_VS / MENENGAI_FG) read without that prefix and
  * are marked VS or FG. `nearStorage`: within NEAR_STORAGE_M of a storage.
  */
 export function customersIn(featureCollection, storages = []) {
-  const skip = new Set(storages.flatMap((s) => [s.feature, s.fence].filter(Boolean)));
+  const skip = new Set(storages.flatMap((s) => (s.key === 'nairobi' ? [s.feature] : [s.feature, s.fence]).filter(Boolean)));
   const mids = storages.map((s) => ({ m: middleOf(s.feature), r: Math.max(NEAR_STORAGE_M, s.marginM ?? 0, s.feature?.properties?.radiusM ?? 0) })).filter((x) => x.m);
   const seen = new Set();
   const out = [];
@@ -163,7 +166,7 @@ export function tripsOf(pings, storages, { to }) {
     trips.push({ leftAt: s.end, leftFrom: s.at, arrivedAt: back?.start ?? null, arrivedTo: back?.at ?? null });
   });
   const last = merged[merged.length - 1];
-  return { trips, inStorage: last?.end == null ? last?.at ?? null : null, need: !merged.length };
+  return { trips, inStorage: last?.end == null ? last?.at ?? null : null, need: !merged.length, first: merged[0]?.at ?? null };
 }
 
 const overlaps = (trip, from, to) => trip.leftAt <= to && (trip.arrivedAt == null || trip.arrivedAt >= from);
@@ -178,6 +181,35 @@ export function tripOf(pings, storages, { from = -Infinity, to }) {
   const shown = [...trips].reverse().find((x) => overlaps(x, from, to));
   if (shown) return { ...shown, need: false };
   return { leftAt: null, leftFrom: null, arrivedAt: null, arrivedTo: null, need, ...(inStorage ? { inStorage } : {}) };
+}
+
+/**
+ * Where a unit works from, MORL or the Nairobi depot, and they are different
+ * places (operator, 5 Nov 2026: "we can achieve the result by playing back behind
+ * the scene"): its readings played back, the first stay at either. A trip then
+ * ends only back there; the other depot is a place on the route.
+ */
+export const originOf = (pings, storages, { to }) => tripsOf(pings, storages, { to }).first;
+
+/**
+ * The run the row shows (operator, 5 Nov 2026: "a unit might not deliver all
+ * items to all client and still make it back"): out on the trip holding the
+ * first delivery, back from the one holding the last. With no deliveries, the
+ * longest trip in the window, so a short outing does not take its place.
+ * @param {object[]} trips  from tripsOf
+ * @param {number[]} times  when each delivery began
+ * @returns {object|null} a trip, with `outAgain` when a later one has begun
+ */
+export function deliveryRun(trips, times, { from, to }) {
+  const holding = (t) => trips.find((x) => x.leftAt <= t && (x.arrivedAt == null || x.arrivedAt >= t));
+  const held = [...times].sort((a, b) => a - b).map(holding).filter(Boolean);
+  const length = (x) => Math.min(x.arrivedAt ?? to, to) - Math.max(x.leftAt, from);
+  const longest = trips.filter((x) => overlaps(x, from, to)).reduce((best, x) => (!best || length(x) >= length(best) ? x : best), null);
+  const first = held[0] ?? longest;
+  const last = held[held.length - 1] ?? longest;
+  if (!first) return null;
+  return { ...last, leftAt: first.leftAt, leftFrom: first.leftFrom,
+    outAgain: last.arrivedAt != null && trips.some((x) => x.leftAt >= last.arrivedAt) };
 }
 
 /**
@@ -224,7 +256,7 @@ export function pinStop(pin, storages = []) {
  * depot in the days read still delivered where it stood. Each tracker of the
  * unit is its own route, as two of them can disagree, and the best answer stands.
  * @param {object[][]} routes  each tracker's readings, sorted
- * @returns {{ at, reachedAt, nearest: {m, t}|null }} `at`: stood STOP_MS inside
+ * @returns {{ at, reachedAt, nearest: {m, t}|null }} `at`: stood STOP_MS inside, at STAND_KMH or under,
  *   from then; `reachedAt`: first inside; `nearest`: how close it came, when it
  *   did not deliver (null: no readings in the window).
  */
@@ -237,9 +269,11 @@ export function stopCheck(routes, stop, { from, to }) {
     for (let i = 0; i <= list.length; i++) {
       const p = list[i];
       const inside = p ? fenceContains(p, stop.feature) : false;
-      if (inside && inAt == null) inAt = p.t;
+      // A reading with no speed is judged by where it is alone
+      const standing = inside && !(p.speedKmh > STAND_KMH);
+      if (standing && inAt == null) inAt = p.t;
       if (inside && (reachedAt == null || p.t < reachedAt)) reachedAt = p.t;
-      if (!inside && inAt != null) {
+      if (!standing && inAt != null) {
         const outAt = p ? p.t : list[list.length - 1].t;
         if (outAt - inAt >= STOP_MS && (at == null || inAt < at)) at = inAt;
         inAt = null;
@@ -271,6 +305,12 @@ function checkOver(routes, stop, spans) {
   return got.at != null ? { ...got, nearest: null } : got;
 }
 
+const isNear = (stop, storage) => {
+  const m = storage && middleOf(storage.feature);
+  const mid = middleOf(stop.feature);
+  return Boolean(m && mid && metres(mid, m) <= Math.max(NEAR_STORAGE_M, storage.marginM ?? 0, storage.feature?.properties?.radiusM ?? 0));
+};
+
 /**
  * One row: the vehicle's trip, its customers ticked off, where it is.
  * @param {object} plan     { plate, customers: [names] }
@@ -285,9 +325,12 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
   // parked tracker can go quiet for days
   const all = lastFix && Number.isFinite(lastFix.lat) && Number.isFinite(lastFix.t) && lastFix.t <= to
     && !(pings ?? []).some((p) => p.t >= lastFix.t) ? [...(pings ?? []), lastFix] : (pings ?? []);
-  let trip = tripOf(all, storages, { from: from ?? -Infinity, to });
+  const origin = originOf(all, storages, { to });
+  const anchored = origin ? [origin] : storages;
+  const played = tripsOf(all, anchored, { to });
+  let trip = tripOf(all, anchored, { from: from ?? -Infinity, to });
   // Movements reads it at MORL (the server's own MORL geofence): it is, whatever the readings missed
-  if (atMorl && trip.leftAt == null && !trip.inStorage) {
+  if (atMorl && trip.leftAt == null && !trip.inStorage && (!origin || origin.key === 'morl')) {
     trip = { ...trip, need: false, inStorage: storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } };
   }
   pings = all;
@@ -300,7 +343,19 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
   // The whole route in the window; with no window, the last trip
   const spans = from != null ? windows ?? [{ from, to }]
     : trip.leftAt != null ? [{ from: trip.leftAt, to: Math.min(trip.arrivedAt ?? to, to) }] : [];
-  const checked = picked.map((c) => (c.missing ? c : { ...c, ...checkOver(routes ?? [pings], c, spans) }));
+  // A stop on the origin's own ground counts only while away from it: parked in the yard delivers nothing
+  const awaySpans = spans.flatMap((s) => played.trips
+    .map((x) => ({ from: Math.max(s.from, x.leftAt), to: Math.min(s.to, x.arrivedAt ?? s.to) }))
+    .filter((x) => x.from < x.to));
+  const checked = picked.map((c) => {
+    if (c.missing) return c;
+    const home = isNear(c, origin);
+    return { ...c, ...checkOver(routes ?? [pings], c, home ? awaySpans : spans), ...(home ? { nearOrigin: origin.label } : {}) };
+  });
+  if (from != null) {
+    const run = deliveryRun(played.trips, checked.filter((c) => c.at != null).map((c) => c.at), { from, to });
+    if (run) trip = { ...run, need: false };
+  }
   const last = [...(pings ?? [])].reverse().find((p) => p.t <= to && Number.isFinite(p.lat));
   return {
     plate: plan.plate, vehicleId: plan.vehicleId, trip, place,
@@ -335,8 +390,42 @@ export function stopWords(c, withDay = false) {
   if (c.missing) return 'Not on the platform';
   if (c.at != null) return `Delivered ${when(c.at)}`;
   if (c.reachedAt != null) return `Reached ${when(c.reachedAt)}, did not stop`;
+  if (c.nearOrigin && !c.nearest) return `No stop away from ${c.nearOrigin}`;
   if (c.nearest) return `Not reached, closest ${distance(c.nearest.m)} at ${when(c.nearest.t)}`;
   return 'No readings in the window';
+}
+
+/** Back at its origin with this many stops not delivered: 0 when out, or when all were. */
+export const backShort = (r) => (r.trip.arrivedAt != null ? Math.max(0, r.planned - r.fulfilled) : 0);
+
+/** A vehicle's line over its stops: "1/4 delivered · left MORL 08:33 · back MORL 16:23 · 3 not delivered". */
+export function runWords(r, withDay = false) {
+  const when = (ms) => (withDay ? `${stamp(ms).slice(0, 5)} ${hm(ms)}` : hm(ms));
+  const short = backShort(r);
+  return [`${r.fulfilled}/${r.planned} delivered`,
+    ...(r.trip.leftAt != null && r.trip.leftFrom ? [`left ${r.trip.leftFrom.label} ${when(r.trip.leftAt)}`] : []),
+    ...(r.trip.arrivedAt != null && r.trip.arrivedTo ? [`back ${r.trip.arrivedTo.label} ${when(r.trip.arrivedAt)}`] : []),
+    ...(short ? [`${short} not delivered`] : [])].join(' · ');
+}
+
+/**
+ * Pasted lines that are geofences, by their full name or without the
+ * MENENGAI_VS: / MENENGAI_FG: in front. The full name settles a name on both lists.
+ * @returns {{ names: string[], rest: string[] }} the geofences' names, and the lines that are none
+ */
+export function matchGeofences(lines, customers) {
+  const plain = (s) => String(s).replace(/\s+/g, ' ').trim().toLowerCase();
+  const short = (s) => plain(plain(s).replace(/^menengai_(vs|fg)\s*:\s*/, ''));
+  const full = new Map(customers.map((c) => [plain(c.name), c.name]));
+  const byLabel = new Map();
+  for (const c of customers) if (!byLabel.has(short(c.name))) byLabel.set(short(c.name), c.name);
+  const names = [];
+  const rest = [];
+  for (const line of lines ?? []) {
+    const hit = full.get(plain(line)) ?? byLabel.get(short(line));
+    if (hit) names.push(hit); else rest.push(line);
+  }
+  return { names, rest };
 }
 
 /** Why there is no time left: in a storage since the readings began, or not at one in them. */
@@ -363,8 +452,8 @@ export function rowCells(r) {
     r.plate,
     r.trip.leftAt != null ? `${stamp(r.trip.leftAt)} (${r.trip.leftFrom?.short ?? ''})` : notLeftWords(r.trip),
     `${r.fulfilled}/${r.planned}`,
-    r.trip.arrivedAt != null && r.trip.arrivedTo ? r.trip.arrivedTo.label : (r.place ?? '-'),
-    r.trip.arrivedAt != null ? stamp(r.trip.arrivedAt) : '',
+    r.trip.arrivedAt != null && r.trip.arrivedTo && !r.trip.outAgain ? r.trip.arrivedTo.label : (r.place ?? '-'),
+    r.trip.arrivedAt != null ? `${stamp(r.trip.arrivedAt)}${r.trip.arrivedTo?.short ? ` (${r.trip.arrivedTo.short})` : ''}` : '',
   ];
 }
 
@@ -397,7 +486,9 @@ export function deliveriesPdfBody(rows, { from, at, fleet, group = null, stops =
       planned: r.planned,
       place: r.place ?? null,
       arrivedAt: r.trip.arrivedAt ?? null,
-      arrivedTo: r.trip.arrivedTo?.label ?? null,
+      arrivedTo: r.trip.outAgain ? null : r.trip.arrivedTo?.label ?? null,
+      arrivedShort: r.trip.arrivedTo?.short ?? null,
+      run: runWords(r, withDay),
       customers: r.customers.map((c) => ({ label: c.label, at: c.at ?? null, note: stopWords(c, withDay), ...(c.missing ? { missing: true } : {}) })),
     })),
   };
