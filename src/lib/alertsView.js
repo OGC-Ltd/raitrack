@@ -299,7 +299,7 @@ export const kmh = (v) => (v == null ? "-" : `${Math.round(v)} km/h`);
 export function headline(alert) {
   if (alert.kind === "fuel") return { figure: litres(alert.fuel?.litres), words: "lost" };
   const s = alert.speeding ?? {};
-  return { figure: kmh(s.peakKmh), words: `in ${Math.round(s.limitKmh ?? 0)} km/h` };
+  return { figure: kmh(s.limitKmh), over: `+${Math.round(s.overByKmh ?? 0)} km/h` };
 }
 
 /** The fuel rule's slug in words; the slug itself when it is one we have not named. */

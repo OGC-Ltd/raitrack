@@ -1191,14 +1191,16 @@ export default function AlertsScreen() {
                             {a.kind === "fuel" ? "Fuel" : "Speed"}
                           </span>
                           <span className="aud-cellbar alr-figure">
-                            <span><b className="sys-num">{h.figure}</b> <span className="aud-unit">{h.words}</span></span>
+                            <span><b className="sys-num">{h.figure}</b> {h.over
+                              ? <b className="sys-num alr-over">{h.over}</b>
+                              : <span className="aud-unit">{h.words}</span>}</span>
                             <i aria-hidden="true"><b className="aud-cellbar--alert" style={{ width: `${Math.max(2, Math.min(1, figure / maxFigure) * 100)}%` }} /></i>
                           </span>
                         </td>
                         <td className="sp4-td--left alr-details">
                           {a.kind === "fuel"
                             ? <>{ruleWords(a.fuel.rule)}{a.fuel.driverName ? ` · ${a.fuel.driverName}` : ""}</>
-                            : <>+{Math.round(a.speeding.overByKmh)} km/h for {duration(a.speeding.durationSec)}{a.speeding.driverName ? ` · ${a.speeding.driverName}` : ""}</>}
+                            : <>For {duration(a.speeding.durationSec)}{a.speeding.driverName ? ` · ${a.speeding.driverName}` : ""}</>}
                         </td>
                         <td className="sp4-td--left">
                           <span className="alr-state">

@@ -119,6 +119,7 @@
 .alr-kind--fuel .ti { color: var(--frv-crit); }
 .alr-kind--speeding .ti { color: var(--sp4-warn); }
 .alr-figure { display: grid; min-width: 112px; }
+.alr-figure b.alr-over, .alr-tr--unread .alr-figure b.alr-over { color: var(--sp4-crit); font-weight: 700; }
 
 .alr-details { white-space: normal; min-width: 160px; max-width: 280px; color: var(--sp4-text-2); }
 

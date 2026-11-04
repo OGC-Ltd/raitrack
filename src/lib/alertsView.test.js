@@ -86,7 +86,7 @@ describe("an alert's decision in words", () => {
 describe("figures", () => {
   it("states what happened in one figure", () => {
     expect(headline({ kind: "fuel", fuel: { litres: 23.44 } })).toEqual({ figure: "23.4 L", words: "lost" });
-    expect(headline({ kind: "speeding", speeding: { peakKmh: 104.4, limitKmh: 80 } })).toEqual({ figure: "104 km/h", words: "in 80 km/h" });
+    expect(headline({ kind: "speeding", speeding: { limitKmh: 110, overByKmh: 14.6 } })).toEqual({ figure: "110 km/h", over: "+15 km/h" });
   });
 
   it("reads a duration the way a person would say it", () => {
