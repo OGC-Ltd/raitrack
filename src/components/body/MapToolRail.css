@@ -105,7 +105,7 @@
 .mtr-btn__count--alert { background: #ef4444; color: #ffffff; }
 .mtr-btn__count[data-digits="2"] { font-size: 8px; letter-spacing: -0.02em; }
 
-/* Past 20 (RailButton's COUNT_MAX) a number no longer fits the corner: a dot,
+/* From 30 (RailButton's RIPPLE_FROM) a number no longer fits the corner: a dot,
    its ring rippling out, says "many" and the title carries the count. It keeps
    the count's colour: amber for warnings, red once something is critical. */
 .mtr-btn__dot {
@@ -300,14 +300,11 @@
   pointer-events: none;
 }
 
+/* A picked geofence needs no pin: its outline is the marker. The name stands
+   clear of the centre so it doesn't cover a small fence. */
+.mtr-fence-name.zone-label--hover { margin-bottom: 32px; }
+
 /* A searched place, pinned until the next search. */
-/* A picked geofence: its name above the pin. */
-.mtr-place-pin-named {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.mtr-place-pin-named .zone-label--hover { margin-bottom: 2px; }
 .mtr-place-pin {
   color: #dc2626;
   font-size: 30px;
