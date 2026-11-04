@@ -2009,6 +2009,10 @@
 .dr-comp__sum--na { color: var(--text-2); background: color-mix(in srgb, var(--text-2) 12%, transparent); }
 .dr-comp__grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
 .dr-comp__tile { display: flex; flex-direction: column; gap: 1px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--strip-line); background: var(--card); min-width: 0; }
+.dr-comp__top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.dr-comp__i { flex: none; color: var(--text-2); }
+.dr-comp__tile--ok .dr-comp__i { color: var(--meter-ok, #2e7d32); }
+.dr-comp__tile--bad .dr-comp__i { color: var(--tone-down, #c42b2b); }
 .dr-comp__n { font-size: 18px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--ink); }
 .dr-comp__l { font-size: 11px; font-weight: 600; color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
 .dr-comp__d { font-size: 10px; color: var(--text-2); }

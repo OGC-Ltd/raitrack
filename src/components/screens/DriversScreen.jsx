@@ -1129,6 +1129,17 @@ function DriverIdCard({ driver, tier, st, row, w, liveVehicle, totals, windowDay
   );
 }
 
+/** One drawing per compliance tile, by ITEMS key. */
+const COMPLIANCE_ICONS = {
+  overspeed: <><path d="M4.5 18.5a9.5 9.5 0 1 1 15 0" /><path d="M12 14l4.5-5" /><circle cx="12" cy="14" r="1.2" /></>,
+  accel: <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
+  brake: <><circle cx="12" cy="12" r="6" /><path d="M4.6 6.5a9.5 9.5 0 0 0 0 11" /><path d="M19.4 6.5a9.5 9.5 0 0 1 0 11" /><path d="M12 9v3.2" /><path d="M12 15h.01" /></>,
+  phone: <><rect x="7" y="2.5" width="10" height="19" rx="2" /><path d="M11 18.5h2" /></>,
+  seatbelt: <><circle cx="12" cy="5" r="2.5" /><path d="M6 21v-6a6 6 0 0 1 12 0v6" /><path d="M8 10.5L16.5 20" /></>,
+  freewheel: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><path d="M12 12h.01" /></>,
+  covered: <><path d="M15 11l6-3.5v9L15 13" /><path d="M15 15.5V9a2 2 0 0 0-2-2H8" /><path d="M4 7.3A2 2 0 0 0 3 9v6a2 2 0 0 0 2 2h9" /><path d="M3 3l18 18" /></>,
+};
+
 /**
  * Compliance, where the live gauges were (operator, 4 Nov 2026): each breach
  * our reports count, how many times this driver did it, green at none and red
@@ -1145,14 +1156,17 @@ function ComplianceCard({ tiles, sum, dash }) {
         {tiles.map((t) => (
           <li key={t.key} className={`dr-comp__tile${t.count == null ? " dr-comp__tile--na" : t.count > 0 ? " dr-comp__tile--bad" : " dr-comp__tile--ok"}`}
               title={`${t.label}: ${t.count == null ? (t.why ?? "not read") : t.count} · last ${t.days} days`}>
-            <span className="dr-comp__n">{t.count == null ? "-" : t.count.toLocaleString("en-GB")}</span>
+            <span className="dr-comp__top">
+              <span className="dr-comp__n">{t.count == null ? "-" : t.count.toLocaleString("en-GB")}</span>
+              <svg className="dr-comp__i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{COMPLIANCE_ICONS[t.key]}</svg>
+            </span>
             <span className="dr-comp__l">{t.label}</span>
             <span className="dr-comp__d">{t.count == null && t.why ? t.why : `Last ${t.days} days`}</span>
           </li>
         ))}
       </ul>
       {dash.note && <p className="dr-comp__note">{dash.note}</p>}
-      <p className="dr-comp__note">Phone, seatbelt, free-wheeling and camera covered come from the dashcams, which keep the last {DASHCAM_DAYS} days.</p>
     </div>
   );
 }
