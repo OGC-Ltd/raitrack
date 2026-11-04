@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { legendFor, zoneColor, ZONE_STYLE, ZONE_LEGEND } from "./zoneLegend";
+import { legendFor, zoneColor, fenceColorKey, isDummyFence, ZONE_STYLE, ZONE_LEGEND } from "./zoneLegend";
 
 const labels = (cats) => legendFor(cats).map((r) => r.label);
 const keys   = (cats) => legendFor(cats).map((r) => r.key);
@@ -73,12 +73,46 @@ describe("legendFor", () => {
     const colors = ["shop", "customer"].map((k) => zoneColor(k, "osm"));
     expect(new Set(colors).size).toBe(2);
     expect(colors).not.toContain(ZONE_STYLE.other.color);
-    expect(keys(["shop", "customer"])).toEqual(["customer", "shop"]);
+    expect(keys(["shop", "customer"])).toEqual(["shop", "customer"]);
   });
 
   it("carries the site vocabulary a mill needs", () => {
     expect(labels(["yard", "parking", "workshop", "weighing", "gate"]))
       .toEqual(["Gate", "Yard", "Vehicle park", "Workshop", "Weighbridge"]);
+  });
+});
+
+describe("fenceColorKey", () => {
+  const fence = (type, name, category = "other") => ({ geometry: { type }, properties: { name, category } });
+  const color = (f) => zoneColor(fenceColorKey(f));
+
+  it("draws routes, HQs and shops in the operator's colours", () => {
+    expect(color(fence("LineString", "Kabras - Selia Route", "road"))).toBe("#fb8500");
+    expect(color(fence("Polygon", "Menengai Yard - Nakuru HQ", "logistics"))).toBe("#90e0ef");
+    expect(color(fence("Point", "MENENGAI_VS:RIZIKI SHOP", "shop"))).toBe("#ffb703");
+    expect(color(fence("Point", "MENENGAI_VS:DIAMOND WHOLESALERS", "shop"))).toBe("#ffb703");
+    expect(color(fence("Point", "MENENGAI_FG:ALPHA SHOP", "customer"))).toBe("#ffb703");
+  });
+
+  it("leaves everything else colouring by shape", () => {
+    expect(fenceColorKey(fence("LineString", "Main river malagarasi", "water"))).toBe("fence");
+    expect(fenceColorKey(fence("LineString", "DRAINS1", "drain"))).toBe("fence");
+    expect(fenceColorKey(fence("Polygon", "workshop1", "facility"))).toBe("fence");
+    expect(fenceColorKey(fence("Point", "MENENGAI_FG: NAIVAS", "customer"))).toBe("circle");
+  });
+});
+
+describe("isDummyFence", () => {
+  it("finds dummy and test fences by whole word", () => {
+    for (const name of ["Menengai Dummy Geofence", "MENENGAI_VS:TEST CUSTOMERSHOP", "Damsite 2 Test"]) {
+      expect(isDummyFence(name)).toBe(true);
+    }
+  });
+
+  it("leaves real customers whose names only contain the letters", () => {
+    for (const name of ["MENENGAI_VS: TESTIMONY SHOP", "MENENGAI_VS:TESTAI SHOP", "MENENGAI_VS: DEMOLIOUS", null]) {
+      expect(isDummyFence(name)).toBe(false);
+    }
   });
 });
 
