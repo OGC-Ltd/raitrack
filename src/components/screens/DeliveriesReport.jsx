@@ -1,11 +1,11 @@
 /*
  * Deliveries Report (operator, 4 Nov 2026; Menengai's Finished Goods and Van
- * Sales): a tab under Movements. The operator lists the vehicles shared on
- * the day and gives each its customers (kept in this browser,
- * lib/deliveryPlan); a run reads each vehicle's positions and says when it
- * left MORL or the Nairobi depot, how many of its customers it delivered to
- * (stood 1½ minutes in their geofence, within the window), where it is, and
- * when it came back. Stops are geofences, or points pasted as coordinates, and
+ * Sales): a tab under Movements. The operator picks a plate and inserts the
+ * geofences it should deliver to (kept in this browser, lib/deliveryPlan); a
+ * run plays each route back, finds its origin (MORL or the Nairobi depot, two
+ * different places), and says when it left, how many of its stops it delivered
+ * to (stood 1½ minutes in the geofence, within the window), where it is, and
+ * when it came back, all delivered or not. Stops are geofences, or points pasted as coordinates, and
  * the vehicle's whole route in the window is run against them. The bar is
  * Movements': the last hours or days and the same hours on each (with the first
  * day's list), a group, Run report; then JPEG, Preview, CSV and PDF over the group picked.
@@ -18,7 +18,7 @@ import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords } from '../../lib/fleetReports';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
 } from '../../lib/deliveriesReport';
 import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, emptyPlan, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
@@ -50,23 +50,24 @@ function Kpi({ value, label, tone }) {
   );
 }
 
-/** Delivery points pasted for one vehicle: the box, what it could not read, and the points held. */
-function PinPaste({ vehicle, onChange }) {
+/** Stops pasted for one vehicle, geofence names or coordinates: the box, what it could not read, and the points held. */
+function PinPaste({ vehicle, customers, onChange }) {
   const [text, setText] = useState('');
   const [radius, setRadius] = useState(PIN_RADIUS_M);
   const [told, setTold] = useState(null);                 // { added, bad }
   const pins = vehicle.pins ?? [];
   const add = () => {
     const { pins: read, bad } = readCoordinates(text, radius);
-    if (read.length) onChange(mergePins(pins, read));
-    setTold({ added: read.length, bad: bad.length });
-    setText(bad.join('\n'));                              // what did not read stays, to be put right
+    const { names, rest } = matchGeofences(bad, customers);
+    if (read.length || names.length) onChange(mergePins(pins, read), names);
+    setTold({ added: read.length + names.length, bad: rest.length });
+    setText(rest.join('\n'));                             // what did not read stays, to be put right
   };
   return (
     <div className="dlv-paste">
       <textarea className="dlv-paste__box" rows={4} value={text} spellCheck={false}
-                aria-label={`Delivery coordinates for ${vehicle.plate}`}
-                placeholder={'One delivery point a line, from a sheet or a map:\nNaivas Nakuru, -0.28802, 36.04494\n-1.30294, 36.86609'}
+                aria-label={`Delivery stops for ${vehicle.plate}`}
+                placeholder={'One stop a line, a geofence’s name or coordinates from a sheet or a map:\nJOJAC INVESTMENTS\nNaivas Nakuru, -0.28802, 36.04494'}
                 onChange={(e) => { setText(e.target.value); setTold(null); }} />
       <div className="dlv-paste__foot">
         <label className="dlv-paste__radius">
@@ -75,11 +76,11 @@ function PinPaste({ vehicle, onChange }) {
                  onChange={(e) => setRadius(e.target.value)} /> m
         </label>
         <button type="button" className="sp4-ghost-btn" disabled={!text.trim()} onClick={add}>
-          <i className="ti ti-plus" aria-hidden="true" /> Add points
+          <i className="ti ti-plus" aria-hidden="true" /> Add stops
         </button>
         {told && (
           <span className={told.bad ? 'rpt-warn' : 'rpt-sub'} role="status">
-            {told.added} added{told.bad ? `; ${told.bad} line${told.bad === 1 ? '' : 's'} left in the box had no coordinates` : ''}
+            {told.added} added{told.bad ? `; ${told.bad} line${told.bad === 1 ? '' : 's'} left in the box matched no geofence and had no coordinates` : ''}
           </span>
         )}
         {pins.length > 0 && (
@@ -128,6 +129,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   }, [vehicles]);
   const unitOf = (key) => units.find((u) => u.key === key);
   const [find, setFind] = useState('');
+  const [justAdded, setJustAdded] = useState(null);       // its stops picker opens, as the geofences come next
+  const addUnit = (u) => { change(addVehicle(plan, u)); setJustAdded(u.key); setFind(''); };
   // Orders fulfilled typed over the report's own count (operator, 4 Nov 2026: "the user should have the
   // option to edit the delivered like 8/10 and generate the report"), by plate, for this run
   const [typed, setTyped] = useState({});
@@ -369,47 +372,20 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             <p className="rpt-warn dlv-plan__warn">No geofences are on the platform for Menengai yet, so stops cannot be picked.</p>
           )}
           {zones.status === 'error' && <p className="rpt-warn dlv-plan__warn">The geofences could not be read: {zones.message}</p>}
-          {plan.vehicles.length > 0 && (
-            <ul className="dlv-plan__list">
-              {plan.vehicles.map((v) => {
-                const picked = v.customers.length + (v.pins?.length ?? 0);
-                const isPasting = pasting.has(v.key);
-                const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
-                return (
-                  <li key={v.key} className="dlv-plan__veh">
-                    <span className="dlv-plan__plate">{v.plate}</span>
-                    <span className="rpt-sub">{unitOf(v.key)?.group ?? ''}</span>
-                    <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
-                                 options={options} picked={v.customers}
-                                 onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
-                    <button type="button" className="sp4-ghost-btn" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
-                      <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste coordinates{v.pins?.length ? ` (${v.pins.length})` : ''}
-                    </button>
-                    <span className="rpt-sub">{picked} stop{picked === 1 ? '' : 's'}{near ? ` · ${near} at storage` : ''}</span>
-                    <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
-                            aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
-                      <i className="ti ti-x" aria-hidden="true" />
-                    </button>
-                    {isPasting && <PinPaste vehicle={v} onChange={(pins) => change(setPins(plan, v.key, pins))} />}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
           <div className="dlv-plan__add">
             <div className="dlv-find">
               <div className="sp4-search-wrap">
                 <i className="ti ti-search sp4-search-icon" aria-hidden="true" />
                 <input className="sp4-search" type="search" value={find} placeholder="Add a vehicle: type its plate, e.g. KDE 127E"
                        aria-label="Find a vehicle to add" onChange={(e) => setFind(e.target.value)}
-                       onKeyDown={(e) => { if (e.key === 'Enter' && findHits[0]) { change(addVehicle(plan, findHits[0])); setFind(''); } }} />
+                       onKeyDown={(e) => { if (e.key === 'Enter' && findHits[0]) addUnit(findHits[0]); }} />
               </div>
               {find.trim() && (
                 <ul className="dlv-find__list" role="listbox" aria-label="Vehicles found">
                   {findHits.map((u) => (
                     <li key={u.key}>
                       <button type="button" role="option" aria-selected="false" className="dlv-find__hit"
-                              onClick={() => { change(addVehicle(plan, u)); setFind(''); }}>
+                              onClick={() => addUnit(u)}>
                         <b>{u.plate}</b><span className="rpt-sub">{u.group ?? u.name}</span>
                       </button>
                     </li>
@@ -425,10 +401,37 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               </button>
             )}
           </div>
+          {plan.vehicles.length > 0 && (
+            <ul className="dlv-plan__list">
+              {plan.vehicles.map((v) => {
+                const picked = v.customers.length + (v.pins?.length ?? 0);
+                const isPasting = pasting.has(v.key);
+                const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
+                return (
+                  <li key={v.key} className="dlv-plan__veh">
+                    <span className="dlv-plan__plate">{v.plate}</span>
+                    <span className="rpt-sub">{unitOf(v.key)?.group ?? ''}</span>
+                    <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
+                                 options={options} picked={v.customers} startOpen={justAdded === v.key}
+                                 onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
+                    <button type="button" className="sp4-ghost-btn" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
+                      <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
+                    </button>
+                    <span className="rpt-sub">{picked} stop{picked === 1 ? '' : 's'}{near ? ` · ${near} at storage` : ''}</span>
+                    <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
+                            aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
+                      <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                    {isPasting && <PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} />}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         {run.status === 'idle' && plan.vehicles.length > 0 && (
-          <EmptyNote icon="ti-truck-delivery" title="Deliveries">Give each vehicle its stops (geofences or pasted coordinates), choose the window, then press Run report.</EmptyNote>
+          <EmptyNote icon="ti-truck-delivery" title="Deliveries">Give each vehicle the geofences it should deliver to, choose the window, then press Run report. Its origin, MORL or the Nairobi depot, comes from its route.</EmptyNote>
         )}
         {run.status === 'loading' && (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report" progress={run.total ? run.done / run.total : null}>
@@ -448,6 +451,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 <strong>{done.rows.length}</strong> vehicle{done.rows.length === 1 ? '' : 's'}
                 <span className="rpt-sub"> · {periodWords(done.from, done.at)}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} tracker{done.failed === 1 ? '' : 's'} could not be read</span>}
+                {done.rows.some((r) => backShort(r) > 0) && <span className="rpt-warn"> · {done.rows.filter((r) => backShort(r) > 0).length} back with stops undelivered</span>}
                 {done.noMoves && <span className="rpt-warn"> · Movements could not be read, so current locations are missing</span>}
               </>}
               onCsv={done.rows.length ? saveCsv : undefined}
@@ -467,8 +471,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             />
             {preview && <PdfPreview state={preview} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={previewPdf} onClose={closePreview} />}
             <p className="mvr-depots" role="note">
-              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
-              <span>Storage: {done.storages.join(', ') || 'none found'}.</span>
+              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
+              <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>
             </p>
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table dlv-table">

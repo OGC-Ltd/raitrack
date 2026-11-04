@@ -9,8 +9,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 const SHOW_MAX = 300;
 
-export default function CheckPicker({ icon, label, options, picked, onChange, noun = 'items', allWord = 'All', search = false, minOne = false, noAll = false }) {
-  const [open, setOpen] = useState(false);
+export default function CheckPicker({ icon, label, options, picked, onChange, noun = 'items', allWord = 'All', search = false, minOne = false, noAll = false, startOpen = false }) {
+  const [open, setOpen] = useState(startOpen);
+  // The ticked ones go first as the list opens and when a search is cleared, not under the pointer
+  const [held, setHeld] = useState(() => new Set(picked ?? []));
   const [q, setQ] = useState('');
   const rootRef = useRef(null);
   const values = options.map((o) => o.value);
@@ -39,10 +41,9 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     const hits = s ? options.filter((o) => o.label.toLowerCase().includes(s)) : options;
-    const ticked = picked ? new Set(picked) : null;
-    const ordered = ticked && !s ? [...hits.filter((o) => ticked.has(o.value)), ...hits.filter((o) => !ticked.has(o.value))] : hits;
+    const ordered = !s ? [...hits.filter((o) => held.has(o.value)), ...hits.filter((o) => !held.has(o.value))] : hits;
     return ordered.slice(0, SHOW_MAX);
-  }, [options, q, picked]);
+  }, [options, q, held]);
   const more = useMemo(() => {
     const s = q.trim().toLowerCase();
     return (s ? options.filter((o) => o.label.toLowerCase().includes(s)).length : options.length) - SHOW_MAX;
@@ -57,7 +58,7 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
   return (
     <div className="drp mvr-types gfr-pick" ref={rootRef}>
       <button type="button" className={`drp-field${open ? ' drp-field--open' : ''}`}
-              onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open}
+              onClick={() => { setHeld(new Set(picked ?? [])); setOpen((o) => !o); }} aria-haspopup="true" aria-expanded={open}
               aria-label={`${label}: ${text}`} disabled={!options.length}>
         {icon && <i className={`ti ${icon}`} aria-hidden="true" />}
         <span className="drp-text mvr-types__v">{text}</span>
@@ -72,7 +73,7 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
           </div>
           {search && options.length > 8 && (
             <input type="search" className="rpt-select gfr-pick__q" placeholder={`Find ${noun}`} value={q} autoFocus
-                   onChange={(e) => setQ(e.target.value)} aria-label={`Find ${noun}`} />
+                   onChange={(e) => { setQ(e.target.value); if (!e.target.value) setHeld(new Set(picked ?? [])); }} aria-label={`Find ${noun}`} />
           )}
           <ul className="mvr-types__list">
             {shown.map((o) => (

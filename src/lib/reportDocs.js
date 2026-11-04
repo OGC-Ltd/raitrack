@@ -18,7 +18,7 @@ import { SECTIONS, offlineCount, rowCells as dormantCells, sectionDays, asAtWord
 import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCells as geofenceCells } from './geofenceReport';
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
-import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, spansDays, stamp, stopWords } from './deliveriesReport';
+import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, spansDays, stopWords } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
 const PORTRAIT_MM = 184;
@@ -173,7 +173,7 @@ export function speedDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.
   };
 }
 
-const DELIVERY_WIDTHS = [22, 42, 24, 60, 36];
+const DELIVERY_WIDTHS = [22, 42, 24, 52, 44];
 
 /** The Deliveries Report. `stops: false` is the sheet's table alone, as its PDF. */
 export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = true, orgCode, now = Date.now() }) {
@@ -181,7 +181,7 @@ export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = tru
   const orders = `${fmt(rows.reduce((n, r) => n + r.fulfilled, 0))}/${fmt(rows.reduce((n, r) => n + r.planned, 0))}`;
   const period = `${dmyhm(from)} to ${dmyhm(at)}`;
   // Current location takes what is left, so the pages can be turned for the JPEG
-  const cols = columns(DELIVERY_WIDTHS, PORTRAIT_MM, { figures: new Set([2]), wrap: new Set([0, 1, 3]) }).map((c, i) => (i === 3 ? { ...c, w: 0 } : c));
+  const cols = columns(DELIVERY_WIDTHS, PORTRAIT_MM, { figures: new Set([2]), wrap: new Set([0, 1, 3, 4]) }).map((c, i) => (i === 3 ? { ...c, w: 0 } : c));
   const sheet = rows.length
     ? { kind: 'table', cols, head: DELIVERY_HEADS, size: 7.8, rows: rows.map((r) => deliveryCells(r).map((t, i) => textCell(t, i === 0))) }
     : { kind: 'none', text: 'No vehicles in the report.' };
@@ -202,9 +202,7 @@ export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = tru
       { kind: 'h2', title: '3. Customers by vehicle' },
     );
     for (const r of rows) {
-      const leftWhen = r.trip.leftAt != null ? `${withDay ? `${stamp(r.trip.leftAt).slice(0, 5)} ` : ''}${stamp(r.trip.leftAt).slice(11, 16)}` : '';
-      const left = r.trip.leftAt != null && r.trip.leftFrom ? ` · left ${r.trip.leftFrom.label} ${leftWhen}` : '';
-      blocks.push({ kind: 'h3', title: r.plate, aside: `${r.fulfilled}/${r.planned} delivered${left}` });
+      blocks.push({ kind: 'h3', title: r.plate, aside: runWords(r, withDay) });
       if (!r.customers.length) { blocks.push({ kind: 'none', text: 'No customers given.' }); continue; }
       blocks.push({ kind: 'table', cols: [{ w: 0, wrap: true }, { w: 68, wrap: true }], head: ['Stop', 'Result'], size: 7.8,
         rows: r.customers.map((c) => [textCell(c.label),

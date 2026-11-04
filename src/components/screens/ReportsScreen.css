@@ -480,7 +480,7 @@ select.mvr-edit { min-width: 110px; }
 .dlv-plan__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
 .dlv-plan__title { margin: 0; font-size: 13px; font-weight: 700; }
 .dlv-plan__warn { margin: 4px 0 8px; font-size: 12px; }
-.dlv-plan__list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dlv-plan__list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .dlv-plan__veh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .dlv-plan__plate { font-weight: 700; min-width: 80px; }
 .dlv-plan__x { padding: 2px 8px; }

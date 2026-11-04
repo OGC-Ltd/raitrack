@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findStorages, customersIn, tripOf, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays } from './deliveriesReport';
+import { findStorages, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays } from './deliveriesReport';
 import { readCoordinates, mergePins } from './deliveryPlan';
 import { addVehicle, removeVehicle, setCustomers, emptyPlan } from './deliveryPlan';
 import { reportKeysFor, hasDeliveriesTab } from './reportNav';
@@ -25,9 +25,9 @@ describe('Deliveries Report', () => {
   const customers = customersIn(zones, storages);
   const byName = new Map(customers.map((c) => [c.name, c]));
 
-  it('finds the two storages and the customers, the depot itself left out', () => {
+  it('finds the two storages and the customers, MORL left out, the Nairobi depot a stop like any', () => {
     expect(storages.map((s) => s.label)).toEqual(['MORL', 'Nairobi depot']);
-    expect(customers.map((c) => c.label)).toEqual(['DUR DUR COSMETICS', 'JOJAC INVESTMENTS', 'Some farm', 'THANJU SHOP']);
+    expect(customers.map((c) => c.label)).toEqual(['DUR DUR COSMETICS', 'JOJAC INVESTMENTS', 'NAIROBI DEPOT', 'Some farm', 'THANJU SHOP']);
     expect(customers.find((c) => c.label === 'Some farm').kind).toBe('Geofence');
     expect(customers.find((c) => c.label === 'DUR DUR COSMETICS').nearStorage).toBe(true);
     expect(customers.find((c) => c.label === 'THANJU SHOP').kind).toBe('FG');
@@ -90,7 +90,7 @@ describe('Deliveries Report', () => {
     // Its last position, newer than the readings, is used: back at MORL
     const back = deliveryRow(plan, [p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD)], storages, byName,
       { to: at('2026-11-04T17:00:00'), lastFix: { t: at('2026-11-04T16:00:00'), ...MORL } });
-    expect(rowCells(back)[4]).toBe('04.11.2026 16:00:00');
+    expect(rowCells(back)[4]).toBe('04.11.2026 16:00:00 (MORL)');
   });
 
   it('counts a customer only after 1½ minutes inside its geofence', () => {
@@ -199,14 +199,16 @@ describe('every trip in the window, and only there', () => {
     expect(r.fulfilled).toBe(1);
   });
 
-  it('counts a delivery on the day’s first trip after a second one begins', () => {
+  it('shows the delivery run when a second trip begins after it', () => {
     const pings = [
       p('2026-11-04T07:00:00', MORL), p('2026-11-04T07:30:00', ROAD), p('2026-11-04T08:00:00', A), p('2026-11-04T08:05:00', A),
       p('2026-11-04T08:30:00', ROAD), p('2026-11-04T09:00:00', MORL), p('2026-11-04T10:00:00', MORL), p('2026-11-04T10:30:00', ROAD),
     ];
     const r = deliveryRow(plan, pings, storages, byName, { from: today, to });
     expect(r.fulfilled).toBe(1);
-    expect(stamp(r.trip.leftAt)).toBe('04.11.2026 10:30:00');
+    expect(stamp(r.trip.leftAt)).toBe('04.11.2026 07:30:00');
+    expect(stamp(r.trip.arrivedAt)).toBe('04.11.2026 09:00:00');
+    expect(r.trip.outAgain).toBe(true);
   });
 
   it('does not end a trip driving past a storage', () => {
@@ -259,6 +261,100 @@ describe('pasted coordinates', () => {
   it('holds the same place once', () => {
     const a = { name: 'A', lat: -1, lng: 36, radiusM: 200 };
     expect(mergePins([a], [{ ...a, name: 'B' }, { name: 'C', lat: -2, lng: 36, radiusM: 200 }]).map((p) => p.name)).toEqual(['B', 'C']);
+  });
+});
+
+describe('MORL and the Nairobi depot are different places, found by playing the route back', () => {
+  const storages = findStorages(zones);
+  const byName = new Map(customersIn(zones, storages).map((c) => [c.name, c]));
+  const AWAY = { lat: -1.2, lng: 36.7 };
+  const sto = storages.find((s) => s.key === 'nairobi');
+  const from = at('2026-11-04T06:00:00');
+  const to = at('2026-11-04T20:00:00');
+  const JOJAC = 'MENENGAI_VS: JOJAC INVESTMENTS';
+  const THANJU = 'MENENGAI_FG:THANJU SHOP';
+  const NEAR_NBI = { lat: NBI.lat + 0.0005, lng: NBI.lng };
+
+  it('takes the first stay as the origin', () => {
+    expect(originOf([p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', MORL), p('2026-11-04T08:00:00', ROAD)], storages, { to }).key).toBe('morl');
+    expect(originOf([p('2026-11-04T06:00:00', NBI), p('2026-11-04T07:00:00', NBI), p('2026-11-04T08:00:00', AWAY)], storages, { to }).key).toBe('nairobi');
+    expect(originOf([p('2026-11-04T08:00:00', ROAD)], storages, { to })).toBeNull();
+  });
+  it('a truck from MORL is not back at the Nairobi depot: it is still out', () => {
+    const pings = [p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD), p('2026-11-04T12:00:00', NBI), p('2026-11-04T14:00:00', NBI), p('2026-11-04T15:00:00', AWAY)];
+    const r = deliveryRow({ plate: 'X', customers: [] }, pings, storages, byName, { from, to, place: 'On the road' });
+    expect(r.trip.leftFrom.key).toBe('morl');
+    expect(stamp(r.trip.leftAt)).toBe('04.11.2026 07:00:00');
+    expect(r.trip.arrivedAt).toBeNull();
+    expect(rowCells(r)[3]).toBe('On the road');
+  });
+  it('a van from the depot stays the depot’s through a visit to MORL, and is back only there', () => {
+    const pings = [p('2026-11-04T06:00:00', NBI), p('2026-11-04T07:00:00', AWAY), p('2026-11-04T10:00:00', MORL), p('2026-11-04T11:00:00', MORL), p('2026-11-04T12:00:00', AWAY), p('2026-11-04T16:00:00', NBI)];
+    const r = deliveryRow({ plate: 'X', customers: [] }, pings, storages, byName, { from, to });
+    expect(rowCells(r)[1]).toBe('04.11.2026 07:00:00 (STO)');
+    expect(rowCells(r)[4]).toBe('04.11.2026 16:00:00 (STO)');
+    expect(deliveriesPdfBody([r], { from, at: to, fleet: 'M' }).rows[0]).toMatchObject({ arrivedTo: 'Nairobi depot', arrivedShort: 'STO' });
+    expect(sto.short).toBe('STO');
+  });
+  it('a short outing after the run keeps the run, and says where it is now', () => {
+    const pings = [
+      p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD), p('2026-11-04T09:00:00', A), p('2026-11-04T09:05:00', A), p('2026-11-04T10:00:00', ROAD),
+      p('2026-11-04T14:00:00', MORL), p('2026-11-04T15:00:00', MORL), p('2026-11-04T15:30:00', ROAD),
+    ];
+    const r = deliveryRow({ plate: 'X', customers: [JOJAC] }, pings, storages, byName, { from, to, place: 'Fuel station' });
+    expect(stamp(r.trip.leftAt)).toBe('04.11.2026 07:00:00');
+    expect(stamp(r.trip.arrivedAt)).toBe('04.11.2026 14:00:00');
+    expect(rowCells(r)[3]).toBe('Fuel station');
+    const body = deliveriesPdfBody([r], { from, at: to, fleet: 'M' }).rows[0];
+    expect(body).toMatchObject({ arrivedTo: null, arrivedShort: 'MORL', place: 'Fuel station' });
+  });
+  it('with no deliveries, the longest trip in the window', () => {
+    const trips = [{ leftAt: at('2026-11-04T07:00:00'), arrivedAt: at('2026-11-04T14:00:00') }, { leftAt: at('2026-11-04T15:00:00'), arrivedAt: at('2026-11-04T15:40:00') }];
+    expect(deliveryRun(trips, [], { from, to })).toMatchObject({ leftAt: trips[0].leftAt, outAgain: true });
+    expect(deliveryRun([], [], { from, to })).toBeNull();
+  });
+  it('over two trips: out on the first delivery’s, back from the last’s', () => {
+    const trips = tripsOf([p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD), p('2026-11-04T09:00:00', MORL), p('2026-11-04T10:00:00', MORL), p('2026-11-04T11:00:00', ROAD), p('2026-11-04T13:00:00', MORL)], [storages[0]], { to }).trips;
+    const run = deliveryRun(trips, [at('2026-11-04T12:00:00'), at('2026-11-04T08:00:00')], { from, to });
+    expect(stamp(run.leftAt)).toBe('04.11.2026 07:00:00');
+    expect(stamp(run.arrivedAt)).toBe('04.11.2026 13:00:00');
+    expect(run.outAgain).toBe(false);
+  });
+  it('back with stops undelivered says so', () => {
+    const pings = [p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD), p('2026-11-04T09:00:00', A), p('2026-11-04T09:05:00', A), p('2026-11-04T10:00:00', ROAD), p('2026-11-04T14:00:00', MORL)];
+    const r = deliveryRow({ plate: 'X', customers: [JOJAC, THANJU] }, pings, storages, byName, { from, to });
+    expect([r.fulfilled, r.planned, backShort(r)]).toEqual([1, 2, 1]);
+    expect(runWords(r)).toBe('1/2 delivered · left MORL 07:00 · back MORL 14:00 · 1 not delivered');
+    expect(deliveriesPdfBody([r], { from, at: to, fleet: 'M' }).rows[0].run).toBe(runWords(r));
+    expect(backShort({ ...r, fulfilled: 2 })).toBe(0);
+  });
+  it('driving through a large geofence is not a delivery; standing in it is', () => {
+    const town = { name: 'Town', label: 'Town', feature: sq('Town', A.lat, A.lng, 0.05) };
+    const drive = [0, 1, 2, 3, 4].map((m) => ({ t: from + m * 60_000, ...A, speedKmh: 50 }));
+    expect(stopCheck([drive], town, { from, to })).toMatchObject({ at: null, reachedAt: from });
+    const stand = [0, 1, 2, 3].map((m) => ({ t: from + m * 60_000, ...A, speedKmh: m === 3 ? 30 : 0 }));
+    expect(stopCheck([stand], town, { from, to }).at).toBe(from);
+    const crawl = [{ t: from, ...A, speedKmh: 0 }, { t: from + 30_000, ...A, speedKmh: 40 }, { t: from + 60_000, ...A, speedKmh: 0 }, { t: from + 90_000, ...A, speedKmh: 40 }];
+    expect(stopCheck([crawl], town, { from, to }).at).toBeNull();
+  });
+  it('parked in the origin’s yard delivers nothing to a stop on its ground; a visit from the road does', () => {
+    const yardShop = { lat: MORL.lat + 0.001, lng: MORL.lng };
+    const pin = { name: 'Yard shop', ...yardShop, radiusM: 200 };
+    const out = { lat: MORL.lat + 0.1, lng: MORL.lng };
+    const parked = deliveryRow({ plate: 'X', customers: [], pins: [pin] }, [p('2026-11-04T06:00:00', yardShop), p('2026-11-04T16:00:00', yardShop)], storages, byName, { from, to });
+    expect(parked.fulfilled).toBe(0);
+    expect(stopWords(parked.customers[0])).toBe('No stop away from MORL');
+    const visit = deliveryRow({ plate: 'X', customers: [], pins: [pin] }, [p('2026-11-04T06:00:00', yardShop), p('2026-11-04T07:00:00', out), p('2026-11-04T09:00:00', yardShop), p('2026-11-04T09:03:00', yardShop), p('2026-11-04T09:05:00', out)], storages, byName, { from, to });
+    expect(visit.fulfilled).toBe(1);
+  });
+  it('a stop at the other depot is judged as any shop', () => {
+    const pin = { name: 'Depot', ...NEAR_NBI, radiusM: 200 };
+    const r = deliveryRow({ plate: 'X', customers: [], pins: [pin] }, [p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD), p('2026-11-04T12:00:00', NEAR_NBI), p('2026-11-04T13:00:00', NEAR_NBI), p('2026-11-04T14:00:00', AWAY)], storages, byName, { from, to });
+    expect(r.fulfilled).toBe(1);
+  });
+  it('finds pasted geofences by either name, and leaves what is none', () => {
+    const list = customersIn(zones, storages);
+    expect(matchGeofences(['jojac  investments', 'MENENGAI_FG:THANJU SHOP', 'Nowhere'], list)).toEqual({ names: [JOJAC, THANJU], rest: ['Nowhere'] });
   });
 });
 
