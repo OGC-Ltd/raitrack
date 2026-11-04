@@ -167,3 +167,41 @@ describe("smoothFuel (processed fuel level)", () => {
     expect(out[0].fuelSmoothL).toBe(100);
   });
 });
+
+describe('a stop at the pump', () => {
+  const t = (m) => new Date(T0 + m * MIN).toISOString();
+  const fill = (m, rise, before, after) => ({ id: `f${m}`, filledAt: t(m), observedRiseMl: rise, filledMl: 1000, verdict: 'REFILL', initialFuelLevelMl: before, finalFuelLevelMl: after });
+  const filled = (fillings) => buildFuelReport({ pings: [], fillings, drains: [] });
+
+  it('does not count overlapping rises twice (KCS 644G, 2 Nov)', () => {
+    const r = filled([fill(0, 85_820, 151_030, 163_410), fill(18, 78_297, 168_530, 236_920)]);
+    expect(r.stats.filledL).toBe(85.9);
+    expect(r.stats.fillingCount).toBe(1);
+    expect(r.fillings[0]).toMatchObject({ beforeL: 151.03, afterL: 236.92 });
+  });
+  it('keeps the biggest rise where the levels say less', () => {
+    expect(filled([fill(0, 60_000, 100_000, 105_000), fill(10, 20_000, 105_000, 110_000)]).stats.filledL).toBe(60);
+  });
+  it('leaves fillings over an hour apart alone', () => {
+    const r = filled([fill(0, 50_000, 100_000, 150_000), fill(61, 40_000, 120_000, 160_000)]);
+    expect(r.stats.filledL).toBe(90);
+    expect(r.stats.fillingCount).toBe(2);
+  });
+  it('reads a chain as one stop, however long it runs', () => {
+    expect(filled([fill(0, 30_000, 100_000, 130_000), fill(50, 30_000, 130_000, 160_000), fill(100, 30_000, 160_000, 190_000)]).stats.fillingCount).toBe(1);
+  });
+});
+
+describe('a drain a reviewer ruled out', () => {
+  const drain = (o) => ({ id: 'd', beganAt: new Date(T0).toISOString(), verdict: 'DRAIN', drainCause: 'SIPHON', stolenMl: 10_000, finalFuelLevelMl: 80_000, ...o });
+  const theft = (o) => buildFuelReport({ pings: [], fillings: [], drains: [drain(o)] }).stats.theftL;
+  it('is not lost fuel, whichever way it was ruled out', () => {
+    for (const reviewStatus of ['DISMISSED', 'NOT_THEFT', 'PROBE_FAULT']) expect(theft({ reviewStatus })).toBe(0);
+    expect(theft({ dismissedAt: new Date(T0).toISOString() })).toBe(0);
+  });
+  it('still counts until then, and a confirmed theft for good', () => {
+    expect(theft({})).toBe(10);
+    expect(theft({ reviewStatus: 'UNDER_REVIEW', dismissedAt: new Date(T0).toISOString() })).toBe(10);
+    expect(theft({ reviewStatus: 'CONFIRMED_THEFT', dismissedAt: new Date(T0).toISOString() })).toBe(10);
+  });
+});
