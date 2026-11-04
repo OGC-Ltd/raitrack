@@ -103,7 +103,7 @@ import { useGoogleRoutingOn } from "../../lib/googleRouting";
 
 import { liveTrip } from "../../lib/tripProgress";
 
-import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor } from "../../lib/zoneLegend";
+import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor, fenceColorKey, isDummyFence } from "../../lib/zoneLegend";
 import { fenceExtent, clusterFences, fenceBadgeLabel, fenceNames } from "../../lib/fenceCluster";
 import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
@@ -2514,7 +2514,7 @@ export default function FleetMap() {
   const planAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
   // What the rail's search can find: the fences this layer can draw.
   const searchableFences = useMemo(() => (zones?.features ?? []).filter((f) =>
-    !ZONE_SKIP_CATEGORIES.has(f.properties?.category) && !ZONE_EXCLUDE.has(zoneKey(f.properties?.name))), [zones]);
+    !ZONE_SKIP_CATEGORIES.has(f.properties?.category) && !ZONE_EXCLUDE.has(zoneKey(f.properties?.name)) && !isDummyFence(f.properties?.name)), [zones]);
   // The surveys this organisation has. An empty list is also the gate: a
   // company absent from the table is offered no switch and draws nothing.
   const ownPlans = SITE_PLANS[activeCompanyId] ?? NO_PLANS;
@@ -2607,8 +2607,8 @@ export default function FleetMap() {
     for (const f of zones?.features ?? []) {
       const p = f.properties ?? {};
       if (ZONE_SKIP_CATEGORIES.has(p.category)) continue;
-      if (ZONE_EXCLUDE.has(zoneKey(p.name))) continue;
-      seen.add(f.geometry?.type === "Point" ? "circle" : "fence");
+      if (ZONE_EXCLUDE.has(zoneKey(p.name)) || isDummyFence(p.name)) continue;
+      seen.add(fenceColorKey(f));
     }
     return [...seen];
   }, [zones]);
@@ -4666,11 +4666,10 @@ export default function FleetMap() {
       // Ahead of every bounds.extend below, so an excluded zone cannot drag the
       // camera fit out to ground the layer no longer draws.
       const key = zoneKey(p.name);
-      if (ZONE_EXCLUDE.has(key)) continue;
+      if (ZONE_EXCLUDE.has(key) || isDummyFence(p.name)) continue;
 
       const geom  = f.geometry;
-      // One colour for circles, one for every other shape, on every base map.
-      const color = zoneColor(geom?.type === "Point" ? "circle" : "fence");
+      const color = zoneColor(fenceColorKey(f));
       const alias = ZONE_PLAN_ALIAS[key];
       let shape = null;
       // A circular fence arrives as its centre and radius; drawn as its ring.
@@ -6581,7 +6580,7 @@ export default function FleetMap() {
       lng: onLine ? onLine[0] : box.lng,
       bbox: [box.s, box.n, box.w, box.e],
       label: p.name,
-      labelColor: zoneColor(isCircle ? "circle" : "fence"),
+      labelColor: zoneColor(fenceColorKey(feature)),
     });
   }, [activeCompanyId, handlePickPlace]);
 
