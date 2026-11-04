@@ -22,6 +22,8 @@ export const directionWords = (site = 'MORL') => ({
   // Menengai's silent units stand at RAIMDF, the others are not reporting
   // (operator, 2 Nov / 3 Nov: "remove no fix")
   'no-fix': site === 'MORL' ? 'At RAIMDF' : 'Not reporting',
+  // Menengai's units at the Nairobi depot (lib/stoUnits)
+  'sto-at': 'At STO',
 });
 export const DIRECTION = directionWords('MORL');
 export const STATES = Object.keys(DIRECTION);
@@ -31,7 +33,10 @@ export const STATES = Object.keys(DIRECTION);
  * with no direction ("-"), stays on its own row but is not offered on others.
  */
 const UNOFFERED = new Set(['no-fix', 'moving']);
-export const statesFor = (row) => STATES.filter((s) => !UNOFFERED.has(s) || row.state === s);
+const STO_STATES = new Set(['sto-at']);
+export const statesFor = (row) => STATES.filter((s) => (!UNOFFERED.has(s) || row.state === s)
+  // Menengai's units may be set At STO
+  && (!STO_STATES.has(s) || row.state === s || (row.stoSite && s === 'sto-at')));
 
 /** Moving, as the server reads it: this fast or faster on a fix inside the window. */
 export const MOVING_KMH = 5;
@@ -105,8 +110,8 @@ export function isEdited(row, edit) {
 
 /** The overview's figures from the rows kept, as the server counts them. */
 export function countRows(groups) {
-  const counts = { to: 0, from: 0, at: 0, moving: 0, stopped: 0, 'no-fix': 0, stale: 0, total: 0 };
-  for (const g of groups) for (const r of g.rows) { counts[r.state] += 1; counts.total += 1; if (r.stale) counts.stale += 1; }
+  const counts = { to: 0, from: 0, at: 0, moving: 0, stopped: 0, 'no-fix': 0, 'sto-at': 0, stale: 0, total: 0 };
+  for (const g of groups) for (const r of g.rows) { counts[r.state] = (counts[r.state] ?? 0) + 1; counts.total += 1; if (r.stale) counts.stale += 1; }
   return counts;
 }
 

@@ -49,6 +49,11 @@ const WEST_KENYA_SITES = {
 };
 
 export const TEMPLATES = {
+  // Menengai's Finished Goods and Van Sales deliveries, the vehicles shared on
+  // a day and their customers (DeliveriesReport; operator, 4 Nov 2026)
+  deliveries: {
+    orgs: { MENENGAI: {} },
+  },
   // Menengai's tankers on the road from the Mombasa depot to MORL (TankersReport)
   tankers: {
     orgs: { MENENGAI: { group: 'Tankers' } },

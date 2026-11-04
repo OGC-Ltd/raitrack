@@ -75,6 +75,8 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .contact { font-size:7pt; font-style:italic; color:var(--mut); margin-top:6mm; padding-top:2mm; border-top:.5pt solid var(--rule) }
 .foot { display:flex; justify-content:space-between; color:var(--mut); font-size:7pt; padding:2mm 13mm 4mm; border-top:.6pt solid var(--rule); flex:none }
 #flow { position:absolute; left:-10000px; top:0; width:${landscape ? '271mm' : '184mm'} }
+.page.long { height:auto; overflow:visible }
+.page.long .body { flex:none; overflow:visible; padding-bottom:4mm }
 `;
 
 const PAGER = `
@@ -130,8 +132,10 @@ const PAGER = `
  * @param {string} o.footNote     left of the footer
  * @param {{rai: string, ogc: string}} o.logos
  * @param {boolean} [o.landscape]
+ * @param {boolean} [o.continuous]  one page as long as the report, never broken
+ *   into A4 pages: for a JPEG that reads as one list (operator, 4 Nov 2026)
  */
-export function renderLetterheadHtml({ title, reportNo, date, companyName, info = [], flow, footNote, logos, landscape = false }) {
+export function renderLetterheadHtml({ title, reportNo, date, companyName, info = [], flow, footNote, logos, landscape = false, continuous = false }) {
   const rows = [];
   for (let i = 0; i < info.length; i += 2) {
     const [a, b] = [info[i], info[i + 1]];
@@ -143,6 +147,12 @@ export function renderLetterheadHtml({ title, reportNo, date, companyName, info 
   <div class="title"><h1>${esc(title)}</h1><div class="ref">Report no. <b>${esc(reportNo)}</b> &nbsp;·&nbsp; Date <b>${esc(date)}</b></div></div>
   <table class="info">${rows.join('')}</table>
 </div>${foot}`;
+  if (continuous) {
+    const whole = first.replace('</table>\n</div>', `</table>\n${flow.filter(Boolean).join('\n')}\n</div>`);
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)} ${esc(companyName)} ${esc(date)}</title><style>${css(landscape)}</style></head><body>
+<div class="page long">${whole}</div>
+</body></html>`;
+  }
   const next = `<div class="lh2"><b>${esc(title)}</b><span>${esc(companyName)} · ${esc(reportNo)}</span></div><div class="body"></div>${foot}`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)} ${esc(companyName)} ${esc(date)}</title><style>${css(landscape)}</style></head><body>

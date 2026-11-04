@@ -17,12 +17,14 @@ export const letterheadLogos = () => ({
 const PDF_SCALE = 2.2;
 // The JPEG is looked at zoomed in, on a phone: an A4 page 2382 px wide (~290 dpi)
 const JPEG_SCALE = 3;
+/** The tallest image a browser will draw, with room to spare. */
+const MAX_LONG_PX = 15_800;
 
 /**
  * The report's A4 pages drawn to canvases, laid out in an off-screen frame.
  * @returns {Promise<HTMLCanvasElement[]>}
  */
-async function drawPages(html, { landscape, scale, onProgress }) {
+async function drawPages(html, { landscape, scale, onProgress, continuous = false }) {
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
   frame.tabIndex = -1;
@@ -42,7 +44,11 @@ async function drawPages(html, { landscape, scale, onProgress }) {
     const out = [];
     for (let i = 0; i < pages.length; i++) {
       onProgress?.(`Drawing page ${i + 1} of ${pages.length}`);
-      out.push(await html2canvas(pages[i], { scale, backgroundColor: '#ffffff', useCORS: true, logging: false }));
+      // One long page stays one image: drawn smaller when it would pass what a
+      // browser will draw (api/pdfJpeg MAX_HEIGHT), never cut
+      const s = continuous ? Math.min(scale, MAX_LONG_PX / Math.max(1, pages[i].scrollHeight)) : scale;
+      out.push(await html2canvas(pages[i], { scale: s, backgroundColor: '#ffffff', useCORS: true, logging: false,
+        ...(continuous ? { windowHeight: pages[i].scrollHeight + 50, height: pages[i].scrollHeight } : {}) }));
     }
     return out;
   } finally {
@@ -70,8 +76,12 @@ export async function saveLetterheadPdf(html, { filename, landscape = false, onP
   return null;
 }
 
-/** The same report as a JPEG: the pages drawn once, at JPEG_SCALE, never through the PDF. */
-export async function saveLetterheadJpeg(html, { filename, landscape = false, onProgress }) {
-  const pages = await drawPages(html, { landscape, scale: JPEG_SCALE, onProgress });
+/**
+ * The same report as a JPEG: the pages drawn once, at JPEG_SCALE, never
+ * through the PDF. `continuous`: the html is one long page
+ * (renderLetterheadHtml continuous), drawn as one image.
+ */
+export async function saveLetterheadJpeg(html, { filename, landscape = false, onProgress, continuous = false }) {
+  const pages = await drawPages(html, { landscape, scale: JPEG_SCALE, onProgress, continuous });
   await savePagesAsJpeg(pages, filename);
 }

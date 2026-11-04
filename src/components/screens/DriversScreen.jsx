@@ -6,7 +6,9 @@
 
 import { useState, useEffect, useId, useRef, useCallback, useMemo } from "react";
 import "./DriversScreen.css";
-import { getDriversOverview } from "../../api/drivers";
+import { getDriversOverview, getDriverScores } from "../../api/drivers";
+import { loadDashcamAlarms } from "../../api/fleetReports";
+import { complianceTiles, complianceWords, DASHCAM_DAYS } from "../../lib/driverCompliance";
 import { resolveOrgId } from "../../api/org";
 import { loadWeighbridgeCredit } from "../../api/weighbridgeTonnage";
 import { withWeighbridgeTonnes } from "../../lib/weighbridgeTonnage";
@@ -24,7 +26,7 @@ import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { DriversIcon } from "../footer/NavIcons";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
-import { carriesCargo, fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
+import { fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
 
 // Vehicle-type filter. A driver's type is the class of the unit on their row
 // (last driven, else posted), resolved by the same fleetType the map's Fleets
@@ -248,7 +250,7 @@ export default function DriversScreen() {
 
   // Live fleet (shared SSE stream) — powers the selected driver's realtime
   // gauges/radar. Same list the map renders, no extra request.
-  const { vehicles: liveVehicles } = useFleetLiveShared();
+  const { vehicles: liveVehicles, orgId: liveOrgId } = useFleetLiveShared();
 
   // One batched request: roster + EVERY driver's analytics (kept warm on the
   // server). Selecting a driver is then a pure in-memory lookup — instant,
@@ -509,6 +511,8 @@ export default function DriversScreen() {
       </div>
       {panelOpen && detail?.driver && (
         <DriverPanel
+          companyId={activeCompanyId}
+          orgId={liveOrgId}
           detail={detail}
           row={drivers.find((d) => d.id === selectedId)}
           liveVehicle={liveVehicle}
@@ -596,7 +600,7 @@ function WeighbridgeNote({ wb }) {
   );
 }
 
-function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
+function DriverPanel({ companyId, orgId, detail, row, liveVehicle, onReport, onClose }) {
   const { driver, totals, heaviestLoad, byDay = [], incidents } = detail;
   const tier = ratingTier(driver.rating, driver.ratingBand);
   const st = statusMeta(row?.status ?? driver.status);
@@ -648,7 +652,8 @@ function DriverPanel({ detail, row, liveVehicle, onReport, onClose }) {
       </header>
 
       <div className="dr-panel__body" ref={ref}>
-        <DriverIdCard driver={driver} tier={tier} st={st} row={row} w={w} liveVehicle={liveVehicle} />
+        <DriverIdCard driver={driver} tier={tier} st={st} row={row} w={w} liveVehicle={liveVehicle}
+                      totals={totals} windowDays={totals.windowDays ?? 90} companyId={companyId} orgId={orgId} />
 
         <section className="dr-panel__sec">
           <h3 className="dr-panel__h">Last {fmt(windowDays)} Days</h3>
@@ -1066,29 +1071,13 @@ function FleetCard({ fleet, loading }) {
  * Engine off, or no unit of theirs in this fleet: the rings empty, the
  * figures read "—", the radar greys, and the state line says which it is.
  */
-function DriverIdCard({ driver, tier, st, row, w, liveVehicle }) {
+function DriverIdCard({ driver, tier, st, row, w, liveVehicle, totals, windowDays, companyId, orgId }) {
   const v        = liveVehicle;
   const engineOn = v?.engine === "on";
-  const speed    = v?.speed ?? 0;
-  const fuel     = v?.fuelLevel ?? 0;
-  const loadPct  = v?.maxPayload > 0 ? Math.min(100, Math.round(((v?.weight ?? 0) / v.maxPayload) * 100)) : 0;
-  const temp     = v?.engineTemp ?? 0;
-  const oil      = v?.oilLevel ?? 0;
-
-  const gauges = [
-    { key: "speed", label: "Speed", unit: "km/h", value: speed,   max: 120,
-      tone: speed > (v?.speedLimit ?? 80) ? "crit" : "ok" },
-    { key: "fuel",  label: "Fuel",  unit: "%",    value: fuel,    max: 100,
-      tone: fuel < 15 ? "crit" : fuel < 40 ? "warn" : "ok" },
-    { key: "load",  label: "Load",  unit: "%",    value: loadPct, max: 100,
-      tone: loadPct > 95 ? "crit" : loadPct > 80 ? "warn" : "info" },
-    { key: "temp",  label: "Temp",  unit: "°C",   value: temp,    max: 120,
-      tone: temp > 105 ? "crit" : temp > 95 ? "warn" : "info" },
-    { key: "oil",   label: "Oil",   unit: "%",    value: oil,     max: 100,
-      tone: oil < 20 ? "crit" : oil < 40 ? "warn" : "ok" },
-  // A generator or motorbike has no load to gauge; the radar takes any count.
-  ].filter((g) => g.key !== "load" || !v || carriesCargo(v));
-  const liveState = !v ? "No vehicle on record" : engineOn ? "Live" : "Engine off";
+  const liveState = !v ? "No vehicle on record" : engineOn ? `Live · ${Math.round(v.speed ?? 0)} km/h` : "Engine off";
+  const dash = useDashcamBreaches(companyId, orgId);
+  const tiles = complianceTiles(totals, dash, { driver, vehicle: row?.vehicle ?? v?.id ?? null, windowDays });
+  const sum = complianceWords(tiles);
 
   return (
     <section className={`dr-idcard${engineOn ? " dr-idcard--on" : ""}`} aria-label="Driver ID card">
@@ -1134,70 +1123,70 @@ function DriverIdCard({ driver, tier, st, row, w, liveVehicle }) {
           </span>
           {v && <span className="dr-live__unit">{v.id}</span>}
         </div>
-        <div className="dr-idcard__instruments">
-          <DriverRadar gauges={gauges} off={!engineOn} />
-          <ul className="dr-gauges">
-            {gauges.map((g) => <DriverGauge key={g.key} g={g} off={!engineOn} />)}
-          </ul>
-        </div>
+        <ComplianceCard tiles={tiles} sum={sum} dash={dash} />
       </div>
     </section>
   );
 }
 
-/** One ring: the share of its scale filled, the figure in the middle, the
- *  label and unit under it. Colour only where the reading has a threshold. */
-function DriverGauge({ g, off }) {
-  const r = 18, c = 22;
-  const circ = 2 * Math.PI * r;
-  const share = off ? 0 : Math.max(0, Math.min(g.value / g.max, 1));
+/**
+ * Compliance, where the live gauges were (operator, 4 Nov 2026): each breach
+ * our reports count, how many times this driver did it, green at none and red
+ * past it, with the days each covers (lib/driverCompliance).
+ */
+function ComplianceCard({ tiles, sum, dash }) {
   return (
-    <li className={`dr-gauge dr-meter--${off ? "off" : g.tone}`}>
-      <span className="dr-gauge__ring">
-        <svg className="dr-gauge__svg" viewBox="0 0 44 44" aria-hidden="true">
-          <circle className="dr-gauge__track" cx={c} cy={c} r={r} />
-          <circle
-            className="dr-gauge__fill" cx={c} cy={c} r={r}
-            strokeDasharray={`${circ * share} ${circ}`}
-            transform={`rotate(-90 ${c} ${c})`}
-          />
-        </svg>
-        <span className="dr-gauge__val">{off ? "-" : Math.round(g.value)}</span>
-      </span>
-      <span className="dr-gauge__lbl">{g.label}<span className="dr-meter__unit">{g.unit}</span></span>
-    </li>
+    <div className="dr-comp" aria-label="Compliance">
+      <div className="dr-comp__head">
+        <span className="dr-comp__title">Compliance</span>
+        <span className={`dr-comp__sum dr-comp__sum--${sum.tone}`}>{sum.words}</span>
+      </div>
+      <ul className="dr-comp__grid">
+        {tiles.map((t) => (
+          <li key={t.key} className={`dr-comp__tile${t.count == null ? " dr-comp__tile--na" : t.count > 0 ? " dr-comp__tile--bad" : " dr-comp__tile--ok"}`}
+              title={`${t.label}: ${t.count == null ? (t.why ?? "not read") : t.count} · last ${t.days} days`}>
+            <span className="dr-comp__n">{t.count == null ? "-" : t.count.toLocaleString("en-GB")}</span>
+            <span className="dr-comp__l">{t.label}</span>
+            <span className="dr-comp__d">{t.count == null && t.why ? t.why : `Last ${t.days} days`}</span>
+          </li>
+        ))}
+      </ul>
+      {dash.note && <p className="dr-comp__note">{dash.note}</p>}
+      <p className="dr-comp__note">Phone, seatbelt, free-wheeling and camera covered come from the dashcams, which keep the last {DASHCAM_DAYS} days.</p>
+    </div>
   );
 }
 
-/** The same five readings as one shape, each spoke its share of its own scale. */
-function DriverRadar({ gauges, off }) {
-  const n = gauges.length;
-  const CX = 50, CY = 46, R = 30;
-  const step = (2 * Math.PI) / n;
-  const pt = (i, rr) => [CX + rr * Math.cos(-Math.PI / 2 + i * step), CY + rr * Math.sin(-Math.PI / 2 + i * step)];
-  const poly = (rr) => gauges.map((_, i) => pt(i, typeof rr === "function" ? rr(i) : rr))
-    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + "Z";
-  const vals = gauges.map((g) => (off ? 0 : Math.max(0, Math.min(g.value / g.max, 1))));
-  const label = off ? "No live readings" :
-    gauges.map((g) => `${g.label} ${Math.round(g.value)} ${g.unit}`).join(", ");
-  return (
-    <svg className={`dr-radar${off ? " dr-radar--off" : ""}`} viewBox="0 0 100 92" role="img" aria-label={label}>
-      {[0.33, 0.66, 1].map((lvl) => <path key={lvl} className="dr-radar__grid" d={poly(R * lvl)} />)}
-      {gauges.map((g, i) => {
-        const p = pt(i, R);
-        return <line key={g.key} className="dr-radar__grid" x1={CX} y1={CY} x2={p[0]} y2={p[1]} />;
-      })}
-      <path className="dr-radar__shape" d={poly((i) => R * Math.max(vals[i], 0.03))} />
-      {gauges.map((g, i) => {
-        const p = pt(i, R * Math.max(vals[i], 0.03));
-        return <circle key={g.key} className="dr-radar__pt" cx={p[0]} cy={p[1]} r="2" />;
-      })}
-      {gauges.map((g, i) => {
-        const p = pt(i, R + 10);
-        return <text key={g.key} className="dr-radar__axis" x={p[0]} y={p[1]} textAnchor="middle" dominantBaseline="middle">{g.label}</text>;
-      })}
-    </svg>
-  );
+/** Driver Scorecard lines and dashcam alarms for the last DASHCAM_DAYS, once per organisation for a few minutes. */
+const dashKept = new Map();
+const DASH_KEEP_MS = 5 * 60_000;
+function useDashcamBreaches(companyId, orgId) {
+  const key = `${companyId ?? ""}|${orgId ?? ""}`;
+  const [state, setState] = useState(() => {
+    const k = dashKept.get(key);
+    return k && Date.now() - k.at < DASH_KEEP_MS ? k.value : { status: "idle" };
+  });
+  useEffect(() => {
+    if (!companyId || !orgId) return undefined;
+    const k = dashKept.get(key);
+    if (k && Date.now() - k.at < DASH_KEEP_MS) { setState(k.value); return undefined; }
+    let live = true;
+    setState({ status: "loading" });
+    const day = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
+    const now = Date.now();
+    const from = now - DASHCAM_DAYS * 86_400_000;
+    Promise.all([
+      getDriverScores({ companyId, from: day(from), to: day(now) }),
+      loadDashcamAlarms({ orgId, from }),
+    ]).then(([scores, cams]) => {
+      const value = { status: "done", scores, alarms: cams.alarms, cameras: cams.cameras,
+        note: cams.failed ? "The camera server did not answer, so camera covered may be short." : scores?.dashcam?.complete === false ? scores.dashcam.note : null };
+      dashKept.set(key, { at: Date.now(), value });
+      if (live) setState(value);
+    }).catch(() => { if (live) setState({ status: "error" }); });
+    return () => { live = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return state;
 }
 
 function StarRating({ value }) {
@@ -1964,4 +1953,4 @@ function DayLoads({ loads }) {
       {loads.length > shown.length && <li className="dr-dayloads__more">and {loads.length - shown.length} more</li>}
     </ul>
   );
-}
+}

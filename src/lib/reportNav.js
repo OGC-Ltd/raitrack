@@ -26,6 +26,9 @@ export const REPORT_NODES = [
  */
 export const hasTankersTab = (can, orgCode) => can('telemetry:read') && templateFor('tankers', orgCode) != null;
 
+/** Does Movements carry a Deliveries tab (the day's shared vehicles and their customers)? (operator, 4 Nov 2026) */
+export const hasDeliveriesTab = (can, orgCode) => can('telemetry:read') && templateFor('deliveries', orgCode) != null;
+
 /**
  * Does Movements carry a Dormant Assets tab (trackers that have stopped
  * sending, by the day of their last message)? Renamed from Non-Updating
