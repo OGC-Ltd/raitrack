@@ -12,8 +12,8 @@ const idle = { ...trip, vehicleId: "v2", plate: "KTCC 1", group: "Tractors", dis
 describe("the sheet's row", () => {
   it("carries every column in the sheet's order", () => {
     expect(rowCells(trip)).toEqual([
-      "KDL 208X", "2 Nov 22:51 to 3 Nov 20:03 (21 h 12 min)", "209.70", "40.91", "250.61", "33.48", "0.00", "217.12",
-      "OPAPO", "77", "2.30", "600", "PROBE OK", "Sukari",
+      "KDL 208X", "2 Nov 22:51 to 3 Nov 20:03 (21 h 12 min)", "209.7", "40.9", "250.6", "33.5", "0.0", "217.1",
+      "OPAPO", "77.00", "2.30", "600", "PROBE OK", "Sukari",
     ]);
     expect(rowCells(trip)).toHaveLength(COLUMNS.length);
   });
