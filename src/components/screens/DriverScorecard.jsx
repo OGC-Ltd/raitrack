@@ -22,6 +22,7 @@ import { useAppSelector } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import LoadError from "../shared/LoadError";
+import { downloadTableCsv } from "../../utils/tableExport";
 
 const DAY = 86_400_000;
 /** A fleet day (EAT) as YYYY-MM-DD. */
@@ -186,6 +187,15 @@ export default function DriverScorecard() {
   const pageCount = Math.max(1, Math.ceil(sorted.length / step));
   const at = Math.min(page, pageCount - 1);
   const pageRows = sorted.slice(at * step, at * step + step);
+  // The scorecard as a CSV (operator, 4 Nov 2026: CSV on every report): the table's columns, every driver in the list
+  const downloadCsv = (list) => downloadTableCsv({
+    head: ["Driver", "Vehicles", "Days", "Trips", "Trip pay (KES)", "Fuel pts", "Speed pts", "Safety pts", "Gross (KES)", "Est. net (KES)",
+      ...VIOLATIONS.map((k) => KIND_LABEL[k]), "Standing"],
+    body: list.map((d) => [titleCase(d.name), [...new Set(d.byDay.flatMap((x) => x.plates))].join(" · "), d.days, d.trips,
+      d.pay?.tripPay ?? "", d.fuelPoints ?? "", d.speedPoints, d.safetyPoints, grossOf(d) ?? "", d.pay?.net ?? "",
+      ...VIOLATIONS.map((k) => d.violations[k] ?? 0), standingOf(d).label]),
+    filenameSlug: `driver-scorecard-${period.from}${period.to !== period.from ? `-to-${period.to}` : ""}`,
+  });
 
   const totals = useMemo(() => {
     const list = data?.drivers ?? [];
@@ -247,6 +257,11 @@ export default function DriverScorecard() {
                   onClick={() => download(picked.size ? [...picked] : null, "list")}
                   title={picked.size ? "Download the scorecard for the ticked drivers" : "Download the scorecard for every driver in the period"}>
             {pdf.busy === "list" ? "Preparing PDF…" : picked.size ? `Download PDF (${picked.size})` : "Download PDF (all)"}
+          </button>
+          <button type="button" className="dr-pager__btn" disabled={!sorted.length}
+                  onClick={() => downloadCsv(picked.size ? sorted.filter((d) => picked.has(d.driverId)) : sorted)}
+                  title={picked.size ? "The ticked drivers as a CSV (opens in Excel)" : "Every driver in the period as a CSV (opens in Excel)"}>
+            {picked.size ? `CSV (${picked.size})` : "CSV (all)"}
           </button>
           {picked.size > 0 && (
             <button type="button" className="sc-pdf__clear" onClick={() => setPicked(new Set())}>Clear selection</button>

@@ -31,6 +31,7 @@ import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overSta
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
+import { docCsv, docSlug } from '../../lib/docCsv';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import { IncidentDialog, LoggedIncidents } from './OperatorIncidents';
@@ -51,15 +52,21 @@ import { flowDoc } from '../../lib/reportDocs';
 import TankersReport from './TankersReport';
 import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
+import DeliveriesReport from './DeliveriesReport';
 import TatFuelReport from './TatFuelReport';
 import SpeedReport from './SpeedReport';
 import OfflineReport from './OfflineReport';
-import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
+import { loadMovementReport, makeReportDoc } from '../../api/reports';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPreview from '../shared/PdfPreview';
+import { loadZones } from '../../hooks/useEstateZones';
+import { depotsFor, findDepots, depotAt } from '../../lib/movementDepots';
+import { withStoDirections } from '../../lib/stoUnits';
+import { movementDoc } from '../../lib/movementDoc';
+import { docHtml } from '../../lib/docHtml';
 import JpegButton from '../shared/JpegButton';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -408,6 +415,11 @@ function ShiftReport({ orgId, vehicles, groups }) {
             Undo edits
           </button>
         )}
+        <button type="button" className="sp4-ghost-btn rpt-log" disabled={run.status !== 'done' || !doc}
+                onClick={() => doc && downloadTableCsv({ ...docCsv(pdfDoc(doc)), filenameSlug: docSlug(doc) })}
+                title="The report as a CSV (opens in Excel), with your edits">
+          <i className="ti ti-file-spreadsheet" aria-hidden="true" /> CSV
+        </button>
         <JpegButton className="sp4-ghost-btn rpt-log" onSave={downloadJpeg}
                     disabled={Boolean(pdf.busy) || run.status !== 'done'} busy={pdf.busy === 'jpeg'} />
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={download}
@@ -734,12 +746,13 @@ function TypePicker({ types, picked, counts, onChange }) {
  * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
  * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, geofences, tatFuel, speed, dormant }) {
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, speed, dormant }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !geofences && !tatFuel && !speed && !dormant) return <MovementsReport orgId={orgId} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !speed && !dormant) return <MovementsReport orgId={orgId} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
+    deliveries && { key: 'deliveries', label: 'Deliveries' },
     geofences && { key: 'geofences', label: 'Geofences' },
     tatFuel && { key: 'tatFuel', label: 'TAT and Fuel' },
     speed && { key: 'speed', label: 'Speed Report' },
@@ -759,6 +772,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, geofenc
       {tankers && (
       <div className="mvt-panel" role="tabpanel" id="mvt-tankers-panel" aria-labelledby="mvt-tankers" hidden={tab !== 'tankers'}>
         <TankersReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} active={tab === 'tankers'} />
+      </div>
+      )}
+      {deliveries && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-deliveries-panel" aria-labelledby="mvt-deliveries" hidden={tab !== 'deliveries'}>
+        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />
       </div>
       )}
       {geofences && (
@@ -827,6 +845,14 @@ function MovementsReport({ orgId }) {
         if (id !== runId.current) return;
         setRun({ status: 'loading', done: reports.length, of: windows.length });
       }
+      // Menengai: a unit at the Nairobi depot reads At STO (operator, 4 Nov 2026: "units that are at
+      // Nairobi depot current location to just show At STO rather than from/to or stopped")
+      if (/^MENENGAI$/i.test(String(reports[0]?.orgCode ?? ''))) {
+        const fc = await loadZones(orgId).catch(() => null);
+        if (id !== runId.current) return;
+        const fence = (fc?.features ?? []).find((f) => /nairobi\s*depot/i.test(String(f?.properties?.name ?? '')) && f?.geometry) ?? null;
+        for (let i = 0; i < reports.length; i++) reports[i] = withStoDirections(reports[i], fence);
+      }
       const all = vehicleTypes(reports);
       setTypes((t) => (t?.some((x) => all.includes(x)) ? t.filter((x) => all.includes(x)) : defaultTypes(all)));
       setEdits(reports.map(() => ({})));
@@ -847,6 +873,18 @@ function MovementsReport({ orgId }) {
   // Vehicles of each type on the day shown, before the type filter
   const typeCounts = useMemo(() => Object.fromEntries((reports?.[day] ?? reports?.[0])?.groups.map((g) => [g.name, g.rows.length]) ?? []), [reports, day]);
   const report = useMemo(() => (reports ? onlyTypes(reports[day] ?? reports[0], picked) : null), [reports, day, picked]);
+  // Depots marked blue (operator, 4 Nov 2026: Menengai's Van Sales at the
+  // Nairobi depot): the organisation's fences, found by name (lib/movementDepots)
+  const depotOrg = reports?.[0]?.orgCode ?? null;
+  const [depots, setDepots] = useState({ code: null, found: [], missing: [] });
+  useEffect(() => {
+    if (!orgId || !depotsFor(depotOrg).length || depots.code === depotOrg) return undefined;
+    let live = true;
+    loadZones(orgId)
+      .then((z) => { if (live) setDepots({ code: depotOrg, ...findDepots(depotOrg, z) }); })
+      .catch(() => { if (live) setDepots({ code: depotOrg, found: [], missing: depotsFor(depotOrg), failed: true }); });
+    return () => { live = false; };
+  }, [orgId, depotOrg]); // eslint-disable-line react-hooks/exhaustive-deps
   const dayEdits = useMemo(() => edits[day] ?? {}, [edits, day]);
   const kept = useMemo(() => (report ? applyEdits(report, dayEdits) : null), [report, dayEdits]);
   // "kcb 101", "KCB101A" and "101a" all find KCB 101A; the grouping name ("CPO - Menengai 12") too
@@ -877,15 +915,18 @@ function MovementsReport({ orgId }) {
   const problem = daysOpen ? daysProblem : null;
   const runDays = () => guard('Make the report for these days', () => execute({ mode: 'days', ...draft }));
 
-  const pdfBody = () => {
-    const each = pdfRequests(reports, edits, picked);
-    return each.length === 1 ? each[0] : { reports: each };
-  };
+  // The PDF is laid out here and drawn by the server from the document
+  // (operator, 4 Nov 2026), so the depots' blue is in it (lib/movementDoc)
+  const movementSheet = () => movementDoc(pdfRequests(reports, edits, picked), {
+    organisation: reports?.[0]?.organisation, orgCode: reports?.[0]?.orgCode, depots: depots.found,
+  });
+  const makeMovementPdf = (landscape = false) => makeReportDoc({ orgId, landscape, doc: movementSheet() });
   const downloadPdf = async () => {
     if (!reports || pdf.busy) return;
     setPdf({ busy: true, error: null });
     try {
-      await downloadEditedMovementReport({ orgId, request: pdfBody() });
+      const made = await makeMovementPdf();
+      saveFile(made.blob, made.filename);
       setPdf({ busy: false, error: null });
     } catch (err) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
@@ -895,8 +936,10 @@ function MovementsReport({ orgId }) {
     if (!reports || pdf.busy) return;
     setPdf({ busy: 'jpeg', error: null });
     try {
-      const { blob, filename } = await makeEditedMovementReport({ orgId, request: pdfBody(), landscape });
-      await savePdfAsJpeg(blob, filename);
+      // One continuous list, not A4 pages one under another (operator, 4 Nov 2026):
+      // the same sheet, laid out here on one long letterhead page
+      const sheet = movementSheet();
+      await saveLetterheadJpeg(docHtml(sheet, { logos: letterheadLogos(), landscape }), { filename: `${sheet.filename}.pdf`, landscape, continuous: true });
       setPdf({ busy: false, error: null });
     } catch (err) {
       setPdf({ busy: false, error: `The JPEG could not be made: ${err?.message ?? err}` });
@@ -909,7 +952,7 @@ function MovementsReport({ orgId }) {
     const id = ++previewId.current;
     setPreview({ status: 'loading' });
     try {
-      const file = await makeEditedMovementReport({ orgId, request: pdfBody() });
+      const file = await makeMovementPdf();
       if (id === previewId.current) setPreview({ status: 'done', ...file });
     } catch (err) {
       if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
@@ -1017,7 +1060,7 @@ function MovementsReport({ orgId }) {
         {run.status === 'loading' && (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report"
                      progress={run.of > 1 ? run.done / run.of : null}>
-            {run.of > 1 ? `Day ${Math.min(run.done + 1, run.of)} of ${run.of}. ` : ''}Reading where every unit was. Up to half a minute while new places are named.
+            {run.of > 1 ? `Day ${Math.min(run.done + 1, run.of)} of ${run.of}. ` : ''}{run.words ? `${run.words}…` : 'Reading where every unit was. Up to half a minute while new places are named.'}
           </EmptyNote>
         )}
         {run.status === 'error' && (
@@ -1045,6 +1088,7 @@ function MovementsReport({ orgId }) {
                 <span className="rpt-sub"> · {periodText(report.from, report.to)}{report.morl ? ` · ${report.morl} geofence` : ''}</span>
                 {changed > 0 && <span className="rpt-edited"> · {changed} edited</span>}
               </>}
+              onCsv={kept.counts.total ? () => { const sheet = movementSheet(); downloadTableCsv({ ...docCsv(sheet), filenameSlug: docSlug(sheet) }); } : undefined}
               onPdf={pdf.busy ? undefined : downloadPdf}
               actions={<>
                 {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits((all) => all.map(() => ({})))}>Undo edits</button>}
@@ -1058,6 +1102,17 @@ function MovementsReport({ orgId }) {
               </>}
             />
             {preview && <PdfPreview state={preview} caption={previewCaption} edited={changed} onRetry={previewPdf} onClose={closePreview} />}
+            {depots.code === depotOrg && (depots.found.length > 0 || depots.missing.length > 0) && (
+              <p className="mvr-depots" role="note">
+                {depots.found.map((d) => (
+                  <span key={d.key}><span className="mvr-depots__sw" style={{ background: d.fill }} aria-hidden="true" />
+                    Blue: {d.who} units at the {d.label}, inside its geofence or within {d.radiusM / 1000} km.</span>
+                ))}
+                {depots.missing.map((d) => (
+                  <span key={d.key} className="rpt-warn">The {d.label} geofence {depots.failed ? 'could not be read' : 'is not on the platform yet'}, so no unit is marked blue.</span>
+                ))}
+              </p>
+            )}
             {report.groups.length > 0 && (
               <div className="mvr-find">
                 <div className="sp4-search-wrap mvr-find__box">
@@ -1112,7 +1167,9 @@ function MovementsReport({ orgId }) {
                                 style={!out && TINT[state] ? { background: TINT[state] } : undefined}>
                               <td className={`rpt-unit${silent ? ' mvr-silent' : ''}`}>{row.grouping}</td>
                               <td className={row.stale ? 'mvr-silent' : undefined}>{stamp(row.lastAt)}</td>
-                              <td className={out ? undefined : isLoading(row) ? 'mvr-cell--loading' : state === 'at' ? 'mvr-cell--morl' : isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}>
+                              <td className={out ? undefined : isLoading(row) ? 'mvr-cell--loading' : state === 'at' ? 'mvr-cell--morl'
+                                : depotAt(row, g.name, depots.found) ? 'mvr-cell--depot' : isMoving({ ...row, state }) ? 'mvr-cell--moving' : undefined}
+                                  title={!out && depotAt(row, g.name, depots.found) ? `At the ${depotAt(row, g.name, depots.found).label} (within ${depotAt(row, g.name, depots.found).radiusM / 1000} km)` : undefined}>
                                 <input type="text" className={`mvr-edit${locationChanged(row, location) ? ' mvr-edit--changed' : ''}`}
                                        value={location} placeholder="-" maxLength={200} disabled={out}
                                        aria-label={`Location of ${row.plate}`}
@@ -1486,7 +1543,7 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>

@@ -468,3 +468,36 @@ select.mvr-edit { min-width: 110px; }
 .tat-field { display: inline-flex; align-items: center; gap: 6px; }
 .tat-input { height: 30px; padding: 0 8px; border: 1px solid var(--sp4-line-hi); border-radius: 6px; background: transparent; color: var(--sp4-text-1); font: inherit; }
 .tat-table td { white-space: nowrap; }
+
+/* Movements: a unit at a depot (operator, 4 Nov 2026: Menengai's Van Sales at the Nairobi depot, blue) */
+.mvr-table td.mvr-cell--depot { background: #9cc7f5; }
+.mvr-cell--depot .mvr-edit { background: rgba(255, 255, 255, .35); }
+.mvr-depots { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px var(--sp4-gutter, 12px) 0; color: var(--sp4-text-3); font-size: var(--sp4-body, 12px); }
+.mvr-depots__sw { display: inline-block; width: 14px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+
+/* Deliveries (operator, 4 Nov 2026): the day's vehicles and their customers */
+.dlv-plan { margin: 10px var(--sp4-gutter, 12px); padding: 10px 12px; border: 1px solid var(--sp4-line, rgba(127,127,127,.25)); border-radius: 10px; }
+.dlv-plan__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.dlv-plan__title { margin: 0; font-size: 13px; font-weight: 700; }
+.dlv-plan__warn { margin: 4px 0 8px; font-size: 12px; }
+.dlv-plan__list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dlv-plan__veh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.dlv-plan__plate { font-weight: 700; min-width: 80px; }
+.dlv-plan__x { padding: 2px 8px; }
+.dlv-plan__add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dlv-table th.dlv-day { text-align: center; background: #00b0f0; color: #0b1f2a; font-weight: 700; }
+.dlv-table td b.dlv-all { color: #2e7d32; }
+.dlv-more { padding: 2px 8px; font-size: 12px; }
+.dlv-cust td { background: color-mix(in srgb, var(--sp4-text-1, #000) 3%, transparent); }
+.dlv-cust ul { list-style: none; margin: 0; padding: 4px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
+.dlv-cust li { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.dlv-cust--done i { color: #2e7d32; } .dlv-cust--no i { color: #c62828; }
+.dlv-find { position: relative; flex: 1 1 320px; max-width: 420px; }
+.dlv-find__list { position: static; list-style: none; margin: 4px 0 0; padding: 4px; max-height: 320px; overflow: auto;
+  background: var(--sp4-surface, #fff); border: 1px solid var(--sp4-line, rgba(127,127,127,.3)); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+.dlv-find__hit { display: flex; width: 100%; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 0; background: none; border-radius: 6px; cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.dlv-find__hit:hover, .dlv-find__hit:focus-visible { background: color-mix(in srgb, currentColor 8%, transparent); }
+.dlv-find__none { padding: 6px 8px; }
+.dlv-stops-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.dlv-orders { width: 72px; text-align: right; font-weight: 700; }
+.dlv-orders--bad { outline: 2px solid #c62828; }

@@ -7,7 +7,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-export default function CheckPicker({ icon, label, options, picked, onChange, noun = 'items', allWord = 'All', search = false, minOne = false }) {
+const SHOW_MAX = 300;
+
+export default function CheckPicker({ icon, label, options, picked, onChange, noun = 'items', allWord = 'All', search = false, minOne = false, noAll = false }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const rootRef = useRef(null);
@@ -32,9 +34,18 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
     };
   }, [open]);
 
+  // A long list (thousands of geofences) shows what is ticked first and stops at
+  // SHOW_MAX; typing finds the rest
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? options.filter((o) => o.label.toLowerCase().includes(s)) : options;
+    const hits = s ? options.filter((o) => o.label.toLowerCase().includes(s)) : options;
+    const ticked = picked ? new Set(picked) : null;
+    const ordered = ticked && !s ? [...hits.filter((o) => ticked.has(o.value)), ...hits.filter((o) => !ticked.has(o.value))] : hits;
+    return ordered.slice(0, SHOW_MAX);
+  }, [options, q, picked]);
+  const more = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return (s ? options.filter((o) => o.label.toLowerCase().includes(s)).length : options.length) - SHOW_MAX;
   }, [options, q]);
 
   const toggle = (v) => {
@@ -56,11 +67,11 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
       {open && (
         <div className="drp-pop mvr-types__pop" role="group" aria-label={label}>
           <div className="drp-quick">
-            <button type="button" className={`drp-chip${all ? ' drp-chip--on' : ''}`} onClick={() => onChange(null)}>{allWord}</button>
+            {!noAll && <button type="button" className={`drp-chip${all ? ' drp-chip--on' : ''}`} onClick={() => onChange(null)}>{allWord}</button>}
             {!minOne && <button type="button" className="drp-chip" onClick={() => onChange([])} disabled={!set.size}>Clear</button>}
           </div>
           {search && options.length > 8 && (
-            <input type="search" className="rpt-select gfr-pick__q" placeholder={`Find ${noun}`} value={q}
+            <input type="search" className="rpt-select gfr-pick__q" placeholder={`Find ${noun}`} value={q} autoFocus
                    onChange={(e) => setQ(e.target.value)} aria-label={`Find ${noun}`} />
           )}
           <ul className="mvr-types__list">
@@ -75,6 +86,7 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
               </li>
             ))}
             {!shown.length && <li className="drp-hint">Nothing matches.</li>}
+            {more > 0 && <li className="drp-hint">{more.toLocaleString('en-GB')} more: type to find them.</li>}
           </ul>
         </div>
       )}
