@@ -28,6 +28,15 @@
  * one. Fillings and drains are the server's ledger, judged by its adjudicator
  * — this module does not decide what a drop was. Consumption is the tank
  * balance: start + filled − end − (drains the server called a theft).
+ *
+ * Fillings up to STOP_GAP_MS apart are one stop at the pump, one row (operator,
+ * 4 Nov 2026): the ledger measures each rise over a window that can take in the
+ * next filling, so adding them counted the same fuel twice (KCS 644G, 2 Nov:
+ * 85.8 + 78.3 L while the tank went from 151 to 237 L). A drain a reviewer ruled
+ * out is listed but is not lost fuel.
+ *
+ * fleet-server fuel/fuel-balance works these figures out the same way for TAT
+ * and Fuel: a change here has to be made there too.
  */
 
 export const MOVING_KMH = 3;
@@ -155,6 +164,31 @@ export function engineMs(pings, gapMs = GAP_MS) {
 export const countsAsFilling = (f) => f.verdict === 'REFILL' || f.verdict === 'PENDING' || f.verdict == null;
 /** A drain the server called a possible theft — the only one subtracted as lost. */
 export const isTheft = (d) => d.verdict === 'DRAIN' && d.drainCause === 'SIPHON';
+/**
+ * A reviewer's answer that it was not a theft. A confirmed theft also carries a
+ * dismissedAt (it was dismissed into its follow-up on the way), so that alone says
+ * nothing where a review has answered since.
+ */
+const RULED_OUT = new Set(['DISMISSED', 'NOT_THEFT', 'PROBE_FAULT']);
+export const ruledOut = (d) => RULED_OUT.has(d.reviewStatus) || (d.reviewStatus == null && d.dismissedAt != null);
+/** Fillings this close are one stop at the pump. */
+export const STOP_GAP_MS = 60 * 60_000;
+
+/** Fillings as stops, in time order: the tank's rise over the stop, or its biggest single rise if that is more. */
+export function fillingStops(fills) {
+  const stops = [];
+  for (const f of fills) {
+    const last = stops.at(-1);
+    if (last && f.at - last.at(-1).at <= STOP_GAP_MS) last.push(f);
+    else stops.push([f]);
+  }
+  return stops.map((stop) => {
+    const [first, end] = [stop[0], stop.at(-1)];
+    if (stop.length === 1) return first;
+    const span = first.beforeL != null && end.afterL != null ? end.afterL - first.beforeL : -Infinity;
+    return { ...first, afterL: end.afterL, volumeL: Math.max(span, ...stop.map((f) => f.volumeL ?? 0)) };
+  });
+}
 
 /**
  * The whole report.
@@ -171,7 +205,7 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
 
   const { start: fuelStartL, end: fuelEndL } = edgeLevels(rows);
 
-  const fills = fillings
+  const fills = fillingStops(fillings
     .filter(countsAsFilling)
     .map((f) => ({
       id: f.id,
@@ -182,7 +216,7 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
       volumeL: litres(f.observedRiseMl ?? f.filledMl),
       verdict: f.verdict ?? 'PENDING',
     }))
-    .sort((a, b) => a.at - b.at);
+    .sort((a, b) => a.at - b.at));
 
   const drops = drains
     .map((d) => {
@@ -199,7 +233,7 @@ export function buildFuelReport({ pings = [], fillings = [], drains = [], from, 
         volumeL: litres(d.cleanDropMl ?? d.measuredDropMl ?? d.stolenMl),
         verdict: d.verdict ?? 'PENDING',
         cause: d.drainCause ?? null,
-        theft: isTheft(d) && !probeDropout,
+        theft: isTheft(d) && !probeDropout && !ruledOut(d),
         probeDropout,
         moving: Number(d.initialSpeedKmh) > 0,
       };
