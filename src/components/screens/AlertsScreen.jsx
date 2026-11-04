@@ -518,7 +518,7 @@ function Facts({ alert, org }) {
   } else {
     const s = alert.speeding;
     rows.push(["Peak", kmh(s.peakKmh)], ["Limit", `${kmh(s.limitKmh)}${s.limitSource === "zone" ? " (zone)" : s.limitSource === "road" ? " (road)" : ""}`]);
-    rows.push(["Over by", `${Math.round(s.overByKmh)} km/h`]);
+    rows.push(["Over by", headline(alert).over]);
     if (s.avgKmh != null) rows.push(["Average", kmh(s.avgKmh)]);
     rows.push(["Lasted", duration(s.durationSec)]);
     if (s.distanceM != null) rows.push(["Distance", `${(s.distanceM / 1000).toFixed(1)} km`]);
@@ -601,7 +601,7 @@ function AlertPanel({ alert, org, start, canMap, onClose, onDecided, onToast, on
       </DetailSidebarIdent>
 
       <DetailSidebarFacts facts={[
-        { label: alert.kind === "fuel" ? "Lost" : "Over by", value: h.figure },
+        { label: alert.kind === "fuel" ? "Lost" : "Over by", value: alert.kind === "fuel" ? h.figure : h.over },
         { label: "When", value: when(alert.at) },
         { label: "State", value: <span className={`sp4-pill sp4-pill--${st.tone}`} title={st.meaning}>{st.label}</span> },
       ]} />
