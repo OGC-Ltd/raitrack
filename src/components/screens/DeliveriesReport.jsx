@@ -24,6 +24,8 @@ import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCusto
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { loadZones } from '../../hooks/useEstateZones';
+import { deliveriesDoc } from '../../lib/reportDocs';
+import { useReportEditor } from './ReportEditor';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { saveFile } from '../../api/tripReport';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -253,9 +255,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     { label: 'Orders fulfilled', value: sums ? `${sums.fulfilled}/${sums.planned}` : null },
   ];
 
+  // Edit (operator, 4 Nov 2026), as the other reports: a new run, group or choice of stops starts the sheet over
+  const editSource = useMemo(() => (done ? { done, showStops } : null), [done, showStops]);
+  const editor = useReportEditor({ orgId, source: editSource,
+    build: () => deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops, orgCode }) });
+
   // The server draws the PDF from the rows (reports/deliveries.pdf), as the other Movements tabs; the JPEG comes from that PDF
-  const makePdf = (landscape = false) => makeReportPdf({ orgId, kind: 'deliveries', landscape,
-    body: deliveriesPdfBody(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops }) });
+  const makePdf = (landscape = false) => (editor.edited ? editor.make(landscape) : makeReportPdf({ orgId, kind: 'deliveries', landscape,
+    body: deliveriesPdfBody(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops }) }));
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
@@ -304,7 +311,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             return (
               <button key={h} type="button" aria-pressed={on}
                       className={`sp4-filter-chip${on ? ' sp4-filter-chip--on' : ''}`}
-                      onClick={() => { setDaysOpen(false); execute({ mode: 'last', hours: h }); }}>
+                      onClick={() => editor.guard('Make the report again', () => { setDaysOpen(false); execute({ mode: 'last', hours: h }); })}>
                 {lastWords(h)}
               </button>
             );
@@ -325,7 +332,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 {daysProblem && <span className="rpt-problem" role="status">{daysProblem}</span>}
                 <button type="button" className="sp4-submit-btn frp-run"
                         disabled={run.status === 'loading' || Boolean(problem)} title={problem ?? 'Make the report'}
-                        onClick={() => { close(); execute({ mode: 'days', ...draft }); }}>
+                        onClick={() => { close(); editor.guard('Make the report again', () => execute({ mode: 'days', ...draft })); }}>
                   {run.status === 'loading' ? 'Running…' : 'Run report'}
                 </button>
               </div>
@@ -336,15 +343,17 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         <ChoicePicker icon="ti-users-group" label="Group" align="right" value={group}
                       options={[{ value: null, label: 'All groups', note: plan.vehicles.length },
                         ...groupNames.map((name) => ({ value: name, label: name, note: groupCount(name) }))]}
-                      onChange={setGroup} />
+                      onChange={(g) => editor.guard('Show another group', () => setGroup(g))} />
 
         <button type="button" className="sp4-submit-btn frp-run rpt-run"
-                onClick={() => execute(daysOpen ? { mode: 'days', ...draft } : sel)}
+                onClick={() => editor.guard('Make the report again', () => execute(daysOpen ? { mode: 'days', ...draft } : sel))}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
+
+      {editor.overlay}
 
       <div className="sp4-body rpt-body">
         {/* The day's list: the vehicles shared, each with its customers */}
@@ -444,10 +453,11 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               onCsv={done.rows.length ? saveCsv : undefined}
               onPdf={file.busy || !done.rows.length ? undefined : () => save('pdf')}
               actions={<>
+                {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <label className="dlv-stops-opt" title="The list of each vehicle's pick-up locations, ticked or not, under the table">
-                  <input type="checkbox" checked={showStops} onChange={(e) => setShowStops(e.target.checked)} /> Show pick-up locations
+                  <input type="checkbox" checked={showStops} onChange={(e) => { const on = e.target.checked; editor.guard(on ? 'Show the pick-up locations' : 'Leave the pick-up locations out', () => setShowStops(on)); }} /> Show pick-up locations
                 </label>
                 <JpegButton className="sp4-ghost-btn rpt-log" onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy) || !done.rows.length} title="The PDF report as an image" />
                 <button type="button" className="sp4-ghost-btn rpt-log" onClick={previewPdf} disabled={!done.rows.length} title="See the PDF before saving it">
@@ -477,7 +487,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                             <td key={i} className={i === 0 ? 'rpt-unit' : undefined}>
                               {i === 2 ? (
                                 <input type="text" inputMode="numeric" className={`mvr-edit dlv-orders${r.typed ? ' mvr-edit--changed' : ''}${typed[r.plate] && !readOrders(typed[r.plate]) ? ' dlv-orders--bad' : ''}`}
-                                       value={typed[r.plate] ?? v} aria-label={`Orders fulfilled by ${r.plate}, e.g. 8/10`} title="Type the orders fulfilled, e.g. 8/10"
+                                       value={typed[r.plate] ?? v} readOnly={editor.edited} aria-label={`Orders fulfilled by ${r.plate}, e.g. 8/10`}
+                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : 'Type the orders fulfilled, e.g. 8/10'}
                                        onChange={(e) => setTyped((t) => ({ ...t, [r.plate]: e.target.value }))} />
                               ) : v}
                             </td>

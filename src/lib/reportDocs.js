@@ -8,6 +8,8 @@
 // reports (Driver Conduct, Night Driving, Overspeeding, Utilisation, Tankers) are
 // read off the very flow their PDF is laid out from, so nothing is said twice.
 //
+// Deliveries mirrors the same file's renderDeliveriesPdf.
+//
 // Pure but for flowDoc's `parse`, which a browser's DOMParser fills in.
 
 import { CONTACT_LINE, reportNumber } from './reportLetterhead';
@@ -16,6 +18,7 @@ import { SECTIONS, offlineCount, rowCells as dormantCells, sectionDays, asAtWord
 import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCells as geofenceCells } from './geofenceReport';
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
+import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, spansDays, stamp, stopWords } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
 const PORTRAIT_MM = 184;
@@ -167,6 +170,55 @@ export function speedDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.
     meta: meta([['Fleet', fleet], ['Units', group === 'all' ? 'All units' : group], ['Day', words], ['Over the limit', plural(s.units, 'unit')]]),
     blocks,
     footer: `${fleet} · Speed Report · ${date}`,
+  };
+}
+
+const DELIVERY_WIDTHS = [22, 42, 24, 60, 36];
+
+/** The Deliveries Report. `stops: false` is the sheet's table alone, as its PDF. */
+export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = true, orgCode, now = Date.now() }) {
+  const withDay = spansDays(from, at);
+  const orders = `${fmt(rows.reduce((n, r) => n + r.fulfilled, 0))}/${fmt(rows.reduce((n, r) => n + r.planned, 0))}`;
+  const period = `${dmyhm(from)} to ${dmyhm(at)}`;
+  // Current location takes what is left, so the pages can be turned for the JPEG
+  const cols = columns(DELIVERY_WIDTHS, PORTRAIT_MM, { figures: new Set([2]), wrap: new Set([0, 1, 3]) }).map((c, i) => (i === 3 ? { ...c, w: 0 } : c));
+  const sheet = rows.length
+    ? { kind: 'table', cols, head: DELIVERY_HEADS, size: 7.8, rows: rows.map((r) => deliveryCells(r).map((t, i) => textCell(t, i === 0))) }
+    : { kind: 'none', text: 'No vehicles in the report.' };
+  const blocks = [];
+  if (!stops) {
+    blocks.push({ kind: 'bar', title: withDay ? `${dmy(from)} to ${dmy(at)}` : dmy(at), aside: plural(rows.length, 'vehicle') }, sheet);
+  } else {
+    blocks.push(
+      { kind: 'h2', title: '1. Overview', aside: `as at ${dmyhm(at)}` },
+      { kind: 'figures', items: [
+        { label: 'Vehicles', value: fmt(rows.length) },
+        { label: 'Out on delivery', value: fmt(rows.filter((r) => r.trip.leftAt != null && r.trip.arrivedAt == null).length) },
+        { label: 'Back at storage', value: fmt(rows.filter((r) => r.trip.arrivedAt != null).length) },
+        { label: 'Orders fulfilled', value: orders },
+      ] },
+      { kind: 'h2', title: '2. Deliveries', aside: period },
+      sheet,
+      { kind: 'h2', title: '3. Customers by vehicle' },
+    );
+    for (const r of rows) {
+      const leftWhen = r.trip.leftAt != null ? `${withDay ? `${stamp(r.trip.leftAt).slice(0, 5)} ` : ''}${stamp(r.trip.leftAt).slice(11, 16)}` : '';
+      const left = r.trip.leftAt != null && r.trip.leftFrom ? ` · left ${r.trip.leftFrom.label} ${leftWhen}` : '';
+      blocks.push({ kind: 'h3', title: r.plate, aside: `${r.fulfilled}/${r.planned} delivered${left}` });
+      if (!r.customers.length) { blocks.push({ kind: 'none', text: 'No customers given.' }); continue; }
+      blocks.push({ kind: 'table', cols: [{ w: 0, wrap: true }, { w: 68, wrap: true }], head: ['Stop', 'Result'], size: 7.8,
+        rows: r.customers.map((c) => [textCell(c.label),
+          { text: stopWords(c, withDay), ...(c.at != null ? { bold: true } : c.missing ? { tone: 'mut' } : { tone: 'flag' }) }]) });
+    }
+  }
+  blocks.push({ kind: 'note', text: CONTACT_LINE });
+  return {
+    title: 'DELIVERIES REPORT', docName: `Deliveries Report ${fleet}`, pairs: true,
+    filename: `Deliveries Report ${fleet} ${new Date(at + OFFSET).toISOString().slice(0, 10)}`,
+    reportNo: reportNumber('DL', orgCode, now), date: dmy(at),
+    meta: meta([['Fleet', fleet], ['Window', period], ['Units', group ?? 'All groups'], ['Vehicles', fmt(rows.length)], ['As at', dmyhm(at)], ['Orders fulfilled', orders]]),
+    blocks,
+    footer: `${fleet} · Deliveries Report · ${dmyhm(at)}`,
   };
 }
 
