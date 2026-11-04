@@ -18,6 +18,8 @@ import { metresToFence } from './movementDepots';
 export const STOP_MS = 90_000;
 /** Out of storage and back within this is the fix wandering at the gate, not a trip. */
 export const BLIP_MS = 10 * 60_000;
+/** Shorter than this in a storage's circle is driving past it, not coming back to it: the road runs through the 1 km. */
+export const MIN_STAY_MS = 10 * 60_000;
 /** Read first: the last days, which hold most trips under way; then a day further back at a time, up to MAX_LOOKBACK_DAYS. */
 export const LOOKBACK_DAYS = 3;
 export const MAX_LOOKBACK_DAYS = 10;
@@ -56,15 +58,15 @@ const isArea = (f) => {
 
 /**
  * The storages: MORL HQ as the Movements report names its fence (`morlName`),
- * else as the server finds it (a fence named MORL, else one with MORL but not
- * the farm, else the HQ yard), and the Nairobi depot.
+ * else a fence named MORL, else the HQ yard, and the Nairobi depot. Never any
+ * fence with MORL in its name: "MORL: BATCHUMA/MIASENYI -TOTAL NO STOP ZONE"
+ * lies on the Mombasa road, some 400 km from Nakuru.
  */
 export function findStorages(featureCollection, morlName = null) {
   const areas = (featureCollection?.features ?? []).filter(isArea);
   const byName = (re) => areas.find((f) => re.test(nameOf(f)));
   const morl = (morlName && areas.find((f) => nameOf(f) === morlName))
-    ?? byName(/^morl$/i) ?? areas.find((f) => /morl/i.test(nameOf(f)) && !/farm/i.test(nameOf(f)))
-    ?? byName(/nakuru\s*hq|menengai\s*yard/i);
+    ?? byName(/^morl$/i) ?? byName(/nakuru\s*hq/i) ?? byName(/menengai\s*yard/i);
   const nairobi = byName(/nairobi\s*depot/i);
   return [
     { key: 'morl', label: 'MORL', short: 'MORL', marginM: 0, fence: morl ?? null,
@@ -123,31 +125,59 @@ export function customersIn(featureCollection, storages = []) {
 }
 
 /**
- * The vehicle's trip out of storage up to `to`, from its readings (sorted):
- * the last time it left a storage, a stay outside shorter than BLIP_MS not
- * counting, and the first time back in one after it.
- * @returns {{ leftAt, leftFrom, arrivedAt, arrivedAt, arrivedTo, need } }
- *   `need`: no storage in what was read (read further back).
+ * Every trip out of storage up to `to`, from the vehicle's readings (sorted).
+ * A stay in a storage lasts MIN_STAY_MS, or is where the vehicle is now; out of
+ * storage and back within BLIP_MS is the fix wandering at the gate, one stay.
+ * @returns {{ trips: Array<{leftAt, leftFrom, arrivedAt, arrivedTo}>, inStorage, need }}
+ *   `inStorage`: the storage it is in at the end; `need`: no stay in what was
+ *   read (read further back).
  */
-export function tripOf(pings, storages, { to }) {
+export function tripsOf(pings, storages, { to }) {
   const marks = [];
   for (const p of pings ?? []) {
     if (p.t > to || !Number.isFinite(p?.lat) || !Number.isFinite(p?.lng)) continue;
     marks.push({ t: p.t, at: storageAt(p, storages) });
   }
-  if (!marks.some((m) => m.at)) return { leftAt: null, leftFrom: null, arrivedAt: null, arrivedTo: null, need: true };
-  let dep = -1;
-  for (let i = marks.length - 1; i > 0; i--) {
-    if (!marks[i - 1].at || marks[i].at) continue;
-    const back = marks.slice(i + 1).find((m) => m.at);
-    if (back && back.t - marks[i].t < BLIP_MS) continue;     // the fix wandered at the gate
-    dep = i;
-    break;
+  const stays = [];
+  let run = null;
+  const close = (end) => {
+    if (end == null || end - run.start >= MIN_STAY_MS) stays.push({ ...run, end });
+    run = null;
+  };
+  for (const m of marks) {
+    if (run && m.at?.key !== run.at.key) close(m.t);
+    if (m.at && !run) run = { at: m.at, start: m.t };
   }
-  // In a storage since the first reading: it has not left (in what was read)
-  if (dep < 0) return { leftAt: null, leftFrom: null, arrivedAt: null, arrivedTo: null, need: false, inStorage: marks[marks.length - 1].at };
-  const back = marks.slice(dep + 1).find((m) => m.at);
-  return { leftAt: marks[dep].t, leftFrom: marks[dep - 1].at, arrivedAt: back?.t ?? null, arrivedTo: back?.at ?? null, need: false };
+  if (run) close(null);    // still there: end null, however short so far
+
+  const merged = [];
+  for (const s of stays) {
+    const last = merged[merged.length - 1];
+    if (last && last.at.key === s.at.key && s.start - last.end < BLIP_MS) last.end = s.end;
+    else merged.push({ ...s });
+  }
+  const trips = [];
+  merged.forEach((s, i) => {
+    if (s.end == null) return;
+    const back = merged[i + 1];
+    trips.push({ leftAt: s.end, leftFrom: s.at, arrivedAt: back?.start ?? null, arrivedTo: back?.at ?? null });
+  });
+  const last = merged[merged.length - 1];
+  return { trips, inStorage: last?.end == null ? last?.at ?? null : null, need: !merged.length };
+}
+
+const overlaps = (trip, from, to) => trip.leftAt <= to && (trip.arrivedAt == null || trip.arrivedAt >= from);
+
+/**
+ * The trip the report shows: the last one in [from, to], or, with none, where
+ * it stood: a trip that ended before the window is not this report's.
+ * @returns {{ leftAt, leftFrom, arrivedAt, arrivedTo, need, inStorage? }}
+ */
+export function tripOf(pings, storages, { from = -Infinity, to }) {
+  const { trips, inStorage, need } = tripsOf(pings, storages, { to });
+  const shown = [...trips].reverse().find((x) => overlaps(x, from, to));
+  if (shown) return { ...shown, need: false };
+  return { leftAt: null, leftFrom: null, arrivedAt: null, arrivedTo: null, need, ...(inStorage ? { inStorage } : {}) };
 }
 
 /**
@@ -178,14 +208,15 @@ export function deliveries(pings, customers, { from, to }) {
  * One row: the vehicle's trip, its customers ticked off, where it is.
  * @param {object} plan     { plate, customers: [names] }
  * @param {object[]} pings  its readings, sorted
- * @param {number} [o.from]  the report's window starts here: a delivery before it does not count
+ * @param {number} [o.from]  the report's window starts here: every trip in the
+ *   window counts, a delivery before it does not. Not given: the last trip alone.
  */
-export function deliveryRow(plan, pings, storages, customerByName, { from = -Infinity, to, place = null, lastFix = null, atMorl = false, unread = false }) {
+export function deliveryRow(plan, pings, storages, customerByName, { from = null, to, place = null, lastFix = null, atMorl = false, unread = false }) {
   // Its last position as Movements has it, when newer than the readings: a
   // parked tracker can go quiet for days
   const all = lastFix && Number.isFinite(lastFix.lat) && Number.isFinite(lastFix.t) && lastFix.t <= to
     && !(pings ?? []).some((p) => p.t >= lastFix.t) ? [...(pings ?? []), lastFix] : (pings ?? []);
-  let trip = tripOf(all, storages, { to });
+  let trip = tripOf(all, storages, { from: from ?? -Infinity, to });
   // Movements reads it at MORL (the server's own MORL geofence): it is, whatever the readings missed
   if (atMorl && trip.leftAt == null && !trip.inStorage) {
     trip = { ...trip, need: false, inStorage: storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } };
@@ -197,7 +228,16 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = -Inf
     ...(plan.customers ?? []).map((n) => customerByName.get(n) ?? { name: n, label: n, missing: true }),
   ];
   const known = picked.filter((c) => !c.missing);
-  const done = trip.leftAt != null ? deliveries(pings, known, { from: Math.max(trip.leftAt, from), to: trip.arrivedAt ?? to }) : new Map();
+  // Each trip in the window, the earliest visit to a customer standing
+  const start = from ?? trip.leftAt;
+  const done = new Map();
+  if (start != null) {
+    for (const x of tripsOf(pings, storages, { to }).trips.filter((y) => overlaps(y, start, to))) {
+      for (const [name, when] of deliveries(pings, known, { from: Math.max(x.leftAt, start), to: Math.min(x.arrivedAt ?? to, to) })) {
+        if (!done.has(name)) done.set(name, when);
+      }
+    }
+  }
   const last = [...(pings ?? [])].reverse().find((p) => p.t <= to && Number.isFinite(p.lat));
   return {
     plate: plan.plate, vehicleId: plan.vehicleId, trip, place,

@@ -158,3 +158,72 @@ describe('the report window', () => {
     expect(deliveryRow(plan, pings, storages, byName, { from: at('2026-11-04T07:00:00'), to }).fulfilled).toBe(0);
   });
 });
+
+describe('every trip in the window, and only there', () => {
+  const NO_STOP = sq('MORL: BATCHUMA/MIASENYI -TOTAL NO STOP ZONE', -3.67, 38.94, 0.01);
+  const storages = findStorages({ features: [NO_STOP, ...zones.features] });
+  const byName = new Map(customersIn(zones, storages).map((c) => [c.name, c]));
+  const plan = { plate: 'KDE 127E', customers: ['MENENGAI_VS: JOJAC INVESTMENTS'] };
+  const today = at('2026-11-04T07:00:00');
+  const to = at('2026-11-04T12:00:00');
+
+  it('never takes a no-stop zone for MORL', () => {
+    expect(storages.find((s) => s.key === 'morl').fence.properties.name).toBe('Menengai Yard - Nakuru HQ');
+    const onMombasaRoad = { lat: -3.67, lng: 38.94 };
+    const pings = [p('2026-11-04T07:00:00', MORL), p('2026-11-04T08:00:00', ROAD), p('2026-11-04T10:00:00', onMombasaRoad), p('2026-11-04T11:00:00', onMombasaRoad)];
+    expect(tripOf(pings, storages, { to }).arrivedAt).toBeNull();
+  });
+
+  it('takes the HQ yard over another Menengai Yard, and never makes one up', () => {
+    const other = sq('Menengai yard', 0, 37);
+    expect(findStorages({ features: [other, ...zones.features] })[0].fence.properties.name).toBe('Menengai Yard - Nakuru HQ');
+    expect(findStorages({ features: [NO_STOP] })[0].fence).toBeNull();
+  });
+
+  it('does not credit today with yesterday’s trip', () => {
+    const pings = [
+      p('2026-11-03T06:00:00', MORL), p('2026-11-03T08:00:00', ROAD), p('2026-11-03T09:00:00', A), p('2026-11-03T09:05:00', A),
+      p('2026-11-03T10:00:00', ROAD), p('2026-11-03T11:00:00', MORL), p('2026-11-04T11:00:00', MORL),
+    ];
+    const r = deliveryRow(plan, pings, storages, byName, { from: today, to });
+    expect(r.fulfilled).toBe(0);
+    expect(rowCells(r)[1]).toBe('At MORL, not left');
+    expect(r.trip.arrivedAt).toBeNull();
+  });
+
+  it('keeps a trip begun yesterday and still out', () => {
+    const pings = [p('2026-11-03T06:00:00', MORL), p('2026-11-03T08:00:00', ROAD), p('2026-11-04T09:00:00', A), p('2026-11-04T09:05:00', A), p('2026-11-04T10:00:00', ROAD)];
+    const r = deliveryRow(plan, pings, storages, byName, { from: today, to });
+    expect(stamp(r.trip.leftAt)).toBe('03.11.2026 08:00:00');
+    expect(r.fulfilled).toBe(1);
+  });
+
+  it('counts a delivery on the day’s first trip after a second one begins', () => {
+    const pings = [
+      p('2026-11-04T07:00:00', MORL), p('2026-11-04T07:30:00', ROAD), p('2026-11-04T08:00:00', A), p('2026-11-04T08:05:00', A),
+      p('2026-11-04T08:30:00', ROAD), p('2026-11-04T09:00:00', MORL), p('2026-11-04T10:00:00', MORL), p('2026-11-04T10:30:00', ROAD),
+    ];
+    const r = deliveryRow(plan, pings, storages, byName, { from: today, to });
+    expect(r.fulfilled).toBe(1);
+    expect(stamp(r.trip.leftAt)).toBe('04.11.2026 10:30:00');
+  });
+
+  it('does not end a trip driving past a storage', () => {
+    const atSto = { lat: -1.3029, lng: 36.866 };
+    const beyond = { lat: -1.33, lng: 36.9 };
+    const pings = [
+      p('2026-11-04T07:00:00', MORL), p('2026-11-04T07:30:00', ROAD), p('2026-11-04T08:00:00', A), p('2026-11-04T08:05:00', A),
+      p('2026-11-04T10:00:00', atSto), p('2026-11-04T10:02:00', beyond), p('2026-11-04T11:00:00', beyond),
+    ];
+    const r = deliveryRow(plan, pings, storages, byName, { from: today, to });
+    expect(r.trip.leftFrom.label).toBe('MORL');
+    expect(stamp(r.trip.leftAt)).toBe('04.11.2026 07:30:00');
+    expect(r.trip.arrivedAt).toBeNull();
+    expect(r.fulfilled).toBe(1);
+  });
+
+  it('reads a van just back as back', () => {
+    const pings = [p('2026-11-04T07:00:00', MORL), p('2026-11-04T07:30:00', ROAD), p('2026-11-04T11:58:00', MORL)];
+    expect(stamp(tripOf(pings, storages, { to }).arrivedAt)).toBe('04.11.2026 11:58:00');
+  });
+});

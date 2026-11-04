@@ -64,14 +64,21 @@ export function complianceTiles(totals, dash, { driver, vehicle, windowDays = 90
       return { ...it, count: Number.isFinite(n) ? n : null, days: windowDays };
     }
     if (!read || noCameras) return { ...it, count: null, days: DASHCAM_DAYS, why: noCameras ? 'No dashcams' : dash?.status === 'error' ? 'Not read' : 'Reading…' };
-    const n = it.key === 'covered' ? coveredOn(dash.alarms, vehicle) : (score?.violations?.[it.key] ?? 0);
-    return { ...it, count: n, days: DASHCAM_DAYS };
+    if (it.key === 'covered') return { ...it, count: coveredOn(dash.alarms, vehicle), days: DASHCAM_DAYS };
+    // No line of theirs on the scorecard says nothing of what they did: not a clean sheet
+    if (!score) return { ...it, count: null, days: DASHCAM_DAYS, why: 'Not on the scorecard' };
+    return { ...it, count: score.violations?.[it.key] ?? 0, days: DASHCAM_DAYS };
   });
 }
 
-/** "Compliant", or how many breaches, from the tiles that were read. */
+/**
+ * How many breaches, from the tiles that were read. "Compliant" only when every
+ * tile was: what could not be read is not a clean sheet.
+ */
 export function complianceWords(tiles) {
-  const read = tiles.filter((t) => t.count != null);
-  const n = read.reduce((s, t) => s + t.count, 0);
-  return { total: n, words: n === 0 ? 'Compliant: no breaches' : `${n.toLocaleString('en-GB')} breach${n === 1 ? '' : 'es'}`, tone: n === 0 ? 'ok' : 'crit' };
+  const unread = tiles.filter((t) => t.count == null);
+  const n = tiles.reduce((s, t) => s + (t.count ?? 0), 0);
+  if (n > 0) return { total: n, words: `${n.toLocaleString('en-GB')} breach${n === 1 ? '' : 'es'}`, tone: 'crit' };
+  if (!unread.length) return { total: 0, words: 'Compliant: no breaches', tone: 'ok' };
+  return { total: 0, words: unread.some((t) => t.why === 'Reading…') ? 'Reading dashcams…' : 'No breaches in what was read', tone: 'na' };
 }

@@ -34,8 +34,30 @@ describe('Driver compliance', () => {
     expect(coveredOn(alarms, null)).toBe(0);
   });
 
-  it('says Compliant when there are none', () => {
-    const clean = complianceTiles({ overspeedingCases: 0, harshAccelerationCases: 0, harshBrakingCases: 0 }, { status: 'done', scores: { drivers: [] }, alarms: [], cameras: 2 }, { driver, vehicle: 'KCB 303Z' });
+  const zero = { overspeedingCases: 0, harshAccelerationCases: 0, harshBrakingCases: 0 };
+  const cleanScores = { drivers: [{ driverId: 'u1', name: 'Duncan Mwangi Ndegwa', violations: {} }] };
+
+  it('says Compliant only when every tile was read', () => {
+    const clean = complianceTiles(zero, { status: 'done', scores: cleanScores, alarms: [], cameras: 2 }, { driver, vehicle: 'KCB 303Z' });
     expect(complianceWords(clean)).toMatchObject({ total: 0, words: 'Compliant: no breaches', tone: 'ok' });
+  });
+
+  it('never says Compliant over what it could not read', () => {
+    const words = (dash) => complianceWords(complianceTiles(zero, dash, { driver, vehicle: 'KCB 303Z' }));
+    expect(words({ status: 'loading' })).toMatchObject({ words: 'Reading dashcams…', tone: 'na' });
+    expect(words({ status: 'idle' })).toMatchObject({ words: 'Reading dashcams…', tone: 'na' });
+    expect(words({ status: 'error' })).toMatchObject({ words: 'No breaches in what was read', tone: 'na' });
+    expect(words({ status: 'done', scores: cleanScores, alarms: [], cameras: 0 })).toMatchObject({ words: 'No breaches in what was read', tone: 'na' });
+  });
+
+  it('does not read a driver missing from the scorecard as clean', () => {
+    const tiles = complianceTiles(zero, { status: 'done', scores: { drivers: [] }, alarms: [], cameras: 2 }, { driver, vehicle: 'KCB 303Z' });
+    expect(tiles.find((x) => x.key === 'phone')).toMatchObject({ count: null, why: 'Not on the scorecard' });
+    expect(tiles.find((x) => x.key === 'covered').count).toBe(0);
+    expect(complianceWords(tiles)).toMatchObject({ words: 'No breaches in what was read', tone: 'na' });
+  });
+
+  it('still counts breaches while the dashcams are read', () => {
+    expect(complianceWords(complianceTiles(totals, { status: 'loading' }, { driver, vehicle: 'KCB 303Z' }))).toMatchObject({ total: 3, words: '3 breaches', tone: 'crit' });
   });
 });
