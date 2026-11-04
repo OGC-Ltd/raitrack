@@ -48,13 +48,14 @@ import ShiftDocument from './ShiftDocument';
 import TankersReport from './TankersReport';
 import GeofenceReport from './GeofenceReport';
 import TatFuelReport from './TatFuelReport';
+import SpeedReport from './SpeedReport';
 import OfflineReport from './OfflineReport';
 import { loadMovementReport, downloadEditedMovementReport, makeEditedMovementReport } from '../../api/reports';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPreview from '../shared/PdfPreview';
 import JpegButton from '../shared/JpegButton';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasTankersTab, hasDormantTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -93,14 +94,10 @@ const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
 /** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
-const GEOFENCES = 'geofences';
-const TAT_FUEL = 'tatFuel';
 /** The pages with a form of their own, not made from REPORTS. */
 const SERVER_TABS = {
   [SHIFT]: { label: 'Shift' },
   [MOVEMENTS]: { label: 'Movements' },
-  [GEOFENCES]: { label: 'Geofences' },
-  [TAT_FUEL]: { label: 'TAT and Fuel' },
 };
 
 
@@ -796,17 +793,21 @@ function TypePicker({ types, picked, counts, onChange }) {
  * another, counting each overview again from what is kept.
  */
 /**
- * Movements, with Tankers and Dormant Assets as tabs beside it for the
- * organisations that have them (operator, 3 Nov 2026: "the Tankers page should
- * be a tab under movements", then Dormant Assets too). Every tab stays mounted
- * so a run on one survives a look at another.
+ * Movements, with Tankers, Geofences, TAT and Fuel and Dormant Assets as tabs
+ * beside it for the organisations that have them (operator, 3 Nov 2026: "the
+ * Tankers page should be a tab under movements", then Dormant Assets too;
+ * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
+ * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, dormant }) {
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, geofences, tatFuel, speed, dormant }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !dormant) return <MovementsReport orgId={orgId} />;
+  if (!tankers && !geofences && !tatFuel && !speed && !dormant) return <MovementsReport orgId={orgId} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
+    geofences && { key: 'geofences', label: 'Geofences' },
+    tatFuel && { key: 'tatFuel', label: 'TAT and Fuel' },
+    speed && { key: 'speed', label: 'Speed Report' },
     dormant && { key: 'dormant', label: 'Dormant Assets' },
   ].filter(Boolean);
   return (
@@ -823,6 +824,21 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, dormant
       {tankers && (
       <div className="mvt-panel" role="tabpanel" id="mvt-tankers-panel" aria-labelledby="mvt-tankers" hidden={tab !== 'tankers'}>
         <TankersReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} active={tab === 'tankers'} />
+      </div>
+      )}
+      {geofences && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-geofences-panel" aria-labelledby="mvt-geofences" hidden={tab !== 'geofences'}>
+        <GeofenceReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />
+      </div>
+      )}
+      {tatFuel && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-tatFuel-panel" aria-labelledby="mvt-tatFuel" hidden={tab !== 'tatFuel'}>
+        <TatFuelReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'tatFuel'} />
+      </div>
+      )}
+      {speed && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-speed-panel" aria-labelledby="mvt-speed" hidden={tab !== 'speed'}>
+        <SpeedReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'speed'} />
       </div>
       )}
       {dormant && (
@@ -1520,9 +1536,8 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
-        : key === GEOFENCES ? <GeofenceReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} />
-        : key === TAT_FUEL ? <TatFuelReport key={orgId ?? 'none'} orgId={orgId} orgCode={orgCode} companyName={activeCompany?.name} /> : (<>
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
+        : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
         <div className="sp4-header-kpis">

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  placesIn, placeNames, visitsOf, geofenceRows, rowCells, counts, periodProblem, durationWords, stampWords, geofenceHtml,
+  placesIn, placeNames, visitsOf, geofenceRows, rowCells, counts, periodProblem, durationWords, stampWords, geofencePdfBody,
 } from './geofenceReport';
 import { templateFor, familyOf } from './reportTemplates';
-import { reportKeysFor, hasTankersTab } from './reportNav';
+import { reportKeysFor, hasTankersTab, hasGeofencesTab } from './reportNav';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 // Khalaba Station: a square; Magut: a circle 300 m round; a road that is no place
@@ -56,11 +56,12 @@ describe('Geofence Report', () => {
     const rows = geofenceRows(vehicles, (id) => pings[id], placesIn(zones), day);
     expect(rows.map((r) => r.vehicle)).toEqual(['WKS - Kabras - KCS 650G', 'WKS - Naitiri - KCR 210Y']);
     expect(counts(rows)).toEqual({ visits: 2, vehicles: 2, places: 2, still: 0 });
-    const { html, filename } = geofenceHtml(rows, { ...day, fleet: 'West Kenya', orgCode: 'KABRAS', logos: { rai: '', ogc: '' }, now: at('2026-11-03T13:00:00') });
-    expect(html).toContain('GEOFENCE REPORT');
-    expect(html).toContain('Duration in geofence');
-    expect(html).toContain('WKS - Kabras - KCS 650G');
-    expect(filename).toBe('Geofence Report West Kenya 2026-10-30.pdf');
+    const body = geofencePdfBody(rows, { ...day, fleet: 'West Kenya', places: ['Magut'], failed: 1 });
+    expect(body.fleet).toBe('West Kenya');
+    expect(body.places).toBe(1);
+    expect(body.failed).toBe(1);
+    expect(body.rows[0]).toMatchObject({ vehicle: 'WKS - Kabras - KCS 650G', open: false });
+    expect(geofencePdfBody(rows, { ...day, fleet: 'W' }).places).toBeNull();
   });
 
   it('refuses a period it cannot make', () => {
@@ -73,9 +74,11 @@ describe('Geofence Report', () => {
   it('is a template: West Kenya’s organisations have it, and make it together', () => {
     expect(templateFor('geofences', 'kabras')).toEqual({});
     expect(templateFor('geofences', 'MENENGAI')).toBeNull();
-    expect(familyOf('geofences', 'NZOIA').orgs).toEqual(['WESTSUGAR', 'KABRAS', 'NZOIA']);
-    expect(reportKeysFor(() => true, 'KABRAS')).toContain('geofences');
-    expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('geofences');
+    expect(familyOf('geofences', 'NZOIA')).toBeNull();
+    expect(familyOf('geofences', 'WESTSUGAR').name).toBe('West Kenya');
+    expect(hasGeofencesTab(() => true, 'KABRAS')).toBe(true);
+    expect(hasGeofencesTab(() => true, 'MENENGAI')).toBe(false);
+    expect(reportKeysFor(() => true, 'KABRAS')).not.toContain('geofences');
     // Tankers is a tab under Movements, Menengai's only (operator, 3 Nov 2026)
     expect(reportKeysFor(() => true, 'MENENGAI')).not.toContain('tankers');
     expect(hasTankersTab(() => true, 'MENENGAI')).toBe(true);

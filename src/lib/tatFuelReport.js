@@ -5,9 +5,6 @@
 //
 // Pure: no React, no network.
 
-import { renderLetterheadHtml, table, cells, esc } from './letterhead';
-import { reportNumber, CONTACT_LINE } from './reportLetterhead';
-
 const OFFSET = 3 * 3600_000;
 
 export const COLUMNS = [
@@ -16,13 +13,6 @@ export const COLUMNS = [
 ];
 /** The columns that hold a figure. */
 export const FIGURES = new Set([2, 3, 4, 5, 6, 7, 9, 10, 11]);
-
-/** The sheet's headings as a PDF column can hold them, on one line. */
-export const PDF_COLUMNS = [
-  'Reg No', 'Trip Duration', 'Initial (L)', 'Top Ups (L)', 'Total (L)', 'Consumption', 'Theft (L)',
-  'Final (L)', 'Station', 'KM', 'KM/L', 'Tank (L)', 'Comment', 'Base',
-];
-const WIDTHS = [18, 60, 15, 15, 15, 18, 12, 15, 26, 10, 10, 12, 30, 12];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -101,49 +91,7 @@ export function dayWords(day) {
 /** The day before `now` in Nairobi, as YYYY-MM-DD: a day's sheet is read once it has closed. */
 export const yesterday = (now = Date.now()) => new Date(now + OFFSET - 86_400_000).toISOString().slice(0, 10);
 
-export const NOTE = 'A trip runs from dispatch and leaving the premises to its sign-in on FactorySuite. Where FactorySuite has none, '
-  + 'it runs from one entry to a factory fence to the next, and the station comes from the cane ticket, the route driven or the geofence. '
-  + 'Fuel used, distance and rate in the totals count only trips whose probe reads true (PROBE OK).';
-
 export const csvTable = (rows) => ({ head: COLUMNS, body: rows.map(rowCells) });
 
-/** The PDF, on the letterhead, landscape for the sheet's fourteen columns. */
-export function tatHtml(rows, { day, fleet, orgCode, logos, group = 'all', now = Date.now() }) {
-  const s = summary(rows);
-  const inner = 281;
-  const used = WIDTHS.reduce((a, b) => a + b, 0);
-  const cols = PDF_COLUMNS.map((h, i) => ({ h, r: FIGURES.has(i), w: `${((WIDTHS[i] * inner) / used).toFixed(1)}mm` }));
-  const flow = [cells([
-    ['Trips', s.trips.toLocaleString('en-GB')],
-    ['Units on trips', s.units.toLocaleString('en-GB')],
-    ['Fuel used, L', Math.round(s.litres).toLocaleString('en-GB')],
-    ['Distance, km', s.km.toLocaleString('en-GB')],
-    ['Rate, km/L', s.rate == null ? '-' : s.rate.toFixed(2)],
-    ['Not updating', s.notUpdating.toLocaleString('en-GB')],
-  ])];
-  for (const sec of sections(rows)) {
-    flow.push(`<h3>${esc(sec.group)}</h3>`);
-    flow.push(table(cols, sec.rows.map((r) => rowCells(r).map((v, i) => ({
-      html: esc(v), cls: [i === 0 ? 'b' : '', i === 1 || i === 8 || i === 12 ? 'wrap' : ''].filter(Boolean).join(' '),
-    })))));
-  }
-  flow.push(`<div class="note">${esc(NOTE)} ${esc(CONTACT_LINE)}</div>`);
-  const dmy = day.split('-').reverse().join('/');
-  const html = renderLetterheadHtml({
-    landscape: true,
-    title: 'TAT AND FUEL REPORT',
-    reportNo: reportNumber('TF', orgCode, now),
-    date: dmy,
-    companyName: fleet,
-    info: [
-      ['Fleet', esc(fleet)],
-      ['Units', esc(group === 'all' ? 'All units' : group)],
-      ['Day', esc(dayWords(day))],
-      ['Trips', esc(`Finished on the day (${s.trips})`)],
-    ],
-    flow,
-    footNote: `${fleet} · TAT and Fuel Report · ${dmy}`,
-    logos,
-  });
-  return { html, filename: `TAT and Fuel Report ${fleet} ${day}.pdf` };
-}
+/** What the server draws the PDF from (fleet-server reports/template-report.pdf). */
+export const tatPdfBody = (rows, { day, fleet, group = 'all' }) => ({ day, fleet, group, rows });

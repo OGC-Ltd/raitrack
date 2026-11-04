@@ -20,8 +20,6 @@
 // Pure: no React, no network.
 
 import { fenceContains } from './zoneContainment';
-import { renderLetterheadHtml, table, cells, esc } from './letterhead';
-import { reportNumber } from './reportLetterhead';
 
 /** Read this long before the period too, to know who was already inside when it began. */
 export const LEAD_MS = 2 * 3600_000;
@@ -172,49 +170,8 @@ export function csvTable(rows, ctx) {
   return { head: COLUMNS, body: rows.map((r) => rowCells(r, ctx)) };
 }
 
-/**
- * The PDF on the letterhead: the figures, then one table a row a visit.
- * `fleet`: the organisation, or the family when made for several.
- */
-export function geofenceHtml(rows, { from, to, fleet, orgCode, logos, places = null, failed = 0, now = Date.now(), landscape = false }) {
-  const c = counts(rows);
-  const ctx = { from, to, now };
-  const flow = [
-    `<h2>1. Overview <small>${esc(periodWords(ctx, now))}</small></h2>`,
-    cells([['Visits', String(c.visits)], ['Vehicles', String(c.vehicles)], ['Geofences visited', String(c.places)],
-      ...(endsNow(to, now) ? [['Still inside', String(c.still)]] : [])]),
-    `<h2>2. Geofence Visits <small>${c.visits} visit${c.visits === 1 ? '' : 's'}</small></h2>`,
-  ];
-  if (!rows.length) flow.push('<div class="none">No vehicle was in a geofence in the period.</div>');
-  else {
-    const cols = [{ h: 'Registration', w: '50mm' }, { h: 'Geofence', w: '43mm' }, { h: 'Time in', w: '31mm' }, { h: 'Time out', w: '31mm' }, { h: 'Duration in geofence', w: '29mm', r: true }];
-    flow.push(table(cols, rows.map((r) => rowCells(r, ctx).map((v, i) => ({
-      html: esc(v), cls: i === 0 ? 'b wrap' : i === 1 ? 'wrap' : i === 3 && v === 'Still inside' ? 'b' : undefined,
-    })))));
-  }
-  if (failed) flow.push(`<div class="note">${esc(`${failed} vehicle${failed === 1 ? '' : 's'} could not be read and ${failed === 1 ? 'is' : 'are'} left out.`)}</div>`);
-
-  const date = dmyhm(Math.max(from, to - 1)).slice(0, 10);
-  const html = renderLetterheadHtml({
-    landscape,
-    title: 'GEOFENCE REPORT',
-    reportNo: reportNumber('GF', orgCode, now),
-    date,
-    companyName: fleet,
-    info: [
-      ['Fleet', esc(fleet)],
-      ['Period', esc(periodWords(ctx, now))],
-      ['Geofences', esc(places == null ? 'All' : `${places.length} picked`)],
-      ['Visits', `${c.visits} by ${c.vehicles} vehicle${c.vehicles === 1 ? '' : 's'}`],
-      ['Generated', esc(dmyhm(now))],
-    ],
-    flow,
-    footNote: `${fleet} · Geofence Report · ${periodWords(ctx, now)}`,
-    logos,
-  });
-  // A period ending at midnight is that day's: 00:00 to 00:00 next day is one day
-  const d = (ms) => new Date(ms + OFFSET).toISOString().slice(0, 10);
-  const last = d(Math.max(from, to - 1));
-  const span = d(from) === last ? d(from) : `${d(from)} to ${last}`;
-  return { html, landscape, filename: `Geofence Report ${fleet} ${span}.pdf` };
-}
+/** What the server draws the PDF from (fleet-server reports/template-report.pdf). */
+export const geofencePdfBody = (rows, { from, to, fleet, places = null, failed = 0 }) => ({
+  fleet, from: Math.round(from), to: Math.round(to), places: places == null ? null : places.length, failed,
+  rows: rows.map((r) => ({ vehicle: r.vehicle, vehicleId: r.vehicleId, place: r.place, in: Math.round(r.in), out: Math.round(r.out), open: Boolean(r.open) })),
+});

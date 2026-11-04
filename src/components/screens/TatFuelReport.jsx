@@ -9,9 +9,10 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useReportOrgs } from '../../hooks/useReportOrgs';
-import { loadTatFuelReport } from '../../api/reports';
-import { COLUMNS, FIGURES, NOTE, csvTable, dayWords, mergeRows, rowCells, rowsOfGroup, sections, summary, tatHtml, yesterday } from '../../lib/tatFuelReport';
-import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import { loadTatFuelReport, makeReportPdf } from '../../api/reports';
+import { saveFile } from '../../api/tripReport';
+import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { COLUMNS, FIGURES, csvTable, dayWords, mergeRows, rowCells, rowsOfGroup, sections, summary, tatPdfBody, yesterday } from '../../lib/tatFuelReport';
 import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
@@ -31,8 +32,8 @@ function Kpi({ value, label }) {
 const fmt = (n) => n.toLocaleString('en-GB');
 const KPI_LABELS = ['Trips', 'Fuel used, L', 'Distance, km', 'Rate, km/L', 'Not updating'];
 
-export default function TatFuelReport({ orgId, orgCode, companyName }) {
-  const { code, picked, several, orgIdOf, nameOf, fleetWords, picker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
+export default function TatFuelReport({ orgId, orgCode, companyName, active = true }) {
+  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
   const [day, setDay] = useState(() => yesterday());
   const [group, setGroup] = useState('all');
   const [run, setRun] = useState({ status: 'idle' });
@@ -51,37 +52,39 @@ export default function TatFuelReport({ orgId, orgCode, companyName }) {
       for (const c of picked) {
         const oid = await orgIdOf(c);
         if (!oid) { unread.push(nameOf(c)); continue; }
-        reports.push(await loadTatFuelReport({ orgId: oid, day }));
+        const rep = await loadTatFuelReport({ orgId: oid, day });
+        reports.push({ ...rep, rows: rep.rows.filter((r) => keepUnit(c, r.base)) });
       }
       if (id !== runId.current) return;
       setGroup('all');
       setRun({
-        status: 'done', day, orgs: picked, unread,
+        status: 'done', day, fleet: pickedWords, unread,
         rep: { day, failed: reports.reduce((n, r) => n + r.failed, 0), rows: mergeRows(reports.map((r) => r.rows)) },
       });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
-  useEffect(() => { if (orgId) execute(); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A tab under Movements: it runs when first opened, not with the page.
+  useEffect(() => { if (active && orgId && run.status === 'idle') execute(); }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = run.status === 'done' ? run : null;
   const groups = useMemo(() => (done ? sections(done.rep.rows).map((s) => s.group) : []), [done]);
   const rows = useMemo(() => (done ? rowsOfGroup(done.rep.rows, group) : []), [done, group]);
   const s = useMemo(() => (done ? summary(rows) : null), [done, rows]);
-  const fleet = done ? fleetWords(done.orgs) : (companyName ?? orgCode ?? '');
+  const fleet = done ? done.fleet : (companyName ?? orgCode ?? '');
 
   const values = s
     ? [fmt(s.trips), fmt(Math.round(s.litres)), fmt(s.km), s.rate == null ? '-' : s.rate.toFixed(2), fmt(s.notUpdating)]
-    : KPI_LABELS.map(() => <span className="frp-kpi-none">-</span>);
+    : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
 
   const save = async (as) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { html, filename } = tatHtml(rows, { day: done.rep.day, fleet, orgCode: code, logos: letterheadLogos(), group });
-      if (as === 'jpeg') await saveLetterheadJpeg(html, { filename, landscape: true });
-      else await saveLetterheadPdf(html, { filename, landscape: true });
+      const { blob, filename } = await makeReportPdf({ orgId, kind: 'tat-fuel', body: tatPdfBody(rows, { day: done.rep.day, fleet, group }) });
+      if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
+      else saveFile(blob, filename);
       setFile({ busy: false, error: null });
     } catch (err) {
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
@@ -180,7 +183,6 @@ export default function TatFuelReport({ orgId, orgCode, companyName }) {
                   ))}
                 </tbody>
               </table>
-              <p className="tkr-key">{NOTE}</p>
             </div>
           </>
         )}

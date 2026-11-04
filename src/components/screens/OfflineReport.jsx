@@ -11,9 +11,10 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useReportOrgs } from '../../hooks/useReportOrgs';
-import { loadMovementReport } from '../../api/reports';
-import { SECTIONS, COLUMNS, BAR, offlineReport, offlineCount, rowCells, sectionDays, asAtWords, csvTable, offlineHtml } from '../../lib/offlineReport';
-import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import { loadMovementReport, makeReportPdf } from '../../api/reports';
+import { saveFile } from '../../api/tripReport';
+import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { SECTIONS, COLUMNS, BAR, offlineReport, offlineCount, rowCells, sectionDays, asAtWords, csvTable, offlinePdfBody } from '../../lib/offlineReport';
 import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
@@ -34,7 +35,7 @@ function Kpi({ value, label, tone }) {
 }
 
 export default function OfflineReport({ orgId, orgCode, companyName, active = true }) {
-  const { code, picked, several, orgIdOf, nameOf, fleetWords, picker } = useReportOrgs('offline', { orgId, orgCode, companyName });
+  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('offline', { orgId, orgCode, companyName });
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
@@ -52,11 +53,11 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
         setRun({ status: 'loading', words: `${several ? `${nameOf(c)}: ` : ''}Reading each vehicle’s last message`, part: [n + 1, picked.length] });
         const oid = await orgIdOf(c);
         if (!oid) { unread.push(nameOf(c)); continue; }
-        const moves = await loadMovementReport({ orgId: oid, from: now - WINDOW_MS, to: now });
+        const moves = await loadMovementReport({ orgId: oid, from: now - WINDOW_MS, to: now, offline: true });
         if (!live()) return;
-        rows.push(...(moves?.groups ?? []).flatMap((g) => g.rows ?? []));
+        rows.push(...(moves?.groups ?? []).flatMap((g) => g.rows ?? []).filter((r) => keepUnit(c, r.grouping ?? r.plate)));
       }
-      setRun({ status: 'done', rep: offlineReport(rows, now), now, orgs: picked, unread });
+      setRun({ status: 'done', rep: offlineReport(rows, now), now, fleet: pickedWords, unread });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
@@ -75,12 +76,9 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { html, filename } = offlineHtml(rep, { fleet: fleetWords(done.orgs), orgCode: code, logos: letterheadLogos(), now: done.now, landscape });
-      if (as === 'jpeg') {
-        await saveLetterheadJpeg(html, { filename, landscape });
-      } else {
-        await saveLetterheadPdf(html, { filename });
-      }
+      const { blob, filename } = await makeReportPdf({ orgId, kind: 'dormant-assets', body: offlinePdfBody(rep, { fleet: done.fleet, now: done.now }), landscape });
+      if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
+      else saveFile(blob, filename);
       setFile({ busy: false, error: null });
     } catch (err) {
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
@@ -134,7 +132,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
             <TableToolbar
               summary={<>
                 Dormant Assets · <strong>{offlineCount(rep)}</strong> of {rep.total} vehicles
-                <span className="rpt-sub"> · {fleetWords(done.orgs)} · as at {asAtWords(done.now)}</span>
+                <span className="rpt-sub"> · {done.fleet} · as at {asAtWords(done.now)}</span>
                 {done.unread.length > 0 && <span className="rpt-warn"> · {done.unread.join(', ')} could not be opened</span>}
               </>}
               onCsv={offlineCount(rep) ? saveCsv : undefined}

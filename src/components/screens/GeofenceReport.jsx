@@ -15,11 +15,14 @@ import { mapSnapshotVehicle } from '../../lib/vehicleMap';
 import { dayStart, fleetDay, toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import { useReportOrgs } from '../../hooks/useReportOrgs';
 import {
-  LEAD_MS, MAX_DAYS, COLUMNS, placesIn, placeNames, geofenceRows, rowCells, counts, periodProblem, periodWords, endsNow, csvTable, geofenceHtml,
+  LEAD_MS, MAX_DAYS, COLUMNS, placesIn, placeNames, geofenceRows, rowCells, counts, periodProblem, periodWords, endsNow, csvTable, geofencePdfBody,
+  vehicleName,
 } from '../../lib/geofenceReport';
 import { loadPings } from '../../api/fleetReports';
 import { loadZones } from '../../hooks/useEstateZones';
-import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import { makeReportPdf } from '../../api/reports';
+import { saveFile } from '../../api/tripReport';
+import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import JpegButton from '../shared/JpegButton';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
@@ -40,7 +43,7 @@ function Kpi({ value, label, tone }) {
 
 export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }) {
   // This organisation, or several of its family together (hooks/useReportOrgs)
-  const { code, picked: pickedOrgs, several, orgIdOf, nameOf, fleetWords, picker } = useReportOrgs('geofences', { orgId, orgCode, companyName });
+  const { code, picked: pickedOrgs, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('geofences', { orgId, orgCode, companyName });
 
   // The period: from today's midnight to now, unless picked
   const today = fleetDay(Date.now());
@@ -101,7 +104,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
         ]);
         if (!live()) return;
         const list = placesIn(zones, places);
-        const units = fleet.filter((v) => v.vehicleId);
+        const units = fleet.filter((v) => v.vehicleId && keepUnit(c, vehicleName(v)));
         if (!list.length || !units.length) continue;
         const r = await loadPings({
           orgId: oid, vehicles: units, from: ctx.from - LEAD_MS, to: ctx.to,
@@ -112,7 +115,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
         failed += r.failed.size;
       }
       if (several) rows.sort((a, b) => a.vehicle.localeCompare(b.vehicle, 'en', { sensitivity: 'base', numeric: true }) || a.in - b.in);
-      setRun({ status: 'done', rows, ctx, failed, unread, orgs: pickedOrgs, places });
+      setRun({ status: 'done', rows, ctx, failed, unread, fleet: pickedWords, places });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
@@ -132,14 +135,10 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { html, filename } = geofenceHtml(done.rows, {
-        ...done.ctx, fleet: fleetWords(done.orgs), orgCode: code, logos: letterheadLogos(), places: done.places, failed: done.failed, landscape,
-      });
-      if (as === 'jpeg') {
-        await saveLetterheadJpeg(html, { filename, landscape });
-      } else {
-        await saveLetterheadPdf(html, { filename });
-      }
+      const body = geofencePdfBody(done.rows, { ...done.ctx, fleet: done.fleet, places: done.places, failed: done.failed });
+      const { blob, filename } = await makeReportPdf({ orgId, kind: 'geofences', body, landscape });
+      if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
+      else saveFile(blob, filename);
       setFile({ busy: false, error: null });
     } catch (err) {
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
@@ -225,7 +224,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
             <TableToolbar
               summary={<>
                 Geofence Visits · <strong>{done.rows.length.toLocaleString('en-GB')}</strong> visit{done.rows.length === 1 ? '' : 's'}
-                <span className="rpt-sub"> · {fleetWords(done.orgs)} · {periodWords(done.ctx)}</span>
+                <span className="rpt-sub"> · {done.fleet} · {periodWords(done.ctx)}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} vehicle{done.failed === 1 ? '' : 's'} could not be read</span>}
                 {done.unread.length > 0 && <span className="rpt-warn"> · {done.unread.join(', ')} could not be opened</span>}
               </>}

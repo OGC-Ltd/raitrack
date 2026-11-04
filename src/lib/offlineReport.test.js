@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionOf, offlineReport, offlineCount, rowCells, sectionDays, SECTIONS, csvTable, offlineHtml } from './offlineReport';
+import { sectionOf, offlineReport, offlineCount, rowCells, sectionDays, SECTIONS, csvTable, offlinePdfBody } from './offlineReport';
 import { reportKeysFor, hasDormantTab } from './reportNav';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -38,11 +38,10 @@ describe('Dormant Assets Report', () => {
     expect(rowCells(rep.sections.yesterday[0])).toEqual(['WKS - Kabras - KBV 472N', '2026-10-30 11:42:05', 'D267, Kenya, 1.84 km from Kambi-Mwanza']);
     expect(csvTable(rep).body[0][0]).toBe('Offline yesterday');
 
-    const { html, filename } = offlineHtml(rep, { fleet: 'West Kenya', orgCode: 'KABRAS', logos: { rai: '', ogc: '' }, now: NOW });
-    expect(html).toContain('DORMANT ASSETS REPORT');
-    for (const s of SECTIONS) expect(html).toContain(s.title);
-    expect(html).toContain('1 vehicle has never reported');
-    expect(filename).toBe('Dormant Assets Report West Kenya 2026-10-31.pdf');
+    const body = offlinePdfBody(rep, { fleet: 'West Kenya', now: NOW });
+    expect(body).toMatchObject({ fleet: 'West Kenya', now: NOW, total: rep.total, never: 1 });
+    for (const s of SECTIONS) expect(body.sections[s.key]).toHaveLength(rep.sections[s.key].length);
+    expect(Object.keys(body.sections.yesterday[0])).toEqual(['name', 'lastAt', 'location']);
   });
 
   it('names the days each section covers', () => {
@@ -51,7 +50,7 @@ describe('Dormant Assets Report', () => {
 
   it('is West Kenya’s and Menengai’s', () => {
     // A tab under Movements, not a report of its own (operator, 3 Nov 2026)
-    for (const org of ['WESTSUGAR', 'KABRAS', 'NZOIA', 'MENENGAI']) {
+    for (const org of ['SUKARI', 'WESTSUGAR', 'KABRAS', 'NZOIA', 'MENENGAI']) {
       expect(hasDormantTab(() => true, org)).toBe(true);
       expect(reportKeysFor(() => true, org)).not.toContain('offline');
     }

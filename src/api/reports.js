@@ -44,9 +44,9 @@ export async function downloadOrgReportPdf({ companyId, kind, days = 30, filenam
  * MORL over it, for the Reports page's Movements table. A window is
  * from–to (epoch ms, a day at most): the last hours, or one day's hours.
  */
-export async function loadMovementReport({ orgId, from, to }) {
+export async function loadMovementReport({ orgId, from, to, offline = false }) {
   if (!orgId) throw new Error('No organisation selected')
-  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/movements?from=${Math.round(from)}&to=${Math.round(to)}`)
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/movements?from=${Math.round(from)}&to=${Math.round(to)}${offline ? '&offline=1' : ''}`)
   return res.data
 }
 
@@ -54,6 +54,13 @@ export async function loadMovementReport({ orgId, from, to }) {
 export async function loadTatFuelReport({ orgId, day }) {
   if (!orgId) throw new Error('No organisation selected')
   const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/tat-fuel?day=${encodeURIComponent(day)}`)
+  return res.data
+}
+
+/** Each unit that went over its limit on a fleet day (YYYY-MM-DD). */
+export async function loadSpeedReport({ orgId, day }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/speed?day=${encodeURIComponent(day)}`)
   return res.data
 }
 
@@ -69,6 +76,20 @@ export async function loadTankersReport({ orgId, units, to }) {
     body: JSON.stringify({ units, ...(to != null ? { to: Math.round(to) } : {}) }),
   })
   return res.data
+}
+
+/**
+ * A report the page made, drawn on the server (operator, 4 Nov 2026), `{ blob, filename }`.
+ * @param {'dormant-assets'|'geofences'|'tat-fuel'|'speed'} o.kind
+ */
+export async function makeReportPdf({ orgId, kind, body, landscape = false }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const { blob, filename } = await apiFetchBlob(`/api/v1/organisations/${orgId}/reports/${kind}.pdf${landscape ? '?landscape=1' : ''}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return { blob, filename: filename ?? 'Report.pdf' }
 }
 
 /**

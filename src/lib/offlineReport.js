@@ -18,9 +18,6 @@
 //
 // Pure: no React, no network.
 
-import { renderLetterheadHtml, table, cells, esc } from './letterhead';
-import { reportNumber } from './reportLetterhead';
-
 const OFFSET = 3 * 3600_000;
 const DAY = 86_400_000;
 
@@ -93,43 +90,8 @@ export function csvTable(rep) {
   };
 }
 
-/** The PDF on the letterhead: the figures, then the three sections as the sheet has them. */
-export function offlineHtml(rep, { fleet, orgCode, logos, now = Date.now(), landscape = false }) {
-  const n = offlineCount(rep);
-  const flow = [
-    `<style>.ofl-bar{background:${BAR};color:#0b1f2a;font-weight:700;text-align:center;padding:1.1mm;margin:4mm 0 0;font-size:8.4pt;letter-spacing:.04em}.ofl-bar small{float:right;font-weight:400;letter-spacing:0;font-size:7.4pt}</style>`,
-    `<h2>1. Overview <small>as at ${esc(asAtWords(now))}</small></h2>`,
-    cells([
-      ...SECTIONS.map((s) => [s.words, String(rep.sections[s.key].length)]),
-      ['Not updating', `<b>${n}</b> of ${rep.total}`],
-    ]),
-    '<h2>2. Dormant Assets</h2>',
-  ];
-  const cols = [{ h: 'Registration', w: '52mm' }, { h: 'Last message', w: '32mm' }, { h: 'Location', w: '100mm' }];
-  for (const s of SECTIONS) {
-    const list = rep.sections[s.key];
-    flow.push(`<div class="ofl-bar">${esc(s.title)}<small>${esc(sectionDays(s, now))} · ${list.length}</small></div>`);
-    if (!list.length) flow.push('<div class="none">None.</div>');
-    else flow.push(table(cols, list.map((r) => rowCells(r).map((v, i) => ({ html: esc(v), cls: i === 0 ? 'b wrap' : i === 2 ? 'wrap' : undefined })))));
-  }
-  if (rep.never.length) flow.push(`<div class="note">${esc(`${rep.never.length} vehicle${rep.never.length === 1 ? ' has' : 's have'} never reported to the platform and ${rep.never.length === 1 ? 'is' : 'are'} not listed.`)}</div>`);
-  flow.push('<div class="note">A tracker that stopped sending today is not listed yet: it shows tomorrow, as offline yesterday.</div>');
-
-  const html = renderLetterheadHtml({
-    landscape,
-    title: 'DORMANT ASSETS REPORT',
-    reportNo: reportNumber('NU', orgCode, now),
-    date: dmyhm(now).slice(0, 10),
-    companyName: fleet,
-    info: [
-      ['Fleet', esc(fleet)],
-      ['As at', esc(asAtWords(now))],
-      ['Vehicles', `${rep.total} on the platform`],
-      ['Not updating', `${n}`],
-    ],
-    flow,
-    footNote: `${fleet} · Dormant Assets Report · ${asAtWords(now)}`,
-    logos,
-  });
-  return { html, landscape, filename: `Dormant Assets Report ${fleet} ${new Date(now + OFFSET).toISOString().slice(0, 10)}.pdf` };
-}
+/** What the server draws the PDF from (fleet-server reports/template-report.pdf). */
+export const offlinePdfBody = (rep, { fleet, now }) => ({
+  fleet, now, total: rep.total, never: rep.never.length,
+  sections: Object.fromEntries(SECTIONS.map((s) => [s.key, rep.sections[s.key].map(({ name, lastAt, location }) => ({ name, lastAt, location }))])),
+});
