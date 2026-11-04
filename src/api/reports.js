@@ -80,7 +80,7 @@ export async function loadTankersReport({ orgId, units, to }) {
 
 /**
  * A report the page made, drawn on the server (operator, 4 Nov 2026), `{ blob, filename }`.
- * @param {'dormant-assets'|'geofences'|'tat-fuel'|'speed'} o.kind
+ * @param {'dormant-assets'|'geofences'|'tat-fuel'|'speed'|'deliveries'} o.kind
  */
 export async function makeReportPdf({ orgId, kind, body, landscape = false }) {
   if (!orgId) throw new Error('No organisation selected')
