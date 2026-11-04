@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   behaviourRows, overspeedRows, nightRows, utilisationRows, sections, summariseWindows,
-  nightWindows, hourColumns, presetRange, daysCovering, fromLocalInput, toLocalInput, fleetDay, minutesWords, periodWords,
+  nightWindows, shiftPeriod, hourColumns, presetRange, daysCovering, fromLocalInput, toLocalInput, fleetDay, minutesWords, periodWords,
 } from './fleetReports';
 import { scopeUnits, groupsFor, unitKey, vehicleKeys } from './fleetGroups';
 
@@ -205,5 +205,31 @@ describe('period words', () => {
   });
   it('names both days when it spans two', () => {
     expect(periodWords(at('2026-10-31T19:00:00'), at('2026-11-01T05:00:00'))).toBe('31 Oct 2026, 19:00hrs – 1 Nov 2026, 05:00hrs');
+  });
+});
+
+describe('a night picked', () => {
+  const NOW = at('2026-11-04T10:00:00');
+  const night = { fromDay: '2026-11-02', toDay: '2026-11-02', start: 19.5, end: 7.5 };
+  it('is what the report then says it covers', () => {
+    const { from, to } = shiftPeriod(night, NOW);
+    expect(periodWords(from, to)).toBe('2 Nov 2026, 19:30hrs – 3 Nov 2026, 07:30hrs');
+  });
+  it('reads the same night as the windows it counts', () => {
+    const { from, to } = shiftPeriod(night, NOW);
+    expect(nightWindows(from, to, { start: 19.5, end: 7.5 })).toEqual([[from, to]]);
+  });
+  it('takes each day of a range as a night that starts on it', () => {
+    const d = { ...night, toDay: '2026-11-03' };
+    const { from, to } = shiftPeriod(d, NOW);
+    expect(periodWords(from, to)).toBe('2 Nov 2026, 19:30hrs – 4 Nov 2026, 07:30hrs');
+    expect(nightWindows(from, to, { start: 19.5, end: 7.5 })).toEqual([
+      [at('2026-11-02T19:30:00'), at('2026-11-03T07:30:00')],
+      [at('2026-11-03T19:30:00'), at('2026-11-04T07:30:00')],
+    ]);
+  });
+  it('stops at now on a night still running', () => {
+    const later = at('2026-11-02T22:00:00');
+    expect(shiftPeriod(night, later)).toEqual({ from: at('2026-11-02T19:30:00'), to: later, live: true });
   });
 });

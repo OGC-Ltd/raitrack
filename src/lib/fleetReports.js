@@ -76,6 +76,24 @@ export function periodWords(from, to) {
 }
 
 /**
+ * A period from days and hours, as Movements picks them (operator, 2 Nov: "let
+ * it be like what we have in movements"): the first day at the start hour to the
+ * last day at the end hour, past midnight when the end is at or before the
+ * start, and up to now when it would run past it. The Shift report and Night
+ * driving print what this gives, so it is what the operator picked.
+ */
+export function shiftPeriod(d, now = Date.now()) {
+  // A custom range (operator, 3 Nov 2026): any start and end, to the minute; no end is up to now
+  if (d.custom) {
+    const end = d.custom.to ?? now;
+    return { from: d.custom.from, to: Math.min(end, now), live: end >= now };
+  }
+  const from = dayStart(d.fromDay) + d.start * HOUR;
+  const to = dayStart(d.toDay) + (d.end > d.start ? d.end : d.end + 24) * HOUR;
+  return { from, to: Math.min(to, now), live: to >= now };
+}
+
+/**
  * The period presets. `lastNight` runs noon to noon, so that with the night
  * hours applied it is exactly last night.
  */
