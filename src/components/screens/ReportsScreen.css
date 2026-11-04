@@ -44,6 +44,9 @@
 .sdoc-open__scroll .sdoc { box-shadow: 0 10px 34px rgb(0 0 0 / .4); }
 .sdoc-open__sheet { width: 210mm; margin: 0 auto; }
 .sdoc-open__sheet .sdoc { width: 210mm; }
+.sdoc-open__frame--land { width: min(1180px, 100%); }
+.sdoc-open__sheet--land { width: 297mm; }
+.sdoc-open__sheet--land .sdoc { width: 297mm; }
 @media (max-width: 720px) { .sdoc-open { padding: 12px 12px 0; } }
 
 @media (max-width: 640px) { .rpt-body.sdoc-desk { padding: 8px 0 16px; } }

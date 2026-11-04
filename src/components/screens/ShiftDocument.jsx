@@ -5,7 +5,7 @@
 // What is on the sheet is what the PDF draws (lib/shiftDoc, fleet-server
 // end-of-shift.pdf renderShiftDoc).
 
-import { setAt, removeRow, removeSection, removeBlock, addNote } from '../../lib/shiftDoc';
+import { setAt, removeRow, removeSection, removeBlock, removeBar, addNote } from '../../lib/shiftDoc';
 import './ShiftDocument.css';
 
 /**
@@ -33,12 +33,13 @@ const toneClass = (c) => [c.bold ? 'sdoc-b' : '', c.tone ? `sdoc-${c.tone}` : ''
 
 /** The printed body's width, mm: A4 less its margins, and half of it less the gap. */
 const BODY_MM = 184;
+const LAND_MM = 271;
 const HALF_MM = (BODY_MM - 6) / 2;
 
 function Table({ t, path, doc, onChange, half = false }) {
   const set = (p, v) => onChange(setAt(doc, [...path, ...p], v));
   // The PDF's column widths as shares of the sheet, so it fits whatever its width on screen.
-  const basis = half ? HALF_MM : BODY_MM;
+  const basis = half ? HALF_MM : doc.landscape ? LAND_MM : BODY_MM;
   const fixed = t.cols.reduce((n, c) => n + (c.w || 0), 0);
   const flexCols = t.cols.filter((c) => !c.w).length;
   const share = (c) => (c.w ? (c.w / basis) * 100 : Math.max(0, (basis - fixed) / basis * 100) / (flexCols || 1));
@@ -61,8 +62,8 @@ function Table({ t, path, doc, onChange, half = false }) {
           {t.rows.map((row, r) => (
             <tr key={r}>
               {row.map((c, i) => (
-                <td key={i} className={toneClass(c)} style={{ textAlign: t.cols[i]?.align ?? 'left' }}>
-                  <Ed value={c.text} label={`${t.head[i] ?? 'Cell'}, row ${r + 1}`} onChange={(v) => set(['rows', r, i, 'text'], v)} />
+                <td key={i} className={toneClass(c)} style={{ textAlign: t.cols[i]?.align ?? 'left', ...(c.fill ? { background: c.fill } : {}) }}>
+                  <Ed value={c.text} label={`${t.head[i] ?? 'Cell'}, row ${r + 1}`} className={c.link ? 'sdoc-link' : ''} onChange={(v) => set(['rows', r, i, 'text'], v)} />
                   {i === row.length - 1 && (
                     <button type="button" className="sdoc-x sdoc-x--row" title="Leave this row out" aria-label={`Leave row ${r + 1} out`}
                             onClick={() => onChange(removeRow(doc, path, r))}>
@@ -102,6 +103,16 @@ function Block({ b, i, doc, onChange }) {
         <div className="sdoc-h3">
           <Ed value={b.title} label="Sub-heading" className="sdoc-b" onChange={(v) => set(['title'], v)} />
           {b.aside ? <Ed value={b.aside} label="Sub-heading aside" className="sdoc-aside" onChange={(v) => set(['aside'], v)} /> : null}
+        </div>
+      );
+    case 'bar':
+      return (
+        <div className="sdoc-bar">
+          <Ed value={b.title} label="Section title" className="sdoc-bar__t" onChange={(v) => set(['title'], v)} />
+          {b.aside != null && <Ed value={b.aside} label="Section aside" className="sdoc-bar__a" onChange={(v) => set(['aside'], v)} />}
+          <button type="button" className="sdoc-x sdoc-bar__x" title="Leave this section out" aria-label="Leave this section out" onClick={() => onChange(removeBar(doc, i))}>
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
         </div>
       );
     case 'figures':
@@ -168,7 +179,7 @@ function Block({ b, i, doc, onChange }) {
 
 export default function ShiftDocument({ doc, onChange }) {
   return (
-    <article className="sdoc" aria-label="End of shift report, editable">
+    <article className={`sdoc${doc.landscape ? ' sdoc--land' : ''}`} aria-label={`${doc.docName ?? 'End of shift report'}, editable`}>
       <header className="sdoc-head">
         <Ed value={doc.title} label="Title" className="sdoc-title" onChange={(v) => onChange(setAt(doc, ['title'], v))} />
         <span className="sdoc-no">Report no. {doc.reportNo} · Date {doc.date}</span>

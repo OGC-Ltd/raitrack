@@ -29,6 +29,8 @@ import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
 import CheckPicker from './CheckPicker';
+import { useReportEditor } from './ReportEditor';
+import { geofenceDoc } from '../../lib/reportDocs';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import HourWindow, { hh, hoursText } from './HourWindow';
 
@@ -131,12 +133,14 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
     ...(stillShown || !done ? [{ label: 'Still inside', value: c?.still, tone: c?.still ? 'live' : undefined }] : []),
   ];
 
+  const editor = useReportEditor({ orgId, source: done, build: () => geofenceDoc(done.rows, { ...done.ctx, fleet: done.fleet, places: done.places, failed: done.failed, orgCode }) });
+
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
       const body = geofencePdfBody(done.rows, { ...done.ctx, fleet: done.fleet, places: done.places, failed: done.failed });
-      const { blob, filename } = await makeReportPdf({ orgId, kind: 'geofences', body, landscape });
+      const { blob, filename } = editor.edited ? await editor.make(landscape) : await makeReportPdf({ orgId, kind: 'geofences', body, landscape });
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -176,7 +180,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
                 {problem && <span className="rpt-problem" role="status">{problem}</span>}
                 <button type="button" className="sp4-submit-btn frp-run"
                         disabled={run.status === 'loading' || Boolean(problem)}
-                        onClick={() => { close(); execute(); }}>
+                        onClick={() => { close(); editor.guard('Make the report again', execute); }}>
                   {run.status === 'loading' ? 'Running…' : 'Run report'}
                 </button>
               </div>
@@ -187,12 +191,14 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
         <CheckPicker icon="ti-map-pin" label="Geofences" noun="geofences" allWord="All geofences" search
                      options={names.map((n) => ({ value: n, label: n }))} picked={places}
                      onChange={setPlaces} />
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
+
+      {editor.overlay}
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
@@ -225,6 +231,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
               onCsv={done.rows.length ? saveCsv : undefined}
               onPdf={file.busy ? undefined : () => save('pdf')}
               actions={<>
+                {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />

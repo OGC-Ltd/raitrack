@@ -117,3 +117,11 @@ tr:hover .sdoc-x, .sdoc-note:hover .sdoc-x, .sdoc-x:focus-visible { opacity: 1; 
   .sdoc-title { font-size: 17px; overflow-wrap: anywhere; min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .sdoc-h2__tools, .sdoc-x { transition: none; } }
+
+/* Other reports on the same sheet (ReportEditor): one made on its side, the section bar, a linked cell */
+.sdoc--land { width: min(297mm, 100%); }
+.sdoc-bar { position: relative; display: flex; align-items: center; justify-content: center; min-height: 6mm; margin-top: 4mm; padding: 2px 8px; background: #00b0f0; color: #0b1f2a; font-size: 11px; }
+.sdoc-bar__t { font-weight: 700; }
+.sdoc-bar__a { position: absolute; right: 26px; font-size: 10px; }
+.sdoc-bar__x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+.sdoc-link { color: var(--sdoc-hd); text-decoration: underline; }
