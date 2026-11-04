@@ -15,6 +15,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import MapLayersMenu from "./MapLayersMenu";
 import { findVehicleByQuery } from "../../lib/vehicleMap";
+import { matchFences, fenceDetail } from "../../lib/fenceSearch";
 import { useAppSelector, useAppActions, useCompanies } from "../../context/AppContext";
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import UnitTypeIcon from "../shared/UnitTypeIcon";
@@ -86,8 +87,8 @@ function lastSeenLabel(v) {
   return `Last seen ${new Date(ms).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}`;
 }
 
-/** Vehicles first (they are what this map is for), then places. */
-function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose }) {
+/** Vehicles first (they are what this map is for), then geofences, then places. */
+function SearchPanel({ vehicles, fences, getBias, onPickVehicle, onPickFence, onPickPlace, onClose }) {
   const [q, setQ] = useState("");
   const [places, setPlaces] = useState([]);
   const [state, setState] = useState("idle"); // idle | loading | done | error
@@ -99,16 +100,18 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
   // Deferred like the Units panel: the match runs over the whole fleet.
   const unitTerm = useDeferredValue(term);
   const units = useMemo(() => (unitTerm ? matchUnits(vehicles, unitTerm) : []), [vehicles, unitTerm]);
+  const fenceHits = useMemo(() => matchFences(fences, unitTerm), [fences, unitTerm]);
 
   /* A unit in another of the operator's organisations, as in the Units panel:
-     asked only once this fleet has no match; one answer switches there and
-     focuses it, several are listed to pick from. */
+     asked only once this fleet has no unit or geofence match, since one answer
+     switches there and focuses it by itself, which would carry off a fence search.
+     Several are listed to pick from. */
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const { setActiveCompanyId, setPendingFocusId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
   const { companies: elsewhere, loading: lookingElsewhere, move } = useCrossOrgUnitHandoff({
     query: unitTerm,
-    enabled: Boolean(unitTerm) && units.length === 0,
+    enabled: Boolean(unitTerm) && units.length === 0 && fenceHits.total === 0,
     activeCompanyId,
     visibleCompanies: companies,
     setActiveCompanyId,
@@ -218,8 +221,28 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
         </div>
       )}
 
-      {unitTerm && units.length === 0 && !lookingElsewhere && elsewhere.length === 0 && term.length < 3 && (
+      {unitTerm && units.length === 0 && fenceHits.total === 0 && !lookingElsewhere && elsewhere.length === 0 && term.length < 3 && (
         <div className="mtr-search__note">No unit matches that search.</div>
+      )}
+
+      {fenceHits.total > 0 && (
+        <div className="mtr-search__group">
+          <div className="mtr-search__head">Geofences</div>
+          {fenceHits.hits.map((f) => (
+            <button type="button" key={f.properties.id ?? f.properties.name} className="mtr-search__row" onClick={() => onPickFence(f)}>
+              <i className="ti ti-map-pins" aria-hidden="true" />
+              <span className="mtr-search__text">
+                <span className="mtr-search__name">{f.properties.name}</span>
+                <span className="mtr-search__detail">{fenceDetail(f)}</span>
+              </span>
+            </button>
+          ))}
+          {fenceHits.total > fenceHits.hits.length && (
+            <div className="mtr-search__note">
+              Showing {fenceHits.hits.length} of {fenceHits.total.toLocaleString()}. Keep typing to narrow it.
+            </div>
+          )}
+        </div>
       )}
 
       {term.length >= 3 && (
@@ -240,7 +263,11 @@ function SearchPanel({ vehicles, getBias, onPickVehicle, onPickPlace, onClose })
         </div>
       )}
 
-      {!term && <div className="mtr-search__note">Type a plate, a driver, a place or a road.</div>}
+      {!term && (
+        <div className="mtr-search__note">
+          Type a plate, a driver, {fences?.length ? "a geofence, " : ""}a place or a road.
+        </div>
+      )}
     </div>
   );
 }
@@ -260,6 +287,8 @@ export default function MapToolRail({
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
   arrivals,         // { open, onOpen } or null while Google routing is off
   dashcam,          // { count, critical, onOpen } or null where there are no VSS cameras
+  fences,           // the geofences the search can find, or null where the layer is not offered
+  onPickFence,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -282,7 +311,7 @@ export default function MapToolRail({
       <div className="mtr-card" role="toolbar" aria-label="Map tools" aria-orientation="vertical" data-tour="map-tools">
         <div className="mtr-group">
           <RailButton
-            icon="ti-search" label="Search" title="Search for a plate, driver, place or road" tour="map-search"
+            icon="ti-search" label="Search" title={fences?.length ? "Search for a plate, driver, geofence, place or road" : "Search for a plate, driver, place or road"} tour="map-search"
             on={searchOpen} expanded={expanded} onClick={() => setSearchOpen((v) => !v)}
           />
           <RailButton
@@ -393,8 +422,10 @@ export default function MapToolRail({
       {searchOpen && (
         <SearchPanel
           vehicles={vehicles}
+          fences={fences}
           getBias={getBias}
           onPickVehicle={(id) => { close(); onPickVehicle(id); }}
+          onPickFence={(f) => { close(); onPickFence?.(f); }}
           onPickPlace={(p) => { close(); onPickPlace(p); }}
           onClose={close}
         />

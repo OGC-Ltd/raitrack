@@ -2512,6 +2512,9 @@ export default function FleetMap() {
   zonesRef.current = zones;
   // The CAD planting plan belongs to one estate only.
   const planAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
+  // What the rail's search can find: the fences this layer can draw.
+  const searchableFences = useMemo(() => (zones?.features ?? []).filter((f) =>
+    !ZONE_SKIP_CATEGORIES.has(f.properties?.category) && !ZONE_EXCLUDE.has(zoneKey(f.properties?.name))), [zones]);
   // The surveys this organisation has. An empty list is also the gate: a
   // company absent from the table is offered no switch and draws nothing.
   const ownPlans = SITE_PLANS[activeCompanyId] ?? NO_PLANS;
@@ -6546,13 +6549,41 @@ export default function FleetMap() {
     if (DomMarker) {
       const pin = new DomMarker({
         position: { lat: place.lat, lng: place.lng }, anchor: "bottom", zIndex: 890,
-        html: `<div class="mtr-place-pin" title="${esc(place.detail ?? place.name)}"><i class="ti ti-map-pin-filled"></i></div>`,
+        html: place.label
+          ? `<div class="mtr-place-pin-named"><div class="zone-label zone-label--hover" style="--zone-color:${place.labelColor}">${esc(place.label)}</div><div class="mtr-place-pin"><i class="ti ti-map-pin-filled"></i></div></div>`
+          : `<div class="mtr-place-pin" title="${esc(place.detail ?? place.name)}"><i class="ti ti-map-pin-filled"></i></div>`,
       });
       pin.setMap(map);
       placePinRef.current = pin;
     }
   }, [revealMap]);
   useEffect(() => () => placePinRef.current?.setMap(null), []);
+  // A pin belongs to the organisation it was picked in.
+  useEffect(() => () => { placePinRef.current?.setMap(null); placePinRef.current = null; }, [activeCompanyId]);
+
+  // A picked geofence: the layer on, the fence framed, its name on a pin.
+  const handlePickFence = useCallback((feature) => {
+    const g = feature?.geometry, p = feature?.properties ?? {};
+    const isCircle = g?.type === "Point";
+    const points = isCircle ? circleRing(g.coordinates, p.radiusM)
+      : g?.type === "Polygon" ? g.coordinates?.[0] : g?.coordinates;
+    if (!points?.length) return;
+    const box = fenceExtent(points);
+    // On the line itself: a route's middle can be far from the centre of its box.
+    const onLine = g.type === "LineString" ? points[Math.floor(points.length / 2)] : null;
+    // The operator's camera now, not the first fit's.
+    fittedCompanyRef.current = activeCompanyId;
+    pendingFitRef.current = false;
+    setShowZones(true);
+    writeMapPrefs(activeCompanyId, { layers: { zones: true } });
+    handlePickPlace({
+      lat: onLine ? onLine[1] : box.lat,
+      lng: onLine ? onLine[0] : box.lng,
+      bbox: [box.s, box.n, box.w, box.e],
+      label: p.name,
+      labelColor: zoneColor(isCircle ? "circle" : "fence"),
+    });
+  }, [activeCompanyId, handlePickPlace]);
 
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7242,6 +7273,8 @@ export default function FleetMap() {
             getBias={getSearchBias}
             onPickVehicle={handleFocusVehicle}
             onPickPlace={handlePickPlace}
+            fences={mapLayers.some(l => l.id === "zones") ? searchableFences : null}
+            onPickFence={handlePickFence}
             namesOn={namesOn}
             onToggleNames={toggleNames}
             /* Live traffic and weather are rail buttons of their own, so the
