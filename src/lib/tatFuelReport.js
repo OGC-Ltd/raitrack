@@ -34,14 +34,16 @@ export function durationWords(r) {
   return `${whenWords(r.leftAt)} to ${whenWords(r.returnedAt)} (${tatWords(r.returnedAt - r.leftAt)})`;
 }
 
-const litres = (v) => (v == null ? '-' : v.toFixed(2));
+// As Vehicle analytics writes them: litres to 0.1, kilometres to 0.01.
+const litres = (v) => (v == null ? '-' : v.toFixed(1));
+const kms = (v) => (v == null ? '-' : v.toFixed(2));
 const whole = (v) => (v == null ? '-' : String(Math.round(v)));
 
 export function rowCells(r) {
   const f = r.fuel;
   return [
     r.plate, durationWords(r), litres(f?.initial), litres(f?.topUps), litres(f?.total), litres(f?.consumption), litres(f?.theft),
-    litres(f?.final), r.station || '-', whole(r.km), r.rate == null ? '-' : r.rate.toFixed(2), whole(r.tankL), r.comment, r.base,
+    litres(f?.final), r.station || '-', kms(r.km), r.rate == null ? '-' : r.rate.toFixed(2), whole(r.tankL), r.comment, r.base,
   ];
 }
 
@@ -70,7 +72,7 @@ export function summary(rows) {
   const trips = rows.filter((r) => r.returnedAt != null);
   const ok = trips.filter((r) => r.comment === 'PROBE OK');
   const km = ok.reduce((s, r) => s + r.km, 0);
-  const used = ok.reduce((s, r) => s + r.fuel.consumption, 0);
+  const used = ok.reduce((s, r) => s + (r.fuel.consumption ?? 0), 0);
   return {
     trips: trips.length,
     units: new Set(trips.map((r) => r.vehicleId)).size,

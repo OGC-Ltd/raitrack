@@ -75,7 +75,7 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
   const fleet = done ? done.fleet : (companyName ?? orgCode ?? '');
 
   const values = s
-    ? [fmt(s.trips), fmt(Math.round(s.litres)), fmt(s.km), s.rate == null ? '-' : s.rate.toFixed(2), fmt(s.notUpdating)]
+    ? [fmt(s.trips), fmt(Math.round(s.litres)), fmt(Math.round(s.km)), s.rate == null ? '-' : s.rate.toFixed(2), fmt(s.notUpdating)]
     : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
 
   const save = async (as) => {
