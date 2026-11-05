@@ -54,6 +54,12 @@ export const hasTatFuelTab = (can, orgCode) => can('telemetry:read') && template
  */
 export const hasSpeedTab = (can, orgCode) => can('telemetry:read') && templateFor('speedReport', orgCode) != null;
 
+/**
+ * Does Movements carry a Probe Disconnection tab (each time a unit's fuel probe
+ * was disconnected)? (operator, 5 Nov 2026)
+ */
+export const hasProbeTab = (can, orgCode) => can('telemetry:read') && templateFor('probeReport', orgCode) != null;
+
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));

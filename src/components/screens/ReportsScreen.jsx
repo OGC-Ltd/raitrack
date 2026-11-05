@@ -56,6 +56,7 @@ import DeliveriesReport from './DeliveriesReport';
 import ChoicePicker from './ChoicePicker';
 import TatFuelReport from './TatFuelReport';
 import SpeedReport from './SpeedReport';
+import ProbeReport from './ProbeReport';
 import OfflineReport from './OfflineReport';
 import { loadMovementReport, loadMovementEvents, makeReportDoc } from '../../api/reports';
 import { EVENTS, eventKeys, pickedEvents, countByUnit, countCell, eventsFor, eventSections, eventNotes } from '../../lib/movementEvents';
@@ -69,7 +70,7 @@ import { docHtml } from '../../lib/docHtml';
 import JpegButton from '../shared/JpegButton';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab, hasProbeTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -686,9 +687,9 @@ function TypePicker({ types, picked, counts, onChange }) {
  * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
  * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, speed, dormant }) {
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, speed, probes, dormant }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !deliveries && !geofences && !tatFuel && !speed && !dormant) return <MovementsReport orgId={orgId} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !speed && !probes && !dormant) return <MovementsReport orgId={orgId} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -696,6 +697,7 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
     geofences && { key: 'geofences', label: 'Geofences' },
     tatFuel && { key: 'tatFuel', label: 'TAT and Fuel' },
     speed && { key: 'speed', label: 'Speed Report' },
+    probes && { key: 'probes', label: 'Probe Disconnection' },
     dormant && { key: 'dormant', label: 'Dormant Assets' },
   ].filter(Boolean);
   return (
@@ -732,6 +734,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
       {speed && (
       <div className="mvt-panel" role="tabpanel" id="mvt-speed-panel" aria-labelledby="mvt-speed" hidden={tab !== 'speed'}>
         <SpeedReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'speed'} />
+      </div>
+      )}
+      {probes && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-probes-panel" aria-labelledby="mvt-probes" hidden={tab !== 'probes'}>
+        <ProbeReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'probes'} />
       </div>
       )}
       {dormant && (
@@ -1561,7 +1568,7 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>

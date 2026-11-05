@@ -76,6 +76,13 @@ export const TEMPLATES = {
     orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {}, NZOIA: {} },
     families: [WEST_KENYA],
   },
+  // Each time a unit's fuel probe was disconnected (ProbeReport): West Kenya's
+  // Wialon sheet, Sukari and Kabras too (operator, 5 Nov 2026). The family lists
+  // Nzoia and Naitiri, whose trucks are on that sheet.
+  probeReport: {
+    orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {} },
+    families: [WEST_KENYA],
+  },
   // The vehicles whose trackers have stopped sending (OfflineReport): West
   // Kenya's sheet, and Menengai's too (operator, 3 Nov 2026).
   offline: {

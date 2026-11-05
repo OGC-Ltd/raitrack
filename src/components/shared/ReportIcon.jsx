@@ -85,6 +85,15 @@ const MARKS = {
     </>
   ),
   // Speed Report: a dial, and the rows of a day's sheet under it.
+  probeReport: (
+    <>
+      <path d="M12 3v7" />
+      <path d="M9 3h6" />
+      <path d="M12 21v-5" />
+      <path d="M8 10h8v3a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
   speedReport: (
     <>
       <path d="M5.5 13a6.5 6.5 0 0 1 13 0" />
