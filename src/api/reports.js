@@ -50,6 +50,13 @@ export async function loadMovementReport({ orgId, from, to, offline = false }) {
   return res.data
 }
 
+/** The events picked onto a window of the Movements report (lib/movementEvents): `{ events, notes }`. */
+export async function loadMovementEvents({ orgId, from, to, kinds }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/movements/events?from=${Math.round(from)}&to=${Math.round(to)}&kinds=${kinds.join(',')}`)
+  return res.data
+}
+
 /** Each trip signed back in on a fleet day (YYYY-MM-DD), with its fuel and distance. */
 export async function loadTatFuelReport({ orgId, day }) {
   if (!orgId) throw new Error('No organisation selected')

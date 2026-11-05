@@ -57,7 +57,8 @@ import ChoicePicker from './ChoicePicker';
 import TatFuelReport from './TatFuelReport';
 import SpeedReport from './SpeedReport';
 import OfflineReport from './OfflineReport';
-import { loadMovementReport, makeReportDoc } from '../../api/reports';
+import { loadMovementReport, loadMovementEvents, makeReportDoc } from '../../api/reports';
+import { EVENTS, eventKeys, pickedEvents, countByUnit, countCell, eventsFor, eventCells, eventNotes, EVENT_HEADS } from '../../lib/movementEvents';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPreview from '../shared/PdfPreview';
 import { loadZones } from '../../hooks/useEstateZones';
@@ -66,6 +67,7 @@ import { withStoDirections } from '../../lib/stoUnits';
 import { movementDoc } from '../../lib/movementDoc';
 import { docHtml } from '../../lib/docHtml';
 import JpegButton from '../shared/JpegButton';
+import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
@@ -755,7 +757,12 @@ function MovementsReport({ orgId }) {
   // the PDF and JPEG keep every unit
   const [plateSearch, setPlateSearch] = useState('');
   const [types, setTypes] = useState(saved?.types ?? null);
+  // The events picked onto the report (operator, 5 Nov 2026), none to begin with: the report as it was
+  const [eventKinds, setEventKinds] = useState(saved?.eventKinds ?? []);
+  const [eventRead, setEventRead] = useState({ status: 'idle', list: [], notes: [], message: null });
+  const eventsHeld = useRef(new Map());                      // by window and kind: ticking one more reads only that
   const [pdf, setPdf] = useState({ busy: false, error: null });
+  const [pageLandscape, setPageLandscape] = useState(false); // the way up last asked for: Preview shows what the PDF will be
   const [confirm, setConfirm] = useState(null);              // { words, go }: waits for the operator's yes
   const runId = useRef(0);
 
@@ -763,9 +770,9 @@ function MovementsReport({ orgId }) {
   // back finds them as they were. Only finished tables are kept.
   useEffect(() => {
     if (!orgId) return;
-    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types });
+    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types, eventKinds });
     else movementsKept.delete(orgId);
-  }, [orgId, sel, draft, run, edits, day, types]);
+  }, [orgId, sel, draft, run, edits, day, types, eventKinds]);
 
   const execute = async (next) => {
     if (!orgId) return;
@@ -837,6 +844,36 @@ function MovementsReport({ orgId }) {
   const changed = reports
     ? reports.reduce((n, r, i) => n + r.groups.reduce((m, g) => m + g.rows.filter((x) => isEdited(x, edits[i]?.[x.vehicleId])).length, 0), 0)
     : 0;
+  // The events of the kinds picked over the windows run. A slow or failed read waits beside the table, never in front of it
+  useEffect(() => {
+    if (!orgId || !reports || !eventKinds.length) { setEventRead({ status: 'idle', list: [], notes: [], message: null }); return undefined; }
+    let live = true;
+    const held = eventsHeld.current;
+    const key = (r, kind) => `${r.from}|${r.to}|${kind}`;
+    const gather = () => {
+      const parts = reports.flatMap((r) => eventKinds.map((k) => held.get(key(r, k))).filter(Boolean));
+      return { list: parts.flatMap((x) => x.events), notes: parts.flatMap((x) => x.notes) };
+    };
+    setEventRead({ status: 'loading', ...gather(), message: null });
+    (async () => {
+      try {
+        for (const r of reports) {
+          const missing = eventKinds.filter((k) => !held.has(key(r, k)));
+          if (!missing.length) continue;
+          const got = await loadMovementEvents({ orgId, from: r.from, to: r.to, kinds: missing });
+          for (const k of missing) held.set(key(r, k), { events: got.events.filter((e) => e.kind === k), notes: got.notes });
+          if (live) setEventRead({ status: 'loading', ...gather(), message: null });
+        }
+        if (live) setEventRead({ status: 'done', ...gather(), message: null });
+      } catch (err) {
+        if (live) setEventRead({ status: 'error', ...gather(), message: err?.message ?? String(err) });
+      }
+    })();
+    return () => { live = false; };
+  }, [orgId, reports, eventKinds]);
+  const eventBusy = eventRead.status === 'loading';
+  const pickedKinds = useMemo(() => pickedEvents(eventKinds), [eventKinds]);
+
   const edit = (vehicleId, patch) => setEdits((all) => all.map((e, i) => (i === day ? { ...e, [vehicleId]: { ...e[vehicleId], ...patch } } : e)));
 
   // Closing or reloading the browser tab would lose them: the browser asks first.
@@ -857,13 +894,16 @@ function MovementsReport({ orgId }) {
   // (operator, 4 Nov 2026), so the depots' blue is in it (lib/movementDoc)
   const movementSheet = () => movementDoc(pdfRequests(reports, edits, picked), {
     organisation: reports?.[0]?.organisation, orgCode: reports?.[0]?.orgCode, depots: depots.found,
+    events: eventKinds.length ? { kinds: eventKinds, list: eventRead.list } : null,
+    notes: eventKinds.length ? eventNotes(eventRead.list, eventKinds, eventRead.notes) : [],
   });
   const makeMovementPdf = (landscape = false) => makeReportDoc({ orgId, landscape, doc: movementSheet() });
-  const downloadPdf = async () => {
+  const downloadPdf = async (landscape = false) => {
     if (!reports || pdf.busy) return;
+    setPageLandscape(landscape);
     setPdf({ busy: true, error: null });
     try {
-      const made = await makeMovementPdf();
+      const made = await makeMovementPdf(landscape);
       saveFile(made.blob, made.filename);
       setPdf({ busy: false, error: null });
     } catch (err) {
@@ -890,7 +930,7 @@ function MovementsReport({ orgId }) {
     const id = ++previewId.current;
     setPreview({ status: 'loading' });
     try {
-      const file = await makeMovementPdf();
+      const file = await makeMovementPdf(pageLandscape);
       if (id === previewId.current) setPreview({ status: 'done', ...file });
     } catch (err) {
       if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
@@ -900,6 +940,12 @@ function MovementsReport({ orgId }) {
   const previewCaption = !reports ? null : reports.length === 1
     ? periodText(reports[0].from, reports[0].to)
     : `${reports.length} days, ${dayWords(reports[0].from)} – ${dayWords(reports[reports.length - 1].from)}`;
+
+  // The events of the day on screen, for the units it shows and keeps
+  const dayRows = useMemo(() => (shownGroups ?? []).flatMap((g) => g.rows).filter((r) => !dayEdits[r.vehicleId]?.removed), [shownGroups, dayEdits]);
+  const dayEvents = useMemo(() => (report ? eventsFor(eventRead.list.filter((e) => e.at >= report.from && e.at <= report.to), dayRows, eventKinds) : []), [report, eventRead.list, dayRows, eventKinds]);
+  const dayCounts = useMemo(() => countByUnit(dayEvents), [dayEvents]);
+  const dayNotes = eventBusy ? [] : eventNotes(eventRead.list, eventKinds, eventRead.notes);
 
   // The site the directions read against: MORL for Menengai, the organisation's own elsewhere
   const site = report?.site ?? 'MORL';
@@ -972,6 +1018,10 @@ function MovementsReport({ orgId }) {
                         onChange={(v) => setTypes(v == null ? allTypes : [v])} />
         ) : allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
 
+        <CheckPicker icon="ti-alert-triangle" label="Events" noun="events" noAll
+                     options={EVENTS.map((e) => ({ value: e.key, label: e.label }))} picked={eventKinds}
+                     onChange={(v) => setEventKinds(v ?? eventKeys)} />
+
         <button type="button" className="sp4-submit-btn frp-run rpt-run"
                 onClick={daysOpen ? runDays : () => guard('Run the report again', () => execute(sel))}
                 disabled={!orgId || run.status === 'loading' || Boolean(problem)} title={problem ?? 'Make the report'}>
@@ -1027,13 +1077,16 @@ function MovementsReport({ orgId }) {
                 {changed > 0 && <span className="rpt-edited"> · {changed} edited</span>}
               </>}
               onCsv={kept.counts.total ? () => { const sheet = movementSheet(); downloadTableCsv({ ...docCsv(sheet), filenameSlug: docSlug(sheet) }); } : undefined}
-              onPdf={pdf.busy ? undefined : downloadPdf}
               actions={<>
+                {eventBusy && <span className="rpt-sub" role="status">Reading the events…</span>}
+                {eventRead.status === 'error' && <span className="rpt-warn" role="status">The events could not all be read: {eventRead.message}</span>}
                 {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits((all) => all.map(() => ({})))}>Undo edits</button>}
                 {pdf.busy ? <span className="rpt-sub">{pdf.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
-                <JpegButton onSave={downloadJpeg} disabled={Boolean(pdf.busy) || !kept.counts.total}
+                <JpegButton onSave={downloadJpeg} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
                             title="The PDF report, with your edits, as an image" />
-                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(pdf.busy) || !kept.counts.total}
+                <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={downloadPdf} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
+                            title="The report as a PDF, with your edits, upright or on its side" />
+                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
                         title="See the PDF, with your edits, before you download it">
                   <i className="ti ti-eye" aria-hidden="true" /> Preview
                 </button>
@@ -1082,6 +1135,7 @@ function MovementsReport({ orgId }) {
                       <th scope="col">Location</th>
                       <th scope="col" className="rpt-num">Speed</th>
                       <th scope="col">Direction</th>
+                      {pickedKinds.map((k) => <th key={k.key} scope="col" className="rpt-num mvr-count-th">{k.label}</th>)}
                       <th scope="col"><span className="mvr-sr">Keep or leave out</span></th>
                     </tr>
                   </thead>
@@ -1089,7 +1143,7 @@ function MovementsReport({ orgId }) {
                     {shownGroups.map((g) => (
                       <Fragment key={g.name}>
                         <tr className="rpt-group">
-                          <th colSpan={6} scope="rowgroup">
+                          <th colSpan={6 + pickedKinds.length} scope="rowgroup">
                             <span className="rpt-group__name">{g.name}</span>
                             <span className="rpt-group__meta">{groupWords(g, dayEdits)}</span>
                           </th>
@@ -1121,6 +1175,7 @@ function MovementsReport({ orgId }) {
                                   {statesFor(row).map((s) => <option key={s} value={s}>{words[s]}</option>)}
                                 </select>
                               </td>
+                              {pickedKinds.map((k) => <td key={k.key} className="rpt-num">{countCell(dayCounts, row.vehicleId, k.key)}</td>)}
                               <td className="mvr-keep">
                                 <button type="button" className="mvr-keep__btn"
                                         onClick={() => edit(row.vehicleId, { removed: !out })}
@@ -1137,6 +1192,26 @@ function MovementsReport({ orgId }) {
                   </tbody>
                 </table>
               </div>
+            )}
+            {pickedKinds.length > 0 && report.groups.length > 0 && (
+              <section className="mvr-events" aria-label="Events">
+                <h3 className="mvr-events__title">Events <span className="rpt-sub">{dayEvents.length.toLocaleString('en-GB')}{eventBusy ? ' so far' : ''}</span></h3>
+                {dayNotes.map((text) => <p key={text} className="rpt-warn mvr-events__note">{text}</p>)}
+                {dayEvents.length > 0 ? (
+                  <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+                    <table className="sp4-table rpt-table">
+                      <thead><tr>{EVENT_HEADS.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
+                      <tbody>
+                        {dayEvents.map((e) => (
+                          <tr key={`${e.vehicleId}|${e.kind}|${e.at}|${e.source}`} className="sp4-tr">
+                            {eventCells(e).map((text, i) => <td key={EVENT_HEADS[i]} className={i === 0 ? 'rpt-unit' : undefined}>{text}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : !eventBusy && eventRead.status !== 'error' && <p className="rpt-sub mvr-events__note">None of the events picked in this window.</p>}
+              </section>
             )}
           </>
         )}
