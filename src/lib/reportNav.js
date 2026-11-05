@@ -48,6 +48,9 @@ export const hasGeofencesTab = (can, orgCode) => can('telemetry:read') && templa
  */
 export const hasTatFuelTab = (can, orgCode) => can('telemetry:read') && templateFor('tatFuel', orgCode) != null;
 
+/** Does Movements carry a Recovery tab for the four supported organisations? */
+export const hasRecoveryTab = (can, orgCode) => can('telemetry:read') && templateFor('recovery', orgCode) != null;
+
 /**
  * Does Movements carry a Speed Report tab (each unit over its limit, a day at
  * a time)? Moved under Movements (operator, 4 Nov 2026).

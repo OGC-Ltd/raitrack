@@ -35,6 +35,14 @@ const MARKS = {
       <path d="M16.500 14v2.500l1.700 1" />
     </>
   ),
+  // Recovery: a road line leading to a location pin.
+  recovery: (
+    <>
+      <path d="M3 17.5h3l2.2-5 3.2 3.2 2.4-6.2 2.1 3H21" />
+      <path d="M17.5 7.5s-3-3-3-5.1a3 3 0 0 1 6 0c0 2.1-3 5.1-3 5.1z" />
+      <circle cx="17.5" cy="2.4" r=".8" />
+    </>
+  ),
   // Tankers: the tanker, and a clock for its four hours.
   tankers: (
     <>
