@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EVENTS, pickedEvents, countByUnit, countCell, eventsFor, eventSections, eventNotes } from './movementEvents';
-import { movementDoc } from './movementDoc';
+import { movementDoc, sheetIsWide } from './movementDoc';
 import { textMm } from './shiftDoc';
 
 const T = Date.parse('2026-11-05T08:30:00+03:00');
@@ -67,12 +67,17 @@ describe('the events on the document', () => {
   it('is as it was with nothing picked', () => {
     const d = movementDoc([request], opts);
     expect(tables(d)).toHaveLength(1);
-    expect(tables(d)[0].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction']);
+    expect(tables(d)[0].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Distance', 'Direction']);
     expect(d.blocks.some((b) => b.title?.includes('Events'))).toBe(false);
   });
   it('never cuts a heading: each fits its column whole, on one line as the PDF prints it', () => {
     const d = movementDoc([request], { ...opts, events: { kinds: EVENTS.map((e) => e.key), list: [stop, brake, turn] } });
-    const pageMm = 184;
+    // With the counts on the sheet the PDF is landscape (271 mm), and Location keeps room
+    const pageMm = 271;
+    expect(sheetIsWide(EVENTS.map((e) => e.key))).toBe(true);
+    expect(sheetIsWide(['braking'])).toBe(false);
+    const plain = movementDoc([request], opts).blocks.find((b) => b.kind === 'table');
+    expect(184 - plain.cols.reduce((n, c) => n + c.w, 0)).toBeGreaterThanOrEqual(35);
     for (const t of tables(d)) {
       t.cols.forEach((c, i) => { if (c.w) expect(textMm(t.head[i], 7.2, true) + 3.8, t.head[i]).toBeLessThanOrEqual(c.w); });
       expect(t.cols.reduce((n, c) => n + c.w, 0)).toBeLessThan(pageMm);
@@ -83,10 +88,14 @@ describe('the events on the document', () => {
     const accel = { ...brake, kind: 'acceleration' };
     const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'acceleration'], list: [stop, accel] } });
     const [sheet] = tables(d);
-    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Harsh acceleration', 'Stops', 'Speed', 'Direction']);
+    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Harsh acceleration', 'Stops', 'Speed', 'Distance', 'Direction']);
     expect(sheet.rows[0].slice(3, 6).map((c) => c.text)).toEqual(['1', '1', '40 km/h']);
-    const one = movementDoc([request], { ...opts, events: { kinds: ['cornering'], list: [] } });
-    expect(tables(one)[0].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction']);
+    // Harsh cornering counted on the sheet too (operator, 5 Nov 2026)
+    const one = movementDoc([request], { ...opts, events: { kinds: ['cornering'], list: [{ ...brake, kind: 'cornering' }] } });
+    expect(tables(one)[0].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Harsh cornering', 'Speed', 'Distance', 'Direction']);
+    expect(tables(one)[0].rows[0][3].text).toBe('1');
+    const none = movementDoc([request], { ...opts, events: { kinds: ['braking'], list: [] } });
+    expect(tables(none)[0].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Distance', 'Direction']);
   });
   it('counts on the sheet only what happened in the window', () => {
     const early = { ...stop, at: at(-90), stoppedAt: at(-90) };
@@ -96,7 +105,7 @@ describe('the events on the document', () => {
   it('leaves the sheet’s other columns as they were, the counts in a table of their own, then a numbered section a kind', () => {
     const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'braking'], list: [stop, brake, turn] } });
     const [sheet, counted, stops, brakes] = tables(d);
-    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Stops', 'Speed', 'Direction']);
+    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Stops', 'Speed', 'Distance', 'Direction']);
     expect(counted.head).toEqual(['Unit', 'Stop over 10 min', 'Harsh stop']);
     expect(counted.rows.map((r) => r.map((c) => c.text))).toEqual([['KDE 136E', '1', '1']]);
     expect(d.blocks.find((b) => b.title === '3. Events')).toMatchObject({ aside: '2 events' });

@@ -106,5 +106,5 @@ export function useReportEditor({ orgId, source, build }) {
     </>
   );
 
-  return { edited, make, guard, button, overlay };
+  return { edited, make, guard, button, overlay, doc: sheet.doc };
 }

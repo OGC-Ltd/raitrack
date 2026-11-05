@@ -47,6 +47,11 @@ import TableToolbar from "../body/TableToolbar";
 import TablePager, { PAGE_STEP } from "../body/TablePager";
 import FilterBar from "../body/FilterBar";
 import EmptyNote from "../shared/EmptyNote";
+import GeofenceExits from "./GeofenceExits";
+import UnauthorisedStops from "./UnauthorisedStops";
+import { useStopWatch } from "../../hooks/useStopWatch";
+import { loadGeofenceExits } from "../../api/geofenceExits";
+import { exitRows } from "../../lib/geofenceExits";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
 
@@ -649,6 +654,16 @@ export default function AlertsScreen() {
   const queryClient = useQueryClient();
 
   const [kind, setKind] = useState("all");
+  // Today's geofence exits, read from the notification history when the chip is picked (operator, 5 Nov 2026)
+  // Which list: the server's alerts, today's geofence exits, or Menengai's unauthorised stops now
+  const [view, setView] = useState("alerts");
+  const geo = view === "geo";
+  const stops = view === "stops";
+  const setGeo = (on) => setView(on ? "geo" : "alerts");
+  const watch = useStopWatch();
+  // A pop-up's "Open" (components/shared/StopWatch) lands on the stops
+  useEffect(() => { if (watch.open) setView("stops"); }, [watch.open]);
+  const [geoRead, setGeoRead] = useState({ status: "idle" });
   const [status, setStatus] = useState("open");
   const [orgs, setOrgs] = useState([]);
   // A chip's id, or "custom" for days picked in the From / To fields.
@@ -940,6 +955,21 @@ export default function AlertsScreen() {
     returnTo.current = null;
   }, [open]);
 
+  // The organisations picked (none = all held); read again when they or the day change, or on Refresh
+  const geoOrgIds = useMemo(() => (orgs.length ? orgs : orgList.map((o) => o.id)), [orgs, orgList]);
+  const geoKey = geoOrgIds.join(",");
+  const readGeo = useCallback(async () => {
+    if (!geoOrgIds.length) return;
+    setGeoRead((g) => ({ ...g, status: "loading" }));
+    try {
+      const r = await loadGeofenceExits(geoOrgIds);
+      setGeoRead({ status: "done", rows: exitRows(r.byOrg), day: r.day, failed: r.failed, cut: r.cut, key: geoKey });
+    } catch (err) {
+      setGeoRead({ status: "error", message: err?.message ?? String(err) });
+    }
+  }, [geoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (geo && geoRead.key !== geoKey) readGeo(); }, [geo, geoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const pickOrg = (id) => setOrgs((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   const maxFigure = Math.max(1, ...rows.map((r) => (r.kind === "fuel" ? r.fuel.litres : r.speeding.overByKmh)));
 
@@ -965,7 +995,16 @@ export default function AlertsScreen() {
 
       <div className="sp4-body">
         <TableToolbar
-          summary={
+          summary={stops ? (
+            <>
+              <b>{watch.flags.length}</b> Menengai unit{watch.flags.length === 1 ? "" : "s"} flagged now
+            </>
+          ) : geo ? (
+            <>
+              <b>{geoRead.status === "done" ? geoRead.rows.length : "…"}</b> geofence exit{geoRead.rows?.length === 1 ? "" : "s"} today
+              {orgs.length > 0 && <> · {orgs.map((id) => shortName(orgById.get(id))).join(", ")}</>}
+            </>
+          ) : (
             <>
               <b>{pager.total}</b> alert{pager.total === 1 ? "" : "s"}
               {orgs.length > 0 && <> · {orgs.map((id) => shortName(orgById.get(id))).join(", ")}</>}
@@ -973,11 +1012,11 @@ export default function AlertsScreen() {
               {unread > 0 && <> · <b>{unread}</b> unread</>}
               {first.stale && <span className="sp4-muted"> · updating…</span>}
             </>
-          }
-          loading={first.loading}
-          onReload={refresh}
+          )}
+          loading={stops ? watch.status === "loading" : geo ? geoRead.status === "loading" : first.loading}
+          onReload={stops ? undefined : geo ? readGeo : refresh}
           actions={(
-            <button type="button" className="sp4-ghost-btn" onClick={markAll} disabled={markingAll || !page}
+            <button type="button" className="sp4-ghost-btn" onClick={markAll} disabled={markingAll || !page || geo || stops}
                     title="Every alert that has arrived so far, in every organisation, read for you only">
               <i className="ti ti-checks" aria-hidden="true" /> {markingAll ? "Marking…" : "Mark all read"}
             </button>
@@ -1009,14 +1048,22 @@ export default function AlertsScreen() {
               ))}
             </div>
           )}
-          {kindsHeld.size > 1 && (
+          {(kindsHeld.size > 1 || orgList.length > 0) && (
             <div className="sp4-filter-group">
               <span className="sp4-filter-label">Alert</span>
-              {KINDS.map((k) => (
-                <Chip key={k.id} on={kind === k.id} onClick={() => setKind(k.id)} n={nKind(k.id)}>{k.label}</Chip>
+              {kindsHeld.size > 1 && KINDS.map((k) => (
+                <Chip key={k.id} on={view === "alerts" && kind === k.id} onClick={() => { setKind(k.id); setGeo(false); }} n={nKind(k.id)}>{k.label}</Chip>
               ))}
+              {kindsHeld.size <= 1 && <Chip on={view === "alerts"} onClick={() => setGeo(false)} n={total}>Alerts</Chip>}
+              <Chip on={geo} onClick={() => setGeo(true)} n={geoRead.status === "done" ? geoRead.rows.length : undefined}
+                    title="Today’s geofence exits, as the server recorded them">Geofence exits</Chip>
+              {watch.status !== "off" && watch.status !== "idle" && (
+                <Chip on={stops} onClick={() => setView("stops")} n={watch.status === "done" ? watch.flags.length : undefined}
+                      title="Menengai units standing in a no-go zone, or stopped over 10 minutes outside every authorised place">Unauthorised stops</Chip>
+              )}
             </div>
           )}
+          {view === "alerts" && (<>
           <div className="sp4-filter-group">
             <span className="sp4-filter-label">State</span>
             {STATUSES.map((s) => (
@@ -1049,8 +1096,15 @@ export default function AlertsScreen() {
               ))}
             </div>
           )}
+          </>)}
         </FilterBar>
 
+        {geo && (
+          <GeofenceExits state={geoRead} q={q} orgName={(id) => shortName(orgById.get(id)) ?? "an organisation"}
+                         showOrg={geoOrgIds.length > 1} onRetry={readGeo} />
+        )}
+        {stops && <UnauthorisedStops watch={watch} q={q} />}
+        {view === "alerts" && (<>
         {rows.length === 0 && first.loading ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Alerts">
             Fuel and overspeeding alerts from every organisation you hold.
@@ -1236,8 +1290,9 @@ export default function AlertsScreen() {
             <TablePager pager={pager} label="Alert pages" />
           </div>
         )}
+        </>)}
       </div>
-      {openAlert && (
+      {view === "alerts" && openAlert && (
         <AlertPanel
           alert={openAlert}
           org={orgById.get(openAlert.orgId)}

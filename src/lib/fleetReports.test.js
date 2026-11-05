@@ -100,6 +100,18 @@ describe('driver conduct', () => {
     expect(rows[0]).toMatchObject({ accel: 2, brake: 1, seatbelt: 2, phone: 1, total: 6, driver: 'Osero Monari', dashcam: true, suspect: false });
   });
 
+  it('counts harsh cornering from the Movements events, in the total', async () => {
+    const { cornerAsHarsh } = await import('./fleetReports');
+    const turns = cornerAsHarsh([
+      { kind: 'cornering', vehicleId: 'v1', plate: 'KCS 082M', at: at('2026-11-01T07:15:00') },
+      { kind: 'cornering', vehicleId: 'v1', plate: 'KCS 082M', at: at('2026-11-01T07:40:00') },
+      { kind: 'braking', vehicleId: 'v1', at: at('2026-11-01T07:41:00') },               // not a turn: read from the feed
+    ]);
+    expect(turns.map((e) => e.alertType)).toEqual(['HARSH_CORNERING', 'HARSH_CORNERING']);
+    const rows = behaviourRows(units, [ev('v1', '2026-11-01T06:10:00'), ...turns], [], day);
+    expect(rows[0]).toMatchObject({ accel: 1, corner: 2, total: 3 });
+  });
+
   it('a truck reporting through two units is counted once', () => {
     const rows = behaviourRows(units, [ev('v2', '2026-11-01T07:00:00'), ev('v3', '2026-11-01T07:00:00'), ev('v3', '2026-11-01T07:30:00')], [], day);
     expect(rows.map((r) => [r.unit.plate, r.accel])).toEqual([['KCN 901F', 2]]);

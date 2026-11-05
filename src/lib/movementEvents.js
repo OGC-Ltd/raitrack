@@ -21,6 +21,7 @@ export const eventKeys = EVENTS.map((e) => e.key);
 /** The counts the PDF's unit tables carry, right before Speed (operator, 5 Nov 2026), when picked. */
 export const SHEET_COUNTS = [
   { key: 'acceleration', head: 'Harsh acceleration', w: 28 },
+  { key: 'cornering', head: 'Harsh cornering', w: 25 },
   { key: 'stop', head: 'Stops', w: 13 },
 ];
 
