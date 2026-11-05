@@ -124,7 +124,7 @@ export default function ProbeReport({ orgId, orgCode, companyName, active = true
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
           <EmptyNote icon={<ReportIcon name="probeReport" />} title="Probe Disconnection Report">
-            Each time a unit’s fuel probe was disconnected.
+            Each time a truck’s fuel probe was disconnected.
           </EmptyNote>
         )}
         {run.status === 'loading' && (
