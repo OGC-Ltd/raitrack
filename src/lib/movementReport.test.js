@@ -195,3 +195,24 @@ describe('Menengai by its fleet list', () => {
     expect(pdfRequest({ ...report, groups: [] }, {}).site).toBe('MORL');
   });
 });
+
+describe('Movements: distance and fuel used in the window', async () => {
+  const { distanceText, fuelText, withTrips, consumptionText } = await import('./movementReport');
+  it('reads km and litres, No probe without a fuel sensor, - when nothing was read', async () => {
+    expect(distanceText({ trip: { km: 12.44, readings: 30 } })).toBe('12.4 km');
+    expect(distanceText({ trip: { km: 0, readings: 30 } })).toBe('0.0 km');
+    expect(distanceText({})).toBe('-');
+    expect(distanceText({ trip: { km: 0, readings: 0 } })).toBe('-');
+    expect(fuelText({ trip: { readings: 30, fuelSensor: false } })).toBe('No probe');
+    expect(fuelText({ trip: { readings: 30, fuelSensor: true, fuelSeen: true, usedL: 3.25 } })).toBe('3.3 L');
+    expect(fuelText({ trip: { readings: 30, fuelSensor: true, fuelSeen: false } })).toBe('-');
+    expect(fuelText({ trip: { readings: 0 } })).toBe('-');
+    expect(consumptionText({ trip: { readings: 30, fuelSensor: true, fuelSeen: true, km: 41.3, usedL: 6.2 } })).toBe('6.7 km/L');
+    expect(consumptionText({ trip: { readings: 30, fuelSensor: true, fuelSeen: true, km: 0.4, usedL: 0.3 } })).toBe('-');
+    expect(consumptionText({ trip: { readings: 30, fuelSensor: true, fuelSeen: true, km: 20, usedL: 0 } })).toBe('-');
+    expect(consumptionText({ trip: { readings: 30, fuelSensor: false, km: 20 } })).toBe('No probe');
+    expect(consumptionText({})).toBe('-');
+    const r = withTrips({ groups: [{ name: 'Van Sales', rows: [{ vehicleId: 'a' }, { vehicleId: 'b' }] }] }, new Map([['a', { km: 5, readings: 3 }]]));
+    expect(r.groups[0].rows.map((x) => distanceText(x))).toEqual(['5.0 km', '-']);
+  });
+});

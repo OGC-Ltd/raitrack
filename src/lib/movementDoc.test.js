@@ -29,7 +29,8 @@ describe('Movements PDF laid out on the page', () => {
     expect(doc.blocks.map((b) => b.kind)).toEqual(['h2', 'figures', 'h2', 'table', 'h2', 'table', 'note']);
     expect(doc.blocks[4].title).toBe('3. Van Sales');
     expect(doc.blocks[5].rows[0][2]).toMatchObject({ text: 'Industrial Area, Nairobi', fill: '#9cc7f5' });
-    expect(doc.blocks[3].rows[0][4]).toMatchObject({ text: 'To MORL', bold: true, fill: '#e3f1dc' });
+    expect(doc.blocks[3].rows[0][5]).toMatchObject({ text: 'To MORL', bold: true, fill: '#e3f1dc' });
+    expect(doc.blocks[3].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Distance', 'Direction']);
     expect(doc.filename).toBe('Movement Report Menengai Oil Refineries Ltd 20261104-1200 1 hour');
   });
 
@@ -41,3 +42,4 @@ describe('Movements PDF laid out on the page', () => {
     expect(doc.filename).toBe('Movement Report M 20261103 to 20261104 1100-1200');
   });
 });
+

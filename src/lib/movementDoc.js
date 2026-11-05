@@ -13,7 +13,7 @@
 //
 // Pure: no React, no network.
 
-import { MOMBASA_LOADING, MOVING_KMH, stamp, countRows, directionWords } from './movementReport';
+import { MOMBASA_LOADING, MOVING_KMH, stamp, countRows, directionWords, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED } from './movementReport';
 import { depotAt } from './movementDepots';
 import { pickedEvents, countByUnit, countCell, eventsFor, eventSections, SHEET_COUNTS } from './movementEvents';
 
@@ -56,8 +56,16 @@ export function locationFill(row, groupName, depots = []) {
   return moving(row) ? FILL.moving : undefined;
 }
 
-const COLS = [{ w: 54 }, { w: 30 }, { w: 0, wrap: true }, { w: 15, align: 'right' }, { w: 20 }];
-const HEAD = ['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction'];
+// Distance and Fuel used after Speed (operator, 5 Nov 2026). With them, a sheet
+// carrying event counts too is printed landscape (sheetIsWide), or Location
+// would have no room left on a portrait page.
+// Consumption after Fuel used (operator, 5 Nov 2026), headed "km/L" on the page
+// so Location keeps its room: the figure alone, "6.7"
+const COLS = [{ w: 38, wrap: true }, { w: 29 }, { w: 0, wrap: true }, { w: 15, align: 'right' }, { w: 15, align: 'right' },
+  ...(SHOW_FUEL_USED ? [{ w: 16, align: 'right' }] : []), ...(SHOW_CONSUMPTION ? [{ w: 15, align: 'right' }] : []), { w: 20 }];
+/** Do the event kinds picked put counts on the unit tables? Then the PDF and JPEG are landscape. */
+export const sheetIsWide = (kinds) => SHEET_COUNTS.some((k) => kinds?.includes(k.key));
+const HEAD = ['Grouping', 'Last coordinates', 'Location', 'Speed', 'Distance', ...(SHOW_FUEL_USED ? ['Fuel used'] : []), ...(SHOW_CONSUMPTION ? ['km/L'] : []), 'Direction'];
 
 /** One request's overview and sections, numbered from `n`. */
 function partBlocks(q, n, depots, events) {
@@ -104,6 +112,9 @@ function partBlocks(q, n, depots, events) {
           cell(row.location ?? (row.state === 'at' ? q.morl ?? site : DASH), place ? { fill: place } : {}),
           ...onSheet.map((k) => cell(countCell(counts, row.vehicleId, k.key))),
           cell(row.speedKmh != null ? `${row.speedKmh} km/h` : DASH),
+          cell(distanceText(row)),
+          ...(SHOW_FUEL_USED ? [cell(fuelText(row), fuelText(row) === 'No probe' ? { tone: 'mut' } : {})] : []),
+          ...(SHOW_CONSUMPTION ? [cell(consumptionText(row).replace(/ km\/L$/, ''), consumptionText(row) === 'No probe' ? { tone: 'mut' } : {})] : []),
           cell(words[row.state] ?? row.state, row.state === 'to' || row.state === 'from' ? { bold: true } : {}),
         ];
       }),

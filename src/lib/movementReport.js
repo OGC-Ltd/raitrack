@@ -46,6 +46,52 @@ export const MOVING_KMH = 5;
  * Pass the row as edited: one the operator set to Stopped or not reporting is not
  * moving, whatever the last speed said. The server reads it the same way.
  */
+// ── distance and fuel in the window (operator, 5 Nov 2026: "add a column for
+// distance covered ... include the fuel consumed column"; the report's own
+// window; "No probe" for a unit without a fuel sensor). `row.trip`, set by the
+// page from each unit's readings (api/fleetReports loadDistances):
+// { km, usedL, fuelSeen, fuelSensor, readings }.
+
+/** "12.4 km" covered in the window; "-" when it was not read or sent nothing in it. */
+export function distanceText(row) {
+  const t = row?.trip;
+  if (!t || !t.readings) return '-';
+  return `${(t.km ?? 0).toFixed(1)} km`;
+}
+
+/** "3.2 L" used in the window; "No probe" for a unit without a fuel sensor; "-" when it cannot be told. */
+export function fuelText(row) {
+  const t = row?.trip;
+  if (!t || !t.readings) return '-';
+  if (!t.fuelSensor) return 'No probe';
+  return t.fuelSeen ? `${(t.usedL ?? 0).toFixed(1)} L` : '-';
+}
+
+/**
+ * Fuel consumption in the window, km per litre (operator, 5 Nov 2026: "can we be
+ * able to calculate the fuel consumption?"; km/L). Only over at least
+ * CONSUMPTION_MIN_KM with some fuel used: a van that moved 0.4 km on 0.3 L in an
+ * hour has no consumption worth printing.
+ */
+export const CONSUMPTION_MIN_KM = 5;
+/** The Consumption column, taken off for now (operator, 5 Nov 2026: "we temporarily remove the consumption column"): true puts it back. */
+export const SHOW_CONSUMPTION = false;
+export function consumptionText(row) {
+  const t = row?.trip;
+  if (!t || !t.readings) return '-';
+  if (!t.fuelSensor) return 'No probe';
+  if (!t.fuelSeen || !(t.usedL > 0) || !((t.km ?? 0) >= CONSUMPTION_MIN_KM)) return '-';
+  return `${(t.km / t.usedL).toFixed(1)} km/L`;
+}
+
+/** Each unit's distance and fuel in the report's window, from loadDistances' answer (Map vehicleId → summary). */
+export function withTrips(report, perVehicle) {
+  return { ...report, groups: report.groups.map((g) => ({ ...g, rows: g.rows.map((r) => (perVehicle?.has(r.vehicleId) ? { ...r, trip: perVehicle.get(r.vehicleId) } : r)) })) };
+}
+
+/** The Fuel used column, taken off for now (operator, 5 Nov 2026: "let's remove the column for fuel consumption"): true puts it back. */
+export const SHOW_FUEL_USED = false;
+
 export function isMoving(row) {
   return row.lastAt != null && !row.stale && row.state !== 'stopped' && row.state !== 'no-fix'
     && (row.speedKmh ?? 0) >= MOVING_KMH;

@@ -6,7 +6,7 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from './reportTables';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP } from './reportTables';
 import { ACTIONS, incidentWords, isOverdue, needsEscalation, ESCALATE_CASES, ESCALATE_DAYS } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 
@@ -33,7 +33,7 @@ function columnsFor(def, ctx, keep, inner) {
   const heads = def.columns(ctx);
   const right = (i) => isFigure(def, heads, i);
   const widths = {
-    behaviour: [23, 13, 22, 23, 19, 16, 14, 20, 12, 22],
+    behaviour: [23, 13, 20, 23, 19, 20, 16, 14, 20, 12, ...(SHOW_FOLLOW_UP ? [20] : [])],   // Harsh cornering after Harsh braking (5 Nov 2026)
     night: [48, 40, 48, 48],
     overspeed: [30, 22, 44, 20, 22, 22, 24],
     utilisation: [32, 28, 26, 28, 30, 40],
@@ -187,7 +187,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   if (notes.length) flow.push(...notes.map((t) => `<div class="note">${esc(t)}</div>`));
 
   let next = done.secs.length + 2 + (events ? 1 : 0);
-  const fu = def.key === 'behaviour' ? followUpFlow(done, ctx, now, next, inner) : null;
+  const fu = def.key === 'behaviour' && SHOW_FOLLOW_UP ? followUpFlow(done, ctx, now, next, inner) : null;
   if (fu) { flow.push(...fu.flow); next = fu.next; }
 
   if (done.missing.length) {
