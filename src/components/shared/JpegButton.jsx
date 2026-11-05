@@ -1,7 +1,8 @@
 /*
  * The JPEG button every report shares (operator, 4 Nov 2026: "all jpeg should
  * have the option for portrait or landscape"). Pressing it asks which way up
- * the pages lie, then calls `onSave(landscape)`.
+ * the pages lie, then calls `onSave(landscape)`. `word` and `icon` make it the
+ * same choice for a PDF (operator, 5 Nov 2026).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,7 +13,7 @@ const CHOICES = [
   { landscape: true, label: 'Landscape', icon: 'ti-rectangle', note: 'Wide pages, more room per row' },
 ];
 
-export default function JpegButton({ onSave, disabled, busy, className = 'sp4-ghost-btn', title = 'The PDF report as an image' }) {
+export default function JpegButton({ onSave, disabled, busy, word = 'JPEG', icon = 'ti-photo', className = 'sp4-ghost-btn', title = 'The PDF report as an image' }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
   useEffect(() => {
@@ -29,7 +30,7 @@ export default function JpegButton({ onSave, disabled, busy, className = 'sp4-gh
     <span className="jpg-btn" ref={box}>
       <button type="button" className={className} onClick={() => setOpen((o) => !o)} disabled={disabled}
               aria-haspopup="menu" aria-expanded={open} aria-busy={busy || undefined} title={title}>
-        <i className="ti ti-photo" aria-hidden="true" /> {busy ? 'Making the JPEG…' : 'JPEG'}
+        <i className={`ti ${icon}`} aria-hidden="true" /> {busy ? `Making the ${word}…` : word}
         <i className="ti ti-chevron-down jpg-btn__caret" aria-hidden="true" />
       </button>
       {open && (

@@ -476,6 +476,13 @@ select.mvr-edit { min-width: 110px; }
 .mvr-depots__sw { display: inline-block; width: 14px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
 
 /* Deliveries (operator, 4 Nov 2026): the day's vehicles and their customers */
+/* The events' headings whole, on two lines where they need them */
+.sp4-table thead th.mvr-count-th { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: normal; word-break: normal; min-width: 96px; line-height: 1.25; }
+
+.mvr-events { margin: 14px var(--sp4-gutter, 12px) 0; }
+.mvr-events__title { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.mvr-events__note { margin: 0 0 6px; font-size: 12px; }
+
 .dlv-plan { margin: 10px var(--sp4-gutter, 12px); padding: 10px 12px; border: 1px solid var(--sp4-line, rgba(127,127,127,.25)); border-radius: 10px; }
 .dlv-plan__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
 .dlv-plan__title { margin: 0; font-size: 13px; font-weight: 700; }

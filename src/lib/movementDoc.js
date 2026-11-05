@@ -15,6 +15,7 @@
 
 import { MOMBASA_LOADING, MOVING_KMH, stamp, countRows, directionWords } from './movementReport';
 import { depotAt } from './movementDepots';
+import { pickedEvents, countByUnit, countCell, eventsFor, eventCells, EVENT_HEADS } from './movementEvents';
 
 const TZ = 'Africa/Nairobi';
 const DASH = '-';
@@ -57,13 +58,19 @@ export function locationFill(row, groupName, depots = []) {
 
 const COLS = [{ w: 54 }, { w: 30 }, { w: 0, wrap: true }, { w: 15, align: 'right' }, { w: 20 }];
 const HEAD = ['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction'];
+const EVENT_COLS = [{ w: 30 }, { w: 30 }, { w: 36, wrap: true }, { w: 0, wrap: true }, { w: 26, wrap: true }, { w: 15 }];
 
 /** One request's overview and sections, numbered from `n`. */
-function partBlocks(q, n, depots) {
+function partBlocks(q, n, depots, events) {
   const site = q.site || 'MORL';
   const words = directionWords(site);
   const c = countRows(q.groups);
   const silent = c.stale + c['no-fix'];
+  const kinds = pickedEvents(events?.kinds);
+  const rowsAll = q.groups.flatMap((g) => g.rows);
+  const inWindow = (events?.list ?? []).filter((e) => e.at >= q.from && e.at <= q.to);
+  const listed = kinds.length ? eventsFor(inWindow, rowsAll, events.kinds) : [];
+  const counts = countByUnit(listed);
   const blocks = [
     { kind: 'h2', title: `${n}. Overview`, aside: windowText(q) },
     { kind: 'figures', items: [
@@ -99,15 +106,34 @@ function partBlocks(q, n, depots) {
       }),
     });
   });
-  return { blocks, next: n + 1 + q.groups.length };
+  const after = n + 1 + q.groups.length;
+  if (!kinds.length) return { blocks, next: after };
+  blocks.push({ kind: 'h2', title: `${after}. Events`, aside: `${listed.length} event${listed.length === 1 ? '' : 's'}` });
+  if (!listed.length) {
+    blocks.push({ kind: 'none', text: 'None of the events picked in this window.' });
+    return { blocks, next: after + 1 };
+  }
+  // The counts have a table of their own: beside the sheet's columns the headings would not fit whole
+  blocks.push({
+    kind: 'table', size: 7.6,
+    cols: [{ w: 0, wrap: true }, ...kinds.map((k) => ({ w: k.w, align: 'right' }))],
+    head: ['Unit', ...kinds.map((k) => k.label)],
+    rows: rowsAll.filter((row) => counts.has(row.vehicleId)).map((row) => [
+      { text: String(row.grouping ?? row.plate ?? DASH), bold: true },
+      ...kinds.map((k) => ({ text: String(countCell(counts, row.vehicleId, k.key)) })),
+    ]),
+  });
+  blocks.push({ kind: 'h3', title: 'Each event' });
+  blocks.push({ kind: 'table', size: 7.6, cols: EVENT_COLS, head: EVENT_HEADS, rows: listed.map((e) => eventCells(e).map((text, i) => ({ text: String(text), ...(i === 0 ? { bold: true } : {}) }))) });
+  return { blocks, next: after + 1 };
 }
 
 /**
  * The document the server draws (reports/document.pdf).
  * @param {object[]} requests  lib/movementReport pdfRequests
- * @param {{ organisation: string, orgCode: string, depots?: object[] }} o
+ * @param {{ organisation: string, orgCode: string, depots?: object[], events?: { kinds: string[], list: object[] } }} o
  */
-export function movementDoc(requests, { organisation, orgCode, depots = [], notes = [] }) {
+export function movementDoc(requests, { organisation, orgCode, depots = [], notes = [], events = null }) {
   const list = requests.filter((q) => q.groups?.some((g) => g.rows.length));
   const all = list.length ? list : requests.slice(0, 1);
   const first = all[0];
@@ -121,11 +147,11 @@ export function movementDoc(requests, { organisation, orgCode, depots = [], note
 
   const blocks = [];
   if (!list.length) blocks.push({ kind: 'none', text: 'No units in the report.' });
-  else if (!many) blocks.push(...partBlocks(first, 1, depots).blocks);
+  else if (!many) blocks.push(...partBlocks(first, 1, depots, events).blocks);
   else {
     all.forEach((q) => {
       blocks.push({ kind: 'bar', title: q.groups.length === 1 ? `${q.groups[0].name} · ${longDay(q.from)}` : longDay(q.from), aside: `${hm(q.from)} – ${hm(q.to)}` });
-      blocks.push(...partBlocks(q, 1, depots).blocks);
+      blocks.push(...partBlocks(q, 1, depots, events).blocks);
     });
   }
   const marked = depots.filter((d) => all.some((q) => q.groups.some((g) => g.rows.some((r) => depotAt(r, g.name, [d])))));
