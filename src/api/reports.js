@@ -64,6 +64,22 @@ export async function loadTatFuelReport({ orgId, day }) {
   return res.data
 }
 
+/** The recovery vehicles' daily distance, GPS route, fuel and stops. */
+export async function loadRecoveryReport({ orgId, day, vehicle }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const selectedVehicle = vehicle ? `&vehicle=${encodeURIComponent(vehicle)}` : ''
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/recovery?day=${encodeURIComponent(day)}${selectedVehicle}`)
+  return res.data
+}
+
+/** Download the server-rendered daily recovery report. */
+export async function downloadRecoveryReport({ orgId, day, vehicle, landscape = false }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const orientation = landscape ? '&landscape=1' : ''
+  const selectedVehicle = vehicle ? `&vehicle=${encodeURIComponent(vehicle)}` : ''
+  return apiFetchBlob(`/api/v1/organisations/${orgId}/reports/recovery.pdf?day=${encodeURIComponent(day)}${selectedVehicle}${orientation}`)
+}
+
 /** Each unit that went over its limit on a fleet day (YYYY-MM-DD). */
 /** Each time a unit's fuel probe was disconnected, over fleet days. */
 export async function loadProbeReport({ orgId, from, to }) {

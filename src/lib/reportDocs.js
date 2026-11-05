@@ -25,11 +25,13 @@ const OFFSET = 3 * 3600_000;
 const PORTRAIT_MM = 184;
 const LANDSCAPE_MM = 271;
 const fmt = (n) => Number(n).toLocaleString('en-GB');
+const fmtFixed = (n, digits = 1) => Number(n).toLocaleString('en-GB', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const dmyhm = (ms) => { const s = new Date(ms + OFFSET).toISOString(); return `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}`; };
 const dmy = (ms) => dmyhm(ms).slice(0, 10);
 const plural = (n, one) => `${fmt(n)} ${one}${n === 1 ? '' : 's'}`;
 const meta = (pairs) => pairs.map(([label, value]) => ({ label, value: String(value) }));
 const textCell = (text, bold = false) => ({ text: String(text ?? ''), ...(bold ? { bold: true } : {}) });
+const recoveryTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hour12: false });
 
 /** Columns from the PDF's own widths, stretched to the sheet. */
 function columns(widths, body, { figures = new Set(), wrap = new Set() } = {}) {
@@ -171,6 +173,95 @@ export function speedDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.
     meta: meta([['Fleet', fleet], ['Units', group === 'all' ? 'All units' : group], ['Day', words], ['Over the limit', plural(s.units, 'unit')]]),
     blocks,
     footer: `${fleet} · Speed Report · ${date}`,
+  };
+}
+
+export function recoveryDoc(report, { fleet, orgCode, now = report.generatedAt ?? Date.now() }) {
+  const vehicles = report.vehicles ?? [];
+  const measured = vehicles.filter((v) => v.available && v.hasTelemetry);
+  const total = (key) => measured.some((v) => v[key] != null)
+    ? measured.reduce((sum, v) => sum + (v[key] ?? 0), 0)
+    : null;
+  const day = report.day;
+  const dayDate = day.split('-').reverse().join('/');
+  const dayWordsText = dayWords(day);
+  const distance = total('distanceKm');
+  const fuel = total('fuelConsumedL');
+  const stopCount = total('stopsTotal');
+  const heads = ['Registration', 'Recovery type', 'Distance (km)', 'Fuel (L)', 'Stops'];
+  const summaryCols = columns([32, 38, 34, 32, 20], PORTRAIT_MM, {
+    figures: new Set([2, 3, 4]), wrap: new Set([0, 1]),
+  });
+  const blocks = [
+    { kind: 'h2', title: '1. Daily overview', aside: dayWordsText },
+    { kind: 'figures', items: [
+      { label: 'Vehicles with GPS', value: fmt(measured.length) },
+      { label: 'Distance, km', value: distance == null ? '-' : fmtFixed(distance) },
+      { label: 'Fuel consumed, L', value: fuel == null ? '-' : fmtFixed(fuel) },
+      { label: 'Stops over 5 min', value: stopCount == null ? '-' : fmt(stopCount) },
+    ] },
+    { kind: 'table', cols: summaryCols, head: heads, size: 7.8, rows: vehicles.map((v) => [
+      textCell(v.plate, true),
+      textCell(v.recoveryType === 'puncture' ? 'Puncture recovery' : 'Mechanical recovery'),
+      textCell(v.distanceKm == null ? '-' : fmtFixed(v.distanceKm)),
+      textCell(v.fuelConsumedL == null ? '-' : fmtFixed(v.fuelConsumedL)),
+      textCell(v.stopsTotal == null ? '-' : fmt(v.stopsTotal)),
+    ]) },
+    { kind: 'note', text: 'Stops are GPS stands of at least five minutes. Fuel is shown only when the day’s readings support a measurement. The route trace joins GPS fixes and is not a road map.' },
+  ];
+
+  vehicles.forEach((v, i) => {
+    const type = v.recoveryType === 'puncture' ? 'Puncture' : 'Mechanical';
+    blocks.push({ kind: 'h2', title: `${i + 2}. ${v.plate}`, aside: `${type} recovery` });
+    if (!v.available) {
+      blocks.push({ kind: 'none', text: 'Vehicle data is unavailable for this organisation or your vehicle access scope.' });
+      return;
+    }
+    if (!v.hasTelemetry) {
+      blocks.push({ kind: 'none', text: `No GPS telemetry was recorded on ${dayWordsText}.` });
+      return;
+    }
+
+    const route = v.route ?? [];
+    if (route.length) {
+      const maxPoints = 25;
+      const stride = Math.max(1, Math.ceil(route.length / maxPoints));
+      const points = route.filter((_, j) => j % stride === 0);
+      if (points[points.length - 1] !== route[route.length - 1]) points.push(route[route.length - 1]);
+      blocks.push({ kind: 'h3', title: 'GPS route', aside: `${plural(route.length, 'fix')}${points.length < route.length ? ` · ${points.length} shown` : ''}` });
+      blocks.push({ kind: 'table', cols: columns([20, 42, 42], PORTRAIT_MM), head: ['Point', 'Latitude', 'Longitude'], size: 7.8,
+        rows: points.map(([lat, lng], j) => [textCell(j + 1), textCell(Number(lat).toFixed(5)), textCell(Number(lng).toFixed(5))]) });
+    } else {
+      blocks.push({ kind: 'none', text: 'No GPS route was recorded.' });
+    }
+
+    const stops = v.stops ?? [];
+    blocks.push({ kind: 'h3', title: 'Stops over 5 minutes', aside: plural(stops.length, 'stop') });
+    if (!stops.length) {
+      blocks.push({ kind: 'none', text: 'No stops over five minutes.' });
+    } else {
+      blocks.push({ kind: 'table', cols: columns([0, 20, 20, 20, 25, 25, 74], PORTRAIT_MM, { wrap: new Set([0, 6]) }),
+        head: ['Location', 'Arrived', 'Left', 'Duration', 'Latitude', 'Longitude', 'Remark'], size: 7.4,
+        rows: stops.map((s) => [
+          textCell(s.location ?? '–'),
+          textCell(recoveryTime.format(s.arrivedAt)),
+          textCell(recoveryTime.format(s.leftAt)),
+          textCell(`${Math.round(s.durationMs / 60_000)} min`),
+          textCell(s.lat == null ? '–' : Number(s.lat).toFixed(5)),
+          textCell(s.lng == null ? '–' : Number(s.lng).toFixed(5)),
+          textCell(s.remark ?? '–'),
+        ]) });
+    }
+  });
+
+  blocks.push({ kind: 'note', text: CONTACT_LINE });
+  return {
+    title: 'RECOVERY VEHICLE REPORT', docName: `Recovery Vehicle Report ${fleet}`, pairs: true,
+    filename: `Recovery Vehicle Report ${fleet} ${day}`,
+    reportNo: reportNumber('RC', orgCode, now), date: dayDate,
+    meta: meta([['Fleet', fleet], ['Day', dayWordsText], ['Vehicles', fmt(vehicles.length)], ['Vehicles with GPS', fmt(measured.length)]]),
+    blocks,
+    footer: `${fleet} · Recovery Vehicle Report · ${dayDate}`,
   };
 }
 

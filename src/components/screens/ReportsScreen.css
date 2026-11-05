@@ -469,6 +469,29 @@ select.mvr-edit { min-width: 110px; }
 .tat-input { height: 30px; padding: 0 8px; border: 1px solid var(--sp4-line-hi); border-radius: 6px; background: transparent; color: var(--sp4-text-1); font: inherit; }
 .tat-table td { white-space: nowrap; }
 
+/* Recovery: one daily route and stop detail per recovery vehicle. */
+.recovery-note {
+  margin: 8px var(--sp4-gutter) 16px;
+  padding: 8px 14px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 8px;
+  background: var(--sp4-surface);
+  line-height: 1.5;
+}
+.recovery-detail { margin: 0 var(--sp4-gutter) 10px; padding: 10px 12px; border: 1px solid var(--sp4-line); border-radius: 8px; }
+.recovery-detail > summary { color: var(--sp4-text-1); font-weight: 700; cursor: pointer; }
+.recovery-detail > p { margin: 10px 0 2px; }
+.recovery-route { margin-top: 12px; padding: 8px; border: 1px solid var(--sp4-line); border-radius: 6px; color: var(--sp4-accent); }
+.recovery-route svg { display: block; width: 100%; max-height: 240px; }
+.recovery-route__start { fill: #16a34a; stroke: #fff; stroke-width: 2; }
+.recovery-route__end { fill: #dc2626; stroke: #fff; stroke-width: 2; }
+.recovery-route__ends { display: flex; justify-content: space-between; gap: 12px; color: var(--sp4-text-3); font-size: 11px; }
+.recovery-detail__heading { margin: 16px 0 6px; color: var(--sp4-text-1); font-size: 13px; }
+.recovery-detail .rpt-scroll { margin-top: 4px; }
+@media (max-width: 640px) {
+  .recovery-route__ends { flex-direction: column; gap: 3px; }
+}
+
 /* Movements: a unit at a depot (operator, 4 Nov 2026: Menengai's Van Sales at the Nairobi depot, blue) */
 .mvr-table td.mvr-cell--depot { background: #9cc7f5; }
 .mvr-cell--depot .mvr-edit { background: rgba(255, 255, 255, .35); }
