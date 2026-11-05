@@ -10,13 +10,19 @@ import { stamp } from './movementReport';
 
 // Whole words only (operator, 5 Nov 2026): `w` is the column in mm that holds the label on one line, as the PDF prints a heading
 export const EVENTS = [
-  { key: 'stop', label: 'Stops over 10 minutes', w: 32 },
+  { key: 'stop', label: 'Stop over 10 min', w: 26 },
   { key: 'freewheel', label: 'Free-wheeling', w: 23 },
   { key: 'cornering', label: 'Harsh cornering', w: 25 },
-  { key: 'braking', label: 'Harsh stops', w: 20 },
+  { key: 'braking', label: 'Harsh stop', w: 20 },
   { key: 'acceleration', label: 'Harsh acceleration', w: 28 },
 ];
 export const eventKeys = EVENTS.map((e) => e.key);
+
+/** The counts the PDF's unit tables carry, right before Speed (operator, 5 Nov 2026), when picked. */
+export const SHEET_COUNTS = [
+  { key: 'acceleration', head: 'Harsh acceleration', w: 28 },
+  { key: 'stop', head: 'Stops', w: 13 },
+];
 
 /** The events picked, in the report's own order. */
 export const pickedEvents = (kinds) => EVENTS.filter((e) => kinds?.includes(e.key));
@@ -48,12 +54,12 @@ const lasted = (minutes) => (minutes < 60 ? `${minutes} min` : `${Math.floor(min
 const STOP_TABLE = {
   heads: ['Unit', 'Last speed', 'Time stopped', 'Duration', 'Location', 'Time left'],
   // In mm for the PDF: Location takes what is left
-  cols: [{ w: 30 }, { w: 18, align: 'right' }, { w: 40 }, { w: 26 }, { w: 0, wrap: true }, { w: 32 }],
+  cols: [{ w: 30 }, { w: 18, align: 'right' }, { w: 32 }, { w: 22 }, { w: 0, wrap: true }, { w: 32 }],
   cells: (e) => [
     e.plate || '-',
     speed(e),
-    `${e.before ? 'Before ' : ''}${stamp(e.stoppedAt ?? e.at)}`,
-    `${e.before ? 'Over ' : ''}${lasted(e.minutes)}`,
+    stamp(e.stoppedAt ?? e.at),
+    lasted(e.minutes),
     e.place ?? '-',
     e.leftAt != null ? stamp(e.leftAt) : 'Still there',
   ],
