@@ -1,0 +1,9 @@
+.stw-pops { position: fixed; right: 16px; bottom: 16px; z-index: 10050; display: grid; gap: 8px; width: min(380px, calc(100vw - 32px)); }
+.stw-pop { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #fff; color: #1f2937;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); border-left: 4px solid #b45309; font-size: 13px; }
+.stw-pop--nogo { border-left-color: #c62828; }
+.stw-pop > .ti { font-size: 20px; color: #b45309; margin-top: 2px; }
+.stw-pop--nogo > .ti { color: #c62828; }
+.stw-pop__text { display: grid; gap: 2px; flex: 1; }
+.stw-pop__acts { display: flex; gap: 4px; }
+.stw-pop__acts .sp4-ghost-btn { padding: 2px 8px; }

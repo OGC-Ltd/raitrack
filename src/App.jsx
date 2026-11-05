@@ -13,6 +13,7 @@ import { NAV_ITEMS } from './components/layout/SidePanel';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import TabEmptyState from './components/shared/TabEmptyState';
 import ProductTour from './components/shared/ProductTour';
+import StopWatch from './components/shared/StopWatch';
 
 // New layout components
 import AppHeader          from './components/layout/AppHeader';
@@ -112,6 +113,10 @@ function AppShell() {
       {/* Top bar */}
       <ErrorBoundary label="Header" fullSection>
         <AppHeader />
+      </ErrorBoundary>
+      {/* Menengai's unauthorised stops, watched in the background (operator, 5 Nov 2026) */}
+      <ErrorBoundary label="Stop watch">
+        <StopWatch />
       </ErrorBoundary>
 
       {/* Mobile header — shown only on mobile (< 768px) */}

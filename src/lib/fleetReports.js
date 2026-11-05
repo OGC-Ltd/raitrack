@@ -193,7 +193,7 @@ function unitFinder(units) {
 export const PHONE_CODES = new Set([116, 264]);
 export const SEATBELT_CODES = new Set([125, 51]);
 export const COVER_CODES = new Set([123, 3]);
-export const BEHAVIOUR_KINDS = ['accel', 'brake', 'seatbelt', 'phone', 'covered'];
+export const BEHAVIOUR_KINDS = ['accel', 'brake', 'corner', 'seatbelt', 'phone', 'covered'];
 /** The kinds a dashcam reports, and an operator can log by hand. */
 export const SEEN_KINDS = ['seatbelt', 'phone', 'covered'];
 /** An operator entry and a camera alarm of one kind this close on one vehicle are one incident. */
@@ -218,6 +218,14 @@ const alarmKind = (code) => (PHONE_CODES.has(code) ? 'phone' : SEATBELT_CODES.ha
  * event reported twice is not counted twice. An operator entry within
  * SAME_INCIDENT_MS of an alarm of its kind on the same truck is that alarm.
  */
+/**
+ * The harsh cornering events of reports/movements/events (trackers and the
+ * cameras' Harsh turn; the feed the conduct report reads leaves them out) in
+ * the shape behaviourRows reads: { vehicleId, plate, ts, alertType }.
+ */
+export const cornerAsHarsh = (events) => (events ?? []).filter((e) => e?.kind === 'cornering' && Number.isFinite(e.at))
+  .map((e) => ({ id: `turn-${e.vehicleId}-${e.at}`, vehicleId: e.vehicleId, plate: e.plate, ts: new Date(e.at).toISOString(), alertType: 'HARSH_CORNERING' }));
+
 export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true, logged = [] }) {
   const find = unitFinder(units);
   const perVehicle = new Map();
@@ -228,7 +236,7 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     const hit = find(it);
     if (!hit) return;
     let r = perVehicle.get(hit.v.vehicleId);
-    if (!r) perVehicle.set(hit.v.vehicleId, (r = { accel: 0, brake: 0, seatbelt: 0, phone: 0, covered: 0 }));
+    if (!r) perVehicle.set(hit.v.vehicleId, (r = { accel: 0, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0 }));
     r[kind] += 1;
     seenAt(hit.u.key, t);
     if (alarm) {
@@ -242,6 +250,8 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     if (!Number.isFinite(t) || t < from || t >= to) continue;
     if (e.alertType === 'HARSH_ACCELERATION') bump(e, 'accel', t);
     else if (e.alertType === 'HARSH_BRAKING') bump(e, 'brake', t);
+    // Harsh cornering (operator, 5 Nov 2026), read as the Movements report reads it (cornerAsHarsh)
+    else if (e.alertType === 'HARSH_CORNERING') bump(e, 'corner', t);
   }
   for (const a of alarms ?? []) {
     const t = a?.occurredMs;
@@ -273,7 +283,7 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
   const days = Math.max(1, (to - from) / DAY);
   const rows = [];
   for (const u of units) {
-    const auto = { accel: 0, brake: 0, seatbelt: 0, phone: 0, covered: 0 };
+    const auto = { accel: 0, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0 };
     for (const v of u.vehicles) {
       const c = perVehicle.get(v.vehicleId);
       if (c) for (const k of BEHAVIOUR_KINDS) auto[k] = Math.max(auto[k], c[k]);
@@ -283,12 +293,12 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     // seatbelt, phone and cover counts cannot exist, so the columns say "–" —
     // unless an operator saw one, which counts whatever the unit carries.
     const dashcam = dashcams && u.dashcam !== false;
-    const r = { unit: u, dashcam, accel: auto.accel, brake: auto.brake, manual: m, logged: 0 };
+    const r = { unit: u, dashcam, accel: auto.accel, brake: auto.brake, corner: auto.corner, manual: m, logged: 0 };
     for (const k of SEEN_KINDS) {
       r[k] = (dashcam ? auto[k] : 0) + (m[k] ?? 0);
       r.logged += m[k] ?? 0;
     }
-    r.total = r.accel + r.brake + r.seatbelt + r.phone + r.covered;
+    r.total = r.accel + r.brake + r.corner + r.seatbelt + r.phone + r.covered;
     r.suspect = r.accel / days > HARSH_SUSPECT_PER_DAY || r.brake / days > HARSH_SUSPECT_PER_DAY;
     r.driver = u.vehicles.map((v) => (v.driver && v.driver !== 'Unassigned' ? v.driver : null)).find(Boolean) ?? null;
     r.firstAt = firstAt.get(u.key) ?? null;

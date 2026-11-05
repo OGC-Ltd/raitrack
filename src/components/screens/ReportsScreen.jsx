@@ -23,11 +23,11 @@ import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } from '../../api/fleetReports';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
-  presetRange, nightWindows, behaviourRows, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
+  presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -46,6 +46,7 @@ import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } fro
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { saveFile } from '../../api/tripReport';
 import { isEdited as isDocEdited, pdfDoc } from '../../lib/shiftDoc';
+import { withCornering, withoutDrainsBox } from '../../lib/shiftCornering';
 import ShiftDocument from './ShiftDocument';
 import { useReportEditor } from './ReportEditor';
 import { flowDoc } from '../../lib/reportDocs';
@@ -65,13 +66,13 @@ import PdfPreview from '../shared/PdfPreview';
 import { loadZones } from '../../hooks/useEstateZones';
 import { depotsFor, findDepots, depotAt } from '../../lib/movementDepots';
 import { withStoDirections } from '../../lib/stoUnits';
-import { movementDoc } from '../../lib/movementDoc';
+import { movementDoc, sheetIsWide } from '../../lib/movementDoc';
 import { docHtml } from '../../lib/docHtml';
 import JpegButton from '../shared/JpegButton';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasSpeedTab, hasProbeTab } from '../../lib/reportNav';
-import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -317,8 +318,14 @@ function ShiftReport({ orgId, vehicles, groups }) {
     const id = ++runId.current;
     setRun({ status: 'loading' }); setPdf({ busy: false, error: null });
     try {
-      const answer = await loadEndOfShiftDoc({ orgId, from: period.from, to: period.to, category: categoryOf(cat) });
+      const scope = categoryOf(cat);
+      const [sheet, turns] = await Promise.all([
+        loadEndOfShiftDoc({ orgId, from: period.from, to: period.to, category: scope }),
+        // Harsh cornering, which the server's sheet leaves out, read as the Movements report reads it (lib/shiftCornering)
+        loadMovementEvents({ orgId, from: period.from, to: period.to, kinds: ['cornering'] }).catch(() => null),
+      ]);
       if (id !== runId.current) return;
+      const answer = withoutDrainsBox(withCornering(sheet, turns ? turns.events ?? [] : null, { vehicleIds: scope?.vehicleIds ?? null }));
       setRun({ status: 'done', original: answer }); setDoc(answer); setVersion((v) => v + 1);
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
@@ -805,6 +812,19 @@ function MovementsReport({ orgId }) {
         const fence = (fc?.features ?? []).find((f) => /nairobi\s*depot/i.test(String(f?.properties?.name ?? '')) && f?.geometry) ?? null;
         for (let i = 0; i < reports.length; i++) reports[i] = withStoDirections(reports[i], fence);
       }
+      // Distance and fuel used in each window, from every unit's readings (operator, 5 Nov 2026);
+      // a window that cannot be read keeps its rows, the two columns blank
+      for (let i = 0; i < reports.length; i++) {
+        const vehicles = reports[i].groups.flatMap((g) => g.rows).map((r) => ({ vehicleId: r.vehicleId }));
+        if (!vehicles.length) continue;
+        const words = 'Reading each unit’s distance and fuel';
+        const got = await loadDistances({
+          orgId, vehicles, windows: [[reports[i].from, reports[i].to]],
+          onProgress: ({ done, total }) => { if (id === runId.current) setRun({ status: 'loading', done: i, of: windows.length, words: `${words}, ${done} of ${total}` }); },
+        }).catch(() => null);
+        if (id !== runId.current) return;
+        if (got) reports[i] = withTrips(reports[i], got.perVehicle);
+      }
       const all = vehicleTypes(reports);
       setTypes((t) => (t?.some((x) => all.includes(x)) ? t.filter((x) => all.includes(x)) : defaultTypes(all)));
       setEdits(reports.map(() => ({})));
@@ -881,7 +901,8 @@ function MovementsReport({ orgId }) {
   const eventBusy = eventRead.status === 'loading';
   const pickedKinds = useMemo(() => pickedEvents(eventKinds), [eventKinds]);
 
-  const edit = (vehicleId, patch) => setEdits((all) => all.map((e, i) => (i === day ? { ...e, [vehicleId]: { ...e[vehicleId], ...patch } } : e)));
+  // A table edit starts the edited sheet over: with sheet edits, it asks first
+  const edit = (vehicleId, patch) => editor.guard('Change the table', () => setEdits((all) => all.map((e, i) => (i === day ? { ...e, [vehicleId]: { ...e[vehicleId], ...patch } } : e))));
 
   // Closing or reloading the browser tab would lose them: the browser asks first.
   useEffect(() => {
@@ -904,13 +925,19 @@ function MovementsReport({ orgId }) {
     events: eventKinds.length ? { kinds: eventKinds, list: eventRead.list } : null,
     notes: eventKinds.length ? eventNotes(eventRead.notes) : [],
   });
-  const makeMovementPdf = (landscape = false) => makeReportDoc({ orgId, landscape, doc: movementSheet() });
+  // Every text on the sheet editable before the PDF or JPEG (operator, 5 Nov 2026: "make each data
+  // editable before generating a PDF or JPEG"), in the editor the other reports use (ReportEditor).
+  // A new run, a table edit, another type or other events start the sheet over.
+  const sheetSource = useMemo(() => ({}), [reports, edits, picked, eventKinds, eventRead, depots]); // eslint-disable-line react-hooks/exhaustive-deps
+  const editor = useReportEditor({ orgId, source: sheetSource, build: () => movementSheet() });
+  const theSheet = () => (editor.edited ? pdfDoc(editor.doc) : movementSheet());
+  const makeMovementPdf = (landscape = false) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: movementSheet() }));
   const downloadPdf = async (landscape = false) => {
     if (!reports || pdf.busy) return;
     setPageLandscape(landscape);
     setPdf({ busy: true, error: null });
     try {
-      const made = await makeMovementPdf(landscape);
+      const made = await makeMovementPdf(landscape || sheetIsWide(eventKinds));
       saveFile(made.blob, made.filename);
       setPdf({ busy: false, error: null });
     } catch (err) {
@@ -922,9 +949,10 @@ function MovementsReport({ orgId }) {
     setPdf({ busy: 'jpeg', error: null });
     try {
       // One continuous list, not A4 pages one under another (operator, 4 Nov 2026):
-      // the same sheet, laid out here on one long letterhead page
-      const sheet = movementSheet();
-      await saveLetterheadJpeg(docHtml(sheet, { logos: letterheadLogos(), landscape }), { filename: `${sheet.filename}.pdf`, landscape, continuous: true });
+      // the same sheet, laid out here on one long letterhead page; the edited one when it was edited
+      const sheet = theSheet();
+      const wide = landscape || sheetIsWide(eventKinds);
+      await saveLetterheadJpeg(docHtml(sheet, { logos: letterheadLogos(), landscape: wide }), { filename: `${sheet.filename}.pdf`, landscape: wide, continuous: true });
       setPdf({ busy: false, error: null });
     } catch (err) {
       setPdf({ busy: false, error: `The JPEG could not be made: ${err?.message ?? err}` });
@@ -1037,6 +1065,7 @@ function MovementsReport({ orgId }) {
         {problem && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
 
+      {editor.overlay}
       {confirm && (
         <div className="mvr-confirm" role="alertdialog" aria-labelledby="mvr-confirm-words">
           <span id="mvr-confirm-words">{confirm.words} and lose your {changed} edit{changed === 1 ? '' : 's'}?</span>
@@ -1083,11 +1112,12 @@ function MovementsReport({ orgId }) {
                 <span className="rpt-sub"> · {periodText(report.from, report.to)}{report.morl ? ` · ${report.morl} geofence` : ''}</span>
                 {changed > 0 && <span className="rpt-edited"> · {changed} edited</span>}
               </>}
-              onCsv={kept.counts.total ? () => { const sheet = movementSheet(); downloadTableCsv({ ...docCsv(sheet), filenameSlug: docSlug(sheet) }); } : undefined}
+              onCsv={kept.counts.total ? () => { const sheet = theSheet(); downloadTableCsv({ ...docCsv(sheet), filenameSlug: docSlug(sheet) }); } : undefined}
               actions={<>
                 {eventBusy && <span className="rpt-sub" role="status">Reading the events…</span>}
                 {eventRead.status === 'error' && <span className="rpt-warn" role="status">The events could not all be read: {eventRead.message}</span>}
-                {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setEdits((all) => all.map(() => ({})))}>Undo edits</button>}
+                {changed > 0 && <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => editor.guard('Undo the table edits', () => setEdits((all) => all.map(() => ({}))))}>Undo edits</button>}
+                {kept.counts.total > 0 && !eventBusy && editor.button}
                 {pdf.busy ? <span className="rpt-sub">{pdf.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span> : pdf.error ? <span className="rpt-warn">{pdf.error}</span> : null}
                 <JpegButton onSave={downloadJpeg} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
                             title="The PDF report, with your edits, as an image" />
@@ -1141,6 +1171,9 @@ function MovementsReport({ orgId }) {
                       <th scope="col">Last coordinates</th>
                       <th scope="col">Location</th>
                       <th scope="col" className="rpt-num">Speed</th>
+                      <th scope="col" className="rpt-num">Distance</th>
+                      {SHOW_FUEL_USED && <th scope="col" className="rpt-num">Fuel used</th>}
+                      {SHOW_CONSUMPTION && <th scope="col" className="rpt-num" title="Kilometres per litre, over at least 5 km in the window">Consumption</th>}
                       <th scope="col">Direction</th>
                       {pickedKinds.map((k) => <th key={k.key} scope="col" className="rpt-num mvr-count-th">{k.label}</th>)}
                       <th scope="col"><span className="mvr-sr">Keep or leave out</span></th>
@@ -1150,7 +1183,7 @@ function MovementsReport({ orgId }) {
                     {shownGroups.map((g) => (
                       <Fragment key={g.name}>
                         <tr className="rpt-group">
-                          <th colSpan={6 + pickedKinds.length} scope="rowgroup">
+                          <th colSpan={7 + (SHOW_FUEL_USED ? 1 : 0) + (SHOW_CONSUMPTION ? 1 : 0) + pickedKinds.length} scope="rowgroup">
                             <span className="rpt-group__name">{g.name}</span>
                             <span className="rpt-group__meta">{groupWords(g, dayEdits)}</span>
                           </th>
@@ -1175,6 +1208,9 @@ function MovementsReport({ orgId }) {
                                        onChange={(ev) => edit(row.vehicleId, { location: ev.target.value })} />
                               </td>
                               <td className="rpt-num">{row.speedKmh != null ? `${row.speedKmh} km/h` : '-'}</td>
+                              <td className="rpt-num">{distanceText(row)}</td>
+                              {SHOW_FUEL_USED && <td className={`rpt-num${fuelText(row) === 'No probe' ? ' rpt-sub' : ''}`}>{fuelText(row)}</td>}
+                              {SHOW_CONSUMPTION && <td className={`rpt-num${consumptionText(row) === 'No probe' ? ' rpt-sub' : ''}`}>{consumptionText(row)}</td>}
                               <td>
                                 <select className={`rpt-select mvr-edit${state !== row.state ? ' mvr-edit--changed' : ''}`}
                                         value={state} disabled={out} aria-label={`Direction of ${row.plate}`}
@@ -1387,16 +1423,19 @@ export default function ReportsScreen() {
       let rows;
       let failed = 0;
       if (key === 'behaviour') {
-        const [h, cam] = await Promise.all([
+        const [h, cam, turns] = await Promise.all([
           loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
           loadDashcamAlarms({ orgId, from: ctx.from }),
+          // Harsh cornering is not on the feed: read as the Movements report reads it
+          loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
         ]);
+        ctx.cornerFailed = turns == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
         if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
-        setRun({ status: 'done', raw: { events: h.events, alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed },
+        setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed },
                  unitList: units, ctx, missing, failed: h.failed, units: units.length });
         return;
       } else if (key === 'overspeed') {
@@ -1669,6 +1708,7 @@ export default function ReportsScreen() {
                 {key === 'utilisation' || key === 'night' ? ` of ${done.units.toLocaleString('en-GB')}` : ''}
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
+                {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
               </>}
@@ -1768,7 +1808,7 @@ export default function ReportsScreen() {
           </>
         )}
 
-        {key === 'behaviour' && (
+        {key === 'behaviour' && SHOW_FOLLOW_UP && (
           <FollowUpPanel cases={cases} orgCode={orgCode} now={now} saveFailed={storeError}
                          onOpen={(c) => setActing(c.id)} onReplace={importCaseList} />
         )}

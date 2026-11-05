@@ -20,7 +20,7 @@ import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '
 import {
   COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
 } from '../../lib/deliveriesReport';
-import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, emptyPlan, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
+import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, saveOrder, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { loadZones } from '../../hooks/useEstateZones';
@@ -130,10 +130,31 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const unitOf = (key) => units.find((u) => u.key === key);
   const [find, setFind] = useState('');
   const [justAdded, setJustAdded] = useState(null);       // its stops picker opens, as the geofences come next
-  const addUnit = (u) => { change(addVehicle(plan, u)); setJustAdded(u.key); setFind(''); };
+  // A unit put under another group than its own asks first (operator, 5 Nov 2026: "before putting
+  // there can be a prompt like: this unit belongs to VS, assign it anyway?")
+  const [assign, setAssign] = useState(null);             // { words, yes, go }
+  const ownGroup = (key) => unitOf(key)?.group ?? null;
+  const groupOfV = (v) => v.group ?? ownGroup(v.key);
+  const addUnit = (u) => {
+    const put = () => {
+      const next = addVehicle(plan, u);
+      change(group && group !== u.group ? setVehicleGroup(next, u.key, group) : next);
+      setJustAdded(u.key); setFind('');
+    };
+    if (group && u.group && group !== u.group && !plan.vehicles.some((v) => v.key === u.key)) {
+      setAssign({ words: `${u.plate} belongs to ${u.group}. Assign it to ${group} anyway?`, yes: `Assign to ${group}`, go: put });
+    } else put();
+  };
+  const moveTo = (v, g) => {
+    const own = ownGroup(v.key);
+    const go = () => change(setVehicleGroup(plan, v.key, g === own ? null : g));
+    if (own && g !== own) setAssign({ words: `${v.plate} belongs to ${own}. Assign it to ${g} anyway?`, yes: `Assign to ${g}`, go });
+    else go();
+  };
   // Orders fulfilled typed over the report's own count (operator, 4 Nov 2026: "the user should have the
-  // option to edit the delivered like 8/10 and generate the report"), by plate, for this run
-  const [typed, setTyped] = useState({});
+  // option to edit the delivered like 8/10 and generate the report"), by plate; the last value typed for
+  // each plate is kept in this browser and comes back on the next report (operator, 5 Nov 2026)
+  const [typed, setTyped] = useState(() => loadOrders(orgCode));
   const findHits = useMemo(() => {
     const q = find.replace(/\s+/g, '').toUpperCase();
     if (!q) return [];
@@ -181,7 +202,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     const id = ++runId.current;
     const live = () => id === runId.current;
     try {
-      setTyped({});
+      setTyped(loadOrders(orgCode));
       setRun({ status: 'loading', words: 'Finding MORL, the Nairobi depot and the customers', done: 0, total: 0 });
       // Each step says what it was doing when it fails; Movements (where each
       // vehicle is now) is help, not a need: without it the report still runs
@@ -228,7 +249,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           from: windowFrom, to, windows, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
-        return { ...row, group: unitOf(v.key)?.group ?? null };
+        return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
       });
       setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves });
     } catch (err) {
@@ -244,7 +265,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   }) } : null), [ran, typed, group]);
   // How many on the day's list in each group
   const groupNames = useMemo(() => groupsFor('MENENGAI').map((g) => g.name), []);
-  const groupCount = (name) => plan.vehicles.filter((v) => unitOf(v.key)?.group === name).length;
+  const groupCount = (name) => plan.vehicles.filter((v) => groupOfV(v) === name).length;
   const sums = done ? {
     out: done.rows.filter((x) => x.trip.leftAt != null && x.trip.arrivedAt == null).length,
     back: done.rows.filter((x) => x.trip.arrivedAt != null).length,
@@ -401,6 +422,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               </button>
             )}
           </div>
+          {assign && (
+            <div className="mvr-confirm dlv-assign" role="alertdialog" aria-labelledby="dlv-assign-words">
+              <span id="dlv-assign-words">{assign.words}</span>
+              <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setAssign(null)} autoFocus>Cancel</button>
+              <button type="button" className="sp4-submit-btn frp-run mvr-confirm__go"
+                      onClick={() => { const { go } = assign; setAssign(null); go(); }}>{assign.yes}</button>
+            </div>
+          )}
           {plan.vehicles.length > 0 && (
             <ul className="dlv-plan__list">
               {plan.vehicles.map((v) => {
@@ -410,7 +439,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 return (
                   <li key={v.key} className="dlv-plan__veh">
                     <span className="dlv-plan__plate">{v.plate}</span>
-                    <span className="rpt-sub">{unitOf(v.key)?.group ?? ''}</span>
+                    <select className="rpt-select dlv-plan__group" value={groupOfV(v) ?? ''} aria-label={`Group ${v.plate} is reported under`}
+                            title={v.group && v.group !== ownGroup(v.key) ? `Assigned here today; on the fleet list it is ${ownGroup(v.key) ?? 'in no group'}` : 'The group it is reported under'}
+                            onChange={(e) => e.target.value && moveTo(v, e.target.value)}>
+                      {!groupOfV(v) && <option value="">No group</option>}
+                      {groupNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                    {v.group && v.group !== ownGroup(v.key) && <span className="rpt-sub dlv-plan__moved">from {ownGroup(v.key) ?? 'no group'}</span>}
                     <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
                                  options={options} picked={v.customers} startOpen={justAdded === v.key}
                                  onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
@@ -492,8 +527,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                               {i === 2 ? (
                                 <input type="text" inputMode="numeric" className={`mvr-edit dlv-orders${r.typed ? ' mvr-edit--changed' : ''}${typed[r.plate] && !readOrders(typed[r.plate]) ? ' dlv-orders--bad' : ''}`}
                                        value={typed[r.plate] ?? v} readOnly={editor.edited} aria-label={`Orders fulfilled by ${r.plate}, e.g. 8/10`}
-                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : 'Type the orders fulfilled, e.g. 8/10'}
-                                       onChange={(e) => setTyped((t) => ({ ...t, [r.plate]: e.target.value }))} />
+                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : 'Type the orders fulfilled, e.g. 8/10. It is kept in this browser for the next report; clear it to use the report’s own count.'}
+                                       onChange={(e) => {
+                                         const text = e.target.value;
+                                         setTyped((t) => ({ ...t, [r.plate]: text }));
+                                         // Kept once it reads as a count, or forgotten when cleared
+                                         if (!text.trim() || readOrders(text)) saveOrder(orgCode, r.plate, text);
+                                       }} />
                               ) : v}
                             </td>
                           ))}

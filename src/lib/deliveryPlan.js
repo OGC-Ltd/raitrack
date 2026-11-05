@@ -56,6 +56,17 @@ export function lastPlanBefore(orgCode, day) {
 export const addVehicle = (plan, unit) => (plan.vehicles.some((v) => v.key === unit.key) ? plan
   : { ...plan, vehicles: [...plan.vehicles, { key: unit.key, plate: unit.plate, vehicleIds: unit.vehicles.map((x) => x.vehicleId), customers: [] }] });
 export const setPins = (plan, key, pins) => ({ ...plan, vehicles: plan.vehicles.map((v) => (v.key === key ? { ...v, pins } : v)) });
+/**
+ * The group a vehicle is reported under today, when it is not its own on the
+ * fleet list (operator, 5 Nov 2026: "the VS and FG units can be reassigned ...
+ * put an FG unit under VS and vice versa"). null: its own group.
+ */
+export const setVehicleGroup = (plan, key, group) => ({ ...plan, vehicles: plan.vehicles.map((v) => {
+  if (v.key !== key) return v;
+  const rest = { ...v };
+  delete rest.group;
+  return group ? { ...rest, group } : rest;
+}) });
 export const removeVehicle = (plan, key) => ({ ...plan, vehicles: plan.vehicles.filter((v) => v.key !== key) });
 export const setCustomers = (plan, key, customers) => ({ ...plan, vehicles: plan.vehicles.map((v) => (v.key === key ? { ...v, customers: [...new Set(customers)] } : v)) });
 
@@ -110,4 +121,38 @@ export function mergePins(have, more) {
   const byPlace = new Map((have ?? []).map((p) => [key(p), p]));
   for (const p of more ?? []) byPlace.set(key(p), p);
   return [...byPlace.values()];
+}
+
+// ── orders fulfilled typed by hand, kept (operator, 5 Nov 2026: "I want the
+// values filled manually ... the recent values to be stored in the browser as
+// well, so the next time one wants to prepare a report, if the values haven't
+// changed, they shouldn't have to retype"). By organisation, by plate, the
+// last value typed; kept ORDERS_KEEP_DAYS, then forgotten.
+
+const ORDERS_KEY = (orgCode) => `ft-delivery-orders:${String(orgCode ?? '').toUpperCase()}`;
+export const ORDERS_KEEP_DAYS = 30;
+const ordersMemory = new Map();
+
+/** { plate: "8/10" }, the last value typed for each plate. */
+export function loadOrders(orgCode, now = Date.now()) {
+  const k = ORDERS_KEY(orgCode);
+  let all = ordersMemory.get(k) ?? {};
+  try {
+    const raw = localStorage.getItem(k);
+    if (raw) all = JSON.parse(raw) ?? {};
+  } catch { /* storage unavailable: memory only */ }
+  const fresh = now - ORDERS_KEEP_DAYS * 86_400_000;
+  return Object.fromEntries(Object.entries(all).filter(([, v]) => v?.text && v.at > fresh).map(([plate, v]) => [plate, v.text]));
+}
+
+/** Keep one plate's value; an empty one forgets it. */
+export function saveOrder(orgCode, plate, text, now = Date.now()) {
+  const k = ORDERS_KEY(orgCode);
+  let all = ordersMemory.get(k) ?? {};
+  try { all = JSON.parse(localStorage.getItem(k) ?? 'null') ?? all; } catch { /* memory only */ }
+  const next = { ...all };
+  if (String(text ?? '').trim()) next[plate] = { text: String(text).trim(), at: now };
+  else delete next[plate];
+  ordersMemory.set(k, next);
+  try { localStorage.setItem(k, JSON.stringify(next)); } catch { /* full or blocked: memory only */ }
 }

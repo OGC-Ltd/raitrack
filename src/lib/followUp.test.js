@@ -107,7 +107,8 @@ describe('storage', () => {
 });
 
 describe('the PDF', () => {
-  it('has the follow-up column, the summary and the pending list', () => {
+  // Follow-up is off the report for now (operator, 5 Nov 2026: "remove the pending pending things"; reportTables SHOW_FOLLOW_UP)
+  it('leaves the follow-up column, the summary and the pending list off the PDF', () => {
     const now = at('2026-11-02T12:00:00');
     const found = casesFromRun(units, [], [alarm('v1', '2026-11-01T10:00:00', 116)], twoDays);
     const cases = mergeCases([], found);
@@ -116,10 +117,10 @@ describe('the PDF', () => {
     const done = { rows, secs: [{ name: 'Van Sales', rows, total: 1 }], missing: [], units: 2, failed: 0,
       ctx: { ...twoDays, followUp, cases, allCases: cases, now } };
     const { html } = reportHtml(REPORTS.behaviour, done, { companyName: 'Menengai', orgCode: 'MENENGAI', groupWords: 'All groups', periodWords: 'p', logos: { rai: '', ogc: '' }, now });
-    expect(html).toContain('Follow-up');
-    expect(html).toContain('0 of 1 case actioned');
-    expect(html).toContain('Pending cases');
-    expect(html).toContain('Overdue');
+    expect(html).not.toContain('Follow-up');
+    expect(html).not.toContain('case actioned');
+    expect(html).not.toContain('Pending cases');
+    expect(html).not.toContain('Overdue');
   });
 });
 

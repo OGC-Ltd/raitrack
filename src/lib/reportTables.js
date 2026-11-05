@@ -60,6 +60,13 @@ function consumption(r, ctx) {
 }
 const n = (x) => (Number.isFinite(x) ? x.toLocaleString('en-GB') : '-');
 
+/**
+ * The Driver Conduct Report's Follow-up (its column and its section), taken
+ * off (operator, 5 Nov 2026: "let's remove the pending pending things"; both).
+ * The cases are still kept; true puts them back on the report.
+ */
+export const SHOW_FOLLOW_UP = false;
+
 export const REPORTS = {
   behaviour: {
     key: 'behaviour',
@@ -72,16 +79,16 @@ export const REPORTS = {
     maxDays: 7,
     /** The dashcam keeps its alarms 7 days, so a period must start within them. */
     reachDays: 7,
-    columns: () => ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'No seatbelt', 'On phone', 'Camera covered', 'Total', 'Follow-up'],
+    columns: () => ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'Harsh cornering', 'No seatbelt', 'On phone', 'Camera covered', 'Total', ...(SHOW_FOLLOW_UP ? ['Follow-up'] : [])],
     /** Columns of words after the figures: left-aligned. */
-    text: ['Follow-up'],
+    text: SHOW_FOLLOW_UP ? ['Follow-up'] : [],
     cells: (r, ctx) => {
       // A unit without a dashcam cannot report these itself: a dash, not a
       // zero, unless an operator logged one.
       const cam = (k) => (r.dashcam || r.manual?.[k] ? String(r[k]) : '–');
       return [vehicleCell(r) + (r.suspect ? ' (check sensor)' : ''), typeOf(r), clean(r.driver),
-        String(r.accel), String(r.brake), cam('seatbelt'), cam('phone'), cam('covered'), String(r.total),
-        statusWord(ctx?.followUp?.get(r.unit.key), ctx?.now)];
+        String(r.accel), String(r.brake), String(r.corner ?? 0), cam('seatbelt'), cam('phone'), cam('covered'), String(r.total),
+        ...(SHOW_FOLLOW_UP ? [statusWord(ctx?.followUp?.get(r.unit.key), ctx?.now)] : [])];
     },
     sum: (r) => r.total,
     sumWords: (t) => `${n(t)} incident${t === 1 ? '' : 's'}`,
@@ -92,6 +99,7 @@ export const REPORTS = {
         { label: 'Vehicles', value: n(rows.length) },
         { label: 'Harsh acceleration', value: n(sum('accel')) },
         { label: 'Harsh braking', value: n(sum('brake')) },
+        { label: 'Harsh cornering', value: n(sum('corner')) },
         { label: 'No seatbelt', value: n(sum('seatbelt')) },
         { label: 'On phone', value: n(sum('phone')) },
         { label: 'Camera covered', value: n(sum('covered')) },
@@ -99,7 +107,7 @@ export const REPORTS = {
         { label: 'Total incidents', value: n(rows.reduce((s, r) => s + r.total, 0)) },
       ];
     },
-    empty: 'No harsh driving, seatbelt, phone or camera-covered incidents in this period.',
+    empty: 'No harsh driving or cornering, seatbelt, phone or camera-covered incidents in this period.',
   },
 
   night: {
