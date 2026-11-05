@@ -70,6 +70,10 @@ export const TEMPLATES = {
     orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {}, NZOIA: {} },
     families: [WEST_KENYA_SITES],
   },
+  // Daily mechanical and puncture recovery fleet report.
+  recovery: {
+    orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {}, NZOIA: {} },
+  },
   // Each unit over its limit on a day (SpeedReport): West Kenya's daily sheet,
   // Sukari, Kabras and Nzoia too (operator, 4 Nov 2026).
   speedReport: {

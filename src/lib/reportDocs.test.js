@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dormantDoc, geofenceDoc, roomForHeads, tatDoc, speedDoc, deliveriesDoc } from './reportDocs';
+import { dormantDoc, geofenceDoc, roomForHeads, tatDoc, speedDoc, deliveriesDoc, recoveryDoc } from './reportDocs';
 import { offlineReport } from './offlineReport';
 import { removeBar } from './shiftDoc';
 
@@ -100,6 +100,37 @@ describe('the Deliveries Report as a document', () => {
   it('fits the columns to the sheet, and says when there are no vehicles', () => {
     expect(tables(deliveriesDoc([row], o))[0].cols[3].w).toBe(0);
     expect(deliveriesDoc([], o).blocks.some((b) => b.kind === 'none')).toBe(true);
+  });
+});
+
+describe('the Recovery Report as a document', () => {
+  it('includes daily totals, vehicle metrics, route fixes and stop details', () => {
+    const report = {
+      day: '2026-11-03',
+      generatedAt: NOW,
+      vehicles: [
+        {
+          plate: 'KDX 130Y', recoveryType: 'mechanical', available: true, hasTelemetry: true,
+          distanceKm: 82.4, fuelConsumedL: 12.5, stopsTotal: 1,
+          route: [[-0.1, 34.7], [-0.2, 34.8]],
+          stops: [{ arrivedAt: at('2026-11-03T08:00:00'), leftAt: at('2026-11-03T08:10:00'), durationMs: 600_000, location: 'Kakamega', remark: 'Recovery call', lat: -0.15, lng: 34.75 }],
+        },
+        {
+          plate: 'KDX 131Y', recoveryType: 'puncture', available: true, hasTelemetry: false,
+          distanceKm: null, fuelConsumedL: null, stopsTotal: null, route: [], stops: [],
+        },
+      ],
+    };
+    const d = recoveryDoc(report, { fleet: 'West Kenya', orgCode: 'WK' });
+    const [overview, route, stops] = tables(d);
+    expect(d.filename).toBe('Recovery Vehicle Report West Kenya 2026-11-03');
+    expect(d.blocks[1].items.map((x) => x.value)).toEqual(['1', '82.4', '12.5', '1']);
+    expect(overview.rows.map((r) => r.slice(0, 2).map((c) => c.text))).toEqual([
+      ['KDX 130Y', 'Mechanical recovery'], ['KDX 131Y', 'Puncture recovery'],
+    ]);
+    expect(route.rows.map((r) => r.slice(1).map((c) => c.text))).toEqual([['-0.10000', '34.70000'], ['-0.20000', '34.80000']]);
+    expect(stops.rows[0].map((c) => c.text)).toEqual(['Kakamega', '08:00', '08:10', '10 min', '-0.15000', '34.75000', 'Recovery call']);
+    expect(d.blocks.some((b) => b.kind === 'none' && b.text.includes('No GPS telemetry'))).toBe(true);
   });
 });
 
