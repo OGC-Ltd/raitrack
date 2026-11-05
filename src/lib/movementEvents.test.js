@@ -1,18 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { EVENTS, pickedEvents, countByUnit, countCell, eventsFor, eventCells, eventNotes, FREEWHEEL_NOTE } from './movementEvents';
+import { EVENTS, pickedEvents, countByUnit, countCell, eventsFor, eventSections, eventNotes } from './movementEvents';
 import { movementDoc } from './movementDoc';
 import { textMm } from './shiftDoc';
 
 const T = Date.parse('2026-11-05T08:30:00+03:00');
 const at = (m) => T + m * 60_000;
 const row = (vehicleId, plate) => ({ vehicleId, plate, grouping: plate, lastAt: at(0), lat: 0, lng: 0, location: 'Nakuru', speedKmh: 40, state: 'to', stale: false });
-const stop = { vehicleId: 'v1', plate: 'KDE 136E', kind: 'stop', at: at(10), lat: 1, lng: 2, place: 'Gilgil', speedKmh: 0, source: 'tracker', minutes: 45 };
+const stop = { vehicleId: 'v1', plate: 'KDE 136E', kind: 'stop', at: at(10), stoppedAt: at(10), leftAt: at(55), lat: 1, lng: 2, place: 'Gilgil', speedKmh: 62, source: 'tracker', minutes: 45 };
 const brake = { vehicleId: 'v1', plate: 'KDE 136E', kind: 'braking', at: at(5), lat: 1, lng: 2, place: 'Naivasha', speedKmh: 38.4, source: 'tracker' };
 const turn = { vehicleId: 'v2', plate: 'KDE 127E', kind: 'cornering', at: at(20), lat: null, lng: null, place: null, speedKmh: null, source: 'camera' };
 
 describe('the events picked', () => {
   it('keeps the report’s order, whatever order they were ticked in', () => {
-    expect(pickedEvents(['stop', 'freewheel']).map((e) => e.key)).toEqual(['freewheel', 'stop']);
+    expect(pickedEvents(['freewheel', 'stop']).map((e) => e.key)).toEqual(['stop', 'freewheel']);
   });
   it('counts a unit’s events by kind, a dash for none', () => {
     const counts = countByUnit([stop, brake, { ...brake, at: at(6) }]);
@@ -26,18 +26,40 @@ describe('the events picked', () => {
     expect(eventsFor([stop, brake], [row('v1', 'KDE 136E')], ['stop'])).toEqual([stop]);
     expect(eventsFor([stop], [row('v2', 'KDE 127E')], ['stop'])).toEqual([]);
   });
-  it('writes a line for each kind of event', () => {
-    expect(eventCells(brake).slice(0, 2)).toEqual(['KDE 136E', 'Harsh stops']);
-    expect(eventCells(brake)[4]).toBe('38 km/h');
-    expect(eventCells(stop)[4]).toBe('45 min');
-    expect(eventCells({ ...stop, ongoing: true })[4]).toBe('45 min, still there');
-    expect(eventCells({ ...stop, before: true })[2]).toMatch(/^Before /);
-    expect(eventCells(turn).slice(3)).toEqual(['-', '-', 'Camera']);
+  it('gives each kind its own table, an empty one for none', () => {
+    const [stops, turns, brakes] = eventSections([stop, brake, turn], ['braking', 'cornering', 'stop']);
+    expect([stops.label, turns.label, brakes.label]).toEqual(['Stops over 10 minutes', 'Harsh cornering', 'Harsh stops']);
+    expect(brakes.events).toEqual([brake]);
+    expect(eventSections([brake], ['stop'])[0].events).toEqual([]);
   });
-  it('says a free-wheeling zero proves nothing, and only then', () => {
-    expect(eventNotes([], ['freewheel'])).toEqual([FREEWHEEL_NOTE]);
-    expect(eventNotes([{ kind: 'freewheel' }], ['freewheel'])).toEqual([]);
-    expect(eventNotes([], ['stop'], ['A', 'A'])).toEqual(['A']);
+  const stopCells = (e) => eventSections([e], ['stop'])[0].cells(e);
+  it('writes a stop as last speed, time stopped, duration, location, time left', () => {
+    expect(eventSections([stop], ['stop'])[0].heads).toEqual(['Unit', 'Last speed', 'Time stopped', 'Duration', 'Location', 'Time left']);
+    const [unit, last, stopped, duration, place, left] = stopCells(stop);
+    expect([unit, last, duration, place]).toEqual(['KDE 136E', '62 km/h', '45 min', 'Gilgil']);
+    expect(stopped).toMatch(/^05\.11\.2026 08:40/);
+    expect(left).toMatch(/^05\.11\.2026 09:25/);
+  });
+  it('gives a long stop in hours, and one still running no time left', () => {
+    const cells = stopCells({ ...stop, minutes: 125, leftAt: null, ongoing: true });
+    expect(cells[3]).toBe('2 h 05 min');
+    expect(cells[5]).toBe('Still there');
+  });
+  it('says so when a stop began earlier than the readings show', () => {
+    const cells = stopCells({ ...stop, speedKmh: null, before: true });
+    expect(cells[1]).toBe('-');
+    expect(cells[2]).toMatch(/^Before /);
+    expect(cells[3]).toBe('Over 45 min');
+  });
+  it('writes the other events as time, location, speed, source', () => {
+    const s = eventSections([turn, brake], ['cornering', 'braking']);
+    expect(s[0].heads).toEqual(['Unit', 'Time', 'Location', 'Speed', 'Source']);
+    expect(s[0].cells(turn).slice(2)).toEqual(['-', '-', 'Camera']);
+    expect(s[1].cells(brake).slice(2)).toEqual(['Naivasha', '38 km/h', 'Tracker']);
+  });
+  it('keeps the server’s notes, each once, and adds none of its own', () => {
+    expect(eventNotes(['A', 'A'])).toEqual(['A']);
+    expect(eventNotes()).toEqual([]);
   });
 });
 
@@ -58,16 +80,31 @@ describe('the events on the document', () => {
       t.cols.forEach((c, i) => { if (c.w) expect(textMm(t.head[i], 7.2, true) + 3.8, t.head[i]).toBeLessThanOrEqual(c.w); });
       expect(t.cols.reduce((n, c) => n + c.w, 0)).toBeLessThan(pageMm);
     }
-    expect(EVENTS.map((e) => e.label)).toEqual(['Free-wheeling', 'Harsh cornering', 'Harsh stops', 'Harsh acceleration', 'Stops over 10 min']);
+    expect(EVENTS.map((e) => e.label)).toEqual(['Stops over 10 minutes', 'Free-wheeling', 'Harsh cornering', 'Harsh stops', 'Harsh acceleration']);
   });
-  it('leaves the sheet’s columns as they were, the counts in a table of their own, then the list', () => {
+  it('leaves the sheet’s columns as they were, the counts in a table of their own, then a numbered section a kind', () => {
     const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'braking'], list: [stop, brake, turn] } });
-    const [sheet, counted, list] = tables(d);
+    const [sheet, counted, stops, brakes] = tables(d);
     expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction']);
-    expect(counted.head).toEqual(['Unit', 'Harsh stops', 'Stops over 10 min']);
+    expect(counted.head).toEqual(['Unit', 'Stops over 10 minutes', 'Harsh stops']);
     expect(counted.rows.map((r) => r.map((c) => c.text))).toEqual([['KDE 136E', '1', '1']]);
     expect(d.blocks.find((b) => b.title === '3. Events')).toMatchObject({ aside: '2 events' });
-    expect(list.rows.map((r) => r[1].text)).toEqual(['Harsh stops', 'Stops over 10 min']);
+    expect(d.blocks.filter((b) => b.kind === 'h3').map((b) => b.title)).toEqual(['3.1 Stops over 10 minutes', '3.2 Harsh stops']);
+    expect(stops.head[1]).toBe('Last speed');
+    expect(brakes.rows[0][0].text).toBe('KDE 136E');
+  });
+  it('says none under a kind that had none, with no note about why', () => {
+    const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'freewheel'], list: [stop] } });
+    expect(d.blocks.filter((b) => b.kind === 'h3').map((b) => b.title)).toEqual(['3.1 Stops over 10 minutes', '3.2 Free-wheeling']);
+    expect(d.blocks.find((b) => b.kind === 'none').text).toBe('None recorded in this window.');
+    expect(JSON.stringify(d)).not.toMatch(/CAN-bus/);
+  });
+  it('never cuts a stop’s time or duration', () => {
+    const worst = { ...stop, plate: 'KDE 136E', before: true, minutes: 10_080, speedKmh: 120 };
+    const s = eventSections([worst], ['stop'])[0];
+    s.cells(worst).forEach((text, i) => {
+      if (s.cols[i].w && !s.cols[i].wrap) expect(textMm(text, 7.6, false) + 3.8, text).toBeLessThanOrEqual(s.cols[i].w);
+    });
   });
   it('says so when none of the kinds picked happened', () => {
     const d = movementDoc([request], { ...opts, events: { kinds: ['stop'], list: [] } });

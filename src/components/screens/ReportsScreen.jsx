@@ -58,7 +58,7 @@ import TatFuelReport from './TatFuelReport';
 import SpeedReport from './SpeedReport';
 import OfflineReport from './OfflineReport';
 import { loadMovementReport, loadMovementEvents, makeReportDoc } from '../../api/reports';
-import { EVENTS, eventKeys, pickedEvents, countByUnit, countCell, eventsFor, eventCells, eventNotes, EVENT_HEADS } from '../../lib/movementEvents';
+import { EVENTS, eventKeys, pickedEvents, countByUnit, countCell, eventsFor, eventSections, eventNotes } from '../../lib/movementEvents';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPreview from '../shared/PdfPreview';
 import { loadZones } from '../../hooks/useEstateZones';
@@ -895,7 +895,7 @@ function MovementsReport({ orgId }) {
   const movementSheet = () => movementDoc(pdfRequests(reports, edits, picked), {
     organisation: reports?.[0]?.organisation, orgCode: reports?.[0]?.orgCode, depots: depots.found,
     events: eventKinds.length ? { kinds: eventKinds, list: eventRead.list } : null,
-    notes: eventKinds.length ? eventNotes(eventRead.list, eventKinds, eventRead.notes) : [],
+    notes: eventKinds.length ? eventNotes(eventRead.notes) : [],
   });
   const makeMovementPdf = (landscape = false) => makeReportDoc({ orgId, landscape, doc: movementSheet() });
   const downloadPdf = async (landscape = false) => {
@@ -945,7 +945,7 @@ function MovementsReport({ orgId }) {
   const dayRows = useMemo(() => (shownGroups ?? []).flatMap((g) => g.rows).filter((r) => !dayEdits[r.vehicleId]?.removed), [shownGroups, dayEdits]);
   const dayEvents = useMemo(() => (report ? eventsFor(eventRead.list.filter((e) => e.at >= report.from && e.at <= report.to), dayRows, eventKinds) : []), [report, eventRead.list, dayRows, eventKinds]);
   const dayCounts = useMemo(() => countByUnit(dayEvents), [dayEvents]);
-  const dayNotes = eventBusy ? [] : eventNotes(eventRead.list, eventKinds, eventRead.notes);
+  const dayNotes = eventBusy ? [] : eventNotes(eventRead.notes);
 
   // The site the directions read against: MORL for Menengai, the organisation's own elsewhere
   const site = report?.site ?? 'MORL';
@@ -1197,20 +1197,25 @@ function MovementsReport({ orgId }) {
               <section className="mvr-events" aria-label="Events">
                 <h3 className="mvr-events__title">Events <span className="rpt-sub">{dayEvents.length.toLocaleString('en-GB')}{eventBusy ? ' so far' : ''}</span></h3>
                 {dayNotes.map((text) => <p key={text} className="rpt-warn mvr-events__note">{text}</p>)}
-                {dayEvents.length > 0 ? (
-                  <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
-                    <table className="sp4-table rpt-table">
-                      <thead><tr>{EVENT_HEADS.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
-                      <tbody>
-                        {dayEvents.map((e) => (
-                          <tr key={`${e.vehicleId}|${e.kind}|${e.at}|${e.source}`} className="sp4-tr">
-                            {eventCells(e).map((text, i) => <td key={EVENT_HEADS[i]} className={i === 0 ? 'rpt-unit' : undefined}>{text}</td>)}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {dayEvents.length > 0 ? eventSections(dayEvents, eventKinds).map((s) => (
+                  <div key={s.key} className="mvr-events__kind">
+                    <h4 className="mvr-events__sub">{s.label} <span className="rpt-sub">{s.events.length.toLocaleString('en-GB')}</span></h4>
+                    {s.events.length > 0 ? (
+                      <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+                        <table className="sp4-table rpt-table">
+                          <thead><tr>{s.heads.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
+                          <tbody>
+                            {s.events.map((e) => (
+                              <tr key={`${e.vehicleId}|${e.at}|${e.source}`} className="sp4-tr">
+                                {s.cells(e).map((text, i) => <td key={s.heads[i]} className={i === 0 ? 'rpt-unit' : undefined}>{text}</td>)}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : !eventBusy && <p className="rpt-sub mvr-events__note">None recorded in this window.</p>}
                   </div>
-                ) : !eventBusy && eventRead.status !== 'error' && <p className="rpt-sub mvr-events__note">None of the events picked in this window.</p>}
+                )) : !eventBusy && eventRead.status !== 'error' && <p className="rpt-sub mvr-events__note">None of the events picked in this window.</p>}
               </section>
             )}
           </>

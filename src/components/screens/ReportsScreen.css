@@ -481,6 +481,8 @@ select.mvr-edit { min-width: 110px; }
 
 .mvr-events { margin: 14px var(--sp4-gutter, 12px) 0; }
 .mvr-events__title { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.mvr-events__kind { margin: 0 0 12px; }
+.mvr-events__sub { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
 .mvr-events__note { margin: 0 0 6px; font-size: 12px; }
 
 .dlv-plan { margin: 10px var(--sp4-gutter, 12px); padding: 10px 12px; border: 1px solid var(--sp4-line, rgba(127,127,127,.25)); border-radius: 10px; }

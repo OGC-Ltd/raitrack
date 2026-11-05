@@ -15,7 +15,7 @@
 
 import { MOMBASA_LOADING, MOVING_KMH, stamp, countRows, directionWords } from './movementReport';
 import { depotAt } from './movementDepots';
-import { pickedEvents, countByUnit, countCell, eventsFor, eventCells, EVENT_HEADS } from './movementEvents';
+import { pickedEvents, countByUnit, countCell, eventsFor, eventSections } from './movementEvents';
 
 const TZ = 'Africa/Nairobi';
 const DASH = '-';
@@ -58,7 +58,6 @@ export function locationFill(row, groupName, depots = []) {
 
 const COLS = [{ w: 54 }, { w: 30 }, { w: 0, wrap: true }, { w: 15, align: 'right' }, { w: 20 }];
 const HEAD = ['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction'];
-const EVENT_COLS = [{ w: 30 }, { w: 30 }, { w: 36, wrap: true }, { w: 0, wrap: true }, { w: 26, wrap: true }, { w: 15 }];
 
 /** One request's overview and sections, numbered from `n`. */
 function partBlocks(q, n, depots, events) {
@@ -123,8 +122,12 @@ function partBlocks(q, n, depots, events) {
       ...kinds.map((k) => ({ text: String(countCell(counts, row.vehicleId, k.key)) })),
     ]),
   });
-  blocks.push({ kind: 'h3', title: 'Each event' });
-  blocks.push({ kind: 'table', size: 7.6, cols: EVENT_COLS, head: EVENT_HEADS, rows: listed.map((e) => eventCells(e).map((text, i) => ({ text: String(text), ...(i === 0 ? { bold: true } : {}) }))) });
+  eventSections(listed, events.kinds).forEach((s, i) => {
+    blocks.push({ kind: 'h3', title: `${after}.${i + 1} ${s.label}`, aside: `${s.events.length}` });
+    blocks.push(s.events.length
+      ? { kind: 'table', size: 7.6, cols: s.cols, head: s.heads, rows: s.events.map((e) => s.cells(e).map((text, c) => ({ text: String(text), ...(c === 0 ? { bold: true } : {}) }))) }
+      : { kind: 'none', text: 'None recorded in this window.' });
+  });
   return { blocks, next: after + 1 };
 }
 
