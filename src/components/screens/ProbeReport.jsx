@@ -63,6 +63,7 @@ export default function ProbeReport({ orgId, orgCode, companyName, active = true
       setRun({
         status: 'done', ...days, fleet: pickedWords, unread,
         failed: reports.reduce((n, r) => n + r.failed, 0),
+        eventsSeen: reports.reduce((n, r) => n + r.eventsSeen, 0),
         rows: mergeRows(reports.map((r) => r.rows)),
       });
     } catch (err) {
@@ -136,7 +137,10 @@ export default function ProbeReport({ orgId, orgCode, companyName, active = true
         )}
         {done && !rows.length && (
           <EmptyNote icon={<ReportIcon name="probeReport" />} title="No Probe Disconnections">
-            Wialon has no probe disconnection alert for {done.fleet} on {words}.
+            {done.eventsSeen === 0
+              // Not a clean result: nothing was recorded, of any rule, so nothing shows the probes were connected
+              ? `Wialon recorded no alerts of any kind for ${done.fleet} on ${words}, so this does not show the probes stayed connected.`
+              : `Wialon has no probe disconnection alert for ${done.fleet} on ${words}.`}
             {done.failed > 0 ? ` ${plural(done.failed, 'unit')} could not be read.` : ''}
             {done.unread.length > 0 ? ` ${done.unread.join(', ')} could not be opened.` : ''}
           </EmptyNote>
