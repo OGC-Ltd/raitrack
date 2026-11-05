@@ -21,7 +21,7 @@ import { useEffect, useRef } from "react";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 import "./DetailSidebar.css";
 
-export default function DetailSidebar({ title, label, itemKey, onClose, footer = null, wide = false, children }) {
+export default function DetailSidebar({ id, title, label, itemKey, onClose, footer = null, wide = false, children }) {
   const body = useRef(null);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function DetailSidebar({ title, label, itemKey, onClose, footer =
   }, []);
 
   return (
-    <aside className={"dsb" + (wide ? " dsb--wide" : "")} role="dialog" aria-label={label ?? title}>
+    <aside id={id} className={"dsb" + (wide ? " dsb--wide" : "")} role="dialog" aria-label={label ?? title}>
       <header className="dsb__head">
         <span className="dsb__title">{title}</span>
         <button type="button" className="dsb__x" onClick={onClose} aria-label={`Close ${String(title).toLowerCase()}`}>×</button>

@@ -109,14 +109,16 @@ export default function StopWatch() {
     <div className="stw-pops" role="region" aria-label="Unauthorised stops">
       {pops.map((p) => (
         <div key={p.key} className={`stw-pop stw-pop--${p.kind}`} role="alert">
-          <i className={`ti ${p.kind === 'nogo' ? 'ti-hand-stop' : 'ti-map-pin-exclamation'}`} aria-hidden="true" />
+          <span className="stw-pop__mark" aria-hidden="true">
+            <i className={`ti ${p.kind === 'nogo' ? 'ti-hand-stop' : 'ti-map-pin-exclamation'}`} />
+          </span>
           <div className="stw-pop__text">
             <b>{p.kind === 'nogo' ? 'No-go zone' : 'Unauthorised stop'}</b>
             <span>{p.text}</span>
           </div>
           <div className="stw-pop__acts">
-            <button type="button" className="sp4-ghost-btn" onClick={() => { setDesktopActiveTab('alerts'); requestStopsView(); setPops((x) => x.filter((y) => y.key !== p.key)); }}>Open</button>
-            <button type="button" className="sp4-ghost-btn" aria-label="Dismiss" onClick={() => setPops((x) => x.filter((y) => y.key !== p.key))}>✕</button>
+            <button type="button" className="stw-pop__open" onClick={() => { setDesktopActiveTab('alerts'); requestStopsView(); setPops((x) => x.filter((y) => y.key !== p.key)); }}>Open</button>
+            <button type="button" className="stw-pop__x" aria-label="Dismiss" onClick={() => setPops((x) => x.filter((y) => y.key !== p.key))}>{"\u2715"}</button>
           </div>
         </div>
       ))}

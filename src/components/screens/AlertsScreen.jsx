@@ -1292,7 +1292,7 @@ export default function AlertsScreen() {
         )}
         </>)}
       </div>
-      {openAlert && (
+      {view === "alerts" && openAlert && (
         <AlertPanel
           alert={openAlert}
           org={orgById.get(openAlert.orgId)}
