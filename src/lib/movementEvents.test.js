@@ -28,7 +28,7 @@ describe('the events picked', () => {
   });
   it('gives each kind its own table, an empty one for none', () => {
     const [stops, turns, brakes] = eventSections([stop, brake, turn], ['braking', 'cornering', 'stop']);
-    expect([stops.label, turns.label, brakes.label]).toEqual(['Stops over 10 minutes', 'Harsh cornering', 'Harsh stops']);
+    expect([stops.label, turns.label, brakes.label]).toEqual(['Stop over 10 min', 'Harsh cornering', 'Harsh stop']);
     expect(brakes.events).toEqual([brake]);
     expect(eventSections([brake], ['stop'])[0].events).toEqual([]);
   });
@@ -45,11 +45,8 @@ describe('the events picked', () => {
     expect(cells[3]).toBe('2 h 05 min');
     expect(cells[5]).toBe('Still there');
   });
-  it('says so when a stop began earlier than the readings show', () => {
-    const cells = stopCells({ ...stop, speedKmh: null, before: true });
-    expect(cells[1]).toBe('-');
-    expect(cells[2]).toMatch(/^Before /);
-    expect(cells[3]).toBe('Over 45 min');
+  it('shows a dash where there is no last speed', () => {
+    expect(stopCells({ ...stop, speedKmh: null })[1]).toBe('-');
   });
   it('writes the other events as time, location, speed, source', () => {
     const s = eventSections([turn, brake], ['cornering', 'braking']);
@@ -80,27 +77,41 @@ describe('the events on the document', () => {
       t.cols.forEach((c, i) => { if (c.w) expect(textMm(t.head[i], 7.2, true) + 3.8, t.head[i]).toBeLessThanOrEqual(c.w); });
       expect(t.cols.reduce((n, c) => n + c.w, 0)).toBeLessThan(pageMm);
     }
-    expect(EVENTS.map((e) => e.label)).toEqual(['Stops over 10 minutes', 'Free-wheeling', 'Harsh cornering', 'Harsh stops', 'Harsh acceleration']);
+    expect(EVENTS.map((e) => e.label)).toEqual(['Stop over 10 min', 'Free-wheeling', 'Harsh cornering', 'Harsh stop', 'Harsh acceleration']);
   });
-  it('leaves the sheet’s columns as they were, the counts in a table of their own, then a numbered section a kind', () => {
+  it('adds Harsh acceleration and Stops right before Speed, only when picked', () => {
+    const accel = { ...brake, kind: 'acceleration' };
+    const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'acceleration'], list: [stop, accel] } });
+    const [sheet] = tables(d);
+    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Harsh acceleration', 'Stops', 'Speed', 'Direction']);
+    expect(sheet.rows[0].slice(3, 6).map((c) => c.text)).toEqual(['1', '1', '40 km/h']);
+    const one = movementDoc([request], { ...opts, events: { kinds: ['cornering'], list: [] } });
+    expect(tables(one)[0].head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction']);
+  });
+  it('counts on the sheet only what happened in the window', () => {
+    const early = { ...stop, at: at(-90), stoppedAt: at(-90) };
+    const d = movementDoc([request], { ...opts, events: { kinds: ['stop'], list: [early] } });
+    expect(tables(d)[0].rows[0][3].text).toBe('-');
+  });
+  it('leaves the sheet’s other columns as they were, the counts in a table of their own, then a numbered section a kind', () => {
     const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'braking'], list: [stop, brake, turn] } });
     const [sheet, counted, stops, brakes] = tables(d);
-    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Speed', 'Direction']);
-    expect(counted.head).toEqual(['Unit', 'Stops over 10 minutes', 'Harsh stops']);
+    expect(sheet.head).toEqual(['Grouping', 'Last coordinates', 'Location', 'Stops', 'Speed', 'Direction']);
+    expect(counted.head).toEqual(['Unit', 'Stop over 10 min', 'Harsh stop']);
     expect(counted.rows.map((r) => r.map((c) => c.text))).toEqual([['KDE 136E', '1', '1']]);
     expect(d.blocks.find((b) => b.title === '3. Events')).toMatchObject({ aside: '2 events' });
-    expect(d.blocks.filter((b) => b.kind === 'h3').map((b) => b.title)).toEqual(['3.1 Stops over 10 minutes', '3.2 Harsh stops']);
+    expect(d.blocks.filter((b) => b.kind === 'h3').map((b) => b.title)).toEqual(['3.1 Stop over 10 min', '3.2 Harsh stop']);
     expect(stops.head[1]).toBe('Last speed');
     expect(brakes.rows[0][0].text).toBe('KDE 136E');
   });
   it('says none under a kind that had none, with no note about why', () => {
     const d = movementDoc([request], { ...opts, events: { kinds: ['stop', 'freewheel'], list: [stop] } });
-    expect(d.blocks.filter((b) => b.kind === 'h3').map((b) => b.title)).toEqual(['3.1 Stops over 10 minutes', '3.2 Free-wheeling']);
+    expect(d.blocks.filter((b) => b.kind === 'h3').map((b) => b.title)).toEqual(['3.1 Stop over 10 min', '3.2 Free-wheeling']);
     expect(d.blocks.find((b) => b.kind === 'none').text).toBe('None recorded in this window.');
     expect(JSON.stringify(d)).not.toMatch(/CAN-bus/);
   });
   it('never cuts a stop’s time or duration', () => {
-    const worst = { ...stop, plate: 'KDE 136E', before: true, minutes: 10_080, speedKmh: 120 };
+    const worst = { ...stop, plate: 'KDE 136E', minutes: 10_080, speedKmh: 120 };
     const s = eventSections([worst], ['stop'])[0];
     s.cells(worst).forEach((text, i) => {
       if (s.cols[i].w && !s.cols[i].wrap) expect(textMm(text, 7.6, false) + 3.8, text).toBeLessThanOrEqual(s.cols[i].w);

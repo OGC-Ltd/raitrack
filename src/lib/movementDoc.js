@@ -15,7 +15,7 @@
 
 import { MOMBASA_LOADING, MOVING_KMH, stamp, countRows, directionWords } from './movementReport';
 import { depotAt } from './movementDepots';
-import { pickedEvents, countByUnit, countCell, eventsFor, eventSections } from './movementEvents';
+import { pickedEvents, countByUnit, countCell, eventsFor, eventSections, SHEET_COUNTS } from './movementEvents';
 
 const TZ = 'Africa/Nairobi';
 const DASH = '-';
@@ -70,6 +70,7 @@ function partBlocks(q, n, depots, events) {
   const inWindow = (events?.list ?? []).filter((e) => e.at >= q.from && e.at <= q.to);
   const listed = kinds.length ? eventsFor(inWindow, rowsAll, events.kinds) : [];
   const counts = countByUnit(listed);
+  const onSheet = SHEET_COUNTS.filter((k) => events?.kinds?.includes(k.key));
   const blocks = [
     { kind: 'h2', title: `${n}. Overview`, aside: windowText(q) },
     { kind: 'figures', items: [
@@ -89,7 +90,9 @@ function partBlocks(q, n, depots, events) {
       tally('sto-at') ? `${tally('sto-at')} at STO` : null].filter(Boolean).join(' · ');
     blocks.push({ kind: 'h2', title: `${n + 1 + i}. ${g.name}`, aside });
     blocks.push({
-      kind: 'table', size: 7.6, cols: COLS, head: HEAD,
+      kind: 'table', size: 7.6,
+      cols: [...COLS.slice(0, 3), ...onSheet.map((k) => ({ w: k.w, align: 'right' })), ...COLS.slice(3)],
+      head: [...HEAD.slice(0, 3), ...onSheet.map((k) => k.head), ...HEAD.slice(3)],
       rows: g.rows.map((row) => {
         const tint = TINT[row.state];
         const silentRow = row.stale || row.state === 'no-fix';
@@ -99,6 +102,7 @@ function partBlocks(q, n, depots, events) {
           cell(row.grouping ?? row.plate, { bold: true, ...(silentRow ? { tone: 'flag' } : {}) }),
           cell(row.lastAt != null ? stamp(row.lastAt) : DASH, row.stale ? { tone: 'flag' } : {}),
           cell(row.location ?? (row.state === 'at' ? q.morl ?? site : DASH), place ? { fill: place } : {}),
+          ...onSheet.map((k) => cell(countCell(counts, row.vehicleId, k.key))),
           cell(row.speedKmh != null ? `${row.speedKmh} km/h` : DASH),
           cell(words[row.state] ?? row.state, row.state === 'to' || row.state === 'from' ? { bold: true } : {}),
         ];
