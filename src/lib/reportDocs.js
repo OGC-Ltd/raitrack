@@ -18,6 +18,7 @@ import { SECTIONS, offlineCount, rowCells as dormantCells, sectionDays, asAtWord
 import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCells as geofenceCells } from './geofenceReport';
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
+import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, spansDays, stopWords } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
@@ -170,6 +171,38 @@ export function speedDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.
     meta: meta([['Fleet', fleet], ['Units', group === 'all' ? 'All units' : group], ['Day', words], ['Over the limit', plural(s.units, 'unit')]]),
     blocks,
     footer: `${fleet} · Speed Report · ${date}`,
+  };
+}
+
+/** Not a mirror: this report has no PDF of its own, the server draws this document. */
+export function probeDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
+  const s = probeSummary(rows);
+  const several = from !== to;
+  const words = periodWords(from, to);
+  const align = (i, figures) => (figures.has(i) ? { align: 'right' } : {});
+  const unitCols = [{ w: 0, wrap: true }, { w: 26 }, { w: 16 }, { w: 34 }, { w: 34 }].map((c, i) => ({ ...c, ...align(i, UNIT_FIGURES) }));
+  const runCols = [{ w: 50, wrap: true }, { w: 32 }, { w: 32 }, { w: 14 }, { w: 16 }, { w: 0, wrap: true }].map((c, i) => ({ ...c, ...align(i, RUN_FIGURES) }));
+  const blocks = [
+    { kind: 'h2', title: '1. Overview', aside: words },
+    { kind: 'figures', items: [
+      { label: 'Units', value: fmt(s.units) }, { label: 'Disconnections', value: fmt(s.runs) }, { label: 'Alerts', value: fmt(s.alerts) },
+    ] },
+    { kind: 'h2', title: '2. By unit', aside: plural(s.units, 'unit') },
+    { kind: 'table', cols: unitCols, head: UNIT_HEADS, size: 7.8, rows: byUnit(rows).map((u) => unitCells(u).map((t, k) => textCell(t, k === 0))) },
+    { kind: 'h2', title: '3. Each disconnection', aside: plural(s.runs, 'disconnection') },
+    { kind: 'table', cols: runCols, head: RUN_HEADS, size: 7.8, rows: rows.map((r) => runCells(r).map((t, k) => {
+      const link = k === PLACE_COLUMN ? mapUrl(r) : '';
+      return { ...textCell(t, k === 0), ...(link ? { link } : {}) };
+    })) },
+    { kind: 'note', text: CONTACT_LINE },
+  ];
+  return {
+    title: 'PROBE DISCONNECTION REPORT', docName: `Probe Disconnection Report ${fleet}`, pairs: true,
+    filename: `Probe Disconnection Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('PD', orgCode, now), date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', words], ['Units', plural(s.units, 'unit')], ['Disconnections', fmt(s.runs)]]),
+    blocks,
+    footer: `${fleet} · Probe Disconnection Report · ${words}`,
   };
 }
 

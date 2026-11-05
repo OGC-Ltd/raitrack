@@ -65,6 +65,13 @@ export async function loadTatFuelReport({ orgId, day }) {
 }
 
 /** Each unit that went over its limit on a fleet day (YYYY-MM-DD). */
+/** Each time a unit's fuel probe was disconnected, over fleet days. */
+export async function loadProbeReport({ orgId, from, to }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/probe-disconnections?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+  return res.data
+}
+
 export async function loadSpeedReport({ orgId, day }) {
   if (!orgId) throw new Error('No organisation selected')
   const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/speed?day=${encodeURIComponent(day)}`)
