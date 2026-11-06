@@ -69,6 +69,12 @@ describe('Alerts: an unauthorised stop’s place, copy and read marks', () => {
     expect(sw.distanceWords(240)).toBe('240 m');
   });
 
+  it('words the nearest place the same for the toast and the Alerts page', () => {
+    expect(sw.nearestWords({ kind: 'unauthorised', lat: 0.0, lng: 36.0005 }, places)).toMatch(/^NAIVAS \(Customer\), 1\.\d km$/);
+    expect(sw.nearestWords({ kind: 'nogo', lat: 0.0, lng: 36.0005 }, places)).toBeNull();
+    expect(sw.nearestWords({ kind: 'unauthorised', lat: 0.0, lng: 36.0005 }, [])).toBeNull();
+  });
+
   it('is unread from the moment it qualified as a stop', () => {
     const since = Date.parse('2026-11-06T10:00:00Z');
     expect(sw.stopLine({ key: 'v|stop|1', kind: 'unauthorised', since }).ts).toBe('2026-11-06T10:10:00.000Z');
