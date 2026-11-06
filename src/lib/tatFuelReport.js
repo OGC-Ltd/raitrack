@@ -36,25 +36,32 @@ export function durationWords(r) {
   return `${whenWords(r.leftAt)} to ${whenWords(r.returnedAt)} (${tatWords(r.returnedAt - r.leftAt)})`;
 }
 
-// As Vehicle analytics writes them: litres to 0.1, kilometres to 0.01.
-const litres = (v) => (v == null ? '-' : v.toFixed(1));
-const kms = (v) => (v == null ? '-' : v.toFixed(2));
-const whole = (v) => (v == null ? '-' : String(Math.round(v)));
+// As Vehicle analytics writes them: litres to 0.1, kilometres to 0.01. No
+// figure reads 0.00 (operator, 7 Nov 2026).
+export const NONE = '0.00';
+const litres = (v) => (v == null ? NONE : v.toFixed(1));
+const kms = (v) => (v == null ? NONE : v.toFixed(2));
+const whole = (v) => (v == null ? NONE : String(Math.round(v)));
+/** Station names with each word's first letter in capitals: "KITALE TOWN" → "Kitale Town" (operator, 7 Nov 2026). */
+export const stationWords = (s) => (s ? s.toLowerCase().replace(/(^|[\s(/-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase()) : '-');
 
 export function rowCells(r) {
   const f = r.fuel;
   return [
     r.plate, durationWords(r), litres(f?.initial), litres(f?.topUps), litres(f?.total), litres(f?.consumption), litres(f?.theft),
-    litres(f?.final), r.station || '-', kms(r.km), r.rate == null ? '-' : r.rate.toFixed(2), whole(r.tankL), r.comment, r.base,
+    litres(f?.final), stationWords(r.station), kms(r.km), r.rate == null ? NONE : r.rate.toFixed(2), whole(r.tankL), r.comment, r.base,
   ];
 }
 
 /** Prime movers come first, as on the server. */
 const rank = (g) => (g === 'Prime Movers' ? 0 : 1);
 
-/** Reports for several organisations as one: a unit's rows together, in the server's order. */
+/** A row with no finished trip goes to the bottom of its section (operator, 7 Nov 2026). */
+const empty = (r) => (r.returnedAt == null ? 1 : 0);
+
+/** Reports for several organisations as one: a unit's rows together, in the server's order, the rows without a trip last. */
 export const mergeRows = (lists) => lists.flat().sort((a, b) => rank(a.group) - rank(b.group) || b.group.localeCompare(a.group)
-  || a.plate.localeCompare(b.plate) || (a.leftAt ?? 0) - (b.leftAt ?? 0));
+  || empty(a) - empty(b) || a.plate.localeCompare(b.plate) || (a.leftAt ?? 0) - (b.leftAt ?? 0));
 
 /**
  * One organisation's days as one sheet, the days in order: every trip, and a

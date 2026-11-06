@@ -13,13 +13,15 @@ describe("the sheet's row", () => {
   it("carries every column in the sheet's order", () => {
     expect(rowCells(trip)).toEqual([
       "KDL 208X", "2 Nov 22:51 to 3 Nov 20:03 (21 h 12 min)", "209.7", "40.9", "250.6", "33.5", "0.0", "217.1",
-      "OPAPO", "77.00", "2.30", "600", "PROBE OK", "Sukari",
+      "Opapo", "77.00", "2.30", "600", "PROBE OK", "Sukari",
     ]);
     expect(rowCells(trip)).toHaveLength(COLUMNS.length);
   });
 
-  it("leaves what is not known as a dash, not a zero", () => {
-    expect(rowCells(idle).slice(2, 8)).toEqual(["-", "-", "-", "-", "-", "-"]);
+  it("reads a figure that is not known as 0.00 (operator, 7 Nov 2026)", () => {
+    expect(rowCells(idle).slice(2, 8)).toEqual(["0.00", "0.00", "0.00", "0.00", "0.00", "0.00"]);
+    expect(rowCells(idle).slice(9, 12)).toEqual(["0.00", "0.00", "0.00"]);
+    expect(rowCells(idle)[8]).toBe("-");
     expect(rowCells(idle)[1]).toBe("");
     expect(rowCells(idle)[12]).toBe("NOT UPDATING");
   });
@@ -75,6 +77,20 @@ describe("mergeRows with prime movers", () => {
   it("puts them first", () => {
     const r = (group, plate) => ({ group, plate, leftAt: 1 });
     expect(mergeRows([[r("Trucks", "A")], [r("Prime Movers", "B"), r("Tractors", "C")]]).map((x) => x.group)).toEqual(["Prime Movers", "Trucks", "Tractors"]);
+  });
+});
+
+describe("the operator's sheet, 7 Nov 2026", () => {
+  it("writes station names with the first letter of each word in capitals", () => {
+    expect(rowCells({ ...trip, station: "SELIA" })[8]).toBe("Selia");
+    expect(rowCells({ ...trip, station: "kitale town (amuka)" })[8]).toBe("Kitale Town (Amuka)");
+    expect(rowCells(trip)[8]).toBe("Opapo");
+  });
+
+  it("puts the rows without a trip at the bottom of each section", () => {
+    const quiet = { ...idle, group: trip.group, plate: "AAA 1" };
+    const other = { ...trip, plate: "ZZZ 9" };
+    expect(mergeRows([[quiet, trip], [other]]).map((r) => r.plate)).toEqual([trip.plate, "ZZZ 9", "AAA 1"]);
   });
 });
 

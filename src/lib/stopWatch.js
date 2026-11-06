@@ -17,6 +17,7 @@
 // Pure: no React, no network.
 
 import { fenceContains } from './zoneContainment';
+import { ZONE_STYLE } from './zoneLegend';
 import { metresToFence } from './movementDepots';
 
 export const ORG_CODE = 'MENENGAI';
@@ -156,6 +157,16 @@ export function distanceWords(m) {
   if (!Number.isFinite(m)) return '';
   if (m < 1000) return `${Math.max(10, Math.round(m / 10) * 10)} m`;
   return m < 10_000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
+}
+
+/** A place category's words, as the Alerts page's Type column writes them. */
+export const placeLabel = (category) => (category === 'parking' ? 'Rest stop' : (ZONE_STYLE[category] ?? ZONE_STYLE.other).label);
+
+/** "Kahawa Depot (Customer), 1.2 km" for a stop outside; null for a no-go stop or none known. */
+export function nearestWords(f, places) {
+  if (f.kind === 'nogo') return null;
+  const n = nearestPlace(f, places);
+  return n?.name ? `${n.name} (${placeLabel(n.category)}), ${distanceWords(n.metres)}` : null;
 }
 
 /** The read marks' own store (lib/feedReads), apart from any organisation's feed. */

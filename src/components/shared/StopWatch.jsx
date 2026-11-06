@@ -14,7 +14,9 @@ import { fetchSnapshot } from '../../services/snapshot';
 import { mapSnapshotVehicle } from '../../lib/vehicleMap';
 import { loadZones } from '../../hooks/useEstateZones';
 import { AUTHORISED, NO_GO } from '../../data/menengaiStopPlaces';
-import { desktopAlertsOn, flaggedUnits, placesOf, flagWords } from '../../lib/stopWatch';
+import { desktopAlertsOn, flaggedUnits, placesOf, flagWords, nearestWords, stopCopyText } from '../../lib/stopWatch';
+import { copyText } from '../../lib/copyText';
+import { cachedPlaceName } from '../../hooks/usePlaceName';
 import { setStopWatch, requestStopsView } from '../../hooks/useStopWatch';
 import './StopWatch.css';
 
@@ -56,6 +58,29 @@ function notify(text) {
   } catch { /* not allowed here */ }
 }
 
+/**
+ * Copy the stop, beside Open (operator, 7 Nov 2026): the same text the Alerts
+ * page copies, to paste into a chat. The icon turns to a tick, or a warning
+ * when the browser refused, then back.
+ */
+function CopyStop({ text, plate }) {
+  const [state, setState] = useState('idle');
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const onCopy = async () => {
+    const ok = await copyText(text());
+    setState(ok ? 'copied' : 'failed');
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState('idle'), ok ? 1600 : 2600);
+  };
+  const words = state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : `Copy the ${plate} stop`;
+  return (
+    <button type="button" className={`stw-pop__copy stw-pop__copy--${state}`} onClick={onCopy} title={words} aria-label={words}>
+      <i className={`ti ${state === 'copied' ? 'ti-check' : state === 'failed' ? 'ti-alert-triangle' : 'ti-copy'}`} aria-hidden="true" />
+    </button>
+  );
+}
+
 export default function StopWatch() {
   const { companies } = useCompanies();
   const { setDesktopActiveTab } = useAppActions();
@@ -63,6 +88,7 @@ export default function StopWatch() {
   const [pops, setPops] = useState([]);           // the new ones, newest first
   const seen = useRef(alerted());
   const zones = useRef({ at: 0, places: [] });
+  const places = useRef([]);          // every authorised place, for the copy's nearest one
 
   useEffect(() => {
     if (!holds) { setStopWatch({ status: 'off', flags: [] }); return undefined; }
@@ -83,7 +109,8 @@ export default function StopWatch() {
         if (!live) return;
         const fleet = (Array.isArray(snap?.data) ? snap.data : []).map(mapSnapshotVehicle);
         const now = Date.now();
-        const flags = flaggedUnits(fleet, { authorised: [...fromFile, ...zones.current.places], noGo, now });
+        places.current = [...fromFile, ...zones.current.places];
+        const flags = flaggedUnits(fleet, { authorised: places.current, noGo, now });
         const fresh = flags.filter((f) => !seen.current.has(f.key));
         for (const f of fresh) seen.current.set(f.key, now);
         if (fresh.length) {
@@ -105,6 +132,7 @@ export default function StopWatch() {
   }, [holds]);
 
   if (!pops.length) return null;
+  const copyOf = (p) => stopCopyText(p, { now: Date.now(), area: cachedPlaceName(p.lat, p.lng), place: nearestWords(p, places.current) });
   return (
     <div className="stw-pops" role="region" aria-label="Unauthorised stops">
       {pops.map((p) => (
@@ -117,6 +145,7 @@ export default function StopWatch() {
             <span>{p.text}</span>
           </div>
           <div className="stw-pop__acts">
+            <CopyStop text={() => copyOf(p)} plate={p.plate} />
             <button type="button" className="stw-pop__open" onClick={() => { setDesktopActiveTab('alerts'); requestStopsView(); setPops((x) => x.filter((y) => y.key !== p.key)); }}>Open</button>
             <button type="button" className="stw-pop__x" aria-label="Dismiss" onClick={() => setPops((x) => x.filter((y) => y.key !== p.key))}>{"\u2715"}</button>
           </div>

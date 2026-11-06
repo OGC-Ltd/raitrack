@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
-import { desktopAlertsOn, distanceWords, nearestPlace, setDesktopAlerts, placesOf, standingWords, stopCopyText, storePlaces } from "../../lib/stopWatch";
+import { desktopAlertsOn, distanceWords, nearestPlace, placeLabel, setDesktopAlerts, placesOf, standingWords, stopCopyText, storePlaces } from "../../lib/stopWatch";
 import { byRead } from "../../lib/geofenceExits";
 import { ZONE_STYLE } from "../../lib/zoneLegend";
 import { resolveOrgId } from "../../api/org";
@@ -94,7 +94,7 @@ function useAuthorisedPlaces() {
 
 const styleOf = (category) => {
   const s = ZONE_STYLE[category] ?? ZONE_STYLE.other;
-  return { label: category === "parking" ? "Rest stop" : s.label, color: s.osmColor ?? s.color };
+  return { label: placeLabel(category), color: s.osmColor ?? s.color };
 };
 
 /**
