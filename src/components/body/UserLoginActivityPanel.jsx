@@ -198,7 +198,7 @@ export default function UserLoginActivityPanel() {
     }
   };
 
-  const makePdf = async (landscape = false) => {
+  const makePdf = async (landscape) => {
     if (editor.edited) return editor.make(landscape);
     const complete = await loadCompleteReport();
     return makeReportDoc({

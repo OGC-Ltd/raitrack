@@ -33,7 +33,9 @@
  * @param {boolean}  [p.loading]
  * @param {() => void} [p.onReload]
  * @param {() => void} [p.onCsv]   omitted or with `disabled` when there is nothing to export
- * @param {() => void} [p.onPdf]
+ * @param {(landscape?: boolean) => void} [p.onPdf]
+ * @param {boolean}  [p.pdfWays]   the PDF asks Portrait or Landscape first, and
+ *   `onPdf(landscape)` gets the answer (every report under Reports, 6 Nov 2026)
  * @param {boolean}  [p.disabled]  true when the table is empty or still arriving
  * @param {import("react").ReactNode} [p.actions]  tab-specific buttons, shown
  *   BEFORE Refresh. Optional and absent by default, so no existing caller
@@ -42,8 +44,10 @@
  *   appears and disappears at the END of the row would make Refresh jump
  *   under the cursor every time a selection changed.
  */
+import JpegButton from "../shared/JpegButton";
+
 export default function TableToolbar({
-  summary, loading = false, onReload, onCsv, onPdf, disabled = false, actions,
+  summary, loading = false, onReload, onCsv, onPdf, pdfWays = false, disabled = false, actions,
 }) {
   return (
     <div data-tour="page-toolbar" className="sp4-table-sub sp4-gridbar">
@@ -71,11 +75,15 @@ export default function TableToolbar({
             title="CSV, the rows on screen, opens in Excel"
           >CSV</button>
         )}
-        {onPdf && (
+        {onPdf && pdfWays && (
+          <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={onPdf} disabled={disabled}
+                      title="PDF, the rows on screen, as a filed record" />
+        )}
+        {onPdf && !pdfWays && (
           <button
             type="button"
             className="sp4-ghost-btn"
-            onClick={onPdf}
+            onClick={() => onPdf()}
             disabled={disabled}
             title="PDF, the rows on screen, as a filed record"
           >PDF</button>

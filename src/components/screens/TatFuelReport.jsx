@@ -13,7 +13,9 @@ import { loadTatFuelReport, makeReportPdf } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { COLUMNS, FIGURES, MAX_DAYS, csvTable, dayWords, daysFrom, mergeRows, periodWords, rowCells, rowsOfGroup, rowsOverDays, sections, summary, tatPdfBody, yesterday } from '../../lib/tatFuelReport';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
+import PdfPreview from '../shared/PdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -89,11 +91,16 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
 
   const editor = useReportEditor({ orgId, source: rows, build: () => tatDoc(rows, { day: done.rep.day, to: done.rep.to, fleet, group, orgCode }) });
 
-  const save = async (as) => {
+  // Made landscape (14 columns); Portrait on request (operator, 6 Nov 2026)
+  // The file the PDF, the JPEG and the Preview share, the way up asked
+  const makePdf = (landscape = true) => (editor.edited ? editor.make(landscape)
+    : makeReportPdf({ orgId, kind: 'tat-fuel', landscape, body: tatPdfBody(rows, { day: done.rep.day, to: done.rep.to, fleet, group }) }));
+  const preview = usePdfPreview(makePdf);
+  const save = async (as, landscape = true) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { blob, filename } = editor.edited ? await editor.make() : await makeReportPdf({ orgId, kind: 'tat-fuel', body: tatPdfBody(rows, { day: done.rep.day, to: done.rep.to, fleet, group }) });
+      const { blob, filename } = await makePdf(landscape);
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -161,14 +168,16 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
                 {done.unread.length > 0 && <span className="rpt-warn"> · {done.unread.join(', ')} could not be opened</span>}
               </>}
               onCsv={saveCsv}
-              onPdf={file.busy ? undefined : () => save('pdf')}
+              onPdf={file.busy ? undefined : (landscape) => save('pdf', landscape)} pdfWays
               actions={<>
                 {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-                <JpegButton onSave={() => save('jpeg')} disabled={Boolean(file.busy)} title="The PDF report as an image" />
+                <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
+                <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
               </>}
             />
+            {preview.state && <PdfPreview state={preview.state} title="TAT and Fuel report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table tat-table">
                 <thead>

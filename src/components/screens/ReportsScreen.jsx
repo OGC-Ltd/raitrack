@@ -67,9 +67,10 @@ import PdfPreview from '../shared/PdfPreview';
 import { loadZones } from '../../hooks/useEstateZones';
 import { depotsFor, findDepots, depotAt } from '../../lib/movementDepots';
 import { withStoDirections } from '../../lib/stoUnits';
-import { movementDoc, sheetIsWide } from '../../lib/movementDoc';
+import { movementDoc } from '../../lib/movementDoc';
 import { docHtml } from '../../lib/docHtml';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab } from '../../lib/reportNav';
@@ -105,8 +106,6 @@ function OverspeedEvents({ events, unit }) {
 /** The reports that can be made for one unit (operator, 2 Nov 2026: Overspeeding "by the unit"). */
 const UNIT_REPORTS = new Set(['overspeed']);
 
-/** The reports drawn here that also save as a JPEG; Shift and Movements always do. */
-const JPEG_REPORTS = new Set(['behaviour', 'overspeed', 'utilisation']);
 
 /** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
@@ -363,16 +362,17 @@ function ShiftReport({ orgId, vehicles, groups }) {
     ? { ...d, fromDay: fleetDay(dayStart(today) - 12 * HOUR_MS), toDay: fleetDay(dayStart(today) - 12 * HOUR_MS) }
     : d);
 
-  const download = async () => {
+  const download = async (landscape = false) => {
     if (pdf.busy || !doc) return;
     setPdf({ busy: true, error: null });
     try {
-      await downloadEditedEndOfShift({ orgId, doc: pdfDoc(doc) });
+      await downloadEditedEndOfShift({ orgId, doc: pdfDoc(doc), landscape });
       setPdf({ busy: false, error: null });
     } catch (err) {
       setPdf({ busy: false, error: `The PDF could not be made: ${err?.message ?? err}` });
     }
   };
+  const preview = usePdfPreview((landscape) => makeEditedEndOfShift({ orgId, doc: pdfDoc(doc), landscape }));
   const downloadJpeg = async (landscape) => {
     if (pdf.busy || !doc) return;
     setPdf({ busy: 'jpeg', error: null });
@@ -434,10 +434,10 @@ function ShiftReport({ orgId, vehicles, groups }) {
         </button>
         <JpegButton className="sp4-ghost-btn rpt-log" onSave={downloadJpeg}
                     disabled={Boolean(pdf.busy) || run.status !== 'done'} busy={pdf.busy === 'jpeg'} />
-        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={download}
-                disabled={Boolean(pdf.busy) || run.status !== 'done'} aria-busy={pdf.busy === true}>
-          {pdf.busy === true ? 'Making the PDF…' : 'Download PDF'}
-        </button>
+        <JpegButton className="sp4-submit-btn frp-run rpt-run" word="PDF" text="Download PDF" icon="ti-file-type-pdf" onSave={download}
+                    disabled={Boolean(pdf.busy) || run.status !== 'done'} busy={pdf.busy === true} title="The report as a PDF" />
+        <PreviewButton className="sp4-ghost-btn rpt-log" onPreview={preview.open} disabled={Boolean(pdf.busy) || run.status !== 'done' || !doc}
+                       title="See the PDF, with your edits, before you download it" />
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
         {pdf.error && <span className="rpt-problem" role="alert">{pdf.error}</span>}
       </div>
@@ -470,6 +470,7 @@ function ShiftReport({ orgId, vehicles, groups }) {
         )}
         {run.status === 'done' && doc && <ShiftSheet doc={doc} version={version} onChange={setDoc} />}
       </div>
+      {preview.state && <PdfPreview state={preview.state} title="Shift report" edited={edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
     </>
   );
 }
@@ -783,7 +784,6 @@ function MovementsReport({ orgId }) {
   const [eventRead, setEventRead] = useState({ status: 'idle', list: [], notes: [], message: null });
   const eventsHeld = useRef(new Map());                      // by window and kind: ticking one more reads only that
   const [pdf, setPdf] = useState({ busy: false, error: null });
-  const [pageLandscape, setPageLandscape] = useState(false); // the way up last asked for: Preview shows what the PDF will be
   const [confirm, setConfirm] = useState(null);              // { words, go }: waits for the operator's yes
   const runId = useRef(0);
 
@@ -938,13 +938,12 @@ function MovementsReport({ orgId }) {
   const sheetSource = useMemo(() => ({}), [reports, edits, picked, eventKinds, eventRead, depots]); // eslint-disable-line react-hooks/exhaustive-deps
   const editor = useReportEditor({ orgId, source: sheetSource, build: () => movementSheet() });
   const theSheet = () => (editor.edited ? pdfDoc(editor.doc) : movementSheet());
-  const makeMovementPdf = (landscape = false) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: movementSheet() }));
+  const makeMovementPdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: movementSheet() }));
   const downloadPdf = async (landscape = false) => {
     if (!reports || pdf.busy) return;
-    setPageLandscape(landscape);
     setPdf({ busy: true, error: null });
     try {
-      const made = await makeMovementPdf(landscape || sheetIsWide(eventKinds));
+      const made = await makeMovementPdf(landscape);
       saveFile(made.blob, made.filename);
       setPdf({ busy: false, error: null });
     } catch (err) {
@@ -958,27 +957,14 @@ function MovementsReport({ orgId }) {
       // One continuous list, not A4 pages one under another (operator, 4 Nov 2026):
       // the same sheet, laid out here on one long letterhead page; the edited one when it was edited
       const sheet = theSheet();
-      const wide = landscape || sheetIsWide(eventKinds);
+      const wide = landscape;
       await saveLetterheadJpeg(docHtml(sheet, { logos: letterheadLogos(), landscape: wide }), { filename: `${sheet.filename}.pdf`, landscape: wide, continuous: true });
       setPdf({ busy: false, error: null });
     } catch (err) {
       setPdf({ busy: false, error: `The JPEG could not be made: ${err?.message ?? err}` });
     }
   };
-  const [preview, setPreview] = useState(null);   // { status: loading | done (blob, filename) | error }
-  const previewId = useRef(0);
-  const previewPdf = async () => {
-    if (!reports) return;
-    const id = ++previewId.current;
-    setPreview({ status: 'loading' });
-    try {
-      const file = await makeMovementPdf(pageLandscape);
-      if (id === previewId.current) setPreview({ status: 'done', ...file });
-    } catch (err) {
-      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
-    }
-  };
-  const closePreview = () => { previewId.current++; setPreview(null); };
+  const preview = usePdfPreview(makeMovementPdf);
   const previewCaption = !reports ? null : reports.length === 1
     ? periodText(reports[0].from, reports[0].to)
     : `${reports.length} days, ${dayWords(reports[0].from)} – ${dayWords(reports[reports.length - 1].from)}`;
@@ -1130,13 +1116,11 @@ function MovementsReport({ orgId }) {
                             title="The PDF report, with your edits, as an image" />
                 <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={downloadPdf} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
                             title="The report as a PDF, with your edits, upright or on its side" />
-                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
-                        title="See the PDF, with your edits, before you download it">
-                  <i className="ti ti-eye" aria-hidden="true" /> Preview
-                </button>
+                <PreviewButton onPreview={preview.open} disabled={Boolean(pdf.busy) || eventBusy || !kept.counts.total}
+                               title="See the PDF, with your edits, before you download it" />
               </>}
             />
-            {preview && <PdfPreview state={preview} caption={previewCaption} edited={changed} onRetry={previewPdf} onClose={closePreview} />}
+            {preview.state && <PdfPreview state={preview.state} caption={previewCaption} edited={changed} onRetry={preview.retry} onClose={preview.close} />}
             {depots.code === depotOrg && (depots.found.length > 0 || depots.missing.length > 0) && (
               <p className="mvr-depots" role="note">
                 {depots.found.map((d) => (
@@ -1538,19 +1522,19 @@ export default function ReportsScreen() {
       orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
     })),
   });
-  const downloadPdf = async () => {
+  const downloadPdf = async (turned = false) => {
     if (!done || pdfBusy) return;
     setPdfBusy(true);
     setPdfError(null);
     try {
       if (editor.edited) {
-        const made = await editor.make();
+        const made = await editor.make(turned);
         saveFile(made.blob, made.filename);
         return;
       }
       const { html, landscape, filename } = reportHtml(def, done, {
         companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
-        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
+        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
       });
       await saveLetterheadPdf(html, { filename, landscape });
     } catch (err) {
@@ -1585,24 +1569,14 @@ export default function ReportsScreen() {
   };
 
   // The PDF on screen before it is saved (operator, 2 Nov), as Movements has it.
-  const [preview, setPreview] = useState(null);
-  const previewId = useRef(0);
-  const previewPdf = async () => {
-    if (!done) return;
-    const id = ++previewId.current;
-    setPreview({ status: 'loading' });
-    try {
-      const { html, landscape, filename } = reportHtml(def, done, {
-        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
-        orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
-      });
-      const file = editor.edited ? await editor.make() : await saveLetterheadPdf(html, { filename, landscape, keep: true });
-      if (id === previewId.current) setPreview({ status: 'done', ...file });
-    } catch (err) {
-      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
-    }
-  };
-  const closePreview = () => { previewId.current++; setPreview(null); };
+  const preview = usePdfPreview(async (turned) => {
+    if (editor.edited) return editor.make(turned);
+    const { html, landscape, filename } = reportHtml(def, done, {
+      companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+      orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: Boolean(turned),
+    });
+    return saveLetterheadPdf(html, { filename, landscape, keep: true });
+  });
 
   const downloadCsv = () => {
     if (!done) return;
@@ -1720,27 +1694,20 @@ export default function ReportsScreen() {
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
               </>}
               onCsv={done.rows.length ? downloadCsv : undefined}
-              onPdf={pdfBusy || jpegBusy ? undefined : downloadPdf}
+              onPdf={pdfBusy || jpegBusy ? undefined : downloadPdf} pdfWays
               actions={<>
                 {editor.button}
                 {pdfBusy ? <span className="rpt-sub">Making the PDF…</span>
                   : jpegBusy ? <span className="rpt-sub">Making the JPEG…</span>
                   : pdfError ? <span className="rpt-warn">{pdfError}</span> : null}
-                {JPEG_REPORTS.has(key) && (
-                  <JpegButton onSave={downloadJpeg} disabled={pdfBusy || jpegBusy} />
-                )}
-                {conduct && (
-                  <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={pdfBusy}
-                          title="See the PDF before you download it">
-                    <i className="ti ti-eye" aria-hidden="true" /> Preview
-                  </button>
-                )}
+                <JpegButton onSave={downloadJpeg} disabled={pdfBusy || jpegBusy} />
+                <PreviewButton onPreview={preview.open} disabled={pdfBusy} />
               </>}
             />
             {editor.overlay}
-            {preview && (
-              <PdfPreview state={preview} title={`${def.label} report`}
-                          caption={`${periodWords} · ${groupWords}${done.ctx.unit ? ` · ${done.ctx.unit}` : ''}`} onRetry={previewPdf} onClose={closePreview} />
+            {preview.state && (
+              <PdfPreview state={preview.state} title={`${def.label} report`} edited={editor.edited ? 1 : 0}
+                          caption={`${periodWords} · ${groupWords}${done.ctx.unit ? ` · ${done.ctx.unit}` : ''}`} onRetry={preview.retry} onClose={preview.close} />
             )}
             {!done.rows.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">{def.empty}</EmptyNote>

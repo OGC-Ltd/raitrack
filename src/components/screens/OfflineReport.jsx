@@ -16,7 +16,9 @@ import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { fleetDay } from '../../lib/fleetReports';
 import { SECTIONS, COLUMNS, BAR, asAtOf, offlineReport, offlineCount, rowCells, sectionDays, asAtWords, csvTable, offlinePdfBody } from '../../lib/offlineReport';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
+import PdfPreview from '../shared/PdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -80,11 +82,15 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
 
   const editor = useReportEditor({ orgId, source: done, build: () => dormantDoc(rep, { fleet: done.fleet, now: done.now, orgCode }) });
 
+  // The file the PDF, the JPEG and the Preview share, the way up asked
+  const makePdf = (landscape) => (editor.edited ? editor.make(landscape)
+    : makeReportPdf({ orgId, kind: 'dormant-assets', body: offlinePdfBody(rep, { fleet: done.fleet, now: done.now }), landscape }));
+  const preview = usePdfPreview(makePdf);
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { blob, filename } = editor.edited ? await editor.make(landscape) : await makeReportPdf({ orgId, kind: 'dormant-assets', body: offlinePdfBody(rep, { fleet: done.fleet, now: done.now }), landscape });
+      const { blob, filename } = await makePdf(landscape);
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -147,14 +153,16 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
                 {done.unread.length > 0 && <span className="rpt-warn"> · {done.unread.join(', ')} could not be opened</span>}
               </>}
               onCsv={offlineCount(rep) ? saveCsv : undefined}
-              onPdf={file.busy ? undefined : () => save('pdf')}
+              onPdf={file.busy ? undefined : (landscape) => save('pdf', landscape)} pdfWays
               actions={<>
                 {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
+                <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
               </>}
             />
+            {preview.state && <PdfPreview state={preview.state} title="Dormant assets report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table ofl-table">
                 <colgroup><col style={{ width: '30%' }} /><col style={{ width: '18%' }} /><col /></colgroup>
