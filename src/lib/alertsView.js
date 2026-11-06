@@ -178,6 +178,40 @@ export function alertTrend(history, { orgs = [] } = {}, now = Date.now()) {
   return { unit, points: [...byStart.values()] };
 }
 
+/**
+ * The period's alerts a fleet day each, fuel and overspeeding apart, for the
+ * strip's two trend cells: every day from `fromDay` to `toDay`, empty ones at
+ * 0. Follows the Organisation filter only, as alertTrend does. null until the
+ * history is in.
+ *   → [{ day, fuel, speeding }]
+ */
+export function alertDays(history, { orgs = [], fromDay, toDay } = {}) {
+  if (!Array.isArray(history) || !fromDay || !toDay) return null;
+  const byDay = new Map();
+  for (let d = fromDay; d <= toDay; d = nextDay(d)) byDay.set(d, { day: d, fuel: 0, speeding: 0 });
+  for (const r of history) {
+    if (orgs.length && !orgs.includes(r.orgId)) continue;
+    const point = byDay.get(r.day);
+    if (point && (r.kind === "fuel" || r.kind === "speeding")) point[r.kind] += r.n;
+  }
+  return [...byDay.values()];
+}
+
+/** How many organisations hold a matching count above 0 (countWhere's filters). */
+export function orgsWhere(counts, { orgs = [], kind = "all", status = "all", read = "all" } = {}) {
+  if (!Array.isArray(counts)) return null;
+  const seen = new Set();
+  for (const c of counts) {
+    if (!c.n) continue;
+    if (orgs.length && !orgs.includes(c.orgId)) continue;
+    if (kind !== "all" && c.kind !== kind) continue;
+    if (status !== "all" && c.status !== status) continue;
+    if (read !== "all" && Boolean(c.read) !== (read === "read")) continue;
+    seen.add(c.orgId);
+  }
+  return seen.size;
+}
+
 // ── An alert's decision, in words ───────────────────────────────────────────
 
 const FUEL_REASON_WORDS = { theft: "confirmed theft", probe_fault: "faulty fuel probe" };

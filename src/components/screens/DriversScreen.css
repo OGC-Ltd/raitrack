@@ -135,7 +135,8 @@
 /* Driver Analytics page — shares the Analytics/Maintenance design language:
    Geist, --color-* theme tokens, card shell, KPI tiles, ranked bars. Light +
    dark safe. Mirrors the token bridge used in AnalyticsScreen.css. */
-.drivers-page {
+.drivers-page,
+.dr-tones {
   --card: var(--color-card, #0a0a0b);
   --border: var(--color-border, #2a2d35);
   --border-hi: var(--color-text-sec, var(--text-sec-adaptive, #7c8899));
@@ -167,6 +168,10 @@
   --tone-up:      #15803d;
   --tone-down:    #c42b2b;
 
+}
+/* .dr-tones carries the same tokens to a page that borrows the strip (the
+   Alerts page, 2026-11-06) without this page's scroll box. */
+.drivers-page {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -181,7 +186,8 @@
 
 /* Dark-surface steps, chosen for the dark band rather than derived by
    lightening the light ones — same rule the analytics palette follows. */
-.app--dark .drivers-page {
+.app--dark .drivers-page,
+.app--dark .dr-tones {
   --accent:     #3987e5;
   --tone-theft: #e66767;
   --tone-speed: #c98500;
@@ -887,6 +893,8 @@
 }
 .dr-statchart--tonnes  { --tone: var(--tone-tonnes); }
 .dr-statchart--mileage { --tone: var(--tone-mileage); }
+.dr-statchart--theft   { --tone: var(--tone-theft); }
+.dr-statchart--speed   { --tone: var(--tone-speed); }
 
 .dr-spark__base { stroke: var(--border); stroke-width: 1; }
 .dr-spark__line {
