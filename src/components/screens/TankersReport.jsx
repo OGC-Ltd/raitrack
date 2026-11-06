@@ -8,7 +8,7 @@
  * time, and the PDF, JPEG and CSV (lib/tankersReport).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import {
@@ -17,7 +17,8 @@ import {
 } from '../../lib/tankersReport';
 import { loadTankersReport } from '../../api/reports';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
 import PdfPreview from '../shared/PdfPreview';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
@@ -111,7 +112,7 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
       if (as === 'jpeg') {
         await saveLetterheadJpeg(html, { filename, landscape });
       } else {
-        await saveLetterheadPdf(html, { filename });
+        await saveLetterheadPdf(html, { filename, landscape });
       }
       setFile({ busy: false, error: null });
     } catch (err) {
@@ -119,21 +120,11 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
     }
   };
   // The PDF on screen before it is saved (operator, 4 Nov 2026), as the other reports have it
-  const [preview, setPreview] = useState(null);
-  const previewId = useRef(0);
-  const previewPdf = async () => {
-    if (!done) return;
-    const id = ++previewId.current;
-    setPreview({ status: 'loading' });
-    try {
-      const { html, filename } = sheet();
-      const made = editor.edited ? await editor.make() : await saveLetterheadPdf(html, { filename, keep: true });
-      if (id === previewId.current) setPreview({ status: 'done', ...made });
-    } catch (err) {
-      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
-    }
-  };
-  const closePreview = useCallback(() => { previewId.current++; setPreview(null); }, []);
+  const preview = usePdfPreview(async (landscape) => {
+    if (editor.edited) return editor.make(landscape);
+    const { html, filename } = sheet(landscape);
+    return saveLetterheadPdf(html, { filename, landscape, keep: true });
+  });
   const saveCsv = () => {
     if (!done) return;
     downloadTableCsv({ ...csvTable(kept, done.ctx.from, done.ctx.to), filenameSlug: `tankers-${new Date(done.ctx.to + 3 * 3600_000).toISOString().slice(0, 10)}` });
@@ -201,20 +192,17 @@ export default function TankersReport({ orgId, vehicles, orgCode, companyName, a
                 {done.noMorl && <span className="rpt-warn"> · MORL’s geofence could not be read, so no trip shows as completed</span>}
               </>}
               onCsv={kept.length ? saveCsv : undefined}
-              onPdf={file.busy ? undefined : () => save('pdf')}
+              onPdf={file.busy ? undefined : (landscape) => save('pdf', landscape)} pdfWays
               actions={<>
                 {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
-                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(file.busy) || preview?.status === 'loading'}
-                        title="See the PDF before you download it">
-                  <i className="ti ti-eye" aria-hidden="true" /> Preview
-                </button>
+                <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy) || preview.state?.status === 'loading'} />
               </>}
             />
-            {preview && (
-              <PdfPreview state={preview} title="Tankers report" onRetry={previewPdf} onClose={closePreview}
+            {preview.state && (
+              <PdfPreview state={preview.state} title="Tankers report" onRetry={preview.retry} onClose={preview.close}
                           caption={`${dmy(done.ctx.to)} · ${periodWords(done.ctx.from, done.ctx.to)} · ${kept.length} tanker${kept.length === 1 ? '' : 's'}`} />
             )}
             {!done.rows.length ? (

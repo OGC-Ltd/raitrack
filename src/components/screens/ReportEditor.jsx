@@ -56,8 +56,8 @@ export function useReportEditor({ orgId, source, build }) {
   };
   const undo = () => setSheet((s) => ({ ...s, doc: s.original, version: s.version + 1 }));
   const guard = (words, go) => (edited ? setConfirm({ words, go }) : go());
-  /** The edited PDF: `{ blob, filename }`. A report made for its side stays on its side. */
-  const make = (landscape = false) => makeReportDoc({ orgId, doc: pdfDoc(sheet.doc), landscape: landscape || Boolean(sheet.doc.landscape) });
+  /** The edited PDF: `{ blob, filename }`, the way up picked; with none picked, the way the report was made. */
+  const make = (landscape) => makeReportDoc({ orgId, doc: pdfDoc(sheet.doc), landscape: landscape ?? Boolean(sheet.doc.landscape) });
 
   const button = (
     <>

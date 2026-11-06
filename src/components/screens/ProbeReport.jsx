@@ -15,7 +15,9 @@ import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { MAX_DAYS, PLACE_COLUMN, RUN_FIGURES, RUN_HEADS, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, mergeRows, periodWords, runCells, summary, unitCells, yesterday } from '../../lib/probeReport';
 import { probeDoc } from '../../lib/reportDocs';
 import { docCsv, docSlug } from '../../lib/docCsv';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
+import PdfPreview from '../shared/PdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
@@ -87,11 +89,14 @@ export default function ProbeReport({ orgId, orgCode, companyName, active = true
   const sheet = () => probeDoc(rows, { from: done.from, to: done.to, fleet, orgCode });
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
 
+  // The file the PDF, the JPEG and the Preview share, the way up asked
+  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
+  const preview = usePdfPreview(makePdf);
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
-      const { blob, filename } = editor.edited ? await editor.make(landscape) : await makeReportDoc({ orgId, landscape, doc: sheet() });
+      const { blob, filename } = await makePdf(landscape);
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
       setFile({ busy: false, error: null });
@@ -161,8 +166,10 @@ export default function ProbeReport({ orgId, orgCode, companyName, active = true
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
                 <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={(landscape) => save('pdf', landscape)} disabled={Boolean(file.busy)} title="The report as a PDF" />
+                <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
               </>}
             />
+            {preview.state && <PdfPreview state={preview.state} title="Probe disconnection report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
             <section className="rpt-events" aria-label="By unit">
               <h3 className="rpt-events__title">By unit <span className="rpt-sub">· {plural(s.units, 'unit')}</span></h3>
               <div className="sp4-table-scroll sp4-keep-table rpt-scroll">

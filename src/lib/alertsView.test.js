@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  alertPager, bulkPlan, bulkWords, canTake, choiceWords, companyForOrgCode, alertTrend, countWhere, trendUnit, daysBounds, daysWords, decisionWords,
+  alertPager, bulkPlan, bulkWords, canTake, choiceWords, companyForOrgCode, alertTrend, alertDays, orgsWhere, countWhere, trendUnit, daysBounds, daysWords, decisionWords,
   duration, fleetDay, fleetMidnight, headline, periodDays, periodFrom, reportedLate, statusOf, unitQueues,
 } from "./alertsView";
 
@@ -232,5 +232,42 @@ describe("reportedLate", () => {
   it("says nothing when it was reported within minutes, or the time is missing", () => {
     expect(reportedLate({ at: "2026-10-13T01:00:00Z", arrivedAt: "2026-10-13T01:05:00Z" })).toBeNull();
     expect(reportedLate({ at: "2026-10-13T01:00:00Z" })).toBeNull();
+  });
+});
+
+describe("alertDays", () => {
+  const history = [
+    { orgId: "a", kind: "fuel", day: "2026-10-11", n: 2 },
+    { orgId: "a", kind: "speeding", day: "2026-10-11", n: 1 },
+    { orgId: "b", kind: "speeding", day: "2026-10-13", n: 4 },
+    { orgId: "b", kind: "fuel", day: "2026-10-01", n: 9 },
+  ];
+
+  it("gives every day of the period, empty ones at 0, both kinds apart", () => {
+    expect(alertDays(history, { fromDay: "2026-10-11", toDay: "2026-10-13" })).toEqual([
+      { day: "2026-10-11", fuel: 2, speeding: 1 },
+      { day: "2026-10-12", fuel: 0, speeding: 0 },
+      { day: "2026-10-13", fuel: 0, speeding: 4 },
+    ]);
+  });
+
+  it("follows the organisation filter and waits for the history", () => {
+    expect(alertDays(history, { orgs: ["a"], fromDay: "2026-10-13", toDay: "2026-10-13" }))
+      .toEqual([{ day: "2026-10-13", fuel: 0, speeding: 0 }]);
+    expect(alertDays(null, { fromDay: "2026-10-13", toDay: "2026-10-13" })).toBeNull();
+  });
+});
+
+describe("orgsWhere", () => {
+  const counts = [
+    { orgId: "a", kind: "fuel", status: "open", read: false, n: 2 },
+    { orgId: "b", kind: "fuel", status: "open", read: true, n: 1 },
+    { orgId: "b", kind: "speeding", status: "escalated", read: true, n: 0 },
+  ];
+  it("counts the organisations with a matching count above 0", () => {
+    expect(orgsWhere(counts, { kind: "fuel", status: "open" })).toBe(2);
+    expect(orgsWhere(counts, { status: "escalated" })).toBe(0);
+    expect(orgsWhere(counts, { read: "unread" })).toBe(1);
+    expect(orgsWhere(null)).toBeNull();
   });
 });

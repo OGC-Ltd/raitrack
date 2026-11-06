@@ -29,7 +29,8 @@ import { useReportEditor } from './ReportEditor';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { saveFile } from '../../api/tripReport';
 import { downloadTableCsv } from '../../utils/tableExport';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
 import PdfPreview from '../shared/PdfPreview';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import HourWindow, { hoursText } from './HourWindow';
@@ -285,7 +286,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     build: () => deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops, orgCode }) });
 
   // The server draws the PDF from the rows (reports/deliveries.pdf), as the other Movements tabs; the JPEG comes from that PDF
-  const makePdf = (landscape = false) => (editor.edited ? editor.make(landscape) : makeReportPdf({ orgId, kind: 'deliveries', landscape,
+  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportPdf({ orgId, kind: 'deliveries', landscape,
     body: deliveriesPdfBody(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops }) }));
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
@@ -299,20 +300,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
     }
   };
-  const [preview, setPreview] = useState(null);           // { status: loading | done (blob, filename) | error }
-  const previewId = useRef(0);
-  const previewPdf = async () => {
-    if (!done) return;
-    const id = ++previewId.current;
-    setPreview({ status: 'loading' });
-    try {
-      const made = await makePdf();
-      if (id === previewId.current) setPreview({ status: 'done', ...made });
-    } catch (err) {
-      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
-    }
-  };
-  const closePreview = () => { previewId.current++; setPreview(null); };
+  const preview = usePdfPreview(makePdf);
   const saveCsv = () => done && downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` });
   const flip = (s, k) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; };
   const toggle = (k) => setOpen((s) => flip(s, k));
@@ -490,7 +478,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 {done.noMoves && <span className="rpt-warn"> · Movements could not be read, so current locations are missing</span>}
               </>}
               onCsv={done.rows.length ? saveCsv : undefined}
-              onPdf={file.busy || !done.rows.length ? undefined : () => save('pdf')}
+              onPdf={file.busy || !done.rows.length ? undefined : (landscape) => save('pdf', landscape)} pdfWays
               actions={<>
                 {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
@@ -499,12 +487,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                   <input type="checkbox" checked={showStops} onChange={(e) => { const on = e.target.checked; editor.guard(on ? 'Show the pick-up locations' : 'Leave the pick-up locations out', () => setShowStops(on)); }} /> Show pick-up locations
                 </label>
                 <JpegButton className="sp4-ghost-btn rpt-log" onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy) || !done.rows.length} title="The PDF report as an image" />
-                <button type="button" className="sp4-ghost-btn rpt-log" onClick={previewPdf} disabled={!done.rows.length} title="See the PDF before saving it">
-                  <i className="ti ti-eye" aria-hidden="true" /> Preview
-                </button>
+                <PreviewButton className="sp4-ghost-btn rpt-log" onPreview={preview.open} disabled={!done.rows.length} />
               </>}
             />
-            {preview && <PdfPreview state={preview} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={previewPdf} onClose={closePreview} />}
+            {preview.state && <PdfPreview state={preview.state} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={preview.retry} onClose={preview.close} />}
             <p className="mvr-depots" role="note">
               <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
               <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>

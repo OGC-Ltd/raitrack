@@ -38,11 +38,11 @@ import { hushFuelAlarm, useFuelAlarm } from "../../hooks/useFuelAlarm";
 import { plateIn } from "../../lib/plate";
 import { settleLimited } from "../../lib/settleLimited";
 import {
-  KINDS, OVER_BY, PERIODS, READS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertTrend, countWhere,
+  KINDS, OVER_BY, PERIODS, READS, STATUSES, alertPager, bulkPlan, bulkWords, choiceWords, companyForOrgCode, alertDays, countWhere,
   daysBounds, daysWords, decisionWords, duration, fleetDay, headline, kmh, litres, periodDays,
   reportedLate, ruleWords, statusOf, unitQueues, when,
 } from "../../lib/alertsView";
-import { Card, Gauge } from "./FuelReportOverview";
+import AlertsStrip from "./AlertsStrip";
 import TableToolbar from "../body/TableToolbar";
 import TablePager, { PAGE_STEP } from "../body/TablePager";
 import FilterBar from "../body/FilterBar";
@@ -52,6 +52,8 @@ import UnauthorisedStops from "./UnauthorisedStops";
 import { useStopWatch } from "../../hooks/useStopWatch";
 import { loadGeofenceExits } from "../../api/geofenceExits";
 import { exitRows } from "../../lib/geofenceExits";
+import { useOrgsFeedReads } from "../../lib/feedReads";
+import { STOP_READS, stopLine } from "../../lib/stopWatch";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
 
@@ -132,100 +134,6 @@ function DayField({ label, value, max, onPick }) {
         setDraft(value);
       }}
     />
-  );
-}
-
-/** One figure as a gauge against the period's whole, like the Fuel Audit's cards. */
-function StatCard({ title, n, of, color, note, loading }) {
-  const shown = n == null ? "-" : n;
-  const unit = of > 0 ? `of ${of} alert${of === 1 ? "" : "s"}` : loading ? "reading" : "no alerts";
-  return (
-    <Card title={title} note={note} className="aud-stat">
-      <Gauge ratio={of > 0 && n != null ? n / of : 0} color={color} value={shown} unit={unit}
-             ariaLabel={`${title}: ${shown} of ${of ?? 0} alerts.`} />
-    </Card>
-  );
-}
-
-const TREND_W = 240;
-const TREND_H = 100;
-const TREND_LINES = [
-  { key: "fuel", label: "Fuel", cls: "alr-trend__line--fuel" },
-  { key: "speeding", label: "Speed", cls: "alr-trend__line--speed" },
-];
-
-const UNIT_WORDS = { day: "a day", week: "a week", month: "a month" };
-
-/**
- * Every alert ever received, one line for fuel and one for overspeeding, a
- * day, week or month a point (alertsView alertTrend). Pointing at (or arrowing
- * along) the chart reads out that point; otherwise the key holds the totals.
- */
-function TrendCard({ trend, loading }) {
-  const [at, setAt] = useState(null);
-  const series = trend?.points ?? null;
-  const n = series?.length ?? 0;
-  const top = Math.max(1, ...(series ?? []).flatMap((d) => [d.fuel, d.speeding]));
-  const xPct = (i) => (n < 2 ? 50 : (i / (n - 1)) * 100);
-  // Room above the top line for its figure.
-  const y = (v) => 16 + (1 - v / top) * (TREND_H - 20);
-  const path = (k) => series.map((d, i) => `${i ? "L" : "M"}${((xPct(i) / 100) * TREND_W).toFixed(1)},${y(d[k]).toFixed(1)}`).join("");
-  const sum = (k) => (series ?? []).reduce((t, d) => t + d[k], 0);
-  const point = at != null && series?.[at] ? series[at] : null;
-
-  const pointAt = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    if (!n || r.width <= 0) return;
-    setAt(Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width) * (n - 1)))));
-  };
-  const onKey = (e) => {
-    if (!n || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-    e.preventDefault();
-    setAt((i) => Math.max(0, Math.min(n - 1, (i ?? n) + (e.key === "ArrowLeft" ? -1 : 1))));
-  };
-  const readout = point ? point.words : n ? `Since ${series[0].words.replace(/^Week of /, "")}` : "";
-
-  return (
-    <Card title="Alerts over time" className="aud-stat alr-trend">
-      <ul className="alr-trend__key" aria-live="polite">
-        {TREND_LINES.map((l) => (
-          <li key={l.key} className={l.cls}>
-            <i aria-hidden="true" />{l.label}
-            <b>{series ? (point ? point[l.key] : sum(l.key)) : "-"}</b>
-          </li>
-        ))}
-        <li className="alr-trend__when">{series ? readout : loading ? "Reading…" : ""}</li>
-      </ul>
-      <div className="alr-trend__plot" tabIndex={n ? 0 : -1}
-           role="img"
-           aria-label={series
-             ? `Alerts ${UNIT_WORDS[trend.unit]}, ${readout.toLowerCase()}: ${sum("fuel")} fuel, ${sum("speeding")} overspeeding. Arrow keys read one point.`
-             : "Alerts over time: reading."}
-           onPointerMove={pointAt} onPointerDown={pointAt} onPointerLeave={() => setAt(null)}
-           onKeyDown={onKey} onBlur={() => setAt(null)}>
-        <svg viewBox={`0 0 ${TREND_W} ${TREND_H}`} preserveAspectRatio="none" aria-hidden="true">
-          {[0, 0.5, 1].map((f) => (
-            <line key={f} x1="0" x2={TREND_W} y1={y(top * f)} y2={y(top * f)} className="alr-trend__grid" />
-          ))}
-          {n > 1 && TREND_LINES.map((l) => (
-            <path key={l.key} d={path(l.key)} className={`alr-trend__line ${l.cls}`} />
-          ))}
-          {point && (
-            <line x1={(xPct(at) / 100) * TREND_W} x2={(xPct(at) / 100) * TREND_W} y1="0" y2={TREND_H}
-                  className="alr-trend__cursor" />
-          )}
-        </svg>
-        {/* Points in HTML, so they stay round however the chart stretches. */}
-        {series && (n === 1 || point) && TREND_LINES.map((l) => {
-          const i = point ? at : 0;
-          return (
-            <span key={l.key} className={`alr-trend__dot ${l.cls}`}
-                  style={{ left: `${xPct(i)}%`, top: `${(y(series[i][l.key]) / TREND_H) * 100}%` }} />
-          );
-        })}
-        <span className="alr-trend__top">{top} {series ? UNIT_WORDS[trend.unit] : ""}</span>
-      </div>
-    </Card>
   );
 }
 
@@ -828,7 +736,7 @@ export default function AlertsScreen() {
   const nRead = (r) => countWhere(counts, { orgs, kind, status, read: r });
   const unread = nRead("unread");
   const total = nStatus("all");
-  const trend = useMemo(() => alertTrend(history.data ?? null, { orgs }), [history.data, orgs]);
+  const daySeries = useMemo(() => alertDays(history.data ?? null, { orgs, ...days }), [history.data, orgs, days]);
   const pager = {
     ...alertPager({ page: at.page, rows: rows.length, hasNext: Boolean(page?.hasNextPage), listed: nStatus(status), step: PAGE_STEP }),
     setPage: goTo,
@@ -958,6 +866,27 @@ export default function AlertsScreen() {
   // The organisations picked (none = all held); read again when they or the day change, or on Refresh
   const geoOrgIds = useMemo(() => (orgs.length ? orgs : orgList.map((o) => o.id)), [orgs, orgList]);
   const geoKey = geoOrgIds.join(",");
+  // Read marks for the exits, as for the alerts: the bell's marks for the same
+  // lines (lib/feedReads), per organisation in this browser.
+  const exitReads = useOrgsFeedReads(geoOrgIds);
+  const exitsDone = geoRead.status === "done";
+  const exitsUnread = exitsDone ? geoRead.rows.filter(exitReads.unread).length : 0;
+  const nExitRead = (r) => (!exitsDone ? undefined
+    : r === "unread" ? exitsUnread : r === "read" ? geoRead.rows.length - exitsUnread : geoRead.rows.length);
+  // The stops' read marks: their own store, in this browser, as the exits'.
+  const stopReads = useOrgsFeedReads([STOP_READS]);
+  const stopLines = useMemo(() => (watch.flags ?? []).map(stopLine), [watch.flags]);
+  const stopsUnread = stopLines.filter(stopReads.unread).length;
+  const nStopRead = (r) => (watch.status !== "done" && !watch.checkedAt ? undefined
+    : r === "unread" ? stopsUnread : r === "read" ? stopLines.length - stopsUnread : stopLines.length);
+  const markAllStops = () => {
+    stopReads.markRead(stopLines);
+    setToast({ tone: "ok", text: "The stops flagged now are marked read." });
+  };
+  const markAllExits = () => {
+    exitReads.markRead(geoRead.rows ?? []);
+    setToast({ tone: "ok", text: "Today’s geofence exits are marked read." });
+  };
   const readGeo = useCallback(async () => {
     if (!geoOrgIds.length) return;
     setGeoRead((g) => ({ ...g, status: "loading" }));
@@ -983,14 +912,14 @@ export default function AlertsScreen() {
       )}
 
       {/* Where the period stands, for the organisations and kind picked. */}
-      <div data-tour="alerts-stats" className="aud-stats alr-stats">
-        <StatCard title="Open" n={nStatus("open")} of={total} color="var(--frv-s2)" loading={first.loading}
-                  note="Waiting for somebody to escalate or de-escalate them." />
-        <StatCard title="Escalated" n={nStatus("escalated")} of={total} color="var(--frv-crit)" loading={first.loading}
-                  note="Confirmed: a theft, a faulty probe, or a real overspeed." />
-        <StatCard title="De-escalated" n={nStatus("deescalated")} of={total} color="var(--frv-s3)" loading={first.loading}
-                  note="Looked at and found not to be one." />
-        <TrendCard trend={trend} loading={history.isLoading} />
+      <div data-tour="alerts-stats" className="aud-stats alr-stats dr-tones">
+        <AlertsStrip
+          counts={counts} countsLoading={first.loading}
+          series={daySeries} seriesLoading={history.isLoading}
+          orgs={orgs} kind={kind} read={readF}
+          scope={orgs.length === 1 ? (shortName(orgById.get(orgs[0])) ?? "one organisation")
+            : orgs.length ? `${orgs.length} organisations` : "all organisations"}
+        />
       </div>
 
       <div className="sp4-body">
@@ -998,11 +927,13 @@ export default function AlertsScreen() {
           summary={stops ? (
             <>
               <b>{watch.flags.length}</b> Menengai unit{watch.flags.length === 1 ? "" : "s"} flagged now
+              {stopsUnread > 0 && <> · <b>{stopsUnread}</b> unread</>}
             </>
           ) : geo ? (
             <>
               <b>{geoRead.status === "done" ? geoRead.rows.length : "…"}</b> geofence exit{geoRead.rows?.length === 1 ? "" : "s"} today
               {orgs.length > 0 && <> · {orgs.map((id) => shortName(orgById.get(id))).join(", ")}</>}
+              {exitsUnread > 0 && <> · <b>{exitsUnread}</b> unread</>}
             </>
           ) : (
             <>
@@ -1016,8 +947,11 @@ export default function AlertsScreen() {
           loading={stops ? watch.status === "loading" : geo ? geoRead.status === "loading" : first.loading}
           onReload={stops ? undefined : geo ? readGeo : refresh}
           actions={(
-            <button type="button" className="sp4-ghost-btn" onClick={markAll} disabled={markingAll || !page || geo || stops}
-                    title="Every alert that has arrived so far, in every organisation, read for you only">
+            <button type="button" className="sp4-ghost-btn" onClick={stops ? markAllStops : geo ? markAllExits : markAll}
+                    disabled={markingAll || (stops ? !stopsUnread : geo ? !exitsUnread : !page)}
+                    title={stops ? "The stops flagged now, read in this browser"
+                      : geo ? "Today’s geofence exits in the organisations picked, read in this browser"
+                      : "Every alert that has arrived so far, in every organisation, read for you only"}>
               <i className="ti ti-checks" aria-hidden="true" /> {markingAll ? "Marking…" : "Mark all read"}
             </button>
           )}
@@ -1063,6 +997,14 @@ export default function AlertsScreen() {
               )}
             </div>
           )}
+          {(geo || stops) && (
+            <div className="sp4-filter-group">
+              <span className="sp4-filter-label">Read</span>
+              {READS.map((r) => (
+                <Chip key={r.id} on={readF === r.id} onClick={() => setReadF(r.id)} n={stops ? nStopRead(r.id) : nExitRead(r.id)}>{r.label}</Chip>
+              ))}
+            </div>
+          )}
           {view === "alerts" && (<>
           <div className="sp4-filter-group">
             <span className="sp4-filter-label">State</span>
@@ -1101,9 +1043,9 @@ export default function AlertsScreen() {
 
         {geo && (
           <GeofenceExits state={geoRead} q={q} orgName={(id) => shortName(orgById.get(id)) ?? "an organisation"}
-                         showOrg={geoOrgIds.length > 1} onRetry={readGeo} />
+                         showOrg={geoOrgIds.length > 1} onRetry={readGeo} reads={exitReads} read={readF} />
         )}
-        {stops && <UnauthorisedStops watch={watch} q={q} />}
+        {stops && <UnauthorisedStops watch={watch} q={q} lines={stopLines} reads={stopReads} read={readF} />}
         {view === "alerts" && (<>
         {rows.length === 0 && first.loading ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Alerts">

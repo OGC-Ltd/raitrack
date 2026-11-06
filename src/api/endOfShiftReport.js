@@ -38,7 +38,7 @@ export async function makeEditedEndOfShift({ orgId, doc, landscape = false }) {
 }
 
 /** The same PDF, saved. */
-export async function downloadEditedEndOfShift({ orgId, doc }) {
-  const { blob, filename } = await makeEditedEndOfShift({ orgId, doc });
+export async function downloadEditedEndOfShift({ orgId, doc, landscape = false }) {
+  const { blob, filename } = await makeEditedEndOfShift({ orgId, doc, landscape });
   saveFile(blob, filename);
 }

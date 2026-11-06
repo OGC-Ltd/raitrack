@@ -78,6 +78,13 @@ export function placeNameAt(lat, lng) {
   return lookup(key, lat, lng)
 }
 
+/** The name already known for a coordinate, or null: never asks the network. */
+export function cachedPlaceName(lat, lng) {
+  if (lat == null || lng == null) return null
+  const key = keyOf(lat, lng)
+  return mem.get(key) ?? lsCache()[key] ?? null
+}
+
 /**
  * `enabled: false` reads the cache but never asks the network — for rows not
  * yet on screen (see UnitsMenu's location cell).

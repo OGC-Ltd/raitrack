@@ -14,7 +14,8 @@ import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
 import PdfPreview from '../shared/PdfPreview';
-import JpegButton from '../shared/JpegButton';
+import JpegButton, { PreviewButton } from '../shared/JpegButton';
+import { usePdfPreview } from '../../hooks/usePdfPreview';
 import DateRangePicker from '../layout/DateRangePicker';
 import { dayWords, yesterday } from '../../lib/tatFuelReport';
 import { useReportEditor } from './ReportEditor';
@@ -112,7 +113,7 @@ export default function RecoveryReport({ orgId, orgCode, companyName, active = t
     orgId, source: editorSource,
     build: () => recoveryDoc(report, { fleet: companyName ?? orgCode ?? 'Fleet', orgCode }),
   });
-  const makePdf = (landscape = false) => editor.edited
+  const makePdf = (landscape) => editor.edited
     ? editor.make(landscape)
     : downloadRecoveryReport({ orgId, day: report.day, vehicle: reportVehicle, landscape });
   const save = async (as, landscape = false) => {
@@ -127,20 +128,7 @@ export default function RecoveryReport({ orgId, orgCode, companyName, active = t
       setFile({ busy: false, error: `The ${as === 'jpeg' ? 'JPEG' : 'PDF'} could not be made: ${err?.message ?? err}` });
     }
   };
-  const [preview, setPreview] = useState(null);
-  const previewId = useRef(0);
-  const previewPdf = async () => {
-    if (!report) return;
-    const id = ++previewId.current;
-    setPreview({ status: 'loading' });
-    try {
-      const made = await makePdf();
-      if (id === previewId.current) setPreview({ status: 'done', ...made });
-    } catch (err) {
-      if (id === previewId.current) setPreview({ status: 'error', message: err?.message ?? String(err) });
-    }
-  };
-  const closePreview = () => { previewId.current++; setPreview(null); };
+  const preview = usePdfPreview(makePdf);
 
   return (
     <>
@@ -186,12 +174,10 @@ export default function RecoveryReport({ orgId, orgCode, companyName, active = t
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
                 <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
                 <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={(landscape) => save('pdf', landscape)} disabled={Boolean(file.busy)} title="The report as a PDF" />
-                <button type="button" className="sp4-ghost-btn" onClick={previewPdf} disabled={Boolean(file.busy)} title="See the PDF before saving it">
-                  <i className="ti ti-eye" aria-hidden="true" /> Preview
-                </button>
+                <PreviewButton className="sp4-ghost-btn" onPreview={preview.open} disabled={Boolean(file.busy)} />
               </>}
             />
-            {preview && <PdfPreview state={preview} title="Recovery vehicle report" caption={dayWords(report.day)} edited={editor.edited ? 1 : 0} onRetry={previewPdf} onClose={closePreview} />}
+            {preview.state && <PdfPreview state={preview.state} title="Recovery vehicle report" caption={dayWords(report.day)} edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table recovery-table">
                 <thead><tr>{COLUMNS.map((column, i) => <th key={column} scope="col" className={i > 1 ? 'rpt-num' : undefined}>{column}</th>)}</tr></thead>

@@ -13,7 +13,12 @@ const CHOICES = [
   { landscape: true, label: 'Landscape', icon: 'ti-rectangle', note: 'Wide pages, more room per row' },
 ];
 
-export default function JpegButton({ onSave, disabled, busy, word = 'JPEG', icon = 'ti-photo', className = 'sp4-ghost-btn', title = 'The PDF report as an image' }) {
+/** The report's Preview: the same choice, then the PDF on screen (hooks/usePdfPreview). */
+export function PreviewButton({ onPreview, disabled, className = 'sp4-ghost-btn', title = 'See the PDF before you download it' }) {
+  return <JpegButton word="Preview" icon="ti-eye" className={className} onSave={onPreview} disabled={disabled} title={title} />;
+}
+
+export default function JpegButton({ onSave, disabled, busy, word = 'JPEG', text = word, icon = 'ti-photo', className = 'sp4-ghost-btn', title = 'The PDF report as an image' }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
   useEffect(() => {
@@ -30,7 +35,7 @@ export default function JpegButton({ onSave, disabled, busy, word = 'JPEG', icon
     <span className="jpg-btn" ref={box}>
       <button type="button" className={className} onClick={() => setOpen((o) => !o)} disabled={disabled}
               aria-haspopup="menu" aria-expanded={open} aria-busy={busy || undefined} title={title}>
-        <i className={`ti ${icon}`} aria-hidden="true" /> {busy ? `Making the ${word}…` : word}
+        <i className={`ti ${icon}`} aria-hidden="true" /> {busy ? `Making the ${word}…` : text}
         <i className="ti ti-chevron-down jpg-btn__caret" aria-hidden="true" />
       </button>
       {open && (
