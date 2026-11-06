@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const apiFetch = vi.fn();
 vi.mock("../services/api", () => ({ apiFetch: (...args) => apiFetch(...args) }));
 
-const { listUsersAcrossOrgs } = await import("./users");
+const { listAllUserLoginActivity, listUsersAcrossOrgs } = await import("./users");
 
 const roster = (...names) => ({
   data: names.map((n) => ({ id: `u-${n}`, fullName: n })),
@@ -136,5 +136,42 @@ describe("listUsersAcrossOrgs", () => {
     apiFetch.mockResolvedValue(roster("Ada"));
     await listUsersAcrossOrgs(["org-a"]);
     expect(apiFetch.mock.calls[0][0]).toContain("access=system");
+  });
+});
+
+describe("listAllUserLoginActivity", () => {
+  it("collects every successful sign-in page and preserves the report metadata", async () => {
+    apiFetch
+      .mockResolvedValueOnce({ data: { rows: [{ id: "event-1" }, { id: "event-2" }], total: 3, everLoggedIn: 4 } })
+      .mockResolvedValueOnce({ data: { rows: [{ id: "event-3" }], total: 3, everLoggedIn: 4 } });
+
+    const report = await listAllUserLoginActivity("org-a", {
+      from: "2026-11-01", to: "2026-11-07", limit: 2,
+    });
+
+    expect(report.rows.map((row) => row.id)).toEqual(["event-1", "event-2", "event-3"]);
+    expect(report).toMatchObject({ total: 3, everLoggedIn: 4 });
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(apiFetch.mock.calls.map(([url]) => url)).toEqual([
+      expect.stringContaining("page=1&limit=2"),
+      expect.stringContaining("page=2&limit=2"),
+    ]);
+  });
+
+  it("does not return an incomplete report when records change during pagination", async () => {
+    apiFetch
+      .mockResolvedValueOnce({ data: { rows: [{ id: "event-1" }, { id: "event-2" }], total: 3 } })
+      .mockResolvedValueOnce({ data: { rows: [{ id: "event-2" }], total: 3 } });
+
+    await expect(listAllUserLoginActivity("org-a", {
+      from: "2026-11-01", to: "2026-11-07", limit: 2,
+    })).rejects.toThrow("changed while loading");
+  });
+
+  it("rejects a page size the endpoint cannot serve", async () => {
+    await expect(listAllUserLoginActivity("org-a", {
+      from: "2026-11-01", to: "2026-11-07", limit: 101,
+    })).rejects.toThrow(RangeError);
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });

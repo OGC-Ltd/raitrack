@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { dormantDoc, geofenceDoc, roomForHeads, tatDoc, speedDoc, deliveriesDoc, recoveryDoc } from './reportDocs';
+import {
+  dormantDoc, geofenceDoc, roomForHeads, tatDoc, speedDoc, deliveriesDoc, recoveryDoc,
+  loginActivityDoc, LOGIN_ACTIVITY_PDF_LIMIT,
+} from './reportDocs';
 import { offlineReport } from './offlineReport';
 import { removeBar } from './shiftDoc';
 
@@ -131,6 +134,47 @@ describe('the Recovery Report as a document', () => {
     expect(route.rows.map((r) => r.slice(1).map((c) => c.text))).toEqual([['-0.10000', '34.70000'], ['-0.20000', '34.80000']]);
     expect(stops.rows[0].map((c) => c.text)).toEqual(['Kakamega', '08:00', '08:10', '10 min', '-0.15000', '34.75000', 'Recovery call']);
     expect(d.blocks.some((b) => b.kind === 'none' && b.text.includes('No GPS telemetry'))).toBe(true);
+  });
+});
+
+describe('the Login Activity Report as a document', () => {
+  const report = {
+    total: 2,
+    systemUsers: 5,
+    everLoggedIn: 4,
+    rows: [
+      {
+        id: 'login-1', loggedInAt: '2026-11-03T05:30:00.000Z',
+        user: { id: 'user-1', fullName: 'Ada Lovelace', email: 'ada@example.test', roles: ['Dispatcher'], groups: ['Dispatch'] },
+      },
+      {
+        id: 'login-2', loggedInAt: '2026-11-03T08:15:00.000Z',
+        user: { id: 'user-2', fullName: 'Grace Hopper', email: null, roles: [], groups: [] },
+      },
+    ],
+  };
+  const options = { organisation: 'West Kenya', orgCode: 'WK', from: '2026-11-03', to: '2026-11-03', now: NOW };
+
+  it('includes every successful sign-in, scope totals and the selected period', () => {
+    const d = loginActivityDoc(report, options);
+    const [log] = tables(d);
+    expect(d.title).toBe('LOGIN ACTIVITY REPORT');
+    expect(d.filename).toBe('Login Activity Report West Kenya 2026-11-03');
+    expect(d.meta).toContainEqual({ label: 'Scope', value: 'Successful sign-ins only' });
+    expect(d.blocks[1].items.map((item) => item.value)).toEqual(['2', '2', '4', '5']);
+    expect(log.rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ['03 Nov 2026, 08:30', 'Ada Lovelace', 'ada@example.test', 'Dispatcher', 'Dispatch'],
+      ['03 Nov 2026, 11:15', 'Grace Hopper', '—', 'No role assigned', 'Ungrouped'],
+    ]);
+  });
+
+  it('uses a none block for an empty period and refuses a document beyond the server row limit', () => {
+    expect(loginActivityDoc({ ...report, rows: [] }, options).blocks.some(
+      (block) => block.kind === 'none' && block.text.includes('No successful sign-ins'),
+    )).toBe(true);
+    expect(() => loginActivityDoc({
+      ...report, rows: Array.from({ length: LOGIN_ACTIVITY_PDF_LIMIT + 1 }, (_, i) => ({ id: `login-${i}` })),
+    }, options)).toThrow('Narrow the date range');
   });
 });
 
