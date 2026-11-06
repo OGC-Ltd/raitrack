@@ -36,6 +36,7 @@ import { useWayBack } from "../../hooks/useWayBack";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import UserAdminPanel from "../body/UserAdminPanel";
 import UserGroupsPanel from "../body/UserGroupsPanel";
+import UserLoginActivityPanel from "../body/UserLoginActivityPanel";
 import "./UserAdminScreen.css";
 
 export default function UserAdminScreen() {
@@ -110,10 +111,19 @@ export default function UserAdminScreen() {
                     onClick={() => setSection("groups")}>
               Groups
             </button>
+            <button type="button" className={section === "login-activity" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
+                    aria-current={section === "login-activity" ? "page" : undefined}
+                    onClick={() => setSection("login-activity")}>
+              Login Activity
+            </button>
           </nav>
         )}
-        <ErrorBoundary label={section === "groups" ? "User groups" : "Users"} fullSection>
-          {section === "groups" && canViewGroups ? <UserGroupsPanel /> : <UserAdminPanel />}
+        <ErrorBoundary label={section === "groups" ? "User groups" : section === "login-activity" ? "Login activity" : "Users"} fullSection>
+          {section === "groups" && canViewGroups
+            ? <UserGroupsPanel />
+            : section === "login-activity" && canViewGroups
+              ? <UserLoginActivityPanel />
+              : <UserAdminPanel />}
         </ErrorBoundary>
       </div>
     </div>

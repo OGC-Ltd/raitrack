@@ -92,7 +92,7 @@ export default function AppHeader() {
   useEffect(() => { refreshPush(activeCompanyId); }, [activeCompanyId]);
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
-  const { can, flaggedOnly } = usePermissions();
+  const { can, orgsWhere, flaggedOnly } = usePermissions();
   const { user, logout } = useAuth();
 
   /* The server's field is `fullName`. This header asked for `user.name`, which
@@ -449,7 +449,7 @@ export default function AppHeader() {
                 <i className="ti ti-user-circle" aria-hidden="true" />
                 Account
               </button>
-              {can('user:create') && (
+              {orgsWhere('user:read').length > 0 && (
                 <button className="app-header__user-item" role="menuitem" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" />
                   Users
