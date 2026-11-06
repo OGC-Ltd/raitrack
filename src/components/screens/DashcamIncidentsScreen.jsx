@@ -16,7 +16,7 @@
 // browser only (lib/dashcamReviewed); the button says so.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -27,7 +27,7 @@ import { useAppSelector, useAppActions, useCompanies } from '../../context/AppCo
 import { useFleetLiveShared } from '../../context/FleetLiveContext'
 import { usePlaceName } from '../../hooks/usePlaceName'
 import { CATEGORIES, RANGES } from '../../lib/dashcamIncidents'
-import { vssIncidentsQuery, ensureVssSession } from '../../api/vssAlarms'
+import { vssIncidentsQuery, ensureVssSession, VERDICTS, verdictWord, fetchAlarmFeedback, postAlarmFeedback } from '../../api/vssAlarms'
 import { useDashcamReviewed } from '../../lib/dashcamReviewed'
 import { diagnoseMedia } from '../../lib/mediaDiagnose'
 import { loadMapEngine, maps as mapsNs } from '../../lib/mapEngine'
@@ -385,19 +385,25 @@ function Detail({ inc, orgId, company, vehicle, plate, driver, reviewed, onRevie
             )}
         </div>
 
+        {/* One card: who and when, and the unit's overspeeding beside it (operator, 7 Nov 2026). */}
         <section className="dci-card dci-card--facts" aria-label="Who and when">
-          <dl className="dci-facts">
-            <dt>Unit</dt><dd><span className="sp4-reg">{plate}</span>{model ? <span className="dci-dim"> · {model}</span> : null}</dd>
-            <dt>Driver</dt><dd>{driver ?? <span className="dci-dim">Not assigned</span>}</dd>
-            <dt>When</dt><dd>{whenLabel(inc.occurredMs)}</dd>
-            <dt>Speed</dt><dd>{inc.speed != null ? `${inc.speed} km/h` : <span className="dci-dim">Not reported</span>}</dd>
-            <dt>Where</dt><dd title={where ?? undefined}>{where ?? <span className="dci-dim">No location</span>}</dd>
-            <dt>Alarm</dt><dd>{inc.label} <span className="dci-dim">· code {inc.code}</span></dd>
-          </dl>
-          <button type="button" className="dci-unit-link" onClick={onUnit} disabled={unitFiltered}>
-            {unitFiltered ? `Showing ${plate} only` : `Every alarm from ${plate}`}
-            {!unitFiltered && <i className="ti ti-arrow-right" aria-hidden="true" />}
-          </button>
+          <div className="dci-summary__facts">
+            <header className="dci-sum__head"><h3 className="dci-sum__t">Alarm details</h3></header>
+            <dl className="dci-facts">
+              <dt>Unit</dt><dd><span className="sp4-reg">{plate}</span>{model ? <span className="dci-dim"> · {model}</span> : null}</dd>
+              <dt>Driver</dt><dd>{driver ?? <span className="dci-dim">Not assigned</span>}</dd>
+              <dt>When</dt><dd>{whenLabel(inc.occurredMs)}</dd>
+              <dt>Speed</dt><dd>{inc.speed != null ? `${inc.speed} km/h` : <span className="dci-dim">Not reported</span>}</dd>
+              <dt>Where</dt><dd title={where ?? undefined}>{where ?? <span className="dci-dim">No location</span>}</dd>
+              <dt>Alarm</dt><dd>{inc.label} <span className="dci-dim">· code {inc.code}</span></dd>
+            </dl>
+            <button type="button" className="dci-unit-link" onClick={onUnit} disabled={unitFiltered}>
+              {unitFiltered ? `Showing ${plate} only` : `Every alarm from ${plate}`}
+              {!unitFiltered && <i className="ti ti-arrow-right" aria-hidden="true" />}
+            </button>
+          </div>
+          <AlarmFeedback orgId={orgId} inc={inc} plate={plate} onSaved={() => { if (!reviewed) onReviewed() }} />
+          <SpeedingByDay orgId={orgId} vehicleId={inc.vehicleId} plate={plate} />
         </section>
 
         <div className="dci-side">
@@ -406,10 +412,81 @@ function Detail({ inc, orgId, company, vehicle, plate, driver, reviewed, onRevie
                       lat={inc.lat} lng={inc.lng} severity={inc.severity} title={`${inc.label} · ${plate}`}
                       vehicle={vehicle} plate={plate} />
           </div>
-          <SpeedingByDay orgId={orgId} vehicleId={inc.vehicleId} plate={plate} />
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Feedback on the alarm, beside its details (operator, 7 Nov 2026): pick what
+ * it was, add a note if there is more to say, save. Shared with everyone in
+ * the organisation; every entry stays, newest first, with who and when. A
+ * saved verdict also marks the alarm reviewed in this browser.
+ */
+function AlarmFeedback({ orgId, inc, plate, onSaved }) {
+  const qc = useQueryClient()
+  const key = ['vss', 'feedback', orgId, inc.id]
+  const q = useQuery({ queryKey: key, queryFn: () => fetchAlarmFeedback(orgId, inc.id), enabled: Boolean(orgId && inc.id), staleTime: 30_000 })
+  const [verdict, setVerdict] = useState(null)
+  const [note, setNote] = useState('')
+  const save = useMutation({
+    mutationFn: () => postAlarmFeedback(orgId, inc.id, {
+      verdict, note: note.trim(), vehicleId: inc.vehicleId ?? null, plate,
+      alarmAt: inc.occurredMs != null ? new Date(inc.occurredMs).toISOString() : null,
+    }),
+    onSuccess: (entry) => {
+      if (entry) qc.setQueryData(key, (old) => [entry, ...(old ?? [])])
+      setVerdict(null); setNote('')
+      onSaved?.()
+    },
+  })
+  const entries = q.data ?? []
+  const submit = (e) => { e.preventDefault(); if (verdict && !save.isPending) save.mutate() }
+
+  return (
+    <section className="dci-fb" aria-label={`Feedback on this alarm from ${plate}`}>
+      <header className="dci-sum__head">
+        <h3 className="dci-sum__t">Feedback</h3>
+        <span className="dci-sum__aside">{entries.length ? `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}` : 'Shared with your team'}</span>
+      </header>
+      <form className="dci-fb__form" onSubmit={submit}>
+        <div className="dci-fb__verdicts" role="group" aria-label="What was it?">
+          {VERDICTS.map((v) => (
+            <button key={v.key} type="button" className={`dci-fb__verdict dci-fb__verdict--${v.key}`} aria-pressed={verdict === v.key}
+                    disabled={save.isPending} onClick={() => setVerdict(verdict === v.key ? null : v.key)}>
+              {v.word}
+            </button>
+          ))}
+        </div>
+        <div className="dci-fb__row">
+          <input className="dci-fb__note" type="text" value={note} maxLength={1000} disabled={save.isPending}
+                 onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)" aria-label="Note" />
+          <button type="submit" className="dci-fb__save" disabled={!verdict || save.isPending} aria-busy={save.isPending || undefined}
+                  title={verdict ? undefined : 'Pick what it was first'}>
+            {save.isPending ? <><i className="ti ti-loader-2 dci-spin" aria-hidden="true" />Saving…</> : 'Save'}
+          </button>
+        </div>
+        {save.isError && <p className="dci-fb__err" role="alert">Could not save. Check your connection and try again.</p>}
+      </form>
+      <div className="dci-fb__list" aria-live="polite">
+        {q.isPending ? <p className="dci-fb__quiet">Loading feedback…</p>
+          : q.isError ? (
+            <p className="dci-fb__quiet">Could not load feedback. <button type="button" className="dci-fb__link" onClick={() => q.refetch()}>Try again</button></p>
+          ) : !entries.length ? <p className="dci-fb__quiet">No feedback yet.</p>
+          : (
+            <ol className="dci-fb__entries">
+              {entries.map((x) => (
+                <li key={x.id} className="dci-fb__entry">
+                  <span className={`dci-fb__tag dci-fb__tag--${x.verdict}`}>{verdictWord(x.verdict)}</span>
+                  {x.note && <span className="dci-fb__text">{x.note}</span>}
+                  <span className="dci-fb__by">{x.by} · {whenLabel(Date.parse(x.at))}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+      </div>
+    </section>
   )
 }
 
@@ -736,45 +813,61 @@ function SpeedingByDay({ orgId, vehicleId, plate }) {
     return { days: out, total: sum, worst: top }
   }, [q.data])
 
+  // One body at a time: no unit, loading, could not load, none, or the chart.
+  const state = !vehicleId ? 'unlinked' : q.isPending ? 'loading' : q.isError ? 'error' : total === 0 ? 'clear' : 'data'
+
   return (
-    <section className="dci-card dci-speed" aria-label={`Overspeeding on ${plate}, last ${SPEED_DAYS} days`}>
-      <header className="dci-speed__head">
-        <h3 className="dci-speed__t">Overspeeding</h3>
-        <span className="dci-speed__span">Last {SPEED_DAYS} days</span>
+    <section className={`dci-speed dci-speed--${state}`} aria-label={`Overspeeding on ${plate}, last ${SPEED_DAYS} days`} aria-busy={state === 'loading' || undefined}>
+      <header className="dci-sum__head">
+        <h3 className="dci-sum__t">Overspeeding</h3>
+        <span className="dci-sum__aside">Last {SPEED_DAYS} days</span>
       </header>
-      <p className="dci-speed__lead">
-        {q.isPending ? <span className="dci-dim">Loading…</span>
-          : q.isError ? <span className="dci-dim">Could not load the cases.</span>
-          : (
-            <>
-              <b className="dci-speed__n">{total}</b> {total === 1 ? 'case' : 'cases'} on <span className="sp4-reg">{plate}</span>
-              {worst && <span className="dci-dim"> · most on {worst.label} ({worst.n})</span>}
-            </>
-          )}
-      </p>
-      <div className="dci-speed__chart" aria-hidden={q.isPending || undefined}>
-        {!vehicleId ? (
-          <div className="dci-speed__none">This camera is not linked to a unit.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={days} margin={{ top: 6, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
-              <CartesianGrid vertical={false} strokeDasharray="2 4" stroke="var(--sp4-line)" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} interval={6}
-                     tick={{ fontSize: 10, fill: 'var(--sp4-text-3)' }} />
-              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={40}
-                     tick={{ fontSize: 10, fill: 'var(--sp4-text-3)' }} />
-              <Tooltip cursor={{ fill: 'var(--sp4-raised)' }} content={<SpeedTip />} />
-              <Bar dataKey="n" name="Cases" fill="var(--sp4-warn)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
-              <Line dataKey="avg" name={`${AVG_DAYS}-day average`} type="monotone" stroke="var(--sp4-text-1)"
-                    strokeWidth={1.75} dot={false} isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-      <ul className="dci-speed__key" aria-hidden="true">
-        <li><span className="dci-speed__sw dci-speed__sw--bar" />Cases a day</li>
-        <li><span className="dci-speed__sw dci-speed__sw--line" />{AVG_DAYS}-day average</li>
-      </ul>
+      {state === 'unlinked' && <p className="dci-speed__msg">This camera is not linked to a unit.</p>}
+      {state === 'loading' && (
+        <div className="dci-speed__skel" aria-hidden="true"><span /><span /></div>
+      )}
+      {state === 'error' && (
+        <p className="dci-speed__msg">
+          Could not load the cases.
+          <button type="button" className="dci-speed__retry" onClick={() => q.refetch()} disabled={q.isFetching}>
+            <i className={`ti ${q.isFetching ? 'ti-loader-2 dci-spin' : 'ti-refresh'}`} aria-hidden="true" />
+            {q.isFetching ? 'Trying…' : 'Try again'}
+          </button>
+        </p>
+      )}
+      {state === 'clear' && (
+        <p className="dci-speed__clear">
+          <i className="ti ti-circle-check" aria-hidden="true" />
+          <span><b>None</b> on <span className="sp4-reg">{plate}</span> in the last {SPEED_DAYS} days.</span>
+        </p>
+      )}
+      {state === 'data' && (
+        <>
+          <p className="dci-speed__lead">
+            <b className="dci-speed__n">{total}</b>
+            <span>{total === 1 ? 'case' : 'cases'}{worst && <span className="dci-dim"> · most on {worst.label} ({worst.n})</span>}</span>
+          </p>
+          <div className="dci-speed__chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={days} margin={{ top: 6, right: 4, bottom: 0, left: -18 }} barCategoryGap="22%">
+                <CartesianGrid vertical={false} strokeDasharray="2 4" stroke="var(--sp4-line)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} interval={6}
+                       tick={{ fontSize: 10, fill: 'var(--sp4-text-3)' }} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={40}
+                       tick={{ fontSize: 10, fill: 'var(--sp4-text-3)' }} />
+                <Tooltip cursor={{ fill: 'var(--sp4-raised)' }} content={<SpeedTip />} />
+                <Bar dataKey="n" name="Cases" fill="var(--sp4-warn)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+                <Line dataKey="avg" name={`${AVG_DAYS}-day average`} type="monotone" stroke="var(--sp4-text-1)"
+                      strokeWidth={1.75} dot={false} isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <ul className="dci-speed__key" aria-hidden="true">
+            <li><span className="dci-speed__sw dci-speed__sw--bar" />Cases a day</li>
+            <li><span className="dci-speed__sw dci-speed__sw--line" />{AVG_DAYS}-day average</li>
+          </ul>
+        </>
+      )}
     </section>
   )
 }

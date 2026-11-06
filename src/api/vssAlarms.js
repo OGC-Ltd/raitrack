@@ -113,3 +113,34 @@ export async function ensureVssSession(orgId) {
     checkedAt = Date.now()
   } catch { /* the player reports whatever then goes wrong */ }
 }
+
+// ── feedback on an alarm (operator, 7 Nov 2026) ──────────────────────────────
+//
+//   GET  {VSS_BASE}/alarms/:alarmId/feedback?org=<orgId>  → { data: { entries } }
+//   POST {VSS_BASE}/alarms/:alarmId/feedback?org=<orgId>  → { data: { entry } }
+//        body { verdict, note, vehicleId, plate, alarmAt }
+//
+// Shared across the organisation; each entry is kept, the newest is the verdict.
+
+/** What a reviewer can say an alarm was, in the order the page offers them. */
+export const VERDICTS = [
+  { key: 'genuine', word: 'Genuine' },
+  { key: 'false_alarm', word: 'False alarm' },
+  { key: 'coached', word: 'Driver coached' },
+]
+export const verdictWord = (key) => VERDICTS.find((v) => v.key === key)?.word ?? 'Feedback'
+
+const feedbackPath = (orgId, alarmId) =>
+  `${VSS_BASE}/alarms/${encodeURIComponent(alarmId)}/feedback?org=${encodeURIComponent(orgId)}`
+
+/** Every entry on one alarm, newest first. */
+export async function fetchAlarmFeedback(orgId, alarmId) {
+  const res = await apiFetch(feedbackPath(orgId, alarmId))
+  return Array.isArray(res?.data?.entries) ? res.data.entries : []
+}
+
+/** One more entry on an alarm; answers the entry as saved. */
+export async function postAlarmFeedback(orgId, alarmId, body) {
+  const res = await apiFetch(feedbackPath(orgId, alarmId), { method: 'POST', body: JSON.stringify(body) })
+  return res?.data?.entry ?? null
+}

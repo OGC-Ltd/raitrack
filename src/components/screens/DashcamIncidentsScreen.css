@@ -28,6 +28,22 @@
  *   alarm fits its pane with no scrolling, frame, summary, map and chart cut
  *   from the evidence block's own size (see the min-width: 1101px block).
  *   Map shows the unit's sprite and its route round the alarm.
+ *
+ * Hallmark · component: alarm summary card (redesign) · genre: modern-minimal · theme: the app's sp4
+ * 2026-11-07 pass (operator): the facts and the overspeeding are ONE card,
+ *   two columns that speak alike: a sentence-case head over each (Alarm
+ *   details | Overspeeding · Last 30 days), labels in quiet sentence case,
+ *   a hairline between. Overspeeding shows a chart only when there is
+ *   something to chart; none reads as one calm line, not an empty grid.
+ * states (overspeeding): unlinked · loading (skeleton) · error (Try again:
+ *   default · hover · focus · active · disabled/loading "Trying…") ·
+ *   clear (none) · data (count, worst day, chart, key).
+ * pre-emit critique: P4 H5 E5 S5 R5 V4
+ * 2026-11-07 feedback (operator): a third part beside Alarm details, the same
+ *   head, padding and hairline. Verdict chips (default · hover · focus ·
+ *   active · picked · disabled while saving), a note and Save (disabled until
+ *   a verdict is picked · loading "Saving…" · error line · success: the entry
+ *   tops the list), the entries newest first, scrolling inside the card.
  *   pre-emit critique: P4 H5 E5 S4 R5 V4
  *
  * Everything here is .dci-* so nothing can touch the Alerts page. */
@@ -320,8 +336,93 @@
   overflow: hidden;
   background: var(--sp4-surface);
 }
-.dci-card--facts { grid-area: facts; display: flex; flex-direction: column; }
-/* The right column: the square map, the overspeeding chart under it. */
+.dci-card--facts { grid-area: facts; display: grid; grid-template-columns: minmax(0, 1fr); }
+/* Two halves of one card, padded alike, so their heads sit on one line. */
+.dci-summary__facts,
+.dci-card--facts .dci-speed {
+  min-width: 0;
+  display: flex; flex-direction: column; gap: var(--sp4-xs);
+  padding: var(--sp4-sm) var(--sp4-lg) var(--sp4-md);
+}
+/* The overspeeding is the card's second half: under the facts, a hairline between. */
+.dci-card--facts .dci-speed { border-top: 1px solid var(--sp4-line); }
+
+/* Feedback: padded like its neighbours, ruled off from the facts. */
+.dci-fb {
+  min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; gap: var(--sp4-xs);
+  padding: var(--sp4-sm) var(--sp4-lg) var(--sp4-md);
+  border-top: 1px solid var(--sp4-line);
+}
+.dci-fb__form { display: grid; gap: var(--sp4-xs); }
+.dci-fb__verdicts { display: flex; flex-wrap: wrap; gap: 6px; }
+.dci-fb__verdict {
+  height: 26px; padding: 0 10px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 999px;
+  background: var(--sp4-surface);
+  font: inherit; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dci-fb__verdict:hover { background: var(--sp4-raised); color: var(--sp4-text-1); border-color: var(--sp4-field-line); }
+.dci-fb__verdict:active { transform: translateY(1px); }
+.dci-fb__verdict:focus-visible,
+.dci-fb__save:focus-visible,
+.dci-fb__note:focus-visible,
+.dci-fb__link:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.dci-fb__verdict:disabled { opacity: 0.55; cursor: default; transform: none; }
+/* Picked: filled in the verdict's own tone. */
+.dci-fb__verdict[aria-pressed="true"] { color: var(--sp4-surface); border-color: transparent; }
+.dci-fb__verdict--genuine[aria-pressed="true"] { background: var(--sp4-crit); }
+.dci-fb__verdict--false_alarm[aria-pressed="true"] { background: var(--sp4-text-2); }
+.dci-fb__verdict--coached[aria-pressed="true"] { background: var(--sp4-ok); }
+
+.dci-fb__row { display: flex; gap: 6px; }
+.dci-fb__note {
+  flex: 1; min-width: 0; height: 28px; padding: 0 9px;
+  border: 1px solid var(--sp4-field-line);
+  border-radius: 6px;
+  background: var(--sp4-surface);
+  font: inherit; font-size: var(--sp4-body); color: var(--sp4-text-1);
+}
+.dci-fb__note::placeholder { color: var(--sp4-text-4); }
+.dci-fb__note:disabled { opacity: 0.6; }
+.dci-fb__save {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  height: 28px; padding: 0 14px;
+  border: 0; border-radius: 6px;
+  background: var(--sp4-accent);
+  font: inherit; font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-surface);
+  cursor: pointer;
+}
+.dci-fb__save:hover { background: color-mix(in srgb, var(--sp4-accent) 86%, var(--sp4-text-1)); }
+.dci-fb__save:active { transform: translateY(1px); }
+.dci-fb__save:disabled { background: var(--sp4-raised); color: var(--sp4-text-3); cursor: default; transform: none; }
+.dci-fb__save[aria-busy="true"] { background: var(--sp4-accent); color: var(--sp4-surface); opacity: 0.8; }
+.dci-fb__err { margin: 0; font-size: var(--sp4-label); color: var(--sp4-crit); }
+
+/* The entries scroll inside the card; the form above never moves. */
+.dci-fb__list { min-height: 0; overflow-y: auto; }
+.dci-fb__quiet { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-3); }
+.dci-fb__link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--sp4-accent); cursor: pointer; }
+.dci-fb__link:hover { text-decoration: underline; }
+.dci-fb__entries { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp4-xs); }
+.dci-fb__entry { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: var(--sp4-body); color: var(--sp4-text-1); }
+.dci-fb__tag { font-weight: 700; }
+.dci-fb__tag--genuine { color: var(--sp4-crit); }
+.dci-fb__tag--false_alarm { color: var(--sp4-text-2); }
+.dci-fb__tag--coached { color: var(--sp4-ok); }
+.dci-fb__text { overflow-wrap: anywhere; }
+.dci-fb__by { flex-basis: 100%; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+@media (prefers-reduced-motion: reduce) {
+  .dci-fb__verdict:active, .dci-fb__save:active { transform: none; }
+}
+/* One head for both halves: what it is, and the span it covers. */
+.dci-sum__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp4-sm); min-height: 18px; }
+.dci-sum__t { margin: 0; font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-1); }
+.dci-sum__aside { font-size: var(--sp4-label); color: var(--sp4-text-3); white-space: nowrap; }
+/* The right column: the square map. */
 .dci-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: var(--sp4-md); }
 /* Wide screens: the whole alarm in one view, no scrolling (operator,
    2026-10-29). The evidence block is a size container, so its pieces are cut
@@ -337,49 +438,57 @@
   .dci-evidence {
     container-type: size;
     grid-template-columns: minmax(0, 1fr) auto;
+    /* The summary card runs under the footage and the map both. */
+    grid-template-areas: "media side" "facts facts";
     --dci-below: 248px;   /* caption 35 + gap 16 + summary 191 (three one-line fact rows + the unit link, measured) + 6 slack */
+    /* The frame's height F, the map's side; read in the children, where cq units mean this block. */
+    --dci-f: max(180px, min((100cqw - var(--sp4-md)) * 9 / 25, 100cqh - var(--dci-below)));
   }
   .dci-evidence .dci-stage,
   .dci-evidence .dci-stage--empty {
     aspect-ratio: auto;
-    height: max(180px, min((100cqw - var(--sp4-md)) * 9 / 25, 100cqh - var(--dci-below)));
+    height: var(--dci-f);
   }
-  .dci-side { width: max(180px, min((100cqw - var(--sp4-md)) * 9 / 25, 100cqh - var(--dci-below))); }
+  .dci-side { width: var(--dci-f); }
   .dci-side .dci-card--map { flex: none; }
-  .dci-speed { flex: 1 1 0; min-height: 0; padding-block: var(--sp4-sm) var(--sp4-xs); }
+  .dci-card--facts .dci-speed { min-height: 0; }
   .dci-speed__chart { flex: 1 1 0; height: auto; min-height: 48px; }
   /* The summary two facts a row, so six facts take three lines, not six,
      each on ONE line (a long place ends in an ellipsis, full text on hover):
      its height is then fixed, the frame leaves exactly that, and the card
      never needs a scrollbar (operator, 2026-10-29). */
   .dci-card--facts { min-height: 0; overflow: hidden; }
+  /* Facts on the left, the overspeeding under the map, as wide as it, a rule between. */
+  /* One row held to the card's height: the feedback list scrolls rather than push the card past its room. */
+  .dci-card--facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) calc(var(--dci-f) + var(--sp4-md)); grid-template-rows: minmax(0, 1fr); }
+  .dci-card--facts .dci-speed,
+  .dci-fb { border-top: 0; border-left: 1px solid var(--sp4-line); }
+  .dci-fb { padding: var(--sp4-sm) var(--sp4-md); }
   .dci-facts dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dci-facts {
-    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
-    padding: var(--sp4-sm) var(--sp4-md);
-    gap: var(--sp4-xs) var(--sp4-md);
-  }
-  .dci-card--facts .dci-unit-link { margin: 0 var(--sp4-md) var(--sp4-sm); }
+  /* Six facts one to a row, set close so they fit the card's room beside the feedback.
+     (Scoped to the card so it outranks the base .dci-facts rule further down.) */
+  .dci-card--facts .dci-facts { gap: var(--sp4-2xs) var(--sp4-md); }
+  .dci-summary__facts, .dci-card--facts .dci-speed { padding: var(--sp4-sm) var(--sp4-md); }
 }
-/* Square-cornered, like the Reports map: the map is a picture cut edge to
-   edge inside its frame, not a rounded card. */
-.dci-card--map { border-radius: 0; }
+.dci-card--map { border-radius: 12px; }
+/* Rounded like the summary card beside it (operator, 7 Nov 2026). The
+   card's overflow clips the tiles; isolate keeps Leaflet's layered panes
+   inside the rounded corners too. */
+.dci-card--map, .dci-card--map .dci-map { isolation: isolate; }
 .dci-facts {
   margin: 0;
-  padding: var(--sp4-md) var(--sp4-lg);
+  padding: 0;
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--sp4-xs) var(--sp4-lg);
   font-size: var(--sp4-body);
   align-content: start;
 }
+/* Labels say what the value is and step back: sentence case, muted, regular weight. */
 .dci-facts dt {
   color: var(--sp4-text-3);
-  font-size: var(--sp4-label);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding-top: 2px;
+  font-size: var(--sp4-body);
+  font-weight: 500;
 }
 .dci-facts dd { margin: 0; color: var(--sp4-text-1); font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .dci-dim { color: var(--sp4-text-4); font-weight: 500; }
@@ -414,22 +523,51 @@
   background: var(--sp4-raised);
 }
 
-.dci-speed { padding: var(--sp4-md) var(--sp4-lg) var(--sp4-sm); display: flex; flex-direction: column; gap: var(--sp4-2xs); }
-.dci-speed__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp4-sm); }
-.dci-speed__t {
+/* The count leads, the worst day beside it in the quiet tone. */
+.dci-speed__lead { margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: var(--sp4-body); color: var(--sp4-text-2); }
+.dci-speed__n { font-size: var(--sp4-title); font-weight: 800; line-height: 1; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
+.dci-speed__chart { position: relative; height: 150px; }
+
+/* None in the period: one calm line in the ok tone, no empty axes. */
+.dci-speed__clear,
+.dci-speed__msg {
   margin: 0;
-  font-size: var(--sp4-label); font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--sp4-text-3);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp4-xs);
+  font-size: var(--sp4-body); color: var(--sp4-text-2);
 }
-.dci-speed__span { font-size: var(--sp4-label); color: var(--sp4-text-3); }
-.dci-speed__lead { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-1); }
-.dci-speed__n { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.dci-speed__chart { position: relative; height: 150px; margin-top: var(--sp4-2xs); }
-.dci-speed__none {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: var(--sp4-body); color: var(--sp4-text-3);
+.dci-speed__clear .ti { font-size: 18px; color: var(--sp4-ok); }
+.dci-speed__clear b { color: var(--sp4-text-1); }
+.dci-speed__msg { color: var(--sp4-text-3); }
+
+/* Could not load: the way out, a quiet bordered button. */
+.dci-speed__retry {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 10px;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 6px;
+  background: var(--sp4-surface);
+  font: inherit; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-1);
+  cursor: pointer;
+}
+.dci-speed__retry:hover { background: var(--sp4-raised); border-color: var(--sp4-field-line); }
+.dci-speed__retry:active { transform: translateY(1px); }
+.dci-speed__retry:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.dci-speed__retry:disabled { color: var(--sp4-text-3); cursor: default; transform: none; background: var(--sp4-surface); }
+.dci-spin { animation: dci-spin 0.9s linear infinite; }
+@keyframes dci-spin { to { transform: rotate(360deg); } }
+
+/* Loading: the count and the chart as two grey blocks, sweeping. */
+.dci-speed__skel { display: grid; gap: var(--sp4-xs); flex: 1 1 auto; min-height: 60px; }
+.dci-speed__skel span { position: relative; overflow: hidden; border-radius: 4px; background: var(--sp4-raised); }
+.dci-speed__skel span:first-child { width: 42%; height: 18px; }
+.dci-speed__skel span:last-child { min-height: 40px; }
+.dci-speed__skel span::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sp4-surface) 70%, transparent), transparent);
+  animation: dci-sweep 1.4s var(--ease-in-out, cubic-bezier(0.65, 0, 0.35, 1)) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dci-spin, .dci-speed__skel span::after { animation: none; }
 }
 .dci-speed__key {
   list-style: none; margin: 0; padding: 0;
@@ -452,7 +590,7 @@
 
 .dci-unit-link {
   align-self: flex-start;
-  margin: 0 var(--sp4-lg) var(--sp4-md);
+  margin: var(--sp4-2xs) 0 0;
   display: inline-flex; align-items: center; gap: 5px;
   padding: 0;
   border: 0;
@@ -488,6 +626,6 @@
   .dci-detail { overflow: visible; }
   .dci-detail__inner { padding: var(--sp4-md) var(--sp4-gutter); }
   .dci-evidence { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "side" "facts"; }
-  .dci-unit-link { margin: 0 var(--sp4-md) var(--sp4-md); }
-  .dci-facts { padding: var(--sp4-md); gap: var(--sp4-xs) var(--sp4-md); }
+  .dci-summary__facts, .dci-card--facts .dci-speed, .dci-fb { padding: var(--sp4-sm) var(--sp4-md) var(--sp4-md); }
+  .dci-facts { gap: var(--sp4-xs) var(--sp4-md); }
 }
