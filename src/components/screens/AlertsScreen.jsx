@@ -52,6 +52,8 @@ import UnauthorisedStops from "./UnauthorisedStops";
 import { useStopWatch } from "../../hooks/useStopWatch";
 import { loadGeofenceExits } from "../../api/geofenceExits";
 import { exitRows } from "../../lib/geofenceExits";
+import { useOrgsFeedReads } from "../../lib/feedReads";
+import { STOP_READS, stopLine } from "../../lib/stopWatch";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
 
@@ -864,6 +866,27 @@ export default function AlertsScreen() {
   // The organisations picked (none = all held); read again when they or the day change, or on Refresh
   const geoOrgIds = useMemo(() => (orgs.length ? orgs : orgList.map((o) => o.id)), [orgs, orgList]);
   const geoKey = geoOrgIds.join(",");
+  // Read marks for the exits, as for the alerts: the bell's marks for the same
+  // lines (lib/feedReads), per organisation in this browser.
+  const exitReads = useOrgsFeedReads(geoOrgIds);
+  const exitsDone = geoRead.status === "done";
+  const exitsUnread = exitsDone ? geoRead.rows.filter(exitReads.unread).length : 0;
+  const nExitRead = (r) => (!exitsDone ? undefined
+    : r === "unread" ? exitsUnread : r === "read" ? geoRead.rows.length - exitsUnread : geoRead.rows.length);
+  // The stops' read marks: their own store, in this browser, as the exits'.
+  const stopReads = useOrgsFeedReads([STOP_READS]);
+  const stopLines = useMemo(() => (watch.flags ?? []).map(stopLine), [watch.flags]);
+  const stopsUnread = stopLines.filter(stopReads.unread).length;
+  const nStopRead = (r) => (watch.status !== "done" && !watch.checkedAt ? undefined
+    : r === "unread" ? stopsUnread : r === "read" ? stopLines.length - stopsUnread : stopLines.length);
+  const markAllStops = () => {
+    stopReads.markRead(stopLines);
+    setToast({ tone: "ok", text: "The stops flagged now are marked read." });
+  };
+  const markAllExits = () => {
+    exitReads.markRead(geoRead.rows ?? []);
+    setToast({ tone: "ok", text: "Today’s geofence exits are marked read." });
+  };
   const readGeo = useCallback(async () => {
     if (!geoOrgIds.length) return;
     setGeoRead((g) => ({ ...g, status: "loading" }));
@@ -904,11 +927,13 @@ export default function AlertsScreen() {
           summary={stops ? (
             <>
               <b>{watch.flags.length}</b> Menengai unit{watch.flags.length === 1 ? "" : "s"} flagged now
+              {stopsUnread > 0 && <> · <b>{stopsUnread}</b> unread</>}
             </>
           ) : geo ? (
             <>
               <b>{geoRead.status === "done" ? geoRead.rows.length : "…"}</b> geofence exit{geoRead.rows?.length === 1 ? "" : "s"} today
               {orgs.length > 0 && <> · {orgs.map((id) => shortName(orgById.get(id))).join(", ")}</>}
+              {exitsUnread > 0 && <> · <b>{exitsUnread}</b> unread</>}
             </>
           ) : (
             <>
@@ -922,8 +947,11 @@ export default function AlertsScreen() {
           loading={stops ? watch.status === "loading" : geo ? geoRead.status === "loading" : first.loading}
           onReload={stops ? undefined : geo ? readGeo : refresh}
           actions={(
-            <button type="button" className="sp4-ghost-btn" onClick={markAll} disabled={markingAll || !page || geo || stops}
-                    title="Every alert that has arrived so far, in every organisation, read for you only">
+            <button type="button" className="sp4-ghost-btn" onClick={stops ? markAllStops : geo ? markAllExits : markAll}
+                    disabled={markingAll || (stops ? !stopsUnread : geo ? !exitsUnread : !page)}
+                    title={stops ? "The stops flagged now, read in this browser"
+                      : geo ? "Today’s geofence exits in the organisations picked, read in this browser"
+                      : "Every alert that has arrived so far, in every organisation, read for you only"}>
               <i className="ti ti-checks" aria-hidden="true" /> {markingAll ? "Marking…" : "Mark all read"}
             </button>
           )}
@@ -969,6 +997,14 @@ export default function AlertsScreen() {
               )}
             </div>
           )}
+          {(geo || stops) && (
+            <div className="sp4-filter-group">
+              <span className="sp4-filter-label">Read</span>
+              {READS.map((r) => (
+                <Chip key={r.id} on={readF === r.id} onClick={() => setReadF(r.id)} n={stops ? nStopRead(r.id) : nExitRead(r.id)}>{r.label}</Chip>
+              ))}
+            </div>
+          )}
           {view === "alerts" && (<>
           <div className="sp4-filter-group">
             <span className="sp4-filter-label">State</span>
@@ -1007,9 +1043,9 @@ export default function AlertsScreen() {
 
         {geo && (
           <GeofenceExits state={geoRead} q={q} orgName={(id) => shortName(orgById.get(id)) ?? "an organisation"}
-                         showOrg={geoOrgIds.length > 1} onRetry={readGeo} />
+                         showOrg={geoOrgIds.length > 1} onRetry={readGeo} reads={exitReads} read={readF} />
         )}
-        {stops && <UnauthorisedStops watch={watch} q={q} />}
+        {stops && <UnauthorisedStops watch={watch} q={q} lines={stopLines} reads={stopReads} read={readF} />}
         {view === "alerts" && (<>
         {rows.length === 0 && first.loading ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Alerts">

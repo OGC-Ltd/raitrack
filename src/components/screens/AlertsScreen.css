@@ -63,7 +63,8 @@
 .alr-tr--unread > td:first-child { box-shadow: inset 3px 0 0 var(--alr-fuel); }
 .alr-tr--unread .sp4-reg,
 .alr-tr--unread .alr-figure b { font-weight: 800; color: var(--sp4-text-1); }
-.alr-tr--unread .alr-details { color: var(--sp4-text-1); }
+.alr-tr--unread .alr-details,
+.alr-tr--unread .alr-geo-details { color: var(--sp4-text-1); }
 
 /* The organisation under the plate: a reader holding five tenants must see
    whose unit it is without opening the row. */
@@ -363,6 +364,136 @@
   gap: 4px;
   white-space: nowrap;
 }
+/* The geofence type and the copy button.
+ * Hallmark · component: geofence-exit type + copy · genre: modern-minimal
+ * theme: sp4, preserved; the type's dot is the map's own colour for it
+ *   (lib/zoneLegend ZONE_STYLE), so a Customer here is the pink it is there
+ * pre-emit critique: P5 H4 E5 S5 R5 V4
+ * states (copy): default · hover · focus (ring, shown at once) · active
+ *   (pressed in) · disabled · loading (none: copying is instant) · error
+ *   (warning icon, crit) · success (tick, ok) — the icon swaps, and the title
+ *   and label say it, so neither is told by colour alone.
+ * contrast: the label is ink; the dot is a graphic beside its word. */
+.alr-geo-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--sp4-text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alr-geo-type__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zone, var(--sp4-text-4));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sp4-text-1) 18%, transparent);
+}
+.alr-geo-type--pending { color: var(--sp4-text-4); }
+
+.alr-geo-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.alr-copy-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--sp4-line-hi);
+  border-radius: 5px;
+  color: var(--sp4-text-3);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.alr-copy-btn:hover, .alr-copy-btn.is-hover { color: var(--sp4-text-1); border-color: var(--sp4-text-4); }
+.alr-copy-btn:focus-visible, .alr-copy-btn.is-focus { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.alr-copy-btn:active, .alr-copy-btn.is-active { transform: translateY(1px); }
+.alr-copy-btn:disabled { opacity: 0.45; cursor: default; }
+.alr-copy-btn--copied { color: var(--sp4-ok); border-color: var(--sp4-ok); }
+.alr-copy-btn--failed { color: var(--sp4-crit); border-color: var(--sp4-crit); }
+.alr-geo-copyline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .alr-copy-btn:active { transform: none; }
+}
+/* Phones: the button is a 36px target, as the rest of the row's controls. */
+@media (max-width: 599px) {
+  .alr-copy-btn { width: 36px; height: 36px; }
+}
+
+/* Unauthorised stops: the same columns as the exits, and the nearest place
+ * under its type (muted: a stop outside is not AT that place). */
+@media (min-width: 600px) {
+  .alr-stop-table .sp4-table { width: 100%; min-width: 0; table-layout: fixed; }
+}
+/* Fixed columns: a long unit name ("MORL FARM EQUIPMENT - GENSET MOLO
+ * RIVER") is cut with an ellipsis inside its own column, whole in its title
+ * and in the side panel (operator, 2026-11-06), and no text cell spills into
+ * its neighbour. */
+.alr-stop-table .sp4-td--left,
+.alr-geo-table .sp4-td--left { min-width: 0; overflow-wrap: anywhere; }
+.alr-stop-table .sp4-reg,
+.alr-geo-table .sp4-reg,
+.alr-stop-unit-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.alr-stop-table .alr-unread-dot + .sp4-reg,
+.alr-geo-table .alr-unread-dot + .sp4-reg { max-width: calc(100% - 14px); }
+.alr-stop-col--unit { width: 12%; }
+.alr-stop-col--alert { width: 14%; }
+.alr-stop-col--since { width: 12%; }
+.alr-stop-col--for { width: 8%; }
+.alr-stop-col--type { width: 18%; }
+.alr-stop-col--where { width: 23%; }
+.alr-stop-col--action { width: 13%; }
+.alr-stop-where { display: block; min-width: 0; }
+.alr-stop-where__place {
+  display: block;
+  color: var(--sp4-text-1);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alr-stop-where__place:hover { text-decoration: underline; }
+/* In the side panel: whole, on as many lines as it takes. */
+.dsb__facts .alr-stop-where__place { white-space: normal; overflow-wrap: anywhere; }
+.alr-stop-where__place:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.alr-stop-where__place--pending { color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+.alr-stop-where__rule,
+.alr-stop-near {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .alr-geo-details {
   display: block;
   width: 100%;
@@ -377,17 +508,19 @@
     min-width: 0;
     table-layout: fixed;
   }
-  .alr-geo-col--unit { width: 13%; }
-  .alr-geo-col--when { width: 8%; }
-  .alr-geo-col--alert { width: 15%; }
-  .alr-geo-col--details { width: 36%; }
-  .alr-geo-col--org { width: 16%; }
-  .alr-geo-col--action { width: 12%; }
-  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--unit { width: 15%; }
-  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--when { width: 9%; }
-  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--alert { width: 18%; }
-  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--details { width: 46%; }
-  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--action { width: 12%; }
+  .alr-geo-col--unit { width: 12%; }
+  .alr-geo-col--when { width: 7%; }
+  .alr-geo-col--alert { width: 13%; }
+  .alr-geo-col--type { width: 13%; }
+  .alr-geo-col--details { width: 29%; }
+  .alr-geo-col--org { width: 13%; }
+  .alr-geo-col--action { width: 13%; }
+  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--unit { width: 13%; }
+  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--when { width: 8%; }
+  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--alert { width: 15%; }
+  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--type { width: 15%; }
+  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--details { width: 36%; }
+  .alr-geo-table:not(.alr-geo-table--with-org) .alr-geo-col--action { width: 13%; }
 }
 .alr-stop-note {
   display: flex;

@@ -28,8 +28,8 @@ const STAND_KMH = 3;
 
 /** MORL and STO, as the Deliveries Report reads them (lib/deliveriesReport). */
 export const STORES = [
-  { name: 'MORL', lat: -0.28802969095623043, lng: 36.04494759379902, radiusM: 1000 },
-  { name: 'STO (Nairobi depot)', lat: -1.3029466, lng: 36.8660916, radiusM: 1000 },
+  { name: 'MORL', lat: -0.28802969095623043, lng: 36.04494759379902, radiusM: 1000, category: 'factory' },
+  { name: 'STO (Nairobi depot)', lat: -1.3029466, lng: 36.8660916, radiusM: 1000, category: 'storage' },
 ];
 
 function boxOf(f) {
@@ -53,7 +53,7 @@ function boxOf(f) {
 export function placesOf(features) {
   return (features ?? []).map((f) => ({ name: String(f?.properties?.name ?? '').trim() || 'Unnamed', feature: f, box: boxOf(f) })).filter((p) => p.box);
 }
-const storePlaces = () => placesOf(STORES.map((s) => ({ type: 'Feature', properties: { name: s.name, radiusM: s.radiusM }, geometry: { type: 'Point', coordinates: [s.lng, s.lat] } })));
+export const storePlaces = () => placesOf(STORES.map((s) => ({ type: 'Feature', properties: { name: s.name, radiusM: s.radiusM, category: s.category }, geometry: { type: 'Point', coordinates: [s.lng, s.lat] } })));
 
 const inBox = (p, b) => p.lat >= b.minLat && p.lat <= b.maxLat && p.lng >= b.minLng && p.lng <= b.maxLng;
 /** The first place holding the point, or null. */
@@ -112,4 +112,94 @@ export function flagWords(f, now = Date.now()) {
   return f.kind === 'nogo'
     ? `${f.plate} has stood ${standingWords(f.since, now)} in the no-go zone ${f.zone}.`
     : `${f.plate} has stood ${standingWords(f.since, now)} outside any authorised place.`;
+}
+
+// ---- On the Alerts page: the stop's place type, a copy, and read marks.
+
+/** The places file's types as the map's categories (lib/zoneLegend ZONE_STYLE). */
+const FILE_TYPES = { Customer: 'customer', RestStop: 'parking', Site: 'facility', Other: 'weighing', NoGoZone: 'restricted' };
+
+/** A place's category: the platform's own (lib/zone-taxonomy), else the file's type. */
+export function placeCategory(feature) {
+  const p = feature?.properties ?? {};
+  return p.category ?? FILE_TYPES[p.type] ?? 'other';
+}
+
+const metresToBox = (p, b) => {
+  const lat = Math.min(Math.max(p.lat, b.minLat), b.maxLat);
+  const lng = Math.min(Math.max(p.lng, b.minLng), b.maxLng);
+  const k = 111_320;
+  return Math.hypot((p.lat - lat) * k, (p.lng - lng) * k * Math.cos((p.lat * Math.PI) / 180));
+};
+
+/**
+ * The authorised place nearest a stop: { name, category, metres }, or null.
+ * The boxes pick a shortlist, and only those are measured to their edge, so
+ * Menengai's six thousand fences cost a few hundred measurements a unit.
+ */
+export function nearestPlace(point, places, shortlist = 24) {
+  if (!Number.isFinite(point?.lat) || !Number.isFinite(point?.lng)) return null;
+  const near = (places ?? [])
+    .map((pl) => ({ pl, d: metresToBox(point, pl.box) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, shortlist);
+  let best = null;
+  for (const { pl } of near) {
+    const metres = metresToFence(point, pl.feature);
+    if (Number.isFinite(metres) && (!best || metres < best.metres)) best = { name: pl.name, category: placeCategory(pl.feature), metres };
+  }
+  return best;
+}
+
+/** "350 m", "1.2 km", "38 km". */
+export function distanceWords(m) {
+  if (!Number.isFinite(m)) return '';
+  if (m < 1000) return `${Math.max(10, Math.round(m / 10) * 10)} m`;
+  return m < 10_000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
+}
+
+/** The read marks' own store (lib/feedReads), apart from any organisation's feed. */
+export const STOP_READS = 'menengai-stops';
+
+/**
+ * A flag as a line with read marks: its key, and the time it became a stop
+ * to flag (2 minutes in a no-go zone, 10 outside), so "Mark all read" covers
+ * only the stops that had been flagged by then.
+ */
+export function stopLine(f) {
+  const at = f.since + (f.kind === 'nogo' ? NOGO_MIN_MS : UNAUTHORISED_MIN_MS);
+  return { ...f, orgId: STOP_READS, id: f.key, ts: new Date(at).toISOString() };
+}
+
+/**
+ * One stop as text to paste into a chat or a report. `area` is the place's
+ * name (reverse-geocoded), `place` the nearest authorised place's words.
+ */
+export function stopCopyText(f, { now = Date.now(), place, area } = {}) {
+  const when = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(f.since);
+  return [
+    `${f.kind === 'nogo' ? 'No-go zone stop' : 'Unauthorised stop'} · ${f.plate}`,
+    `Standing since: ${when}`,
+    `For: ${standingWords(f.since, now)}`,
+    `Where: ${[area, f.kind === 'nogo' ? `no-go zone ${f.zone}` : 'outside any authorised place'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())}`,
+    place ? `Nearest place: ${place}` : null,
+    `Location: ${f.lat.toFixed(5)}, ${f.lng.toFixed(5)} · https://www.google.com/maps?q=${f.lat},${f.lng}`,
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Desktop alerts on or off, per browser (operator, 2026-11-06: turning them on
+ * needs a way to turn them off). A page cannot take back the browser's
+ * permission, so this is the platform's own switch, read before each one.
+ * On unless turned off, so a browser that allowed them keeps them.
+ */
+const DESKTOP_KEY = 'ft-stopwatch-desktop';
+export function desktopAlertsOn() {
+  try { return localStorage.getItem(DESKTOP_KEY) !== 'off'; } catch { return true; }
+}
+export function setDesktopAlerts(on) {
+  try { localStorage.setItem(DESKTOP_KEY, on ? 'on' : 'off'); } catch { /* storage off: stays as it was */ }
 }

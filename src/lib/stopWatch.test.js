@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as sw from './stopWatch';
 import { flaggedUnits, placesOf, placeAt, flagWords, NOGO_MIN_MS, UNAUTHORISED_MIN_MS } from './stopWatch';
 import { AUTHORISED, NO_GO } from '../data/menengaiStopPlaces';
 
@@ -45,5 +46,46 @@ describe('the stop watch: Menengai units where they should not stand', () => {
     const shop = { type: 'Feature', properties: { name: 'MENENGAI_VS: JOJAC' }, geometry: { type: 'Polygon', coordinates: [[[36.599, -0.901], [36.601, -0.901], [36.601, -0.899], [36.599, -0.899], [36.599, -0.901]]] } };
     const flags = flaggedUnits([unit('KDE 127E', -0.9, 36.6)], { authorised: [...authorised, ...placesOf([shop])], noGo, now });
     expect(flags).toEqual([]);
+  });
+});
+
+describe('Alerts: an unauthorised stop’s place, copy and read marks', () => {
+  const square = (name, lat, lng, props = {}) => ({ type: 'Feature', properties: { name, ...props },
+    geometry: { type: 'Polygon', coordinates: [[[lng, lat], [lng + 0.001, lat], [lng + 0.001, lat + 0.001], [lng, lat + 0.001], [lng, lat]]] } });
+  const places = sw.placesOf([
+    square('NAIVAS', 0.01, 36, { type: 'Customer' }),
+    square('Menengai Yard', 0.05, 36, { category: 'yard' }),
+    square('Far shop', 1, 37, { category: 'shop' }),
+  ]);
+
+  it('names the nearest authorised place, its type and how far', () => {
+    const n = sw.nearestPlace({ lat: 0.0, lng: 36.0005 }, places);
+    expect(n.name).toBe('NAIVAS');
+    expect(n.category).toBe('customer');
+    expect(n.metres).toBeGreaterThan(1000);
+    expect(n.metres).toBeLessThan(1200);
+    expect(sw.nearestPlace({ lat: 0.0505, lng: 36.0005 }, places)).toMatchObject({ name: 'Menengai Yard', metres: 0 });
+    expect(sw.distanceWords(1113)).toBe('1.1 km');
+    expect(sw.distanceWords(240)).toBe('240 m');
+  });
+
+  it('is unread from the moment it qualified as a stop', () => {
+    const since = Date.parse('2026-11-06T10:00:00Z');
+    expect(sw.stopLine({ key: 'v|stop|1', kind: 'unauthorised', since }).ts).toBe('2026-11-06T10:10:00.000Z');
+    expect(sw.stopLine({ key: 'v|nogo|Z|1', kind: 'nogo', since }).ts).toBe('2026-11-06T10:02:00.000Z');
+  });
+
+  it('copies a stop as lines to paste', () => {
+    const f = { kind: 'unauthorised', plate: 'KDE 127E', since: Date.parse('2026-11-06T11:00:00Z'), lat: -0.1, lng: 36.2 };
+    expect(sw.stopCopyText(f, { now: Date.parse('2026-11-06T11:25:00Z'), place: 'NAIVAS (Customer), 1.1 km' })).toBe([
+      'Unauthorised stop · KDE 127E',
+      'Standing since: 6 Nov 2026, 14:00',
+      'For: 25 min',
+      'Where: Outside any authorised place',
+      'Nearest place: NAIVAS (Customer), 1.1 km',
+      'Location: -0.10000, 36.20000 · https://www.google.com/maps?q=-0.1,36.2',
+    ].join('\n'));
+    expect(sw.stopCopyText(f, { area: 'Londiani, Kericho' })).toContain('Where: Londiani, Kericho, outside any authorised place');
+    expect(sw.stopCopyText({ ...f, kind: 'nogo', zone: 'Awasi' })).toContain('Where: No-go zone Awasi');
   });
 });

@@ -14,7 +14,7 @@ import { fetchSnapshot } from '../../services/snapshot';
 import { mapSnapshotVehicle } from '../../lib/vehicleMap';
 import { loadZones } from '../../hooks/useEstateZones';
 import { AUTHORISED, NO_GO } from '../../data/menengaiStopPlaces';
-import { flaggedUnits, placesOf, flagWords } from '../../lib/stopWatch';
+import { desktopAlertsOn, flaggedUnits, placesOf, flagWords } from '../../lib/stopWatch';
 import { setStopWatch, requestStopsView } from '../../hooks/useStopWatch';
 import './StopWatch.css';
 
@@ -50,7 +50,7 @@ function beep() {
 }
 function notify(text) {
   try {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && desktopAlertsOn()) {
       new Notification('Menengai: unauthorised stop', { body: text, tag: text });
     }
   } catch { /* not allowed here */ }

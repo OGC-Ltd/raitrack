@@ -21,12 +21,17 @@
 //
 // "Mark all read" empties the ids and the list is capped, so it stays small
 // however long the tab stays open. Every open tab follows the marks the others
-// save (the `storage` event), so a line read in one is read in all.
+// save (the `storage` event), so a line read in one is read in all; within one
+// tab the Alerts page's geofence exits (the same ZONE_EXIT lines) and the bell
+// follow each other through SAME_TAB.
 
 import { useCallback, useEffect, useState } from 'react';
 
 /** Read lines remembered above the cut-off; the oldest marks fall off first. */
 export const MAX_READ_IDS = 500;
+
+/** Told in this tab when marks are saved: `storage` reaches only the others. */
+const SAME_TAB = 'ft-feed-reads';
 
 const sinceKey = (org) => `ft-feed-seen:${org}`;
 const idsKey   = (org) => `ft-feed-read:${org}`;
@@ -106,6 +111,10 @@ function save(org, reads) {
     localStorage.setItem(sinceKey(org), String(reads.since));
     localStorage.setItem(idsKey(org), JSON.stringify([...reads.ids]));
   } catch { /* storage off */ }
+  // After this render: the saver may be inside a state update.
+  if (typeof window !== 'undefined') {
+    setTimeout(() => window.dispatchEvent(new CustomEvent(SAME_TAB, { detail: { org } })), 0);
+  }
 }
 
 /** The bell's and the panel's shared read marks for one organisation. */
@@ -118,8 +127,13 @@ export function useFeedReads(org) {
   useEffect(() => {
     const keys = new Set([sinceKey(org), idsKey(org)]);
     const onStorage = (e) => { if (e.key == null || keys.has(e.key)) setReads(load(org)); };
+    const onHere = (e) => { if (e.detail?.org === org) setReads(load(org)); };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener(SAME_TAB, onHere);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(SAME_TAB, onHere);
+    };
   }, [org]);
 
   const update = useCallback((next) => {
@@ -136,4 +150,51 @@ export function useFeedReads(org) {
   const markRead    = useCallback((...items) => update((cur) => withRead(cur, items)), [update]);
   const markAllRead = useCallback(() => update((cur) => allRead(cur)), [update]);
   return { reads, markRead, markAllRead };
+}
+
+/**
+ * The same marks for several organisations at once: the Alerts page's
+ * geofence exits, which are those organisations' ZONE_EXIT feed lines. An exit
+ * read here is read in the bell, and the other way round.
+ * `markRead(items)` takes { orgId, id, ts } lines.
+ */
+export function useOrgsFeedReads(orgIds) {
+  const key = [...new Set(orgIds ?? [])].sort().join(',');
+  const loadAll = useCallback(() => new Map(key ? key.split(',').map((org) => [org, load(org)]) : []), [key]);
+  const [byOrg, setByOrg] = useState(loadAll);
+  useEffect(() => {
+    setByOrg(loadAll());
+    const mine = new Set(key.split(','));
+    const onStorage = (e) => { if (e.key == null || e.key.startsWith('ft-feed-')) setByOrg(loadAll()); };
+    const onHere = (e) => { if (mine.has(e.detail?.org)) setByOrg(loadAll()); };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener(SAME_TAB, onHere);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(SAME_TAB, onHere);
+    };
+  }, [key, loadAll]);
+
+  const markRead = useCallback((items) => {
+    const groups = new Map();
+    for (const it of items ?? []) {
+      if (it?.orgId == null || it.id == null) continue;
+      groups.set(it.orgId, [...(groups.get(it.orgId) ?? []), it]);
+    }
+    let changed = false;
+    for (const [org, its] of groups) {
+      // On top of what the bell or another tab saved meanwhile, never over it.
+      const cur = load(org);
+      const next = withRead(cur, its);
+      if (next !== cur) { save(org, next); changed = true; }
+    }
+    if (changed) setByOrg(loadAll());
+  }, [loadAll]);
+
+  const unread = useCallback((item) => {
+    const reads = byOrg.get(item?.orgId);
+    return reads ? isUnread(item, reads) : false;
+  }, [byOrg]);
+
+  return { unread, markRead };
 }
