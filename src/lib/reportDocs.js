@@ -32,6 +32,14 @@ const plural = (n, one) => `${fmt(n)} ${one}${n === 1 ? '' : 's'}`;
 const meta = (pairs) => pairs.map(([label, value]) => ({ label, value: String(value) }));
 const textCell = (text, bold = false) => ({ text: String(text ?? ''), ...(bold ? { bold: true } : {}) });
 const recoveryTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hour12: false });
+const loginTime = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Africa/Nairobi', day: '2-digit', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const loginDay = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric',
+});
+export const LOGIN_ACTIVITY_PDF_LIMIT = 5000;
 
 /** Columns from the PDF's own widths, stretched to the sheet. */
 function columns(widths, body, { figures = new Set(), wrap = new Set() } = {}) {
@@ -262,6 +270,67 @@ export function recoveryDoc(report, { fleet, orgCode, now = report.generatedAt ?
     meta: meta([['Fleet', fleet], ['Day', dayWordsText], ['Vehicles', fmt(vehicles.length)], ['Vehicles with GPS', fmt(measured.length)]]),
     blocks,
     footer: `${fleet} · Recovery Vehicle Report · ${dayDate}`,
+  };
+}
+
+/** Successful organisation-scoped sign-ins as an editable report document. */
+export function loginActivityDoc(report, { organisation, orgCode, from, to, now = Date.now() }) {
+  const rows = report.rows ?? [];
+  if (rows.length > LOGIN_ACTIVITY_PDF_LIMIT) {
+    throw new Error(`This PDF supports up to ${fmt(LOGIN_ACTIVITY_PDF_LIMIT)} successful sign-ins. Narrow the date range.`);
+  }
+
+  const fleet = String(organisation ?? 'Fleet').trim() || 'Fleet';
+  const safeFleet = fleet.replace(/[^\w .-]/g, '') || 'Fleet';
+  const fromWords = loginDay.format(new Date(`${from}T00:00:00Z`));
+  const toWords = loginDay.format(new Date(`${to}T00:00:00Z`));
+  const period = from === to ? fromWords : `${fromWords} to ${toWords}`;
+  const uniqueUsers = new Set(rows.map((row) => row.user?.id).filter(Boolean)).size;
+  const cols = columns([34, 36, 39, 39, 36], PORTRAIT_MM, { wrap: new Set([1, 2, 3, 4]) });
+  const blocks = [
+    { kind: 'h2', title: '1. Successful Sign-ins', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Successful sign-ins', value: fmt(rows.length) },
+      { label: 'Users with sign-ins', value: fmt(uniqueUsers) },
+      { label: 'Accounts ever logged in', value: fmt(report.everLoggedIn ?? 0) },
+      { label: 'System accounts', value: fmt(report.systemUsers ?? 0) },
+    ] },
+    { kind: 'h2', title: '2. Sign-in log', aside: plural(rows.length, 'successful sign-in') },
+    rows.length
+      ? {
+        kind: 'table', cols, head: ['Date and time (EAT)', 'User', 'Email', 'Role', 'Groups'], size: 7.8,
+        rows: rows.map((row) => {
+          const groups = Array.isArray(row.user?.groups) ? row.user.groups : [];
+          const roles = Array.isArray(row.user?.roles) ? row.user.roles : [];
+          return [
+            textCell(loginTime.format(new Date(row.loggedInAt))),
+            textCell(row.user?.fullName || 'Unknown user', true),
+            textCell(row.user?.email || '—'),
+            textCell(roles.length ? roles.join(', ') : 'No role assigned'),
+            textCell(groups.length ? groups.join(', ') : 'Ungrouped'),
+          ];
+        }),
+      }
+      : { kind: 'none', text: 'No successful sign-ins in this date range.' },
+    { kind: 'note', text: 'This report includes successful sign-ins only. Failed sign-in attempts are not recorded in this report.' },
+  ];
+
+  return {
+    title: 'LOGIN ACTIVITY REPORT',
+    docName: `Login Activity Report ${fleet}`,
+    pairs: true,
+    filename: `Login Activity Report ${safeFleet} ${from}${from === to ? '' : ` to ${to}`}`,
+    reportNo: reportNumber('LA', orgCode, now),
+    date: dmy(now),
+    meta: meta([
+      ['Organisation', fleet],
+      ['Period', period],
+      ['Scope', 'Successful sign-ins only'],
+      ['Time zone', 'Africa/Nairobi'],
+      ['Ever logged in', fmt(report.everLoggedIn ?? 0)],
+    ]),
+    blocks,
+    footer: `${fleet} · Login Activity Report · ${period}`,
   };
 }
 
