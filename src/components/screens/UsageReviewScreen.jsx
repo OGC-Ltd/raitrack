@@ -91,11 +91,17 @@ const PAGE_ROWS = 5;
 const addDays = (key, n) => new Date(Date.parse(`${key}T00:00:00Z`) + n * DAY_MS).toISOString().slice(0, 10);
 const daysIn = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / DAY_MS) + 1;
 const PRESETS = [
+  ["today", "Today"], ["yesterday", "Yesterday"],
   ["d7", "7 days"], ["d30", "30 days"], ["month", "This month"], ["last", "Last month"], ["two", "Last 2 months"],
 ];
 function preset(id) {
   const today = fleetDayKey();
   const first = `${today.slice(0, 8)}01`;
+  if (id === "today") return { from: today, to: today, id };
+  if (id === "yesterday") {
+    const yesterday = addDays(today, -1);
+    return { from: yesterday, to: yesterday, id };
+  }
   if (id === "d7") return { from: addDays(today, -6), to: today, id };
   if (id === "d30") return { from: addDays(today, -29), to: today, id };
   if (id === "month") return { from: first, to: today, id };
