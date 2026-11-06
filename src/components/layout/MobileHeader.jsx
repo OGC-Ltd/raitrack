@@ -20,7 +20,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setDesktopActiveTab } = useAppActions();
   const { activeCompany, companies } = useCompanies();
   const { user, logout } = useAuth();
-  const { can } = usePermissions();
+  const { can, orgsWhere } = usePermissions();
   // The sidebar's System section, for a phone, which has no sidebar.
   // Fuel Audit readers: the roles the operator named (fuel_audit:read).
   const canTriage = can('fuel_audit:read');
@@ -204,7 +204,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-car" aria-hidden="true" /> Logbook
                 </button>
               )}
-              {can('user:create') && (
+              {orgsWhere('user:read').length > 0 && (
                 <button className="mobile-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" /> Users
                 </button>

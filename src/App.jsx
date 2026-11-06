@@ -338,8 +338,8 @@ function AccountGate() {
 function UserAdminGate() {
   const userAdminOpen = useAppSelector((a) => a.userAdminOpen);
   const { setUserAdminOpen } = useAppActions();
-  const { can } = usePermissions();
-  const allowed = can('user:create');
+  const { orgsWhere } = usePermissions();
+  const allowed = orgsWhere('user:read').length > 0;
 
   // Roles are per-organisation: switching company can remove the grant.
   useEffect(() => {
