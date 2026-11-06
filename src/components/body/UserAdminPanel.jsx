@@ -94,6 +94,7 @@ const COLUMNS = [
   { key: "roles",    label: "Roles" },
   { key: "status",   label: "Status" },
   { key: "created",  label: "Created" },
+  { key: "lastLogin", label: "Last login" },
   { key: "password", label: "Password" },
 ];
 
@@ -754,6 +755,17 @@ function fmtDate(value) {
     : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
+function fmtDateTime(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleString(undefined, {
+      timeZone: "Africa/Nairobi", day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+}
+
 export default function UserAdminPanel() {
   const { activeCompany } = useCompanies();
   const { orgs, user: me } = useAuth();
@@ -1229,6 +1241,7 @@ export default function UserAdminPanel() {
     roles:    (u) => rolesFor(u).join(", "),
     status:   (u) => accountState(u).label,
     created:  (u) => (u.createdAt ? new Date(u.createdAt).getTime() : null),
+    lastLogin: (u) => (u.lastLoginAt ? new Date(u.lastLoginAt).getTime() : null),
     // Never-set sorts as empty, which rosterView pins to the end in both
     // directions — "no password" is not "the oldest password".
     password: (u) => ((u.passwordChangeCount ?? 0) === 0
@@ -1353,6 +1366,7 @@ export default function UserAdminPanel() {
           case "roles":    return rolesFor(u).join("; ");
           case "status":   return accountState(u).label;
           case "created":  return fmtDate(u.createdAt);
+          case "lastLogin": return fmtDateTime(u.lastLoginAt);
           case "password": return (u.passwordChangeCount ?? 0) === 0
             ? "never set" : fmtDate(u.passwordChangedAt);
           default:         return "";
@@ -2737,6 +2751,9 @@ export default function UserAdminPanel() {
                         )}
                         {shows("created") && (
                           <td className="ua-row__num" data-label="Created">{fmtDate(u.createdAt)}</td>
+                        )}
+                        {shows("lastLogin") && (
+                          <td className="ua-row__num" data-label="Last login">{fmtDateTime(u.lastLoginAt)}</td>
                         )}
                         {shows("password") && (
                         <td className="ua-row__num" data-label="Password">

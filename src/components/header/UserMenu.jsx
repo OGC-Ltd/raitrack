@@ -56,7 +56,7 @@ export default function UserMenu() {
   // The page supports read-only access too; writes remain gated by the
   // organisation-specific permissions enforced by the API.
   const { canIn } = usePermissions();
-  const canAdminUsers = (orgs ?? []).some((org) => canIn(org.id, "user:read"));
+  const canReadUsers = (orgs ?? []).some((org) => canIn(org.id, "user:read"));
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
@@ -124,7 +124,7 @@ export default function UserMenu() {
             Account
           </button>
 
-          {canAdminUsers && (
+          {canReadUsers && (
             <button
               type="button"
               className="user-menu__item"

@@ -136,6 +136,16 @@ export async function listUsersAcrossOrgs(orgIds, { access = "system", limit = 1
   };
 }
 
+/** Successful sign-ins for system accounts visible in this organisation. */
+export async function listUserLoginActivity(
+  orgId,
+  { from, to, page = 1, limit = 50 } = {},
+) {
+  const params = new URLSearchParams({ from, to, page: String(page), limit: String(limit) });
+  const res = await apiFetch(`${base(orgId)}/login-report?${params}`);
+  return res.data;
+}
+
 /**
  * Two organisations' copies of one person's grants, said once each.
  *
