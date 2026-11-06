@@ -43,10 +43,10 @@ export function useReportEditor({ orgId, source, build }) {
     return () => document.removeEventListener('keydown', onKey, true);
   }, [open]);
 
-  const startEditing = () => {
-    if (sheet.doc) { setOpen(true); return; }
+  const startEditing = (initialDoc) => {
+    if (initialDoc === undefined && sheet.doc) { setOpen(true); return; }
     try {
-      const doc = build();
+      const doc = initialDoc ?? build();
       setSheet((s) => ({ ...s, original: doc, doc }));
       setProblem(null);
       setOpen(true);
@@ -63,7 +63,7 @@ export function useReportEditor({ orgId, source, build }) {
     <>
       {problem && <span className="rpt-warn">{problem}</span>}
       {edited && <button type="button" className="sp4-ghost-btn" onClick={undo}>Undo edits</button>}
-      <button type="button" className="sp4-ghost-btn" onClick={startEditing}
+      <button type="button" className="sp4-ghost-btn" onClick={() => startEditing()}
               title="Change any text on the report, leave rows or sections out, add notes">
         <i className="ti ti-pencil" aria-hidden="true" /> {edited ? 'Edited' : 'Edit'}
       </button>
@@ -106,5 +106,5 @@ export function useReportEditor({ orgId, source, build }) {
     </>
   );
 
-  return { edited, make, guard, button, overlay, doc: sheet.doc };
+  return { edited, make, guard, button, overlay, doc: sheet.doc, startEditing, undo, problem };
 }

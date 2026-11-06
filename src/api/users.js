@@ -146,6 +146,39 @@ export async function listUserLoginActivity(
   return res.data;
 }
 
+/** All successful sign-ins in a period, not only the first table page. */
+export async function listAllUserLoginActivity(orgId, { from, to, limit = 100 } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new RangeError("Login activity page size must be between 1 and 100");
+  }
+
+  const first = await listUserLoginActivity(orgId, { from, to, page: 1, limit });
+  const total = Number(first?.total ?? first?.rows?.length ?? 0);
+  if (!Number.isSafeInteger(total) || total < 0) {
+    throw new Error("The login activity response has an invalid total");
+  }
+
+  const byId = new Map();
+  const addRows = (rows = []) => {
+    for (const row of rows) {
+      if (!row?.id) throw new Error("The login activity response contains an entry without an ID");
+      byId.set(row.id, row);
+    }
+  };
+  addRows(first?.rows);
+
+  const pageCount = Math.ceil(total / limit);
+  for (let page = 2; page <= pageCount; page += 1) {
+    const next = await listUserLoginActivity(orgId, { from, to, page, limit });
+    addRows(next?.rows);
+  }
+
+  if (byId.size < total) {
+    throw new Error("Login activity changed while loading the report. Try again to include every sign-in.");
+  }
+  return { ...first, rows: [...byId.values()] };
+}
+
 /**
  * Two organisations' copies of one person's grants, said once each.
  *
