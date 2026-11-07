@@ -43,8 +43,7 @@ import {
   PROBE_STATE_LABEL, CHANNEL_STATE_LABEL, faultAction,
 } from "../../api/probeHealth";
 import { downloadProbeCsv } from "../../utils/probeReport";
-import { faultyRows } from "../../lib/faultyProbeReport";
-import { faultyProbeDoc } from "../../lib/reportDocs";
+import { probeHealthDoc } from "../../lib/reportDocs";
 import { makeReportDoc } from "../../api/reports";
 import { saveFile } from "../../api/tripReport";
 import { savePdfAsJpeg } from "../../api/pdfJpeg";
@@ -316,16 +315,13 @@ export default function ProbeHealthPanel({
     return parts.join("-");
   }, [channel, status, trucksOnly]);
 
-  // The Faulty Probe Report, on the report template (lib/reportDocs): the whole
-  // fleet, or its trucks, one comment a unit. The table's other filters narrow
-  // the table and its CSV, not the report.
+  // The Probe & Sensor Health report, on the report template (lib/reportDocs):
+  // the table's filtered rows, as the CSV, with no Action column.
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
   const fleet = activeCompany?.name ?? orgCode ?? "Fleet";
-  const checked = useMemo(() => (data?.rows ?? []).filter((r) => !trucksOnly || r.truck), [data, trucksOnly]);
-  const faulty = useMemo(() => faultyRows(checked), [checked]);
-  const sheet = () => faultyProbeDoc(faulty, { checked: checked.length, fleet, trucks: trucksOnly, orgCode });
-  const editor = useReportEditor({ orgId, source: faulty, build: sheet });
+  const sheet = () => probeHealthDoc(rows, { note: filterNote, fleet, trucks: trucksOnly, orgCode });
+  const editor = useReportEditor({ orgId, source: rows, build: sheet });
   const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
   const preview = usePdfPreview(makePdf);
   const [file, setFile] = useState({ busy: false, error: null });
@@ -369,13 +365,13 @@ export default function ProbeHealthPanel({
           {editor.button}
           {file.busy ? <span className="rpt-sub">{file.busy === "jpeg" ? "Making the JPEG…" : "Making the PDF…"}</span>
             : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-          <JpegButton onSave={(landscape) => save("jpeg", landscape)} disabled={Boolean(file.busy)} title={`The ${trucksOnly ? "Trucks " : ""}Faulty Probe Report as an image`} />
-          <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={(landscape) => save("pdf", landscape)} disabled={Boolean(file.busy)} title={`The ${trucksOnly ? "Trucks " : ""}Faulty Probe Report: ${faulty.length} of ${checked.length} ${trucksOnly ? "trucks" : "units"}`} />
+          <JpegButton onSave={(landscape) => save("jpeg", landscape)} disabled={Boolean(file.busy)} title="Probe & Sensor Health as an image" />
+          <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={(landscape) => save("pdf", landscape)} disabled={Boolean(file.busy)} title={`Probe & Sensor Health: ${rows.length} units`} />
           <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
         </>}
       />
       {editor.overlay}
-      {preview.state && <PdfPreview state={preview.state} title="Faulty probe report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
+      {preview.state && <PdfPreview state={preview.state} title="Probe & sensor health" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
 
       {/* Channel "all" and State "faulty" are where this panel starts, so
           neither counts as a narrowing the reader needs warning about. */}

@@ -19,7 +19,7 @@ import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCe
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
-import { HEADS as FAULTY_HEADS, commentCounts, rowCells as faultyCells } from './faultyProbeReport';
+import { HEADS as HEALTH_HEADS, rowCells as healthCells, summary as healthSummary } from './probeHealthReport';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, spansDays, stopWords } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
@@ -368,31 +368,26 @@ export function probeDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
 }
 
 /**
- * The Faulty Probe Report (Maintenance › Probes), as West Kenya's sheet WSK
- * TRUCKS FAULTY PROBE REPORT: Registration No and Comment, one row a unit.
- * `faulty` is lib/faultyProbeReport faultyRows; `checked` is how many units
- * the rows came from.
+ * The Probe & Sensor Health report: the Probes table's filtered rows, `note`
+ * saying which filter. `trucks` names it for the Trucks filter.
  */
-export function faultyProbeDoc(faulty, { checked, fleet, trucks = false, orgCode, now = Date.now() }) {
+export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode, now = Date.now() }) {
   const asAt = dmyhm(now);
-  const kind = trucks ? 'truck' : 'unit';
-  const counts = commentCounts(faulty);
-  const items = [{ label: trucks ? 'Trucks checked' : 'Units checked', value: fmt(checked) }, { label: 'Faulty', value: fmt(faulty.length) },
-    ...counts.map((c) => ({ label: c.label, value: fmt(c.count) }))];
+  const items = healthSummary(rows).map((x) => ({ label: x.label, value: fmt(x.value) }));
   const blocks = [{ kind: 'h2', title: '1. Overview', aside: `as at ${asAt}` }];
-  for (let i = 0; i < items.length; i += 4) blocks.push({ kind: 'figures', items: items.slice(i, i + 4) });
-  blocks.push({ kind: 'h2', title: '2. Faulty probes', aside: plural(faulty.length, kind) });
-  blocks.push(faulty.length
-    ? { kind: 'table', cols: [{ w: 60 }, { w: 0, wrap: true }], head: FAULTY_HEADS, size: 8.4, rows: faulty.map((f) => faultyCells(f).map((t, i) => textCell(t, i === 0))) }
-    : { kind: 'none', text: `No faulty probes on the ${kind}s in the report.` });
+  for (let i = 0; i < items.length; i += 3) blocks.push({ kind: 'figures', items: items.slice(i, i + 3) });
+  blocks.push({ kind: 'h2', title: '2. Probes and sensors', aside: note || plural(rows.length, 'unit') });
+  const cols = columns([40, 30, 30, 30, 22, 26], PORTRAIT_MM, { figures: new Set([4]), wrap: new Set([0, 2]) });
+  blocks.push(rows.length
+    ? { kind: 'table', cols, head: HEALTH_HEADS, size: 7.8, rows: rows.map((r) => healthCells(r).map((t, i) => textCell(t, i === 0))) }
+    : { kind: 'none', text: 'Nothing matched the current filters.' });
   blocks.push({ kind: 'note', text: CONTACT_LINE });
-  const title = trucks ? 'TRUCKS FAULTY PROBE REPORT' : 'FAULTY PROBE REPORT';
-  const name = trucks ? 'Trucks Faulty Probe Report' : 'Faulty Probe Report';
+  const name = trucks ? 'Trucks Probe & Sensor Health' : 'Probe & Sensor Health';
   return {
-    title, docName: `${name} ${fleet}`, pairs: true,
+    title: name.toUpperCase(), docName: `${name} ${fleet}`, pairs: true,
     filename: `${name} ${fleet} ${new Date(now + OFFSET).toISOString().slice(0, 10)}`,
-    reportNo: reportNumber('FP', orgCode, now), date: dmy(now),
-    meta: meta([['Fleet', fleet], ['As at', asAt], [trucks ? 'Trucks' : 'Units', fmt(checked)], ['Faulty', fmt(faulty.length)]]),
+    reportNo: reportNumber('PH', orgCode, now), date: dmy(now),
+    meta: meta([['Fleet', fleet], ['As at', asAt], ['Units', fmt(rows.length)], ['Filter', note || 'All']]),
     blocks,
     footer: `${fleet} · ${name} · ${asAt}`,
   };
