@@ -42,7 +42,18 @@ import { vehicleReadings } from "../../lib/vehicleReadings";
 import {
   PROBE_STATE_LABEL, CHANNEL_STATE_LABEL, faultAction,
 } from "../../api/probeHealth";
-import { downloadProbeCsv, downloadProbePdf } from "../../utils/probeReport";
+import { downloadProbeCsv } from "../../utils/probeReport";
+import { faultyRows } from "../../lib/faultyProbeReport";
+import { faultyProbeDoc } from "../../lib/reportDocs";
+import { makeReportDoc } from "../../api/reports";
+import { saveFile } from "../../api/tripReport";
+import { savePdfAsJpeg } from "../../api/pdfJpeg";
+import { ORG_CODE_BY_COMPANY } from "../../api/org";
+import { useCompanies } from "../../context/AppContext";
+import JpegButton, { PreviewButton } from "../shared/JpegButton";
+import { usePdfPreview } from "../../hooks/usePdfPreview";
+import PdfPreview from "../shared/PdfPreview";
+import { useReportEditor } from "../screens/ReportEditor";
 import TableToolbar from "./TableToolbar";
 import FlagRepairDialog from "./FlagRepairDialog";
 import { categoriesForProbeRow } from "../../api/repairWorkflow";
@@ -230,7 +241,7 @@ export default function ProbeHealthPanel({
   // snapshot answers "what does it read right now", and the merged tab has to
   // carry both or it is not a merge — it is a replacement that lost half the
   // screen it replaced.
-  const { vehicles } = useFleetLiveShared();
+  const { vehicles, orgId } = useFleetLiveShared();
   // Keyed by PLATE, and read through vehicleReadings.
   //
   // Both were wrong first time round and both are worth naming. The snapshot's
@@ -253,12 +264,18 @@ export default function ProbeHealthPanel({
   // Opens on the fault list. A list somebody has to filter to reach is a list
   // they stop reaching for.
   const [status,  setStatus]  = useState("faulty");
+  // Trucks only, as West Kenya's sheet (WSK TRUCKS FAULTY PROBE REPORT). Shown
+  // once the server marks trucks on the rows.
+  const [kind,    setKind]    = useState("all");
+  const knowsTrucks = useMemo(() => (data?.rows ?? []).some((r) => typeof r.truck === "boolean"), [data]);
+  const trucksOnly = knowsTrucks && kind === "trucks";
 
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
     const q = search.trim().toLowerCase();
     const chan = CHANNELS.find(c => c.id === channel) ?? CHANNELS[0];
     return all.filter((r) => {
+      if (trucksOnly && !r.truck) return false;
       if (q && !`${r.plate} ${r.name ?? ""} ${r.deviceId ?? ""}`.toLowerCase().includes(q)) return false;
       // "All" asks whether ANYTHING on the unit is wrong; a named channel asks
       // only about that one, so a unit with a dead probe does not surface under
@@ -268,8 +285,8 @@ export default function ProbeHealthPanel({
       if (status === "working") return !bad;
       return true;
     });
-  }, [data, search, channel, status]);
-  const pager = usePager(rows, `${search}|${channel}|${status}`);
+  }, [data, search, channel, status, trucksOnly]);
+  const pager = usePager(rows, `${search}|${channel}|${status}|${trucksOnly}`);
 
   /* Stable, so the memoised row does not see a new function every render.
      Takes the ROW rather than a pre-built payload for the same reason: a
@@ -284,8 +301,8 @@ export default function ProbeHealthPanel({
   const filterNote = useMemo(() => {
     const chan = CHANNELS.find(c => c.id === channel)?.label ?? "All";
     const st = status === "faulty" ? "not working" : status === "working" ? "working" : "all states";
-    return `${chan} · ${st}${search.trim() ? ` · matching "${search.trim()}"` : ""} · ${rows.length} units`;
-  }, [channel, status, search, rows.length]);
+    return `${trucksOnly ? "Trucks · " : ""}${chan} · ${st}${search.trim() ? ` · matching "${search.trim()}"` : ""} · ${rows.length} units`;
+  }, [channel, status, search, rows.length, trucksOnly]);
 
   // The filter, in the filename. Both exports carry ONLY the filtered rows, so
   // three downloads of three different filters are three different documents —
@@ -293,10 +310,38 @@ export default function ProbeHealthPanel({
   // indistinguishable the moment they leave the screen that made them.
   const filenameSlug = useMemo(() => {
     const parts = ["probes"];
+    if (trucksOnly) parts.push("trucks");
     if (channel !== "all") parts.push(channel.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase());
     if (status !== "all")  parts.push(status === "faulty" ? "not-working" : "working");
     return parts.join("-");
-  }, [channel, status]);
+  }, [channel, status, trucksOnly]);
+
+  // The Faulty Probe Report, on the report template (lib/reportDocs): the whole
+  // fleet, or its trucks, one comment a unit. The table's other filters narrow
+  // the table and its CSV, not the report.
+  const { activeCompany } = useCompanies();
+  const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
+  const fleet = activeCompany?.name ?? orgCode ?? "Fleet";
+  const checked = useMemo(() => (data?.rows ?? []).filter((r) => !trucksOnly || r.truck), [data, trucksOnly]);
+  const faulty = useMemo(() => faultyRows(checked), [checked]);
+  const sheet = () => faultyProbeDoc(faulty, { checked: checked.length, fleet, trucks: trucksOnly, orgCode });
+  const editor = useReportEditor({ orgId, source: faulty, build: sheet });
+  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
+  const preview = usePdfPreview(makePdf);
+  const [file, setFile] = useState({ busy: false, error: null });
+  const save = async (as, landscape = false) => {
+    if (file.busy) return;
+    setFile({ busy: as, error: null });
+    try {
+      const { blob, filename } = await makePdf(landscape);
+      if (as === "jpeg") await savePdfAsJpeg(blob, filename);
+      else saveFile(blob, filename);
+      setFile({ busy: false, error: null });
+    } catch (err) {
+      setFile({ busy: false, error: `The ${as === "jpeg" ? "JPEG" : "PDF"} could not be made: ${err?.message ?? err}` });
+    }
+  };
+  const ready = Boolean(data && orgId);
 
   const s = data?.summary;
 
@@ -317,20 +362,44 @@ export default function ProbeHealthPanel({
         )}
         note={filterNote}
         loading={loading}
-        onReload={onReload}
+        onReload={() => editor.guard("Reload the probes", onReload)}
         onCsv={() => downloadProbeCsv(rows, { filenameSlug })}
-        onPdf={() => downloadProbePdf({
-          companyName: "Fleet Tracking", rows, filterNote, filenameSlug,
-        })}
         disabled={!rows.length}
+        actions={ready && <>
+          {editor.button}
+          {file.busy ? <span className="rpt-sub">{file.busy === "jpeg" ? "Making the JPEG…" : "Making the PDF…"}</span>
+            : file.error ? <span className="rpt-warn">{file.error}</span> : null}
+          <JpegButton onSave={(landscape) => save("jpeg", landscape)} disabled={Boolean(file.busy)} title={`The ${trucksOnly ? "Trucks " : ""}Faulty Probe Report as an image`} />
+          <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={(landscape) => save("pdf", landscape)} disabled={Boolean(file.busy)} title={`The ${trucksOnly ? "Trucks " : ""}Faulty Probe Report: ${faulty.length} of ${checked.length} ${trucksOnly ? "trucks" : "units"}`} />
+          <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
+        </>}
       />
+      {editor.overlay}
+      {preview.state && <PdfPreview state={preview.state} title="Faulty probe report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
 
       {/* Channel "all" and State "faulty" are where this panel starts, so
           neither counts as a narrowing the reader needs warning about. */}
       <FilterBar
         label="Channel & state"
-        activeCount={(channel !== "all" ? 1 : 0) + (status !== "faulty" ? 1 : 0)}
+        activeCount={(channel !== "all" ? 1 : 0) + (status !== "faulty" ? 1 : 0) + (trucksOnly ? 1 : 0)}
       >
+        {knowsTrucks && (
+          <>
+            <div className="sp4-filter-group">
+              <span className="sp4-filter-label">Vehicles</span>
+              {[["all", "All"], ["trucks", "Trucks"]].map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={"sp4-filter-chip" + (kind === v ? " sp4-filter-chip--on" : "")}
+                  aria-pressed={kind === v}
+                  onClick={() => setKind(v)}
+                >{label}</button>
+              ))}
+            </div>
+            <div className="sp4-filter-divider" />
+          </>
+        )}
         <div className="sp4-filter-group">
           <span className="sp4-filter-label">Channel</span>
           {CHANNELS.map(c => (
