@@ -19,7 +19,7 @@ import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCe
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
-import { HEADS as HEALTH_HEADS, byGroup as healthByGroup, rowCells as healthCells, summary as healthSummary } from './probeHealthReport';
+import { HEADS as HEALTH_HEADS, KEY as HEALTH_KEY, NOT_WORKING, WORKING, byGroup as healthByGroup, rowCells as healthCells, summary as healthSummary } from './probeHealthReport';
 import { groupsFor } from './fleetGroups';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, spansDays, stopWords } from './deliveriesReport';
 
@@ -375,18 +375,23 @@ export function probeDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
  */
 export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode, groups = groupsFor(orgCode), now = Date.now() }) {
   const asAt = dmyhm(now);
-  const items = healthSummary(rows).map((x) => ({ label: x.label, value: fmt(x.value) }));
+  const items = healthSummary(rows).map((x) => ({ label: x.label, value: fmt(x.value), ...(x.flag ? { flag: true } : {}) }));
   const blocks = [{ kind: 'h2', title: '1. Overview', aside: `as at ${asAt}` }];
   for (let i = 0; i < items.length; i += 3) blocks.push({ kind: 'figures', items: items.slice(i, i + 3) });
-  blocks.push({ kind: 'h2', title: '2. Probes and sensors', aside: note || plural(rows.length, 'unit') });
-  const cols = columns([40, 30, 30, 30, 22, 26], PORTRAIT_MM, { figures: new Set([4]), wrap: new Set([0, 2]) });
-  const table = (list) => ({ kind: 'table', cols, head: HEALTH_HEADS, size: 7.8, rows: list.map((r) => healthCells(r).map((t, i) => textCell(t, i === 0))) });
+  blocks.push({ kind: 'h2', title: '2. Hardware by unit', aside: note || plural(rows.length, 'unit') });
+  const cols = columns([40, 28, 29, 29, 29, 29], PORTRAIT_MM, { wrap: new Set([0]) });
+  // Faulty hardware stands out; what cannot be judged steps back.
+  const cell = (t, i) => (i < 2 ? textCell(t, i === 0)
+    : t === NOT_WORKING ? { text: t, bold: true, tone: 'flag', fill: '#fbe3e0' }
+    : t === WORKING ? textCell(t) : { text: t, tone: 'mut' });
+  const table = (list) => ({ kind: 'table', cols, head: HEALTH_HEADS, size: 7.8, rows: list.map((r) => healthCells(r).map(cell)) });
   // By the client's fleet-list groups (Tankers, Finished Goods, ...) where the
   // fleet has a list; one table otherwise.
   const grouped = healthByGroup(rows, groups);
   if (!rows.length) blocks.push({ kind: 'none', text: 'Nothing matched the current filters.' });
   else if (!grouped) blocks.push(table(rows));
   else for (const g of grouped) blocks.push({ kind: 'bar', title: g.name, aside: plural(g.rows.length, 'unit') }, table(g.rows));
+  if (rows.length) blocks.push({ kind: 'note', text: HEALTH_KEY });
   blocks.push({ kind: 'note', text: CONTACT_LINE });
   const name = trucks ? 'Trucks Probe & Sensor Health' : 'Probe & Sensor Health';
   return {
