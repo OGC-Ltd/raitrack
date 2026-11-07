@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HEADS, rowCells, summary } from './probeHealthReport';
+import { HEADS, byGroup, rowCells, summary } from './probeHealthReport';
 import { probeHealthDoc } from './reportDocs';
 
 const unit = (plate, over = {}) => ({
@@ -36,5 +36,22 @@ describe('probe & sensor health report', () => {
     expect(JSON.stringify(d)).not.toMatch(/Action|calibration table|check the device/);
     expect(probeHealthDoc([], { fleet: 'M', trucks: true, now }).title).toBe('TRUCKS PROBE & SENSOR HEALTH');
     expect(probeHealthDoc([], { fleet: 'M', now }).blocks.find((b) => b.kind === 'none').text).toBe('Nothing matched the current filters.');
+  });
+});
+
+describe('probe & sensor health report: by fleet group', () => {
+  const groups = [{ name: 'Tankers', units: [['KCA 918P', 'Tanker', 1]] }, { name: 'Finished Goods', units: [['KBT 119R', 'FG', 0], ['KBT 113R', 'FG', 0]] }];
+  it("follows the list's order, plate order within, unlisted last", () => {
+    const g = byGroup([unit('ZZZ 1'), unit('KBT 119R'), unit('KCA 918P'), unit('KBT 113R')], groups);
+    expect(g.map((x) => [x.name, x.rows.map((r) => r.plate)])).toEqual([
+      ['Tankers', ['KCA 918P']], ['Finished Goods', ['KBT 113R', 'KBT 119R']], ['Not on the list', ['ZZZ 1']]]);
+    expect(byGroup([unit('A')], null)).toBe(null);
+  });
+
+  it('puts a bar and a table per group in the document', () => {
+    const d = probeHealthDoc([unit('KBT 119R'), unit('KCA 918P')], { fleet: 'Menengai', groups, now: 0 });
+    expect(d.blocks.filter((b) => b.kind === 'bar').map((b) => `${b.title} ${b.aside}`)).toEqual(['Tankers 1 unit', 'Finished Goods 1 unit']);
+    expect(d.blocks.filter((b) => b.kind === 'table')).toHaveLength(2);
+    expect(probeHealthDoc([unit('A')], { fleet: 'X', groups: null, now: 0 }).blocks.filter((b) => b.kind === 'table')).toHaveLength(1);
   });
 });

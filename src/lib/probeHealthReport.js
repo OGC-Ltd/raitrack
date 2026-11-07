@@ -7,6 +7,7 @@
 // Pure: no React, no network.
 
 import { PROBE_STATE_LABEL } from '../api/probeHealth';
+import { unitKey, vehicleKeys } from './fleetGroups';
 
 const OFFSET = 3 * 3600_000;
 
@@ -42,4 +43,29 @@ export function summary(rows) {
     { label: 'Uncalibrated', value: count((r) => r.fuelSensor?.uncalibrated) },
     { label: 'Working', value: count((r) => r.fuelProbe?.state === 'OK' && !r.trackerSilent) },
   ];
+}
+
+export const NOT_ON_LIST = 'Not on the list';
+
+const byPlate = (a, b) => String(a.plate ?? '').localeCompare(String(b.plate ?? ''), 'en', { numeric: true });
+
+/**
+ * The rows under the client's fleet-list groups (data/fleetGroups: Tankers,
+ * Finished Goods, ...), in the list's order, matched as the Movement report's
+ * Group picker matches them. Units the list does not name come last, under
+ * "Not on the list"; empty groups are left out. Null when the fleet has no list.
+ */
+export function byGroup(rows, groups) {
+  if (!groups?.length) return null;
+  const groupOf = new Map();
+  for (const g of groups) for (const [label] of g.units) if (!groupOf.has(unitKey(label))) groupOf.set(unitKey(label), g.name);
+  const buckets = new Map([...groups.map((g) => [g.name, []]), [NOT_ON_LIST, []]]);
+  for (const r of rows) {
+    let name = NOT_ON_LIST;
+    for (const k of vehicleKeys({ regPlate: r.plate, id: r.vehicleId, name: r.name })) {
+      if (groupOf.has(k)) { name = groupOf.get(k); break; }
+    }
+    buckets.get(name).push(r);
+  }
+  return [...buckets.entries()].filter(([, list]) => list.length).map(([name, list]) => ({ name, rows: [...list].sort(byPlate) }));
 }
