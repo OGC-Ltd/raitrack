@@ -1,47 +1,70 @@
 // Probe & Sensor Health report (operator, 7 Nov 2026): the Probes tab's
-// download, on the report template (lib/reportDocs). It carries what the old
-// jsPDF export did, the filtered table's units with their probe and sensor
-// state, without the Action column: the report says what is wrong, not what to
-// do about it.
+// download, on the report template (lib/reportDocs). One line a unit, one
+// column a part (GPS tracker, ignition, odometer, fuel probe), each Working or
+// Not working, Not working highlighted because it is faulty hardware. No
+// course of action: the report says what is wrong, not what to do about it.
 //
 // Pure: no React, no network.
 
-import { PROBE_STATE_LABEL } from '../api/probeHealth';
 import { unitKey, vehicleKeys } from './fleetGroups';
 
-const OFFSET = 3 * 3600_000;
+export const WORKING = 'Working';
+export const NOT_WORKING = 'Not working';
+export const NOT_FITTED = 'Not fitted';
+export const NO_DATA = 'No data';
+export const NOT_SET_UP = 'Not set up';
 
-/** EAT, as the rest of the report. */
-const stamp = (iso) => {
-  const t = iso ? Date.parse(iso) : NaN;
-  if (!Number.isFinite(t)) return '';
-  const s = new Date(t + OFFSET).toISOString();
-  return `${s.slice(0, 10)} ${s.slice(11, 16)}`;
-};
+/** Ignition and odometer, as the Probes tab judges them. A silent tracker
+ *  sends nothing, so its channels cannot be judged. */
+function channel(r, id) {
+  if (r.trackerSilent) return NO_DATA;
+  const st = r.channels?.[id]?.state;
+  if (st === 'NOT_REPORTING') return NOT_WORKING;
+  if (st === 'REPORTING') return WORKING;
+  if (st === 'NOT_FITTED') return NOT_FITTED;
+  return NO_DATA;
+}
 
-const sensorWord = (s) => (!s?.fitted ? 'Not configured' : s.uncalibrated ? 'Uncalibrated' : 'Calibrated');
+/** The tracker itself: silent, or its GPS stopped. */
+function tracker(r) {
+  if (r.trackerSilent) return NOT_WORKING;
+  return channel(r, 'gps');
+}
 
-export const HEADS = ['Plate', 'Unit', 'Fuel probe', 'Probe last worked', 'Last reading (L)', 'Fuel sensor'];
+/** The fuel probe. A sensor with no calibration table is a Wialon record to
+ *  finish, not a fault in the hardware, so it is Not set up. */
+function fuelProbe(r) {
+  if (r.trackerSilent) return NO_DATA;
+  const st = r.fuelProbe?.state;
+  if (st === 'DIED' || st === 'SILENT') return NOT_WORKING;
+  if (st === 'OK') return WORKING;
+  if (r.fuelSensor?.uncalibrated) return NOT_SET_UP;
+  if (st === 'NOT_FITTED') return NOT_FITTED;
+  return NO_DATA;
+}
 
-export const rowCells = (r) => [
-  r.plate || r.name || '',
-  r.deviceId ?? '',
-  PROBE_STATE_LABEL[r.fuelProbe?.state] ?? r.fuelProbe?.state ?? '',
-  stamp(r.fuelProbe?.lastAliveAt),
-  r.fuelProbe?.lastValueMl == null ? '' : (r.fuelProbe.lastValueMl / 1000).toFixed(1),
-  sensorWord(r.fuelSensor),
+export const PARTS = [
+  { label: 'GPS tracker', read: tracker },
+  { label: 'Ignition', read: (r) => channel(r, 'ignition') },
+  { label: 'Odometer', read: (r) => channel(r, 'odometer') },
+  { label: 'Fuel probe', read: fuelProbe },
 ];
+
+export const HEADS = ['Plate', 'Unit', ...PARTS.map((p) => p.label)];
+
+export const rowCells = (r) => [r.plate || r.name || '', r.deviceId ?? '', ...PARTS.map((p) => p.read(r))];
+
+/** What the words mean, under the table. */
+export const KEY = 'Not working: the part has stopped and needs a technician. No data: the tracker is silent, so the part cannot be judged. '
+  + 'Not set up: the fuel sensor has no calibration table in Wialon. Not fitted: the unit has no such part.';
 
 /** The overview figures, for the rows in the report (not the fleet). */
 export function summary(rows) {
-  const count = (f) => rows.filter(f).length;
+  const down = (p) => rows.filter((r) => p.read(r) === NOT_WORKING).length;
   return [
     { label: 'Units in report', value: rows.length },
-    { label: 'Tracker silent', value: count((r) => r.trackerSilent) },
-    { label: 'Stopped reading', value: count((r) => r.fuelProbe?.state === 'DIED') },
-    { label: 'Reads empty', value: count((r) => r.fuelProbe?.state === 'SILENT') },
-    { label: 'Uncalibrated', value: count((r) => r.fuelSensor?.uncalibrated) },
-    { label: 'Working', value: count((r) => r.fuelProbe?.state === 'OK' && !r.trackerSilent) },
+    ...PARTS.map((p) => ({ label: `${p.label} not working`, value: down(p), flag: down(p) > 0 })),
+    { label: 'All working', value: rows.filter((r) => PARTS.every((p) => p.read(r) !== NOT_WORKING)).length },
   ];
 }
 
