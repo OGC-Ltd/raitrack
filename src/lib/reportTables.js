@@ -61,11 +61,16 @@ function consumption(r, ctx) {
 const n = (x) => (Number.isFinite(x) ? x.toLocaleString('en-GB') : '-');
 
 /**
- * The Driver Conduct Report's Follow-up (its column and its section), taken
- * off (operator, 5 Nov 2026: "let's remove the pending pending things"; both).
- * The cases are still kept; true puts them back on the report.
+ * The Driver Conduct Report's Follow-up section (Pending cases, Actions taken etc.).
+ * Restored (operator, 9 Nov 2026: "restore back the pending things and feedback").
  */
-export const SHOW_FOLLOW_UP = false;
+export const SHOW_FOLLOW_UP = true;
+
+/**
+ * The Follow-up column in the main vehicles table (Overdue / Pending / No case / Action taken badges).
+ * Restored (operator, 9 Nov 2026: show inline on each row; pending cases page removed).
+ */
+export const SHOW_FOLLOW_UP_COLUMN = true;
 
 export const REPORTS = {
   behaviour: {
@@ -79,16 +84,16 @@ export const REPORTS = {
     maxDays: 7,
     /** The dashcam keeps its alarms 7 days, so a period must start within them. */
     reachDays: 7,
-    columns: () => ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'Harsh cornering', 'No seatbelt', 'On phone', 'Camera covered', 'Total', ...(SHOW_FOLLOW_UP ? ['Follow-up'] : [])],
+    columns: () => ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'Harsh cornering', 'No seatbelt', 'On phone', 'Camera covered', 'Total', ...(SHOW_FOLLOW_UP_COLUMN ? ['Follow-up'] : [])],
     /** Columns of words after the figures: left-aligned. */
-    text: SHOW_FOLLOW_UP ? ['Follow-up'] : [],
+    text: SHOW_FOLLOW_UP_COLUMN ? ['Follow-up'] : [],
     cells: (r, ctx) => {
       // A unit without a dashcam cannot report these itself: a dash, not a
       // zero, unless an operator logged one.
       const cam = (k) => (r.dashcam || r.manual?.[k] ? String(r[k]) : '–');
       return [vehicleCell(r) + (r.suspect ? ' (check sensor)' : ''), typeOf(r), clean(r.driver),
         String(r.accel), String(r.brake), String(r.corner ?? 0), cam('seatbelt'), cam('phone'), cam('covered'), String(r.total),
-        ...(SHOW_FOLLOW_UP ? [statusWord(ctx?.followUp?.get(r.unit.key), ctx?.now)] : [])];
+        ...(SHOW_FOLLOW_UP_COLUMN ? [statusWord(ctx?.followUp?.get(r.unit.key), ctx?.now)] : [])];
     },
     sum: (r) => r.total,
     sumWords: (t) => `${n(t)} incident${t === 1 ? '' : 's'}`,

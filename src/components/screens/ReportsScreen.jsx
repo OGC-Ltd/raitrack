@@ -56,6 +56,9 @@ import GeofenceReport from './GeofenceReport';
 import DeliveriesReport from './DeliveriesReport';
 import ChoicePicker from './ChoicePicker';
 import TatFuelReport from './TatFuelReport';
+import AlarmDistributionReport from './AlarmDistributionReport';
+import UnauthorizedPassengersReport from './UnauthorizedPassengersReport';
+import FuelConsumptionRateReport from './FuelConsumptionRateReport';
 import RecoveryReport from './RecoveryReport';
 import SpeedReport from './SpeedReport';
 import ProbeReport from './ProbeReport';
@@ -73,7 +76,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -696,9 +699,9 @@ function TypePicker({ types, picked, counts, onChange }) {
  * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
  * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant }) {
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, whoAmI }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant) return <MovementsReport orgId={orgId} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -709,6 +712,9 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
     speed && { key: 'speed', label: 'Speed Report' },
     probes && { key: 'probes', label: 'Probe Disconnection' },
     dormant && { key: 'dormant', label: 'Dormant Assets' },
+    alarmDist && { key: 'alarmDist', label: 'Alarm Distribution' },
+    unauthorizedPassengers && { key: 'unauthorizedPassengers', label: 'Unauthorized Passengers' },
+    fuelConsumption && { key: 'fuelConsumption', label: 'Fuel Consumption Rate' },
   ].filter(Boolean);
   return (
     <>
@@ -759,6 +765,21 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
       {dormant && (
       <div className="mvt-panel" role="tabpanel" id="mvt-dormant-panel" aria-labelledby="mvt-dormant" hidden={tab !== 'dormant'}>
         <OfflineReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'dormant'} />
+      </div>
+      )}
+      {alarmDist && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-alarmDist-panel" aria-labelledby="mvt-alarmDist" hidden={tab !== 'alarmDist'}>
+        <AlarmDistributionReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'alarmDist'} />
+      </div>
+      )}
+      {unauthorizedPassengers && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-unauthorizedPassengers-panel" aria-labelledby="mvt-unauthorizedPassengers" hidden={tab !== 'unauthorizedPassengers'}>
+        <UnauthorizedPassengersReport orgId={orgId} orgCode={orgCode} vehicles={vehicles} companyName={companyName} whoAmI={whoAmI} active={tab === 'unauthorizedPassengers'} />
+      </div>
+      )}
+      {fuelConsumption && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-fuelConsumption-panel" aria-labelledby="mvt-fuelConsumption" hidden={tab !== 'fuelConsumption'}>
+        <FuelConsumptionRateReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'fuelConsumption'} />
       </div>
       )}
     </>
@@ -1298,6 +1319,31 @@ export default function ReportsScreen() {
   // Incidents operators logged by hand (lib/operatorLog), kept in this browser.
   const me = useAuth().user;
   const by = me?.name || me?.email || '';
+
+  // ── Local "by" store ────────────────────────────────────────────────────────
+  // The server ignores the `by` field sent in the action payload and always
+  // stores the signed-in user's name instead. Until the server is updated we
+  // keep the operator-typed name in localStorage and merge it back in.
+  const byKey = orgId ? `ft-followup-by:${orgId}` : null;
+  const readByStore = () => {
+    if (!byKey) return {};
+    try { return JSON.parse(localStorage.getItem(byKey) ?? '{}'); } catch { return {}; }
+  };
+  const writeBy = (caseId, name) => {
+    if (!byKey) return;
+    try {
+      const m = readByStore();
+      if (name) m[caseId] = name; else delete m[caseId];
+      localStorage.setItem(byKey, JSON.stringify(m));
+    } catch { /* best-effort */ }
+  };
+  const mergeBy = (list) => {
+    const m = readByStore();
+    if (!Object.keys(m).length) return list;
+    return list.map((c) => (m[c.id] !== undefined ? { ...c, by: m[c.id] } : c));
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   // The follow-up cases and the incidents operators logged, on the server
   // (api/driverConduct) so every machine sees the same; what this browser
   // kept before is moved there first (lib/conductMove). Read again when the
@@ -1313,7 +1359,7 @@ export default function ReportsScreen() {
     if (!orgId) { setEntries([]); setCases([]); return undefined; }
     let live = true;
     const read = () => Promise.all([conductApi.listCases(orgId), conductApi.listIncidents(orgId)])
-      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setStoreError(null); } })
+      .then(([c, e]) => { if (live) { setCases(mergeBy(c)); setEntries(e); setStoreError(null); } })
       .catch((err) => { if (live) failed('The follow-up could not be read')(err); });
     moveBrowserFollowUp(orgId).catch((err) => { if (live) failed('What this browser kept could not be moved to the server; it is kept here and tried again next time')(err); })
       .finally(read);
@@ -1335,10 +1381,14 @@ export default function ReportsScreen() {
     conductApi.importIncidents(orgId, list).then((r) => setEntries(r.entries)).catch(failed('The incidents could not be imported'));
   };
   const importCaseList = (list) => {
-    conductApi.importCases(orgId, list).then((r) => setCases(r.cases)).catch(failed('The follow-up could not be imported'));
+    conductApi.importCases(orgId, list).then((r) => setCases(mergeBy(r.cases))).catch(failed('The follow-up could not be imported'));
   };
   const saveAction = (id, a) => {
-    conductApi.recordAction(orgId, id, a).then((c) => setCases((l) => l.map((x) => (x.id === c.id ? c : x)))).catch(failed('The action could not be saved'));
+    // Save the operator-typed name locally — the server ignores `by` in the payload.
+    writeBy(id, a.by ?? '');
+    conductApi.recordAction(orgId, id, a)
+      .then((c) => setCases((l) => l.map((x) => (x.id === c.id ? { ...c, by: a.by ?? '' } : x))))
+      .catch(failed('The action could not be saved'));
   };
 
   // A different organisation starts over: its groups and units differ.
@@ -1588,7 +1638,7 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
@@ -1796,7 +1846,7 @@ export default function ReportsScreen() {
       </>)}
 
       {actingCase && (
-        <ActionDialog key={actingCase.id} kase={actingCase} by={by} onClose={() => setActing(null)}
+        <ActionDialog key={actingCase.id} kase={actingCase} onClose={() => setActing(null)}
                       onSave={(a) => { saveAction(actingCase.id, a); setActing(null); }} />
       )}
       {dialog && (

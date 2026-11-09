@@ -63,6 +63,18 @@ export const hasSpeedTab = (can, orgCode) => can('telemetry:read') && templateFo
  */
 export const hasProbeTab = (can, orgCode) => can('telemetry:read') && templateFor('probeReport', orgCode) != null;
 
+/** Does Movements carry an AI Alarm Distribution tab? Shown for orgs with VSS cameras (vss:alarms). */
+export const hasAlarmDistTab = (can) => can('vss:alarms');
+
+/** Does Movements carry an Unauthorized Passengers tab? Shown for any org with telemetry access. */
+export const hasUnauthorizedPassengersTab = (can) => can('telemetry:read');
+
+/**
+ * Does Movements carry a Fuel Consumption Rate tab (per-vehicle fuel
+ * efficiency over a custom date range)? Menengai only (operator, Nov 2026).
+ */
+export const hasFuelConsumptionTab = (can, orgCode) => can('telemetry:read') && templateFor('fuelConsumption', orgCode) != null;
+
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));

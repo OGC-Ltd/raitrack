@@ -98,7 +98,7 @@ export function flaggedUnits(vehicles, { authorised = [], noGo = [], now = Date.
       out.push({ ...base, key: `${v.vehicleId}|stop|${since}`, kind: 'unauthorised', zone: null });
     }
   }
-  return out.sort((a, b) => a.since - b.since);
+  return out.sort((a, b) => b.since - a.since); // most recent first
 }
 
 /** "2 h 05 min", "12 min". */

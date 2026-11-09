@@ -1,0 +1,76 @@
+/* Fuel Consumption Rate Report ──────────────────────────────────────────────
+ * Table layout and cell colours for the per-vehicle fuel consumption report.
+ * KPI strip uses existing sp4-kpi / sp4-kpi-n / sp4-kpi-l tokens.
+ */
+
+/* ── KPI strip: five tiles, wrap gracefully on narrow screens ───────────── */
+.frp-page .sp4-header-kpis { flex-wrap: wrap; }
+.frp-page .sp4-kpi { flex: 1 0 calc(20% - 1px); }
+
+@media (max-width: 700px) {
+  .frp-page .sp4-kpi { flex: 1 0 calc(33.333% - 1px); }
+}
+
+/* ── Table layout ───────────────────────────────────────────────────────── */
+.fcr-table { table-layout: fixed; width: 100%; min-width: 860px; }
+
+/* Registration – wider, left-aligned */
+.fcr-reg {
+  text-align: left;
+  width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Numeric columns – right-aligned */
+.fcr-num {
+  text-align: right;
+  width: 80px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Comment – flexible width, left-aligned, wraps */
+.fcr-comment {
+  text-align: left;
+  width: 0; /* takes the rest */
+  min-width: 80px;
+  word-break: break-word;
+}
+
+/* ── Vehicle name in body rows ──────────────────────────────────────────── */
+.fcr-plate {
+  font-weight: 500;
+  color: var(--sp4-text-1);
+}
+
+/* ── Highlighted columns ────────────────────────────────────────────────── */
+/* Amount Consumed column */
+.fcr-consumed {
+  color: var(--sp4-text-1);
+  font-weight: 500;
+}
+
+/* Consumption Rate column – green when at/above target, amber when below */
+.fcr-rate { font-weight: 600; }
+.fcr-ok   { color: #16a34a; }
+.fcr-below { color: #d97706; }
+
+/* Zero / missing cells: muted, not blue */
+.fcr-zero {
+  color: var(--sp4-text-4, #6b7280);
+  opacity: 0.6;
+}
+
+/* ── Footer / totals row ────────────────────────────────────────────────── */
+.fcr-total-row td {
+  font-weight: 700;
+  border-top: 1px solid var(--sp4-line);
+  padding-top: 6px;
+}
+
+/* ── Narrow screen ──────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .fcr-num  { width: 64px; }
+  .fcr-reg  { width: 90px; }
+}

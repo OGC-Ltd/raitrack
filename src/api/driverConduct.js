@@ -29,8 +29,8 @@ export async function sendFound(orgId, cases) {
 }
 
 /** What was done on a case (the server records who and when); a null action reopens it. */
-export async function recordAction(orgId, caseId, { action, note }) {
-  const out = (await apiFetch(`${base(orgId)}/cases/${encodeURIComponent(caseId)}/action`, json('PUT', { action, note: note ?? '' }))).data;
+export async function recordAction(orgId, caseId, { action, note, by }) {
+  const out = (await apiFetch(`${base(orgId)}/cases/${encodeURIComponent(caseId)}/action`, json('PUT', { action, note: note ?? '', by: by ?? '' }))).data;
   changed();
   return out;
 }

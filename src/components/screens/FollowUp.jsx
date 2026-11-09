@@ -18,10 +18,15 @@ export function openFor(ms) {
 }
 
 /** Record what was done about one case, change it, or put it back to pending. */
-export function ActionDialog({ kase, by, onSave, onClose }) {
+export function ActionDialog({ kase, onSave, onClose }) {
   const titleId = useId();
   const [action, setAction] = useState(kase.action ?? null);
   const [note, setNote] = useState(kase.note ?? '');
+  // "by" here is who PROVIDED the feedback (e.g. "Site Manager"), typed by the operator.
+  // Don't pre-fill from kase.by — old records have "Administrator" there from an earlier version.
+  // The operator types a fresh name every time they record or update an action.
+  const isSystemBy = (v) => !v || v === 'Administrator' || v.includes('@');
+  const [feedbackBy, setFeedbackBy] = useState(isSystemBy(kase.by) ? '' : (kase.by ?? ''));
   const [tried, setTried] = useState(false);
   const first = useRef(null);
   useEffect(() => { first.current?.focus(); }, []);
@@ -35,7 +40,7 @@ export function ActionDialog({ kase, by, onSave, onClose }) {
     e.preventDefault();
     setTried(true);
     if (!action) return;
-    onSave({ action, note, by: by || kase.by || '' });
+    onSave({ action, note, by: feedbackBy.trim() });
   };
 
   return (
@@ -53,7 +58,7 @@ export function ActionDialog({ kase, by, onSave, onClose }) {
             <div><dt>Day</dt><dd>{fmtDay.format(Date.parse(`${kase.day}T12:00:00+03:00`))}</dd></div>
             <div><dt>Driver</dt><dd>{kase.driver || 'Not recorded'}</dd></div>
             <div><dt>Incidents</dt><dd>{incidentWords(kase)}</dd></div>
-            {kase.status === 'done' && <div><dt>Recorded</dt><dd>{kase.by || 'Operator'}, {fmtAt.format(kase.actedAt)}</dd></div>}
+            {kase.status === 'done' && <div><dt>Recorded</dt><dd>{fmtAt.format(kase.actedAt)}</dd></div>}
           </dl>
 
           <div className="oi-field">
@@ -72,7 +77,11 @@ export function ActionDialog({ kase, by, onSave, onClose }) {
                       placeholder="What was said or done, e.g. called at 11:40, driver says the belt buckle is faulty" />
           </label>
 
-          <p className="oi-by">Recorded by <b>{by || 'this operator'}</b></p>
+          <label className="oi-field">
+            <span className="oi-label">Feedback provided by</span>
+            <input className="sp4-input" type="text" maxLength={200} value={feedbackBy} onChange={(e) => setFeedbackBy(e.target.value)}
+                   placeholder="Name of person who provided the feedback, e.g. Site Manager" />
+          </label>
         </div>
 
         <div className="sp4-modal-foot">

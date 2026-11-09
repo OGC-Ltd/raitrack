@@ -14,15 +14,16 @@
 export const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /**
- * A list table. `cols` = [{ h, w, r? }] (w in mm or %, r = right-aligned);
+ * A list table. `cols` = [{ h, w, r?, c? }] (w in mm or %, r = right-aligned, c = centred);
  * each row an array of cell HTML, already escaped.
  */
 export function table(cols, rows) {
   const cg = cols.map((c) => `<col style="width:${c.w}">`).join('');
-  const th = cols.map((c) => `<th class="${c.r ? 'r' : ''}">${c.h}</th>`).join('');
+  const th = cols.map((c) => `<th class="${c.r ? 'r' : c.c ? 'c' : ''}">${c.h}</th>`).join('');
   const tr = rows.map((r) => `<tr>${r.map((v, i) => {
     const cell = typeof v === 'object' && v ? v : { html: v };
-    return `<td class="${cols[i]?.r ? 'r ' : ''}${cell.cls ?? ''}"${cell.style ? ` style="${cell.style}"` : ''}>${cell.html ?? ''}</td>`;
+    const align = cols[i]?.r ? 'r ' : cols[i]?.c ? 'c ' : '';
+    return `<td class="${align}${cell.cls ?? ''}"${cell.style ? ` style="${cell.style}"` : ''}>${cell.html ?? ''}</td>`;
   }).join('')}</tr>`).join('');
   return `<table class="lst"><colgroup>${cg}</colgroup><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
 }
@@ -59,10 +60,10 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .cells td { border:.6pt solid var(--rule); padding:1mm 1.6mm 1.1mm; font-weight:700; font-size:9.4pt; vertical-align:top }
 .cells td span { display:block; font-weight:400; font-size:7pt; color:var(--mut) }
 .lst { table-layout:fixed }
-.lst th { text-align:left; font-weight:700; font-size:7.6pt; color:var(--mut); border-bottom:.6pt solid var(--rule); padding:.6mm 1.4mm; overflow:hidden; white-space:nowrap }
-.lst td { padding:.6mm 1.4mm; border-bottom:.4pt solid var(--soft); vertical-align:top; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.lst th { text-align:left; font-weight:700; font-size:7.6pt; color:var(--mut); border-bottom:.6pt solid var(--rule); padding:.6mm 1.4mm }
+.lst td { padding:.6mm 1.4mm; border-bottom:.4pt solid var(--soft); vertical-align:top }
 .lst tbody tr:last-child td { border-bottom:.6pt solid var(--rule) }
-.lst .r { text-align:right } .lst td:first-child, .lst th:first-child { padding-left:0 }
+.lst .r { text-align:right } .lst .c { text-align:center } .lst td:first-child, .lst th:first-child { padding-left:0 }
 .lst td.b { font-weight:700 } .lst td.m { color:var(--mut) } .lst td.wrap { white-space:normal }
 .lst tr.sum td { font-weight:700; border-top:.6pt solid var(--ink) }
 .lst.grid th, .lst.grid td { padding-left:.6mm; padding-right:.6mm }

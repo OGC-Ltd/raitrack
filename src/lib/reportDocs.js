@@ -513,7 +513,7 @@ function tableOf(el, inner) {
     // Scaled only when they would not fit; a report with room keeps its own widths
     cols: roomForHeads(widths.map((w, i) => ({
       w: used > inner ? Math.round(((w * inner) / used) * 10) / 10 : w,
-      ...(heads[i]?.classList.contains('r') ? { align: 'right' } : {}),
+      ...(heads[i]?.classList.contains('r') ? { align: 'right' } : heads[i]?.classList.contains('c') ? { align: 'center' } : {}),
       ...(wraps.has(i) ? { wrap: true } : {}),
     })), head),
     head,
@@ -551,6 +551,213 @@ export function flowBlocks(flow, inner, parse) {
     }
   }
   return blocks;
+}
+
+/** AI Alarm Distribution Report — per-vehicle breakdown of dashcam alarm types. */
+export function alarmDistDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
+  const several = from !== to;
+  const period = several ? `${from} – ${to}` : from;
+  const totalAlarms = rows.reduce((s, r) => s + r.total, 0);
+  const ALARM_COLS = [
+    { key: 'fatigue',    label: 'Fatigue Driving' },
+    { key: 'phone',      label: 'Phone Call' },
+    { key: 'smoking',    label: 'Smoking' },
+    { key: 'covered',    label: 'Camera Covered' },
+    { key: 'distracted', label: 'Distracted Driving' },
+    { key: 'seatbelt',   label: 'No Seat Belt' },
+    { key: 'other',      label: 'Other' },
+  ];
+  // Widths: device name wide, then 8 numeric columns equal
+  const NUM_COLS = ALARM_COLS.length + 1; // Total + each alarm type
+  const nameW = 46;
+  const numW = Math.round((LANDSCAPE_MM - nameW) / NUM_COLS * 10) / 10;
+  const cols = [
+    { w: nameW, wrap: true },
+    ...Array(NUM_COLS).fill({ w: numW, align: 'right' }),
+  ];
+  const head = ['Device Name', 'Total', ...ALARM_COLS.map((c) => c.label)];
+  const tableRows = rows.map((r) => [
+    textCell(r.plate, true),
+    textCell(fmt(r.total)),
+    ...ALARM_COLS.map((c) => textCell(fmt(r[c.key] ?? 0))),
+  ]);
+  // Footer totals row
+  tableRows.push([
+    { text: 'Total', bold: true },
+    { text: fmt(totalAlarms), bold: true },
+    ...ALARM_COLS.map((c) => ({ text: fmt(rows.reduce((s, r) => s + (r[c.key] ?? 0), 0)), bold: true })),
+  ]);
+  const blocks = [
+    { kind: 'h2', title: '1. Overview', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Vehicles', value: fmt(rows.length) },
+      { label: 'Total Alarms', value: fmt(totalAlarms) },
+      ...ALARM_COLS.slice(0, 4).map((c) => ({ label: c.label, value: fmt(rows.reduce((s, r) => s + (r[c.key] ?? 0), 0)) })),
+    ]},
+    { kind: 'h2', title: '2. By vehicle', aside: plural(rows.length, 'vehicle') },
+    { kind: 'table', cols, head, size: 7.5, rows: tableRows },
+    { kind: 'note', text: CONTACT_LINE },
+  ];
+  return {
+    title: 'AI ALARM DISTRIBUTION REPORT',
+    docName: `AI Alarm Distribution Report ${fleet}`,
+    filename: `AI Alarm Distribution Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('AD', orgCode, now),
+    date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', period], ['Vehicles', fmt(rows.length)], ['Total Alarms', fmt(totalAlarms)]]),
+    blocks,
+    footer: `${fleet} · AI Alarm Distribution · ${period}`,
+    landscape: true,
+  };
+}
+
+/** Unauthorized Passengers Report — portrait, one row per logged incident. */
+export function uprDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
+  const several = from !== to;
+  const period = several ? `${from} – ${to}` : from;
+  const fmtAt = (ms) => {
+    if (!ms) return '—';
+    const d = new Date(ms + OFFSET);
+    const s = d.toISOString();
+    return `${s.slice(8,10)}/${s.slice(5,7)}/${s.slice(0,4)} ${s.slice(11,16)}`;
+  };
+  const cols = [
+    { w: 32 },
+    { w: 42, wrap: true },
+    { w: 36 },
+    { w: 60, wrap: true },
+    { w: 24 },
+  ];
+  const head = ['Registration', 'Client / Location', 'Time of Event', 'Violation', 'Shared'];
+  const tableRows = rows.map((r) => [
+    textCell(r.plate || '—'),
+    textCell(r.location || fleet || '—', false),
+    textCell(fmtAt(r.at)),
+    textCell('Unauthorized Passengers'),
+    textCell(r._shared ? 'Shared ✓' : '—'),
+  ]);
+  const blocks = [
+    { kind: 'h2', title: '1. Summary', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Incidents', value: fmt(rows.length) },
+      { label: 'Fleet', value: fleet || '—' },
+    ]},
+    { kind: 'h2', title: '2. Incidents', aside: plural(rows.length, 'incident') },
+    { kind: 'table', cols, head, size: 8, rows: tableRows },
+    { kind: 'note', text: CONTACT_LINE },
+  ];
+  return {
+    title: 'UNAUTHORIZED PASSENGERS REPORT',
+    docName: `Unauthorized Passengers Report ${fleet}`,
+    filename: `Unauthorized Passengers Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('UP', orgCode, now),
+    date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', period], ['Incidents', fmt(rows.length)]]),
+    blocks,
+    footer: `${fleet} · Unauthorized Passengers · ${period}`,
+    landscape: false,
+  };
+}
+
+/** Fuel Consumption Rate Report — per-vehicle efficiency over a date range. */
+export function fcrDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
+  const several = from !== to;
+  const period = several ? `${from} – ${to}` : from;
+  const totalKm = rows.reduce((s, r) => s + (r.km || 0), 0);
+  const totalFilled = rows.reduce((s, r) => s + (r.filled || 0), 0);
+  const totalConsumed = rows.reduce((s, r) => {
+    const c = (r.initial || 0) + (r.filled || 0) - (r.final || 0);
+    return s + c;
+  }, 0);
+  const fleetRate = totalConsumed > 0 ? totalKm / totalConsumed : null;
+
+  const L = (n) => (n == null || isNaN(n) ? '—' : Number(n).toFixed(1));
+  const K = (n) => (n == null || isNaN(n) ? '—' : Number(n).toFixed(1));
+  const R = (n) => (n == null || isNaN(n) ? '—' : Number(n).toFixed(2));
+
+  const VEHICLE_RATES = {
+    'KCA 917P': 1.789, 'KCN 909F': 2.167, 'KBG 389E': 3.78,
+    'KDM 138L': 5.861, 'KDE 142E': 6.183, 'KCA 223M': 1.991,
+    'KBT 112R': 1.716, 'KCT 358W': 4.533, 'KAX 536U': 5.4,
+    'KDA 258J': 4.7,   'KBZ 911V': 3.933,
+  };
+  const normP = (p) => String(p ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const targetRate = (plate) => {
+    const key = normP(plate);
+    const entry = Object.entries(VEHICLE_RATES).find(([k]) => normP(k) === key);
+    return entry ? entry[1].toFixed(2) : '—';
+  };
+
+  const nameW = 38;
+  const totalW = LANDSCAPE_MM;
+  const numW = Math.round((totalW - nameW - 50) / 7 * 10) / 10;
+  const cols = [
+    { w: nameW, wrap: true },
+    { w: numW, align: 'right' },
+    { w: numW, align: 'right' },
+    { w: numW, align: 'right' },
+    { w: numW, align: 'right' },
+    { w: numW, align: 'right' },
+    { w: numW, align: 'right' },
+    { w: numW, align: 'right' },
+    { w: 50, wrap: true },
+  ];
+  const head = [
+    'Registration', 'Target (km/L)', 'Distance (km)',
+    'Initial (L)', 'Filled (L)', 'Final (L)',
+    'Consumed (L)', 'Rate (km/L)', 'Comment',
+  ];
+  const tableRows = rows.map((r) => {
+    const c = (r.initial || 0) + (r.filled || 0) - (r.final || 0);
+    const cr = c > 0 && r.km > 0 ? r.km / c : null;
+    return [
+      textCell(r.plate, true),
+      textCell(targetRate(r.plate)),
+      textCell(K(r.km)),
+      textCell(L(r.initial)),
+      textCell(L(r.filled)),
+      textCell(L(r.final)),
+      textCell(L(c)),
+      textCell(R(cr)),
+      textCell(r.comment || '—'),
+    ];
+  });
+  // Footer totals row
+  tableRows.push([
+    { text: 'Total / Fleet', bold: true },
+    { text: '—' },
+    { text: K(totalKm), bold: true },
+    { text: '—' },
+    { text: L(totalFilled), bold: true },
+    { text: '—' },
+    { text: L(totalConsumed), bold: true },
+    { text: R(fleetRate), bold: true },
+    { text: '' },
+  ]);
+  const blocks = [
+    { kind: 'h2', title: '1. Overview', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Vehicles', value: fmt(rows.length) },
+      { label: 'Total distance, km', value: K(totalKm) },
+      { label: 'Fuel filled, L', value: L(totalFilled) },
+      { label: 'Fuel consumed, L', value: L(totalConsumed) },
+      { label: 'Fleet rate, km/L', value: R(fleetRate) },
+    ]},
+    { kind: 'h2', title: '2. By vehicle', aside: plural(rows.length, 'vehicle') },
+    { kind: 'table', cols, head, size: 7.5, rows: tableRows },
+    { kind: 'note', text: CONTACT_LINE },
+  ];
+  return {
+    title: 'FUEL CONSUMPTION RATE REPORT',
+    docName: `Fuel Consumption Rate Report ${fleet}`,
+    filename: `Fuel Consumption Rate Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('FC', orgCode, now),
+    date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', period], ['Vehicles', fmt(rows.length)], ['Fleet rate', R(fleetRate) + ' km/L']]),
+    blocks,
+    footer: `${fleet} · Fuel Consumption Rate · ${period}`,
+    landscape: true,
+  };
 }
 
 const browserParse = (html) => new DOMParser().parseFromString(`<!doctype html><body>${html}`, 'text/html').body;
