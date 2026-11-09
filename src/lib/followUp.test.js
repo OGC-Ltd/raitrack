@@ -61,13 +61,13 @@ describe('following up', () => {
     expect(recordAction(again, again[0].id, { action: null })[0]).toMatchObject({ status: 'pending', action: null, by: '' });
   });
 
-  it('overdue after a day, and the word the report shows', () => {
+  it('overdue after a day; the report says Pending however long (operator, 9 Nov 2026)', () => {
     const [c] = mergeCases([], base);
     expect(isOverdue(c, c.openedAt + 23 * HOUR)).toBe(false);
     expect(isOverdue(c, c.openedAt + 25 * HOUR)).toBe(true);
     expect(statusWord([], 0)).toBe('No case');
     expect(statusWord([c], c.openedAt + HOUR)).toBe('Pending');
-    expect(statusWord([c], c.openedAt + 25 * HOUR)).toBe('Overdue');
+    expect(statusWord([c], c.openedAt + 25 * HOUR)).toBe('Pending');
     expect(statusWord([{ ...c, status: 'done' }], c.openedAt + 25 * HOUR)).toBe('Action taken');
   });
 
@@ -108,7 +108,7 @@ describe('storage', () => {
 
 describe('the PDF', () => {
   // Follow-up is off the report for now (operator, 5 Nov 2026: "remove the pending pending things"; reportTables SHOW_FOLLOW_UP)
-  it('leaves the follow-up column, the summary and the pending list off the PDF', () => {
+  it('puts the follow-up on the PDF, with who gave the feedback, not who recorded it (9 Nov 2026)', () => {
     const now = at('2026-11-02T12:00:00');
     const found = casesFromRun(units, [], [alarm('v1', '2026-11-01T10:00:00', 116)], twoDays);
     const cases = mergeCases([], found);
@@ -117,10 +117,15 @@ describe('the PDF', () => {
     const done = { rows, secs: [{ name: 'Van Sales', rows, total: 1 }], missing: [], units: 2, failed: 0,
       ctx: { ...twoDays, followUp, cases, allCases: cases, now } };
     const { html } = reportHtml(REPORTS.behaviour, done, { companyName: 'Menengai', orgCode: 'MENENGAI', groupWords: 'All groups', periodWords: 'p', logos: { rai: '', ogc: '' }, now });
-    expect(html).not.toContain('Follow-up');
-    expect(html).not.toContain('case actioned');
+    expect(html).toContain('Follow-up');
     expect(html).not.toContain('Pending cases');
     expect(html).not.toContain('Overdue');
+    const acted = cases.map((c) => ({ ...c, status: 'done', action: 'Driver called', note: 'Belt fixed', by: 'Ann Operator', feedbackBy: 'Site Manager', actedAt: now }));
+    const again = reportHtml(REPORTS.behaviour, { ...done, ctx: { ...done.ctx, cases: acted, allCases: acted, followUp: new Map([[units[0].key, acted]]) } },
+      { companyName: 'Menengai', orgCode: 'MENENGAI', groupWords: 'All groups', periodWords: 'p', logos: { rai: '', ogc: '' }, now }).html;
+    expect(again).toContain('Feedback received');
+    expect(again).toContain('Site Manager');
+    expect(again).not.toContain('Ann Operator');
   });
 });
 

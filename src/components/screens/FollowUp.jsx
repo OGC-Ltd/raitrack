@@ -22,11 +22,9 @@ export function ActionDialog({ kase, onSave, onClose }) {
   const titleId = useId();
   const [action, setAction] = useState(kase.action ?? null);
   const [note, setNote] = useState(kase.note ?? '');
-  // "by" here is who PROVIDED the feedback (e.g. "Site Manager"), typed by the operator.
-  // Don't pre-fill from kase.by — old records have "Administrator" there from an earlier version.
-  // The operator types a fresh name every time they record or update an action.
-  const isSystemBy = (v) => !v || v === 'Administrator' || v.includes('@');
-  const [feedbackBy, setFeedbackBy] = useState(isSystemBy(kase.by) ? '' : (kase.by ?? ''));
+  // Who gave the feedback (a site manager, the driver), as the operator types it.
+  // The server keeps it apart from who recorded the action (kase.by).
+  const [feedbackBy, setFeedbackBy] = useState(kase.feedbackBy ?? '');
   const [tried, setTried] = useState(false);
   const first = useRef(null);
   useEffect(() => { first.current?.focus(); }, []);
@@ -40,7 +38,7 @@ export function ActionDialog({ kase, onSave, onClose }) {
     e.preventDefault();
     setTried(true);
     if (!action) return;
-    onSave({ action, note, by: feedbackBy.trim() });
+    onSave({ action, note, feedbackBy: feedbackBy.trim() });
   };
 
   return (
@@ -58,7 +56,7 @@ export function ActionDialog({ kase, onSave, onClose }) {
             <div><dt>Day</dt><dd>{fmtDay.format(Date.parse(`${kase.day}T12:00:00+03:00`))}</dd></div>
             <div><dt>Driver</dt><dd>{kase.driver || 'Not recorded'}</dd></div>
             <div><dt>Incidents</dt><dd>{incidentWords(kase)}</dd></div>
-            {kase.status === 'done' && <div><dt>Recorded</dt><dd>{fmtAt.format(kase.actedAt)}</dd></div>}
+            {kase.status === 'done' && <div><dt>Recorded</dt><dd>{kase.by ? `${kase.by}, ` : ''}{fmtAt.format(kase.actedAt)}</dd></div>}
           </dl>
 
           <div className="oi-field">

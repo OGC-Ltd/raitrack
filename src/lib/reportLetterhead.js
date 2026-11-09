@@ -7,7 +7,7 @@
 
 import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
 import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN } from './reportTables';
-import { incidentWords, isOverdue, needsEscalation, ESCALATE_CASES, ESCALATE_DAYS } from './followUp';
+import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 
 const fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -63,7 +63,6 @@ function vehicleCell(r) {
   };
 }
 
-const fmtAt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 const fmtDayWords = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric' });
 
 /**
@@ -74,12 +73,10 @@ const fmtDayWords = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi
  */
 function followUpFlow(done, ctx, now, start, inner) {
   const cases = ctx.cases ?? [];
-  const all = ctx.allCases ?? cases;
   const out = [];
   let k = start;
   const actioned = cases.filter((c) => c.status === 'done');
   const pending = cases.filter((c) => c.status === 'pending').sort((a, b) => a.openedAt - b.openedAt);
-  const escalate = cases.filter((c) => needsEscalation(c, all));
   const words = `${actioned.length} of ${cases.length} case${cases.length === 1 ? '' : 's'} actioned`;
   const b = (s) => ({ html: esc(s), cls: 'b' });
   const w = (s) => ({ html: esc(s), cls: 'wrap' });
@@ -96,9 +93,6 @@ function followUpFlow(done, ctx, now, start, inner) {
   const recent = cases.filter((c) => c.status === 'done');
   if (recent.length) {
     const drivers = recent.some((c) => c.driver);
-    // Strip system-generated values ("Administrator", emails) — show dash instead (operator, 9 Nov 2026).
-    const isSystemBy = (v) => !v || v === 'Administrator' || v.includes('@');
-    const cleanBy = (v) => (isSystemBy(v) ? '-' : v);
     out.push(`<h2>${k++}. Feedback received <small>${esc(dayWords)}</small></h2>`);
     out.push(table([
       { h: 'Vehicle', w: '19mm' }, ...(drivers ? [{ h: 'Driver', w: '30mm' }] : []),
@@ -108,7 +102,8 @@ function followUpFlow(done, ctx, now, start, inner) {
       b(c.plate), ...(drivers ? [w(c.driver || '-')] : []),
       w(incidentWords(c)),
       w([c.action, c.note].filter(Boolean).join(' — ') || '-'),
-      w(cleanBy(c.by)),
+      // Who gave the feedback, as the operator typed it (not who recorded it).
+      w(c.feedbackBy || '-'),
     ])));
   }
   return { flow: out, next: k, words };

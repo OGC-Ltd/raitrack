@@ -128,7 +128,7 @@ export function needsEscalation(c, all) {
 }
 
 /** One word for a vehicle over a period: its worst open case, or how it stands. */
-export function statusWord(cases, now = Date.now()) {
+export function statusWord(cases) {
   if (!cases?.length) return 'No case';
   // Overdue removed (operator, 9 Nov 2026): all open cases show as Pending regardless of age.
   if (cases.some((c) => c.status === 'pending')) return 'Pending';

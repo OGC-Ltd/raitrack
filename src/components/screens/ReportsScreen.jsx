@@ -1320,30 +1320,6 @@ export default function ReportsScreen() {
   const me = useAuth().user;
   const by = me?.name || me?.email || '';
 
-  // ── Local "by" store ────────────────────────────────────────────────────────
-  // The server ignores the `by` field sent in the action payload and always
-  // stores the signed-in user's name instead. Until the server is updated we
-  // keep the operator-typed name in localStorage and merge it back in.
-  const byKey = orgId ? `ft-followup-by:${orgId}` : null;
-  const readByStore = () => {
-    if (!byKey) return {};
-    try { return JSON.parse(localStorage.getItem(byKey) ?? '{}'); } catch { return {}; }
-  };
-  const writeBy = (caseId, name) => {
-    if (!byKey) return;
-    try {
-      const m = readByStore();
-      if (name) m[caseId] = name; else delete m[caseId];
-      localStorage.setItem(byKey, JSON.stringify(m));
-    } catch { /* best-effort */ }
-  };
-  const mergeBy = (list) => {
-    const m = readByStore();
-    if (!Object.keys(m).length) return list;
-    return list.map((c) => (m[c.id] !== undefined ? { ...c, by: m[c.id] } : c));
-  };
-  // ────────────────────────────────────────────────────────────────────────────
-
   // The follow-up cases and the incidents operators logged, on the server
   // (api/driverConduct) so every machine sees the same; what this browser
   // kept before is moved there first (lib/conductMove). Read again when the
@@ -1359,7 +1335,7 @@ export default function ReportsScreen() {
     if (!orgId) { setEntries([]); setCases([]); return undefined; }
     let live = true;
     const read = () => Promise.all([conductApi.listCases(orgId), conductApi.listIncidents(orgId)])
-      .then(([c, e]) => { if (live) { setCases(mergeBy(c)); setEntries(e); setStoreError(null); } })
+      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setStoreError(null); } })
       .catch((err) => { if (live) failed('The follow-up could not be read')(err); });
     moveBrowserFollowUp(orgId).catch((err) => { if (live) failed('What this browser kept could not be moved to the server; it is kept here and tried again next time')(err); })
       .finally(read);
@@ -1381,13 +1357,11 @@ export default function ReportsScreen() {
     conductApi.importIncidents(orgId, list).then((r) => setEntries(r.entries)).catch(failed('The incidents could not be imported'));
   };
   const importCaseList = (list) => {
-    conductApi.importCases(orgId, list).then((r) => setCases(mergeBy(r.cases))).catch(failed('The follow-up could not be imported'));
+    conductApi.importCases(orgId, list).then((r) => setCases(r.cases)).catch(failed('The follow-up could not be imported'));
   };
   const saveAction = (id, a) => {
-    // Save the operator-typed name locally — the server ignores `by` in the payload.
-    writeBy(id, a.by ?? '');
     conductApi.recordAction(orgId, id, a)
-      .then((c) => setCases((l) => l.map((x) => (x.id === c.id ? { ...c, by: a.by ?? '' } : x))))
+      .then((c) => setCases((l) => l.map((x) => (x.id === c.id ? c : x))))
       .catch(failed('The action could not be saved'));
   };
 

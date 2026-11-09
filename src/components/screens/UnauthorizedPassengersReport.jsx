@@ -17,9 +17,9 @@
  *   CSV export of the filtered rows
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as conductApi from '../../api/driverConduct';
-import { makeReportDoc } from '../../api/reports';
+import { loadUnauthorizedPassengers, makeReportDoc } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { uprDoc } from '../../lib/reportDocs';
@@ -52,13 +52,9 @@ function fmtAt(ms) {
   return fmtTime.format(new Date(ms)).replace(',', '');
 }
 
+/** Today as a fleet day, YYYY-MM-DD in Nairobi, whatever the browser's own zone. */
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function localDayMs(dateStr) {
-  return new Date(`${dateStr}T00:00:00+03:00`).getTime();
+  return new Date(Date.now() + 3 * 3_600_000).toISOString().slice(0, 10);
 }
 
 // ── WhatsApp share ────────────────────────────────────────────────────────────
@@ -229,43 +225,35 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
   const [loading, setLoading]     = useState(false);
   const [error,   setError]       = useState(null);
   const [dialog,  setDialog]      = useState(null); // null | 'new' | { entry }
-  const [shared,  setShared]      = useState({}); // id → true (session-only flag)
   const [file,    setFile]        = useState({ busy: false, error: null });
-  const loadedRef = useRef(false);
 
   const fleet = companyName ?? orgCode ?? '';
 
-  // ── Load all incidents, filter client-side ──────────────────────────────────
+  // ── The period's incidents, from the server (reports/unauthorized-passengers) ─
+  const loadId = useRef(0);
   const load = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId || !from || !to) return;
+    const id = ++loadId.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await conductApi.listIncidents(orgId);
-      const entries = (Array.isArray(data?.incidents) ? data.incidents
-                    : Array.isArray(data)             ? data
-                    : []).map(clean).filter(Boolean);
-      setIncidents(entries.filter((e) => e.kind === KIND && e.other === VIOLATION));
+      const data = await loadUnauthorizedPassengers({ orgId, from, to: to < from ? from : to });
+      if (id === loadId.current) setIncidents(data?.incidents ?? []);
     } catch (err) {
-      setError(err?.message ?? String(err));
+      if (id === loadId.current) setError(err?.message ?? String(err));
     } finally {
-      setLoading(false);
+      if (id === loadId.current) setLoading(false);
     }
-  }, [orgId]);
+  }, [orgId, from, to]);
 
-  // Load once when the tab becomes active
+  // Read again whenever the tab is shown or the period changes.
   useEffect(() => {
-    if (active && orgId && !loadedRef.current) {
-      loadedRef.current = true;
-      load();
-    }
-  }, [active, orgId, load]);
+    if (active) load();
+  }, [active, load]);
 
-  // ── Filter rows by date ─────────────────────────────────────────────────────
-  const fromMs = from ? localDayMs(from) : 0;
-  const toMs   = to   ? localDayMs(to) + 86_400_000 : Infinity;
-  const rows   = incidents.filter((e) => e.at >= fromMs && e.at < toMs)
-                          .sort((a, b) => b.at - a.at);
+  // Newest first, as the server sends them.
+  const rows = incidents;
+  const isShared = (r) => r.sharedAt != null;
 
   // ── Save (new or edit) ──────────────────────────────────────────────────────
   const handleSave = async (data) => {
@@ -298,7 +286,10 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
   // ── Share on WhatsApp ───────────────────────────────────────────────────────
   const handleShare = (inc) => {
     shareOnWhatsApp(inc, companyName);
-    setShared((prev) => ({ ...prev, [inc.id]: true }));
+    // Kept on the server, so every machine and every export sees it was shared.
+    conductApi.setIncidentShared(orgId, inc.id, true)
+      .then((saved) => setIncidents((prev) => prev.map((e) => (e.id === saved.id ? { ...e, sharedAt: saved.sharedAt } : e))))
+      .catch((err) => setError(`Shared, but that could not be recorded: ${err?.message ?? err}`));
   };
 
   // ── CSV export ──────────────────────────────────────────────────────────────
@@ -306,13 +297,14 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
     const head = ['Registration', 'Driver', 'Client / Location', 'Time of Event', 'Violation', 'Details', 'Logged By', 'Shared on WhatsApp'];
     const data  = rows.map((r) => [
       r.plate, r.driver, r.location, fmtAt(r.at), VIOLATION, r.details,
-      r.by, shared[r.id] ? 'Shared' : 'Not shared',
+      r.by, isShared(r) ? `Shared ${fmtAt(r.sharedAt)}` : 'Not shared',
     ]);
     downloadTableCsv({ head, rows: data, filenameSlug: `unauthorized-passengers-${from}${to !== from ? `-to-${to}` : ''}` });
   };
 
   // ── PDF / JPEG export ────────────────────────────────────────────────────────
-  const pdfRows = rows.map((r) => ({ ...r, _shared: !!shared[r.id] }));
+  // Kept across renders: the editor resets whenever its rows change.
+  const pdfRows = useMemo(() => rows.map((r) => ({ ...r, _shared: r.sharedAt != null })), [rows]);
   const sheet = () => uprDoc(pdfRows, { from, to, fleet, orgCode });
   const editor = useReportEditor({ orgId, source: pdfRows, build: sheet });
   const makePdf = (landscape = false) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
@@ -362,14 +354,9 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
           {error}
         </EmptyNote>
       )}
-      {!error && !loading && incidents.length === 0 && (
-        <EmptyNote icon="ti-users-minus" title="No Incidents Logged">
-          No unauthorized passenger incidents have been logged yet. Use "Log incident" to add one.
-        </EmptyNote>
-      )}
-      {!error && !loading && incidents.length > 0 && rows.length === 0 && (
-        <EmptyNote icon="ti-calendar-off" title="No Incidents in This Period">
-          There are incidents logged outside this date range. Adjust the dates or refresh.
+      {!error && !loading && rows.length === 0 && (
+        <EmptyNote icon="ti-users-minus" title="No Incidents in This Period">
+          No unauthorized passenger incidents were logged in this period. Use &ldquo;Log incident&rdquo; to add one.
         </EmptyNote>
       )}
 
@@ -412,7 +399,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
             </thead>
             <tbody>
               {rows.map((r) => {
-                const wasShared = shared[r.id] ?? false;
+                const wasShared = isShared(r);
                 return (
                   <tr key={r.id} className="sp4-tr">
                     <td className="upr-plate">{r.plate || '—'}</td>
@@ -454,7 +441,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
               <tr className="upr-total-row">
                 <td colSpan={2}>{rows.length} incident{rows.length === 1 ? '' : 's'}</td>
                 <td colSpan={2} />
-                <td>{Object.keys(shared).filter((id) => rows.some((r) => r.id === id)).length} shared</td>
+                <td>{rows.filter(isShared).length} shared</td>
                 <td />
               </tr>
             </tfoot>

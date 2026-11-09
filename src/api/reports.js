@@ -64,6 +64,22 @@ export async function loadTatFuelReport({ orgId, day }) {
   return res.data
 }
 
+/**
+ * Reports worked out on the server over a range of fleet days, `from` and `to`
+ * as YYYY-MM-DD, both included (fleet-server reports/range-reports).
+ */
+async function rangeReport(path, { orgId, from, to }) {
+  if (!orgId) throw new Error('No organisation selected');
+  const q = new URLSearchParams({ from, to });
+  return (await apiFetch(`/api/v1/organisations/${orgId}/reports/${path}?${q}`)).data;
+}
+/** Per unit: distance, start and end tank, refills, theft, consumed, km/L and the target. */
+export const loadFuelConsumptionRate = (o) => rangeReport('fuel-consumption-rate', o);
+/** Dashcam alarms per unit by kind; `partial` when the dashcam server gave only part. */
+export const loadAlarmDistribution = (o) => rangeReport('alarm-distribution', o);
+/** The Unauthorized Passengers incidents, with when each was shared. */
+export const loadUnauthorizedPassengers = (o) => rangeReport('unauthorized-passengers', o);
+
 /** The recovery vehicles' daily distance, GPS route, fuel and stops. */
 export async function loadRecoveryReport({ orgId, day, vehicle }) {
   if (!orgId) throw new Error('No organisation selected')

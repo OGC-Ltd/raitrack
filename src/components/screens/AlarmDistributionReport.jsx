@@ -1,18 +1,16 @@
 /*
  * AI Alarm Distribution Report — per-vehicle breakdown of dashcam alarm types
- * over a custom date range. Shown only for organisations that have VSS cameras.
+ * over a range of up to 7 fleet days (the dashcams keep a week).
  *
- * Columns: Device Name, Total, Fatigue Driving, Phone Call, Smoking,
- *          Camera Covered, Distracted Driving, No Seat Belt, Other
- *
- * Data source: fetchVssIncidents (api/vssAlarms), same as the Alarms inbox.
- * The `label` field on each alarm is matched to a column by keyword.
+ * Worked out on the server (fleet-server reports/range-reports,
+ * GET …/reports/alarm-distribution) from the same VSS search as the Alarms
+ * inbox. It says when the dashcam server gave only part of the alarms, so a
+ * short count is never read as the whole.
  */
 
 import { useRef, useState } from 'react';
 import './AlarmDistributionReport.css';
-import { fetchVssIncidents } from '../../api/vssAlarms';
-import { makeReportDoc } from '../../api/reports';
+import { loadAlarmDistribution, makeReportDoc } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { alarmDistDoc } from '../../lib/reportDocs';
@@ -25,66 +23,30 @@ import TableToolbar from '../body/TableToolbar';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
 
-// ── Alarm type classification ────────────────────────────────────────────────
-
+/** The kinds the server counts, in its order; Other is drawn last. */
 const ALARM_COLS = [
-  { key: 'fatigue',    label: 'Fatigue Driving',    match: (l) => /fatigue/i.test(l) },
-  { key: 'phone',      label: 'Phone Call',          match: (l) => /phone/i.test(l) },
-  { key: 'smoking',    label: 'Smoking',             match: (l) => /smok/i.test(l) },
-  { key: 'covered',    label: 'Camera Covered',      match: (l) => /cover/i.test(l) },
-  { key: 'distracted', label: 'Distracted Driving',  match: (l) => /distract/i.test(l) },
-  { key: 'seatbelt',   label: 'No Seat Belt',        match: (l) => /seat.?belt|no.?seat/i.test(l) },
+  { key: 'fatigue', label: 'Fatigue Driving' },
+  { key: 'phone', label: 'Phone Call' },
+  { key: 'smoking', label: 'Smoking' },
+  { key: 'covered', label: 'Camera Covered' },
+  { key: 'distracted', label: 'Distracted Driving' },
+  { key: 'seatbelt', label: 'No Seat Belt' },
 ];
 
-function classifyAlarm(label) {
-  for (const col of ALARM_COLS) {
-    if (col.match(label)) return col.key;
-  }
-  return 'other';
-}
-
-// ── Date helpers ─────────────────────────────────────────────────────────────
-
 const MAX_DAYS = 7; // VSS only keeps 7 days
+/** One empty list, so the editor (which resets when its rows change) sees the same one each render. */
+const NONE = [];
 
-function todayLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function yesterdayLocal() {
-  const d = new Date(Date.now() - 86_400_000);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function localMidnightMs(dateStr) {
-  // dateStr = "YYYY-MM-DD"; returns ms at local midnight (Africa/Nairobi)
-  return new Date(`${dateStr}T00:00:00+03:00`).getTime();
-}
+/** A fleet day, YYYY-MM-DD in Nairobi, whatever the browser's own zone. */
+const fleetDay = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
 
 function periodLabel(from, to) {
   if (from === to) return from;
   return `${from} – ${to}`;
 }
 
-// ── Build table rows from alarms ─────────────────────────────────────────────
-
-function buildRows(alarms, fromMs, toMs) {
-  const byPlate = new Map();
-  for (const a of alarms) {
-    if (a.occurredMs == null) continue;
-    if (a.occurredMs < fromMs || a.occurredMs >= toMs) continue;
-    const plate = a.plate || 'Unknown';
-    if (!byPlate.has(plate)) {
-      byPlate.set(plate, { plate, fatigue: 0, phone: 0, smoking: 0, covered: 0, distracted: 0, seatbelt: 0, other: 0, total: 0 });
-    }
-    const row = byPlate.get(plate);
-    const col = classifyAlarm(a.label);
-    row[col] = (row[col] ?? 0) + 1;
-    row.total += 1;
-  }
-  return [...byPlate.values()].sort((a, b) => b.total - a.total);
-}
+/** Said under the table and on the PDF when the counts are short. */
+export const PARTIAL_WORDS = 'The dashcam server returned only part of the alarms for this period, so the counts are lower than the true figures. Run the report again later.';
 
 // ── CSV export ───────────────────────────────────────────────────────────────
 
@@ -96,9 +58,10 @@ function toCsv(rows, period) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function AlarmDistributionReport({ orgId, orgCode, companyName, active = true }) {
-  const today = todayLocal();
-  const [days, setDays] = useState({ from: yesterdayLocal(), to: yesterdayLocal() });
+export default function AlarmDistributionReport({ orgId, orgCode, companyName }) {
+  const today = fleetDay(Date.now());
+  const yesterday = fleetDay(Date.now() - 86_400_000);
+  const [days, setDays] = useState({ from: yesterday, to: yesterday });
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
@@ -110,22 +73,18 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
     const id = ++runId.current;
     setRun({ status: 'loading' });
     try {
-      const fromMs = localMidnightMs(days.from);
-      const toMs   = localMidnightMs(days.to) + 86_400_000;
-      const sinceIso = new Date(fromMs).toISOString();
-      const alarms = await fetchVssIncidents({ orgId, sinceIso });
+      const data = await loadAlarmDistribution({ orgId, from: days.from, to: days.to });
       if (id !== runId.current) return;
-      const rows = buildRows(alarms, fromMs, toMs);
-      setRun({ status: 'done', rows, period: periodLabel(days.from, days.to), from: days.from, to: days.to });
+      setRun({ status: 'done', rows: data.rows ?? [], partial: Boolean(data.partial || data.stale), period: periodLabel(days.from, days.to), from: days.from, to: days.to });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
 
   const done = run.status === 'done' ? run : null;
-  const rows = done?.rows ?? [];
+  const rows = done?.rows ?? NONE;
 
-  const sheet = () => alarmDistDoc(rows, { from: done.from, to: done.to, fleet, orgCode });
+  const sheet = () => alarmDistDoc(rows, { from: done.from, to: done.to, fleet, orgCode, partial: done.partial });
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
 
   const makePdf = (landscape = true) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
@@ -188,7 +147,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
 
       {done && rows.length === 0 && (
         <EmptyNote icon="ti-mood-happy" title="No Alarms">
-          No dashcam alarms were recorded in this period.
+          {done.partial ? PARTIAL_WORDS : 'No dashcam alarms were recorded in this period.'}
         </EmptyNote>
       )}
 
@@ -232,6 +191,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
               <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
             </>}
           />
+          {done.partial && <p className="rpt-warn adr-partial" role="status">{PARTIAL_WORDS}</p>}
           {preview.state && <PdfPreview state={preview.state} title="Alarm Distribution report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
 
           <div className="sp4-table-scroll rpt-scroll">

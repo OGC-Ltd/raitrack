@@ -29,8 +29,9 @@ export async function sendFound(orgId, cases) {
 }
 
 /** What was done on a case (the server records who and when); a null action reopens it. */
-export async function recordAction(orgId, caseId, { action, note, by }) {
-  const out = (await apiFetch(`${base(orgId)}/cases/${encodeURIComponent(caseId)}/action`, json('PUT', { action, note: note ?? '', by: by ?? '' }))).data;
+export async function recordAction(orgId, caseId, { action, note, feedbackBy }) {
+  // Who gave the feedback, as typed; the server records who is signed in as the one who acted.
+  const out = (await apiFetch(`${base(orgId)}/cases/${encodeURIComponent(caseId)}/action`, json('PUT', { action, note: note ?? '', feedbackBy: feedbackBy ?? '' }))).data;
   changed();
   return out;
 }
@@ -56,4 +57,9 @@ export async function deleteIncident(orgId, id) {
 
 export async function importIncidents(orgId, entries) {
   return (await apiFetch(`${base(orgId)}/incidents/import`, json('POST', { entries }))).data;
+}
+
+/** Mark a logged incident shared (now) or not; answers with the incident. */
+export async function setIncidentShared(orgId, id, shared) {
+  return (await apiFetch(`${base(orgId)}/incidents/${encodeURIComponent(id)}/shared`, json('PUT', { shared }))).data;
 }

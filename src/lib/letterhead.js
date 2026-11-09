@@ -60,8 +60,8 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .cells td { border:.6pt solid var(--rule); padding:1mm 1.6mm 1.1mm; font-weight:700; font-size:9.4pt; vertical-align:top }
 .cells td span { display:block; font-weight:400; font-size:7pt; color:var(--mut) }
 .lst { table-layout:fixed }
-.lst th { text-align:left; font-weight:700; font-size:7.6pt; color:var(--mut); border-bottom:.6pt solid var(--rule); padding:.6mm 1.4mm }
-.lst td { padding:.6mm 1.4mm; border-bottom:.4pt solid var(--soft); vertical-align:top }
+.lst th { text-align:left; font-weight:700; font-size:7.6pt; color:var(--mut); border-bottom:.6pt solid var(--rule); padding:.6mm 1.4mm; overflow:hidden; white-space:nowrap }
+.lst td { padding:.6mm 1.4mm; border-bottom:.4pt solid var(--soft); vertical-align:top; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .lst tbody tr:last-child td { border-bottom:.6pt solid var(--rule) }
 .lst .r { text-align:right } .lst .c { text-align:center } .lst td:first-child, .lst th:first-child { padding-left:0 }
 .lst td.b { font-weight:700 } .lst td.m { color:var(--mut) } .lst td.wrap { white-space:normal }
