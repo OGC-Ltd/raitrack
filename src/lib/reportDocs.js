@@ -12,7 +12,7 @@
 //
 // Pure but for flowDoc's `parse`, which a browser's DOMParser fills in.
 
-import { CONTACT_LINE, reportNumber } from './reportLetterhead';
+import { reportNumber } from './reportLetterhead';
 import { textMm } from './shiftDoc';
 import { SECTIONS, offlineCount, rowCells as dormantCells, sectionDays, asAtWords } from './offlineReport';
 import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCells as geofenceCells } from './geofenceReport';
@@ -139,7 +139,6 @@ export function tatDoc(rows, { day, to = day, fleet, group = 'all', orgCode, now
     blocks.push({ kind: 'h2', title: `${i + 2}. ${sec.group}`, aside: plural(sec.rows.length, 'row') });
     blocks.push({ kind: 'table', cols, head: TAT_HEADS, size: 6.8, rows: sec.rows.map((r) => tatCells(r).map((t, k) => textCell(t, k === 0))) });
   });
-  blocks.push({ kind: 'note', text: CONTACT_LINE });
   return {
     title: 'TAT AND FUEL REPORT', docName: `TAT and Fuel Report ${fleet}`, pairs: true, landscape: true,
     filename: `TAT and Fuel Report ${fleet} ${day}${several ? ` to ${to}` : ''}`,
@@ -175,7 +174,6 @@ export function speedDoc(rows, { day, fleet, group = 'all', orgCode, now = Date.
       return { ...textCell(t, k === 0), ...(link ? { link } : {}) };
     })) });
   });
-  blocks.push({ kind: 'note', text: CONTACT_LINE });
   return {
     title: 'SPEED REPORT', docName: `Speed Report ${fleet}`, pairs: true,
     filename: `Speed Report ${fleet} ${day}`,
@@ -264,7 +262,6 @@ export function recoveryDoc(report, { fleet, orgCode, now = report.generatedAt ?
     }
   });
 
-  blocks.push({ kind: 'note', text: CONTACT_LINE });
   return {
     title: 'RECOVERY VEHICLE REPORT', docName: `Recovery Vehicle Report ${fleet}`, pairs: true,
     filename: `Recovery Vehicle Report ${fleet} ${day}`,
@@ -356,7 +353,6 @@ export function probeDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
       const link = k === PLACE_COLUMN ? mapUrl(r) : '';
       return { ...textCell(t, k === 0), ...(link ? { link } : {}) };
     })) },
-    { kind: 'note', text: CONTACT_LINE },
   ];
   return {
     title: 'PROBE DISCONNECTION REPORT', docName: `Probe Disconnection Report ${fleet}`, pairs: true,
@@ -392,7 +388,6 @@ export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode
   else if (!grouped) blocks.push(table(rows));
   else for (const g of grouped) blocks.push({ kind: 'bar', title: g.name, aside: plural(g.rows.length, 'unit') }, table(g.rows));
   if (rows.length) blocks.push({ kind: 'note', text: HEALTH_KEY });
-  blocks.push({ kind: 'note', text: CONTACT_LINE });
   const name = trucks ? 'Trucks Probe & Sensor Health' : 'Probe & Sensor Health';
   return {
     title: name.toUpperCase(), docName: `${name} ${fleet}`, pairs: true,
@@ -440,7 +435,6 @@ export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = tru
           { text: stopWords(c, withDay), ...(c.at != null ? { bold: true } : c.missing ? { tone: 'mut' } : { tone: 'flag' }) }]) });
     }
   }
-  blocks.push({ kind: 'note', text: CONTACT_LINE });
   return {
     title: 'DELIVERIES REPORT', docName: `Deliveries Report ${fleet}`, pairs: true,
     filename: `Deliveries Report ${fleet} ${new Date(at + OFFSET).toISOString().slice(0, 10)}`,
@@ -513,7 +507,7 @@ function tableOf(el, inner) {
     // Scaled only when they would not fit; a report with room keeps its own widths
     cols: roomForHeads(widths.map((w, i) => ({
       w: used > inner ? Math.round(((w * inner) / used) * 10) / 10 : w,
-      ...(heads[i]?.classList.contains('r') ? { align: 'right' } : {}),
+      ...(heads[i]?.classList.contains('r') ? { align: 'right' } : heads[i]?.classList.contains('c') ? { align: 'center' } : {}),
       ...(wraps.has(i) ? { wrap: true } : {}),
     })), head),
     head,
@@ -551,6 +545,176 @@ export function flowBlocks(flow, inner, parse) {
     }
   }
   return blocks;
+}
+
+/** AI Alarm Distribution Report — per-vehicle breakdown of dashcam alarm types. */
+export function alarmDistDoc(rows, { from, to, fleet, orgCode, partial = false, now = Date.now() }) {
+  const several = from !== to;
+  const period = several ? `${from} – ${to}` : from;
+  const totalAlarms = rows.reduce((s, r) => s + r.total, 0);
+  const ALARM_COLS = [
+    { key: 'fatigue',    label: 'Fatigue Driving' },
+    { key: 'phone',      label: 'Phone Call' },
+    { key: 'smoking',    label: 'Smoking' },
+    { key: 'covered',    label: 'Camera Covered' },
+    { key: 'distracted', label: 'Distracted Driving' },
+    { key: 'seatbelt',   label: 'No Seat Belt' },
+    { key: 'other',      label: 'Other' },
+  ];
+  // Widths: device name wide, then 8 numeric columns equal
+  const NUM_COLS = ALARM_COLS.length + 1; // Total + each alarm type
+  const nameW = 46;
+  const numW = Math.round((LANDSCAPE_MM - nameW) / NUM_COLS * 10) / 10;
+  const cols = [
+    { w: nameW, wrap: true },
+    ...Array(NUM_COLS).fill({ w: numW, align: 'right' }),
+  ];
+  const head = ['Device Name', 'Total', ...ALARM_COLS.map((c) => c.label)];
+  const tableRows = rows.map((r) => [
+    textCell(r.plate, true),
+    textCell(fmt(r.total)),
+    ...ALARM_COLS.map((c) => textCell(fmt(r[c.key] ?? 0))),
+  ]);
+  // Footer totals row
+  tableRows.push([
+    { text: 'Total', bold: true },
+    { text: fmt(totalAlarms), bold: true },
+    ...ALARM_COLS.map((c) => ({ text: fmt(rows.reduce((s, r) => s + (r[c.key] ?? 0), 0)), bold: true })),
+  ]);
+  const blocks = [
+    { kind: 'h2', title: '1. Overview', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Vehicles', value: fmt(rows.length) },
+      { label: 'Total Alarms', value: fmt(totalAlarms) },
+      ...ALARM_COLS.slice(0, 4).map((c) => ({ label: c.label, value: fmt(rows.reduce((s, r) => s + (r[c.key] ?? 0), 0)) })),
+    ]},
+    { kind: 'h2', title: '2. By vehicle', aside: plural(rows.length, 'vehicle') },
+    { kind: 'table', cols, head, size: 7.5, rows: tableRows },
+    // The dashcam server gave only part: the counts are short, and the reader must know.
+    ...(partial ? [{ kind: 'note', text: 'The dashcam server returned only part of the alarms for this period, so these counts are lower than the true figures.' }] : []),
+  ];
+  return {
+    title: 'AI ALARM DISTRIBUTION REPORT',
+    docName: `AI Alarm Distribution Report ${fleet}`,
+    filename: `AI Alarm Distribution Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('AD', orgCode, now),
+    date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', period], ['Vehicles', fmt(rows.length)], ['Total Alarms', fmt(totalAlarms)]]),
+    blocks,
+    footer: `${fleet} · AI Alarm Distribution · ${period}`,
+    landscape: true,
+  };
+}
+
+/** Unauthorized Passengers Report — portrait, one row per logged incident. */
+export function uprDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
+  const several = from !== to;
+  const period = several ? `${from} – ${to}` : from;
+  const fmtAt = (ms) => {
+    if (!ms) return '—';
+    const d = new Date(ms + OFFSET);
+    const s = d.toISOString();
+    return `${s.slice(8,10)}/${s.slice(5,7)}/${s.slice(0,4)} ${s.slice(11,16)}`;
+  };
+  const cols = [
+    { w: 32 },
+    { w: 42, wrap: true },
+    { w: 36 },
+    { w: 60, wrap: true },
+    { w: 24 },
+  ];
+  const head = ['Registration', 'Client / Location', 'Time of Event', 'Violation', 'Shared'];
+  const tableRows = rows.map((r) => [
+    textCell(r.plate || '—'),
+    textCell(r.location || fleet || '—', false),
+    textCell(fmtAt(r.at)),
+    textCell('Unauthorized Passengers'),
+    textCell(r._shared ? 'Shared ✓' : '—'),
+  ]);
+  const blocks = [
+    { kind: 'h2', title: '1. Summary', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Incidents', value: fmt(rows.length) },
+      { label: 'Fleet', value: fleet || '—' },
+    ]},
+    { kind: 'h2', title: '2. Incidents', aside: plural(rows.length, 'incident') },
+    { kind: 'table', cols, head, size: 8, rows: tableRows },
+  ];
+  return {
+    title: 'UNAUTHORIZED PASSENGERS REPORT',
+    docName: `Unauthorized Passengers Report ${fleet}`,
+    filename: `Unauthorized Passengers Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('UP', orgCode, now),
+    date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', period], ['Incidents', fmt(rows.length)]]),
+    blocks,
+    footer: `${fleet} · Unauthorized Passengers · ${period}`,
+    landscape: false,
+  };
+}
+
+/**
+ * Fuel Consumption Rate Report — per-vehicle efficiency over a date range, as
+ * the server works it out (fleet-server reports/range-reports): `rows` and
+ * `totals` are its answer; nothing is recomputed here.
+ */
+export function fcrDoc(rows, { from, to, fleet, orgCode, totals = null, now = Date.now() }) {
+  const several = from !== to;
+  const period = several ? `${from} – ${to}` : from;
+  const L = (n) => (n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toFixed(1));
+  const R = (n) => (n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toFixed(2));
+  const totalFilled = rows.reduce((s, r) => s + (r.filledL || 0), 0);
+  const words = (r) => r.note || (r.belowTarget === true ? 'Below target' : r.belowTarget === false ? 'On target' : '');
+
+  const nameW = 34;
+  const commentW = 44;
+  const numW = Math.round(((LANDSCAPE_MM - nameW - commentW) / 8) * 10) / 10;
+  const cols = [{ w: nameW, wrap: true }, ...Array(8).fill({ w: numW, align: 'right' }), { w: commentW, wrap: true }];
+  const head = ['Registration', 'Target (km/L)', 'Distance (km)', 'Initial (L)', 'Filled (L)', 'Theft (L)', 'Final (L)', 'Consumed (L)', 'Rate (km/L)', 'Comment'];
+  const tableRows = rows.map((r) => [
+    textCell(r.plate, true),
+    textCell(r.target?.words ?? '—'),
+    textCell(L(r.distanceKm)),
+    textCell(L(r.startL)),
+    textCell(L(r.filledL)),
+    textCell(r.theftL ? L(r.theftL) : '—'),
+    textCell(L(r.endL)),
+    textCell(L(r.consumedL)),
+    r.belowTarget ? { text: R(r.kmPerL), bold: true, tone: 'flag' } : textCell(R(r.kmPerL)),
+    r.note ? { text: words(r), tone: 'mut' } : textCell(words(r)),
+  ]);
+  tableRows.push([
+    { text: 'Total / Fleet', bold: true }, { text: '—' },
+    { text: L(totals?.distanceKm), bold: true }, { text: '—' },
+    { text: L(totalFilled), bold: true }, { text: '—' }, { text: '—' },
+    { text: L(totals?.consumedL), bold: true }, { text: R(totals?.kmPerL), bold: true },
+    { text: totals ? `${fmt(totals.measured)} of ${fmt(rows.length)} measured` : '' },
+  ]);
+  const blocks = [
+    { kind: 'h2', title: '1. Overview', aside: period },
+    { kind: 'figures', items: [
+      { label: 'Vehicles', value: fmt(rows.length) },
+      { label: 'Measured', value: fmt(totals?.measured ?? 0) },
+      { label: 'Distance, km', value: L(totals?.distanceKm) },
+      { label: 'Fuel consumed, L', value: L(totals?.consumedL) },
+      { label: 'Fleet rate, km/L', value: R(totals?.kmPerL) },
+      { label: 'Below target', value: fmt(rows.filter((r) => r.belowTarget).length) },
+    ] },
+    { kind: 'h2', title: '2. By vehicle', aside: plural(rows.length, 'vehicle') },
+    { kind: 'table', cols, head, size: 7.5, rows: tableRows },
+    { kind: 'note', text: "Each unit's fuel over the whole period: the tank at the start and end, the refills and suspected thefts on record, and the distance driven. The fleet rate counts only units with a measured figure." },
+  ];
+  return {
+    title: 'FUEL CONSUMPTION RATE REPORT',
+    docName: `Fuel Consumption Rate Report ${fleet}`,
+    filename: `Fuel Consumption Rate Report ${fleet} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('FC', orgCode, now),
+    date: dmy(now),
+    meta: meta([['Fleet', fleet], [several ? 'Days' : 'Day', period], ['Vehicles', fmt(rows.length)], ['Fleet rate', `${R(totals?.kmPerL)} km/L`]]),
+    blocks,
+    footer: `${fleet} · Fuel Consumption Rate · ${period}`,
+    landscape: true,
+  };
 }
 
 const browserParse = (html) => new DOMParser().parseFromString(`<!doctype html><body>${html}`, 'text/html').body;

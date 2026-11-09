@@ -6,8 +6,8 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP } from './reportTables';
-import { ACTIONS, incidentWords, isOverdue, needsEscalation, ESCALATE_CASES, ESCALATE_DAYS } from './followUp';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN } from './reportTables';
+import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 
 const fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -33,14 +33,24 @@ function columnsFor(def, ctx, keep, inner) {
   const heads = def.columns(ctx);
   const right = (i) => isFigure(def, heads, i);
   const widths = {
-    behaviour: [23, 13, 20, 23, 19, 20, 16, 14, 20, 12, ...(SHOW_FOLLOW_UP ? [20] : [])],   // Harsh cornering after Harsh braking (5 Nov 2026)
+    // Vehicle/Type/Driver widened (operator, 9 Nov 2026: columns were truncating).
+    // Type widened further (9 Nov 2026: "COMPANY_VEHICLE" still truncated).
+    // Incident columns are centred rather than right-aligned.
+    // Follow-up column removed from main table (9 Nov 2026: redundant with the section below).
+    behaviour: [32, 26, 36, 14, 14, 14, 12, 11, 14, 10, ...(SHOW_FOLLOW_UP_COLUMN ? [18] : [])],
     night: [48, 40, 48, 48],
     overspeed: [30, 22, 44, 20, 22, 22, 24],
     utilisation: [32, 28, 26, 28, 30, 40],
     utilisationRated: [42, 21, 18, 18, 19, 22, 22, 22],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
   const used = keep.reduce((s, i) => s + widths[i], 0);
-  return keep.map((i) => ({ h: heads[i], r: right(i), w: `${((widths[i] * inner) / used).toFixed(1)}mm` }));
+  // Behaviour report: incident/total columns are centred, not right-aligned.
+  const centre = def.key === 'behaviour' ? (i) => right(i) : () => false;
+  return keep.map((i) => ({
+    h: heads[i],
+    ...(centre(i) ? { c: true } : right(i) && !centre(i) ? { r: true } : {}),
+    w: `${((widths[i] * inner) / used).toFixed(1)}mm`,
+  }));
 }
 
 /** The vehicle cell: plate, then its notes as tags. */
@@ -53,7 +63,6 @@ function vehicleCell(r) {
   };
 }
 
-const fmtAt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 const fmtDayWords = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric' });
 
 /**
@@ -64,59 +73,38 @@ const fmtDayWords = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi
  */
 function followUpFlow(done, ctx, now, start, inner) {
   const cases = ctx.cases ?? [];
-  const all = ctx.allCases ?? cases;
   const out = [];
   let k = start;
   const actioned = cases.filter((c) => c.status === 'done');
   const pending = cases.filter((c) => c.status === 'pending').sort((a, b) => a.openedAt - b.openedAt);
-  const overdue = pending.filter((c) => isOverdue(c, now));
-  const escalate = cases.filter((c) => needsEscalation(c, all));
   const words = `${actioned.length} of ${cases.length} case${cases.length === 1 ? '' : 's'} actioned`;
   const b = (s) => ({ html: esc(s), cls: 'b' });
   const w = (s) => ({ html: esc(s), cls: 'wrap' });
   const days = [...new Set(cases.map((c) => c.day))].sort();
   const dayWords = days.length === 1 ? fmtDayWords.format(Date.parse(`${days[0]}T12:00:00+03:00`)) : `${days.length} days`;
 
+  // Summary cells only — pending cases page removed; status badges now on each row (operator, 9 Nov 2026).
   out.push(`<h2>${k++}. Follow-up <small>${cases.length ? `Cases for ${esc(dayWords)}` : 'No cases'}</small></h2>`);
   out.push(cells([
     ['Cases opened', String(cases.length)], ['Action taken', String(actioned.length)], ['Pending', String(pending.length)],
-    ['Overdue (over 24 hrs)', String(overdue.length)], [`Escalate (${ESCALATE_CASES}+ cases in ${ESCALATE_DAYS} days)`, String(escalate.length)],
   ]));
 
-  if (pending.length) {
-    out.push(`<h2>${k++}. Pending cases <small>oldest first</small></h2>`);
-    // Overdue and Escalate ride beside the plate, only where they apply.
-    const drivers = pending.some((c) => c.driver);
-    out.push(table([
-      { h: 'Opened', w: '24mm' }, { h: 'Vehicle', w: '46mm' }, ...(drivers ? [{ h: 'Driver', w: '40mm' }] : []),
-      { h: 'Incidents', w: `${inner - 70 - (drivers ? 40 : 0)}mm` },
-    ], pending.map((c) => [
-      esc(fmtAt.format(c.openedAt)),
-      { cls: 'b', html: esc(c.plate) + (isOverdue(c, now) ? tag('Overdue', true) : '') + (needsEscalation(c, all) ? tag('Escalate', true) : '') },
-      ...(drivers ? [w(c.driver)] : []), w(incidentWords(c)),
-    ])));
-  }
-
-  if (actioned.length) {
-    out.push(`<h2>${k++}. Actions taken</h2>`);
-    const drivers = actioned.some((c) => c.driver);
-    out.push(table([
-      { h: 'Vehicle', w: '19mm' }, ...(drivers ? [{ h: 'Driver', w: '34mm' }] : []), { h: 'Incidents', w: '32mm' }, { h: 'Action', w: '29mm' },
-      { h: 'Note', w: `${inner - 80 - (drivers ? 34 : 0)}mm` },
-    ], [...actioned].sort((a, b2) => a.actedAt - b2.actedAt).map((c) => [
-      b(c.plate), ...(drivers ? [w(c.driver || '-')] : []), w(incidentWords(c)), b(c.action), w(c.note || '-'),
-    ])));
-  }
-
-  const since = now - 7 * 86_400_000;
-  const recent = all.filter((c) => c.status === 'done' && c.actedAt >= since);
+  // Only cases from the report period that have been actioned (operator, 9 Nov 2026: show period only, not rolling 7 days).
+  const recent = cases.filter((c) => c.status === 'done');
   if (recent.length) {
-    const count = new Map(ACTIONS.map((a) => [a, 0]));
-    for (const c of recent) count.set(c.action, (count.get(c.action) ?? 0) + 1);
-    const list = [...count].filter(([, n]) => n > 0).sort((a, b2) => b2[1] - a[1]);
-    out.push(`<h2>${k++}. Actions by type <small>last 7 days</small></h2>`);
-    out.push(table([{ h: 'Action', w: '60mm' }, { h: 'Cases', w: '20mm', r: true }, { h: 'Share', w: '20mm', r: true }],
-      list.map(([a, n]) => [esc(a), String(n), `${Math.round((n / recent.length) * 100)}%`])));
+    const drivers = recent.some((c) => c.driver);
+    out.push(`<h2>${k++}. Feedback received <small>${esc(dayWords)}</small></h2>`);
+    out.push(table([
+      { h: 'Vehicle', w: '19mm' }, ...(drivers ? [{ h: 'Driver', w: '30mm' }] : []),
+      { h: 'Incidents', w: '44mm' }, { h: 'Feedback', w: `${inner - 103 - (drivers ? 30 : 0)}mm` },
+      { h: 'Responded by', w: '20mm' },
+    ], [...recent].sort((a, b2) => a.actedAt - b2.actedAt).map((c) => [
+      b(c.plate), ...(drivers ? [w(c.driver || '-')] : []),
+      w(incidentWords(c)),
+      w([c.action, c.note].filter(Boolean).join(' — ') || '-'),
+      // Who gave the feedback, as the operator typed it (not who recorded it).
+      w(c.feedbackBy || '-'),
+    ])));
   }
   return { flow: out, next: k, words };
 }
@@ -143,7 +131,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     if (c === '–') return { html: c, cls: 'm' };
     if (def.key === 'behaviour' && heads[i] === 'Total') return { html: esc(c), cls: 'b' };
     if (def.key === 'behaviour' && heads[i] === 'Follow-up') {
-      if (c === 'Overdue' || c === 'Pending') return { html: tag(c, c === 'Overdue').replace('class="tag', 'style="margin-left:0" class="tag') };
+      if (c === 'Pending') return { html: tag(c, false).replace('class="tag', 'style="margin-left:0" class="tag') };
       return { html: esc(c), cls: c === 'No case' ? 'm' : '' };
     }
     return esc(c);
@@ -157,8 +145,10 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   if (!done.rows.length) flow.push(`<div class="none">${esc(def.empty)}</div>`);
   done.secs.forEach((s, i) => {
     const head = s.name ?? 'All vehicles';
+    // Behaviour report: sort worst to best by total incidents (operator, 9 Nov 2026).
+    const rows = def.key === 'behaviour' ? [...s.rows].sort((a, b) => b.total - a.total) : s.rows;
     flow.push(`<h2>${i + 2}. ${esc(head)} <small>${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'} · ${esc(def.sumWords(s.total))}</small></h2>`);
-    flow.push(table(cols, s.rows.map(rowCells)));
+    flow.push(table(cols, rows.map(rowCells)));
   });
   // A report made for one unit lists each overspeed (operator, 2 Nov 2026)
   const events = ctx.events?.length ? overspeedEventTable(ctx.events) : null;
@@ -176,6 +166,9 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     else if (!ctx.dashcams) notes.push('This fleet has no dashcams: no seatbelt, on phone and camera covered count only what operators logged.');
     else if (done.rows.some((r) => !r.dashcam)) notes.push('–: the vehicle has no dashcam and no operator logged one.');
     if (done.logged?.length) notes.push('Operator entries are counted once: one within 5 minutes of a dashcam alarm of the same kind on the same vehicle is that alarm.');
+    notes.push('Harsh acceleration / braking: A case is opened when a vehicle records 5 or more harsh acceleration or braking events in a single day. Vehicles flagged "Check sensor" with only harsh events are excluded — these are referred to the workshop rather than the driver.');
+    notes.push('Harsh cornering: A case is opened when a vehicle records 1 or more harsh cornering events in a single day.');
+    notes.push('Seatbelt / On phone / Camera covered: A single event of any of these opens a case immediately.');
   }
   if (def.key === 'utilisation' && done.rows.some(fuelSuspect)) {
     notes.push(ctx.rated
@@ -198,8 +191,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       [...byGroup].map(([g, plates]) => [{ html: `${esc(g)} (${plates.length})`, cls: 'b' }, { html: esc(plates.join(', ')), cls: 'wrap' }])));
   }
 
-  // Last of all: who to ask (operator, 1 Nov 2026).
-  flow.push(`<div class="contact">${esc(CONTACT_LINE)}</div>`);
+  // Contact line removed (operator, 9 Nov 2026: "remove these words this is a system generated").
 
   const info = [
     ['Fleet', esc(companyName)],

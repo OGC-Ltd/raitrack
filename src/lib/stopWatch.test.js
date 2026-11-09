@@ -12,9 +12,9 @@ describe('the stop watch: Menengai units where they should not stand', () => {
   const authorised = placesOf(AUTHORISED);
   const noGo = placesOf(NO_GO);
 
-  it('reads the file: 90 authorised places, 7 no-go zones, no test entries', () => {
-    expect(AUTHORISED).toHaveLength(90);
-    expect(NO_GO.map((f) => f.properties.name)).toEqual(['Voi', 'kwa dc', 'Kipsitet no Stopping Zone', 'Awasi No stop Zone', 'Maungu stop/rest zone', 'Kikopey', 'Kedowa Market no stopping Zone']);
+  it('reads the file: 92 authorised places (Awasi and Kedowa approved, 9 Nov 2026), 5 no-go zones, no test entries', () => {
+    expect(AUTHORISED).toHaveLength(92);
+    expect(NO_GO.map((f) => f.properties.name)).toEqual(['Voi', 'kwa dc', 'Kipsitet no Stopping Zone', 'Maungu stop/rest zone', 'Kikopey']);
     expect(JSON.stringify([AUTHORISED, NO_GO])).not.toMatch(/95E9|Test location|fbgddf/);
   });
 

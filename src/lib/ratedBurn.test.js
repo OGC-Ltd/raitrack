@@ -62,11 +62,11 @@ describe('Mufindi: burn against the register', () => {
 });
 
 describe('the closing line', () => {
-  it('ends every report with who to contact', () => {
+  it('is no longer printed (operator, 9 Nov 2026)', () => {
     const ctx = { from: 0, to: 86_400_000 };
     const { html } = reportHtml(REPORTS.night, { rows: [], secs: [], ctx, missing: [], units: 0, failed: 0 },
       { companyName: 'Nzoia', orgCode: 'NZOIA', groupWords: 'All vehicles', periodWords: 'p', nightWords: 'Night hours 19:00hrs – 05:00hrs', logos: { rai: '', ogc: '' }, now: 86_400_000 });
-    expect(html).toContain('This is a system-generated report.');
-    expect(html).toContain('operations@offgridconsultingltd.com');
+    expect(html).not.toContain('system-generated');
+    expect(html).not.toContain('operations@offgridconsultingltd.com');
   });
 });

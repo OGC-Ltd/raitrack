@@ -1,0 +1,62 @@
+/* AI Alarm Distribution Report ─────────────────────────────────────────────
+ * Table layout and cell colours for the per-vehicle alarm breakdown.
+ * KPI strip uses existing sp4-kpi / sp4-kpi-n / sp4-kpi-l tokens.
+ */
+
+/* ── KPI strip: eight tiles wrap gracefully on narrow screens ───────────── */
+.frp-page .sp4-header-kpis { flex-wrap: wrap; }
+.frp-page .sp4-kpi { flex: 1 0 calc(25% - 1px); }
+
+@media (max-width: 600px) {
+  .frp-page .sp4-kpi { flex: 1 0 calc(33.333% - 1px); }
+}
+
+/* ── Table columns ──────────────────────────────────────────────────────── */
+.adr-table { table-layout: fixed; width: 100%; }
+
+/* Device name column – wider, left-aligned */
+.adr-name {
+  text-align: left;
+  width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Numeric columns – right-aligned, fixed narrow width */
+.adr-num {
+  text-align: right;
+  width: 80px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Total column stands out slightly */
+.adr-total {
+  font-weight: 600;
+  color: var(--sp4-text-1);
+}
+
+/* ── Zero cells: muted, not blue ────────────────────────────────────────── */
+.adr-zero {
+  color: var(--sp4-text-4, #6b7280);
+  opacity: 0.6;
+}
+
+/* ── Footer / totals row ────────────────────────────────────────────────── */
+.adr-total-row td {
+  font-weight: 700;
+  border-top: 1px solid var(--sp4-line);
+  padding-top: 6px;
+}
+
+/* ── Vehicle name in body rows ──────────────────────────────────────────── */
+.adr-plate {
+  font-weight: 500;
+  color: var(--sp4-text-1);
+}
+
+/* ── Narrow screen: allow table to scroll horizontally ─────────────────── */
+@media (max-width: 700px) {
+  .adr-name { width: 110px; }
+  .adr-num  { width: 60px; }
+}

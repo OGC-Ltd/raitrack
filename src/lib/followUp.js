@@ -51,16 +51,18 @@ export function incidentWords(c) {
   if (c.phone) parts.push(`${c.phone} on phone`);
   if (c.seatbelt) parts.push(`${c.seatbelt} no seatbelt`);
   if (c.covered) parts.push(`${c.covered} camera covered`);
-  const harsh = (c.accel ?? 0) + (c.brake ?? 0);
+  const harsh = (c.accel ?? 0) + (c.brake ?? 0) + (c.corner ?? 0);
   if (harsh) parts.push(`${harsh} harsh`);
   return parts.join(', ') || 'No incidents';
 }
 
 /** Does this vehicle-day call for follow-up? */
 export function opensCase(r) {
-  const seen = (r.seatbelt ?? 0) + (r.phone ?? 0) + (r.covered ?? 0);
+  // Any cornering, seatbelt, phone or camera-covered incident opens a case immediately.
+  const seen = (r.seatbelt ?? 0) + (r.phone ?? 0) + (r.covered ?? 0) + (r.corner ?? 0);
   if (seen > 0) return true;
   if (r.suspect) return false;
+  // Acceleration and braking need 5 or more to open a case.
   return (r.accel ?? 0) + (r.brake ?? 0) >= CASE_HARSH_MIN;
 }
 
@@ -83,7 +85,7 @@ export function casesFromRun(units, harsh, alarms, { from, to, dashcams, logged 
         plate: r.unit.plate,
         group: r.unit.group ?? null,
         driver: r.driver ?? '',
-        accel: r.accel, brake: r.brake, seatbelt: r.seatbelt, phone: r.phone, covered: r.covered,
+        accel: r.accel, brake: r.brake, corner: r.corner, seatbelt: r.seatbelt, phone: r.phone, covered: r.covered,
         openedAt: r.firstAt ?? a,
       });
     }
@@ -126,9 +128,9 @@ export function needsEscalation(c, all) {
 }
 
 /** One word for a vehicle over a period: its worst open case, or how it stands. */
-export function statusWord(cases, now = Date.now()) {
+export function statusWord(cases) {
   if (!cases?.length) return 'No case';
-  if (cases.some((c) => isOverdue(c, now))) return 'Overdue';
+  // Overdue removed (operator, 9 Nov 2026): all open cases show as Pending regardless of age.
   if (cases.some((c) => c.status === 'pending')) return 'Pending';
   return 'Action taken';
 }

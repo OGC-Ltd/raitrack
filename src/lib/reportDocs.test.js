@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   dormantDoc, geofenceDoc, roomForHeads, tatDoc, speedDoc, deliveriesDoc, recoveryDoc,
-  loginActivityDoc, LOGIN_ACTIVITY_PDF_LIMIT,
+  loginActivityDoc, LOGIN_ACTIVITY_PDF_LIMIT, fcrDoc, alarmDistDoc,
 } from './reportDocs';
 import { offlineReport } from './offlineReport';
 import { removeBar } from './shiftDoc';
@@ -97,7 +97,7 @@ describe('the Deliveries Report as a document', () => {
   });
   it('is the table alone when the stops are left out, under the days', () => {
     const d = deliveriesDoc([row], { ...o, stops: false });
-    expect(kinds(d)).toEqual(['bar', 'table', 'note']);
+    expect(kinds(d)).toEqual(['bar', 'table']);
     expect(d.blocks[0].title).toBe('02/11/2026 to 03/11/2026');
   });
   it('fits the columns to the sheet, and says when there are no vehicles', () => {
@@ -189,5 +189,27 @@ describe('room for the headings', () => {
   it('leaves columns that fit alone, and has nothing to take where nothing wraps', () => {
     expect(roomForHeads([{ w: 20 }, { w: 60 }], ['A', 'B'])).toEqual([{ w: 20 }, { w: 60 }]);
     expect(roomForHeads([{ w: 20 }, { w: 34 }], ['A', head[2]])).toEqual([{ w: 20 }, { w: 34 }]);
+  });
+});
+
+describe('the server-worked reports as documents (v47)', () => {
+  const now = Date.UTC(2026, 10, 10, 6, 0);
+  it('Fuel Consumption Rate draws the server rows as they are, flagging below target', () => {
+    const rows = [
+      { vehicleId: 'v1', plate: 'KDA 258J', distanceKm: 64.2, startL: 128, filledL: 10.5, theftL: 0, endL: 129.1, consumedL: 9.4, kmPerL: 3.1, target: { kmPerL: 4.7, words: '4.70' }, belowTarget: true, note: '' },
+      { vehicleId: 'v2', plate: 'KCX 001A', distanceKm: 12, startL: null, filledL: 0, theftL: 0, endL: null, consumedL: null, kmPerL: null, target: null, belowTarget: null, note: 'No fuel probe' },
+    ];
+    const d = fcrDoc(rows, { from: '2026-11-06', to: '2026-11-07', fleet: 'Menengai', orgCode: 'MENENGAI', totals: { measured: 1, distanceKm: 64.2, consumedL: 9.4, kmPerL: 6.83 }, now });
+    const t = d.blocks.find((b) => b.kind === 'table');
+    expect(t.rows[0].map((c) => c.text)).toEqual(['KDA 258J', '4.70', '64.2', '128.0', '10.5', '—', '129.1', '9.4', '3.10', 'Below target']);
+    expect(t.rows[0][8]).toMatchObject({ tone: 'flag', bold: true });
+    expect(t.rows[1].map((c) => c.text)).toEqual(['KCX 001A', '—', '12.0', '—', '0.0', '—', '—', '—', '—', 'No fuel probe']);
+    expect(t.rows[2][8].text).toBe('6.83');
+  });
+  it('Alarm Distribution says on the page when the counts are partial', () => {
+    const row = { plate: 'KDA 258J', total: 2, fatigue: 1, phone: 1, smoking: 0, covered: 0, distracted: 0, seatbelt: 0, other: 0 };
+    const notes = (o) => alarmDistDoc([row], { from: '2026-11-06', to: '2026-11-06', fleet: 'Sukari', orgCode: 'SUKARI', now, ...o }).blocks.filter((b) => b.kind === 'note');
+    expect(notes({})).toEqual([]);
+    expect(notes({ partial: true })[0].text).toMatch(/only part of the alarms/);
   });
 });
