@@ -76,8 +76,33 @@ function Choice({ value, saved, label, disabled, onChoose }) {
           {word}
         </button>
       ))}
-      {value !== saved && <span className="ua-iam__unsaved" title="Not saved yet" aria-label="Not saved yet" />}
+      {value !== saved && <span className="ua-iam__unsaved">Not saved</span>}
     </div>
+  );
+}
+
+const LEDGER_WORDS = { allow: "Allowed", deny: "Denied", inherit: "Back to the role" };
+
+/**
+ * The person's own rights, saved and chosen, in one place above the long
+ * table: what they hold that the role does not say, and where.
+ */
+function Ledger({ entries }) {
+  if (entries.length === 0) return null;
+  return (
+    <section className="ua-iam__ledger" aria-labelledby="ua-iam-ledger-title">
+      <h3 id="ua-iam-ledger-title" className="ua-iam__ledger-title">Their own rights</h3>
+      <ul className="ua-iam__ledger-list">
+        {entries.map((e) => (
+          <li key={e.key} className={`ua-iam__entry ua-iam__entry--${e.effect}`}>
+            <span className="ua-iam__entry-effect">{LEDGER_WORDS[e.effect]}</span>
+            <span className="ua-iam__entry-right">{e.name}</span>
+            <span className="ua-iam__entry-where">{e.where}</span>
+            {e.unsaved && <span className="ua-iam__unsaved">Not saved</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -178,6 +203,25 @@ export default function UserIamPanel() {
       .filter((group) => group.permissions.length > 0);
   }, [catalogue.data, find]);
 
+  // The ledger: every right this person holds or loses on their own, saved or chosen.
+  const ledger = useMemo(() => {
+    const names = new Map();
+    for (const group of catalogue.data?.resources ?? []) for (const p of group.permissions) names.set(p.slug, p.name);
+    const orgNames = new Map(organisations.map((o) => [o.id, o.name]));
+    const keys = [...new Set([...savedMap.keys(), ...pending.keys()])];
+    return keys.map((key) => {
+      const [{ organisationId, permission }] = toChanges(new Map([[key, "inherit"]]));
+      const effect = standing.get(key) ?? "inherit";
+      return {
+        key,
+        effect,
+        name: names.get(permission) ?? permission,
+        where: organisationId === null ? "in every organisation" : `in ${orgNames.get(organisationId) ?? "an organisation"}`,
+        unsaved: effect !== (savedMap.get(key) ?? "inherit"),
+      };
+    });
+  }, [catalogue.data, organisations, savedMap, pending, standing]);
+
   const personalHere = (permission) => standing.get(keyOf(scopeId, permission)) ?? "inherit";
   const savedHere = (permission) => savedMap.get(keyOf(scopeId, permission)) ?? "inherit";
 
@@ -261,11 +305,18 @@ export default function UserIamPanel() {
               </button>
               <div className="ua-iam__who">
                 <h2 className="ua-iam__name">{selectedUser?.fullName}</h2>
-                <p className="ua-iam__meta">
-                  {roleNames(access.roles)}, {organisations.length === 1 ? organisations[0].name : `${organisations.length} organisations`}
-                  {grants.length > 0 && `, ${grants.length} personal ${grants.length === 1 ? "right" : "rights"}`}
-                </p>
+                <p className="ua-iam__meta">{roleNames(access.roles)}</p>
               </div>
+              <dl className="ua-iam__figures">
+                <div className="ua-iam__figure">
+                  <dt>{organisations.length === 1 ? "Organisation" : "Organisations"}</dt>
+                  <dd>{organisations.length === 1 ? organisations[0].name : organisations.length}</dd>
+                </div>
+                <div className="ua-iam__figure">
+                  <dt>Personal rights</dt>
+                  <dd>{grants.length}</dd>
+                </div>
+              </dl>
               {!locked && (
                 <div className="ua-iam__actions">
                   <button type="button" className="ua-iam__button" disabled={pending.size === 0 || saving} onClick={discard}>
@@ -291,6 +342,7 @@ export default function UserIamPanel() {
               </EmptyNote>
             ) : (
               <>
+                <Ledger entries={ledger} />
                 <div className="ua-iam__bar">
                   <label className="ua-iam__scope">
                     <span className="ua-iam__label">Applies in</span>
@@ -325,13 +377,17 @@ export default function UserIamPanel() {
                             <th scope="colgroup" colSpan={4}>{group.label}</th>
                           </tr>
                           {group.permissions.map((p) => (
-                            <tr key={p.slug} className="ua-iam__row">
+                            <tr key={p.slug} className={[
+                              "ua-iam__row",
+                              p.grantable && personalHere(p.slug) !== "inherit" ? `ua-iam__row--own ua-iam__row--${personalHere(p.slug)}` : "",
+                              p.grantable && personalHere(p.slug) !== savedHere(p.slug) ? "ua-iam__row--unsaved" : "",
+                            ].filter(Boolean).join(" ")}>
                               <th scope="row">
                                 <span className="ua-iam__right">{p.name}</span>
                                 <code className="ua-iam__slug">{p.slug}</code>
                               </th>
-                              <td>{roleCell(p.slug)}</td>
-                              <td>
+                              <td data-label="Role gives">{roleCell(p.slug)}</td>
+                              <td className="ua-iam__choice-cell">
                                 {p.grantable ? (
                                   <Choice
                                     value={personalHere(p.slug)}

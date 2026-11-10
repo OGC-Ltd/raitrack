@@ -8,6 +8,43 @@
     "theme": "brand",
     "genre": "modern-minimal",
     "axes": "light/grotesk-sans/cool",
+    "hero": "none (app screen)",
+    "nav": "the shell, kept",
+    "footer": "none (app screen)",
+    "imagery": "none",
+    "photos": [],
+    "entry": "masthead with figures",
+    "fingerprint": "people list | masthead figures | own-rights ledger | scope bar | rights table, differing rows ruled",
+    "signature": "the ledger of the person own rights above the rights table",
+    "sections": [
+      "people list with search and personal filter",
+      "masthead: name, role, organisations, personal rights, Discard/Save",
+      "ledger of own rights, unsaved in words",
+      "scope and find bar",
+      "rights table, rows that differ from the role ruled left, unsaved tinted",
+      "phone: one pane at a time, rows restacked"
+    ],
+    "files": [
+      "src/components/body/UserIamPanel.jsx",
+      "src/components/body/UserIamPanel.css"
+    ],
+    "waived": [],
+    "dismissed": [
+      "74",
+      "F4"
+    ],
+    "prompt": "redesign the IAM page",
+    "outcome": "Floor 0 FAIL, Reflex 0, 2 dismissed (74, F4); before 23 FAIL, 16 REFLEX, 1 WARN; handlers, query keys, API calls and ua-iam-title kept"
+  },
+  {
+    "date": "2026-11-10",
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "shape": "app screen",
+    "theme": "brand",
+    "genre": "modern-minimal",
+    "axes": "light/grotesk-sans/cool",
     "signature": "the day strip: each sign-in marked on a 24 hour line per user-day",
     "sections": [
       "head with organisation",
