@@ -148,7 +148,8 @@
   }
   .uadm-page__body > .ua-page,
   .uadm-page__body > .ug-page,
-  .uadm-page__body > .ua-login {
+  .uadm-page__body > .ua-login,
+  .uadm-page__body > .ua-iam {
     flex: 1 1 auto;
     min-height: 0;
     height: auto;

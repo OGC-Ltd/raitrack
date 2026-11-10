@@ -37,6 +37,7 @@ import ErrorBoundary from "../shared/ErrorBoundary";
 import UserAdminPanel from "../body/UserAdminPanel";
 import UserGroupsPanel from "../body/UserGroupsPanel";
 import UserLoginActivityPanel from "../body/UserLoginActivityPanel";
+import UserIamPanel from "../body/UserIamPanel";
 import "./UserAdminScreen.css";
 
 export default function UserAdminScreen() {
@@ -45,6 +46,10 @@ export default function UserAdminScreen() {
   const { canIn } = usePermissions();
   const [section, setSection] = useState("users");
   const canViewGroups = (orgs ?? []).some((org) => canIn(org.id, "user:read"));
+  // IAM is the System Administrator's alone: the wildcard itself, which a
+  // Director and an organisation's Admin do not hold. The server refuses
+  // everybody else whatever is drawn here.
+  const canIam = (orgs ?? []).some((org) => (org.permissions ?? []).includes("platform:admin"));
 
   /* The crumb used to read "← Fleet" and only close, which was wrong twice
      over for an administrator without `map:read`: it named a screen they
@@ -116,10 +121,19 @@ export default function UserAdminScreen() {
                     onClick={() => setSection("login-activity")}>
               Login Activity
             </button>
+            {canIam && (
+              <button type="button" className={section === "iam" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
+                      aria-current={section === "iam" ? "page" : undefined}
+                      onClick={() => setSection("iam")}>
+                IAM
+              </button>
+            )}
           </nav>
         )}
-        <ErrorBoundary label={section === "groups" ? "User groups" : section === "login-activity" ? "Login activity" : "Users"} fullSection>
-          {section === "groups" && canViewGroups
+        <ErrorBoundary label={section === "groups" ? "User groups" : section === "login-activity" ? "Login activity" : section === "iam" ? "Access rights" : "Users"} fullSection>
+          {section === "iam" && canIam
+            ? <UserIamPanel />
+            : section === "groups" && canViewGroups
             ? <UserGroupsPanel />
             : section === "login-activity" && canViewGroups
               ? <UserLoginActivityPanel />
