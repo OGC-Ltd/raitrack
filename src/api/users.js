@@ -179,6 +179,81 @@ export async function listAllUserLoginActivity(orgId, { from, to, limit = 100 } 
   return { ...first, rows: [...byId.values()] };
 }
 
+/** Every system account in one organisation's roster, all pages. */
+async function listEveryOrgUser(orgId) {
+  const limit = 100;
+  const first = await listOrgUsers(orgId, { page: 1, limit, access: "system" });
+  const users = [...first.users];
+  const pageCount = Math.ceil((first.total || 0) / limit);
+  for (let page = 2; page <= pageCount; page += 1) {
+    users.push(...(await listOrgUsers(orgId, { page, limit, access: "system" })).users);
+  }
+  return users;
+}
+
+const unionSorted = (a = [], b = []) => [...new Set([...a, ...b])].sort((x, y) => x.localeCompare(y));
+
+/**
+ * Login activity for SEVERAL organisations, as one report (operator,
+ * 10 Nov 2026: "All organisations" in the picker for anyone who reads more
+ * than one).
+ *
+ * A sign-in belongs to a person, not to an organisation: somebody who holds
+ * two organisations comes back in both reports with the SAME event. So rows
+ * are merged by event id, each said once, carrying `orgIds` (every
+ * organisation it was read from) and the union of the person's roles and
+ * groups there.
+ *
+ * The account figures cannot be added up for the same reason, a person in
+ * two organisations would count twice. They are read from the rosters
+ * instead (every page), each person once: `systemUsers` the accounts,
+ * `everLoggedIn` those with a last login.
+ *
+ * One organisation failing costs its own rows, named in `failures`, as
+ * listUsersAcrossOrgs does.
+ */
+export async function listLoginActivityAcrossOrgs(orgIds, { from, to } = {}) {
+  const ids = [...new Set((orgIds ?? []).filter(Boolean))];
+  const settled = await Promise.all(ids.map(async (id) => {
+    try {
+      const [report, users] = await Promise.all([
+        listAllUserLoginActivity(id, { from, to }),
+        listEveryOrgUser(id),
+      ]);
+      return { id, report, users };
+    } catch (error) {
+      return { id, error };
+    }
+  }));
+  const ok = settled.filter((s) => !s.error);
+  if (ids.length && !ok.length) throw settled[0].error;
+
+  const byEvent = new Map();
+  const accounts = new Map();
+  for (const { id, report, users } of ok) {
+    for (const row of report.rows ?? []) {
+      const held = byEvent.get(row.id);
+      if (!held) {
+        byEvent.set(row.id, { ...row, orgIds: [id], user: { ...row.user } });
+        continue;
+      }
+      if (!held.orgIds.includes(id)) held.orgIds.push(id);
+      held.user.roles = unionSorted(held.user.roles, row.user?.roles);
+      held.user.groups = unionSorted(held.user.groups, row.user?.groups);
+    }
+    for (const user of users) if (!accounts.has(user.id)) accounts.set(user.id, user);
+  }
+
+  const rows = [...byEvent.values()].sort((a, b) => Date.parse(b.loggedInAt) - Date.parse(a.loggedInAt));
+  return {
+    rows,
+    total: rows.length,
+    systemUsers: accounts.size,
+    everLoggedIn: [...accounts.values()].filter((u) => u.lastLoginAt).length,
+    failures: settled.filter((s) => s.error).map((s) => ({ orgId: s.id, error: s.error })),
+  };
+}
+
 /**
  * Two organisations' copies of one person's grants, said once each.
  *

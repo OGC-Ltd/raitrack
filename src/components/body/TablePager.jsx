@@ -48,10 +48,13 @@ export function usePager(rows, resetKey, step = PAGE_STEP) {
  */
 export const withMore = (pager, more) => (more ? { ...pager, total: `${pager.total}+` } : pager);
 
-/** The bar. Renders nothing when everything fits on one page. */
-export default function TablePager({ pager, label = "Table pages" }) {
+/**
+ * The bar. Renders nothing when everything fits on one page, unless `always`
+ * (Login Activity: the operator wants the pager in place on one page too).
+ */
+export default function TablePager({ pager, label = "Table pages", always = false }) {
   const { page, pageCount, total, from, to, setPage } = pager;
-  if (pageCount <= 1) return null;
+  if (pageCount <= 1 && !always) return null;
   return (
     <nav data-tour="page-pager" className="sp4-tpager" aria-label={label}>
       <button type="button" className="sp4-tpager__btn"
