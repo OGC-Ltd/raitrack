@@ -50,9 +50,11 @@ describe('report on the letterhead', () => {
 
     const t = overspeedEventTable(events);
     expect(t.head).toContain('Driver');
-    expect(t.rows[0]).toEqual(['1', '30 Oct 09:10:05', '09:13:53', '3 min 48 s', '91 / 80', '89', '5.24', 'Osero', '-0.29412, 36.07215']);
-    expect(t.rows[1][3]).toBe('1 min 00 s');
-    expect(t.rows[1][7]).toBe('-');
+    expect(t.rows[0]).toEqual(['1', '30 Oct 09:10:05', '09:13:53', '-', '3 min 48 s', '91 / 80', '89', '5.24', 'Osero', '-0.29412, 36.07215']);
+    expect(t.rows[1][4]).toBe('1 min 00 s');
+    expect(t.rows[1][8]).toBe('-');
+    // Once the reading it peaked on is found, its time to the second
+    expect(overspeedEventTable([{ ...events[0], peakAt: at('2026-10-30T09:11:47') }]).rows[0][3]).toBe('09:11:47');
 
     const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, list]]));
     const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
@@ -61,6 +63,18 @@ describe('report on the letterhead', () => {
     expect(html).toContain('3. Each overspeed');
     expect(html).toContain('30 Oct 09:10:05');
     expect(html).toContain('3 min 48 s');
+  });
+
+  it('says when each vehicle reached its top speed, to the second', () => {
+    const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, [{ durationSec: 60, distanceM: 1_400, peakKmh: 83, limitKmh: 80 }]]]))
+      .map((r) => ({ ...r, peakAt: at('2026-11-07T14:32:15') }));
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
+                   ctx: { from: at('2026-11-02T00:00:00'), to: at('2026-11-09T00:00:00'), peaksFailed: 1 }, missing: [], units: 1, failed: 0 };
+    expect(REPORTS.overspeed.cells(rows[0], done.ctx).at(-1)).toBe('Sat 07 Nov 2026 14:32:15');
+    const html = reportHtml(REPORTS.overspeed, done, opts).html;
+    expect(html).toContain('Top speed at');
+    expect(html).toContain('Sat 07 Nov 2026 14:32:15');
+    expect(html).toContain('could not be read: their top speed time shows as -');
   });
 
   it('keeps a short period on a portrait page', () => {

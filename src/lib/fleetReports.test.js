@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   behaviourRows, overspeedRows, nightRows, utilisationRows, sections, summariseWindows,
-  nightWindows, shiftPeriod, hourColumns, presetRange, daysCovering, fromLocalInput, toLocalInput, fleetDay, minutesWords, periodWords,
+  nightWindows, shiftPeriod, hourColumns, presetRange, peakFix, daysCovering, fromLocalInput, toLocalInput, fleetDay, minutesWords, periodWords,
 } from './fleetReports';
 import { scopeUnits, groupsFor, unitKey, vehicleKeys } from './fleetGroups';
 
@@ -53,6 +53,8 @@ describe('fleet time', () => {
     const now = at('2026-11-01T13:00:00');
     expect(presetRange('yesterday', now)).toEqual({ from: at('2026-10-31T00:00:00'), to: at('2026-11-01T00:00:00') });
     expect(presetRange('lastNight', now)).toEqual({ from: at('2026-10-31T12:00:00'), to: at('2026-11-01T12:00:00') });
+    // Seven whole days, ending at today's midnight
+    expect(presetRange('lastWeek', now)).toEqual({ from: at('2026-10-25T00:00:00'), to: at('2026-11-01T00:00:00') });
   });
 
   it('night windows cut the period to 19:00–05:00, across midnight', () => {
@@ -167,6 +169,25 @@ describe('overspeeding over 5 seconds', () => {
     ]));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ count: 2, seconds: 901, km: 22.5, peakKmh: 92, driver: 'Osero' });
+  });
+
+  it('keeps the top overspeed, and finds the reading it peaked on', () => {
+    const [row] = overspeedRows(units, new Map([['v1', [
+      { durationSec: 60, peakKmh: 88, limitKmh: 80, startedAt: '2026-11-01T07:00:00Z', endedAt: '2026-11-01T07:01:00Z' },
+      { durationSec: 90, peakKmh: 97, limitKmh: 80, startedAt: '2026-11-01T09:00:00Z', endedAt: '2026-11-01T09:01:30Z', peakLat: -0.3, peakLng: 36.02 },
+    ]]]));
+    expect(row.peak).toMatchObject({ vehicleId: 'v1', peakKmh: 97, startedAt: Date.parse('2026-11-01T09:00:00Z'), lat: -0.3, lng: 36.02 });
+    const t0 = row.peak.startedAt;
+    const pings = [
+      { t: t0 - 30_000, speedKmh: 120, lat: -0.3, lng: 36 },       // before the overspeed: not it
+      { t: t0 + 15_000, speedKmh: 92, lat: -0.3, lng: 36.01 },
+      { t: t0 + 30_000, speedKmh: 97, lat: -0.3, lng: 36.03 },
+      { t: t0 + 45_000, speedKmh: 97, lat: -0.3, lng: 36.02 },     // as fast, and where the peak was recorded
+      { t: t0 + 60_000, speedKmh: null, lat: -0.3, lng: 36.04 },
+    ];
+    expect(peakFix(pings, row.peak)).toEqual({ at: t0 + 45_000, kmh: 97 });
+    expect(peakFix([], row.peak)).toBeNull();
+    expect(peakFix(pings, null)).toBeNull();
   });
 });
 

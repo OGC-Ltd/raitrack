@@ -5,6 +5,10 @@
 // Pure: no React.
 
 import { km1, km2, minutesWords, OVERSPEED_MIN_SEC, OVER_STANDARD } from './fleetReports';
+
+/** The day and second a unit reached its top speed: "Sat 07 Nov 2026 14:32:15", Nairobi. */
+const peakDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+export const peakWords = (ms) => (Number.isFinite(ms) ? peakDay.format(ms).replace(/,/g, '') : '-');
 import { statusWord } from './followUp';
 
 /** Words that say there is no value: shown blank, and a column of nothing else is left out. */
@@ -142,11 +146,17 @@ export const REPORTS = {
     label: 'Overspeeding',
     title: 'Overspeeding Report',
     preset: 'yesterday',
+    // Mufindi reads it weekly (10 Nov 2026): its daily figures are on the end of shift sheet
+    presetFor: { KASULU: 'lastWeek' },
+    spans: [7, 31],
     maxDays: 31,
-    columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit'],
+    columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit', 'Top speed at'],
+    /** Not figures, though after `num`: left as words. */
+    text: ['Top speed at'],
     cells: (r) => [
       vehicleCell(r), typeOf(r), clean(r.driver), String(r.count), minutesWords(r.seconds / 60),
       km2(r.km), Number.isFinite(r.peakKmh) ? `${Math.round(r.peakKmh)} / ${Math.round(r.limitKmh)} km/h` : '',
+      peakWords(r.peakAt),
     ],
     sum: (r) => r.km,
     sumWords: (t) => `${km2(t)} km`,
@@ -257,14 +267,14 @@ const kmh = (x) => (Number.isFinite(x) ? `${Math.round(x)}` : '-');
  */
 export function overspeedEventTable(events) {
   const driver = events.some((e) => e.driver);
-  const head = ['#', 'Started', 'Ended', 'Duration', 'Peak / limit km/h', 'Avg km/h', 'Distance, km', ...(driver ? ['Driver'] : []), 'Where (at the peak)'];
+  const head = ['#', 'Started', 'Ended', 'Peak at', 'Duration', 'Peak / limit km/h', 'Avg km/h', 'Distance, km', ...(driver ? ['Driver'] : []), 'Where (at the peak)'];
   const rows = events.map((e, i) => [
-    String(i + 1), fmt(eventDay, e.startedAt), fmt(eventClock, e.endedAt), secondsWords(e.durationSec),
+    String(i + 1), fmt(eventDay, e.startedAt), fmt(eventClock, e.endedAt), fmt(eventClock, e.peakAt), secondsWords(e.durationSec),
     `${kmh(e.peakKmh)} / ${kmh(e.limitKmh)}`, kmh(e.avgKmh), e.km == null ? '-' : km2(e.km),
     ...(driver ? [e.driver ?? '-'] : []),
     e.lat == null || e.lng == null ? '-' : `${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}`,
   ]);
   /** Figures (right-aligned): Duration to Distance */
-  const num = (i) => i >= 3 && i <= 6;
+  const num = (i) => i >= 4 && i <= 7;
   return { head, rows, num, driver };
 }

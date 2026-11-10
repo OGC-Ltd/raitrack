@@ -104,6 +104,8 @@ export function presetRange(id, now = Date.now()) {
     case 'yesterday': return { from: today - DAY, to: today };
     case 'lastNight': return { from: today - DAY + 12 * HOUR, to: today + 12 * HOUR };
     case 'week':      return { from: today - 6 * DAY, to: now };
+    // The seven whole days before today (Mufindi's weekly overspeeding sheet)
+    case 'lastWeek':  return { from: today - 7 * DAY, to: today };
     default:          return null;
   }
 }
@@ -319,6 +321,7 @@ export function overspeedRows(units, episodesByVehicle, minSec = OVERSPEED_MIN_S
     const long = (list ?? []).filter((e) => Number(e?.durationSec) > minSec);
     if (!long.length) continue;
     const peak = long.reduce((m, e) => (Number(e.peakKmh) > (m?.peakKmh ?? -1) ? e : m), null);
+    const num = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
     perVehicle.set(vehicleId, {
       count: long.length,
       seconds: long.reduce((s, e) => s + Number(e.durationSec || 0), 0),
@@ -328,6 +331,12 @@ export function overspeedRows(units, episodesByVehicle, minSec = OVERSPEED_MIN_S
       limitKmh: peak ? Number(peak.limitKmh) : null,
       longestSec: Math.max(...long.map((e) => Number(e.durationSec) || 0)),
       driver: long.find((e) => e.driverName)?.driverName ?? null,
+      // The overspeed with the top speed, to find the reading it peaked on
+      peak: peak ? {
+        vehicleId, startedAt: Date.parse(peak.startedAt), endedAt: Date.parse(peak.endedAt),
+        peakKmh: num(peak.peakKmh), lat: num(peak.peakLat), lng: num(peak.peakLng),
+      } : null,
+      peakAt: null,
     });
   }
   return bestPerUnit(units, perVehicle, (r) => r.count)
@@ -345,6 +354,7 @@ export function overspeedEvents(lists, minSec = OVERSPEED_MIN_SEC) {
   return lists.flat()
     .filter((e) => Number(e?.durationSec) > minSec)
     .map((e) => ({
+      vehicleId: e.vehicleId ?? null,
       startedAt: Date.parse(e.startedAt),
       endedAt: Date.parse(e.endedAt),
       durationSec: Number(e.durationSec),
@@ -355,8 +365,30 @@ export function overspeedEvents(lists, minSec = OVERSPEED_MIN_SEC) {
       driver: e.driverName || null,
       lat: num(e.peakLat),
       lng: num(e.peakLng),
+      peakAt: null,
     }))
     .sort((a, b) => a.startedAt - b.startedAt);
+}
+
+/**
+ * The reading an overspeed peaked on (Mufindi, 10 Nov 2026: "the date and
+ * exact time of the highest peak speed ... traceable to the specific
+ * overspeeding event"). The episode keeps where it peaked but not when, so
+ * this is the fastest reading inside it; equal speeds go to the one nearest
+ * the recorded peak, then the earliest. `pings` are the tracker's readings
+ * ({t, speedKmh, lat, lng}); null when none falls inside the overspeed.
+ */
+export function peakFix(pings, ep, slackMs = 1000) {
+  if (!ep || !Number.isFinite(ep.startedAt) || !Number.isFinite(ep.endedAt)) return null;
+  const away = (p) => (ep.lat == null || ep.lng == null || p.lat == null || p.lng == null ? 0
+    : (p.lat - ep.lat) ** 2 + (p.lng - ep.lng) ** 2);
+  let best = null;
+  for (const p of pings ?? []) {
+    if (!(p.t >= ep.startedAt - slackMs && p.t <= ep.endedAt + slackMs) || !Number.isFinite(p.speedKmh)) continue;
+    if (!best || p.speedKmh > best.speedKmh
+      || (p.speedKmh === best.speedKmh && (away(p) < away(best) || (away(p) === away(best) && p.t < best.t)))) best = p;
+  }
+  return best ? { at: best.t, kmh: best.speedKmh } : null;
 }
 
 /**
