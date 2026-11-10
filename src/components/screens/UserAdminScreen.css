@@ -156,32 +156,40 @@
   }
 }
 
-.uadm-sections {
+/* The page's tabs (Rights, Users, Groups, Login Activity): plain words on
+   the white page with a line under the one open. */
+.uadm-subtabs {
   flex: 0 0 auto;
   display: flex;
-  gap: 4px;
-  padding: 8px var(--maint-gutter);
-  background: var(--color-bg, #f0f4f8);
+  gap: 20px;
+  padding: 0 var(--maint-gutter);
+  background: #fff;
   border-bottom: 1px solid var(--color-border, #dde1e7);
 }
-
-.uadm-sections__item {
-  padding: 7px 12px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
+.uadm-subtabs__item {
+  position: relative;
+  padding: 10px 0 9px;
+  border: 0;
+  background: none;
   color: var(--color-text-sec, #475569);
-  font: 600 12px var(--font-ui, system-ui);
+  font: 600 12.5px var(--font-ui, system-ui);
   cursor: pointer;
+  transition: color 0.15s;
 }
-
-.uadm-sections__item:hover { background: rgba(3, 105, 161, 0.06); }
-.uadm-sections__item:focus-visible { outline: 2px solid #0369a1; outline-offset: 2px; }
-.uadm-sections__item--active {
-  border-color: var(--color-border, #cbd5e1);
-  background: #fff;
-  color: #075985;
+.uadm-subtabs__item::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
 }
+.uadm-subtabs__item:hover { color: #0f172a; }
+.uadm-subtabs__item:focus-visible { outline: 2px solid #0369a1; outline-offset: 2px; border-radius: 4px; }
+.uadm-subtabs__item[aria-current="page"] { color: #075985; }
+.uadm-subtabs__item[aria-current="page"]::after { background: #0369a1; }
 
 @media (min-width: 768px) {
   .uadm-page__body {
@@ -278,4 +286,5 @@
   .uadm-page .ua-nomatch {
     animation: none;
   }
+  .uadm-subtabs__item { transition: none; }
 }

@@ -206,7 +206,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               )}
               {orgsWhere('user:read').length > 0 && (
                 <button className="mobile-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
-                  <i className="ti ti-users" aria-hidden="true" /> Users
+                  <i className="ti ti-users" aria-hidden="true" /> IAM
                 </button>
               )}
               {/* The Guide: the first-time tour, again (lib/productTour). */}

@@ -452,7 +452,7 @@ export default function AppHeader() {
               {orgsWhere('user:read').length > 0 && (
                 <button className="app-header__user-item" role="menuitem" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
                   <i className="ti ti-users" aria-hidden="true" />
-                  Users
+                  IAM
                 </button>
               )}
               {/* The Guide: the first-time tour, again (lib/productTour). */}

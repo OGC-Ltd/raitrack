@@ -9,17 +9,18 @@
  * Only the System Administrator is shown this section (UserAdminScreen), and
  * the server refuses everybody else whatever the page draws.
  *
- * People on the left, the chosen person's rights on the right. Nothing is
- * sent until Save: the Result column shows what the choices will come to
- * first (lib/iamAccess, the server's own rules), and a person with unsaved
- * choices cannot be left by accident.
+ * People on the left, the chosen person's rights on the right. A choice of
+ * Role, Allow or Deny saves the moment it is made: the row shows it at once
+ * and says "Saving…" until the server answers, saves go out one at a time in
+ * the order they were made, and a failed one puts the row back as it is
+ * stored and says which right did not save.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchIamCatalogue, fetchIamUser, listIamUsers, saveIamGrants } from "../../api/iam";
 import {
-  EVERYWHERE, keyOf, resolveEverywhere, resolveIn, spread, standingGrants, toChanges, withChoice,
+  EVERYWHERE, keyOf, resolveEverywhere, resolveIn, spread, standingGrants, toChanges,
 } from "../../lib/iamAccess";
 import { firstMessage } from "../../lib/formErrors";
 import EmptyNote from "../shared/EmptyNote";
@@ -61,7 +62,7 @@ function Person({ user, current, onPick }) {
 }
 
 /** Role / Allow / Deny for one right in the scope on screen. */
-function Choice({ value, saved, label, disabled, onChoose }) {
+function Choice({ value, busy, label, onChoose }) {
   return (
     <div className="ua-iam__choice" role="group" aria-label={label}>
       {CHOICES.map(([effect, word, title]) => (
@@ -71,13 +72,13 @@ function Choice({ value, saved, label, disabled, onChoose }) {
           className={`ua-iam__choice-btn ua-iam__choice-btn--${effect}`}
           aria-pressed={value === effect}
           title={title}
-          disabled={disabled}
+          disabled={busy}
           onClick={() => onChoose(effect)}
         >
           {word}
         </button>
       ))}
-      {value !== saved && <span className="ua-iam__unsaved">Not saved</span>}
+      {busy && <span className="ua-iam__unsaved">Saving…</span>}
     </div>
   );
 }
@@ -120,13 +121,13 @@ function Ledger({ entries }) {
                 <span className="ua-iam__set-effect">{LEDGER_WORDS[set.effect]}</span> {set.where}
               </span>
               <span className="ua-iam__set-count">{n} {n === 1 ? "right" : "rights"}</span>
-              {unsaved > 0 && <span className="ua-iam__unsaved">{unsaved} not saved</span>}
+              {unsaved > 0 && <span className="ua-iam__unsaved">{unsaved} saving</span>}
             </summary>
             <ul className="ua-iam__set-list">
               {set.entries.map((e) => (
                 <li key={e.key} className="ua-iam__set-item">
                   {e.name}
-                  {e.unsaved && <span className="ua-iam__unsaved">Not saved</span>}
+                  {e.unsaved && <span className="ua-iam__unsaved">Saving…</span>}
                 </li>
               ))}
             </ul>
@@ -135,6 +136,305 @@ function Ledger({ entries }) {
       })}
       </div>
     </section>
+  );
+}
+
+const REACH_ORDER = { all: 0, some: 1, none: 2 };
+
+/**
+ * How many rights the person has, drawn as one mark per right: solid where
+ * they have it in every organisation they reach, lighter where only in some,
+ * faint where nowhere. Held first, so the solid run reads as the share held.
+ * Counts what Result says, including choices still saving.
+ */
+function Marks({ marks, label, small }) {
+  const sorted = [...marks].sort((a, b) => REACH_ORDER[a.reach] - REACH_ORDER[b.reach]);
+  return (
+    <span className={small ? "ua-iam__marks ua-iam__marks--small" : "ua-iam__marks"} role="img" aria-label={label}>
+      {sorted.map((m) => (
+        <span key={m.slug} className={`ua-iam__mark ua-iam__mark--${m.reach}`} title={m.name} />
+      ))}
+    </span>
+  );
+}
+
+/** Held in at least one organisation, out of how many. */
+const heldOf = (marks) => marks.filter((m) => m.reach !== "none").length;
+
+function Reach({ marks }) {
+  const all = marks.filter((m) => m.reach === "all").length;
+  const some = marks.filter((m) => m.reach === "some").length;
+  const held = all + some;
+  const said = `${held} of ${marks.length} rights${some ? `, ${some} of them in some organisations only` : ""}`;
+  return (
+    <div className="ua-iam__reach">
+      <p className="ua-iam__reach-figure">
+        <strong>{held}</strong> of {marks.length} rights
+        {some > 0 && <span className="ua-iam__reach-some">{some} in some organisations</span>}
+      </p>
+      <Marks marks={marks} label={said} />
+    </div>
+  );
+}
+
+// Groups hidden from the board, kept per browser so the board opens as it was left.
+const HIDDEN_KEY = "iam.board.hidden";
+// Until somebody chooses, the board opens on the first few groups, A to Z.
+const SHOWN_AT_FIRST = 10;
+const BOARD_STACKS = 5;
+const firstFew = (resources) => new Set([...resources].sort(byLabel).slice(SHOWN_AT_FIRST).map((g) => g.resource));
+const readHidden = (resources) => {
+  try {
+    const saved = localStorage.getItem(HIDDEN_KEY);
+    return saved === null ? firstFew(resources) : new Set(JSON.parse(saved));
+  } catch { return firstFew(resources); }
+};
+const writeHidden = (set) => {
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])); } catch { /* storage blocked: this visit only */ }
+};
+
+/**
+ * Which groups the board shows: a box per group, A to Z, with Show all and
+ * Hide all. Closes on a click outside or Escape.
+ */
+function GroupPicker({ groups, hidden, onToggle, onSet }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const close = (e) => {
+      const menu = ref.current;
+      if (!menu?.open) return;
+      if (e.type === "keydown" ? e.key === "Escape" : !menu.contains(e.target)) menu.open = false;
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, []);
+  const shown = groups.filter((g) => !hidden.has(g.resource)).length;
+  return (
+    <details ref={ref} className="ua-iam__groups">
+      <summary className="ua-iam__groups-btn">
+        <i className="ti ti-layout-columns" aria-hidden="true" />
+        Groups <span className="ua-iam__groups-count">{shown} of {groups.length}</span>
+        <i className="ti ti-chevron-down" aria-hidden="true" />
+      </summary>
+      <div className="ua-iam__groups-menu">
+        <div className="ua-iam__groups-actions">
+          <button type="button" className="ua-iam__link" disabled={shown === groups.length} onClick={() => onSet(new Set())}>
+            Show all
+          </button>
+          <button type="button" className="ua-iam__link" disabled={shown === 0}
+                  onClick={() => onSet(new Set(groups.map((g) => g.resource)))}>
+            Hide all
+          </button>
+        </div>
+        <ul className="ua-iam__groups-list">
+          {groups.map((g) => (
+            <li key={g.resource}>
+              <label className="ua-iam__groups-opt">
+                <input type="checkbox" checked={!hidden.has(g.resource)} onChange={() => onToggle(g.resource)} />
+                <span>{g.label}</span>
+                <span className="ua-iam__groups-n">{g.permissions.length}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
+}
+
+// The System Administrator's one permission stands for every right.
+const WILDCARD = "platform:admin";
+const byLabel = (a, b) => String(a.label).localeCompare(String(b.label), undefined, { sensitivity: "base" });
+
+/**
+ * Before anybody is chosen: every right on one board, a column per group,
+ * A to Z. Each card says which roles give it; choosing a role lights the
+ * cards it gives and fills each column's strip with its share.
+ */
+function Board({ resources, roles }) {
+  const [roleSlug, setRoleSlug] = useState("");
+  const [find, setFind] = useState("");
+  const [hidden, setHiddenState] = useState(() => readHidden(resources));
+  const setHidden = (next) => { setHiddenState(next); writeHidden(next); };
+  const toggleHidden = (resource) => {
+    const next = new Set(hidden);
+    if (next.has(resource)) next.delete(resource); else next.add(resource);
+    setHidden(next);
+  };
+  const role = roles.find((r) => r.slug === roleSlug) ?? null;
+  const sortedGroups = useMemo(() => [...resources].sort(byLabel), [resources]);
+
+  // Right → the names of the roles that give it.
+  const givers = useMemo(() => {
+    const by = new Map();
+    for (const r of roles) {
+      const every = r.permissions.includes(WILDCARD);
+      for (const group of resources) for (const p of group.permissions) {
+        if (!every && !r.permissions.includes(p.slug)) continue;
+        if (!by.has(p.slug)) by.set(p.slug, []);
+        by.get(p.slug).push(r.name);
+      }
+    }
+    return by;
+  }, [resources, roles]);
+
+  const gives = (slug) => Boolean(role) && (givers.get(slug) ?? []).includes(role.name);
+
+  const columns = useMemo(() => {
+    const q = find.trim().toLowerCase();
+    return resources
+      .map((group) => ({
+        ...group,
+        permissions: group.permissions.filter((p) => !q || `${group.label} ${p.name} ${p.slug}`.toLowerCase().includes(q)),
+      }))
+      .filter((group) => group.permissions.length > 0 && !hidden.has(group.resource))
+      .sort(byLabel);
+  }, [resources, find, hidden]);
+
+  // Masonry: five stacks, each group dropped into whichever stack is shortest
+  // so far, so a short group has the next one pulled up under it instead of
+  // leaving a hole the height of its tallest neighbour. Heights are estimated
+  // in card units for the first paint, then each group's drawn height is
+  // measured and the board repacks once. Every stack is the same width, so a
+  // group is the same height in any of them and the second pack is final.
+  const boardRef = useRef(null);
+  const [heights, setHeights] = useState({});
+  const [width, setWidth] = useState(0);
+  const stacks = useMemo(() => {
+    const out = Array.from({ length: BOARD_STACKS }, () => ({ h: 0, groups: [] }));
+    for (const group of columns) {
+      const h = heights[group.resource]
+        ?? 48 + (role ? 16 : 0) + group.permissions.reduce((n, p) => n + (p.name.length > 22 ? 82 : 66), 0);
+      const low = out.reduce((a, b) => (b.h < a.h ? b : a));
+      low.groups.push(group);
+      low.h += h;
+    }
+    return out;
+  }, [columns, role, heights]);
+
+  useLayoutEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const next = {};
+    let changed = false;
+    for (const el of board.querySelectorAll("[data-group]")) {
+      const h = el.offsetHeight;
+      next[el.dataset.group] = h;
+      if (heights[el.dataset.group] !== h) changed = true;
+    }
+    if (changed) setHeights((prev) => ({ ...prev, ...next }));
+  }, [stacks, width, heights]);
+
+  // A narrower board wraps names onto more lines: measure again.
+  const hasColumns = columns.length > 0;
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    ro.observe(board);
+    return () => ro.disconnect();
+  }, [hasColumns]);
+
+  const total = resources.reduce((n, g) => n + g.permissions.length, 0);
+  const given = role ? resources.reduce((n, g) => n + g.permissions.filter((p) => gives(p.slug)).length, 0) : 0;
+
+  return (
+    <div className="ua-iam__board-wrap">
+      <header className="ua-iam__board-head">
+        <div className="ua-iam__who">
+          <h2 className="ua-iam__name">Rights by group</h2>
+          <p className="ua-iam__meta">
+            {role ? (
+              <><strong>{role.name}</strong> gives {given} of {total} rights</>
+            ) : (
+              `${total} rights in ${resources.length} groups. Choose a person to give or take one.`
+            )}
+          </p>
+        </div>
+        <div className="ua-iam__board-tools">
+          {role && (
+            <p className="ua-iam__key" aria-hidden="true">
+              <span className="ua-iam__key-item ua-iam__key-item--given">Given</span>
+              <span className="ua-iam__key-item ua-iam__key-item--not">Not given</span>
+            </p>
+          )}
+          <GroupPicker groups={sortedGroups} hidden={hidden} onToggle={toggleHidden} onSet={setHidden} />
+          <label className="ua-iam__field">
+            <i className="ti ti-users-group ua-iam__search-icon" aria-hidden="true" />
+            <span className="ua-iam__visually-hidden">What a role gives</span>
+            <select value={roleSlug} onChange={(e) => setRoleSlug(e.target.value)}>
+              <option value="">Show what a role gives</option>
+              {roles.map((r) => <option key={r.slug} value={r.slug}>{r.name}</option>)}
+            </select>
+            <i className="ti ti-chevron-down ua-iam__field-chevron" aria-hidden="true" />
+          </label>
+          <label className="ua-iam__search ua-iam__search--board">
+            <i className="ti ti-search ua-iam__search-icon" aria-hidden="true" />
+            <span className="ua-iam__visually-hidden">Find a right</span>
+            <input type="search" value={find} placeholder="Find a right" onChange={(e) => setFind(e.target.value)} />
+          </label>
+        </div>
+      </header>
+
+      {sortedGroups.length > 0 && sortedGroups.every((g) => hidden.has(g.resource)) ? (
+        <EmptyNote icon="ti-eye-off" tone="info" title="Every group is hidden"
+                   action={{ label: "Show all groups", onClick: () => setHidden(new Set()) }}>
+          Pick the groups to show from Groups above.
+        </EmptyNote>
+      ) : columns.length === 0 ? (
+        <EmptyNote icon="ti-search-off" tone="info" title="No right matches">
+          {hidden.size > 0 ? "Try a different word, or show the hidden groups." : "Try a different word."}
+        </EmptyNote>
+      ) : (
+        <div ref={boardRef} className="ua-iam__board" role="list" aria-label="Rights by group">
+          {stacks.map((stack, i) => (
+          <div key={i} className="ua-iam__stack" role="none">
+          {stack.groups.map((group) => {
+            const marks = group.permissions.map((p) => ({ slug: p.slug, name: p.name, reach: gives(p.slug) ? "all" : "none" }));
+            const n = group.permissions.length;
+            return (
+              <section key={group.resource} className="ua-iam__column" role="listitem" aria-label={group.label} data-group={group.resource}>
+                <header className="ua-iam__column-head">
+                  <h3 className="ua-iam__column-name">{group.label}</h3>
+                  <span className="ua-iam__group-count">
+                    {role ? `${heldOf(marks)} of ${n}` : `${n} ${n === 1 ? "right" : "rights"}`}
+                  </span>
+                  <button type="button" className="ua-iam__column-hide" aria-label={`Hide ${group.label}`}
+                          title={`Hide ${group.label}`} onClick={() => toggleHidden(group.resource)}>
+                    <i className="ti ti-eye-off" aria-hidden="true" />
+                  </button>
+                  {role && <Marks marks={marks} small label={`${role.name} gives ${heldOf(marks)} of ${n} rights in ${group.label}`} />}
+                </header>
+                <ul className="ua-iam__cards">
+                  {group.permissions.map((p) => {
+                    const names = givers.get(p.slug) ?? [];
+                    const state = !role ? "" : gives(p.slug) ? " ua-iam__card--given" : " ua-iam__card--not";
+                    return (
+                      <li key={p.slug} className={`ua-iam__card${state}`}>
+                        <span className="ua-iam__right">{p.name}</span>
+                        <code className="ua-iam__slug">{p.slug}</code>
+                        <span className="ua-iam__card-foot">
+                          <span className="ua-iam__card-roles" title={names.join(", ") || "No role gives it"}>
+                            {names.length} {names.length === 1 ? "role" : "roles"}
+                          </span>
+                          {!p.grantable && <span className="ua-iam__tag">Role only</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
+          </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -153,11 +453,22 @@ export default function UserIamPanel() {
   const [onlyPersonal, setOnlyPersonal] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [scope, setScope] = useState(EVERYWHERE);
+  // Choices sent and not yet answered, key → effect: drawn as if saved.
   const [pending, setPending] = useState(() => new Map());
   const [find, setFind] = useState("");
-  const [saving, setSaving] = useState(false);
+  // Rights groups folded shut, by resource. Kept across people, so a group
+  // folded away stays out of the way while working down the list.
+  const [folded, setFolded] = useState(() => new Set());
+  const toggleGroup = (resource) => setFolded((now) => {
+    const next = new Set(now);
+    if (next.has(resource)) next.delete(resource); else next.add(resource);
+    return next;
+  });
+  const [savedOnce, setSavedOnce] = useState(false);
   const [problem, setProblem] = useState("");
   const [held, setHeld] = useState(false);
+  // One save at a time, in the order the choices were made.
+  const queue = useRef(Promise.resolve());
 
   const people = useQuery({ queryKey: ["iam", "users"], queryFn: listIamUsers, staleTime: 60_000 });
   const catalogue = useQuery({ queryKey: ["iam", "catalogue"], queryFn: fetchIamCatalogue, staleTime: 30 * 60_000 });
@@ -197,31 +508,35 @@ export default function UserIamPanel() {
     if (pending.size > 0) { setHeld(true); return; }
     setSelectedId(id);
     setProblem("");
+    setSavedOnce(false);
     setFind("");
   };
 
-  const discard = () => { setPending(new Map()); setHeld(false); setProblem(""); };
-
-  const choose = (permission, effect) => {
+  const choose = (permission, name, effect) => {
+    const key = keyOf(scopeId, permission);
+    if ((standing.get(key) ?? "inherit") === effect || pending.has(key)) return;
+    const userId = selectedId;
+    const [change] = toChanges(new Map([[key, effect]]));
     setHeld(false);
-    setPending((now) => withChoice(now, grants, scopeId, permission, effect));
-  };
-
-  const save = async () => {
-    if (!selectedId || pending.size === 0 || saving) return;
-    setSaving(true);
     setProblem("");
-    try {
-      const next = await saveIamGrants(selectedId, toChanges(pending));
-      queryClient.setQueryData(["iam", "user", selectedId], next);
-      queryClient.invalidateQueries({ queryKey: ["iam", "users"] });
-      setPending(new Map());
-      setHeld(false);
-    } catch (err) {
-      setProblem(firstMessage(err) ?? "The changes could not be saved.");
-    } finally {
-      setSaving(false);
-    }
+    setPending((now) => new Map(now).set(key, effect));
+    queue.current = queue.current.then(async () => {
+      try {
+        const next = await saveIamGrants(userId, [change]);
+        queryClient.setQueryData(["iam", "user", userId], next);
+        queryClient.invalidateQueries({ queryKey: ["iam", "users"] });
+        setSavedOnce(true);
+      } catch (err) {
+        setProblem(`"${name}" was not saved: ${firstMessage(err) ?? "the server did not answer."}`);
+      } finally {
+        setPending((now) => {
+          if (!now.has(key)) return now;
+          const rest = new Map(now);
+          rest.delete(key);
+          return rest;
+        });
+      }
+    });
   };
 
   const groups = useMemo(() => {
@@ -232,7 +547,9 @@ export default function UserIamPanel() {
         permissions: group.permissions.filter((p) =>
           !q || `${group.label} ${p.name} ${p.slug}`.toLowerCase().includes(q)),
       }))
-      .filter((group) => group.permissions.length > 0);
+      .filter((group) => group.permissions.length > 0)
+      // Groups A to Z by the name on screen; rights inside keep the server's order.
+      .sort(byLabel);
   }, [catalogue.data, find]);
 
   // The ledger: every right this person holds or loses on their own, saved or chosen.
@@ -254,10 +571,19 @@ export default function UserIamPanel() {
     });
   }, [catalogue.data, organisations, savedMap, pending, standing]);
 
+  // One mark per right that can be given, for the strip in the header.
+  const reach = useMemo(() => (catalogue.data?.resources ?? []).flatMap((group) =>
+    group.permissions.filter((p) => p.grantable).map((p) => {
+      if (locked) return { resource: group.resource, slug: p.slug, name: p.name, reach: "all" };
+      const r = resolveEverywhere(organisations, p.slug, standing);
+      return { resource: group.resource, slug: p.slug, name: p.name, reach: spread(r.held, r.total) };
+    })), [catalogue.data, organisations, standing, locked]);
+
   const personalHere = (permission) => standing.get(keyOf(scopeId, permission)) ?? "inherit";
   const savedHere = (permission) => savedMap.get(keyOf(scopeId, permission)) ?? "inherit";
 
   const roleCell = (permission) => {
+    if (locked) return "Yes";
     if (scopeOrg) return scopeOrg.fromRoles.includes(permission) ? "Yes" : "No";
     const r = resolveEverywhere(organisations, permission, new Map());
     const s = spread(r.fromRole, r.total);
@@ -265,6 +591,7 @@ export default function UserIamPanel() {
   };
 
   const resultCell = (permission) => {
+    if (locked) return <Result held>Can, in every organisation</Result>;
     if (scopeOrg) {
       const r = resolveIn(scopeOrg, permission, standing);
       return <Result held={r.held}>{r.held ? "Can" : "Cannot"}, {SOURCE_WORDS[r.source]}</Result>;
@@ -345,9 +672,16 @@ export default function UserIamPanel() {
 
       <div className="ua-iam__editor">
         {!selectedId ? (
-          <EmptyNote icon="ti-shield-lock" tone="info" title="Choose a person">
-            Their role sets what they can do. Here you give or take single rights on top of it.
-          </EmptyNote>
+          catalogue.isLoading ? (
+            <EmptyNote icon="ti-loader-2" tone="busy" title="Reading access rights" />
+          ) : catalogue.isError ? (
+            <EmptyNote icon="ti-alert-triangle" tone="error" title="Access rights could not be loaded"
+                       action={{ label: "Try again", onClick: () => catalogue.refetch() }}>
+              {firstMessage(catalogue.error) ?? "The server did not answer."}
+            </EmptyNote>
+          ) : (
+            <Board resources={catalogue.data?.resources ?? []} roles={catalogue.data?.roles ?? []} />
+          )
         ) : detail.isLoading || catalogue.isLoading ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Reading access rights" />
         ) : detail.isError || catalogue.isError ? (
@@ -375,33 +709,39 @@ export default function UserIamPanel() {
                   </span>
                 </p>
               </div>
+              {reach.length > 0 && <Reach marks={reach} />}
               {!locked && (
-                <div className="ua-iam__actions">
-                  <button type="button" className="ua-iam__button" disabled={pending.size === 0 || saving} onClick={discard}>
-                    Discard
-                  </button>
-                  <button type="button" className="ua-iam__button ua-iam__button--lead" disabled={pending.size === 0 || saving} onClick={save}>
-                    {saving ? "Saving" : pending.size > 0 ? `Save ${pending.size} ${pending.size === 1 ? "change" : "changes"}` : "Save"}
-                  </button>
-                </div>
+                <p className={pending.size > 0 ? "ua-iam__status ua-iam__status--busy" : "ua-iam__status"} role="status">
+                  {pending.size > 0 ? (
+                    <><i className="ti ti-loader-2" aria-hidden="true" /> Saving…</>
+                  ) : savedOnce ? (
+                    <><i className="ti ti-check" aria-hidden="true" /> Saved</>
+                  ) : (
+                    "Changes save as you choose"
+                  )}
+                </p>
               )}
             </header>
 
             {held && (
               <p className="ua-iam__notice ua-iam__notice--warn" role="alert">
-                Save or discard the changes for {selectedUser?.fullName} before choosing somebody else.
+                Still saving for {selectedUser?.fullName}. Choose somebody else in a moment.
               </p>
             )}
             {problem && <p className="ua-iam__notice ua-iam__notice--error" role="alert">{problem}</p>}
 
-            {locked ? (
-              <EmptyNote icon="ti-shield-check" tone="ok" title="Holds every access right">
-                A System Administrator can do everything in every organisation, so there is nothing to give or take. Change the role on Users to narrow it.
-              </EmptyNote>
-            ) : (
+            {/* A System Administrator's list is every right, read only: the
+                role gives all of it everywhere, so there is nothing to give
+                or take here. Change the role on Users to narrow it. */}
               <div className="ua-iam__body">
-                <Ledger entries={ledger} />
+                {!locked && <Ledger entries={ledger} />}
                 <div className="ua-iam__bar">
+                  {locked ? (
+                    <p className="ua-iam__locked">
+                      <i className="ti ti-shield-check" aria-hidden="true" />
+                      Holds every right in every organisation. Change the role on Users to narrow it.
+                    </p>
+                  ) : (
                   <label className="ua-iam__scope">
                     <span className="ua-iam__label">Applies in</span>
                     <select value={scopeOrg ? scopeOrg.id : EVERYWHERE} onChange={(e) => setScope(e.target.value)}>
@@ -409,11 +749,16 @@ export default function UserIamPanel() {
                       {organisations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
                   </label>
+                  )}
                   <label className="ua-iam__search ua-iam__search--rights">
                     <i className="ti ti-search ua-iam__search-icon" aria-hidden="true" />
                     <span className="ua-iam__visually-hidden">Find a right</span>
                     <input type="search" value={find} placeholder="Find a right" onChange={(e) => setFind(e.target.value)} />
                   </label>
+                  <button type="button" className="ua-iam__button ua-iam__fold-all" disabled={Boolean(find.trim())}
+                          onClick={() => setFolded(folded.size > 0 ? new Set() : new Set(groups.map((g) => g.resource)))}>
+                    {folded.size > 0 ? "Open all" : "Fold all"}
+                  </button>
                 </div>
 
                 <div className="ua-iam__rights">
@@ -429,12 +774,38 @@ export default function UserIamPanel() {
                           <th scope="col">Result</th>
                         </tr>
                       </thead>
-                      {groups.map((group) => (
+                      {groups.map((group) => {
+                        // A search shows every match, folded or not.
+                        const open = Boolean(find.trim()) || !folded.has(group.resource);
+                        const own = group.permissions.filter((p) => p.grantable && personalHere(p.slug) !== "inherit").length;
+                        const n = group.permissions.length;
+                        // The whole group, not just a search's matches.
+                        const marks = reach.filter((m) => m.resource === group.resource);
+                        const has = heldOf(marks);
+                        return (
                         <tbody key={group.resource}>
-                          <tr className="ua-iam__group">
-                            <th scope="colgroup" colSpan={4}>{group.label}</th>
+                          <tr className={open ? "ua-iam__group" : "ua-iam__group ua-iam__group--folded"}>
+                            <th scope="colgroup" colSpan={4}>
+                              <button type="button" className="ua-iam__group-toggle" aria-expanded={open}
+                                      onClick={() => toggleGroup(group.resource)}>
+                                <span className="ua-iam__group-lead">
+                                  <span className="ua-iam__group-name">{group.label}</span>
+                                  {own > 0 && <span className="ua-iam__tag ua-iam__tag--own">{own} personal</span>}
+                                </span>
+                                <span className="ua-iam__group-meter">
+                                  {marks.length > 0 ? (
+                                    <>
+                                      <Marks marks={marks} small label={`${has} of ${marks.length} rights in ${group.label}`} />
+                                      <span className="ua-iam__group-count">{has} of {marks.length}</span>
+                                    </>
+                                  ) : (
+                                    <span className="ua-iam__group-count">{n} {n === 1 ? "right" : "rights"}, set by the role only</span>
+                                  )}
+                                </span>
+                              </button>
+                            </th>
                           </tr>
-                          {group.permissions.map((p) => (
+                          {open && group.permissions.map((p) => (
                             <tr key={p.slug} className={[
                               "ua-iam__row",
                               p.grantable && personalHere(p.slug) !== "inherit" ? `ua-iam__row--own ua-iam__row--${personalHere(p.slug)}` : "",
@@ -446,13 +817,14 @@ export default function UserIamPanel() {
                               </th>
                               <td data-label="Role gives">{roleCell(p.slug)}</td>
                               <td className="ua-iam__choice-cell">
-                                {p.grantable ? (
+                                {locked ? (
+                                  <span className="ua-iam__fixed">Given by the role</span>
+                                ) : p.grantable ? (
                                   <Choice
                                     value={personalHere(p.slug)}
-                                    saved={savedHere(p.slug)}
+                                    busy={pending.has(keyOf(scopeId, p.slug))}
                                     label={`${p.name}, for this person`}
-                                    disabled={saving}
-                                    onChoose={(effect) => choose(p.slug, effect)}
+                                    onChoose={(effect) => choose(p.slug, p.name, effect)}
                                   />
                                 ) : (
                                   <span className="ua-iam__fixed">Set by the role only</span>
@@ -462,12 +834,12 @@ export default function UserIamPanel() {
                             </tr>
                           ))}
                         </tbody>
-                      ))}
+                        );
+                      })}
                     </table>
                   )}
                 </div>
               </div>
-            )}
           </>
         )}
       </div>
