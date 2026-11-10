@@ -24,6 +24,7 @@ import { dismissIncident } from '../lib/fuelDismissals'
 import { followUpsChanged } from '../lib/fuelFollowUps'
 import { accessChanged } from '../lib/accessChanged'
 import { createFrameStore } from '../lib/positionDelta'
+import { receiveServerToast } from '../lib/serverToasts'
 
 const fleetCacheKey = (companyId) => `ft-fleet:${companyId}`
 const orgCacheKey   = (companyId) => `ft-org:${companyId}`
@@ -356,6 +357,12 @@ export function useFleetLive(companyId, { keepFeed = false } = {}) {
     /* A repair job changed for anybody in this organisation: the Repairs tab
        and the Fuel Audit read it again. */
     es.addEventListener('repair_changed', () => { repairsChanged() })
+    /* A toast the server made for this person: an unauthorised stop, or the
+       words of a web push (fleet-server lib/toasts). Stacked first in, first
+       out by components/shared/ToastStack. */
+    es.addEventListener('toast', (e) => {
+      try { receiveServerToast(JSON.parse(e.data)) } catch { /* ignore malformed frame */ }
+    })
     /* An administrator changed THIS account's role or access. The server
        closes the stream after this frame; the reconnect is checked against
        the new access, and AuthProvider re-reads who this is. */
