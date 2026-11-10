@@ -130,6 +130,13 @@
   vertical-align: 1px;
 }
 .rpt-tag--warn { background: rgba(245, 158, 11, 0.16); color: var(--sp4-warn); }
+.rpt-tag--ok { background: rgba(22, 163, 74, 0.14); color: var(--sp4-ok, #16a34a); }
+.rpt-table td > .rpt-tag:first-child { margin-left: 0; }
+
+/* A count column's total, a zero kept quiet, the table's closing total row. */
+.rpt-strong { font-weight: 700; color: var(--sp4-text-1); }
+.rpt-table td.rpt-nil { color: var(--sp4-text-4); }
+.rpt-table tr.rpt-total > td { font-weight: 800; color: var(--sp4-text-1); border-top: 1px solid var(--sp4-line-hi); }
 
 .rpt-missing {
   margin: 16px var(--sp4-gutter);

@@ -27,6 +27,7 @@ import { clean } from '../../lib/operatorLog';
 import { displayOf } from '../../lib/fleetGroups';
 import { toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import EmptyNote from '../shared/EmptyNote';
+import DateRangePicker from '../layout/DateRangePicker';
 import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
@@ -55,6 +56,20 @@ function fmtAt(ms) {
 /** Today as a fleet day, YYYY-MM-DD in Nairobi, whatever the browser's own zone. */
 function todayStr() {
   return new Date(Date.now() + 3 * 3_600_000).toISOString().slice(0, 10);
+}
+
+const MAX_DAYS = 31;
+const fmt = (n) => n.toLocaleString('en-GB');
+/** The figures over the table, as on the other Movements reports. */
+const KPI_LABELS = ['Incidents', 'Units', 'Shared', 'Not shared'];
+
+function Kpi({ value, label }) {
+  return (
+    <div className="sp4-kpi">
+      <span className="sp4-kpi-n">{value}</span>
+      <span className="sp4-kpi-l">{label}</span>
+    </div>
+  );
 }
 
 // ── WhatsApp share ────────────────────────────────────────────────────────────
@@ -219,8 +234,11 @@ function LogDialog({ vehicles, entry, whoAmI, companyName, onSave, onClose }) {
 
 export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles, companyName, whoAmI, active = true }) {
   const today = todayStr();
-  const [from, setFrom] = useState(today);
-  const [to,   setTo]   = useState(today);
+  const [days, setDays] = useState({ from: today, to: today });
+  // The period on screen: what was last run, not what is picked
+  const [period, setPeriod] = useState(null);
+  const from = period?.from ?? days.from;
+  const to = period?.to ?? days.to;
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading]     = useState(false);
   const [error,   setError]       = useState(null);
@@ -231,25 +249,29 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
 
   // ── The period's incidents, from the server (reports/unauthorized-passengers) ─
   const loadId = useRef(0);
-  const load = useCallback(async () => {
-    if (!orgId || !from || !to) return;
+  const load = useCallback(async (want) => {
+    if (!orgId || !want?.from) return;
     const id = ++loadId.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await loadUnauthorizedPassengers({ orgId, from, to: to < from ? from : to });
-      if (id === loadId.current) setIncidents(data?.incidents ?? []);
+      const data = await loadUnauthorizedPassengers({ orgId, from: want.from, to: want.to < want.from ? want.from : want.to });
+      if (id !== loadId.current) return;
+      setIncidents(data?.incidents ?? []);
+      setPeriod(want);
     } catch (err) {
       if (id === loadId.current) setError(err?.message ?? String(err));
     } finally {
       if (id === loadId.current) setLoading(false);
     }
-  }, [orgId, from, to]);
+  }, [orgId]);
+  const run = () => load(days);
+  const reload = () => load(period ?? days);
 
-  // Read again whenever the tab is shown or the period changes.
+  // A tab under Movements: it runs when first opened, not with the page.
   useEffect(() => {
-    if (active) load();
-  }, [active, load]);
+    if (active && orgId && !period) load(days);
+  }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Newest first, as the server sends them.
   const rows = incidents;
@@ -266,7 +288,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
       if (!entry) return;
       await conductApi.saveIncident(orgId, entry);
       setDialog(null);
-      load();
+      reload();
     } catch (err) {
       alert(`Could not save: ${err?.message ?? err}`);
     }
@@ -323,133 +345,105 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
     }
   };
 
-  return (
-    <div className="frp-page upr-page">
+  const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : null;
+  const shared = rows.filter(isShared).length;
+  const values = period
+    ? [fmt(rows.length), fmt(new Set(rows.map((r) => r.plate)).size), fmt(shared), fmt(rows.length - shared)]
+    : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
+  const periodText = `${from}${to !== from ? ` – ${to}` : ''}`;
 
-      {/* Filter bar */}
-      <div className="sp4-filterbar frp-filterbar rpt-filterbar upr-bar">
-        <label className="rpt-sub upr-field">
-          From
-          <input type="date" className="sp4-input upr-date"
-                 value={from} max={today} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label className="rpt-sub upr-field">
-          To
-          <input type="date" className="sp4-input upr-date"
-                 value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
-        </label>
-        <button type="button" className="sp4-ghost-btn" onClick={load}
-                disabled={loading} title="Refresh">
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
-        <button type="button" className="sp4-submit-btn frp-run rpt-run"
-                onClick={() => setDialog('new')}>
-          + Log incident
-        </button>
+  return (
+    <>
+      <div className="sp4-header rpt-header">
+        <div className="sp4-header-kpis">
+          {KPI_LABELS.map((label, i) => <Kpi key={label} label={label} value={values[i]} />)}
+        </div>
       </div>
 
-      {/* States */}
-      {error && (
-        <EmptyNote icon="ti-alert-circle" tone="warn" title="Could not load incidents">
-          {error}
-        </EmptyNote>
-      )}
-      {!error && !loading && rows.length === 0 && (
-        <EmptyNote icon="ti-users-minus" title="No Incidents in This Period">
-          No unauthorized passenger incidents were logged in this period. Use &ldquo;Log incident&rdquo; to add one.
-        </EmptyNote>
-      )}
+      <div className="sp4-filterbar frp-filterbar rpt-filterbar">
+        <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[]} label="Days"
+                         onChange={(f, t) => setDays({ from: f, to: t ?? f })} />
+        <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog('new')}>
+          Log incident
+        </button>
+        <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', run)}
+                disabled={Boolean(problem) || loading} title={problem ?? 'Make the report for these days'}>
+          {loading ? 'Running…' : 'Run report'}
+        </button>
+        {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
+      </div>
 
-      {/* Toolbar + table */}
-      {rows.length > 0 && (
-        <>
-          {editor.overlay}
-          <TableToolbar
-            summary={<>
-              Unauthorized Passengers · <strong>{rows.length}</strong> incident{rows.length === 1 ? '' : 's'}
-              <span className="rpt-sub"> · {fleet} · {from}{to !== from ? ` – ${to}` : ''}</span>
-            </>}
-            onCsv={saveCsv}
-            onPdf={file.busy ? undefined : (landscape) => save('pdf', landscape)}
-            actions={<>
-              {editor.button}
-              {file.busy
-                ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
-                : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-              <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
-              <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
-            </>}
-          />
-          {preview.state && <PdfPreview state={preview.state} title="Unauthorized Passengers report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
-        </>
-      )}
+      {editor.overlay}
 
-      {rows.length > 0 && (
-        <div className="sp4-table-scroll rpt-scroll">
-          <table className="sp4-table rpt-table upr-table">
-            <thead>
-              <tr>
-                <th>Registration</th>
-                <th>Client Name</th>
-                <th>Time of Event</th>
-                <th>Violation</th>
-                <th className="upr-status-col">Status on WhatsApp</th>
-                <th className="upr-actions-col" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const wasShared = isShared(r);
-                return (
-                  <tr key={r.id} className="sp4-tr">
-                    <td className="upr-plate">{r.plate || '—'}</td>
-                    <td>{r.location || companyName || '—'}</td>
-                    <td className="upr-time">{fmtAt(r.at)}</td>
-                    <td>{VIOLATION}</td>
-                    <td className="upr-status-col">
-                      {wasShared
-                        ? <span className="upr-shared">Shared ✓</span>
-                        : <span className="upr-not-shared">Not shared</span>}
-                    </td>
-                    <td className="upr-actions-col">
-                      <div className="upr-actions">
-                        <button type="button" className="upr-wa-btn"
-                                onClick={() => handleShare(r)}
-                                title="Share on WhatsApp">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                          </svg>
-                          Share
-                        </button>
-                        <button type="button" className="sp4-ghost-btn upr-edit-btn"
-                                onClick={() => setDialog({ entry: r })}
-                                title="Edit this incident">
-                          Edit
-                        </button>
-                        <button type="button" className="sp4-ghost-btn upr-del-btn"
-                                onClick={() => handleDelete(r)}
-                                title="Delete this incident">
-                          ×
-                        </button>
-                      </div>
-                    </td>
+      <div className="sp4-body rpt-body">
+        {loading && !period && (
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">Reading the logged incidents…</EmptyNote>
+        )}
+        {error && (
+          <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made" action={{ label: 'Try again', onClick: reload }}>
+            {error}
+          </EmptyNote>
+        )}
+        {!error && period && rows.length === 0 && (
+          <EmptyNote icon="ti-users-minus" title="No Incidents">
+            No unauthorized passengers were logged {from === to ? `on ${from}` : `from ${from} to ${to}`}. Use Log incident to add one.
+          </EmptyNote>
+        )}
+        {!error && rows.length > 0 && (
+          <>
+            <TableToolbar
+              summary={<>
+                Unauthorized Passengers · <strong>{fmt(rows.length)}</strong> incident{rows.length === 1 ? '' : 's'}, {fmt(shared)} shared
+                <span className="rpt-sub"> · {fleet} · {periodText}</span>
+              </>}
+              onCsv={saveCsv}
+              onPdf={file.busy ? undefined : (landscape) => save('pdf', landscape)}
+              actions={<>
+                {editor.button}
+                {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
+                  : file.error ? <span className="rpt-warn">{file.error}</span> : null}
+                <JpegButton onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy)} title="The PDF report as an image" />
+                <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
+              </>}
+            />
+            {preview.state && <PdfPreview state={preview.state} title="Unauthorized Passengers report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
+            <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+              <table className="sp4-table rpt-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Registration</th>
+                    <th scope="col">Client Name</th>
+                    <th scope="col">Time of Event</th>
+                    <th scope="col">Violation</th>
+                    <th scope="col">Status on WhatsApp</th>
+                    <th scope="col" aria-label="Actions" />
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="upr-total-row">
-                <td colSpan={2}>{rows.length} incident{rows.length === 1 ? '' : 's'}</td>
-                <td colSpan={2} />
-                <td>{rows.filter(isShared).length} shared</td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      {/* Log / edit dialog */}
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="sp4-tr">
+                      <td className="rpt-unit">{r.plate || '—'}</td>
+                      <td>{r.location || companyName || '—'}</td>
+                      <td className="oi-nowrap">{fmtAt(r.at)}</td>
+                      <td>{VIOLATION}</td>
+                      <td className="oi-nowrap">
+                        {isShared(r)
+                          ? <span className="rpt-tag rpt-tag--ok" title={`Shared ${fmtAt(r.sharedAt)}`}>Shared</span>
+                          : <span className="rpt-tag">Not shared</span>}
+                      </td>
+                      <td className="oi-actions">
+                        <button type="button" className="sp4-ghost-btn" onClick={() => handleShare(r)} title="Share on WhatsApp">Share</button>
+                        <button type="button" className="sp4-ghost-btn" onClick={() => setDialog({ entry: r })} title="Edit this incident">Edit</button>
+                        <button type="button" className="sp4-ghost-btn" onClick={() => handleDelete(r)} title="Delete this incident">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
 
       {dialog && (
         <LogDialog
@@ -461,6 +455,6 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
           onClose={() => setDialog(null)}
         />
       )}
-    </div>
+    </>
   );
 }
