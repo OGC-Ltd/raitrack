@@ -20,6 +20,7 @@ import { useAppSelector, useAppActions, useCompanies } from "../../context/AppCo
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import UnitTypeIcon from "../shared/UnitTypeIcon";
 import { usePermissions } from "../../hooks/usePermissions";
+import { claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 import "./MapToolRail.css";
 import "./MapToolFences.css";
 
@@ -377,6 +378,10 @@ export default function MapToolRail({
     window.addEventListener("keydown", onKey, true);
     return () => { document.removeEventListener("pointerdown", onDown); window.removeEventListener("keydown", onKey, true); };
   }, [fencesOpen]);
+  // One map window at a time: the menu opening closes Fuel alerts, Halted and
+  // the rest, and another window opening closes the menu.
+  useEffect(() => { if (fencesOpen) claimMapWindow("geofence-menu"); }, [fencesOpen]);
+  useEffect(() => onMapWindowClaim(["geofence-menu", "geofence"], () => setFencesOpen(false)), []);
   const canDrawFence = Boolean(drawFence);
 
   const close = () => setSearchOpen(false);
