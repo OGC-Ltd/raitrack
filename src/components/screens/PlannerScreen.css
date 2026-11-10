@@ -1,0 +1,343 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand (the sp4 framed scale, light) · redesign: full (2026-11-11, keep the app's theme, type, contrast and hierarchy)
+ * nav: the shell, kept (side panel; icon calendar-time) · signature: the route spine, home to each numbered customer and home again on one dotted line · states: loading, empty, error, full, reading track, no telemetry, saving
+ * axes: light/grotesk-sans/cool · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V3 · weakest: V, on purpose: it sits among the sp4 screens and reads as they do; the dotted spine is what only this page has */
+/* Hallmark · dismissed 74 · every colour below resolves to the sp4 scale SensorPanel.css re-points for the light app, kept brand */
+/* Hallmark · waive 24b · SensorPanel.css pads sp4 cells 14px, ghost buttons 9px and fields 3px 8px · the Planner copies its neighbours so its controls and cells sit at their size */
+
+/* Planner, on the sp4 frame its neighbours use (Maintenance, Weighbridges,
+   Fuel Report): a surface header with the page's figures, flush bands closed
+   by hairlines, 12.5px cells. Two differences, on purpose: table heads and
+   figure labels are sentence case and untracked, and a plan's stops hang off
+   one dotted spine, home to 1 to home, the way Wialon Logistics draws a run.
+   The page draws no map: a plan goes to the Live Map (body/PlanOnMap). */
+
+:root {
+  --pl-on-strong: #ffffff;
+  --pl-sheet-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+  --pl-on-scrim-2: rgba(255, 255, 255, 0.78);
+  --pl-on-scrim-hover: rgba(255, 255, 255, 0.14);
+  --pl-on-scrim-focus: #93c5fd;
+  --pl-on-scrim-warn: #fed7aa;
+  --pl-mask: #000000;
+  --pl-mask-soft: rgba(0, 0, 0, 0.15);
+  --pl-icon-glow: rgba(15, 23, 42, 0.08);
+}
+
+.pl-root {
+  --pl-ink: var(--sp4-text-1);
+  --pl-ink-2: var(--sp4-text-2);
+  --pl-ink-3: var(--sp4-text-3);
+  --pl-ink-4: var(--sp4-text-4);
+  --pl-bg: var(--sp4-bg);
+  --pl-surface: var(--sp4-surface);
+  --pl-raised: var(--sp4-raised);
+  --pl-line: var(--sp4-line);
+  --pl-line-hi: var(--sp4-line-hi);
+  --pl-field: var(--sp4-field-line);
+  --pl-accent: var(--sp4-accent);
+  --pl-ok: var(--sp4-ok);
+  --pl-warn: var(--sp4-warn);
+  --pl-crit: var(--sp4-crit);
+  --pl-new: var(--sp4-warn);
+  --pl-spine: var(--sp4-text-4);
+  --pl-pin: 26px;
+  --pl-dur: 0.12s;
+
+  display: flex; flex-direction: column; min-height: 0; height: 100%;
+}
+
+/* ── Header: the page's name, one sentence, its figures ─────────────────── */
+.pl-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: var(--sp4-sm) var(--sp4-lg);
+}
+.pl-head__name { min-width: 0; }
+.pl-title {
+  display: flex; align-items: center; gap: var(--sp4-xs); margin: 0;
+  font-size: var(--sp4-title); font-weight: 700; color: var(--pl-ink); line-height: 1.2; text-wrap: balance;
+}
+.pl-title .ti { color: var(--pl-accent); font-size: 20px; }
+
+/* The app's figure cards, labels in sentence case */
+.pl-root .sp4-kpi-l { text-transform: none; letter-spacing: 0; font-size: var(--sp4-label); font-weight: 500; }
+.pl-root .sp4-kpi-n { font-variant-numeric: tabular-nums; color: var(--pl-ink); }
+.pl-root .pl-kpi--open .sp4-kpi-n { color: var(--pl-warn); }
+.pl-root .pl-kpi--ok .sp4-kpi-n { color: var(--pl-ok); }
+.pl-root .pl-kpi--crit .sp4-kpi-n { color: var(--pl-crit); }
+.pl-of { font-size: var(--sp4-body); font-weight: 600; color: var(--pl-ink-3); letter-spacing: 0; }
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+.pl-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.pl-band {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp4-sm);
+  padding: var(--sp4-sm) var(--sp4-gutter); border-bottom: 1px solid var(--pl-line);
+}
+.pl-grow { flex: 1; }
+.pl-scroll { flex: 1; min-height: 0; overflow: auto; }
+
+.pl-sub { color: var(--pl-ink-3); font-size: var(--sp4-body); }
+.pl-quiet { color: var(--pl-ink-4); font-size: var(--sp4-label); font-family: var(--font-body); }
+.pl-warn { color: var(--pl-warn); font-size: var(--sp4-body); }
+.pl-error { color: var(--pl-crit); margin: 0; font-size: var(--sp4-body); }
+.pl-r { text-align: right !important; font-variant-numeric: tabular-nums; }
+
+/* Table heads: sentence case, untracked */
+.pl-root .sp4-table thead th { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: var(--sp4-label); }
+.pl-table td { vertical-align: top; }
+.pl-table b { color: var(--pl-ink); font-weight: 600; font-family: var(--font-body); }
+.pl-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; }
+.pl-root .sp4-tr:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: -2px; }
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+.pl-primary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 14px;
+  border: 1px solid var(--pl-accent); border-radius: 6px;
+  background: var(--pl-accent); color: var(--pl-on-strong);
+  font: 600 var(--sp4-body)/1 var(--font-body); cursor: pointer;
+  transition: filter var(--pl-dur), opacity var(--pl-dur);
+}
+.pl-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.pl-primary:active:not(:disabled) { filter: brightness(0.94); }
+.pl-primary:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: 2px; }
+.pl-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.pl-root .sp4-ghost-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; }
+.pl-root .sp4-ghost-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.pl-x {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  background: none; border: 0; border-radius: 5px; color: var(--pl-ink-3); cursor: pointer;
+  transition: color var(--pl-dur), background-color var(--pl-dur);
+}
+.pl-x:hover { color: var(--pl-ink); background: var(--pl-raised); }
+.pl-x:active { background: var(--pl-line-hi); }
+.pl-x:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: 1px; }
+.pl-x--danger:hover { color: var(--pl-crit); }
+
+/* Tags: one status hue each, tinted from the same token */
+.pl-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.pl-tag {
+  display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 10px; white-space: nowrap;
+  font: 600 var(--sp4-label)/1.6 var(--font-body);
+  color: var(--pl-tag, var(--pl-ink-3)); background: color-mix(in srgb, var(--pl-tag, var(--pl-ink-3)) 12%, transparent);
+}
+.pl-tag--ok   { --pl-tag: var(--pl-ok); }
+.pl-tag--new  { --pl-tag: var(--pl-new); }
+.pl-tag--warn { --pl-tag: var(--pl-warn); }
+.pl-tag--crit { --pl-tag: var(--pl-crit); }
+
+/* ── One plan ───────────────────────────────────────────────────────────── */
+.pl-plan { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.pl-plan__head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp4-sm) var(--sp4-md);
+  padding: var(--sp4-sm) var(--sp4-gutter); border-bottom: 1px solid var(--pl-line); background: var(--pl-surface);
+}
+.pl-plan__name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-plan__title {
+  margin: 0; font-size: var(--sp4-title); font-weight: 700; color: var(--pl-ink); line-height: 1.2; text-wrap: balance;
+  overflow-wrap: break-word; min-width: 0;
+}
+.pl-plan__facts { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--pl-ink-3); font-size: var(--sp4-body); }
+.pl-plan__facts .ti { margin-right: 4px; color: var(--pl-ink-4); }
+.pl-plan__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* The route: one dotted spine from home, through every numbered customer, home again */
+.pl-route td.pl-rail { position: relative; width: calc(var(--sp4-gutter) + var(--pl-pin) + 14px); }
+.pl-route td.pl-rail::before,
+.pl-route td.pl-rail::after {
+  content: ''; position: absolute; left: calc(var(--sp4-gutter) + var(--pl-pin) / 2 - 1px);
+  border-left: 2px dotted var(--pl-spine);
+}
+.pl-route td.pl-rail::before { top: 0; height: calc(10px + var(--pl-pin) / 2); }
+.pl-route td.pl-rail::after { top: calc(10px + var(--pl-pin) / 2); bottom: 0; }
+.pl-route tr.pl-route__start td.pl-rail::before,
+.pl-route tr.pl-route__end td.pl-rail::after { content: none; }
+
+.pl-pin {
+  position: relative; z-index: 1;
+  display: inline-grid; place-items: center; width: var(--pl-pin); height: var(--pl-pin); border-radius: 50%;
+  border: 2px solid var(--pl-pin-c, var(--pl-ink-4)); color: var(--pl-pin-c, var(--pl-ink-3));
+  background: var(--pl-surface); font: 700 var(--sp4-label)/1 var(--font-body); font-variant-numeric: tabular-nums;
+}
+.pl-pin--ok   { --pl-pin-c: var(--pl-ok); }
+.pl-pin--miss { --pl-pin-c: var(--pl-crit); }
+.pl-pin--home { --pl-pin-c: var(--pl-accent); background: var(--pl-accent); color: var(--pl-on-strong); }
+.pl-pin--home .ti { font-size: 14px; }
+.pl-route__home td { background: var(--pl-raised); }
+.pl-route__home b { color: var(--pl-ink); }
+
+/* Outcome: three choices, one on */
+.pl-seg { display: inline-flex; border: 1px solid var(--pl-line-hi); border-radius: 6px; overflow: hidden; background: var(--pl-surface); }
+.pl-seg__btn {
+  min-height: 26px; padding: 0 9px; border: 0; border-right: 1px solid var(--pl-line-hi);
+  background: transparent; color: var(--pl-ink-3); font: 600 var(--sp4-label)/1 var(--font-body); cursor: pointer;
+  transition: color var(--pl-dur), background-color var(--pl-dur);
+}
+.pl-seg__btn:last-child { border-right: 0; }
+.pl-seg__btn:disabled { cursor: default; }
+.pl-seg__btn:not(:disabled):hover { color: var(--pl-ink); background: var(--pl-raised); }
+.pl-seg__btn:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: -2px; }
+.pl-seg__btn--full     { --pl-seg: var(--pl-ok); }
+.pl-seg__btn--partly   { --pl-seg: var(--pl-warn); }
+.pl-seg__btn--rejected { --pl-seg: var(--pl-crit); }
+.pl-seg__btn.is-on, .pl-seg__btn.is-on:not(:disabled):hover { background: var(--pl-seg); color: var(--pl-on-strong); }
+
+.pl-remark, .pl-point, .pl-field input {
+  width: 100%; min-width: 130px; min-height: 28px; padding: 3px 8px; border-radius: 5px;
+  font: 400 var(--sp4-body)/1.4 var(--font-body); color: var(--pl-ink);
+  border: 1px solid var(--pl-field); background: var(--pl-surface);
+  transition: border-color var(--pl-dur);
+}
+.pl-remark::placeholder, .pl-point::placeholder { color: var(--pl-ink-4); }
+.pl-remark:hover:not(:disabled), .pl-point:hover, .pl-field input:hover { border-color: var(--pl-ink-3); }
+.pl-remark:focus-visible, .pl-point:focus-visible, .pl-field input:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: 0; border-color: var(--pl-accent); }
+.pl-remark:disabled { border-color: transparent; background: transparent; }
+.pl-point { margin-top: 4px; max-width: 200px; }
+.pl-fence {
+  display: block; width: 100%; max-width: 340px; min-height: 28px; margin-top: 4px; padding: 3px 8px; border-radius: 5px;
+  font: 400 var(--sp4-label)/1.4 var(--font-body); color: var(--pl-ink);
+  border: 1px solid var(--pl-field); background: var(--pl-surface); cursor: pointer;
+  transition: border-color var(--pl-dur);
+}
+.pl-fence:hover { border-color: var(--pl-ink-3); }
+.pl-fence:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: 0; border-color: var(--pl-accent); }
+.pl-point[aria-invalid="true"] { border-color: var(--pl-crit); }
+
+/* ── The upload sheet ───────────────────────────────────────────────────── */
+/* Upload, made the way the PDF preview is (shared/PdfPreview): no window of
+   its own. The head sits in white on the blurred, dimmed page; under it one
+   square white sheet holds the drop target, the sheets picked and the one
+   being checked. */
+.pl-up-overlay { padding: var(--sp4-md) var(--sp4-lg) var(--sp4-lg); }
+.pl-up {
+  --pl-side: min(720px, calc(100vw - 48px), calc(100vh - 112px));
+  display: flex; flex-direction: column; width: var(--pl-side);
+}
+.pl-up__head { display: flex; align-items: center; gap: var(--sp4-sm); padding: 0 0 var(--sp4-sm); }
+.pl-up__icon { flex: none; font-size: 26px; color: var(--pl-on-strong); }
+.pl-up__what { flex: 1; min-width: 0; }
+.pl-up__title { margin: 0; font-size: var(--sp4-strong); font-weight: 700; line-height: 1.25; color: var(--pl-on-strong); text-wrap: balance; }
+.pl-up__facts { display: flex; flex-wrap: wrap; column-gap: var(--sp4-sm); margin: 2px 0 0; font-size: var(--sp4-body); color: var(--pl-on-scrim-2); font-variant-numeric: tabular-nums; }
+.pl-up__facts .is-warn { color: var(--pl-on-scrim-warn); font-weight: 600; }
+.pl-up__tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.pl-up__save { margin-right: 4px; }
+.pl-up__x {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--pl-on-strong); font-size: 18px; cursor: pointer;
+  transition: background-color var(--pl-dur);
+}
+.pl-up__x:hover { background: var(--pl-on-scrim-hover); }
+.pl-up__x:focus-visible { outline: 2px solid var(--pl-on-scrim-focus); outline-offset: 1px; }
+.pl-up__x:active { transform: translateY(1px); }
+/* With sheets picked it stays the drop area's panel: the same width, its
+   360px height as the floor (growing with a preview, up to the square), the
+   same tinted surface, cell lines and accent edge, solid now that it holds
+   work rather than waits for it. */
+.pl-up__sheet {
+  --pl-cell: color-mix(in srgb, var(--pl-accent) 7%, transparent);
+  display: flex; flex-direction: column; gap: var(--sp4-sm); width: var(--pl-side);
+  min-height: min(360px, var(--pl-side)); max-height: var(--pl-side);
+  padding: var(--sp4-md); overflow: auto; border-radius: 10px; box-shadow: var(--pl-sheet-shadow);
+  border: 1.5px solid color-mix(in srgb, var(--pl-accent) 45%, var(--pl-surface));
+  background-color: color-mix(in srgb, var(--pl-accent) 4%, var(--pl-surface));
+  background-image:
+    linear-gradient(var(--pl-cell) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pl-cell) 1px, transparent 1px);
+  background-size: 96px 24px; background-position: -1px -1px; background-attachment: local;
+}
+.pl-up__sheet:not(.is-empty) .pl-drop--slim { background: var(--pl-surface); border-color: color-mix(in srgb, var(--pl-accent) 45%, var(--pl-surface)); }
+.pl-up__sheet:not(.is-empty) .pl-drop--slim:hover, .pl-up__sheet:not(.is-empty) .pl-drop--slim.is-over { border-color: var(--pl-accent); }
+/* Empty, the drop target is the square itself: no white sheet around it. */
+.pl-up__sheet.is-empty { height: min(360px, var(--pl-side)); padding: 0; border: 0; background: transparent; box-shadow: none; overflow: visible; }
+/* The drop target is drawn as the file it asks for: faint spreadsheet cells
+   on the app's surface, fading out behind the words so they read clean, and
+   a dashed accent edge. Dragging a file over lifts the tint and the edge. */
+.pl-up__sheet.is-empty .pl-drop {
+  flex: 1; flex-direction: column; justify-content: center; gap: var(--sp4-sm); text-align: center; padding: var(--sp4-lg);
+  border-radius: 10px; border-color: color-mix(in srgb, var(--pl-accent) 45%, var(--pl-surface)); box-shadow: var(--pl-sheet-shadow);
+  background-color: color-mix(in srgb, var(--pl-accent) 4%, var(--pl-surface)); isolation: isolate; overflow: hidden;
+  --pl-cell: color-mix(in srgb, var(--pl-accent) 12%, transparent);
+}
+.pl-up__sheet.is-empty .pl-drop::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(var(--pl-cell) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pl-cell) 1px, transparent 1px);
+  background-size: 96px 24px; background-position: -1px -1px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, var(--pl-mask-soft) 20%, var(--pl-mask) 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, var(--pl-mask-soft) 20%, var(--pl-mask) 75%);
+}
+.pl-up__sheet.is-empty .pl-drop:hover,
+.pl-up__sheet.is-empty .pl-drop.is-over {
+  border-color: var(--pl-accent);
+  background-color: color-mix(in srgb, var(--pl-accent) 9%, var(--pl-surface));
+  --pl-cell: color-mix(in srgb, var(--pl-accent) 16%, transparent);
+}
+.pl-up__sheet.is-empty .pl-drop .ti {
+  display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font-size: 32px;
+  color: var(--pl-accent); background: var(--pl-surface); box-shadow: 0 0 0 1px var(--pl-line), 0 6px 16px var(--pl-icon-glow);
+  transition: transform var(--pl-dur);
+}
+.pl-up__sheet.is-empty .pl-drop.is-over .ti { transform: translateY(-3px); }
+.pl-up__sheet.is-empty .pl-drop span { max-width: 34ch; text-wrap: balance; color: var(--pl-ink-2); }
+.pl-up__sheet.is-empty .pl-drop u { color: var(--pl-accent); font-weight: 600; text-underline-offset: 3px; }
+
+.pl-drop {
+  position: relative; display: flex; align-items: center; gap: var(--sp4-sm); padding: var(--sp4-md); border-radius: 8px; cursor: pointer;
+  border: 1.5px dashed var(--pl-field); color: var(--pl-ink-2); font-size: var(--sp4-body); background: var(--pl-bg);
+  transition: border-color var(--pl-dur), background-color var(--pl-dur);
+}
+.pl-drop .ti { font-size: 24px; color: var(--pl-accent); }
+.pl-drop:hover { border-color: var(--pl-accent); }
+.pl-drop:focus-within { outline: 2px solid var(--pl-accent); outline-offset: 2px; }
+.pl-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.pl-drop--busy { opacity: 0.7; cursor: progress; }
+.pl-drop b { color: var(--pl-ink); font-weight: 600; }
+
+.pl-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp4-sm); }
+.pl-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--sp4-label); font-weight: 600; color: var(--pl-ink-2); }
+.pl-field > span { font-weight: 400; }
+.pl-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pl-problems { margin: 0; padding-left: 16px; color: var(--pl-warn); font-size: var(--sp4-body); }
+.pl-up__table { max-height: 50vh; overflow: auto; border: 1px solid var(--pl-line); border-radius: 8px; }
+.pl-up__table .sp4-table { min-width: 0; }
+.pl-up__table td:last-child { min-width: 300px; white-space: normal; }
+.pl-up__table .pl-tag { white-space: normal; }
+.pl-up__table .sp4-table thead th:first-child,
+.pl-up__table .sp4-table tbody td:first-child { padding-left: 14px; }
+.pl-up__table .sp4-table thead th:last-child,
+.pl-up__table .sp4-table tbody td:last-child { padding-right: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-primary, .pl-x, .pl-seg__btn, .pl-fence, .pl-remark, .pl-point, .pl-field input, .pl-drop, .pl-up__x, .pl-drop .ti { transition: none; }
+}
+
+@media (max-width: 767px) {
+  .pl-head { align-items: flex-start; }
+  .pl-up-overlay { padding: var(--sp4-sm); }
+  .pl-up { width: 100%; height: 100%; }
+  .pl-up__sheet { width: 100%; max-height: none; flex: 1; }
+  .pl-up__icon { display: none; }
+  .pl-plan__actions { width: 100%; }
+}
+
+/* Several sheets in one upload: one row each, the one being checked marked */
+.pl-drop--slim { padding: var(--sp4-xs) var(--sp4-md); }
+.pl-drop--slim .ti { font-size: 18px; }
+.pl-sheets { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp4-xs); }
+.pl-sheet {
+  display: flex; align-items: flex-start; gap: 4px; border: 1px solid var(--pl-line-hi); border-radius: 8px;
+  background: var(--pl-surface); transition: border-color var(--pl-dur), background-color var(--pl-dur);
+}
+.pl-sheet:hover { border-color: var(--pl-ink-4); }
+.pl-sheet.is-on { border-color: var(--pl-accent); background: color-mix(in srgb, var(--pl-accent) 6%, var(--pl-surface)); }
+.pl-sheet__pick {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: var(--sp4-xs) var(--sp4-sm); border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit; border-radius: 8px;
+}
+.pl-sheet__pick:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: 0; }
+.pl-sheet__pick:active { opacity: 0.8; }
+.pl-sheet__name { font: 600 var(--sp4-body)/1.3 var(--font-body); color: var(--pl-ink); overflow-wrap: anywhere; }
+.pl-sheet .pl-tag { white-space: normal; }
+.pl-sheet .pl-x { margin: 4px 4px 0 0; }
+@media (prefers-reduced-motion: reduce) { .pl-sheet { transition: none; } }

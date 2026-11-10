@@ -43,6 +43,10 @@ export const NAV_ITEMS = [
   // supervisor (no sensor:read) reach it.
   { key: 'workshop',     label: 'Workshop',     icon: 'car-garage', permission: 'repair:read'     },
   { key: 'weighbridges', label: 'Weighbridges', icon: 'scale',     permission: 'weighbridge:read' },
+  // Planner: a truck's delivery sheet for a day, its customers' geofences,
+  // and plan against actual (operator, 2026-11-11). Menengai only, by
+  // usePermissions' PLANNER_ORGS.
+  { key: 'planner',      label: 'Planner',      icon: 'calendar-time', permission: 'planner:read'     },
   // Pinned to the foot of the sidebar, and not drawn at all without its
   // permission. The Cases page that sat here is gone (operator, 2026-09-30):
   // a deleted alert is removed from the UI for good, and the case work that

@@ -105,6 +105,7 @@ import { liveTrip } from "../../lib/tripProgress";
 
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor, fenceColor, fenceColorKey, isDummyFence } from "../../lib/zoneLegend";
 import GeofenceDrawer from "./GeofenceDrawer";
+import PlanOnMap from "./PlanOnMap";
 import { fenceExtent, clusterFences, fenceBadgeLabel, fenceNames } from "../../lib/fenceCluster";
 import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
@@ -4558,6 +4559,11 @@ export default function FleetMap() {
   }, []);
   // Another company's map is not where a drawing in progress belongs.
   useEffect(() => { setFenceDraw(null); }, [orgId]);
+  // The Planner's Fence button: this map's own tool, on that customer's fence
+  const onPlanFenceEdit = useCallback((f) => {
+    setMeasuring(false);
+    setFenceDraw({ editing: f });
+  }, []);
 
   const toggleFenceDraw = useCallback(() => {
     setFenceDraw((v) => (v && !v.editing ? null : { editing: null }));
@@ -7367,6 +7373,11 @@ export default function FleetMap() {
               ? { count: dashcamBadge?.open ?? 0, critical: dashcamBadge?.critical ?? 0, onOpen: () => setDesktopActiveTab("dashcam") }
               : null}
           />
+        )}
+        {/* A delivery plan the Planner put on the map (lib/planOverlay) */}
+        {mapReady && mapRef.current && (
+          <PlanOnMap map={mapRef.current} maps={mapsLibRef.current} DomMarker={DomMarkerRef.current}
+                     zones={zones} onEditFence={onPlanFenceEdit} />
         )}
         {fenceDraw && mapReady && mapRef.current && (
           <GeofenceDrawer
