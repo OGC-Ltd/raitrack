@@ -429,7 +429,7 @@ export default function AccountScreen() {
           <p className="acct-id__bio">
             {roleSummary ?? "No role assigned"}
             {homeOrg ? <> at <strong>{homeOrg}</strong></> : null}
-            {isPlatform && <> · platform administrator, which applies in every organisation</>}
+            {isPlatform && <> · applies in every organisation</>}
           </p>
         )}
 
