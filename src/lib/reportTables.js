@@ -160,13 +160,14 @@ export const REPORTS = {
     presetFor: { KASULU: 'lastWeek' },
     spans: [7, 31],
     maxDays: 31,
-    columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit', 'Top speed at'],
+    columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit', 'Top speed at', 'Location'],
     /** Not figures, though after `num`: left as words. */
-    text: ['Top speed at'],
+    text: ['Top speed at', 'Location'],
     cells: (r) => [
       vehicleCell(r), typeOf(r), clean(r.driver), String(r.count), minutesWords(r.seconds / 60),
       km2(r.km), Number.isFinite(r.peakKmh) ? `${Math.round(r.peakKmh)} / ${Math.round(r.limitKmh)} km/h` : '',
-      peakWords(r.peakAt),
+      timeWords(r.peakAt),
+      r.peakPlace ?? ((r.peak?.lat != null && r.peak?.lng != null) ? `${r.peak.lat.toFixed(5)}, ${r.peak.lng.toFixed(5)}` : '–'),
     ],
     sum: (r) => r.km,
     sumWords: (t) => `${km2(t)} km`,
@@ -230,7 +231,7 @@ export const REPORTS = {
 };
 
 /** Columns left out when no vehicle in the report has a value in them (operator, 1 Nov 2026). */
-const OPTIONAL = ['Type', 'Driver'];
+const OPTIONAL = ['Type', 'Driver', 'Location'];
 
 /**
  * The indexes of the columns to show for these rows: every column, less a

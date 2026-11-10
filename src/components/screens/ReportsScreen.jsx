@@ -77,6 +77,7 @@ import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
+import { placeNameAt } from '../../hooks/usePlaceName';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -847,7 +848,7 @@ function MovementsReport({ orgId }) {
       for (let i = 0; i < reports.length; i++) {
         const vehicles = reports[i].groups.flatMap((g) => g.rows).map((r) => ({ vehicleId: r.vehicleId }));
         if (!vehicles.length) continue;
-        const words = 'Reading each unit’s distance and fuel';
+        const words = "Reading each unit's distance and fuel";
         const got = await loadDistances({
           orgId, vehicles, windows: [[reports[i].from, reports[i].to]],
           onProgress: ({ done, total }) => { if (id === runId.current) setRun({ status: 'loading', done: i, of: windows.length, words: `${words}, ${done} of ${total}` }); },
@@ -1474,13 +1475,29 @@ export default function ReportsScreen() {
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
-        const r = await loadDistances({ orgId, vehicles: units.flatMap((u) => u.vehicles), windows, onProgress: step('Reading each vehicle’s day') });
+        const r = await loadDistances({ orgId, vehicles: units.flatMap((u) => u.vehicles), windows, onProgress: step("Reading each vehicle's day") });
         rows = key === 'night' ? nightRows(units, r.perVehicle) : utilisationRows(units, r.perVehicle, { rated: ctx.rated });
         failed = r.failed;
       }
       if (!live()) return;
       const secs = sections(rows, ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum);
       setRun({ status: 'done', rows, secs, ctx, missing, failed, units: units.length });
+      // Reverse-geocode each row's peak location in the background; update rows as names arrive.
+      if (key === 'overspeed') {
+        const rowsWithPeak = rows.filter((row) => row.peak?.lat != null && row.peak?.lng != null);
+        if (rowsWithPeak.length) {
+          rowsWithPeak.forEach((row) => {
+            placeNameAt(row.peak.lat, row.peak.lng).then((name) => {
+              if (!name || !live()) return;
+              setRun((prev) => {
+                if (prev.status !== 'done') return prev;
+                const nextRows = prev.rows.map((r) => (r === row || (r.unit === row.unit && r.peak === row.peak)) ? { ...r, peakPlace: name } : r);
+                return { ...prev, rows: nextRows, secs: sections(nextRows, ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum) };
+              });
+            }).catch(() => { /* place name is optional */ });
+          });
+        }
+      }
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
