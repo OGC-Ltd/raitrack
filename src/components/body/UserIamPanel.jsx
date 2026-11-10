@@ -40,15 +40,16 @@ const SOURCE_WORDS = {
   "deny-all": "taken in every organisation",
 };
 
-const roleNames = (roles) => (roles ?? []).map((r) => r.name).join(", ") || "No role";
+// One role held under two slugs ("Admin" in an organisation and on the platform) is one name.
+const roleNames = (roles) => [...new Set((roles ?? []).map((r) => r.name))].join(", ") || "No role";
 
 function Person({ user, current, onPick }) {
   return (
     <li>
       <button type="button" className="ua-iam__person" aria-current={current ? "true" : undefined} onClick={() => onPick(user.id)}>
         <span className="ua-iam__person-name">{user.fullName}</span>
-        <span className="ua-iam__person-role">{roleNames(user.roles)}</span>
-        <span className="ua-iam__person-mail">{user.email}</span>
+        <span className="ua-iam__person-role" title={roleNames(user.roles)}>{roleNames(user.roles)}</span>
+        <span className="ua-iam__person-mail" title={user.email}>{user.email}</span>
         {user.grants > 0 && (
           <span className="ua-iam__badge" title="Rights given to or taken from this person, on top of the role">
             {user.grants} personal
@@ -82,26 +83,53 @@ function Choice({ value, saved, label, disabled, onChoose }) {
 }
 
 const LEDGER_WORDS = { allow: "Allowed", deny: "Denied", inherit: "Back to the role" };
+const LEDGER_ORDER = ["allow", "deny", "inherit"];
+/** A set this small reads open; a bigger one opens on a click. */
+const OPEN_UP_TO = 6;
 
 /**
  * The person's own rights, saved and chosen, in one place above the long
- * table: what they hold that the role does not say, and where.
+ * table: what they hold that the role does not say, and where. One set per
+ * effect and place ("Denied in every organisation, 78 rights"), so a person
+ * with many grants reads as a few lines rather than a long list.
  */
 function Ledger({ entries }) {
+  const sets = useMemo(() => {
+    const by = new Map();
+    for (const e of entries) {
+      const id = `${e.effect}|${e.where}`;
+      if (!by.has(id)) by.set(id, { id, effect: e.effect, where: e.where, entries: [] });
+      by.get(id).entries.push(e);
+    }
+    return [...by.values()].sort((a, b) => LEDGER_ORDER.indexOf(a.effect) - LEDGER_ORDER.indexOf(b.effect));
+  }, [entries]);
   if (entries.length === 0) return null;
   return (
     <section className="ua-iam__ledger" aria-labelledby="ua-iam-ledger-title">
       <h3 id="ua-iam-ledger-title" className="ua-iam__ledger-title">Their own rights</h3>
-      <ul className="ua-iam__ledger-list">
-        {entries.map((e) => (
-          <li key={e.key} className={`ua-iam__entry ua-iam__entry--${e.effect}`}>
-            <span className="ua-iam__entry-effect">{LEDGER_WORDS[e.effect]}</span>
-            <span className="ua-iam__entry-right">{e.name}</span>
-            <span className="ua-iam__entry-where">{e.where}</span>
-            {e.unsaved && <span className="ua-iam__unsaved">Not saved</span>}
-          </li>
-        ))}
-      </ul>
+      {sets.map((set) => {
+        const unsaved = set.entries.filter((e) => e.unsaved).length;
+        const n = set.entries.length;
+        return (
+          <details key={set.id} className={`ua-iam__set ua-iam__set--${set.effect}`} open={n <= OPEN_UP_TO || undefined}>
+            <summary className="ua-iam__set-head">
+              <span className="ua-iam__set-what">
+                <span className="ua-iam__set-effect">{LEDGER_WORDS[set.effect]}</span> {set.where}
+              </span>
+              <span className="ua-iam__set-count">{n} {n === 1 ? "right" : "rights"}</span>
+              {unsaved > 0 && <span className="ua-iam__unsaved">{unsaved} not saved</span>}
+            </summary>
+            <ul className="ua-iam__set-list">
+              {set.entries.map((e) => (
+                <li key={e.key} className="ua-iam__set-item">
+                  {e.name}
+                  {e.unsaved && <span className="ua-iam__unsaved">Not saved</span>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
     </section>
   );
 }
@@ -341,7 +369,7 @@ export default function UserIamPanel() {
                 A System Administrator can do everything in every organisation, so there is nothing to give or take. Change the role on Users to narrow it.
               </EmptyNote>
             ) : (
-              <>
+              <div className="ua-iam__body">
                 <Ledger entries={ledger} />
                 <div className="ua-iam__bar">
                   <label className="ua-iam__scope">
@@ -408,7 +436,7 @@ export default function UserIamPanel() {
                     </table>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </>
         )}
