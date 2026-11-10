@@ -13,7 +13,8 @@
  * and CSV.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { parseDeliverySheet } from '../../lib/parseDeliverySheet';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords } from '../../lib/fleetReports';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
@@ -68,7 +69,7 @@ function PinPaste({ vehicle, customers, onChange }) {
     <div className="dlv-paste">
       <textarea className="dlv-paste__box" rows={4} value={text} spellCheck={false}
                 aria-label={`Delivery stops for ${vehicle.plate}`}
-                placeholder={'One stop a line, a geofence’s name or coordinates from a sheet or a map:\nJOJAC INVESTMENTS\nNaivas Nakuru, -0.28802, 36.04494'}
+                placeholder={"One stop a line, a geofence's name or coordinates from a sheet or a map:\nJOJAC INVESTMENTS\nNaivas Nakuru, -0.28802, 36.04494"}
                 onChange={(e) => { setText(e.target.value); setTold(null); }} />
       <div className="dlv-paste__foot">
         <label className="dlv-paste__radius">
@@ -105,6 +106,62 @@ function PinPaste({ vehicle, customers, onChange }) {
   );
 }
 
+/**
+ * "Import from Excel" button for a vehicle's stop list.
+ * Reads a Menengai delivery booking sheet and auto-fills the pins + customer names.
+ *
+ * Props:
+ *   onImport({ pins, customers, plate, driver, date }) — called on success
+ *   onError(msg) — called on parse failure
+ */
+function ImportSheetBtn({ onImport, onError }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const firedRef = useRef(false);             // guard: ensure onImport fires exactly once per pick
+
+  const handleFile = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!inputRef.current) return;
+    inputRef.current.value = '';               // reset so the same file can be re-picked
+    if (!file) return;
+    if (firedRef.current) return;             // already processing — ignore duplicate event
+    firedRef.current = true;
+    setBusy(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      firedRef.current = false;
+      setBusy(false);
+      const result = parseDeliverySheet(new Uint8Array(ev.target.result));
+      if (result.error) { onError(result.error); return; }
+      onImport(result);
+    };
+    reader.onerror = () => { firedRef.current = false; setBusy(false); onError('Could not read the file.'); };
+    reader.readAsArrayBuffer(file);
+  }, [onImport, onError]);
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xlsx,.xlsm,.xls"
+        style={{ display: 'none' }}
+        onChange={handleFile}
+      />
+      <button
+        type="button"
+        className="sp4-ghost-btn dlv-import-btn"
+        disabled={busy}
+        title="Import stops from a Menengai delivery booking Excel sheet"
+        onClick={() => inputRef.current?.click()}
+      >
+        <i className={`ti ${busy ? 'ti-loader-2' : 'ti-file-spreadsheet'}`} aria-hidden="true" />
+        {busy ? 'Reading…' : 'Import from Excel'}
+      </button>
+    </>
+  );
+}
+
 export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName }) {
   const now = Date.now();
   const today = fleetDay(now);
@@ -118,7 +175,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [group, setGroup] = useState(null);               // one group of the fleet list, or all
   const [plan, setPlan] = useState(() => loadPlan(orgCode, day));
   useEffect(() => { setPlan(loadPlan(orgCode, day)); }, [orgCode, day]);
-  const change = (next) => { setPlan(next); savePlan(orgCode, day, next); };
+  const change = (next) => {
+    // `next` may be a plain plan object or an updater fn (plan) => plan
+    if (typeof next === 'function') {
+      setPlan((prev) => { const n = next(prev); savePlan(orgCode, day, n); return n; });
+    } else {
+      setPlan(next); savePlan(orgCode, day, next);
+    }
+  };
   const earlier = useMemo(() => (plan.vehicles.length ? null : lastPlanBefore(orgCode, day)), [plan.vehicles.length, orgCode, day]);
 
   // Every Menengai unit on the platform (operator, 4 Nov 2026: "search any
@@ -183,6 +247,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [file, setFile] = useState({ busy: false, error: null });
   const [open, setOpen] = useState(() => new Set());
   const [pasting, setPasting] = useState(() => new Set()); // vehicles with the coordinates box open
+  const [importMsg, setImportMsg] = useState({}); // { [v.key]: { ok: bool, text: string } }
   const [showStops, setShowStops] = useState(true);       // the pick-up locations on the PDF and JPEG
   const runId = useRef(0);
 
@@ -233,7 +298,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       // A vehicle with two trackers: the one that reported most
       const best = (v) => [...v.vehicleIds].sort((a, b) => (held.get(b)?.length ?? 0) - (held.get(a)?.length ?? 0))[0];
       let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
-      await read(planned.flatMap((v) => v.vehicleIds), start, to, 'Reading each vehicle’s positions');
+      await read(planned.flatMap((v) => v.vehicleIds), start, to, "Reading each vehicle's positions");
       if (!live()) return;
       for (let back = LOOKBACK_DAYS + 1; back <= MAX_LOOKBACK_DAYS; back++) {
         const need = planned.filter((v) => tripOf(held.get(best(v)) ?? [], storages, { to }).need);
@@ -369,7 +434,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
 
       <div className="sp4-body rpt-body">
         {/* The day's list: the vehicles shared, each with its customers */}
-        <section className="dlv-plan" aria-label="Today’s vehicles">
+        <section className="dlv-plan" aria-label="Today's vehicles">
           <div className="dlv-plan__head">
             <h3 className="dlv-plan__title">
               {daysOpen && draft.toDay !== draft.fromDay ? 'Vehicles and stops for ' : 'Vehicles shared on '}
@@ -406,7 +471,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             {earlier && (
               <button type="button" className="sp4-ghost-btn" onClick={() => change({ ...emptyPlan(), ...earlier.plan })}
                       title={`Copy the list of ${earlier.day}`}>
-                <i className="ti ti-copy" aria-hidden="true" /> Copy {earlier.day}’s list
+                <i className="ti ti-copy" aria-hidden="true" /> Copy {earlier.day}'s list
               </button>
             )}
           </div>
@@ -440,9 +505,27 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     <button type="button" className="sp4-ghost-btn" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
                       <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
                     </button>
+                    <ImportSheetBtn
+                      onImport={(result) => {
+                        // Replace — use functional updater so we always operate on the latest plan,
+                        // not a stale closure snapshot that could cause doubling
+                        change((latest) => setCustomers(setPins(latest, v.key, result.pins), v.key, result.customers));
+                        setImportMsg((m) => ({ ...m, [v.key]: { ok: true, text: `Imported ${result.pins.length} stop${result.pins.length === 1 ? '' : 's'} from ${result.plate ?? 'sheet'}${result.driver ? ` · ${result.driver}` : ''}` } }));
+                        setTimeout(() => setImportMsg((m) => { const n = { ...m }; delete n[v.key]; return n; }), 5000);
+                      }}
+                      onError={(msg) => {
+                        setImportMsg((m) => ({ ...m, [v.key]: { ok: false, text: msg } }));
+                        setTimeout(() => setImportMsg((m) => { const n = { ...m }; delete n[v.key]; return n; }), 6000);
+                      }}
+                    />
+                    {importMsg[v.key] && (
+                      <span className={importMsg[v.key].ok ? 'rpt-sub dlv-import-ok' : 'rpt-warn'} role="status">
+                        {importMsg[v.key].ok && <i className="ti ti-check" aria-hidden="true" />} {importMsg[v.key].text}
+                      </span>
+                    )}
                     <span className="rpt-sub">{picked} stop{picked === 1 ? '' : 's'}{near ? ` · ${near} at storage` : ''}</span>
                     <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
-                            aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
+                            aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today's list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
                     {isPasting && <PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} />}
@@ -492,7 +575,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             />
             {preview.state && <PdfPreview state={preview.state} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={preview.retry} onClose={preview.close} />}
             <p className="mvr-depots" role="note">
-              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
+              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop's geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
               <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>
             </p>
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
@@ -513,7 +596,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                               {i === 2 ? (
                                 <input type="text" inputMode="numeric" className={`mvr-edit dlv-orders${r.typed ? ' mvr-edit--changed' : ''}${typed[r.plate] && !readOrders(typed[r.plate]) ? ' dlv-orders--bad' : ''}`}
                                        value={typed[r.plate] ?? v} readOnly={editor.edited} aria-label={`Orders fulfilled by ${r.plate}, e.g. 8/10`}
-                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : 'Type the orders fulfilled, e.g. 8/10. It is kept in this browser for the next report; clear it to use the report’s own count.'}
+                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : "Type the orders fulfilled, e.g. 8/10. It is kept in this browser for the next report; clear it to use the report's own count."}
                                        onChange={(e) => {
                                          const text = e.target.value;
                                          setTyped((t) => ({ ...t, [r.plate]: text }));
