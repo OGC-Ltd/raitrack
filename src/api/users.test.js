@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const apiFetch = vi.fn();
 vi.mock("../services/api", () => ({ apiFetch: (...args) => apiFetch(...args) }));
 
-const { listAllUserLoginActivity, listUsersAcrossOrgs } = await import("./users");
+const { listAllUserLoginActivity, listLoginActivityAcrossOrgs, listUsersAcrossOrgs } = await import("./users");
 
 const roster = (...names) => ({
   data: names.map((n) => ({ id: `u-${n}`, fullName: n })),
@@ -173,5 +173,52 @@ describe("listAllUserLoginActivity", () => {
       from: "2026-11-01", to: "2026-11-07", limit: 101,
     })).rejects.toThrow(RangeError);
     expect(apiFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("listLoginActivityAcrossOrgs", () => {
+  // One person in both organisations: the same sign-in comes back from each
+  const event = (id, at, user) => ({ id, loggedInAt: at, user });
+  const ada = { id: "u-ada", fullName: "Ada", roles: ["Operator"], groups: ["North"] };
+  const adaInB = { ...ada, roles: ["Supervisor"], groups: ["South"] };
+  const ben = { id: "u-ben", fullName: "Ben", roles: [], groups: [] };
+
+  beforeEach(() => {
+    apiFetch.mockImplementation((url) => {
+      const inA = url.includes("org-a");
+      if (url.includes("login-report")) {
+        const rows = inA
+          ? [event("e1", "2026-11-10T06:00:00Z", ada)]
+          : [event("e1", "2026-11-10T06:00:00Z", adaInB), event("e2", "2026-11-10T07:00:00Z", ben)];
+        return Promise.resolve({ data: { rows, total: rows.length, systemUsers: rows.length, everLoggedIn: rows.length } });
+      }
+      return Promise.resolve(inA
+        ? { data: [{ id: "u-ada", lastLoginAt: "2026-11-10T06:00:00Z" }], meta: { total: 1 } }
+        : { data: [{ id: "u-ada", lastLoginAt: "2026-11-10T06:00:00Z" }, { id: "u-ben", lastLoginAt: null }, { id: "u-cy", lastLoginAt: null }], meta: { total: 3 } });
+    });
+  });
+
+  it("says each sign-in once, with every organisation it was read from", async () => {
+    const out = await listLoginActivityAcrossOrgs(["org-a", "org-b"], { from: "2026-11-10", to: "2026-11-10" });
+    expect(out.total).toBe(2);
+    expect(out.rows.map((r) => r.id)).toEqual(["e2", "e1"]);
+    const e1 = out.rows.find((r) => r.id === "e1");
+    expect(e1.orgIds).toEqual(["org-a", "org-b"]);
+    expect(e1.user.roles).toEqual(["Operator", "Supervisor"]);
+    expect(e1.user.groups).toEqual(["North", "South"]);
+  });
+
+  it("counts each account once across organisations", async () => {
+    const out = await listLoginActivityAcrossOrgs(["org-a", "org-b"], { from: "2026-11-10", to: "2026-11-10" });
+    expect(out.systemUsers).toBe(3);
+    expect(out.everLoggedIn).toBe(1);
+  });
+
+  it("keeps the organisations that answered when one fails, and names the one that did not", async () => {
+    const ok = apiFetch.getMockImplementation();
+    apiFetch.mockImplementation((url) => (url.includes("org-b") ? Promise.reject(new Error("403")) : ok(url)));
+    const out = await listLoginActivityAcrossOrgs(["org-a", "org-b"], { from: "2026-11-10", to: "2026-11-10" });
+    expect(out.rows.map((r) => r.id)).toEqual(["e1"]);
+    expect(out.failures.map((f) => f.orgId)).toEqual(["org-b"]);
   });
 });

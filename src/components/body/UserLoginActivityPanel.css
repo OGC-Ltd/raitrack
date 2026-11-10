@@ -1,324 +1,576 @@
-/* Hallmark · macrostructure: Workbench · tone: utilitarian · anchor hue: app blue
- * theme: in-project tokens, preserved · nav/footer: existing application shell
- * pre-emit critique: P5 H5 E4 S5 R5 V4
+/* Login Activity, the third section of User Admin.
+ *
+ * Laid out and set like its two neighbours, Users (UserAdminPanel.css) and
+ * User groups (UserGroupsPanel.css): flush bands closed by hairlines (a
+ * masthead with the KPI tiles and the organisation, then a toolbar of labelled
+ * sections), and below them a full-bleed grid whose edge cells carry the
+ * gutter. The title is read, not seen, because the section rail names the page.
+ *
+ * The scale is theirs, copied deliberately rather than referenced: the files
+ * ship independently, and a var() into another panel's private scale resolves
+ * to nothing wherever that panel is not mounted. If the Users scale moves,
+ * this block moves with it.
+ *
+ * Kept from the 2026-11-10 Hallmark pass: the day strip (a mark per sign-in on
+ * a midnight-to-midnight line), the pressed date preset, the skeleton while
+ * loading, and the restacked rows on a phone.
  */
+
 .ua-login {
   --ua-text-1: #0f172a;
   --ua-text-2: #334155;
   --ua-text-3: #52606f;
   --ua-text-4: #64748b;
   --ua-bg: #f6f8fa;
-  --ua-card: #ffffff;
+  --ua-surface: #ffffff;
   --ua-raised: #f5f7fa;
   --ua-line: #e6e9ee;
+  --ua-line-hi: #cbd5e1;
+  --ua-field-line: #94a3b8;
   --ua-accent: #0369a1;
-  --sp4-surface: #ffffff;
-  --sp4-raised: #f5f7fa;
-  --sp4-line-hi: #cbd5e1;
-  --sp4-text-1: #0f172a;
-  --sp4-text-2: #334155;
-  --sp4-text-3: #52606f;
-  --sp4-text-4: #64748b;
-  --sp4-accent: #0369a1;
-  --sp4-warn: #b45309;
-  --ua-ink: var(--ua-text-1);
-  --ua-text: var(--ua-text-2);
-  --ua-muted: var(--ua-text-4);
-  --card: var(--ua-card);
+  --ua-accent-ink: #075985;
+  --ua-warn: #b45309;
+  --ua-ok: #15803d;
+  --ua-crit: #b91c1c;
+  --ua-gutter: var(--maint-gutter, 24px);
+
+  /* The light sp4 names the shared DetailSidebar reads. Without them it falls
+     back to the app's dark-theme values: near-white text on its white panel. */
+  --sp4-surface: var(--ua-surface);
+  --sp4-raised: var(--ua-raised);
+  --sp4-line-hi: var(--ua-line-hi);
+  --sp4-text-1: var(--ua-text-1);
+  --sp4-text-2: var(--ua-text-2);
+  --sp4-text-3: var(--ua-text-3);
+  --sp4-text-4: var(--ua-text-4);
+  --sp4-accent: var(--ua-accent);
+  --sp4-warn: var(--ua-warn);
+  --sp4-line: var(--ua-line);
+
+  /* The names the shared parts (DetailSidebar, PdfPreview) read. */
+  --card: var(--ua-surface);
   --border: var(--ua-line);
-  --elevated: var(--ua-card);
+  --elevated: var(--ua-surface);
   --bg: var(--ua-bg);
+  --ink: var(--ua-text-1);
   --text-2: var(--ua-text-2);
   --text-3: var(--ua-text-3);
-  --ink: var(--ua-text-1);
-  --ua-gutter: var(--maint-gutter, 24px);
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: auto;
-  color: var(--ua-text);
+
+  min-height: 100%;
   background: var(--ua-bg);
-  font: 13px/1.5 var(--font-body, Inter, system-ui, sans-serif);
+  color: var(--ua-text-2);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
 .ua-login__inner {
-  min-width: 0;
-  padding: 16px var(--ua-gutter) calc(var(--app-footer-h, 64px) + 16px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
 }
 
-.ua-login__head {
+/* On a desk the panel is a fixed-height column and the grid is the only thing
+   that scrolls, so its column heads stay pinned over the rows they name. */
+@media (min-width: 768px) {
+  .ua-login { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+  .ua-login__inner { flex: 1 1 auto; min-height: 0; }
+}
+
+.ua-login__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Masthead: the figures, and whose they are ─────────────────────────── */
+
+.ua-login__masthead {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px 20px;
-  margin-bottom: 14px;
+  gap: 10px 20px;
+  padding: 18px var(--ua-gutter) 14px;
+  background: var(--ua-surface);
+  flex-shrink: 0;
 }
 
-.ua-login__title {
-  margin: 0;
-  color: var(--ua-ink);
-  font: 800 14px/1.25 var(--font-body, Inter, system-ui, sans-serif);
-  letter-spacing: -0.01em;
-}
-
-.ua-login__hint {
-  margin: 2px 0 0;
-  color: var(--ua-text);
-  font-size: 11px;
-}
-
-.ua-login__org,
-.ua-login__date {
-  display: grid;
-  gap: 4px;
-  color: var(--ua-text);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ua-login__org select,
-.ua-login__date input {
-  min-width: 0;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--ua-line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ua-ink) 4%, transparent);
-  color: var(--ua-ink);
-  font: inherit;
-}
-
-.ua-login__org select option { background: var(--ua-card); color: var(--ua-ink); }
-
-.ua-login__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* The app's KPI strip (SensorPanel's .sp4-header-kpis, as on Reports): tiles
+   joined by a 1px hairline, the group's own background showing through the
+   gap, the figure over its label. Copied, not referenced, because SensorPanel.css
+   is not loaded wherever this panel is. */
+.ua-login__kpis {
+  display: flex;
   gap: 1px;
-  margin-bottom: 14px;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--ua-line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--ua-line);
 }
 
-.ua-login__stat {
-  display: grid;
-  min-width: 0;
-  min-height: 92px;
-  align-content: start;
-  gap: 7px;
-  padding: 10px 16px 12px;
-  --ua-stat-color: #2563eb;
-  --ua-stat-wash: #eff6ff;
-  background: var(--ua-card);
+.ua-login__kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 70px;
+  padding: 6px 16px;
+  background: var(--ua-surface);
 }
 
-.ua-login__stat--logged-in {
-  --ua-stat-color: #059669;
-  --ua-stat-wash: #ecfdf5;
+.ua-login__kpi dd {
+  margin: 0;
+  color: var(--ua-text-1);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.ua-login__stat--sign-ins {
-  --ua-stat-color: #d97706;
-  --ua-stat-wash: #fffbeb;
-}
+/* Each figure in its own colour: accounts the app's blue, ever logged in
+   amber, sign-ins green (operator, 10 Nov 2026). */
+.ua-login__kpi--accounts dd { color: var(--ua-accent); }
+.ua-login__kpi--ever dd { color: var(--ua-warn); }
+.ua-login__kpi--signins dd { color: var(--ua-ok); }
 
-.ua-login__stat-label {
-  color: var(--ua-text);
+.ua-login__kpi dt {
+  color: var(--ua-text-3);
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.ua-login__stat-value {
-  justify-self: end;
-  min-width: 34px;
-  padding: 1px 0;
-  border: 0;
-  background: transparent;
-  color: var(--ua-stat-color);
-  font-size: 17px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.ua-login__stat-track {
-  width: 100%;
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ua-stat-color) 12%, white);
-}
-
-.ua-login__stat-fill {
-  display: block;
-  height: 100%;
+/* The organisation, styled as the label it is (Users' scope picker), not as a
+   form control competing with the toolbar. */
+.ua-login__org {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  border-radius: inherit;
-  background: var(--ua-stat-color);
-  transition: width 240ms ease-out;
 }
 
-.ua-login__filters {
+.ua-login__org-label {
+  color: var(--ua-text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ua-login__org select {
+  max-width: 260px;
+  padding: 4px 8px;
+  border: 1px solid var(--ua-line);
+  border-radius: 6px;
+  background: var(--ua-surface);
+  color: var(--ua-text-1);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ua-login__org select:hover { background: rgba(0, 0, 0, 0.04); }
+.ua-login__org select option { background: var(--ua-surface); color: var(--ua-text-1); }
+
+/* ── Toolbar: labelled sections, the Groups toolbar's shape ────────────── */
+
+.ua-login__toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 12px;
-  margin-bottom: 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--ua-gutter) 12px;
+  background: var(--ua-surface);
+  border-bottom: 1px solid var(--ua-line);
+  flex-shrink: 0;
 }
 
+.ua-login__tools { margin-left: auto; }
+
+.ua-login__controls,
+.ua-login__tools,
+.ua-login__toolset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ua-login__toolset + .ua-login__toolset {
+  padding-left: 8px;
+  border-left: 1px solid var(--ua-line);
+}
+
+/* The Groups view switcher: a raised well, the pressed option lifted onto the surface. */
 .ua-login__presets {
   display: inline-flex;
   gap: 2px;
-  margin-right: auto;
   padding: 2px;
   border: 1px solid var(--ua-line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--ua-ink) 4%, transparent);
+  background: var(--ua-raised);
 }
 
-.ua-login__button {
+.ua-login__preset {
   display: inline-flex;
-  min-height: 32px;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
   padding: 5px 11px;
-  border: 1px solid var(--ua-line);
+  border: 0;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--ua-ink) 4%, transparent);
-  color: var(--ua-text);
-  font: 600 12px/1.2 var(--font-body, Inter, system-ui, sans-serif);
+  background: none;
+  color: var(--ua-text-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 120ms, background-color 120ms, border-color 120ms;
+  transition: background-color 0.15s, color 0.15s;
 }
 
-.ua-login__presets .ua-login__button { border-color: transparent; background: transparent; }
-
-.ua-login__button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--ua-accent) 50%, var(--ua-line));
-  background: color-mix(in srgb, var(--ua-accent) 7%, var(--ua-card));
-  color: var(--ua-ink);
+.ua-login__preset:hover:not([aria-pressed="true"]) { color: var(--ua-text-1); }
+.ua-login__preset[aria-pressed="true"] {
+  background: var(--ua-surface);
+  color: var(--ua-text-1);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
 }
 
-.ua-login__button:active:not(:disabled) { transform: translateY(1px); }
-.ua-login__button:disabled { opacity: 0.45; cursor: not-allowed; }
-.ua-login__button:focus-visible,
-.ua-login__org select:focus-visible,
-.ua-login__date input:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: 2px; }
+.ua-login__date input {
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--ua-field-line);
+  border-radius: 8px;
+  background: var(--ua-surface);
+  color: var(--ua-text-1);
+  font: inherit;
+  font-size: 12.5px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
 
-.ua-login__tablehead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  margin: 10px 0 8px;
-  color: var(--ua-ink);
+.ua-login__date input:focus {
+  border-color: rgba(3, 105, 161, 0.55);
+  background: rgba(3, 105, 161, 0.05);
+}
+
+.ua-login__to {
+  color: var(--ua-text-4);
   font-size: 12px;
 }
 
-.ua-login__tablehead p { font-weight: 600; }
-.ua-login__tablehead p span { color: var(--ua-text); font-weight: 400; }
-.ua-login__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.ua-login__tools .ua-login__error { margin: 0 4px; }
+/* The app's ghost button (sp4-ghost-btn), the one Users' toolbar uses. */
+.ua-login__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--ua-line-hi);
+  border-radius: 7px;
+  background: var(--ua-surface);
+  color: var(--ua-text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.ua-login__button:hover:not(:disabled) { color: var(--ua-text-1); border-color: var(--ua-text-4); }
+.ua-login__button:active:not(:disabled) { background: var(--ua-raised); }
+.ua-login__button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ua-login__button:focus-visible,
+.ua-login__preset:focus-visible,
+.ua-login__sort:focus-visible,
+.ua-login__org select:focus-visible,
+.ua-login__date input:focus-visible {
+  outline: 2px solid var(--ua-accent);
+  outline-offset: 1px;
+}
+
+.ua-login__notices {
+  padding: 10px var(--ua-gutter) 0;
+}
+
+.ua-login__message,
+.ua-login__error {
+  margin: 0 0 6px;
+  color: var(--ua-warn);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ua-login__error { color: var(--ua-crit); }
+.ua-login__tools > .ua-login__error { margin: 0; }
+
+/* ── The grid: Users' table, full-bleed, the gutter on its edge cells ──── */
 
 .ua-login__tablewrap {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 120px;
-  margin-inline: calc(-1 * var(--ua-gutter));
+  overflow: auto;
+  scrollbar-width: thin;
 }
+
+/* Loading, failed and empty: the app's EmptyNote, centred in the space the
+   grid will fill, on the sheet's surface rather than floating on the ground. */
+.ua-login__tablewrap > .empty-note { flex: 1 1 auto; }
+.ua-login__tablewrap > .ua-login__table { flex: none; }
+
+@media (min-width: 768px) {
+  .ua-login__tablewrap { flex: 1 1 auto; min-height: 0; padding-bottom: 16px; }
+}
+
+.ua-login__table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ua-login__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--ua-line);
+  background: var(--ua-raised);
+  color: var(--ua-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ua-login__table th:first-child,
+.ua-login__table td:first-child { padding-left: var(--ua-gutter); }
+.ua-login__table th:last-child,
+.ua-login__table td:last-child { padding-right: var(--ua-gutter); }
+
+.ua-login__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.ua-login__sort:hover:not(:disabled) { color: var(--ua-text-1); }
+.ua-login__sort:disabled { cursor: not-allowed; }
+.ua-login__table th[aria-sort="ascending"] .ua-login__sort,
+.ua-login__table th[aria-sort="descending"] .ua-login__sort { color: var(--ua-text-1); }
+
+.ua-login__row {
+  border-bottom: 1px solid var(--ua-line);
+  background: var(--ua-surface);
+  cursor: pointer;
+}
+
+.ua-login__row td {
+  padding: 10px 14px;
+  color: var(--ua-text-2);
+  vertical-align: middle;
+}
+
+.ua-login__row:hover { background: rgba(0, 0, 0, 0.022); }
+.ua-login__row[aria-current="true"] { background: rgba(3, 105, 161, 0.06); }
+.ua-login__row:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: -2px; }
+
+.ua-login__daycell { white-space: nowrap; }
+.ua-login__orgcell { min-width: 180px; color: var(--ua-text-2); }
+
+/* An organisation's mark beside its name: the picker, the column, the sidebar */
+.ua-login__orgmark {
+  flex: none;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid var(--ua-line);
+  border-radius: 5px;
+  background: var(--ua-surface);
+  object-fit: contain;
+}
+.ua-login__orgmark--all,
+.ua-login__orgmark--letter {
+  display: inline-grid;
+  place-items: center;
+  color: var(--ua-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ua-login__orgmark--all .ti { font-size: 14px; }
+.ua-login__orgname { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.ua-login__orgtext { min-width: 0; overflow-wrap: anywhere; }
+.ua-login__orglist { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.ua-login__orgcell .ua-login__orgtext { white-space: nowrap; }
+/* Three marks at most, each tucked under the one before it */
+.ua-login__orgstack { display: inline-flex; flex: none; }
+.ua-login__orgstack .ua-login__orgmark { box-shadow: 0 0 0 2px var(--ua-surface); }
+.ua-login__orgstack .ua-login__orgmark + .ua-login__orgmark { margin-left: -8px; }
+.ua-login__orgmore { color: var(--ua-text-4); font-weight: 600; }
+.ua-login__user { color: var(--ua-text-1); font-weight: 600; }
+.ua-login__quiet { color: var(--ua-text-2); }
+
+.ua-login__num {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ua-login__table thead .ua-login__num { text-align: right; }
+.ua-login__row .ua-login__num { color: var(--ua-text-1); font-weight: 700; }
+
+/* ── The day strip: midnight to midnight, a mark for each sign-in ──────── */
+
+.ua-login__daycol {
+  width: 200px;
+  min-width: 160px;
+}
+
+.ua-login__dayhead {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ua-text-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ua-login__strip {
+  position: relative;
+  display: block;
+  height: 16px;
+  border-radius: 4px;
+  background:
+    linear-gradient(to right, var(--ua-line-hi) 0 1px, transparent 1px) 25% 0 / 1px 100% no-repeat,
+    linear-gradient(to right, var(--ua-line-hi) 0 1px, transparent 1px) 50% 0 / 1px 100% no-repeat,
+    linear-gradient(to right, var(--ua-line-hi) 0 1px, transparent 1px) 75% 0 / 1px 100% no-repeat,
+    var(--ua-raised);
+}
+
+.ua-login__strip--large { height: 28px; }
+
+.ua-login__mark {
+  position: absolute;
+  inset-block: 2px;
+  left: calc(var(--at) * 100%);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--ua-accent);
+  transform: translateX(-50%);
+}
+
+/* ── The sidebar's own parts ───────────────────────────────────────────── */
+
+.ua-login__sidestrip {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.ua-login__times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ua-text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ua-login__tz {
+  margin: 8px 0 0;
+  color: var(--ua-text-4);
+  font-size: 11.5px;
+}
+
+.ua-login__account {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.ua-login__account dt { color: var(--ua-text-3); font-weight: 600; }
+.ua-login__account dd { margin: 0; min-width: 0; overflow-wrap: break-word; color: var(--ua-text-1); }
 
 .ua-login .dsb {
   top: 0;
   z-index: 400;
 }
 
-.ua-login__row { cursor: pointer; }
-.ua-login__row:focus-visible { outline: 2px solid var(--ua-accent); outline-offset: -2px; }
-.ua-login__orgcell { white-space: nowrap; }
-.ua-login__orgcell > span:last-child { color: var(--ua-text-2); }
-.ua-login__orgmark {
-  display: inline-grid;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  place-items: center;
-  object-fit: contain;
-  border-radius: 50%;
-}
-.ua-login__orgmark--letter {
-  background: var(--ua-raised);
-  color: var(--ua-text-1);
-  font-size: 11px;
-  font-weight: 700;
-}
-.ua-login__count {
-  display: inline-grid;
-  min-width: 28px;
-  min-height: 24px;
-  place-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--ua-line);
-  border-radius: 999px;
-  background: var(--ua-raised);
-  color: var(--ua-text-1);
-  font-weight: 700;
-}
-
-.ua-login__empty {
-  margin: 0;
-  padding: 24px 16px;
-  color: var(--ua-text);
-  text-align: center;
-}
-
-.ua-login__message,
-.ua-login__error {
-  margin: 10px 0;
-  color: var(--accent-warn, #b45309);
-  font-size: 12px;
-}
-
-.ua-login__error { color: var(--accent-crit, #b91c1c); }
-
-.ua-login__pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--ua-line);
-  color: var(--ua-text);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ua-login__pager span { text-align: center; }
-.ua-login__pager small { color: var(--ua-muted); }
+/* ── Phone: one column of controls, the grid restacked as labelled rows ── */
 
 @media (max-width: 767px) {
-  .ua-login { height: auto; overflow: visible; }
   .ua-login { --ua-gutter: 16px; }
-  .ua-login__inner { padding-right: 16px; padding-left: 16px; }
-  .ua-login__stats { grid-template-columns: 1fr; }
-  .ua-login__stat { min-height: 82px; }
-  .ua-login__filters { align-items: stretch; }
-  .ua-login__presets { width: 100%; margin-right: 0; }
-  .ua-login__presets .ua-login__button { flex: 1; }
-  .ua-login__date { flex: 1 1 130px; }
-  .ua-login__org { width: 100%; }
-  .ua-login__org select { width: 100%; }
-  .ua-login__tools { width: 100%; }
+  .ua-login__org,
+  .ua-login__org select { width: 100%; max-width: none; }
+  .ua-login__controls,
+  .ua-login__tools { width: 100%; margin-left: 0; }
+  .ua-login__kpis { width: 100%; }
+  .ua-login__kpi { flex: 1 1 0; min-width: 0; padding-inline: 8px; }
+  .ua-login__kpi dt { white-space: normal; text-align: center; line-height: 1.2; }
+  .ua-login__presets { width: 100%; }
+  .ua-login__preset { flex: 1; justify-content: center; min-height: 36px; }
+  .ua-login__date { flex: 1 1 120px; }
+  .ua-login__date input { width: 100%; font-size: 16px; }
+  .ua-login__toolset + .ua-login__toolset { padding-left: 0; border-left: 0; }
+
+  .ua-login__table { min-width: 0; }
+  .ua-login__table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ua-login__table,
+  .ua-login__table tbody { display: block; }
+  .ua-login__row {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 12px;
+    padding: 12px var(--ua-gutter);
+  }
+  .ua-login__row td {
+    display: contents;
+    padding: 0;
+  }
+  .ua-login__row td::before {
+    content: attr(data-label);
+    color: var(--ua-text-3);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .ua-login__num,
+  .ua-login__daycol { width: auto; min-width: 0; text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ua-login__button { transition: none; }
-  .ua-login__button:active:not(:disabled) { transform: none; }
-  .ua-login__stat-fill { transition: none; }
+  .ua-login__button,
+  .ua-login__preset,
+  .ua-login__date input { transition: none; }
 }

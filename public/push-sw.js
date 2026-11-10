@@ -7,16 +7,38 @@
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+const FALLBACK_ICON = "/logo-icon.png";
+
+/*
+ * The organisation's logo, when the server named one (/org-marks/<code>.png,
+ * operator 2026-11-10: a push should carry the logo of its organisation).
+ * Checked before it is shown: nginx answers a missing file with the app's
+ * index.html and a 200, which a notification would draw as a blank square,
+ * so anything that is not an image falls back to the Rai mark.
+ */
+async function iconFor(src) {
+  if (!src || src === FALLBACK_ICON) return FALLBACK_ICON;
+  try {
+    const res = await fetch(src, { cache: "force-cache" });
+    return res.ok && (res.headers.get("content-type") || "").startsWith("image/") ? src : FALLBACK_ICON;
+  } catch {
+    return FALLBACK_ICON;
+  }
+}
+
 self.addEventListener("push", (event) => {
   let p = {};
   try { p = event.data ? event.data.json() : {}; } catch { p = { title: "Rai Operations", body: event.data?.text() ?? "" }; }
-  event.waitUntil(self.registration.showNotification(p.title || "Rai Operations", {
-    body: p.body || "",
-    icon: p.icon || "/logo-icon.png",
-    badge: p.badge || "/logo-icon.png",
-    tag: p.tag,
-    data: p.data || {},
-  }));
+  event.waitUntil((async () => {
+    const icon = await iconFor(p.icon);
+    await self.registration.showNotification(p.title || "Rai Operations", {
+      body: p.body || "",
+      icon,
+      badge: p.badge || FALLBACK_ICON,
+      tag: p.tag,
+      data: p.data || {},
+    });
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {

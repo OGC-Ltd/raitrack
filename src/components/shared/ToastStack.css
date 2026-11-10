@@ -62,6 +62,37 @@
 .tst--critical .tst__mark { color: var(--tst-crit); }
 .tst__mark .ti { font-size: 15px; }
 
+/* The organisation's mark in place of the bare icon; the severity rides on it */
+.tst__org {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -2px;
+}
+.tst__org img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--tst-paper);
+}
+.tst__sev {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tst-paper);
+  font-size: 12px;
+}
+.tst--warning .tst__sev { color: var(--tst-warn); }
+.tst--critical .tst__sev { color: var(--tst-crit); }
+
 .tst__text { display: grid; gap: 4px; flex: 1; min-width: 0; line-height: 1.45; }
 .tst__text b { font-size: 13px; font-weight: 600; color: var(--tst-ink); overflow-wrap: anywhere; }
 .tst__text span { overflow-wrap: anywhere; }
