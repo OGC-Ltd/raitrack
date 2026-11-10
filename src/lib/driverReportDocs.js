@@ -39,7 +39,7 @@ const span = (from, to) => (from === to ? dmyDay(from) : `${dmyDay(from)} – ${
  * capitalised.
  */
 export const nameCase = (name = '') =>
-  String(name).replace(/[^\s'’-]+/g, (w) =>
+  String(name).replace(/[^\s''-]+/g, (w) =>
     (/[a-z]/.test(w) && /[A-Z]/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 
 const STATUS = { ACTIVE: 'Active', SUSPENDED: 'Suspended', TERMINATED: 'Terminated' };
@@ -134,6 +134,13 @@ export function driversDoc(drivers, { details = {}, fleet, orgCode, days = 90, t
           cell(num(d.harshAccelerationCases)), cell(num(d.harshBrakingCases)), cell(num(cases(d)), true),
         ]) }
       : { kind: 'none', text: 'No driver had a fuel theft, overspeeding or harsh driving case in the period.' },
+    { kind: 'h2', title: '4. Notes' },
+    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
+    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
+    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
+    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
+    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
+    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
     { kind: 'note', text: `Figures cover ${period}. Active is each driver's first and last day with a trip in that window. Rating is out of 5; New means not rated yet.` },
     ...(weighbridge ? [{ kind: 'note', text: 'Tonnes include cane weighed at the weighbridge, credited to the driver of the trip the truck was on.' }] : []),
   ];
@@ -244,6 +251,11 @@ export function driverDoc(detail, { fleet, orgCode, vehicle = null, now = Date.n
         rows: byDay.map((d) => [cell(dmyDay(d.day)), cell(num(d.tonnes, 1)), cell(num(d.mileageKm))]) },
     );
   }
+  const nextSection = byDay.length ? 7 : 6;
+  blocks.push(
+    { kind: 'h2', title: `${nextSection}. Notes` },
+    { kind: 'none', text: '' },
+  );
   const posted = [...thefts, ...overspeeds].filter((x) => x.attributedBy === 'posted').length;
   if (posted) {
     blocks.push({ kind: 'note', text: `${plural(posted, 'case')} happened before anyone was posted to the unit and ${posted === 1 ? 'is' : 'are'} listed against the driver posted to it now.` });
