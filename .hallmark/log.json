@@ -1,6 +1,31 @@
 [
   {
     "date": "2026-11-10",
+    "prompt": "The IAM page is broken, ensure every component is intact with the right visual hierarchy and typography",
+    "mode": "redesign",
+    "depth": "repair",
+    "scope": "app",
+    "file": "src/components/body/UserIamPanel.css",
+    "genre": "modern-minimal",
+    "theme": "brand",
+    "shape": "app screen",
+    "signature": "the ledger, one set per effect and place",
+    "fixes": [
+      "role names de-duplicated, name on its own line",
+      "ledger grouped into collapsible sets, no inner scroll box",
+      "editor scrolls as one body, sticky scope bar and table head",
+      "type scale 20/15/14/12",
+      "rows stack by editor width (container query)",
+      "phone: back button above the name"
+    ],
+    "waived": [],
+    "dismissed": [
+      "74",
+      "F4"
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "mode": "redesign",
     "depth": "full",
     "scope": "app",
