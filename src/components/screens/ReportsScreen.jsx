@@ -20,7 +20,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes } from '../../api/fleetReports';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
@@ -126,8 +126,10 @@ function daysOf(key, span, night) {
   return { fromDay: fleetDay(span.from), toDay: fleetDay(Math.max(span.from, span.to - 1)), start: 0, end: 24 };
 }
 
-const spanFor = (key, night = NIGHT) => {
-  const id = (REPORTS[key] ?? REPORTS.behaviour).preset;
+const spanFor = (key, night = NIGHT, orgCode = null) => {
+  const def = REPORTS[key] ?? REPORTS.behaviour;
+  // An organisation may read a report over its own period (Mufindi: overspeeding by the week)
+  const id = def.presetFor?.[String(orgCode ?? '').toUpperCase()] ?? def.preset;
   const range = presetRange(id);
   // Night driving: the night itself, which is what the report then says it covers
   if (key === 'night') {
@@ -1307,7 +1309,7 @@ export default function ReportsScreen() {
   const key = tabs.includes(chosen) ? chosen : firstReport(tabs);
   const isServer = Boolean(SERVER_TABS[key]);
   const def = REPORTS[isServer ? 'behaviour' : key];
-  const [span, setSpan] = useState(() => spanFor(key));
+  const [span, setSpan] = useState(() => spanFor(key, NIGHT, orgCode));
   const [group, setGroup] = useState(null);
   // One unit, on the reports that take it (UNIT_REPORTS); null = every unit in the group
   const [unit, setUnit] = useState(null);
@@ -1375,12 +1377,14 @@ export default function ReportsScreen() {
 
   const reset = () => { runId.current += 1; setRun({ status: 'idle' }); };
   // Picked in the sidebar's Reports tree: the new report starts on its own period.
-  const showing = useRef(key);
+  // So does a newly loaded organisation, whose period may be its own.
+  const showing = useRef(`${key}|${orgCode}`);
   useEffect(() => {
-    if (showing.current === key) return;
-    showing.current = key;
-    setSpan(spanFor(key, night)); reset();
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+    const now = `${key}|${orgCode}`;
+    if (showing.current === now) return;
+    showing.current = now;
+    setSpan(spanFor(key, night, orgCode)); reset();
+  }, [key, orgCode]); // eslint-disable-line react-hooks/exhaustive-deps
   const conduct = key === 'behaviour';
   const byUnit = UNIT_REPORTS.has(key);
   // The units of the group picked, by plate, for the Unit picker
@@ -1398,7 +1402,7 @@ export default function ReportsScreen() {
   const [days, setDays] = useState(() => daysOf(key, span, night));
   const [picking, setPicking] = useState(null);
   const shownDays = picking ?? days;
-  useEffect(() => { setDays(daysOf(key, spanFor(key, night), night)); setPicking(null); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setDays(daysOf(key, spanFor(key, night, orgCode), night)); setPicking(null); }, [key, orgCode]); // eslint-disable-line react-hooks/exhaustive-deps
   const periodOf = (d) => shiftPeriod(d);
   const applyDays = (d) => {
     const sp = { id: null, ...periodOf(d) };
@@ -1458,7 +1462,15 @@ export default function ReportsScreen() {
         const r = await loadOverspeeds({ orgId, from: ctx.from, to: ctx.to, vehicleIds: ids, onProgress: step('Reading overspeeds, vehicle') });
         rows = overspeedRows(units, r.byVehicle); failed = r.failed;
         // One unit: each overspeed too
-        if (one) ctx.events = overspeedEvents(one.vehicles.map((v) => r.byVehicle.get(v.vehicleId) ?? []));
+        if (one) ctx.events = overspeedEvents(one.vehicles.map((v) => (r.byVehicle.get(v.vehicleId) ?? []).map((e) => ({ ...e, vehicleId: v.vehicleId }))));
+        // When each top speed was reached, to the second, from the reading it was
+        // read on (Mufindi, 10 Nov 2026: the report may back a disciplinary case)
+        if (!live()) return;
+        const tops = rows.map((row) => row.peak).filter(Boolean);
+        const found = await loadPeakTimes({ orgId, items: [...tops, ...(ctx.events ?? [])], onProgress: step('Finding when each top speed was reached, vehicle') });
+        rows = rows.map((row) => (row.peak ? { ...row, peakAt: found.peaks.get(row.peak)?.at ?? null } : row));
+        if (ctx.events) ctx.events = ctx.events.map((e) => ({ ...e, peakAt: found.peaks.get(e)?.at ?? null }));
+        ctx.peaksFailed = found.failed;
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
@@ -1485,7 +1497,7 @@ export default function ReportsScreen() {
     if (isServer || !orgId || !vehicles.length || run.status !== 'idle') return;
     const fresh = opened.current !== key;
     opened.current = key;
-    execute(fresh ? { span: spanFor(key, night), night } : {});
+    execute(fresh ? { span: spanFor(key, night, orgCode), night } : {});
   }, [isServer, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A behaviour run (and any new operator entry) opens the cases it finds;
@@ -1627,7 +1639,7 @@ export default function ReportsScreen() {
         {/* One field for the period: days on the calendar, hours under it, as Movements has it */}
         <DateRangePicker
           from={shownDays.fromDay} to={shownDays.toDay} today={today}
-          maxDays={def.reachDays ?? def.maxDays} spans={[def.reachDays ?? def.maxDays]}
+          maxDays={def.reachDays ?? def.maxDays} spans={def.spans ?? [def.reachDays ?? def.maxDays]}
           minDay={def.reachDays ? addDays(today, -(def.reachDays - 1)) : null}
           label="Period" on
           text={isNight

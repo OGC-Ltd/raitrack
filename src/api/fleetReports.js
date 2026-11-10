@@ -20,7 +20,7 @@ import { fetchVssIncidents, fetchVssCameraCount } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
 import { loadDay } from '../lib/vehicleDay';
 import { settleLimited } from '../lib/settleLimited';
-import { daysCovering, summariseWindows } from '../lib/fleetReports';
+import { daysCovering, summariseWindows, peakFix } from '../lib/fleetReports';
 
 const DAY_PAGE = 500;
 
@@ -176,4 +176,34 @@ export async function loadPings({ orgId, vehicles, from, to, onProgress = () => 
   });
   for (const list of pings.values()) list.sort((a, b) => a.t - b.t);
   return { pings, failed };
+}
+
+/**
+ * When each overspeed peaked: the fastest reading inside it (lib/fleetReports
+ * peakFix). `items` are overspeeds ({vehicleId, startedAt, endedAt, peakKmh,
+ * lat, lng}); each tracker's readings are read once, over all of its own.
+ * Answers a Map from each item to {at, kmh}, or null where no reading is found.
+ */
+export async function loadPeakTimes({ orgId, items, onProgress = () => {} }) {
+  const byVehicle = new Map();
+  for (const it of items) {
+    if (!it?.vehicleId || !Number.isFinite(it.startedAt) || !Number.isFinite(it.endedAt)) continue;
+    if (!byVehicle.has(it.vehicleId)) byVehicle.set(it.vehicleId, []);
+    byVehicle.get(it.vehicleId).push(it);
+  }
+  const out = new Map(items.map((it) => [it, null]));
+  let done = 0;
+  let failed = 0;
+  onProgress({ done, total: byVehicle.size });
+  await settleLimited([...byVehicle], 4, async ([vehicleId, list]) => {
+    const from = Math.min(...list.map((it) => it.startedAt)) - 60_000;
+    const to = Math.max(...list.map((it) => it.endedAt)) + 60_000;
+    const r = await loadPings({ orgId, vehicles: [{ vehicleId }], from, to });
+    if (r.failed.size) failed += 1;
+    const pings = r.pings.get(vehicleId) ?? [];
+    for (const it of list) out.set(it, peakFix(pings, it));
+    done += 1;
+    onProgress({ done, total: byVehicle.size });
+  });
+  return { peaks: out, failed };
 }

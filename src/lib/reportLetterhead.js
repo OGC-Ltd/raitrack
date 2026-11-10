@@ -39,7 +39,7 @@ function columnsFor(def, ctx, keep, inner) {
     // Follow-up column removed from main table (9 Nov 2026: redundant with the section below).
     behaviour: [32, 26, 36, 14, 14, 14, 12, 11, 14, 10, ...(SHOW_FOLLOW_UP_COLUMN ? [18] : [])],
     night: [48, 40, 48, 48],
-    overspeed: [30, 22, 44, 20, 22, 22, 24],
+    overspeed: [30, 22, 36, 18, 20, 20, 22, 34],
     utilisation: [32, 28, 26, 28, 30, 40],
     utilisationRated: [42, 21, 18, 18, 19, 22, 22, 22],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
@@ -154,12 +154,17 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   const events = ctx.events?.length ? overspeedEventTable(ctx.events) : null;
   if (events) {
     flow.push(`<h2>${done.secs.length + 2}. Each overspeed <small>${events.rows.length} · ${esc(ctx.unit ?? '')}</small></h2>`);
-    const widths = [8, 27, 16, 18, 22, 16, 17, ...(events.driver ? [26] : []), events.driver ? 34 : 60];
+    // #, Started, Ended, Peak at, Duration, Peak / limit, Avg, Distance, [Driver], Where: 184 mm upright
+    const widths = [8, 24, 16, 16, 18, 20, 14, 15, ...(events.driver ? [22] : []), events.driver ? 30 : 52];
     flow.push(table(events.head.map((h, i) => ({ h: esc(h), w: `${widths[i]}mm`, r: events.num(i) })),
       events.rows.map((r) => r.map((c) => (c === '-' ? { html: c, cls: 'm' } : esc(c))))));
   }
 
   const notes = [];
+  if (def.key === 'overspeed') {
+    notes.push('Top speed at: the date and time of the GPS reading on which each vehicle reached its top speed in the period, Nairobi time.');
+    if (ctx.peaksFailed) notes.push(`The readings of ${ctx.peaksFailed} vehicle${ctx.peaksFailed === 1 ? '' : 's'} could not be read: their top speed time shows as -.`);
+  }
   if (def.key === 'behaviour') {
     if (done.rows.some((r) => r.suspect)) notes.push('Check sensor: more than 100 harsh accelerations or brakes a day, far more than a driver makes. Most likely a faulty sensor.');
     if (ctx.dashcamFailed) notes.push('The dashcam alarms could not be read: no seatbelt, on phone and camera covered count only what operators logged.');
