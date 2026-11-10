@@ -12,8 +12,16 @@ const OFFSET = 3 * 3600_000;
 const DAY = 86_400_000;
 const num = (n, d = 0) => Number(n ?? 0).toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
 const plural = (n, one) => `${num(n)} ${one}${n === 1 ? '' : 's'}`;
-const cell = (text, bold = false) => ({ text: String(text ?? ''), ...(bold ? { bold: true } : {}) });
-const meta = (pairs) => pairs.filter(([, v]) => v != null && v !== '').map(([label, value]) => ({ label, value: String(value) }));
+/**
+ * Text the server's Helvetica can draw. Its standard fonts carry only the
+ * WinAnsi set, so a minus sign or an arrow (in a typed route name, say)
+ * would print as a missing glyph.
+ */
+export const drawable = (text) => String(text ?? '')
+  .replace(/\s*[→⟶⇒]\s*/g, ' to ')
+  .replace(/[−‐‑]/g, '-');
+const cell = (text, bold = false) => ({ text: drawable(text), ...(bold ? { bold: true } : {}) });
+const meta = (pairs) => pairs.filter(([, v]) => v != null && v !== '').map(([label, value]) => ({ label, value: drawable(value) }));
 const fleetDay = (ms) => new Date(ms + OFFSET).toISOString().slice(0, 10);
 /** YYYY-MM-DD → DD/MM/YYYY. */
 const dmyDay = (day) => (day ? `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}` : '-');
@@ -139,7 +147,7 @@ export function driversDoc(drivers, { details = {}, fleet, orgCode, days = 90, t
     date: dmyDay(win.to),
     meta: meta([['Fleet', fleet], ['Vehicles', typeName], ['Period', period], ['Drivers', num(drivers.length)]]),
     blocks,
-    footer: `${scope} · Drivers · ${period}`,
+    footer: drawable(`${scope} · Drivers · ${period}`),
     landscape: true,
   };
 }
@@ -168,7 +176,7 @@ export function driverDoc(detail, { fleet, orgCode, vehicle = null, now = Date.n
   const harsh = [...(incidents.harsh ?? [])].sort(byTime);
   const confirmed = thefts.filter((t) => t.review === 'confirmed');
 
-  const pairCols = [{ w: 92 }, { w: 92, align: 'right' }];
+  const pairCols = [{ w: 72 }, { w: 112, align: 'right', wrap: true }];
   const blocks = [
     { kind: 'h2', title: '1. Overview', aside: period },
     { kind: 'figures', items: [
@@ -199,10 +207,10 @@ export function driverDoc(detail, { fleet, orgCode, vehicle = null, now = Date.n
     thefts.length
       ? { kind: 'table', size: 7.8,
         cols: [{ w: 30 }, { w: 24 }, { w: 20, align: 'right' }, { w: 28, align: 'right' }, { w: 52, wrap: true }, { w: 30 }],
-        head: ['Time', 'Unit', 'Litres', 'Tank (L)', 'Where', 'Review'],
+        head: ['Time', 'Unit', 'Litres lost', 'Tank (L)', 'Where', 'Review'],
         rows: thefts.map((t) => [
-          cell(dmyhm(t.at)), cell(t.plate ?? '-', true), cell(`−${num(t.litres, 1)}`),
-          cell(t.fromL != null && t.toL != null ? `${num(t.fromL)} → ${num(t.toL)}` : '-'),
+          cell(dmyhm(t.at)), cell(t.plate ?? '-', true), cell(num(t.litres, 1)),
+          cell(t.fromL != null && t.toL != null ? `${num(t.fromL)} to ${num(t.toL)}` : '-'),
           cell(t.where ?? '-'), cell(THEFT_STANDING[t.review] ?? 'Awaiting review'),
         ]) }
       : { kind: 'none', text: 'No fuel theft was flagged on their units in the period.' },
@@ -253,7 +261,7 @@ export function driverDoc(detail, { fleet, orgCode, vehicle = null, now = Date.n
       ['Vehicle', vehicle], ['Fleet', fleet], ['Period', period],
     ]),
     blocks,
-    footer: `${fleet} · Driver Report · ${name}`,
+    footer: drawable(`${fleet} · Driver Report · ${name}`),
     landscape: false,
   };
 }

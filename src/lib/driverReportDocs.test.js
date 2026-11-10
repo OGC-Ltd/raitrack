@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { driverDoc, driversDoc, nameCase } from './driverReportDocs';
+import { drawable, driverDoc, driversDoc, nameCase } from './driverReportDocs';
 
 const NOW = Date.UTC(2026, 10, 10, 9, 0); // 10 Nov 2026 12:00 EAT
 
@@ -24,6 +24,20 @@ function fitsSchema(doc) {
     }
   }
 }
+
+describe('drawable', () => {
+  it('swaps the characters Helvetica cannot draw', () => {
+    expect(drawable('Field 7 → Mill')).toBe('Field 7 to Mill');
+    expect(drawable('−3.5')).toBe('-3.5');
+    expect(drawable('12/09/2026 – 01/10/2026 · ok')).toBe('12/09/2026 – 01/10/2026 · ok');
+  });
+
+  it('leaves no such character in the roster document', () => {
+    const d = driversDoc(roster, { details, fleet: "A → B", orgCode: "X", now: NOW });
+    const text = JSON.stringify([d.blocks, d.meta, d.footer]);
+    expect(text).not.toMatch(/[→−]/);
+  });
+});
 
 describe('nameCase', () => {
   it('repairs case but keeps a mixed-case word as typed', () => {
@@ -97,7 +111,7 @@ describe('driverDoc', () => {
     const tables = doc.blocks.filter((b) => b.kind === 'table');
     const theft = tables[1];
     expect(theft.rows).toHaveLength(1); // the slosh is not a theft case
-    expect(theft.rows[0].map((c) => c.text)).toEqual(['07/11/2026 13:15', 'KDA 101A', '−22.4', '180 → 158', 'Awendo', 'Confirmed theft']);
+    expect(theft.rows[0].map((c) => c.text)).toEqual(['07/11/2026 13:15', 'KDA 101A', '22.4', '180 to 158', 'Awendo', 'Confirmed theft']);
     expect(tables[2].rows[0].map((c) => c.text)).toEqual(['05/11/2026 08:02', 'KDA 101A', '94', '80', 'Migori road']);
     expect(tables[3].rows[0][2].text).toBe('Hard braking');
     expect(doc.blocks.some((b) => b.kind === 'note' && /before anyone was posted/.test(b.text))).toBe(true);
