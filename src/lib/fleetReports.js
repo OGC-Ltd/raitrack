@@ -18,8 +18,8 @@ const OFFSET = 3 * HOUR;
 
 /** An overspeed must last longer than this to count (operator, 1 Nov 2026: continuous; 2 Nov 2026: 5 s, was 5 min). */
 export const OVERSPEED_MIN_SEC = 5;
-/** Night hours, by default 19:00 to 05:00. */
-export const NIGHT = { start: 19, end: 5 };
+/** Night hours, by default 22:00 to 04:00. */
+export const NIGHT = { start: 22, end: 4 };
 /** Harsh accelerations per day above which the count reads as a sensor fault, not driving. */
 export const HARSH_SUSPECT_PER_DAY = 100;
 /** Telemetry is read a unit-day at a time, so the distance reports are kept short. */
@@ -401,11 +401,18 @@ export function summariseWindows(pings, windows) {
   // (lib/vehicleDay). fuelSensor: the unit reports fuel at all; fuelSeen: a
   // figure could be worked out (too few readings, or a level that ends higher
   // than it started with no refill, gives none).
-  const out = { km: 0, movingMin: 0, engineOnMin: 0, idleMin: 0, usedL: 0, fuelSeen: false, fuelSensor: false, readings: 0 };
+  const out = { km: 0, movingMin: 0, engineOnMin: 0, idleMin: 0, usedL: 0, fuelSeen: false, fuelSensor: false, readings: 0, firstMovingAt: null, latestMovingAt: null };
   for (const [a, b] of windows) {
     const sub = pings.filter((p) => p.t >= a && p.t < b);
     out.readings += sub.length;
     if (!out.fuelSensor && sub.some((p) => Number.isFinite(p.fuelLevelMl) || Number.isFinite(p.fuelUsedMl))) out.fuelSensor = true;
+    // Track the first and latest timestamp where the unit was actually moving (≥ 3 km/h).
+    for (const p of sub) {
+      if ((p.speedKmh ?? 0) >= 3) {
+        if (out.firstMovingAt == null || p.t < out.firstMovingAt) out.firstMovingAt = p.t;
+        if (out.latestMovingAt == null || p.t > out.latestMovingAt) out.latestMovingAt = p.t;
+      }
+    }
     if (sub.length < 2) continue;
     const s = summariseDay(sub, null);
     out.km += s.distanceKm ?? 0;

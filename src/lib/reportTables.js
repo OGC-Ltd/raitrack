@@ -9,6 +9,16 @@ import { km1, km2, minutesWords, OVERSPEED_MIN_SEC, OVER_STANDARD } from './flee
 /** The day and second a unit reached its top speed: "Sat 07 Nov 2026 14:32:15", Nairobi. */
 const peakDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 export const peakWords = (ms) => (Number.isFinite(ms) ? peakDay.format(ms).replace(/,/g, '') : '-');
+/** Time only, no date: "22:47" Nairobi. Used where the date is already known from context. */
+const timeOnlyFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const timeWords = (ms) => (Number.isFinite(ms) ? timeOnlyFmt.format(ms) : '-');
+/** "22:30 – 23:40 Hrs" range; falls back to just the end time, then "-". */
+const movingRange = (first, last) => {
+  if (!Number.isFinite(first) && !Number.isFinite(last)) return '-';
+  if (!Number.isFinite(first)) return `${timeWords(last)} Hrs`;
+  if (!Number.isFinite(last) || first === last) return `${timeWords(first)} Hrs`;
+  return `${timeWords(first)} – ${timeWords(last)} Hrs`;
+};
 import { statusWord } from './followUp';
 
 /** Words that say there is no value: shown blank, and a column of nothing else is left out. */
@@ -127,8 +137,8 @@ export const REPORTS = {
     title: 'Night Driving Report',
     preset: 'lastNight',
     maxDays: 7,
-    columns: () => ['Vehicle', 'Type', 'Night distance, km', 'Time moving'],
-    cells: (r) => [vehicleCell(r), typeOf(r), km1(r.km), minutesWords(r.movingMin)],
+    columns: () => ['Vehicle', 'Type', 'Night distance, km', 'Time moving', 'Moving between'],
+    cells: (r) => [vehicleCell(r), typeOf(r), km1(r.km), minutesWords(r.movingMin), movingRange(r.firstMovingAt, r.latestMovingAt)],
     sum: (r) => r.km,
     sumWords: (t) => `${km1(t)} km`,
     kpis: (rows) => [
