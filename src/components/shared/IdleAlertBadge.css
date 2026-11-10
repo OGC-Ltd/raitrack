@@ -1,0 +1,163 @@
+/* ── Idle alert corner badge ─────────────────────────────────────────── */
+
+.iab {
+  --iab-paper:       #fff;
+  --iab-ink:         #0f172a;
+  --iab-ink-2:       #334155;
+  --iab-ink-3:       #64748b;
+  --iab-rule:        #94a3b8;
+  --iab-rule-soft:   #cbd5e1;
+  --iab-warn-ink:    #8a3d07;
+  --iab-warn-line:   #d97706;
+  --iab-crit-ink:    #b91c1c;
+  --iab-crit-line:   #e53e3e;
+  --iab-act:         #0369a1;
+  --iab-ease:        cubic-bezier(0.2, 0, 0, 1);
+
+  position: fixed;
+  /* Sits just above the toast stack (z 10050) so it doesn't collide */
+  bottom: 20px;
+  right: 20px;
+  z-index: 10040;
+  width: min(380px, calc(100vw - 40px));
+
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 8px 14px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--iab-rule);
+  background: var(--iab-paper);
+  color: var(--iab-ink-2);
+  font-size: 12.5px;
+  box-shadow: 0 6px 18px -10px rgb(15 23 42 / 0.35);
+  animation: iab-in 180ms var(--iab-ease);
+}
+
+/* When the ToastStack is also visible, stack above it */
+.tst-stack ~ .iab,
+.iab + .tst-stack {
+  bottom: calc(20px + 8px + 56px); /* approx one toast height */
+}
+
+@keyframes iab-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Colour strip along the left edge */
+.iab::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 6px 0 0 6px;
+  background: var(--iab-warn-line);
+}
+.iab--critical::before { background: var(--iab-crit-line); }
+
+/* Icon */
+.iab__mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--iab-warn-ink);
+}
+.iab--critical .iab__mark { color: var(--iab-crit-ink); }
+.iab__mark .ti { font-size: 15px; }
+
+/* Text */
+.iab__body { flex: 1; min-width: 0; display: grid; gap: 3px; line-height: 1.45; }
+.iab__title { font-size: 13px; font-weight: 600; color: var(--iab-ink); overflow-wrap: anywhere; }
+.iab__sub   { font-size: 12px; color: var(--iab-ink-3); overflow-wrap: anywhere; }
+
+/* Actions */
+.iab__acts { display: flex; align-items: flex-start; gap: 4px; }
+
+.iab__copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--iab-rule-soft);
+  border-radius: 6px;
+  background: none;
+  color: var(--iab-ink-3);
+  cursor: pointer;
+  transition: color 120ms var(--iab-ease), border-color 120ms var(--iab-ease), background 120ms var(--iab-ease);
+}
+.iab__copy .ti { font-size: 15px; }
+.iab__copy:hover { color: var(--iab-ink); border-color: var(--iab-rule); background: #f5f7fa; }
+.iab__copy:active { background: #e6e9ee; transform: translateY(1px); }
+.iab__copy--copied,
+.iab__copy--copied:hover { color: #15803d; border-color: #15803d; background: none; }
+.iab__copy--failed,
+.iab__copy--failed:hover { color: var(--iab-crit-ink); border-color: var(--iab-crit-ink); background: none; }
+
+.iab__open {
+  flex: none;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--iab-act);
+  border-radius: 6px;
+  background: none;
+  color: var(--iab-act);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.iab__open:hover { background: color-mix(in srgb, var(--iab-act) 8%, transparent); }
+.iab__open:active { background: color-mix(in srgb, var(--iab-act) 14%, transparent); }
+
+.iab__x {
+  flex: none;
+  margin-top: -3px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--iab-ink-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.iab__x:hover { color: var(--iab-ink); background: #f5f7fa; }
+.iab__x:active { background: #e6e9ee; }
+
+.iab__copy:focus-visible,
+.iab__open:focus-visible,
+.iab__x:focus-visible { outline: 2px solid var(--iab-act); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .iab { animation: none; }
+  .iab__copy { transition: none; }
+  .iab__copy:active { transform: none; }
+}
+
+@media (max-width: 560px) {
+  .iab { left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: auto; }
+  .iab__copy { width: 36px; height: 36px; }
+  .iab__open { height: 36px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .iab {
+    --iab-paper:     #1e293b;
+    --iab-ink:       #f1f5f9;
+    --iab-ink-2:     #cbd5e1;
+    --iab-ink-3:     #94a3b8;
+    --iab-rule:      #334155;
+    --iab-rule-soft: #1e293b;
+  }
+  .iab__copy:hover { background: #334155; }
+  .iab__copy:active { background: #475569; }
+  .iab__x:hover { background: #334155; }
+  .iab__x:active { background: #475569; }
+}
