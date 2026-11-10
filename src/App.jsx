@@ -14,6 +14,7 @@ import ErrorBoundary from './components/shared/ErrorBoundary';
 import TabEmptyState from './components/shared/TabEmptyState';
 import ProductTour from './components/shared/ProductTour';
 import StopWatch from './components/shared/StopWatch';
+import ToastStack from './components/shared/ToastStack';
 
 // New layout components
 import AppHeader          from './components/layout/AppHeader';
@@ -114,9 +115,13 @@ function AppShell() {
       <ErrorBoundary label="Header" fullSection>
         <AppHeader />
       </ErrorBoundary>
-      {/* Menengai's unauthorised stops, watched in the background (operator, 5 Nov 2026) */}
+      {/* Menengai's unauthorised stops, flagged by the server (operator, 5 and 10 Nov 2026) */}
       <ErrorBoundary label="Stop watch">
         <StopWatch />
+      </ErrorBoundary>
+      {/* Every toast, made by the server: first in, first out, 8 s each */}
+      <ErrorBoundary label="Toasts">
+        <ToastStack />
       </ErrorBoundary>
 
       {/* Mobile header — shown only on mobile (< 768px) */}
