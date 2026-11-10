@@ -9,7 +9,7 @@ import "./DriversScreen.css";
 import { getDriversOverview, getDriverScores } from "../../api/drivers";
 import { loadDashcamAlarms } from "../../api/fleetReports";
 import { complianceTiles, complianceWords, DASHCAM_DAYS } from "../../lib/driverCompliance";
-import { resolveOrgId } from "../../api/org";
+import { resolveOrgId, ORG_CODE_BY_COMPANY } from "../../api/org";
 import { loadWeighbridgeCredit } from "../../api/weighbridgeTonnage";
 import { withWeighbridgeTonnes } from "../../lib/weighbridgeTonnage";
 import DriverScorecard from "./DriverScorecard";
@@ -19,9 +19,10 @@ import { pendingDriver, clearPendingDriver, driverNameMatches } from "../../lib/
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { createReport, addSectionTitle, addSummaryCards, addTable, downloadReport } from "../../utils/pdfReport";
 import DownloadReportButton from "../shared/DownloadReportButton";
-import { downloadOrgReportPdf } from "../../api/reports";
+import { makeReportDoc } from "../../api/reports";
+import { saveFile } from "../../api/tripReport";
+import { driverDoc, driversDoc } from "../../lib/driverReportDocs";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
@@ -53,12 +54,6 @@ function driverTypeOptions(drivers) {
     .sort((a, b) => (a.kind === NO_UNIT) - (b.kind === NO_UNIT) || b.count - a.count || a.label.localeCompare(b.label));
 }
 
-// Report-only. The on-screen charts take their colour from --tone-tonnes /
-// --tone-mileage on .drivers-page; jsPDF cannot resolve a CSS variable, so the
-// PDF summary cards still need a literal.
-const TONNES_COLOR = "#22c55e";
-const MILEAGE_COLOR = "#06b6d4";
-
 const fmt = (n, d = 0) =>
   Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -72,15 +67,14 @@ const initialsOf = (name = "") =>
 // low performer, not new (2026-10-29). Below
 // "FAIR" (rating < 3) never shows a pill — the UI intentionally hides any
 // "Needs Work" style label for low performers.
-// `color` is for the PDF, which cannot resolve a CSS variable; on screen the
-// tier is a TONE name and its colour lives in DriversScreen.css, per theme.
+// The tier is a TONE name; its colour lives in DriversScreen.css, per theme.
 const unrated = (d) => !(Number(d?.rating) > 0) && d?.ratingBand !== "Poor";
 const ratingTier = (r = 0, band) => {
-  if (r === 0 && band !== "Poor") return { label: "NEW", color: "#94a3b8", tone: "new" };
-  if (r >= 4.5) return { label: "EXCELLENT", color: "#22c55e", tone: "good" };
-  if (r >= 4) return { label: "GOOD", color: "#22c55e", tone: "good" };
-  if (r >= 3) return { label: "FAIR", color: "#f59e0b", tone: "fair" };
-  return { label: "", color: "#94a3b8", tone: "new" };
+  if (r === 0 && band !== "Poor") return { label: "NEW", tone: "new" };
+  if (r >= 4.5) return { label: "EXCELLENT", tone: "good" };
+  if (r >= 4) return { label: "GOOD", tone: "good" };
+  if (r >= 3) return { label: "FAIR", tone: "fair" };
+  return { label: "", tone: "new" };
 };
 
 /**
@@ -325,69 +319,35 @@ export default function DriversScreen() {
   const dHalf = Math.max(1, Math.floor(dayCount / 2));
   const fleetSub = dayCount > 1 ? `last ${dHalf}d vs previous ${dHalf}d, all drivers` : dayCount ? "single day" : "";
 
-  // ── PDF reports (utils/pdfReport.js — same builder as the Warehouse tab) ──
-  const accent = activeCompany?.accentColor || "#22c55e";
+  // ── PDF reports: letterhead documents the server draws (reports/document.pdf),
+  // the same format as every report on the Reports page. Read off the rows on
+  // screen, so the weighbridge tonnes and the vehicle-type filter carry over.
+  const fleetName = activeCompany?.name || "Fleet";
+  const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
+  const savePdf = async (doc) => {
+    const orgId = await resolveOrgId(activeCompanyId);
+    if (!orgId) throw new Error("This company has no backend organisation to report on");
+    const { blob, filename } = await makeReportDoc({ orgId, doc, landscape: doc.landscape });
+    saveFile(blob, filename);
+  };
 
-  // Whole roster — server-rendered template report (kind 'drivers'), same
-  // 90-day window the on-screen roster uses (api/drivers getDriversOverview).
+  // Every driver in the grid (under the type filter), over the roster's
+  // 90-day window (api/drivers getDriversOverview).
   const handleAllDriversReport = () =>
-    downloadOrgReportPdf({
-      companyId: activeCompanyId,
-      kind: "drivers",
-      days: 90,
-      filename: `${activeCompany?.short || "Fleet"}-Drivers-Report.pdf`,
-    });
+    savePdf(driversDoc(drivers, {
+      details: overview?.details, fleet: fleetName, orgCode, days: 90,
+      typeName: vehicleType === ALL_TYPES ? null : driverTypeLabel(vehicleType),
+      // Said only when some ticket was credited to a driver.
+      weighbridge: ((overview?.weighbridge?.viaTrip ?? 0) + (overview?.weighbridge?.viaName ?? 0)) > 0,
+    }));
 
-  // Selected driver: the performance statement + daily activity, from the same
-  // /analytics/drivers/:id payload the profile cards render.
-  //
-  // This is where the statement lives now. The card that used to print it
-  // beside the grid is gone — it was the third copy of figures the grid and
-  // the Summary card above already carry — but it held two things they do not:
-  // hours on road, and the heaviest load with its date and route. Both are
-  // still in this PDF, which is the artefact a statement should be anyway.
+  // Selected driver: the performance statement, each flagged case with its
+  // time and unit, and daily activity — the /analytics/drivers/:id payload the
+  // panel renders. Hours on road and the heaviest load live only here.
   const handleDriverReport = () => {
-    if (!detail?.driver) return;
-    const { driver, totals, heaviestLoad, byDay = [] } = detail;
-    const tier = ratingTier(driver.rating, driver.ratingBand);
-    const period = byDay.length ? `${fmtDay(byDay[0].day)} – ${fmtDay(byDay.at(-1).day)}` : "no activity";
-    const doc = createReport({
-      companyName: activeCompany?.name || "Fleet",
-      reportTitle: "Driver Report",
-      subtitle:    `${titleCase(driver.fullName)}${driver.employeeId ? ` · #${driver.employeeId}` : ""} · ${period}`,
-      accentColor: accent,
-    });
-    addSummaryCards(doc, [
-      { value: `${fmt(driver.rating, 1)} / 5`,   label: tier.label ? `Rating: ${tier.label}` : "Rating", color: tier.color },
-      { value: fmt(totals.trips),                label: "Trips",                  color: "#3b82f6" },
-      { value: `${fmt(totals.tonnes, 1)} t`,     label: "Tonnes ferried",         color: TONNES_COLOR },
-      { value: `${fmt(totals.mileageKm)} km`,    label: "Mileage",                color: MILEAGE_COLOR },
-    ]);
-    addSectionTitle(doc, "Performance Statement");
-    addTable(doc, {
-      accentColor: accent,
-      head: ["Metric", "Value"],
-      body: [
-        ["Trips completed",    fmt(totals.trips)],
-        ["Tonnes ferried",     `${fmt(totals.tonnes, 1)} t`],
-        ["Distance covered",   `${fmt(totals.mileageKm)} km`],
-        ["Hours on road",      `${fmt(totals.hoursOnRoad, 1)} h`],
-        ["Fuel-theft cases",   fmt(totals.fuelTheftCases)],
-        ["Overspeeding cases", fmt(totals.overspeedingCases)],
-        ["Harsh acceleration", fmt(totals.harshAccelerationCases ?? 0)],
-        ["Hard braking",       fmt(totals.harshBrakingCases ?? 0)],
-        ["Heaviest load",      heaviestLoad ? `${fmt(heaviestLoad.tonnes, 1)} t · ${fmtDay(heaviestLoad.date)} · ${heaviestLoad.route}` : "-"],
-      ],
-    });
-    if (byDay.length > 0) {
-      addSectionTitle(doc, "Daily Activity");
-      addTable(doc, {
-        accentColor: accent,
-        head: ["Date", "Tonnes", "Mileage (km)"],
-        body: byDay.map((d) => [fmtDay(d.day), fmt(d.tonnes, 1), fmt(d.mileageKm)]),
-      });
-    }
-    downloadReport(doc, `${activeCompany?.short || "Fleet"}-Driver-Report-${titleCase(driver.fullName).replace(/\s+/g, "")}.pdf`);
+    if (!detail?.driver) return undefined;
+    const vehicle = drivers.find((d) => d.id === detail.driver.id)?.vehicle ?? null;
+    return savePdf(driverDoc(detail, { fleet: fleetName, orgCode, vehicle }));
   };
 
   const isEmpty = !loading && roster.length === 0;
@@ -1695,4 +1655,4 @@ function IncidentCell({ n, tone, label }) {
       {fmt(n)}
     </td>
   );
-}
+}
