@@ -1,65 +1,82 @@
-/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand · redesign: full (repair pass 2026-11-10)
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand (the User Admin scale) · redesign: full (2026-11-10, match the app)
  * nav: the shell, kept (the User Admin section rail) · signature: the ledger of the person's own rights, one set per effect and place · states: loading, empty, error, full, saving, unsaved, locked
  * axes: light/grotesk-sans/cool · contrast: pass · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H5 E5 S4 R4 V3 · weakest: V, it shares the Login Activity masthead on purpose (one User Admin screen); the grouped ledger is what only this page has */
-/* Hallmark · dismissed 74 · #0f172a is the app's own ink on every Users panel, kept brand, not a stock pick for this page */
-/* Hallmark · dismissed F4 · neither control is filled: "With personal rights" is an outlined toggle and "People" is the phone's outlined way back */
+/* Hallmark · pre-emit critique: P4 H5 E5 S4 R5 V3 · weakest: V, on purpose: this is the fourth tab of one screen and now reads as its neighbours do; the ledger is what only this page has */
+/* Hallmark · waive 24b · UserAdminPanel.css pads and gaps on 10, 14 and 18px and waived gate 24 at pre-flight · the four User Admin tabs sit on one grid, so IAM copies those steps */
+/* Hallmark · dismissed 74 · #0f172a is the app's own ink on every User Admin panel, kept brand, not a stock pick for this page */
 
-/* IAM, the fourth section of User Admin: one person's access, their role with
-   their own rights laid over it. The person's own rights lead (the ledger,
-   grouped so 78 grants read as one line); the full table follows, the rows
-   that differ from the role ruled on the left.
+/* IAM, the fourth section of User Admin, set like its neighbours (Users,
+   User groups, Login activity): a masthead of figure tiles, then flush bands
+   closed by hairlines, 12.5px controls and cells, the Groups "well" for a
+   choice between a few options, and Users' green Save.
 
-   Type, four steps: the person's name 20; section and group heads 15; a
-   right's name and body 14; what explains it 12. The editor scrolls as one
-   body under the masthead (no box scrolling inside another), the scope and
-   search bar held at its top. */
+   One difference, on purpose: table heads and figure labels are sentence
+   case and untracked, where the neighbours set them in tracked capitals.
+
+   The scale is Users' (UserAdminPanel.css), copied rather than referenced,
+   because the files ship apart. If that scale moves, this block moves too. */
 
 :root {
-  --iam-ink-1: #0f172a;
-  --iam-ink-2: #334155;
-  --iam-ink-3: #52606f;
-  --iam-ground: #f6f8fa;
-  --iam-paper: #ffffff;
+  --iam-text-1: #0f172a;
+  --iam-text-2: #334155;
+  --iam-text-3: #52606f;
+  --iam-text-4: #64748b;
+  --iam-bg: #f6f8fa;
+  --iam-surface: #ffffff;
   --iam-raised: #f5f7fa;
-  --iam-press: #e6e9ee;
   --iam-line: #e6e9ee;
   --iam-line-hi: #cbd5e1;
-  --iam-field: #94a3b8;
+  --iam-field-line: #94a3b8;
   --iam-accent: #0369a1;
   --iam-accent-ink: #075985;
-  --iam-on-accent: #ffffff;
   --iam-ok: #15803d;
+  --iam-ok-ink: #0f6132;
   --iam-warn: #b45309;
+  --iam-warn-ink: #8a3d07;
   --iam-crit: #b91c1c;
+  --iam-save: var(--accent-ok, #15803d);
+  --iam-save-hi: #166534;
+  --iam-on-save: var(--color-bg, #f8fafc);
+  --iam-hover: rgba(0, 0, 0, 0.022);
+  --iam-press: rgba(0, 0, 0, 0.05);
+  --iam-selected: rgba(3, 105, 161, 0.06);
+  --iam-accent-wash: rgba(3, 105, 161, 0.09);
+  --iam-accent-edge: rgba(3, 105, 161, 0.26);
+  --iam-field-focus-wash: rgba(3, 105, 161, 0.05);
+  --iam-warn-wash: rgba(180, 83, 9, 0.07);
+  --iam-crit-wash: rgba(185, 28, 28, 0.06);
+  --iam-shade: rgb(15 23 42 / 8%);
 }
 
 .ua-iam {
+  --iam-lift: 0 1px 2px var(--iam-shade);
   --iam-gutter: var(--maint-gutter, 24px);
-  --iam-bar-h: 56px;
-  --iam-tint-accent: color-mix(in srgb, var(--iam-accent) 8%, var(--iam-paper));
-  --iam-tint-ok: color-mix(in srgb, var(--iam-ok) 10%, var(--iam-paper));
-  --iam-tint-crit: color-mix(in srgb, var(--iam-crit) 8%, var(--iam-paper));
-  --iam-tint-warn: color-mix(in srgb, var(--iam-warn) 8%, var(--iam-paper));
-  --iam-ease: cubic-bezier(0.2, 0, 0, 1);
-  --sp4-surface: var(--iam-paper);
+  --iam-bar-h: 48px;
+
+  /* The light names the shared pager reads. */
+  --sp4-surface: var(--iam-surface);
   --sp4-raised: var(--iam-raised);
   --sp4-line: var(--iam-line);
   --sp4-line-hi: var(--iam-line-hi);
-  --sp4-text-1: var(--iam-ink-1);
-  --sp4-text-2: var(--iam-ink-2);
-  --sp4-text-3: var(--iam-ink-3);
+  --sp4-text-1: var(--iam-text-1);
+  --sp4-text-2: var(--iam-text-2);
+  --sp4-text-3: var(--iam-text-3);
+  --sp4-text-4: var(--iam-text-4);
   --sp4-accent: var(--iam-accent);
 
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  background: var(--iam-ground);
-  color: var(--iam-ink-2);
+  background: var(--iam-bg);
+  color: var(--iam-text-2);
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 12.5px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+}
+
+@media (min-width: 768px) {
+  .ua-iam { height: 100%; overflow: hidden; }
 }
 
 .ua-iam__visually-hidden {
@@ -67,15 +84,42 @@
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 
-/* Two panes: people, then the chosen person. A phone shows one at a time. */
+/* ── Masthead: the Login Activity figure strip ─────────────────────────── */
+.ua-iam__masthead {
+  flex-shrink: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
+  padding: 18px var(--iam-gutter) 14px;
+  background: var(--iam-surface);
+  border-bottom: 1px solid var(--iam-line);
+}
+.ua-iam__kpis {
+  display: flex; gap: 1px; margin: 0; overflow: hidden;
+  border: 1px solid var(--iam-line); border-radius: 8px; background: var(--iam-line);
+}
+.ua-iam__kpi {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 70px; padding: 6px 16px; background: var(--iam-surface);
+}
+.ua-iam__kpi dd {
+  margin: 0; color: var(--iam-text-1);
+  font-size: 26px; font-weight: 900; letter-spacing: -0.04em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ua-iam__kpi--people dd { color: var(--iam-accent); }
+.ua-iam__kpi--personal dd { color: var(--iam-warn); }
+.ua-iam__kpi--rights dd { color: var(--iam-ok); }
+.ua-iam__kpi dt { color: var(--iam-text-3); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+
+/* ── Two panes: people, then the chosen person. A phone shows one. ─────── */
+.ua-iam__split { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .ua-iam__people,
-.ua-iam__editor { display: flex; flex-direction: column; min-width: 0; background: var(--iam-paper); }
+.ua-iam__editor { display: flex; flex-direction: column; min-width: 0; background: var(--iam-surface); }
 .ua-iam__editor { container: iam-editor / inline-size; }
 .ua-iam--open .ua-iam__people { display: none; }
 .ua-iam:not(.ua-iam--open) .ua-iam__editor { display: none; }
 
 @media (min-width: 768px) {
-  .ua-iam { flex-direction: row; height: 100%; overflow: hidden; }
+  .ua-iam__split { flex-direction: row; }
   .ua-iam--open .ua-iam__people,
   .ua-iam:not(.ua-iam--open) .ua-iam__editor { display: flex; }
   .ua-iam__people { flex: 0 0 320px; min-height: 0; border-right: 1px solid var(--iam-line); }
@@ -83,194 +127,227 @@
   .ua-iam__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 }
 
-/* Controls: one recipe, 32px, every state */
-.ua-iam__toggle,
+/* ── Controls: the app's ghost button, Users' green Save ───────────────── */
 .ua-iam__button,
 .ua-iam__back {
-  display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 32px; padding: 0 12px;
-  border: 1px solid var(--iam-line-hi); border-radius: 6px;
-  background: var(--iam-paper); color: var(--iam-ink-2);
-  font: 600 13px var(--font-body); white-space: nowrap; cursor: pointer;
-  transition: background-color 120ms var(--iam-ease), border-color 120ms var(--iam-ease), color 120ms var(--iam-ease);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--iam-line-hi); border-radius: 7px;
+  background: var(--iam-surface); color: var(--iam-text-2);
+  font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
 }
-.ua-iam__toggle:hover,
 .ua-iam__button:hover:not(:disabled),
-.ua-iam__back:hover { background: var(--iam-raised); border-color: var(--iam-field); }
-.ua-iam__toggle:active,
+.ua-iam__back:hover { color: var(--iam-text-1); border-color: var(--iam-text-4); }
 .ua-iam__button:active:not(:disabled),
-.ua-iam__back:active { background: var(--iam-press); }
-@media (min-width: 768px) { .ua-iam__back { display: none; } }
-.ua-iam__toggle[aria-pressed="true"] { border-color: var(--iam-accent); background: var(--iam-tint-accent); color: var(--iam-accent-ink); }
+.ua-iam__back:active { background: var(--iam-raised); }
 .ua-iam__button:disabled { opacity: 0.45; cursor: not-allowed; }
-.ua-iam__button--lead { border-color: var(--iam-accent); background: var(--iam-accent); color: var(--iam-on-accent); }
-.ua-iam__button--lead:hover:not(:disabled) { border-color: var(--iam-accent-ink); background: var(--iam-accent-ink); }
-.ua-iam__button--lead:active:not(:disabled) { background: var(--iam-ink-1); }
-.ua-iam :is(button, select, summary):focus-visible,
-.ua-iam__search:focus-within { outline: 2px solid var(--iam-accent); outline-offset: 1px; transition: none; }
+.ua-iam__button--lead { padding-inline: 16px; border-color: var(--iam-save); background: var(--iam-save); color: var(--iam-on-save); }
+.ua-iam__button--lead:hover:not(:disabled) { border-color: var(--iam-save-hi); background: var(--iam-save-hi); color: var(--iam-on-save); }
+.ua-iam__button--lead:active:not(:disabled) { background: var(--iam-ok-ink); }
+@media (min-width: 768px) { .ua-iam__back { display: none; } }
 
-.ua-iam__search {
-  flex: 1 1 160px; display: flex; align-items: center; gap: 8px; min-width: 0; height: 32px;
-  padding: 0 8px; border: 1px solid var(--iam-line-hi); border-radius: 6px;
-  background: var(--iam-paper); color: var(--iam-ink-3);
+.ua-iam :is(button, select, summary):focus-visible {
+  outline: 2px solid var(--iam-accent); outline-offset: 1px; transition: none;
 }
-.ua-iam__search:hover { border-color: var(--iam-field); }
+
+/* The Groups well: options in a raised tray, the pressed one lifted onto the surface */
+.ua-iam__well,
+.ua-iam__choice {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border: 1px solid var(--iam-line); border-radius: 8px; background: var(--iam-raised);
+}
+.ua-iam__well-opt,
+.ua-iam__choice-btn {
+  display: inline-flex; align-items: center; padding: 5px 11px;
+  border: 0; border-radius: 6px; background: none; color: var(--iam-text-3);
+  font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.ua-iam__well-opt:hover:not([aria-pressed="true"]),
+.ua-iam__choice-btn:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--iam-text-1); }
+.ua-iam__well-opt:active,
+.ua-iam__choice-btn:active:not(:disabled) { background: var(--iam-press); }
+.ua-iam__well-opt[aria-pressed="true"],
+.ua-iam__choice-btn[aria-pressed="true"] { background: var(--iam-surface); color: var(--iam-text-1); box-shadow: var(--iam-lift); }
+.ua-iam__choice-btn--allow[aria-pressed="true"] { color: var(--iam-ok-ink); }
+.ua-iam__choice-btn--deny[aria-pressed="true"] { color: var(--iam-crit); }
+.ua-iam__choice-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* Users' search: icon inside, the field-line edge, the accent wash on focus */
+.ua-iam__search { position: relative; display: flex; align-items: center; min-width: 0; }
+.ua-iam__search-icon { position: absolute; left: 10px; color: var(--iam-text-3); pointer-events: none; }
 .ua-iam__search input {
-  flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: none;
-  color: var(--iam-ink-1); font: inherit; font-size: 13px;
+  width: 100%; min-width: 0; padding: 6px 10px 6px 31px;
+  border: 1px solid var(--iam-field-line); border-radius: 8px;
+  background: var(--iam-surface); color: var(--iam-text-1);
+  font: inherit; font-size: 12.5px; outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
 }
+.ua-iam__search input::placeholder { color: var(--iam-text-4); }
+.ua-iam__search input:focus { background: var(--iam-field-focus-wash); }
+.ua-iam__search input:focus-visible { outline: 2px solid var(--iam-accent); outline-offset: 1px; }
 
-/* People: the name leads on its own line, so a long role list can never squeeze it */
+/* ── People ────────────────────────────────────────────────────────────── */
 .ua-iam__people-head {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0;
+  flex-shrink: 0; display: grid; gap: 8px;
   padding: 12px var(--iam-gutter); border-bottom: 1px solid var(--iam-line);
 }
+.ua-iam__people-head .ua-iam__well { justify-self: start; }
 @media (min-width: 768px) { .ua-iam__people-head { padding: 12px 16px; } }
+
+/* The shared pager, fitted to a 320px pane: its phone form (no range, no
+   minimum width), so "Next" is never cut off at the pane's edge. */
+.ua-iam__people .sp4-tpager { gap: 8px; padding: 10px 16px; border-top: 1px solid var(--iam-line); }
+.ua-iam__people .sp4-tpager__btn { min-width: 0; }
+.ua-iam__people .sp4-tpager__range { display: none; }
 
 .ua-iam__list { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; list-style: none; overflow-y: auto; scrollbar-width: thin; }
 .ua-iam__person {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: "name badge" "role role" "mail mail";
-  gap: 2px 8px; width: 100%;
-  padding: 12px var(--iam-gutter); border: 0; border-bottom: 1px solid var(--iam-line);
-  background: var(--iam-paper); color: inherit; font: inherit; text-align: left; cursor: pointer;
-  transition: background-color 120ms var(--iam-ease);
+  gap: 1px 8px; width: 100%;
+  padding: 10px var(--iam-gutter); border: 0; border-bottom: 1px solid var(--iam-line);
+  background: var(--iam-surface); color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: background-color 0.15s;
 }
-@media (min-width: 768px) { .ua-iam__person { padding: 12px 16px; } }
-.ua-iam__person:hover { background: var(--iam-raised); }
+@media (min-width: 768px) { .ua-iam__person { padding: 10px 16px; } }
+.ua-iam__person:hover { background: var(--iam-hover); }
 .ua-iam__person:active { background: var(--iam-press); }
-.ua-iam__person[aria-current="true"] { background: var(--iam-tint-accent); box-shadow: inset 3px 0 0 var(--iam-accent); }
-.ua-iam__person-name { grid-area: name; min-width: 0; color: var(--iam-ink-1); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ua-iam__person-role { grid-area: role; min-width: 0; color: var(--iam-ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ua-iam__person-mail { grid-area: mail; min-width: 0; color: var(--iam-ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ua-iam__badge {
-  grid-area: badge; align-self: center; justify-self: end; padding: 0 8px; border: 1px solid var(--iam-accent); border-radius: 999px;
-  color: var(--iam-accent-ink); font-size: 12px; font-weight: 600; line-height: 20px; white-space: nowrap;
-}
+.ua-iam__person[aria-current="true"] { background: var(--iam-selected); box-shadow: inset 2px 0 0 var(--iam-accent); }
+.ua-iam__person:focus-visible { outline-offset: -2px; }
+.ua-iam__person-name { grid-area: name; min-width: 0; color: var(--iam-text-1); font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ua-iam__person-role { grid-area: role; min-width: 0; color: var(--iam-text-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ua-iam__person-mail { grid-area: mail; min-width: 0; color: var(--iam-text-4); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The person: a masthead like Login Activity's, figures beside the name */
-.ua-iam__head {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px; flex-shrink: 0;
-  padding: 16px var(--iam-gutter); border-bottom: 1px solid var(--iam-line);
+/* Users' pending badge: accent ink on the accent wash */
+.ua-iam__badge,
+.ua-iam__tag {
+  display: inline-flex; align-items: center; padding: 1px 8px;
+  border: 1px solid var(--iam-line-hi); border-radius: 999px;
+  background: var(--iam-raised); color: var(--iam-text-2);
+  font-size: 11.5px; font-weight: 600; line-height: 18px; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.ua-iam__who { flex: 1 1 200px; min-width: 0; }
-.ua-iam__name { margin: 0; color: var(--iam-ink-1); font-size: 20px; font-weight: 700; line-height: 1.2; overflow-wrap: break-word; min-width: 0; }
-.ua-iam__meta { margin: 4px 0 0; color: var(--iam-ink-3); font-size: 13px; }
-.ua-iam__figures { display: flex; gap: 32px; margin: 0; }
-.ua-iam__figure { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ua-iam__figure dt { color: var(--iam-ink-3); font-size: 12px; }
-.ua-iam__figure dd { margin: 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iam-ink-1); font-size: 20px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.ua-iam__badge { grid-area: badge; align-self: center; justify-self: end; }
+.ua-iam__badge,
+.ua-iam__tag--own { border-color: var(--iam-accent-edge); background: var(--iam-accent-wash); color: var(--iam-accent-ink); }
+
+/* ── The chosen person ─────────────────────────────────────────────────── */
+.ua-iam__head {
+  flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
+  padding: 14px var(--iam-gutter); border-bottom: 1px solid var(--iam-line);
+}
+.ua-iam__who { flex: 1 1 220px; min-width: 0; }
+.ua-iam__name {
+  margin: 0; color: var(--iam-text-1);
+  font-size: 15px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3;
+  overflow-wrap: break-word; min-width: 0;
+}
+.ua-iam__meta { margin: 1px 0 0; color: var(--iam-text-3); font-size: 12px; }
+.ua-iam__tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+.ua-iam__tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ua-iam__actions { display: flex; gap: 8px; }
 
-.ua-iam__notice { margin: 0; padding: 8px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); font-size: 13px; font-weight: 600; }
-.ua-iam__notice--warn { background: var(--iam-tint-warn); color: var(--iam-warn); }
-.ua-iam__notice--error { background: var(--iam-tint-crit); color: var(--iam-crit); }
+.ua-iam__notice { margin: 0; padding: 8px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); font-size: 12px; font-weight: 600; }
+.ua-iam__notice--warn { background: var(--iam-warn-wash); color: var(--iam-warn-ink); }
+.ua-iam__notice--error { background: var(--iam-crit-wash); color: var(--iam-crit); }
 
-/* The ledger: the person's own rights, one set per effect and place */
-.ua-iam__ledger {
-  display: grid; gap: 8px;
-  padding: 16px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); background: var(--iam-raised);
-}
-.ua-iam__ledger-title { margin: 0 0 4px; color: var(--iam-ink-1); font-size: 15px; font-weight: 600; line-height: 1.3; }
-.ua-iam__set { border: 1px solid var(--iam-line); border-radius: 6px; background: var(--iam-paper); box-shadow: inset 3px 0 0 var(--iam-line-hi); }
-.ua-iam__set--allow { box-shadow: inset 3px 0 0 var(--iam-ok); }
-.ua-iam__set--deny { box-shadow: inset 3px 0 0 var(--iam-crit); }
+/* ── The ledger: their own rights, one set per effect and place ────────── */
+.ua-iam__ledger { padding: 14px var(--iam-gutter) 16px; border-bottom: 1px solid var(--iam-line); background: var(--iam-surface); }
+.ua-iam__ledger-title { margin: 0 0 8px; color: var(--iam-text-1); font-size: 12px; font-weight: 700; }
+.ua-iam__ledger-count { margin-left: 4px; color: var(--iam-text-4); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ua-iam__sets { overflow: hidden; border: 1px solid var(--iam-line); border-radius: 8px; }
+.ua-iam__set + .ua-iam__set { border-top: 1px solid var(--iam-line); }
+.ua-iam__set { box-shadow: inset 2px 0 0 var(--iam-line-hi); }
+.ua-iam__set--allow { box-shadow: inset 2px 0 0 var(--iam-ok); }
+.ua-iam__set--deny { box-shadow: inset 2px 0 0 var(--iam-crit); }
 .ua-iam__set-head {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
-  padding: 8px 12px 8px 16px; border-radius: 6px; cursor: pointer; list-style: none;
-  transition: background-color 120ms var(--iam-ease);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px;
+  padding: 8px 14px; cursor: pointer; list-style: none;
+  transition: background-color 0.15s;
 }
 .ua-iam__set-head::-webkit-details-marker { display: none; }
 .ua-iam__set-head::before {
   content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin-right: 2px;
-  border-right: 1.5px solid var(--iam-ink-3); border-bottom: 1.5px solid var(--iam-ink-3);
-  transform: translateY(-2px) rotate(-45deg); transition: transform 120ms var(--iam-ease);
+  border-right: 1.5px solid var(--iam-text-3); border-bottom: 1.5px solid var(--iam-text-3);
+  transform: translateY(-2px) rotate(-45deg); transition: transform 0.15s;
 }
 .ua-iam__set[open] > .ua-iam__set-head::before { transform: translateY(-3px) rotate(45deg); }
-.ua-iam__set-head:hover { background: var(--iam-raised); }
+.ua-iam__set-head:hover { background: var(--iam-hover); }
 .ua-iam__set-head:active { background: var(--iam-press); }
-.ua-iam__set-what { flex: 1 1 auto; min-width: 0; color: var(--iam-ink-2); }
-.ua-iam__set-effect { color: var(--iam-ink-1); font-weight: 600; }
-.ua-iam__set--allow .ua-iam__set-effect { color: var(--iam-ok); }
+.ua-iam__set-head:focus-visible { outline-offset: -2px; }
+.ua-iam__set-what { flex: 1 1 auto; min-width: 0; color: var(--iam-text-2); }
+.ua-iam__set-effect { color: var(--iam-text-1); font-weight: 700; }
+.ua-iam__set--allow .ua-iam__set-effect { color: var(--iam-ok-ink); }
 .ua-iam__set--deny .ua-iam__set-effect { color: var(--iam-crit); }
-.ua-iam__set-count { color: var(--iam-ink-3); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ua-iam__set-list {
-  margin: 0; padding: 4px 16px 12px 32px; list-style: none;
-  columns: 220px auto; column-gap: 24px;
-}
-.ua-iam__set-item { break-inside: avoid; padding: 2px 0; color: var(--iam-ink-1); font-size: 13px; }
+.ua-iam__set-count { color: var(--iam-text-4); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ua-iam__set-list { margin: 0; padding: 0 14px 10px 30px; list-style: none; columns: 220px auto; column-gap: 24px; }
+.ua-iam__set-item { break-inside: avoid; padding: 2px 0; color: var(--iam-text-2); font-size: 12px; }
 
-/* Scope and search, held at the top of the scrolling body */
+/* ── Scope and search, held at the top of the scrolling body ───────────── */
 .ua-iam__bar {
   position: sticky; top: 0; z-index: 2;
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
-  padding: 12px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); background: var(--iam-paper);
+  padding: 8px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); background: var(--iam-surface);
 }
 .ua-iam__scope { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.ua-iam__label { color: var(--iam-ink-3); font-size: 13px; white-space: nowrap; }
+.ua-iam__label { color: var(--iam-text-3); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .ua-iam__scope select {
-  min-width: 0; max-width: 280px; height: 32px; padding: 0 8px; border: 1px solid var(--iam-line-hi); border-radius: 6px;
-  background: var(--iam-paper); color: var(--iam-ink-1); font: 600 13px var(--font-body); cursor: pointer;
+  min-width: 0; max-width: 260px; padding: 5px 8px;
+  border: 1px solid var(--iam-line-hi); border-radius: 6px;
+  background: var(--iam-surface); color: var(--iam-text-1);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
-.ua-iam__scope select:hover { border-color: var(--iam-field); }
+.ua-iam__scope select:hover { background: var(--iam-press); }
 .ua-iam__search--rights { flex: 0 1 240px; margin-left: auto; }
 @media (min-width: 768px) {
   .ua-iam__bar { flex-wrap: nowrap; height: var(--iam-bar-h); padding-block: 0; }
-  .ua-iam__scope { flex: 0 1 auto; }
 }
 
-/* The rights */
-.ua-iam__rights { padding-bottom: 24px; background: var(--iam-paper); }
-.ua-iam__table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+/* ── The rights: Users' table, full-bleed, the gutter on its edge cells ── */
+.ua-iam__rights { padding-bottom: 24px; background: var(--iam-surface); }
+.ua-iam__table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .ua-iam__table thead th {
-  position: sticky; top: var(--iam-bar-h); z-index: 1; padding: 8px 12px; border-bottom: 1px solid var(--iam-line);
-  background: var(--iam-raised); color: var(--iam-ink-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap;
+  position: sticky; top: var(--iam-bar-h); z-index: 1;
+  padding: 9px 14px; border-bottom: 1px solid var(--iam-line);
+  background: var(--iam-raised); color: var(--iam-text-3);
+  font-size: 11px; font-weight: 700; text-align: left; white-space: nowrap;
 }
-.ua-iam__table th:first-child { padding-left: var(--iam-gutter); }
+.ua-iam__table tr > :first-child { padding-left: var(--iam-gutter); }
+.ua-iam__table tr > :last-child { padding-right: var(--iam-gutter); }
 .ua-iam__group th {
-  padding: 24px 12px 8px var(--iam-gutter); border-bottom: 1px solid var(--iam-line-hi);
-  color: var(--iam-ink-1); font-size: 15px; font-weight: 600; line-height: 1.3; text-align: left;
+  padding: 16px 14px 6px; border-bottom: 1px solid var(--iam-line);
+  color: var(--iam-text-1); font-size: 12px; font-weight: 700; text-align: left;
 }
-.ua-iam__row { border-bottom: 1px solid var(--iam-line); transition: background-color 120ms var(--iam-ease); }
-.ua-iam__row:hover { background: var(--iam-raised); }
+.ua-iam__row { border-bottom: 1px solid var(--iam-line); transition: background-color 0.15s; }
+.ua-iam__row:hover { background: var(--iam-hover); }
 .ua-iam__row th,
-.ua-iam__row td { padding: 8px 12px; vertical-align: middle; text-align: left; font-weight: 400; }
-.ua-iam__row td:nth-child(2) { white-space: nowrap; color: var(--iam-ink-2); }
+.ua-iam__row td { padding: 8px 14px; vertical-align: middle; text-align: left; font-weight: 400; color: var(--iam-text-2); }
 .ua-iam__table :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4)) { width: 1%; white-space: nowrap; }
-.ua-iam__row--allow > th:first-child { box-shadow: inset 3px 0 0 var(--iam-ok); }
-.ua-iam__row--deny > th:first-child { box-shadow: inset 3px 0 0 var(--iam-crit); }
-.ua-iam__row--unsaved { background: var(--iam-tint-warn); }
-.ua-iam__row--unsaved:hover { background: var(--iam-tint-warn); }
-.ua-iam__right { display: block; color: var(--iam-ink-1); font-weight: 500; overflow-wrap: break-word; }
-.ua-iam__slug { color: var(--iam-ink-3); font-family: var(--font-mono); font-size: 11px; }
-.ua-iam__fixed { color: var(--iam-ink-3); font-size: 13px; }
+.ua-iam__row--allow > th:first-child { box-shadow: inset 2px 0 0 var(--iam-ok); }
+.ua-iam__row--deny > th:first-child { box-shadow: inset 2px 0 0 var(--iam-crit); }
+.ua-iam__row--unsaved,
+.ua-iam__row--unsaved:hover { background: var(--iam-warn-wash); }
+.ua-iam__right { display: block; color: var(--iam-text-1); font-weight: 600; overflow-wrap: break-word; }
+.ua-iam__slug { color: var(--iam-text-4); font-family: var(--font-mono); font-size: 11px; }
+.ua-iam__fixed { color: var(--iam-text-4); font-size: 12px; }
+.ua-iam__choice { align-items: center; }
+.ua-iam__choice-btn { padding: 4px 10px; font-size: 12px; }
+.ua-iam__unsaved { margin-left: 8px; color: var(--iam-warn-ink); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.ua-iam__choice > .ua-iam__unsaved { margin: 0 6px 0 4px; }
+.ua-iam__result { display: inline-flex; align-items: center; gap: 4px; }
+.ua-iam__result--yes { color: var(--iam-ok-ink); }
+.ua-iam__result--no { color: var(--iam-text-3); }
 
-/* Role / Allow / Deny */
-.ua-iam__choice { display: inline-flex; align-items: center; white-space: nowrap; }
-.ua-iam__choice-btn {
-  height: 32px; padding: 0 12px; margin-left: -1px; border: 1px solid var(--iam-line-hi);
-  background: var(--iam-paper); color: var(--iam-ink-3); font: 600 13px var(--font-body); cursor: pointer;
-  transition: background-color 120ms var(--iam-ease), border-color 120ms var(--iam-ease), color 120ms var(--iam-ease);
-}
-.ua-iam__choice-btn:first-child { margin-left: 0; border-radius: 6px 0 0 6px; }
-.ua-iam__choice-btn:nth-child(3) { border-radius: 0 6px 6px 0; }
-.ua-iam__choice-btn:hover:not(:disabled) { background: var(--iam-raised); color: var(--iam-ink-1); }
-.ua-iam__choice-btn:active:not(:disabled) { background: var(--iam-press); }
-.ua-iam__choice-btn:disabled { cursor: not-allowed; opacity: 0.6; }
-.ua-iam__choice-btn[aria-pressed="true"] { position: relative; z-index: 1; }
-.ua-iam__choice-btn--inherit[aria-pressed="true"] { border-color: var(--iam-field); background: var(--iam-raised); color: var(--iam-ink-1); }
-.ua-iam__choice-btn--allow[aria-pressed="true"] { border-color: var(--iam-ok); background: var(--iam-tint-ok); color: var(--iam-ok); }
-.ua-iam__choice-btn--deny[aria-pressed="true"] { border-color: var(--iam-crit); background: var(--iam-tint-crit); color: var(--iam-crit); }
-.ua-iam__unsaved { margin-left: 8px; color: var(--iam-warn); font-size: 12px; font-weight: 600; white-space: nowrap; }
-
-.ua-iam__result { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
-.ua-iam__result--yes { color: var(--iam-ok); }
-.ua-iam__result--no { color: var(--iam-ink-3); }
-
-/* A phone: the way back on its own line above the name, buttons full width */
+/* ── A phone: the way back above the name, buttons full width ──────────── */
 @media (max-width: 767px) {
+  .ua-iam__masthead { padding-block: 14px 12px; }
+  .ua-iam__kpis { width: 100%; }
+  .ua-iam__kpi { flex: 1 1 0; min-width: 0; padding-inline: 8px; }
+  .ua-iam__kpi dt { white-space: normal; text-align: center; }
   .ua-iam__back { align-self: flex-start; }
   .ua-iam__who { flex-basis: 100%; }
-  .ua-iam__figures { width: 100%; }
   .ua-iam__actions { width: 100%; }
   .ua-iam__actions .ua-iam__button { flex: 1 1 0; }
   .ua-iam__search--rights { flex: 1 1 100%; margin-left: 0; }
@@ -283,21 +360,20 @@
   .ua-iam__table :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4)) { width: auto; }
   .ua-iam__row {
     display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 4px 16px;
-    padding: 12px var(--iam-gutter);
+    padding: 10px var(--iam-gutter);
   }
-  .ua-iam__row th, .ua-iam__row td { padding: 0; }
-  .ua-iam__row th:first-child { grid-column: 1 / -1; padding-left: 0; }
-  .ua-iam__row td[data-label] { grid-column: 1; grid-row: 2; font-size: 13px; }
-  .ua-iam__row td[data-label]::before { content: attr(data-label) " "; color: var(--iam-ink-3); }
+  .ua-iam__table tr.ua-iam__row > * { padding: 0; }
+  .ua-iam__row th:first-child { grid-column: 1 / -1; }
+  .ua-iam__row td[data-label] { grid-column: 1; grid-row: 2; font-size: 12px; }
+  .ua-iam__row td[data-label]::before { content: attr(data-label) " "; color: var(--iam-text-4); }
   .ua-iam__row td:last-child { grid-column: 2; grid-row: 2; justify-self: end; white-space: normal; text-align: right; }
   .ua-iam__choice-cell { grid-column: 1 / -1; grid-row: 3; margin-top: 4px; }
-  .ua-iam__row--allow, .ua-iam__row--deny { padding-left: calc(var(--iam-gutter) + 4px); }
-  .ua-iam__row--allow { box-shadow: inset 3px 0 0 var(--iam-ok); }
-  .ua-iam__row--deny { box-shadow: inset 3px 0 0 var(--iam-crit); }
+  .ua-iam__row--allow { box-shadow: inset 2px 0 0 var(--iam-ok); }
+  .ua-iam__row--deny { box-shadow: inset 2px 0 0 var(--iam-crit); }
   .ua-iam__row > th:first-child { box-shadow: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ua-iam__toggle, .ua-iam__button, .ua-iam__back, .ua-iam__person, .ua-iam__set-head,
-  .ua-iam__set-head::before, .ua-iam__row, .ua-iam__choice-btn { transition: none; }
+  .ua-iam__button, .ua-iam__back, .ua-iam__well-opt, .ua-iam__choice-btn, .ua-iam__person,
+  .ua-iam__set-head, .ua-iam__set-head::before, .ua-iam__row, .ua-iam__search input { transition: none; }
 }

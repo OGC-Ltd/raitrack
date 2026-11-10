@@ -106,7 +106,10 @@ function Ledger({ entries }) {
   if (entries.length === 0) return null;
   return (
     <section className="ua-iam__ledger" aria-labelledby="ua-iam-ledger-title">
-      <h3 id="ua-iam-ledger-title" className="ua-iam__ledger-title">Their own rights</h3>
+      <h3 id="ua-iam-ledger-title" className="ua-iam__ledger-title">
+        Their own rights <span className="ua-iam__ledger-count">{entries.length}</span>
+      </h3>
+      <div className="ua-iam__sets">
       {sets.map((set) => {
         const unsaved = set.entries.filter((e) => e.unsaved).length;
         const n = set.entries.length;
@@ -130,6 +133,7 @@ function Ledger({ entries }) {
           </details>
         );
       })}
+      </div>
     </section>
   );
 }
@@ -276,20 +280,46 @@ export default function UserIamPanel() {
 
   const selectedUser = access?.user ?? (people.data?.users ?? []).find((u) => u.id === selectedId) ?? null;
 
+  // The masthead's three figures, the Login Activity strip's shape.
+  const everyone = people.data?.users ?? [];
+  const figures = [
+    ["people", everyone.length === 1 ? "Person" : "People", people.data ? everyone.length : null],
+    ["personal", "With personal rights", people.data ? everyone.filter((u) => u.grants > 0).length : null],
+    ["rights", "Rights to give", catalogue.data
+      ? catalogue.data.resources.reduce((n, g) => n + g.permissions.filter((p) => p.grantable).length, 0) : null],
+  ];
+
   return (
     <section className={selectedId ? "ua-iam ua-iam--open" : "ua-iam"} aria-labelledby="ua-iam-title">
       <h1 id="ua-iam-title" className="ua-iam__visually-hidden">Access rights</h1>
 
+      <header className="ua-iam__masthead">
+        <dl className="ua-iam__kpis">
+          {figures.map(([id, label, value]) => (
+            <div key={id} className={`ua-iam__kpi ua-iam__kpi--${id}`}>
+              <dd>{value ?? "–"}</dd>
+              <dt>{label}</dt>
+            </div>
+          ))}
+        </dl>
+      </header>
+
+      <div className="ua-iam__split">
       <div className="ua-iam__people">
         <div className="ua-iam__people-head">
           <label className="ua-iam__search">
-            <i className="ti ti-search" aria-hidden="true" />
+            <i className="ti ti-search ua-iam__search-icon" aria-hidden="true" />
             <span className="ua-iam__visually-hidden">Find a person</span>
             <input type="search" value={search} placeholder="Name, email or role" onChange={(e) => setSearch(e.target.value)} />
           </label>
-          <button type="button" className="ua-iam__toggle" aria-pressed={onlyPersonal} onClick={() => setOnlyPersonal((v) => !v)}>
-            With personal rights
-          </button>
+          <div className="ua-iam__well" role="group" aria-label="Show">
+            <button type="button" className="ua-iam__well-opt" aria-pressed={!onlyPersonal} onClick={() => setOnlyPersonal(false)}>
+              Everyone
+            </button>
+            <button type="button" className="ua-iam__well-opt" aria-pressed={onlyPersonal} onClick={() => setOnlyPersonal(true)}>
+              With personal rights
+            </button>
+          </div>
         </div>
 
         {people.isLoading ? (
@@ -334,17 +364,17 @@ export default function UserIamPanel() {
               <div className="ua-iam__who">
                 <h2 className="ua-iam__name">{selectedUser?.fullName}</h2>
                 <p className="ua-iam__meta">{roleNames(access.roles)}</p>
+                <p className="ua-iam__tags">
+                  <span className="ua-iam__tag" title={organisations.map((o) => o.name).join(", ")}>
+                    {organisations.length === 1
+                      ? organisations[0].name
+                      : `${organisations.length} organisations`}
+                  </span>
+                  <span className={grants.length > 0 ? "ua-iam__tag ua-iam__tag--own" : "ua-iam__tag"}>
+                    {grants.length} personal {grants.length === 1 ? "right" : "rights"}
+                  </span>
+                </p>
               </div>
-              <dl className="ua-iam__figures">
-                <div className="ua-iam__figure">
-                  <dt>{organisations.length === 1 ? "Organisation" : "Organisations"}</dt>
-                  <dd>{organisations.length === 1 ? organisations[0].name : organisations.length}</dd>
-                </div>
-                <div className="ua-iam__figure">
-                  <dt>Personal rights</dt>
-                  <dd>{grants.length}</dd>
-                </div>
-              </dl>
               {!locked && (
                 <div className="ua-iam__actions">
                   <button type="button" className="ua-iam__button" disabled={pending.size === 0 || saving} onClick={discard}>
@@ -380,7 +410,7 @@ export default function UserIamPanel() {
                     </select>
                   </label>
                   <label className="ua-iam__search ua-iam__search--rights">
-                    <i className="ti ti-search" aria-hidden="true" />
+                    <i className="ti ti-search ua-iam__search-icon" aria-hidden="true" />
                     <span className="ua-iam__visually-hidden">Find a right</span>
                     <input type="search" value={find} placeholder="Find a right" onChange={(e) => setFind(e.target.value)} />
                   </label>
@@ -440,6 +470,7 @@ export default function UserIamPanel() {
             )}
           </>
         )}
+      </div>
       </div>
     </section>
   );

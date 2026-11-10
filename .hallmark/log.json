@@ -1,6 +1,23 @@
 [
   {
     "date": "2026-11-10",
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "file": "src/components/body/UserIamPanel.css",
+    "shape": "app screen",
+    "theme": "brand (User Admin scale)",
+    "genre": "modern-minimal",
+    "signature": "the ledger of the person own rights, one set per effect and place",
+    "prompt": "redesign the IAM page to match the application theme, layout and typography",
+    "notes": "masthead figure strip, Groups well for filters and Role/Allow/Deny, Users search, green Save, 12.5px cells, 11px raised heads; spacing 24b waived to the User Admin px grid",
+    "waived": [
+      "24b"
+    ],
+    "fingerprint": "iam-match-app-2026-11-10"
+  },
+  {
+    "date": "2026-11-10",
     "prompt": "The IAM page is broken, ensure every component is intact with the right visual hierarchy and typography",
     "mode": "redesign",
     "depth": "repair",
