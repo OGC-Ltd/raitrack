@@ -2784,6 +2784,11 @@ export default function FleetMap() {
     setUnitsOpen(false);
   }), [setUnitsOpen, setStrandedOpen, setFuelAlertsOpen]);
   useEffect(() => onMapWindowClaim("arrivals", () => setArrivalsOpen(false)), []);
+  /* The Draw geofence panel is a map window too: opening it closes Fuel
+     alerts and the rest, and it closes for them. The rail's Geofences menu
+     does not close it, since that menu is how a drawing is stopped. */
+  useEffect(() => { if (fenceDraw) claimMapWindow("geofence"); }, [fenceDraw]);
+  useEffect(() => onMapWindowClaim(["geofence", "geofence-menu"], () => setFenceDraw(null)), []);
   /* The investigation does not claim: it only ever opens from a Halted row,
      and Halted is already the newest window. It closes for anything else. */
   useEffect(() => onMapWindowClaim(["investigation", "stranded"], () => setInvestigateSubject(null)), []);
@@ -4558,8 +4563,8 @@ export default function FleetMap() {
     setFenceDraw((v) => (v && !v.editing ? null : { editing: null }));
     setMeasuring(false);
     setMeasurePts([]);
-    // The fences already there are what a new one is drawn against.
-    setShowZones(true);
+    // The geofences layer is left as it was: the drawing shows itself, and
+    // turning the layer on was a second thing nobody asked for.
   }, []);
 
   const measureText = measurePts.length > 1
