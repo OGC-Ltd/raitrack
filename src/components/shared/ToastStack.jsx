@@ -13,6 +13,7 @@ import { distanceWords, placeLabel, stopCopyText } from '../../lib/stopWatch';
 import { copyText } from '../../lib/copyText';
 import { cachedPlaceName } from '../../hooks/usePlaceName';
 import { requestStopsView } from '../../hooks/useStopWatch';
+import { companyMark } from '../../lib/companyLogos';
 import './ToastStack.css';
 
 /**
@@ -48,10 +49,21 @@ function icon(t) {
 function Toast({ t }) {
   const { setDesktopActiveTab } = useAppActions();
   const stop = t.kind === 'stop' ? t.data : null;
+  const orgCode = typeof t.data?.orgCode === 'string' ? t.data.orgCode : null;
+  const logo = orgCode ? companyMark({ code: orgCode }) : null;
   const copyOf = () => stopCopyText(stop, { now: Date.now(), area: cachedPlaceName(stop.lat, stop.lng), place: nearestWords(stop.nearest) });
   return (
     <div className={`tst tst--${t.level}`} role={t.level === 'info' ? 'status' : 'alert'}>
-      <span className="tst__mark" aria-hidden="true"><i className={`ti ${icon(t)}`} /></span>
+      {logo ? (
+        /* The organisation the toast is about, its severity as a badge on the logo
+           (operator, 10 Nov 2026: a push carries the logo of its organisation). */
+        <span className="tst__org" aria-hidden="true">
+          <img src={logo} alt="" width="28" height="28" />
+          <i className={`ti ${icon(t)} tst__sev`} />
+        </span>
+      ) : (
+        <span className="tst__mark" aria-hidden="true"><i className={`ti ${icon(t)}`} /></span>
+      )}
       <div className="tst__text">
         <b>{t.title}</b>
         {t.body && <span>{t.body}</span>}
