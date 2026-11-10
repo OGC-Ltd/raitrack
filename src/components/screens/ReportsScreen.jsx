@@ -1551,8 +1551,11 @@ export default function ReportsScreen() {
 
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState(null);
+  // Keyed on the run, not on `done`: Driver conduct rebuilds `done` every minute
+  // and whenever the window comes back (cases and incidents read again), which
+  // closed the sheet mid-edit and dropped the edits. Only a new run starts it over.
   const editor = useReportEditor({
-    orgId, source: done,
+    orgId, source: run,
     build: () => flowDoc(reportHtml(def, done, {
       companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
       orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),

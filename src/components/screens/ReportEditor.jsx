@@ -44,7 +44,8 @@ export function useReportEditor({ orgId, source, build }) {
   }, [open]);
 
   const startEditing = (initialDoc) => {
-    if (initialDoc === undefined && sheet.doc) { setOpen(true); return; }
+    // An edited sheet reopens as it was; an unedited one is drawn again from what the report shows now
+    if (initialDoc === undefined && sheet.doc && edited) { setOpen(true); return; }
     try {
       const doc = initialDoc ?? build();
       setSheet((s) => ({ ...s, original: doc, doc }));
