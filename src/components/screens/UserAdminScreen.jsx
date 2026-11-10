@@ -40,16 +40,29 @@ import UserLoginActivityPanel from "../body/UserLoginActivityPanel";
 import UserIamPanel from "../body/UserIamPanel";
 import "./UserAdminScreen.css";
 
+// IAM's own tabs: [id, tab, name for the error boundary].
+const IAM_VIEWS = [
+  ["rights", "Rights", "Access rights"],
+  ["users", "Users", "Users"],
+  ["groups", "Groups", "User groups"],
+  ["login-activity", "Login Activity", "Login activity"],
+];
+
 export default function UserAdminScreen() {
   const { setUserAdminOpen } = useAppActions();
   const { orgs } = useAuth();
   const { canIn } = usePermissions();
-  const [section, setSection] = useState("users");
   const canViewGroups = (orgs ?? []).some((org) => canIn(org.id, "user:read"));
-  // IAM is the System Administrator's alone: the wildcard itself, which a
-  // Director and an organisation's Admin do not hold. The server refuses
-  // everybody else whatever is drawn here.
-  const canIam = (orgs ?? []).some((org) => (org.permissions ?? []).includes("platform:admin"));
+  // Rights, inside IAM, is the System Administrator's alone: the wildcard
+  // itself, which a Director and an organisation's Admin do not hold. The
+  // server refuses everybody else whatever is drawn here.
+  const canRights = (orgs ?? []).some((org) => (org.permissions ?? []).includes("platform:admin"));
+  // One row of tabs: Users, Groups and Login Activity for everybody who can
+  // read users, and Rights in front of them for the System Administrator.
+  // Nobody who cannot read users sees tabs, only the Users panel.
+  const iamViews = IAM_VIEWS.filter(([id]) => id !== "rights" || canRights);
+  const [chosenView, setIamView] = useState(null);
+  const iamView = iamViews.some(([id]) => id === chosenView) ? chosenView : iamViews[0][0];
 
   /* The crumb used to read "← Fleet" and only close, which was wrong twice
      over for an administrator without `map:read`: it named a screen they
@@ -97,7 +110,7 @@ export default function UserAdminScreen() {
               </button>
             </li>
             <li className="uadm-crumbs__item uadm-crumbs__item--current" aria-current="page">
-              Users
+              IAM
             </li>
           </ol>
         </nav>
@@ -105,39 +118,23 @@ export default function UserAdminScreen() {
 
       <div className="uadm-page__body">
         {canViewGroups && (
-          <nav className="uadm-sections" aria-label="User administration">
-            <button type="button" className={section === "users" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
-                    aria-current={section === "users" ? "page" : undefined}
-                    onClick={() => setSection("users")}>
-              Users
-            </button>
-            <button type="button" className={section === "groups" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
-                    aria-current={section === "groups" ? "page" : undefined}
-                    onClick={() => setSection("groups")}>
-              Groups
-            </button>
-            <button type="button" className={section === "login-activity" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
-                    aria-current={section === "login-activity" ? "page" : undefined}
-                    onClick={() => setSection("login-activity")}>
-              Login Activity
-            </button>
-            {canIam && (
-              <button type="button" className={section === "iam" ? "uadm-sections__item uadm-sections__item--active" : "uadm-sections__item"}
-                      aria-current={section === "iam" ? "page" : undefined}
-                      onClick={() => setSection("iam")}>
-                IAM
+          <nav className="uadm-subtabs" aria-label="IAM">
+            {iamViews.map(([id, label]) => (
+              <button key={id} type="button" className="uadm-subtabs__item"
+                      aria-current={iamView === id ? "page" : undefined}
+                      onClick={() => setIamView(id)}>
+                {label}
               </button>
-            )}
+            ))}
           </nav>
         )}
-        <ErrorBoundary label={section === "groups" ? "User groups" : section === "login-activity" ? "Login activity" : section === "iam" ? "Access rights" : "Users"} fullSection>
-          {section === "iam" && canIam
-            ? <UserIamPanel />
-            : section === "groups" && canViewGroups
-            ? <UserGroupsPanel />
-            : section === "login-activity" && canViewGroups
-              ? <UserLoginActivityPanel />
-              : <UserAdminPanel />}
+        <ErrorBoundary key={canViewGroups ? iamView : "users"}
+                       label={canViewGroups ? IAM_VIEWS.find(([id]) => id === iamView)[2] : "Users"} fullSection>
+          {!canViewGroups ? <UserAdminPanel />
+            : iamView === "groups" ? <UserGroupsPanel />
+            : iamView === "login-activity" ? <UserLoginActivityPanel />
+            : iamView === "rights" && canRights ? <UserIamPanel />
+            : <UserAdminPanel />}
         </ErrorBoundary>
       </div>
     </div>

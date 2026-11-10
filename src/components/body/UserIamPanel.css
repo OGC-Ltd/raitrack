@@ -8,7 +8,7 @@
 /* IAM, the fourth section of User Admin, set like its neighbours (Users,
    User groups, Login activity): a masthead of figure tiles, then flush bands
    closed by hairlines, 12.5px controls and cells, the Groups "well" for a
-   choice between a few options, and Users' green Save.
+   choice between a few options, and Users' badges. Choices save on the click, so there is no Save button.
 
    One difference, on purpose: table heads and figure labels are sentence
    case and untracked, where the neighbours set them in tracked capitals.
@@ -34,9 +34,6 @@
   --iam-warn: #b45309;
   --iam-warn-ink: #8a3d07;
   --iam-crit: #b91c1c;
-  --iam-save: var(--accent-ok, #15803d);
-  --iam-save-hi: #166534;
-  --iam-on-save: var(--color-bg, #f8fafc);
   --iam-hover: rgba(0, 0, 0, 0.022);
   --iam-press: rgba(0, 0, 0, 0.05);
   --iam-selected: rgba(3, 105, 161, 0.06);
@@ -46,6 +43,9 @@
   --iam-warn-wash: rgba(180, 83, 9, 0.07);
   --iam-crit-wash: rgba(185, 28, 28, 0.06);
   --iam-shade: rgb(15 23 42 / 8%);
+  --iam-toast-shade: rgb(15 23 42 / 35%);
+  --iam-mark-some: rgba(3, 105, 161, 0.5);
+  --iam-mark-none: rgba(3, 105, 161, 0.13);
 }
 
 .ua-iam {
@@ -122,12 +122,14 @@
   .ua-iam__split { flex-direction: row; }
   .ua-iam--open .ua-iam__people,
   .ua-iam:not(.ua-iam--open) .ua-iam__editor { display: flex; }
-  .ua-iam__people { flex: 0 0 320px; min-height: 0; border-right: 1px solid var(--iam-line); }
+  /* The gutter on the left, so names start under the figures above; wider by
+     the same amount, so the text column keeps its 288px. */
+  .ua-iam__people { flex: 0 0 calc(304px + var(--iam-gutter)); min-height: 0; border-right: 1px solid var(--iam-line); }
   .ua-iam__editor { flex: 1 1 auto; min-height: 0; }
   .ua-iam__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 }
 
-/* ── Controls: the app's ghost button, Users' green Save ───────────────── */
+/* ── Controls: the app's ghost button ─────────────────────────────────── */
 .ua-iam__button,
 .ua-iam__back {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -142,9 +144,6 @@
 .ua-iam__button:active:not(:disabled),
 .ua-iam__back:active { background: var(--iam-raised); }
 .ua-iam__button:disabled { opacity: 0.45; cursor: not-allowed; }
-.ua-iam__button--lead { padding-inline: 16px; border-color: var(--iam-save); background: var(--iam-save); color: var(--iam-on-save); }
-.ua-iam__button--lead:hover:not(:disabled) { border-color: var(--iam-save-hi); background: var(--iam-save-hi); color: var(--iam-on-save); }
-.ua-iam__button--lead:active:not(:disabled) { background: var(--iam-ok-ink); }
 @media (min-width: 768px) { .ua-iam__back { display: none; } }
 
 .ua-iam :is(button, select, summary):focus-visible {
@@ -194,7 +193,7 @@
   padding: 12px var(--iam-gutter); border-bottom: 1px solid var(--iam-line);
 }
 .ua-iam__people-head .ua-iam__well { justify-self: start; }
-@media (min-width: 768px) { .ua-iam__people-head { padding: 12px 16px; } }
+@media (min-width: 768px) { .ua-iam__people-head { padding: 12px 16px 12px var(--iam-gutter); } }
 
 /* The shared pager, fitted to a 320px pane: its phone form (no range, no
    minimum width), so "Next" is never cut off at the pane's edge. */
@@ -211,7 +210,7 @@
   background: var(--iam-surface); color: inherit; font: inherit; text-align: left; cursor: pointer;
   transition: background-color 0.15s;
 }
-@media (min-width: 768px) { .ua-iam__person { padding: 10px 16px; } }
+@media (min-width: 768px) { .ua-iam__person { padding: 10px 16px 10px var(--iam-gutter); } }
 .ua-iam__person:hover { background: var(--iam-hover); }
 .ua-iam__person:active { background: var(--iam-press); }
 .ua-iam__person[aria-current="true"] { background: var(--iam-selected); box-shadow: inset 2px 0 0 var(--iam-accent); }
@@ -247,7 +246,37 @@
 .ua-iam__meta { margin: 1px 0 0; color: var(--iam-text-3); font-size: 12px; }
 .ua-iam__tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
 .ua-iam__tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.ua-iam__actions { display: flex; gap: 8px; }
+/* How many rights they have: the figure over a strip of one mark per right,
+   on a raised track. Solid = in every organisation, lighter = in some,
+   faint = nowhere. Wraps rather than overflow in a narrow header. */
+.ua-iam__reach { display: grid; gap: 5px; min-width: 0; }
+.ua-iam__reach-figure {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0;
+  color: var(--iam-text-3); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.ua-iam__reach-figure strong { color: var(--iam-text-1); font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+.ua-iam__reach-some { color: var(--iam-text-4); font-size: 11.5px; }
+.ua-iam__marks {
+  display: flex; flex-wrap: wrap; gap: 3px 1px; max-width: 100%;
+  padding: 4px 5px; border-radius: 5px; background: var(--iam-raised);
+}
+.ua-iam__mark { flex: none; width: 2px; height: 14px; border-radius: 1px; background: var(--iam-mark-none); }
+.ua-iam__mark--all { background: var(--iam-accent); }
+.ua-iam__mark--some { background: var(--iam-mark-some); }
+/* The same strip in each group's heading, smaller: that group's rights only. */
+.ua-iam__marks--small { flex-wrap: nowrap; padding: 3px 4px; border-radius: 4px; }
+.ua-iam__marks--small .ua-iam__mark { height: 10px; }
+
+/* Where Save used to be: every choice saves itself, so this only says how
+   that is going. Polite, not an alert: it changes on every click. */
+.ua-iam__status {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  color: var(--iam-text-4); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.ua-iam__status .ti-check { color: var(--iam-ok); }
+.ua-iam__status--busy { color: var(--iam-text-2); }
+.ua-iam__status--busy .ti { animation: ua-iam-spin 0.9s linear infinite; }
+@keyframes ua-iam-spin { to { transform: rotate(360deg); } }
 
 .ua-iam__notice { margin: 0; padding: 8px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); font-size: 12px; font-weight: 600; }
 .ua-iam__notice--warn { background: var(--iam-warn-wash); color: var(--iam-warn-ink); }
@@ -292,6 +321,9 @@
   padding: 8px var(--iam-gutter); border-bottom: 1px solid var(--iam-line); background: var(--iam-surface);
 }
 .ua-iam__scope { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+/* A System Administrator: nothing to scope, so the bar says why. */
+.ua-iam__locked { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin: 0; color: var(--iam-text-2); font-size: 12.5px; font-weight: 600; }
+.ua-iam__locked .ti { color: var(--iam-ok); font-size: 16px; }
 .ua-iam__label { color: var(--iam-text-3); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .ua-iam__scope select {
   min-width: 0; max-width: 260px; padding: 5px 8px;
@@ -317,9 +349,34 @@
 .ua-iam__table tr > :first-child { padding-left: var(--iam-gutter); }
 .ua-iam__table tr > :last-child { padding-right: var(--iam-gutter); }
 .ua-iam__group th {
-  padding: 16px 14px 6px; border-bottom: 1px solid var(--iam-line);
+  padding: 0 14px; border-bottom: 1px solid var(--iam-line);
   color: var(--iam-text-1); font-size: 12px; font-weight: 700; text-align: left;
 }
+/* The group's head is the button that folds it: the whole band, so it is
+   easy to hit, with the ledger's chevron, the size of the group, and how many
+   of its rights are this person's own (still seen when folded). */
+/* Three tracks: the name on the left, the group's strip and count centred in
+   the row, an empty right track as wide as the left so the centre is true. */
+.ua-iam__group-toggle {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; width: 100%;
+  padding: 12px 0 8px; border: 0; background: none; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.ua-iam__group-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ua-iam__group-meter { display: inline-flex; align-items: center; gap: 8px; }
+.ua-iam__group-lead::before {
+  content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin: 0 2px;
+  border-right: 1.5px solid var(--iam-text-3); border-bottom: 1.5px solid var(--iam-text-3);
+  transform: translateY(-2px) rotate(45deg); transition: transform 0.15s;
+}
+.ua-iam__group-toggle[aria-expanded="false"] .ua-iam__group-lead::before { transform: translateY(0) rotate(-45deg); }
+.ua-iam__group-toggle:hover .ua-iam__group-name { color: var(--iam-accent); }
+.ua-iam__group-toggle:active { opacity: 0.8; }
+.ua-iam__group-toggle:focus-visible { outline-offset: -2px; }
+.ua-iam__group--folded th { padding-bottom: 0; }
+.ua-iam__group--folded .ua-iam__group-toggle { padding-bottom: 12px; }
+.ua-iam__group-count { color: var(--iam-text-4); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ua-iam__fold-all { flex: none; }
 .ua-iam__row { border-bottom: 1px solid var(--iam-line); transition: background-color 0.15s; }
 .ua-iam__row:hover { background: var(--iam-hover); }
 .ua-iam__row th,
@@ -340,6 +397,131 @@
 .ua-iam__result--yes { color: var(--iam-ok-ink); }
 .ua-iam__result--no { color: var(--iam-text-3); }
 
+/* ── Before anybody is chosen: every right on one board ────────────────
+   A column per group, A to Z, five to a row, scrolling down; a card per right on the
+   raised column, like the ledger's sets. A role chosen above lights the
+   cards it gives (the accent edge) and quiets the rest. */
+.ua-iam__board-wrap { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+/* One band, the board's own: the title and its line on the left, the role
+   picker and the search on the right at the search field's height. Once a
+   role is chosen, a small key says what the two card faces mean. */
+.ua-iam__board-head {
+  flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
+  padding: 14px var(--iam-gutter); border-bottom: 1px solid var(--iam-line);
+}
+.ua-iam__board-head .ua-iam__meta strong { color: var(--iam-text-1); font-weight: 700; }
+.ua-iam__board-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-left: auto; min-width: 0; }
+@media (min-width: 768px) { .ua-iam__board-tools { flex: 0 0 auto; flex-wrap: nowrap; } }
+.ua-iam__search--board { flex: 0 1 220px; }
+.ua-iam__field { position: relative; display: flex; align-items: center; min-width: 0; }
+.ua-iam__field select {
+  appearance: none; min-width: 0; max-width: 240px; padding: 6px 30px 6px 31px;
+  border: 1px solid var(--iam-field-line); border-radius: 8px;
+  background: var(--iam-surface); color: var(--iam-text-1);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.ua-iam__field select:hover { border-color: var(--iam-text-4); }
+.ua-iam__field select:focus { background: var(--iam-field-focus-wash); }
+.ua-iam__field select:focus-visible { outline: 2px solid var(--iam-accent); outline-offset: 1px; }
+.ua-iam__field-chevron { position: absolute; right: 10px; color: var(--iam-text-3); pointer-events: none; }
+.ua-iam__key { display: flex; gap: 12px; white-space: nowrap; margin: 0; color: var(--iam-text-3); font-size: 11.5px; font-weight: 600; }
+.ua-iam__key-item { display: inline-flex; align-items: center; gap: 6px; }
+.ua-iam__key-item::before {
+  content: ""; width: 12px; height: 10px; border-radius: 3px;
+  border: 1px solid var(--iam-field-line); border-bottom: 2px solid var(--iam-accent); background: var(--iam-surface);
+}
+.ua-iam__key-item--not::before { border: 1px dashed var(--iam-line-hi); background: transparent; box-shadow: none; }
+
+/* Groups: which columns the board shows. The button is the role picker's
+   twin; the menu drops from it, a box per group. Each column can also hide
+   itself from the eye in its head. */
+.ua-iam__groups { position: relative; }
+.ua-iam__groups-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; list-style: none;
+  border: 1px solid var(--iam-field-line); border-radius: 8px;
+  background: var(--iam-surface); color: var(--iam-text-1);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.ua-iam__groups-btn::-webkit-details-marker { display: none; }
+.ua-iam__groups-btn:hover { border-color: var(--iam-text-4); }
+.ua-iam__groups-btn:focus-visible { outline: 2px solid var(--iam-accent); outline-offset: 1px; }
+.ua-iam__groups[open] > .ua-iam__groups-btn { background: var(--iam-field-focus-wash); }
+.ua-iam__groups-btn .ti { color: var(--iam-text-3); }
+.ua-iam__groups-count { color: var(--iam-text-3); font-variant-numeric: tabular-nums; }
+.ua-iam__groups-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 5;
+  width: 260px; max-height: min(420px, 60vh); display: flex; flex-direction: column;
+  border: 1px solid var(--iam-line-hi); border-radius: 8px; background: var(--iam-surface);
+  box-shadow: 0 6px 18px -10px var(--iam-toast-shade);
+}
+.ua-iam__groups-actions { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--iam-line); }
+.ua-iam__link {
+  padding: 2px 0; border: 0; background: none; color: var(--iam-accent-ink);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ua-iam__link:hover:not(:disabled) { text-decoration: underline; }
+.ua-iam__link:focus-visible { outline: 2px solid var(--iam-accent); outline-offset: 2px; border-radius: 2px; }
+.ua-iam__link:disabled { color: var(--iam-text-4); cursor: default; }
+.ua-iam__groups-list { margin: 0; padding: 4px 0; list-style: none; overflow-y: auto; scrollbar-width: thin; }
+.ua-iam__groups-opt {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  padding: 6px 12px; color: var(--iam-text-1); font-size: 12.5px; cursor: pointer;
+}
+.ua-iam__groups-opt:hover { background: var(--iam-hover); }
+.ua-iam__groups-opt input { margin: 0; accent-color: var(--iam-accent); }
+.ua-iam__groups-opt input:focus-visible { outline: 2px solid var(--iam-accent); outline-offset: 1px; }
+.ua-iam__groups-n { color: var(--iam-text-4); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.ua-iam__column-hide {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; margin: -4px -6px -4px 0; padding: 0;
+  border: 0; border-radius: 6px; background: none; color: var(--iam-text-4); cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+.ua-iam__column-hide:hover { color: var(--iam-text-1); background: var(--iam-press); }
+.ua-iam__column-hide:focus-visible { outline: 2px solid var(--iam-accent); outline-offset: 0; }
+
+.ua-iam__board {
+  flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start; align-content: start; gap: 12px;
+  padding: 14px var(--iam-gutter) 18px; overflow-x: clip; overflow-y: auto; scrollbar-width: thin;
+}
+/* One of the board's five stacks: groups sit straight under each other. */
+.ua-iam__stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ua-iam__column {
+  display: flex; flex-direction: column; min-width: 0;
+  border: 1px solid var(--iam-line); border-radius: 8px; background: var(--iam-raised);
+}
+.ua-iam__column-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  padding: 10px 12px 8px; border-bottom: 1px solid var(--iam-line);
+}
+.ua-iam__column-name {
+  flex: 1 1 auto; min-width: 0; margin: 0; color: var(--iam-text-1);
+  font-size: 12.5px; font-weight: 700; overflow-wrap: break-word;
+}
+.ua-iam__column-head .ua-iam__marks { flex-basis: 100%; background: var(--iam-surface); flex-wrap: wrap; }
+.ua-iam__cards {
+  display: grid; gap: 6px; margin: 0; padding: 8px; list-style: none;
+}
+.ua-iam__card {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 8px 10px;
+  position: relative; overflow: hidden;
+  border: 1px solid var(--iam-line-hi); border-radius: 6px; background: var(--iam-surface);
+  font-size: 12.5px; box-shadow: 0 6px 18px -10px var(--iam-toast-shade);
+}
+.ua-iam__card :is(.ua-iam__right, .ua-iam__slug) { overflow-wrap: anywhere; }
+.ua-iam__column-head .ua-iam__group-count { min-width: 0; }
+.ua-iam__card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.ua-iam__card-roles { color: var(--iam-text-3); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ua-iam__card--given { border-color: var(--iam-field-line); }
+/* The toast's hairline along the foot, held still: this role gives it. */
+.ua-iam__card--given::after {
+  content: ""; position: absolute; inset: auto 0 0; height: 2px; background: var(--iam-accent);
+}
+.ua-iam__card--not { border-style: dashed; border-color: var(--iam-line-hi); background: transparent; box-shadow: none; }
+.ua-iam__card--not .ua-iam__right { color: var(--iam-text-3); font-weight: 500; }
+
 /* ── A phone: the way back above the name, buttons full width ──────────── */
 @media (max-width: 767px) {
   .ua-iam__masthead { padding-block: 14px 12px; }
@@ -348,14 +530,14 @@
   .ua-iam__kpi dt { white-space: normal; text-align: center; }
   .ua-iam__back { align-self: flex-start; }
   .ua-iam__who { flex-basis: 100%; }
-  .ua-iam__actions { width: 100%; }
-  .ua-iam__actions .ua-iam__button { flex: 1 1 0; }
   .ua-iam__search--rights { flex: 1 1 100%; margin-left: 0; }
+  .ua-iam__board-tools { flex-basis: 100%; margin-left: 0; }
 }
 
 /* A narrow editor (a phone, or a desk under ~1000px): each right stacks.
    Its name; then what the role gives and the result; then the choice. */
 @container iam-editor (max-width: 639px) {
+  .ua-iam__group-toggle { grid-template-columns: minmax(0, 1fr) auto; }
   .ua-iam__table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .ua-iam__table :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4)) { width: auto; }
   .ua-iam__row {
@@ -374,6 +556,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ua-iam__status--busy .ti { animation: none; }
   .ua-iam__button, .ua-iam__back, .ua-iam__well-opt, .ua-iam__choice-btn, .ua-iam__person,
-  .ua-iam__set-head, .ua-iam__set-head::before, .ua-iam__row, .ua-iam__search input { transition: none; }
+  .ua-iam__set-head, .ua-iam__set-head::before, .ua-iam__group-lead::before, .ua-iam__row, .ua-iam__search input, .ua-iam__field select,
+  .ua-iam__groups-btn, .ua-iam__column-hide { transition: none; }
 }
