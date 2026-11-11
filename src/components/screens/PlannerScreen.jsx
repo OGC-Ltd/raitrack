@@ -347,6 +347,10 @@ function UploadSheet({ orgId, units, onClose, onSaved }) {
                             </>
                           )}
                           {s.state === 'moved' && <div className="pl-quiet">Kept where it was: {s.fenceName}</div>}
+                          {s.state === 'new' && s.located === 'approx' && <div className="pl-warn" title={s.address}>Placed on a road or area from its address: check the fence</div>}
+                          {s.state === 'new' && s.located === 'address' && <div className="pl-quiet" title={s.address}>Placed from its address</div>}
+                          {s.state === 'new' && s.located === 'plus_code' && <div className="pl-quiet">Placed from its plus code</div>}
+                          {s.state === 'no_point' && s.address && <div className="pl-quiet">“{s.address}” was not found</div>}
                           {s.state === 'known' && s.fenceName && <div className="pl-quiet">{s.fenceName}</div>}
                           {s.state === 'no_point' && (
                             <input className="pl-point" placeholder="lat, lng" value={sh.points[s.customerCode] ?? ''}
