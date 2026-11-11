@@ -86,13 +86,23 @@
 .dlv-roster .mvr-types__pop { width: 460px; }
 .dlv-roster .mvr-type { align-items: flex-start; }
 .dlv-roster .mvr-type__name { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-/* The geofences picked, by their full names, under the vehicle's row: the record of what it was tasked to */
+/* The geofences picked, under the vehicle's row: one line per name, never wrapped (a long name wrapping
+   grew the row, 12 Nov). Tracks of at least 220px fill the row, so four stops sit on one line at
+   desktop width; a name longer than its track ends in an ellipsis and keeps the full name on hover
+   (the picker shows it whole) */
 .dlv-roster__picked {
-  margin: 0; padding: 0 0 0 16px;
-  columns: 2 280px; column-gap: 24px;
-  font-size: 12px; line-height: 1.5; color: var(--sp4-text-2);
+  margin: 0; padding: 0; list-style: none; counter-reset: picked;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); column-gap: 24px;
+  font-size: 12px; line-height: 20px; color: var(--sp4-text-2);
 }
-.dlv-roster__picked li { break-inside: avoid; overflow-wrap: anywhere; }
+.dlv-roster__picked li {
+  counter-increment: picked; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dlv-roster__picked li::before {
+  content: counter(picked) "."; display: inline-block; min-width: 18px;
+  color: var(--sp4-text-3); font-variant-numeric: tabular-nums;
+}
 
 /* Before a run the body holds the roster AND the "Give each listed vehicle…" note. The shell's
    empty-note rule (.sp4-body:has(> .empty-note) { flex: 1 0 auto }) then let the body grow past the
