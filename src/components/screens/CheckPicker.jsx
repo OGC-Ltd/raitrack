@@ -79,7 +79,8 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
             {shown.map((o) => (
               <li key={o.value}>
                 <button type="button" role="menuitemcheckbox" aria-checked={set.has(o.value)}
-                        className={`mvr-type${set.has(o.value) ? ' mvr-type--on' : ''}`} onClick={() => toggle(o.value)}>
+                        className={`mvr-type${set.has(o.value) ? ' mvr-type--on' : ''}`} onClick={() => toggle(o.value)}
+                        title={o.title ?? o.label}>
                   <span className="mvr-type__box" aria-hidden="true"><i className="ti ti-check" /></span>
                   <span className="mvr-type__name">{o.label}</span>
                   {o.note != null && <span className="mvr-type__n">{o.note}</span>}
