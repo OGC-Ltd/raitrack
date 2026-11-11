@@ -176,7 +176,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               </div>
               <div className="mobile-header__user-divider" />
               <button className="mobile-header__user-item" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
-                <i className="ti ti-user-circle" aria-hidden="true" /> Account
+                <i className="ti ti-user-circle" aria-hidden="true" /> Owner
               </button>
               {canAlerts && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('alerts'); setUserOpen(false); }}>
