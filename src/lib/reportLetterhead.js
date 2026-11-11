@@ -5,7 +5,7 @@
 //
 // Pure: returns the HTML and what the PDF needs to know about it.
 
-import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
+import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './letterhead';
 import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
@@ -134,10 +134,6 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       if (c === 'Pending') return { html: tag(c, false).replace('class="tag', 'style="margin-left:0" class="tag') };
       return { html: esc(c), cls: c === 'No case' ? 'm' : '' };
     }
-    if (def.key === 'overspeed' && heads[i] === 'Location' && r.peak?.lat != null && r.peak?.lng != null) {
-      const url = `https://www.google.com/maps?q=${r.peak.lat.toFixed(5)},${r.peak.lng.toFixed(5)}`;
-      return { html: `<a href="${url}" target="_blank">${esc(c)}</a>` };
-    }
     return esc(c);
   }).filter((_, i) => keep.includes(i));
 
@@ -200,11 +196,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       [...byGroup].map(([g, plates]) => [{ html: `${esc(g)} (${plates.length})`, cls: 'b' }, { html: esc(plates.join(', ')), cls: 'wrap' }])));
   }
 
-  if (def.key === 'behaviour') {
-    const LINE = '_______________________________________________________________________________________________________________';
-    flow.push(`<h2>${next++}. Notes</h2>`);
-    for (let i = 0; i < 6; i++) flow.push(`<div class="note">${LINE}</div>`);
-  }
+  // Room to write by hand on the printed copy
+  if (def.key === 'behaviour') flow.push(`<h2>${next++}. Notes</h2>`, ruledLines());
 
   // Contact line removed (operator, 9 Nov 2026: "remove these words this is a system generated").
 

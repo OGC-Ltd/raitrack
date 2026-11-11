@@ -7,6 +7,7 @@
 // screen agree to the unit. Pure: nothing here fetches.
 
 import { reportNumber } from './reportLetterhead';
+import { NOTE_LINES } from './letterhead';
 
 const OFFSET = 3 * 3600_000;
 const DAY = 86_400_000;
@@ -34,12 +35,24 @@ const dmyhm = (iso) => {
 const span = (from, to) => (from === to ? dmyDay(from) : `${dmyDay(from)} – ${dmyDay(to)}`);
 
 /**
+ * The last section, room to write by hand on the printed copy. The server
+ * draws only its own block kinds, so the lines are a one-column table of
+ * empty rows: each row is ruled across the page, and a cell of two blank
+ * lines makes it tall enough to write in.
+ */
+export const notesBlocks = (n) => [
+  { kind: 'h2', title: `${n}. Notes` },
+  { kind: 'table', cols: [{ w: 0, wrap: true }], head: [''], size: 10,
+    rows: Array.from({ length: NOTE_LINES }, () => [{ text: ' \n ' }]) },
+];
+
+/**
  * A person's name, with its case repaired the way the page draws it: a word
  * that already mixes cases is left as typed ("McOmbaka"), the rest are
  * capitalised.
  */
 export const nameCase = (name = '') =>
-  String(name).replace(/[^\s''-]+/g, (w) =>
+  String(name).replace(/[^\s'’-]+/g, (w) =>
     (/[a-z]/.test(w) && /[A-Z]/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 
 const STATUS = { ACTIVE: 'Active', SUSPENDED: 'Suspended', TERMINATED: 'Terminated' };
@@ -134,15 +147,9 @@ export function driversDoc(drivers, { details = {}, fleet, orgCode, days = 90, t
           cell(num(d.harshAccelerationCases)), cell(num(d.harshBrakingCases)), cell(num(cases(d)), true),
         ]) }
       : { kind: 'none', text: 'No driver had a fuel theft, overspeeding or harsh driving case in the period.' },
-    { kind: 'h2', title: '4. Notes' },
-    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
-    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
-    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
-    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
-    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
-    { kind: 'note', text: '_______________________________________________________________________________________________________________' },
     { kind: 'note', text: `Figures cover ${period}. Active is each driver's first and last day with a trip in that window. Rating is out of 5; New means not rated yet.` },
     ...(weighbridge ? [{ kind: 'note', text: 'Tonnes include cane weighed at the weighbridge, credited to the driver of the trip the truck was on.' }] : []),
+    ...notesBlocks(4),
   ];
 
   const scope = typeName ? `${fleet} · ${typeName}` : fleet;
@@ -251,16 +258,12 @@ export function driverDoc(detail, { fleet, orgCode, vehicle = null, now = Date.n
         rows: byDay.map((d) => [cell(dmyDay(d.day)), cell(num(d.tonnes, 1)), cell(num(d.mileageKm))]) },
     );
   }
-  const nextSection = byDay.length ? 7 : 6;
-  blocks.push(
-    { kind: 'h2', title: `${nextSection}. Notes` },
-    { kind: 'none', text: '' },
-  );
   const posted = [...thefts, ...overspeeds].filter((x) => x.attributedBy === 'posted').length;
   if (posted) {
     blocks.push({ kind: 'note', text: `${plural(posted, 'case')} happened before anyone was posted to the unit and ${posted === 1 ? 'is' : 'are'} listed against the driver posted to it now.` });
   }
   blocks.push({ kind: 'note', text: `Figures cover ${period}; the driver was active ${byDay.length ? `from ${active}` : 'on no day'} in that window. Times are East Africa Time.` });
+  blocks.push(...notesBlocks(byDay.length ? 7 : 6));
 
   return {
     title: 'DRIVER REPORT',
