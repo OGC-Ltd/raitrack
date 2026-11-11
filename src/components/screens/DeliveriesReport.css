@@ -96,6 +96,9 @@
 .dlv-meter.is-dense { gap: 1px; }
 .dlv-meter i.is-storage { background: var(--sp4-text-3); }
 .dlv-meter i.is-pin { background: var(--sp4-line-hi); }
+/* Stops not done on an earlier day and carried here after midnight (fleet-server deliveries/roll-over) */
+.dlv-meter i.is-carried { background: var(--sp4-warn); }
+.dlv-roster__carried { color: var(--sp4-warn); }
 
 /* Before a run the body holds the roster AND the "Give each listed vehicle…" note. The shell's
    empty-note rule (.sp4-body:has(> .empty-note) { flex: 1 0 auto }) then let the body grow past the
