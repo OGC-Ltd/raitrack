@@ -301,7 +301,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     return () => { live = false; };
   }, [orgId]);
   const customers = useMemo(() => zones.customers ?? [], [zones.customers]);
-  const options = useMemo(() => customers.map((c) => ({ value: c.name, label: c.label, note: c.nearStorage ? 'at storage' : c.kind })), [customers]);
+  const options = useMemo(() => customers.map((c) => ({ value: c.name, label: c.label, title: c.name, note: c.nearStorage ? 'at storage' : c.kind })), [customers]);
 
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
@@ -699,6 +699,11 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                             aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
+                    {v.customers.length > 0 && (
+                      <ol className="dlv-roster__wide dlv-roster__picked" aria-label={`Geofences picked for ${v.plate}`}>
+                        {v.customers.map((name) => <li key={name}>{name}</li>)}
+                      </ol>
+                    )}
                     {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
                     {isPasting && <div className="dlv-roster__wide"><PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
                   </li>
