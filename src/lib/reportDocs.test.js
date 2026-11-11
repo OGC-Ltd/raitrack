@@ -213,3 +213,23 @@ describe('the server-worked reports as documents (v47)', () => {
     expect(notes({ partial: true })[0].text).toMatch(/only part of the alarms/);
   });
 });
+
+describe('AI alarms without Other (operator, 11 Nov 2026)', async () => {
+  const { withoutOther, alarmDistDoc } = await import('./reportDocs');
+  const rows = [
+    { plate: 'KCP 073P', total: 9, fatigue: 2, phone: 1, smoking: 0, covered: 0, distracted: 3, seatbelt: 0, other: 3 },
+    { plate: 'KDE 268P', total: 4, fatigue: 0, phone: 0, smoking: 0, covered: 0, distracted: 0, seatbelt: 0, other: 4 },
+  ];
+  it('Total is the six kinds shown, and a unit with Other alone goes', () => {
+    const r = withoutOther(rows);
+    expect(r).toHaveLength(1);
+    expect(r[0].total).toBe(6);
+    expect('other' in r[0]).toBe(false);
+  });
+  it('the PDF has no Other column', () => {
+    const doc = alarmDistDoc(withoutOther(rows), { from: '2026-11-10', to: '2026-11-10', fleet: 'Menengai', orgCode: 'MENENGAI' });
+    const table = doc.blocks.find((b) => b.kind === 'table');
+    expect(table.head).not.toContain('Other');
+    expect(table.head).toHaveLength(8);
+  });
+});
