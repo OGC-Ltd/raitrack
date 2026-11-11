@@ -34,7 +34,8 @@ export function docFlow(blocks, { landscape = false } = {}) {
     switch (b.kind) {
       case 'h2': out.push(`<h2>${esc(b.title)}${b.aside ? ` <small>${esc(b.aside)}</small>` : ''}</h2>`); break;
       case 'h3': out.push(`<h2 style="font-size:8pt;border:0">${esc(b.title)}${b.aside ? ` <small>${esc(b.aside)}</small>` : ''}</h2>`); break;
-      case 'bar': out.push(`<div class="dbar">${esc(b.title)}${b.aside ? `<small>${esc(b.aside)}</small>` : ''}</div>`); break;
+      // `dark`: black with white words (operator, 11 Nov 2026, the Finished Goods deliveries)
+      case 'bar': out.push(`<div class="dbar"${b.dark ? ' style="background:#000;color:#fff;border-left-color:#000"' : ''}>${esc(b.title)}${b.aside ? `<small${b.dark ? ' style="color:#fff"' : ''}>${esc(b.aside)}</small>` : ''}</div>`); break;
       case 'figures': out.push(cells(b.items.map((i) => [i.label, i.flag ? `<b style="color:${FLAG}">${esc(i.value)}</b>` : esc(i.value)]))); break;
       case 'table': out.push(table(colsOf(b, bodyMm), b.rows.map((row) => row.map((c, i) => cellHtml(c, b.cols[i]))))); break;
       case 'none': out.push(`<div class="none">${esc(b.text)}</div>`); break;

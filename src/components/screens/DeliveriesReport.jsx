@@ -21,16 +21,18 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
-import { fleetDay, periodWords, dayStart } from '../../lib/fleetReports';
+import { fleetDay, periodWords, dayStart, daysCovering } from '../../lib/fleetReports';
+import { readMarks, usePlannerDayMarks } from '../../lib/plannerDayMarks';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
 } from '../../lib/deliveriesReport';
 import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, saveOrder, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
+import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, FG_FILL } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan } from '../../api/planner';
-import { sheetDays, sheetsForWindow, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
 import { kmWords } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -39,6 +41,8 @@ import { loadZones } from '../../hooks/useEstateZones';
 import { deliveriesDoc } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import { docHtml } from '../../lib/docHtml';
 import { saveFile } from '../../api/tripReport';
 import { downloadTableCsv } from '../../utils/tableExport';
 import JpegButton, { PreviewButton } from '../shared/JpegButton';
@@ -128,6 +132,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const dayOf = (next) => (next.mode === 'days' ? next.fromDay : today);
   const day = daysOpen ? draft.fromDay : today;
   const [group, setGroup] = useState(null);               // one group of the fleet list, or all
+  // Van Sales (the report as it was) or Finished Goods (operator, 11 Nov 2026), kept in this browser
+  const [template, setTemplate] = useState(() => loadTemplate(orgCode));
+  useEffect(() => { setTemplate(loadTemplate(orgCode)); }, [orgCode]);
+  const isFg = template === 'finishedGoods';
   const [plan, setPlan] = useState(() => loadPlan(orgCode, day));
   useEffect(() => { setPlan(loadPlan(orgCode, day)); }, [orgCode, day]);
   const change = (next) => { setPlan(next); savePlan(orgCode, day, next); };
@@ -146,8 +154,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const canSheets = can('planner:read');
   const { setDesktopActiveTab } = useAppActions();
   const findSheets = async (from, to) => {
-    const d = sheetDays(from, to, fleetDay);
-    return sheetsForWindow(await listPlans(orgId, d.from, d.to), from, to, dayStart);
+    // Every sheet the Planner lists over the last week, for now (lib/plannerReport ALL_SHEETS)
+    const d = sheetDaysFor(from, to, fleetDay);
+    return sheetsForReport(await listPlans(orgId, d.from, d.to), from, to, dayStart);
   };
   const [sheets, setSheets] = useState({ status: 'idle', list: [] });
   const sheetSpanKey = daysOpen ? `days:${day}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
@@ -313,6 +322,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         });
         return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
       });
+      const dayMarks = readMarks(orgId);
+      const reportDays = daysCovering(windowFrom, to);
       const sheetRows = sheetUnits.map(({ plan: p, trackers, span }) => {
         const routes = trackers.map((v) => (sheetPings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
         const { actual } = actualFor(p, routes, fc, dayStart);
@@ -320,8 +331,16 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         const unit = units.find((u) => u.vehicles.some((x) => trackers.some((v) => v.vehicleId === x.vehicleId)));
         const why = !trackers.length ? 'No tracked unit carries this plate'
           : trackers.every((v) => failed.has(v.vehicleId)) ? 'Positions could not be read' : null;
-        const row = sheetRow(p, actual, { place: mv?.location ?? null, why });
-        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null };
+        // Where the truck is now: Movements' MORL reading, else its latest position against MORL/STO
+        const latest = routes.flat().reduce((a, x) => (!a || x.t > a.t ? x : a), null);
+        const nowAt = mv?.lat != null && mv?.lastAt != null && (!latest || mv.lastAt >= latest.t) ? { lat: mv.lat, lng: mv.lng } : latest;
+        const atStorage = (mv?.state === 'at' ? storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } : null)
+          ?? (nowAt ? storageAt(nowAt, storages) : null);
+        // "Mark for today" on the Planner: only the stops due on the report's days count (lib/plannerDayMarks)
+        const opts = { place: mv?.location ?? null, why, atStorage, days: reportDays };
+        const row = sheetRow(p, actual, { ...opts, marks: dayMarks[p.id] ?? null });
+        // Kept so a mark made after the run is taken without running again (see `marked` below)
+        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
       rows.unshift(...sheetRows);
       setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });
@@ -330,7 +349,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     }
   };
 
-  const ran = run.status === 'done' ? run : null;
+  // Planner sheets made again with the marks as they are now: marking a stop "for today", here or
+  // in another tab, changes the counts at once, with no new run (operator, 11 Nov 2026)
+  const [liveMarks] = usePlannerDayMarks(orgId);
+  const ranRaw = run.status === 'done' ? run : null;
+  const ran = useMemo(() => (ranRaw ? { ...ranRaw, rows: ranRaw.rows.map((r) => (r.remake
+    ? { ...sheetRow(r.remake.plan, r.remake.actual, { ...r.remake.opts, marks: liveMarks[r.remake.plan.id] ?? null }),
+      group: r.group, ownGroup: r.ownGroup, remake: r.remake }
+    : r)) } : null), [ranRaw, liveMarks]);
   // The rows as the PDF, JPEG and CSV print them: a typed count over the report's
   const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter((r) => group == null || r.group === group).map((r) => {
     const t = readOrders(typed[r.plate]);
@@ -355,17 +381,43 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   ];
 
   // Edit (operator, 4 Nov 2026), as the other reports: a new run, group or choice of stops starts the sheet over
-  const editSource = useMemo(() => (done ? { done, showStops } : null), [done, showStops]);
+  // Finished Goods lines taken off with ✕ (operator, 11 Nov 2026), until the next run
+  const [dropped, setDropped] = useState(() => new Set());
+  useEffect(() => { setDropped(new Set()); }, [ranRaw]);
+  const drop = (key) => setDropped((d) => new Set(d).add(key));
+  const editSource = useMemo(() => (done ? { done, showStops, template, dropped } : null), [done, showStops, template, dropped]);
+  const fleetName = companyName ?? orgCode ?? 'Menengai';
+  const fgDoc = () => finishedGoodsDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, orgCode, dropped });
   const editor = useReportEditor({ orgId, source: editSource,
-    build: () => deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops, orgCode }) });
+    build: () => (isFg ? fgDoc() : deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, stops: showStops, orgCode })) });
+  const fgAll = useMemo(() => (done && isFg ? fgLines(done.rows, { at: done.at }) : []), [done, isFg]);
+  const fgShown = useMemo(() => fgAll.filter((l) => !dropped.has(l.key)), [fgAll, dropped]);
+  // Find a unit in the table (operator, 11 Nov 2026), as on Movements: "kcw475", "KCW 475E", "475e";
+  // a customer's name too on Finished Goods. The screen only: CSV, PDF and JPEG keep every line
+  const [unitSearch, setUnitSearch] = useState('');
+  const needle = unitSearch.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const hits = (...texts) => !needle || texts.some((t) => String(t ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(needle));
+  const fgVisible = useMemo(() => fgShown.filter((l) => hits(l.plate, l.customer)), [fgShown, needle]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowsVisible = useMemo(() => (done ? done.rows.filter((r) => hits(r.plate)) : []), [done, needle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The server draws the PDF from the rows (reports/deliveries.pdf), as the other Movements tabs; the JPEG comes from that PDF
-  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportPdf({ orgId, kind: 'deliveries', landscape,
+  // Finished Goods: always landscape, ten columns, drawn in the browser on the letterhead so its
+  // day bar can be black with white words (the server's bar is always blue)
+  const fgHtml = (continuous) => { const d = fgDoc(); return { d, html: docHtml(d, { logos: letterheadLogos(), landscape: true, continuous }) }; };
+  const makePdf = (landscape) => (editor.edited ? editor.make(isFg ? true : landscape)
+    : isFg ? (() => { const { d, html } = fgHtml(false); return saveLetterheadPdf(html, { filename: `${d.filename}.pdf`, landscape: true, keep: true }); })()
+    : makeReportPdf({ orgId, kind: 'deliveries', landscape,
     body: deliveriesPdfBody(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops }) }));
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
+      if (isFg && !editor.edited && as === 'jpeg') {
+        const { d, html } = fgHtml(true);
+        await saveLetterheadJpeg(html, { filename: `${d.filename}.pdf`, landscape: true, continuous: true });
+        setFile({ busy: false, error: null });
+        return;
+      }
       const { blob, filename } = await makePdf(landscape);
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
@@ -375,7 +427,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     }
   };
   const preview = usePdfPreview(makePdf);
-  const saveCsv = () => done && downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` });
+  const saveCsv = () => done && (isFg
+    ? downloadTableCsv({ ...fgCsv(fgShown), filenameSlug: `deliveries-finished-goods-${fleetDay(done.at)}` })
+    : downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` }));
   const flip = (s, k) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; };
   const toggle = (k) => setOpen((s) => flip(s, k));
 
@@ -430,6 +484,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       options={[{ value: null, label: 'All groups', note: plan.vehicles.filter((v) => !sheetPlates.has(plateKey(v.plate))).length + sheets.list.length },
                         ...groupNames.map((name) => ({ value: name, label: name, note: groupCount(name) }))]}
                       onChange={(g) => editor.guard('Show another group', () => setGroup(g))} />
+
+        <ChoicePicker icon="ti-template" label="Template" align="right" value={template}
+                      options={TEMPLATES.map((t) => ({ value: t.value, label: `${t.label} template` }))}
+                      onChange={(t) => editor.guard('Use another template', () => { setTemplate(t); saveTemplate(orgCode, t); })} />
 
         <button type="button" className="sp4-submit-btn frp-run rpt-run"
                 onClick={() => editor.guard('Make the report again', () => execute(daysOpen ? { mode: 'days', ...draft } : sel))}
@@ -579,19 +637,70 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-                <label className="dlv-stops-opt" title="The list of each vehicle's pick-up locations, ticked or not, under the table">
+                {!isFg && <label className="dlv-stops-opt" title="The list of each vehicle's pick-up locations, ticked or not, under the table">
                   <input type="checkbox" checked={showStops} onChange={(e) => { const on = e.target.checked; editor.guard(on ? 'Show the pick-up locations' : 'Leave the pick-up locations out', () => setShowStops(on)); }} /> Show pick-up locations
-                </label>
+                </label>}
                 <JpegButton className="sp4-ghost-btn rpt-log" onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy) || !done.rows.length} title="The PDF report as an image" />
                 <PreviewButton className="sp4-ghost-btn rpt-log" onPreview={preview.open} disabled={!done.rows.length} />
               </>}
             />
             {preview.state && <PdfPreview state={preview.state} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={preview.retry} onClose={preview.close} />}
             <p className="mvr-depots" role="note">
-              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
+              {PASS_COUNTS
+                ? <span>Delivered: the vehicle came inside the stop’s geofence, or within {PASS_RADIUS_M} m of it, anywhere on the route in the hours picked. No stop needed for now.</span>
+                : <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>}
               <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>
               {done.sheets > 0 && <span>Planner sheets: each read over the 48 hours from its printing, as on the Planner, so its rows match the plan there.</span>}
+              {done.sheets > 0 && <span>Orders fulfilled on a sheet: when stops on it are marked for a day in the Planner (“Mark for today”), only those count on that day’s report; on a later day with no marks, the stops left over count.</span>}
             </p>
+            <div className="mvr-find dlv-find">
+              <div className="sp4-search-wrap mvr-find__box">
+                <i className="ti ti-search sp4-search-icon" aria-hidden="true" />
+                <input className="sp4-search" type="search" value={unitSearch}
+                       placeholder={isFg ? 'Find a unit or customer, e.g. KCW 475E' : 'Find a unit by plate, e.g. KCW 475E'}
+                       aria-label={isFg ? 'Find a unit by its plate, or a customer by name' : 'Find a unit by its registration plate'}
+                       onChange={(e) => setUnitSearch(e.target.value)} />
+                {unitSearch && <button type="button" className="sp4-search-clear" aria-label="Clear the search" onClick={() => setUnitSearch('')}>✕</button>}
+              </div>
+              {needle && (() => {
+                const [n, of, what] = isFg ? [fgVisible.length, fgShown.length, 'lines'] : [rowsVisible.length, done.rows.length, 'units'];
+                return (
+                  <span className={`mvr-find__note${n ? '' : ' mvr-find__note--none'}`} role="status">
+                    {n ? `${n} of ${of} ${what} shown. CSV, PDF and JPEG keep them all.` : isFg ? 'No unit or customer matches that.' : 'No unit matches that plate.'}
+                  </span>
+                );
+              })()}
+            </div>
+            {isFg ? (
+              <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+                <table className="sp4-table rpt-table dlv-table dlv-fg">
+                  <thead>
+                    <tr><th colSpan={FG_HEADS.length + 1} className="dlv-day">{periodDays(done.from, done.at)} · Finished Goods · {fgShown.filter((l) => l.delivered).length}/{fgShown.length} customers reached
+                      {dropped.size > 0 && (
+                        <button type="button" className="dlv-fg__undo" onClick={() => editor.guard('Put the dropped lines back', () => setDropped(new Set()))}>
+                          Put back {dropped.size} dropped line{dropped.size === 1 ? '' : 's'}
+                        </button>
+                      )}
+                    </th></tr>
+                    <tr>{FG_HEADS.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col"><span className="mvr-sr">Drop</span></th></tr>
+                  </thead>
+                  <tbody>
+                    {fgVisible.map((l) => (
+                      <tr key={l.key} className={`sp4-tr dlv-fg__row ${l.delivered ? 'dlv-fg__row--ok' : 'dlv-fg__row--miss'}`}
+                          style={{ '--dlv-fg-fill': l.delivered ? FG_FILL.ok : FG_FILL.miss }}>
+                        {fgCells(l).map((v, i) => <td key={i} className={i === 1 ? 'rpt-unit' : undefined}>{v}</td>)}
+                        <td className="dlv-fg__x">
+                          <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"
+                                  onClick={() => editor.guard('Drop a line', () => drop(l.key))}>
+                            <i className="ti ti-x" aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table dlv-table">
                 <thead>
@@ -599,7 +708,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                   <tr>{COLUMNS.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col"><span className="mvr-sr">Customers</span></th></tr>
                 </thead>
                 <tbody>
-                  {done.rows.map((r) => {
+                  {rowsVisible.map((r) => {
                     const cellsOf = rowCells(r);
                     const rowKey = r.key ?? r.plate;
                     const isOpen = open.has(rowKey);
@@ -660,6 +769,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

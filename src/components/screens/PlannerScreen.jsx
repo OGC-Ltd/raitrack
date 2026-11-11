@@ -31,6 +31,7 @@ import { fleetDay, dayStart } from '../../lib/fleetReports';
 import { displayOf } from '../../lib/fleetGroups';
 import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWindow, isItinerary, plannedVs, windowWords, onTimeCount } from '../../lib/plannerActual';
 import { trackersFor, actualFor, readSpan } from '../../lib/plannerReport';
+import { usePlannerDayMarks, shortDay } from '../../lib/plannerDayMarks';
 import { showPlanOnMap, focusPlanStop, requestFenceEdit, planOverlayNow, takePlanToOpen } from '../../lib/planOverlay';
 import { useAppActions } from '../../context/AppContext';
 import DateRangePicker from '../layout/DateRangePicker';
@@ -412,6 +413,12 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
     tone: byStop.get(s.id)?.at != null ? 'ok' : actual?.telemetry ? 'crit' : 'new',
   })), [plan, zonesById, byStop, actual]);
 
+  // "Mark for today" (operator, 11 Nov 2026): the stops due today, for orders that take two days.
+  // The Deliveries report counts x of these. Kept in this browser for now (lib/plannerDayMarks)
+  const [dayMarks, setDayMark] = usePlannerDayMarks(orgId);
+  const planMarks = dayMarks[planId] ?? {};
+  const markToday = fleetDay(Date.now());
+
   const setStop = async (stop, body) => {
     qc.setQueryData(key, (p) => p && { ...p, stops: p.stops.map((s) => (s.id === stop.id ? { ...s, ...body } : s)) });
     try { await updateStop(orgId, planId, stop.id, body); }
@@ -604,7 +611,21 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
                     {a.visit != null && a.visit !== s.sequence && <div className="pl-quiet">Visited {a.visit}{a.visit === 1 ? 'st' : a.visit === 2 ? 'nd' : a.visit === 3 ? 'rd' : 'th'}</div>}
                   </td>
                   <td className="sp4-td pl-r">{kmWords(a.kmFromPrev)}{itin && s.legKm != null && <div className="pl-quiet">plan {kmWords(s.legKm)}</div>}</td>
-                  <td className="sp4-td pl-r">{a.stayMs != null ? spanWords(a.stayMs) : a.at != null ? 'Still there' : '-'}</td>
+                  <td className="sp4-td pl-r">
+                    {a.stayMs != null ? spanWords(a.stayMs) : a.at != null ? 'Still there' : '-'}
+                    <div>
+                      <button type="button" disabled={!canWrite}
+                              className={`pl-daymark${planMarks[s.id] === markToday ? ' is-on' : ''}`}
+                              aria-pressed={planMarks[s.id] === markToday}
+                              title={planMarks[s.id] === markToday ? 'Marked for today: the Deliveries report counts it today. Click to clear.'
+                                : planMarks[s.id] ? `Marked for ${shortDay(planMarks[s.id])}. Click to move it to today.`
+                                  : 'Count this stop on today’s Deliveries report'}
+                              onClick={(e) => { e.stopPropagation(); setDayMark(planId, s.id, planMarks[s.id] === markToday ? null : markToday); }}>
+                        {planMarks[s.id] === markToday ? <><i className="ti ti-check" aria-hidden="true" /> For today</>
+                          : planMarks[s.id] ? `For ${shortDay(planMarks[s.id])}` : 'Mark for today'}
+                      </button>
+                    </div>
+                  </td>
                   <td className="sp4-td" onClick={(e) => e.stopPropagation()}>
                     <div className="pl-seg" role="group" aria-label={`Outcome at ${s.customer.name}`}>
                       {OUTCOMES.map((o) => (

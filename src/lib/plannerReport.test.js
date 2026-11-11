@@ -89,11 +89,57 @@ describe('a sheet as a Deliveries row', () => {
     expect(none.fulfilled).toBe(0);
     expect(sheetRow(plan, null, { why: 'No tracked unit carries this plate' }).trip.why).toBe('No tracked unit carries this plate');
   });
+  it('counts only the stops marked for the report\'s day (operator, 11 Nov 2026)', () => {
+    const [s1, s2] = plan.stops;
+    const marks = { [s1.id]: '2026-11-11' };
+    const day1 = sheetRow(plan, actual, { marks, days: ['2026-11-11'] });
+    expect(day1.planned).toBe(1);
+    expect(day1.customers.map((c) => c.name)).toEqual([s1.id]);
+    expect(day1.fulfilled).toBe(day1.customers.filter((c) => c.at != null).length);
+    expect(sheetWords(day1, (k) => `${k} km`)).toMatch(/1 of \d+ stops marked for 11\.11$/);
+    const day2 = sheetRow(plan, actual, { marks, days: ['2026-11-12'] });
+    expect(day2.planned).toBe(plan.stops.length - 1);
+    expect(day2.customers.some((c) => c.name === s1.id)).toBe(false);
+    expect(day2.customers.some((c) => c.name === s2.id)).toBe(true);
+    // No marks: the whole sheet, as before
+    expect(sheetRow(plan, actual, { marks: null, days: ['2026-11-11'] }).planned).toBe(plan.stops.length);
+  });
+  it('not left and parked in MORL now reads "At MORL" (operator, 11 Nov 2026)', () => {
+    const MORL = { key: 'morl', label: 'MORL', short: 'MORL' };
+    const notLeft = { telemetry: true, origin: MORL, leftAt: null, backAt: null, stops: [], visited: 0 };
+    const parked = sheetRow(plan, notLeft, { place: 'KAPTEMBWA, Nakuru West, Kenya', atStorage: MORL });
+    expect(notLeftWords(parked.trip)).toBe('At MORL');
+    expect(rowCells(parked)[1]).toBe('At MORL');
+    expect(parked.place).toBe('MORL');
+    // Out of MORL but never seen leaving it: as before
+    expect(notLeftWords(sheetRow(plan, notLeft, { place: 'Nakuru' }).trip)).toBe('Not seen leaving MORL');
+  });
 });
 
 describe('the truck’s trackers', () => {
   it('its own unit and any other with its plate', () => {
     const vs = [{ vehicleId: 'v1', regPlate: 'KDE 128E' }, { vehicleId: 'v2', regPlate: 'KDE 128E' }, { vehicleId: 'v3', regPlate: 'KDE 127E' }];
     expect(trackersFor({ plate: 'KDE 128E', vehicleId: 'v1' }, vs).map((v) => v.vehicleId)).toEqual(['v1', 'v2']);
+  });
+});
+
+describe('every sheet from the Planner, for now (operator, 11 Nov 2026)', async () => {
+  const { sheetDaysFor, sheetsForReport, ALL_SHEETS_DAYS } = await import('./plannerReport');
+  const day = (d, hm = '00:00') => Date.parse(`2026-11-${d}T${hm}:00+03:00`);
+  const from = day('11', '07:00');
+  const to = day('11', '20:00');
+  it('asks the Planner for the last week', () => {
+    expect(ALL_SHEETS_DAYS).toBe(7);
+    expect(sheetDaysFor(from, to, fleetDay)).toEqual({ from: '2026-11-05', to: '2026-11-11' });
+    expect(sheetDaysFor(from, to, fleetDay, false)).toEqual({ from: '2026-11-10', to: '2026-11-11' });
+  });
+  it('keeps a 9 Nov sheet whose 48 hours ended before the window', () => {
+    const plans = [
+      { id: 'kbb', planDate: '2026-11-09', sheetAt: '2026-11-09T04:00:00+03:00' },
+      { id: 'kax', planDate: '2026-11-11', sheetAt: '2026-11-11T06:00:00+03:00' },
+      { id: 'later', planDate: '2026-11-11', sheetAt: '2026-11-11T21:00:00+03:00' },
+    ];
+    expect(sheetsForReport(plans, from, to, dayStart, to).map((p) => p.id)).toEqual(['kbb', 'kax']);
+    expect(sheetsForReport(plans, from, to, dayStart, to, false).map((p) => p.id)).toEqual(['kax']);
   });
 });

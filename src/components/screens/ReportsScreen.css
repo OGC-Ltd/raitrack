@@ -557,3 +557,29 @@ select.mvr-edit { min-width: 110px; }
 .dlv-plan__group { max-width: 150px; font-size: 12.5px; padding: 2px 6px; }
 .dlv-plan__moved { color: #b45309; }
 .dlv-assign { border-radius: 8px; margin: 6px 0; }
+
+/* Deliveries, Finished Goods template (operator, 11 Nov 2026): the sheet's own colours,
+   yellow once the truck got to the customer, red while it has not */
+.dlv-fg th { white-space: nowrap; }
+.dlv-fg td { white-space: nowrap; }
+.dlv-fg td:nth-child(3), .dlv-fg td:nth-child(4), .dlv-fg td:nth-child(5) { white-space: normal; min-width: 140px; }
+.rpt-table.dlv-fg .dlv-fg__row td,
+.rpt-table.dlv-fg .dlv-fg__row:hover td { background: var(--dlv-fg-fill); color: #111; border-color: rgba(0, 0, 0, 0.12); }
+.rpt-table.dlv-fg thead tr:last-child th { background: #6fa8dc; color: #0b1f2a; font-weight: 700; }
+/* Finished Goods: the day bar black with white words (operator, 11 Nov 2026), ✕ to drop a line */
+.rpt-table.dlv-fg th.dlv-day { background: #000; color: #fff; }
+.dlv-fg__undo {
+  margin-left: 12px; padding: 2px 8px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 6px;
+  background: transparent; color: #fff; font: 600 11px/1.4 var(--font-body); cursor: pointer;
+}
+.dlv-fg__undo:hover { background: rgba(255, 255, 255, 0.15); }
+.dlv-fg__undo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.rpt-table.dlv-fg td.dlv-fg__x { width: 32px; padding: 0 6px; text-align: center; }
+.dlv-fg__x button {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px; background: rgba(255, 255, 255, 0.55); color: #111; cursor: pointer;
+}
+.dlv-fg__x button:hover { background: #fff; }
+.dlv-fg__x button:focus-visible { outline: 2px solid #000; outline-offset: 1px; }
+/* Deliveries: find a unit, on the right above the table (operator, 11 Nov 2026) */
+.mvr-find.dlv-find { flex-direction: row-reverse; justify-content: flex-start; }

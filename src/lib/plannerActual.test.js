@@ -62,10 +62,10 @@ describe('planActual', () => {
     expect(none.missed).toBe(3);
   });
 
-  it('a pass through the fence without standing is not a stop', () => {
+  it('a pass through the fence counts while the temporary pass rule is on (11 Nov 2026)', () => {
     const passing = [ping('05:00', MORL), ping('06:00', mid(MORL, A), 60), ping('07:00', A, 40), ping('07:05', A, 40), ping('07:10', mid(A, B), 60)];
     const p = planActual(plan, [passing], storages, zonesById, day);
-    expect(p.stops[0].at).toBeNull();
+    expect(p.stops[0].at).toBe(passing[2].t);
   });
 });
 
@@ -105,5 +105,23 @@ describe('planWindow', () => {
   it('falls back to the start of the plan day, and never runs past now', () => {
     const w = planWindow({ planDate: '2026-11-09', sheetAt: null }, () => 1000, 5000);
     expect(w).toEqual({ from: 1000, to: 5000 });
+  });
+});
+
+describe('the time it left a stop it only passed (operator, 11 Nov 2026)', async () => {
+  const { leftStopAt } = await import('./deliveriesReport');
+  const shop = { type: 'Feature', properties: { radiusM: 50 }, geometry: { type: 'Point', coordinates: [36.0, -0.3] } };
+  const t0 = Date.parse('2026-11-11T10:00:00+03:00');
+  const pt = (min, dLat) => ({ t: t0 + min * 60_000, lat: -0.3 + dLat, lng: 36.0, speedKmh: 20 });
+  it('the first reading more than 100 m away after getting there', () => {
+    const track = [pt(0, 0.01), pt(5, 0), pt(6, 0.0005), pt(8, 0.0003), pt(10, 0.0015), pt(12, 0.01)];
+    expect(leftStopAt([track], shop, pt(5, 0).t)).toBe(pt(10, 0).t);
+  });
+  it('still there at the last reading: none', () => {
+    const track = [pt(0, 0.01), pt(5, 0), pt(9, 0.0002)];
+    expect(leftStopAt([track], shop, pt(5, 0).t)).toBeNull();
+  });
+  it('a track that never saw it there does not count', () => {
+    expect(leftStopAt([[pt(4, 0.01), pt(10, 0.02)]], shop, pt(5, 0).t)).toBeNull();
   });
 });

@@ -13,7 +13,7 @@
 // Pure: no React, no network.
 
 import { fenceContains } from './zoneContainment';
-import { STOP_MS, STAND_KMH, originOf, tripsOf, deliveryRun, stopCheck } from './deliveriesReport';
+import { STOP_MS, STAND_KMH, originOf, tripsOf, deliveryRun, stopCheck, leftStopAt } from './deliveriesReport';
 
 /** A customer's fence when the zones have none for it: a circle at its point. */
 export const FALLBACK_RADIUS_M = 100;
@@ -134,7 +134,8 @@ export function planActual(plan, routes, storages, zonesById, { from, to }) {
     let check = null;
     if (!stand) {
       check = stopCheck(tracks, { feature }, { from, to });
-      if (check.at != null) stand = { at: check.at, leftAt: null };
+      // Got there without standing (the 100 m pass rule): it left at its first reading away again
+      if (check.at != null) stand = { at: check.at, leftAt: leftStopAt(tracks, feature, check.at, to) };
     }
     return {
       id: s.id, at: stand?.at ?? null, leftAt: stand?.leftAt ?? null,
