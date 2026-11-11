@@ -701,7 +701,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     </button>
                     {v.customers.length > 0 && (
                       <ol className="dlv-roster__wide dlv-roster__picked" aria-label={`Geofences picked for ${v.plate}`}>
-                        {v.customers.map((name) => <li key={name}>{name}</li>)}
+                        {v.customers.map((name) => <li key={name} title={name}>{name}</li>)}
                       </ol>
                     )}
                     {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
