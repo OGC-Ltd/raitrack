@@ -29,7 +29,7 @@ import { fileAsBase64, previewSheet, saveSheet, listPlans, getPlan, updateStop, 
 import { loadPings } from '../../api/fleetReports';
 import { fleetDay, dayStart } from '../../lib/fleetReports';
 import { displayOf } from '../../lib/fleetGroups';
-import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWindow, isItinerary, plannedVs, windowWords, onTimeCount } from '../../lib/plannerActual';
+import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWindow, isItinerary, isKeyed, plannedVs, windowWords, onTimeCount } from '../../lib/plannerActual';
 import { trackersFor, actualFor, readSpan } from '../../lib/plannerReport';
 import { marksOf, shortDay } from '../../lib/plannerDayMarks';
 import { showPlanOnMap, focusPlanStop, requestFenceEdit, planOverlayNow, takePlanToOpen } from '../../lib/planOverlay';
@@ -490,7 +490,9 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
             <span><i className="ti ti-steering-wheel" aria-hidden="true" />{plan.driverName || 'No driver'}</span>
             {itin
               ? <span title="Uploaded from a Wialon Logistics itinerary"><i className="ti ti-route" aria-hidden="true" />{plan.routeName || 'Wialon itinerary'}</span>
-              : plan.sheetAt && <span>Printed {clockWords(Date.parse(plan.sheetAt))}</span>}
+              : isKeyed(plan)
+                ? <span title="Keyed in on Movements › Deliveries: change its stops there"><i className="ti ti-keyboard" aria-hidden="true" />Keyed in on Deliveries</span>
+                : plan.sheetAt && <span>Printed {clockWords(Date.parse(plan.sheetAt))}</span>}
             {itin && plan.plannedStart && <span>Planned {clockWords(Date.parse(plan.plannedStart))} → {plan.plannedEnd ? clockWords(Date.parse(plan.plannedEnd)) : '?'}</span>}
             {!plan.vehicle && <span className="pl-warn">Unit not matched</span>}
           </div>
@@ -824,7 +826,7 @@ export default function PlannerScreen() {
                                 {p.outcomes.open > 0 && <span className="pl-tag">{p.outcomes.open} open</span>}
                               </div>
                             </td>
-                            <td className="sp4-td pl-quiet">{p.sourceFile || '-'}</td>
+                            <td className="sp4-td pl-quiet">{isKeyed(p) ? 'Keyed in on Deliveries' : p.sourceFile || '-'}</td>
                             {canWrite && (
                               <td className="sp4-td" onClick={(e) => e.stopPropagation()}>
                                 <button type="button" className="pl-x pl-x--danger" aria-label={`Remove the plan for ${p.plate}`} onClick={() => remove(p)}>
