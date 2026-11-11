@@ -40,6 +40,7 @@ import { useAppActions } from '../../context/AppContext';
 import { loadZones } from '../../hooks/useEstateZones';
 import { deliveriesDoc } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
+import './DeliveriesReport.css';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { docHtml } from '../../lib/docHtml';
@@ -507,7 +508,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               {daysOpen && draft.toDay !== draft.fromDay ? 'Vehicles and stops for ' : 'Vehicles shared on '}
               {periodDays(Date.parse(`${day}T09:00:00+03:00`), Date.parse(`${daysOpen ? draft.toDay : day}T09:00:00+03:00`))}
             </h3>
-            <span className="rpt-sub">Kept in this browser.</span>
+            <span className="dlv-plan__keep"><i className="ti ti-device-desktop" aria-hidden="true" /> Kept in this browser</span>
           </div>
           {zones.status === 'done' && !customers.length && (
             <p className="rpt-warn dlv-plan__warn">No geofences are on the platform for Menengai yet, so stops cannot be picked.</p>
@@ -556,9 +557,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               <p className="rpt-sub dlv-sheets__lede">
                 From the Planner: {sheets.list.length} sheet{sheets.list.length === 1 ? '' : 's'}, each read as the Planner reads it. Change a sheet’s stops in the Planner.
               </p>
-              <ul className="dlv-plan__list">
+              <ul className="dlv-plan__list dlv-roster">
                 {sheets.list.map((p) => (
-                  <li key={p.id} className="dlv-plan__veh">
+                  <li key={p.id} className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{p.plate}</span>
                     <span className="rpt-sub">{sheetWords({ sheet: { planDate: p.planDate, driverName: p.driverName } }, kmWords)}, {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}</span>
                     <button type="button" className="sp4-ghost-btn" onClick={() => openInPlanner(p.id)}>
@@ -570,38 +571,47 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             </div>
           )}
           {plan.vehicles.length > 0 && (
-            <ul className="dlv-plan__list">
+            <>
+            <div className="dlv-roster__head" aria-hidden="true">
+              <span>Vehicle</span><span>Group</span><span>Stops</span><span /><span className="dlv-roster__count">Picked</span><span />
+            </div>
+            <ul className="dlv-plan__list dlv-roster">
               {plan.vehicles.map((v) => {
                 const picked = v.customers.length + (v.pins?.length ?? 0);
                 const isPasting = pasting.has(v.key);
                 const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
                 return (
-                  <li key={v.key} className="dlv-plan__veh">
+                  <li key={v.key} className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{v.plate}</span>
+                    <span className="dlv-roster__group">
                     <select className="rpt-select dlv-plan__group" value={groupOfV(v) ?? ''} aria-label={`Group ${v.plate} is reported under`}
                             title={v.group && v.group !== ownGroup(v.key) ? `Assigned here today; on the fleet list it is ${ownGroup(v.key) ?? 'in no group'}` : 'The group it is reported under'}
                             onChange={(e) => e.target.value && moveTo(v, e.target.value)}>
                       {!groupOfV(v) && <option value="">No group</option>}
                       {groupNames.map((name) => <option key={name} value={name}>{name}</option>)}
                     </select>
-                    {v.group && v.group !== ownGroup(v.key) && <span className="rpt-sub dlv-plan__moved">from {ownGroup(v.key) ?? 'no group'}</span>}
-                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn">On a Planner sheet: the sheet is reported instead</span>}
+                    {v.group && v.group !== ownGroup(v.key) && <span className="dlv-plan__moved">from {ownGroup(v.key) ?? 'no group'}</span>}
+                    </span>
+                    <span className="dlv-roster__stops">
                     <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
                                  options={options} picked={v.customers} startOpen={justAdded === v.key}
                                  onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
-                    <button type="button" className="sp4-ghost-btn" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
+                    </span>
+                    <button type="button" className="sp4-ghost-btn dlv-roster__paste" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
                       <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
                     </button>
-                    <span className="rpt-sub">{picked} stop{picked === 1 ? '' : 's'}{near ? ` · ${near} at storage` : ''}</span>
+                    <span className="dlv-roster__count"><b>{picked}</b> stop{picked === 1 ? '' : 's'}{near ? `, ${near} at storage` : ''}</span>
                     <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
                             aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
-                    {isPasting && <PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} />}
+                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
+                    {isPasting && <div className="dlv-roster__wide"><PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
                   </li>
                 );
               })}
             </ul>
+            </>
           )}
         </section>
 
@@ -626,10 +636,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             <TableToolbar
               summary={<>
                 <strong>{done.rows.length}</strong> vehicle{done.rows.length === 1 ? '' : 's'}
-                <span className="rpt-sub"> · {periodWords(done.from, done.at)}</span>
-                {done.failed > 0 && <span className="rpt-warn"> · {done.failed} tracker{done.failed === 1 ? '' : 's'} could not be read</span>}
-                {done.rows.some((r) => backShort(r) > 0) && <span className="rpt-warn"> · {done.rows.filter((r) => backShort(r) > 0).length} back with stops undelivered</span>}
-                {done.noMoves && <span className="rpt-warn"> · Movements could not be read, so current locations are missing</span>}
+                <span className="rpt-sub dlv-sum__part">{periodWords(done.from, done.at)}</span>
+                {done.failed > 0 && <span className="rpt-warn dlv-sum__part">{done.failed} tracker{done.failed === 1 ? '' : 's'} could not be read</span>}
+                {done.rows.some((r) => backShort(r) > 0) && <span className="rpt-warn dlv-sum__part">{done.rows.filter((r) => backShort(r) > 0).length} back with stops undelivered</span>}
+                {done.noMoves && <span className="rpt-warn dlv-sum__part">Movements could not be read, so current locations are missing</span>}
               </>}
               onCsv={done.rows.length ? saveCsv : undefined}
               onPdf={file.busy || !done.rows.length ? undefined : (landscape) => save('pdf', landscape)} pdfWays
@@ -645,15 +655,17 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               </>}
             />
             {preview.state && <PdfPreview state={preview.state} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={preview.retry} onClose={preview.close} />}
-            <p className="mvr-depots" role="note">
+            <dl className="dlv-rules" role="note" aria-label="How the report reads each route">
+              <dt>Delivered</dt>
               {PASS_COUNTS
-                ? <span>Delivered: the vehicle came inside the stop’s geofence, or within {PASS_RADIUS_M} m of it, anywhere on the route in the hours picked. No stop needed for now.</span>
-                : <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>}
-              <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>
-              {done.sheets > 0 && <span>Planner sheets: each read over the 48 hours from its printing, as on the Planner, so its rows match the plan there.</span>}
-              {done.sheets > 0 && <span>Orders fulfilled on a sheet: when stops on it are marked for a day in the Planner (“Mark for today”), only those count on that day’s report; on a later day with no marks, the stops left over count.</span>}
-            </p>
-            <div className="mvr-find dlv-find">
+                ? <dd>The vehicle came inside the stop’s geofence, or within {PASS_RADIUS_M} m of it, anywhere on the route in the hours picked. No stop needed for now.</dd>
+                : <dd>Stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</dd>}
+              <dt>Origin</dt>
+              <dd>The first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</dd>
+              {done.sheets > 0 && <><dt>Planner sheets</dt><dd>Each read over the 48 hours from its printing, as on the Planner, so its rows match the plan there.</dd></>}
+              {done.sheets > 0 && <><dt>Orders fulfilled on a sheet</dt><dd>When stops on it are marked for a day in the Planner (“Mark for today”), only those count on that day’s report; on a later day with no marks, the stops left over count.</dd></>}
+            </dl>
+            <div className="mvr-find dlv-search">
               <div className="sp4-search-wrap mvr-find__box">
                 <i className="ti ti-search sp4-search-icon" aria-hidden="true" />
                 <input className="sp4-search" type="search" value={unitSearch}

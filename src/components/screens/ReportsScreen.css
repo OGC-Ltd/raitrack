@@ -515,21 +515,10 @@ select.mvr-edit { min-width: 110px; }
 .mvr-events__sub { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
 .mvr-events__note { margin: 0 0 6px; font-size: 12px; }
 
-.dlv-plan { margin: 10px var(--sp4-gutter, 12px); padding: 10px 12px; border: 1px solid var(--sp4-line, rgba(127,127,127,.25)); border-radius: 10px; }
-.dlv-plan__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
-.dlv-plan__title { margin: 0; font-size: 13px; font-weight: 700; }
-.dlv-plan__warn { margin: 4px 0 8px; font-size: 12px; }
-.dlv-plan__list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.dlv-plan__veh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.dlv-plan__plate { font-weight: 700; min-width: 80px; }
-.dlv-plan__x { padding: 2px 8px; }
-.dlv-plan__add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dlv-table th.dlv-day { text-align: center; background: #00b0f0; color: #0b1f2a; font-weight: 700; }
 .dlv-table td b.dlv-all { color: #2e7d32; }
 .dlv-more { padding: 2px 8px; font-size: 12px; }
 /* Planner sheets: listed above the hand list, a line under the plate, the marks over the stops */
-.dlv-sheets { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--sp4-line, rgba(127,127,127,.25)); }
-.dlv-sheets__lede { margin: 0; font-size: 12px; }
 .dlv-sheet-line { display: block; min-width: 24ch; font-size: 11px; font-weight: 400; white-space: normal; }
 .dlv-sheet-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 4px 0 6px; font-size: 12px; }
 .dlv-cust td { background: color-mix(in srgb, var(--sp4-text-1, #000) 3%, transparent); }
@@ -554,9 +543,6 @@ select.mvr-edit { min-width: 110px; }
 .dlv-stops-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .dlv-orders { width: 72px; text-align: right; font-weight: 700; }
 .dlv-orders--bad { outline: 2px solid #c62828; }
-.dlv-plan__group { max-width: 150px; font-size: 12.5px; padding: 2px 6px; }
-.dlv-plan__moved { color: #b45309; }
-.dlv-assign { border-radius: 8px; margin: 6px 0; }
 
 /* Deliveries, Finished Goods template (operator, 11 Nov 2026): the sheet's own colours,
    green for a completed trip (delivered, then back at the yard), yellow once the truck
@@ -582,5 +568,3 @@ select.mvr-edit { min-width: 110px; }
 }
 .dlv-fg__x button:hover { background: #fff; }
 .dlv-fg__x button:focus-visible { outline: 2px solid #000; outline-offset: 1px; }
-/* Deliveries: find a unit, on the right above the table (operator, 11 Nov 2026) */
-.mvr-find.dlv-find { flex-direction: row-reverse; justify-content: flex-start; }

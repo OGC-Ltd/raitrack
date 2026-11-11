@@ -1,0 +1,111 @@
+/* Hallmark · redesign: full (app screen, one panel) · shape: app screen · genre: modern-minimal (inferred) · theme: brand (sp4 tokens, preserved) · signature: the day's roster, one aligned row per vehicle · v2.0.0
+ * critique: the shared-vehicles card read as loose chips on a line; the rules under the toolbar ran as one paragraph; a 162px hole sat above the search (it borrowed .dlv-find, whose flex-basis is 320px in a column)
+ * answered: every colour is an sp4 token from the shell; the report table's own sheet colours (FG fills) stay in ReportsScreen.css
+ */
+/* Hallmark · waive 26b · the remove button is never disabled · disabled states belong to the shared sp4 buttons and pickers this panel reuses */
+/*
+ *
+ * Deliveries, the panel above the report table: the day's roster (vehicles,
+ * their group and stops), the rules the report reads the route by, and the
+ * find box. The shell, the toolbar and the table are the shared sp4 frame's.
+ */
+
+/* ---- The day's roster ---------------------------------------------------- */
+.dlv-plan {
+  margin: 12px var(--sp4-gutter, 12px) 4px;
+  padding: 0;
+  border: 1px solid var(--sp4-line);
+  border-radius: 10px;
+  background: var(--sp4-surface);
+  overflow: clip;
+}
+.dlv-plan__head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 16px; margin: 0; padding: 12px 16px;
+  border-bottom: 1px solid var(--sp4-line);
+}
+.dlv-plan__title { margin: 0; font: 600 14px/1.3 var(--font-body); color: var(--sp4-text-1); }
+.dlv-plan__keep { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sp4-text-3); }
+.dlv-plan__warn { margin: 12px 16px 0; font-size: 12px; }
+
+.dlv-plan__add {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px;
+  padding: 12px 16px;
+}
+.dlv-plan .dlv-find { position: relative; flex: 1 1 320px; max-width: 460px; }
+
+/* One row per vehicle: plate, group, stops, paste, count, remove; extras span the row */
+.dlv-roster { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--sp4-line); }
+.dlv-roster__head,
+.dlv-roster__row {
+  display: grid;
+  grid-template-columns: minmax(84px, 110px) minmax(140px, 200px) minmax(0, 1fr) auto minmax(64px, auto) 32px;
+  align-items: center; column-gap: 12px;
+  padding: 0 16px;
+}
+.dlv-roster__head {
+  min-height: 32px; background: var(--sp4-raised);
+  font-size: 12px; font-weight: 500; color: var(--sp4-text-3);
+}
+.dlv-roster__row { min-height: 48px; row-gap: 8px; padding-block: 8px; border-top: 1px solid var(--sp4-line); }
+.dlv-roster__row:first-child { border-top: 0; }
+.dlv-roster__row > .dlv-roster__wide { grid-column: 1 / -1; }
+.dlv-plan__plate { font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dlv-roster__group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dlv-plan__group { width: 100%; max-width: none; font-size: 13px; padding: 4px 8px; }
+.dlv-plan__moved { font-size: 12px; color: var(--sp4-warn); }
+.dlv-roster__stops { min-width: 0; }
+.dlv-roster__stops > * { max-width: 100%; }
+.dlv-roster__count { font-size: 12px; color: var(--sp4-text-3); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.dlv-roster__count b { color: var(--sp4-text-1); font-weight: 600; }
+.dlv-plan__x {
+  display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  border-radius: 6px; color: var(--sp4-text-3);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.dlv-plan__x:hover { color: var(--sp4-crit); background: var(--sp4-raised); }
+.dlv-plan__x:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; transition: none; }
+.dlv-plan__x:active { transform: scale(0.94); }
+
+/* The Planner's sheets: the same rows, read only */
+.dlv-sheets { border-top: 1px solid var(--sp4-line); }
+.dlv-sheets__lede { margin: 0; padding: 12px 16px; font-size: 12px; color: var(--sp4-text-3); }
+.dlv-sheets .dlv-roster__row { grid-template-columns: minmax(84px, 110px) minmax(0, 1fr) auto; }
+
+/* ---- The rules the report reads the route by ------------------------------- */
+.dlv-rules {
+  display: grid; grid-template-columns: max-content minmax(0, 72ch); gap: 4px 16px;
+  margin: 8px var(--sp4-gutter, 12px) 0; padding: 12px 16px;
+  border-left: 2px solid var(--sp4-line-hi);
+  font-size: 12px; line-height: 1.5; color: var(--sp4-text-3);
+}
+.dlv-rules dt { font-weight: 600; color: var(--sp4-text-2); }
+.dlv-rules dd { margin: 0; }
+
+/* ---- Find a unit, on the right above the table (operator, 11 Nov 2026) ----- */
+.mvr-find.dlv-search { flex: none; flex-direction: row-reverse; justify-content: flex-start; padding-top: 12px; }
+
+@media (max-width: 60rem) {
+  .dlv-roster__head { display: none; }
+  .dlv-roster__row { grid-template-columns: minmax(0, 1fr) auto 32px; }
+  .dlv-roster__row > .dlv-plan__plate { grid-row: 1; grid-column: 1; }
+  .dlv-roster__row > .dlv-roster__count { grid-row: 1; grid-column: 2; }
+  .dlv-roster__row > .dlv-plan__x { grid-row: 1; grid-column: 3; }
+  .dlv-roster__row > .dlv-roster__group { grid-row: 2; grid-column: 1 / -1; }
+  .dlv-roster__row > .dlv-roster__stops { grid-row: 3; grid-column: 1; }
+  .dlv-roster__row > .dlv-roster__paste { grid-row: 3; grid-column: 2 / -1; }
+  .dlv-sheets .dlv-roster__row > * { grid-row: auto; grid-column: auto; }
+  .dlv-rules { grid-template-columns: minmax(0, 1fr); }
+  .dlv-rules dd + dt { margin-top: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dlv-plan__x { transition: none; }
+  .dlv-plan__x:active { transform: none; }
+}
+
+/* The confirm that moves a vehicle into another group, inside the card */
+.dlv-assign { margin: 0 16px 12px; border-radius: 8px; }
+
+/* The toolbar's summary: its parts set apart by space, not by dots */
+.dlv-sum__part { margin-left: 12px; }
