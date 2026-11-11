@@ -216,3 +216,19 @@ describe('Movements: distance and fuel used in the window', async () => {
     expect(r.groups[0].rows.map((x) => distanceText(x))).toEqual(['5.0 km', '-']);
   });
 });
+
+describe('Aquamist place names (operator, 11 Nov 2026)', () => {
+  it('Mvita and Liwatoni read "Aquamist Mombasa", for Aquamist only', async () => {
+    const { swapPlace, withPlaceSwaps } = await import('./movementReport');
+    expect(swapPlace('Liwatoni, Mvita, Mombasa, Kenya', 'AQUAMIST')).toBe('Aquamist Mombasa');
+    expect(swapPlace('Mvita', 'aquamist')).toBe('Aquamist Mombasa');
+    expect(swapPlace('Liwaton Road', 'AQUAMIST')).toBe('Aquamist Mombasa');
+    expect(swapPlace('Changamwe, Mombasa', 'AQUAMIST')).toBe('Changamwe, Mombasa');
+    expect(swapPlace('Mvita, Mombasa', 'MENENGAI')).toBe('Mvita, Mombasa');
+    expect(swapPlace(null, 'AQUAMIST')).toBeNull();
+    const rep = { orgCode: 'AQUAMIST', groups: [{ name: 'Trucks', rows: [{ vehicleId: 'A', location: 'Mvita, Mombasa' }, { vehicleId: 'B', location: 'Limuru' }] }] };
+    expect(withPlaceSwaps(rep).groups[0].rows.map((r) => r.location)).toEqual(['Aquamist Mombasa', 'Limuru']);
+    const other = { orgCode: 'SUKARI', groups: [] };
+    expect(withPlaceSwaps(other)).toBe(other);
+  });
+});

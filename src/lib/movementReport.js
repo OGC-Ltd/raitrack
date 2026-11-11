@@ -131,6 +131,33 @@ export function stamp(ms) {
   return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}:${p.second}`;
 }
 
+/**
+ * Place names swapped for the organisation's own, by organisation code
+ * (operator, 11 Nov 2026: Aquamist's "locations named as mvita, liwaton to be
+ * swapped with Aquamist Mombasa"). The whole location is replaced when any
+ * pattern matches, so "Liwatoni, Mvita, Mombasa" reads "Aquamist Mombasa".
+ */
+export const PLACE_SWAPS = {
+  AQUAMIST: [{ match: /\b(mvita|liwatoni?)\b/i, to: 'Aquamist Mombasa' }],
+};
+
+/** The location as the organisation names it: swapped when it matches PLACE_SWAPS, else as given. */
+export function swapPlace(location, orgCode) {
+  if (location == null) return location;
+  const swaps = PLACE_SWAPS[String(orgCode ?? '').trim().toUpperCase()] ?? [];
+  const hit = swaps.find((s) => s.match.test(String(location)));
+  return hit ? hit.to : location;
+}
+
+/** The report with every row's location swapped as PLACE_SWAPS says for its organisation. */
+export function withPlaceSwaps(report) {
+  if (!report || !PLACE_SWAPS[String(report.orgCode ?? '').trim().toUpperCase()]) return report;
+  return {
+    ...report,
+    groups: (report.groups ?? []).map((g) => ({ ...g, rows: (g.rows ?? []).map((r) => ({ ...r, location: swapPlace(r.location, report.orgCode) })) })),
+  };
+}
+
 /** The row as it now reads: the server's row with the operator's edit over it. */
 export function editedRow(row, edit) {
   if (!edit) return row;

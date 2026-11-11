@@ -78,7 +78,7 @@ import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
 import { placeNameAt } from '../../hooks/usePlaceName';
-import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -831,7 +831,8 @@ function MovementsReport({ orgId }) {
       for (const w of windows) {
         const r = await loadMovementReport({ orgId, from: w.from, to: w.to });
         // Menengai by its fleet list (Tankers, Finished Goods, …); the others come by vehicle type
-        reports.push(splitsByType(r) ? r : byFleetList(r, groupsFor(r.orgCode)));
+        // Aquamist: Mvita / Liwatoni read "Aquamist Mombasa" (lib/movementReport PLACE_SWAPS)
+        reports.push(withPlaceSwaps(splitsByType(r) ? r : byFleetList(r, groupsFor(r.orgCode))));
         if (id !== runId.current) return;
         setRun({ status: 'loading', done: reports.length, of: windows.length });
       }
