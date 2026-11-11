@@ -22,12 +22,14 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords, dayStart, daysCovering } from '../../lib/fleetReports';
-import { readMarks, usePlannerDayMarks } from '../../lib/plannerDayMarks';
+import { marksOf } from '../../lib/plannerDayMarks';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDeliveryDay, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
   COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
 } from '../../lib/deliveriesReport';
-import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, saveOrder, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
+import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
@@ -137,10 +139,49 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [template, setTemplate] = useState(() => loadTemplate(orgCode));
   useEffect(() => { setTemplate(loadTemplate(orgCode)); }, [orgCode]);
   const isFg = template === 'finishedGoods';
-  const [plan, setPlan] = useState(() => loadPlan(orgCode, day));
-  useEffect(() => { setPlan(loadPlan(orgCode, day)); }, [orgCode, day]);
-  const change = (next) => { setPlan(next); savePlan(orgCode, day, next); };
-  const earlier = useMemo(() => (plan.vehicles.length ? null : lastPlanBefore(orgCode, day)), [plan.vehicles.length, orgCode, day]);
+  // The day's list lives on the server, read through its Redis cache (operator, 11 Nov 2026: "we don't
+  // want it to be kept in the browser"). A list this browser kept before is moved up once, then forgotten
+  const qc = useQueryClient();
+  const dayQuery = (d) => ({
+    queryKey: ['deliveries', 'day', orgId, d],
+    queryFn: async () => {
+      const got = await getDeliveryDay(orgId, d);
+      const kept = loadPlan(orgCode, d);
+      if (!got.vehicles.length && kept.vehicles.length) {
+        await saveDeliveryDay(orgId, d, kept.vehicles);
+        forgetLegacyPlan(orgCode, d);
+        return { vehicles: kept.vehicles };
+      }
+      if (kept.vehicles.length) forgetLegacyPlan(orgCode, d);
+      return { vehicles: got.vehicles };
+    },
+    enabled: Boolean(orgId),
+    staleTime: 30_000,
+  });
+  const dayList = useQuery(dayQuery(day));
+  const plan = dayList.data ?? emptyPlan();
+  // Saves go one after another, each the whole list, so the last change is the one kept
+  const saving = useRef(Promise.resolve());
+  const [saveState, setSaveState] = useState({ busy: 0, error: null });
+  const change = (next) => {
+    const key = ['deliveries', 'day', orgId, day];
+    const forDay = day;
+    qc.setQueryData(key, next);
+    setSaveState((s) => ({ busy: s.busy + 1, error: null }));
+    saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles))
+      .then(() => setSaveState((s) => ({ ...s, busy: s.busy - 1 })))
+      .catch((err) => {
+        setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err) }));
+        qc.invalidateQueries({ queryKey: key });
+      });
+  };
+  const earlierQ = useQuery({
+    queryKey: ['deliveries', 'before', orgId, day],
+    queryFn: () => lastDeliveryDayBefore(orgId, day),
+    enabled: Boolean(orgId) && dayList.isSuccess && !plan.vehicles.length,
+    staleTime: 60_000,
+  });
+  const earlier = !plan.vehicles.length && earlierQ.data ? { day: earlierQ.data.day, plan: { vehicles: earlierQ.data.vehicles } } : null;
 
   // Every Menengai unit on the platform (operator, 4 Nov 2026: "search any
   // vehicle in Menengai"), with its group on the fleet list where it has one
@@ -201,8 +242,34 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   };
   // Orders fulfilled typed over the report's own count (operator, 4 Nov 2026: "the user should have the
   // option to edit the delivered like 8/10 and generate the report"), by plate; the last value typed for
-  // each plate is kept in this browser and comes back on the next report (operator, 5 Nov 2026)
-  const [typed, setTyped] = useState(() => loadOrders(orgCode));
+  // each plate is kept on the server and comes back on the next report (operator, 5 Nov 2026; out of the
+  // browser 11 Nov 2026). Counts this browser kept before are moved up once
+  const ordersQuery = {
+    queryKey: ['deliveries', 'orders', orgId],
+    queryFn: async () => {
+      const kept = Object.entries(loadOrders(orgCode));
+      let all = await getDeliveryOrders(orgId);
+      if (!kept.length) return all;
+      for (const [plate, text] of kept) if (!all[plate]) all = await saveDeliveryOrder(orgId, plate, text);
+      forgetLegacyOrders(orgCode);
+      return all;
+    },
+    enabled: Boolean(orgId),
+    staleTime: 30_000,
+  };
+  const orders = useQuery(ordersQuery);
+  const [typed, setTyped] = useState({});
+  useEffect(() => { if (orders.data) setTyped((t) => ({ ...orders.data, ...t })); }, [orders.data]);
+  // One save per plate once the typing stops
+  const orderTimers = useRef(new Map());
+  const keepOrder = (plate, text) => {
+    clearTimeout(orderTimers.current.get(plate));
+    orderTimers.current.set(plate, setTimeout(() => {
+      saveDeliveryOrder(orgId, plate, text)
+        .then((all) => qc.setQueryData(ordersQuery.queryKey, all))
+        .catch((err) => setSaveState((s) => ({ ...s, error: `The count for ${plate} was not saved: ${err?.message ?? err}` })));
+    }, 600));
+  };
   const findHits = useMemo(() => {
     const q = find.replace(/\s+/g, '').toUpperCase();
     if (!q) return [];
@@ -242,7 +309,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const execute = async (next) => {
     const windows = movementWindows(next);
     // This window's day decides the list: the page may still hold another day's
-    const runPlan = loadPlan(orgCode, dayOf(next));
+    const runPlan = orgId ? await qc.fetchQuery(dayQuery(dayOf(next))).catch(() => plan) : plan;
     setSel(next);
     if (!orgId || !windows.length) return;
     const windowFrom = windows[0].from;
@@ -250,7 +317,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     const id = ++runId.current;
     const live = () => id === runId.current;
     try {
-      setTyped(loadOrders(orgCode));
+      qc.fetchQuery(ordersQuery).then((o) => setTyped((t) => ({ ...o, ...t }))).catch(() => undefined);
       setRun({ status: 'loading', words: 'Finding MORL, the Nairobi depot and the customers', done: 0, total: 0 });
       // Each step says what it was doing when it fails; Movements (where each
       // vehicle is now) is help, not a need: without it the report still runs
@@ -323,7 +390,6 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         });
         return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
       });
-      const dayMarks = readMarks(orgId);
       const reportDays = daysCovering(windowFrom, to);
       const sheetRows = sheetUnits.map(({ plan: p, trackers, span }) => {
         const routes = trackers.map((v) => (sheetPings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
@@ -339,7 +405,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           ?? (nowAt ? storageAt(nowAt, storages) : null);
         // "Mark for today" on the Planner: only the stops due on the report's days count (lib/plannerDayMarks)
         const opts = { place: mv?.location ?? null, why, atStorage, days: reportDays };
-        const row = sheetRow(p, actual, { ...opts, marks: dayMarks[p.id] ?? null });
+        const row = sheetRow(p, actual, { ...opts, marks: marksOf(p) });
         // Kept so a mark made after the run is taken without running again (see `marked` below)
         return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
@@ -350,14 +416,21 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     }
   };
 
-  // Planner sheets made again with the marks as they are now: marking a stop "for today", here or
-  // in another tab, changes the counts at once, with no new run (operator, 11 Nov 2026)
-  const [liveMarks] = usePlannerDayMarks(orgId);
+  // Planner sheets made again with the marks as they are now: marking a stop "for today" on the
+  // Planner changes the counts at once, with no new run (operator, 11 Nov 2026). The Planner keeps
+  // each plan in the query cache under ['planner', 'plan', orgId, id]; a change there redraws these
+  const [planTick, setPlanTick] = useState(0);
+  useEffect(() => qc.getQueryCache().subscribe((e) => {
+    const k = e?.query?.queryKey;
+    if (e?.type === 'updated' && k?.[0] === 'planner' && k?.[1] === 'plan') setPlanTick((t) => t + 1);
+  }), [qc]);
   const ranRaw = run.status === 'done' ? run : null;
-  const ran = useMemo(() => (ranRaw ? { ...ranRaw, rows: ranRaw.rows.map((r) => (r.remake
-    ? { ...sheetRow(r.remake.plan, r.remake.actual, { ...r.remake.opts, marks: liveMarks[r.remake.plan.id] ?? null }),
-      group: r.group, ownGroup: r.ownGroup, remake: r.remake }
-    : r)) } : null), [ranRaw, liveMarks]);
+  const ran = useMemo(() => (ranRaw ? { ...ranRaw, rows: ranRaw.rows.map((r) => {
+    if (!r.remake) return r;
+    const latest = qc.getQueryData(['planner', 'plan', orgId, r.remake.plan.id]) ?? r.remake.plan;
+    return { ...sheetRow(r.remake.plan, r.remake.actual, { ...r.remake.opts, marks: marksOf(latest) }),
+      group: r.group, ownGroup: r.ownGroup, remake: r.remake };
+  }) } : null), [ranRaw, planTick, qc, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
   // The rows as the PDF, JPEG and CSV print them: a typed count over the report's
   const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter((r) => group == null || r.group === group).map((r) => {
     const t = readOrders(typed[r.plate]);
@@ -508,7 +581,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               {daysOpen && draft.toDay !== draft.fromDay ? 'Vehicles and stops for ' : 'Vehicles shared on '}
               {periodDays(Date.parse(`${day}T09:00:00+03:00`), Date.parse(`${daysOpen ? draft.toDay : day}T09:00:00+03:00`))}
             </h3>
-            <span className="dlv-plan__keep"><i className="ti ti-device-desktop" aria-hidden="true" /> Kept in this browser</span>
+            <span className={`dlv-plan__keep${saveState.error || dayList.isError ? ' dlv-plan__keep--error' : ''}`} role="status">
+              {dayList.isError ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> The list could not be read: {dayList.error?.message}</>
+                : saveState.error ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> Not saved: {saveState.error}</>
+                  : dayList.isLoading ? 'Reading the list…'
+                    : saveState.busy > 0 ? 'Saving…'
+                      : <><i className="ti ti-cloud-check" aria-hidden="true" /> Saved for everyone in {companyName ?? orgCode ?? 'the organisation'}</>}
+            </span>
           </div>
           {zones.status === 'done' && !customers.length && (
             <p className="rpt-warn dlv-plan__warn">No geofences are on the platform for Menengai yet, so stops cannot be picked.</p>
@@ -737,7 +816,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                          const text = e.target.value;
                                          setTyped((t) => ({ ...t, [r.plate]: text }));
                                          // Kept once it reads as a count, or forgotten when cleared
-                                         if (!text.trim() || readOrders(text)) saveOrder(orgCode, r.plate, text);
+                                         if (!text.trim() || readOrders(text)) keepOrder(r.plate, text);
                                        }} />
                               ) : i === 0 && r.sheet ? (
                                 <>{v}<span className="rpt-sub dlv-sheet-line">{sheetWords(r, kmWords)}</span></>
