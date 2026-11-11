@@ -1,5 +1,37 @@
 [
   {
+    "date": "2026-11-11",
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "file": "src/components/screens/PlannerScreen.css",
+    "shape": "app screen",
+    "theme": "brand (sp4 framed scale)",
+    "genre": "modern-minimal",
+    "axes": "light/grotesk-sans/cool",
+    "hero": "none (app screen)",
+    "nav": "the shell, kept; Planner icon route -> calendar-time",
+    "footer": "none (app screen)",
+    "imagery": "none",
+    "photos": [],
+    "entry": "header with figure cards",
+    "sections": [
+      "header + figures",
+      "range band",
+      "plans table",
+      "plan head + run figures",
+      "outcome band + actions",
+      "route table on a dotted spine",
+      "upload sheet"
+    ],
+    "signature": "the route spine: home, each numbered customer, home again on one dotted line",
+    "waived": [
+      "24b"
+    ],
+    "fingerprint": "sp4 frame, sentence-case heads, dotted spine",
+    "prompt": "redesign the planner page keeping theme, typography, contrast, hierarchy; better icon; dotted line from start to 1"
+  },
+  {
     "date": "2026-11-10",
     "mode": "redesign",
     "depth": "full",

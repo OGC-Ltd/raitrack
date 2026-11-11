@@ -386,13 +386,54 @@ const distance = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 100
  * @param {boolean} [withDay] the report covers more than a day: the times carry their date
  */
 export function stopWords(c, withDay = false) {
+  const said = routeWords(c, withDay);
+  // A Planner sheet's stop: how long it stood, and the office's mark
+  const stay = c.at != null && Number.isFinite(c.stayMs) ? `, ${stayWords(c.stayMs)} there` : '';
+  return `${said}${stay}${c.outcomeLabel ? `, ${c.outcomeLabel}` : ''}`;
+}
+
+/** "1 h 27 min", "18 min". */
+const stayWords = (ms) => {
+  const min = Math.round(ms / 60_000);
+  return min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`;
+};
+
+function routeWords(c, withDay) {
   const when = (ms) => (withDay ? `${stamp(ms).slice(0, 5)} ${hm(ms)}` : hm(ms));
   if (c.missing) return 'Not on the platform';
   if (c.at != null) return `Delivered ${when(c.at)}`;
   if (c.reachedAt != null) return `Reached ${when(c.reachedAt)}, did not stop`;
   if (c.nearOrigin && !c.nearest) return `No stop away from ${c.nearOrigin}`;
-  if (c.nearest) return `Not reached, closest ${distance(c.nearest.m)} at ${when(c.nearest.t)}`;
+  if (c.nearest) return `Not reached, closest ${distance(c.nearest.m)}${Number.isFinite(c.nearest.t) ? ` at ${when(c.nearest.t)}` : ''}`;
   return 'No readings in the window';
+}
+
+/**
+ * A Planner sheet's stop as the PDF and the Edit sheet print it (operator,
+ * 11 Nov 2026: "the pdf to contain the column for customer id, customer name
+ * etc"): the sheet's own columns, then what the truck did there. The server
+ * (reports/template-report.pdf.ts) draws these heads in this order.
+ */
+export const SHEET_STOP_HEADS = ['No.', 'Customer ID', 'Customer', 'Location', 'Invoice', 'Amount', 'Tonnage', 'Result', 'Time there', 'Km', 'Outcome', 'Remarks'];
+const money = new Intl.NumberFormat('en-KE', { maximumFractionDigits: 2 });
+const tonnes = new Intl.NumberFormat('en-KE', { maximumFractionDigits: 3 });
+
+/** One sheet stop's cells, as text, under SHEET_STOP_HEADS. */
+export function sheetStopCells(c, withDay = false) {
+  const s = c.stop ?? {};
+  // The result alone: the time there and the office's mark have columns of their own
+  const result = stopWords({ ...c, stayMs: null, outcomeLabel: null }, withDay);
+  return [
+    c.sequence != null ? String(c.sequence) : '',
+    s.code ?? '', s.name ?? '', s.location ?? '', s.invoice ?? '',
+    Number.isFinite(s.amount) ? money.format(s.amount) : '',
+    Number.isFinite(s.tonnage) ? tonnes.format(s.tonnage) : '',
+    result,
+    c.at != null && Number.isFinite(c.stayMs) ? stayWords(c.stayMs) : '',
+    Number.isFinite(c.kmFromPrev) ? c.kmFromPrev.toFixed(1) : '',
+    c.outcomeLabel ?? '',
+    c.remarks ?? '',
+  ];
 }
 
 /** Back at its origin with this many stops not delivered: 0 when out, or when all were. */
@@ -406,6 +447,14 @@ export function runWords(r, withDay = false) {
     ...(r.trip.leftAt != null && r.trip.leftFrom ? [`left ${r.trip.leftFrom.label} ${when(r.trip.leftAt)}`] : []),
     ...(r.trip.arrivedAt != null && r.trip.arrivedTo ? [`back ${r.trip.arrivedTo.label} ${when(r.trip.arrivedAt)}`] : []),
     ...(short ? [`${short} not delivered`] : [])].join(' · ');
+}
+
+/** A Planner sheet's line under its vehicle on the PDF: "Sheet of 09.11.2026, driver JOHN DOE"; null for a hand-listed vehicle. */
+export function sheetSub(r) {
+  const s = r.sheet;
+  if (!s) return null;
+  const [y, m, d] = String(s.planDate ?? '').split('-');
+  return [...(d ? [`Sheet of ${d}.${m}.${y}`] : ['Planner sheet']), ...(s.driverName ? [`driver ${s.driverName}`] : [])].join(', ');
 }
 
 /**
@@ -430,6 +479,7 @@ export function matchGeofences(lines, customers) {
 
 /** Why there is no time left: in a storage since the readings began, or not at one in them. */
 export function notLeftWords(trip, days = MAX_LOOKBACK_DAYS) {
+  if (trip.why) return trip.why;
   if (trip.unread) return 'Positions could not be read';
   if (trip.inStorage) return `At ${trip.inStorage.label}, not left`;
   return `Not at MORL/STO in ${days} days`;
@@ -489,7 +539,9 @@ export function deliveriesPdfBody(rows, { from, at, fleet, group = null, stops =
       arrivedTo: r.trip.outAgain ? null : r.trip.arrivedTo?.label ?? null,
       arrivedShort: r.trip.arrivedTo?.short ?? null,
       run: runWords(r, withDay),
-      customers: r.customers.map((c) => ({ label: c.label, at: c.at ?? null, note: stopWords(c, withDay), ...(c.missing ? { missing: true } : {}) })),
+      ...(r.sheet ? { runSub: sheetSub(r) } : {}),
+      customers: r.customers.map((c) => ({ label: c.label, at: c.at ?? null, note: stopWords(c, withDay), ...(c.missing ? { missing: true } : {}),
+        ...(c.stop ? { sheet: sheetStopCells(c, withDay) } : {}) })),
     })),
   };
 }

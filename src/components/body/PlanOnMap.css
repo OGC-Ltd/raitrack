@@ -1,0 +1,25 @@
+/* A delivery plan on the Live Map: numbered customer pins and a small card. */
+.plm-pin {
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--plm, #ea580c); color: #fff; font: 700 11px/1 system-ui, sans-serif;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+.plm-pin--on { width: 30px; height: 30px; font-size: 13px; }
+
+.plm-card {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1100;
+  min-width: 240px; max-width: min(360px, calc(100% - 32px)); padding: 10px 12px; border-radius: 10px;
+  background: var(--surface, #fff); color: var(--text-1, #0f172a);
+  border: 1px solid rgba(148,163,184,0.35); box-shadow: 0 8px 24px rgba(15,23,42,0.18);
+  font-size: 12.5px;
+}
+.plm-card__head { display: flex; align-items: center; gap: 6px; }
+.plm-card__head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plm-card__sub { color: #64748b; margin-top: 2px; }
+.plm-x { background: none; border: 0; cursor: pointer; color: #64748b; padding: 2px; border-radius: 4px; }
+.plm-x:hover { color: #0f172a; background: rgba(148,163,184,0.2); }
+.plm-back {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px;
+  border: 1px solid rgba(148,163,184,0.5); background: transparent; color: inherit; cursor: pointer; font-size: 12px;
+}
+.plm-back:hover { border-color: #3b82f6; color: #3b82f6; }

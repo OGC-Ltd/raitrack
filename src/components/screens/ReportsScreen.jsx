@@ -3,7 +3,7 @@
  * period the reader picks, by the organisation's groups where it has them.
  *
  *   Driver conduct       harsh acceleration, harsh braking, no seatbelt and on phone, per vehicle
- *   Night driving        distance covered in the night hours (19:00–05:00 unless changed)
+ *   Night driving        distance covered in the night hours (22:00–04:00 unless changed)
  *   Overspeeding         overspeeds lasting more than 5 seconds unbroken, and their distance
  *   Vehicle utilisation  every vehicle's distance, time moving and fuel, stationary ones included
  *
@@ -147,7 +147,7 @@ const SHIFT_MAX_DAYS = 7;
 const shiftKept = new Map();
 
 /** The shifts the picker offers in one click; Day is the default (operator, 2 Nov: "the default shift is 7:30hrs to 19:30hrs"). */
-/** Night driving's nights in one click: the report's own (19:00–05:00) and the night shift. */
+/** Night driving's nights in one click: the report's own (22:00–04:00) and the night shift. */
 const NIGHT_PRESETS = [
   { key: 'night', label: 'Night', start: NIGHT.start, end: NIGHT.end || 24 },
   { key: 'shift', label: 'Night shift', start: 19.5, end: 7.5 },

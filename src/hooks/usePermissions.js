@@ -50,6 +50,13 @@ const anyOf = (slug) => (Array.isArray(slug) ? slug : [slug]);
 export const VSS_ALARMS = "vss:alarms";
 
 /**
+ * The Planner's grants hold only where the Planner runs: Menengai's delivery
+ * sheets (operator, 2026-11-11). Elsewhere the role may carry them, unused.
+ */
+export const PLANNER_ORGS = ["MENENGAI"];
+const PLANNER_SLUGS = ["planner:read", "planner:write"];
+
+/**
  * The grader for one organisation BY ID, with no active company involved.
  *
  * `accessIn` above answers "what may they do at the company on screen", which
@@ -103,9 +110,10 @@ export function usePermissions() {
   const can = useMemo(() => (slug) => {
     const list = anyOf(slug);
     if (vssOn && list.includes(VSS_ALARMS)) return true;
-    const rest = list.filter((s) => s !== VSS_ALARMS);
+    const plannerOn = PLANNER_ORGS.includes(String(org?.code ?? "").toUpperCase());
+    const rest = list.filter((s) => s !== VSS_ALARMS && (plannerOn || !PLANNER_SLUGS.includes(s)));
     return rest.length > 0 && canHere(rest);
-  }, [canHere, vssOn]);
+  }, [canHere, vssOn, org?.code]);
 
   return useMemo(() => ({
     orgId: org?.id ?? null,
