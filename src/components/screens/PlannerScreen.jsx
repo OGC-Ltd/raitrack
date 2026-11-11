@@ -28,10 +28,10 @@ import { useEstateZones, reloadEstateZones } from '../../hooks/useEstateZones';
 import { fileAsBase64, previewSheet, saveSheet, listPlans, getPlan, updateStop, deletePlan } from '../../api/planner';
 import { loadPings } from '../../api/fleetReports';
 import { fleetDay, dayStart } from '../../lib/fleetReports';
-import { findStorages } from '../../lib/deliveriesReport';
 import { displayOf } from '../../lib/fleetGroups';
-import { planActual, fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, LOOKBACK_MS, planWindow } from '../../lib/plannerActual';
-import { showPlanOnMap, focusPlanStop, requestFenceEdit, planOverlayNow } from '../../lib/planOverlay';
+import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWindow } from '../../lib/plannerActual';
+import { trackersFor, actualFor, readSpan } from '../../lib/plannerReport';
+import { showPlanOnMap, focusPlanStop, requestFenceEdit, planOverlayNow, takePlanToOpen } from '../../lib/planOverlay';
 import { useAppActions } from '../../context/AppContext';
 import DateRangePicker from '../layout/DateRangePicker';
 import EmptyNote from '../shared/EmptyNote';
@@ -359,25 +359,19 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
   const { setDesktopActiveTab } = useAppActions();
 
   // The truck's trackers: the plan's unit and any other carrying its plate
-  const trackers = useMemo(() => {
-    if (!plan) return [];
-    const k = plateKey(plan.plate);
-    return (vehicles ?? []).filter((v) => v.vehicleId === plan.vehicleId || (k && plateKey(displayOf(v)) === k));
-  }, [plan, vehicles]);
+  const trackers = useMemo(() => trackersFor(plan, vehicles), [plan, vehicles]);
   const window_ = useMemo(() => (plan ? planWindow(plan, dayStart) : null), [plan]);
   const pings = useQuery({
     queryKey: ['planner', 'track', orgId, planId, trackers.map((t) => t.vehicleId).join(','), window_?.from],
-    queryFn: () => loadPings({ orgId, vehicles: trackers, from: window_.from - LOOKBACK_MS, to: window_.to }),
+    queryFn: () => loadPings({ orgId, vehicles: trackers, ...readSpan(plan, dayStart) }),
     enabled: Boolean(orgId && trackers.length && window_ && window_.to > window_.from),
     staleTime: 5 * 60_000,
   });
 
   const zonesById = useMemo(() => new Map((zones?.features ?? []).map((f) => [f.properties?.id, f])), [zones]);
   const routes = useMemo(() => (pings.data ? [...pings.data.pings.values()] : []), [pings.data]);
-  const actual = useMemo(() => {
-    if (!plan || !window_) return null;
-    return planActual(plan, routes, findStorages(zones), zonesById, window_);
-  }, [plan, routes, zones, zonesById, window_]);
+  // The same reading the Deliveries report renders (lib/plannerReport)
+  const actual = useMemo(() => (plan && window_ ? actualFor(plan, routes, zones, dayStart).actual : null), [plan, routes, zones, window_]);
   const byStop = useMemo(() => new Map((actual?.stops ?? []).map((s) => [s.id, s])), [actual]);
   // The run on the map: out of the origin and home again, else the whole span read
   const dayTrack = useMemo(() => {
@@ -617,7 +611,7 @@ export default function PlannerScreen() {
   const today = fleetDay(Date.now());
   const [range, setRange] = useState(() => ({ from: fleetDay(Date.now() - 6 * DAY), to: today }));
   // Back from the Live Map, the plan that was put there is open again
-  const [open, setOpen] = useState(() => planOverlayNow().overlay?.planId ?? null);
+  const [open, setOpen] = useState(() => takePlanToOpen() ?? planOverlayNow().overlay?.planId ?? null);
   const [uploading, setUploading] = useState(false);
   const canWrite = can('planner:write');
 

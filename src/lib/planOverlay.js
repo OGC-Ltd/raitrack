@@ -28,6 +28,11 @@ export const focusPlanStop = (stopId) => state.overlay && set({ overlay: { ...st
 export const requestFenceEdit = (fenceId) => set({ editFence: fenceId ? { id: fenceId, at: Date.now() } : null });
 export const fenceEditTaken = () => set({ editFence: null });
 
+// A plan to open when the Planner next mounts (the Deliveries report's "Open in Planner")
+let planToOpen = null;
+export const openPlanNext = (planId) => { planToOpen = planId ?? null; };
+export const takePlanToOpen = () => { const id = planToOpen; planToOpen = null; return id; };
+
 export function usePlanOverlay() {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
