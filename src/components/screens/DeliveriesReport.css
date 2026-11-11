@@ -1,7 +1,8 @@
-/* Hallmark · redesign: full (app screen, one panel) · shape: app screen · genre: modern-minimal (inferred) · theme: brand (sp4 tokens, preserved) · signature: the day's roster, one aligned row per vehicle · v2.0.0
- * critique: the shared-vehicles card read as loose chips on a line; the rules under the toolbar ran as one paragraph; a 162px hole sat above the search (it borrowed .dlv-find, whose flex-basis is 320px in a column)
+/* Hallmark · redesign: restyle (app screen, one panel; 12 Nov: to Movements' system) · shape: app screen · genre: modern-minimal (inferred) · theme: brand (sp4 tokens and Movements' report classes, by request) · signature: the day's roster, one aligned row per vehicle · v2.0.0
+ * critique: beside Movements the tab read as another product: an inset rounded card where Movements runs flush bands on the gutter, a card title where Movements heads a group row, a boxed rules block where Movements leaves a one-line note, a group select with no edge; earlier, a 162px hole above the search and a card clip that hid the stops picker
  * answered: every colour is an sp4 token from the shell; the report table's own sheet colours (FG fills) stay in ReportsScreen.css
  */
+/* Hallmark · waive 24b · .dlv-plan__head 14px/6px, .dlv-rules 14px gap and 6px margin · copied from Movements' .rpt-group th and .mvr-depots so the two tabs share one rhythm, by request */
 /* Hallmark · waive 26b · the remove button is never disabled · disabled states belong to the shared sp4 buttons and pickers this panel reuses */
 /*
  *
@@ -11,30 +12,31 @@
  */
 
 /* ---- The day's roster ---------------------------------------------------- */
+/* A flush band on the gutter, as Movements lays out its find row and table: no inset card.
+   Nothing clips it, so the stops picker and the plate search spill over what is below. */
 .dlv-plan {
-  margin: 12px var(--sp4-gutter, 12px) 4px;
-  padding: 0;
-  border: 1px solid var(--sp4-line);
-  border-radius: 10px;
+  margin: 0; padding: 0;
   background: var(--sp4-surface);
-  overflow: clip;
-}
-.dlv-plan__head {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 8px 16px; margin: 0; padding: 12px 16px;
   border-bottom: 1px solid var(--sp4-line);
 }
-.dlv-plan__title { margin: 0; font: 600 14px/1.3 var(--font-body); color: var(--sp4-text-1); }
-.dlv-plan__keep { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sp4-text-3); }
+/* Headed as a Movements group row: the name bold, its state beside it in grey */
+.dlv-plan__head {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 4px 16px; margin: 0; padding: 14px var(--sp4-gutter, 12px) 6px;
+  border-bottom: 1px solid var(--sp4-line-hi);
+}
+.dlv-plan__title { margin: 0; font-size: var(--sp4-strong); font-weight: 800; line-height: 1.3; color: var(--sp4-text-1); }
+.dlv-plan__keep { display: inline-flex; align-items: center; gap: 8px; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-3); }
 .dlv-plan__keep--error { color: var(--sp4-crit); }
 .dlv-plan__retry { margin-left: 4px; padding: 2px 8px; font-size: 12px; }
-.dlv-plan__warn { margin: 12px 16px 0; font-size: 12px; }
+.dlv-plan__warn { margin: 12px var(--sp4-gutter, 12px) 0; font-size: var(--sp4-body); }
 
+/* The add row on the find row's footing: same padding, same 380px box */
 .dlv-plan__add {
-  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px;
-  padding: 12px 16px;
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px;
+  padding: 12px var(--sp4-gutter, 12px) 12px;
 }
-.dlv-plan .dlv-find { position: relative; flex: 1 1 320px; max-width: 460px; }
+.dlv-plan .dlv-find { position: relative; flex: 0 1 380px; min-width: 0; max-width: none; }
 
 /* One row per vehicle: plate, group, stops, paste, count, remove; extras span the row */
 .dlv-roster { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--sp4-line); }
@@ -43,18 +45,27 @@
   display: grid;
   grid-template-columns: minmax(84px, 110px) minmax(140px, 200px) minmax(0, 1fr) auto minmax(64px, auto) 32px;
   align-items: center; column-gap: 12px;
-  padding: 0 16px;
+  padding: 0 var(--sp4-gutter, 12px);
 }
+/* The column heads on the table head's ground and size */
 .dlv-roster__head {
-  min-height: 32px; background: var(--sp4-raised);
-  font-size: 12px; font-weight: 500; color: var(--sp4-text-3);
+  min-height: 33px; background: var(--sp4-raised);
+  font-size: 11px; font-weight: 600; color: var(--sp4-text-3);
+  border-bottom: 1px solid var(--sp4-line);
 }
 .dlv-roster__row { min-height: 48px; row-gap: 8px; padding-block: 8px; border-top: 1px solid var(--sp4-line); }
 .dlv-roster__row:first-child { border-top: 0; }
 .dlv-roster__row > .dlv-roster__wide { grid-column: 1 / -1; }
 .dlv-plan__plate { font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dlv-roster__group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.dlv-plan__group { width: 100%; max-width: none; font-size: 13px; padding: 4px 8px; }
+.rpt-select.dlv-plan__group {
+  justify-self: start; width: 100%; max-width: 100%; height: 28px; padding: 0 8px;
+  border: 1px solid var(--sp4-line); border-radius: 4px; background: var(--sp4-surface);
+  font-size: 12.5px; font-weight: 400;
+  transition: border-color 120ms ease;
+}
+.rpt-select.dlv-plan__group:hover { border-color: var(--sp4-line-hi); }
+.rpt-select.dlv-plan__group:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; transition: none; }
 .dlv-plan__moved { font-size: 12px; color: var(--sp4-warn); }
 .dlv-roster__stops { min-width: 0; }
 .dlv-roster__stops > * { max-width: 100%; }
@@ -71,15 +82,14 @@
 
 /* The Planner's sheets: the same rows, read only */
 .dlv-sheets { border-top: 1px solid var(--sp4-line); }
-.dlv-sheets__lede { margin: 0; padding: 12px 16px; font-size: 12px; color: var(--sp4-text-3); }
+.dlv-sheets__lede { margin: 0; padding: 12px var(--sp4-gutter, 12px); font-size: var(--sp4-body); color: var(--sp4-text-3); }
 .dlv-sheets .dlv-roster__row { grid-template-columns: minmax(84px, 110px) minmax(0, 1fr) auto; }
 
-/* ---- The rules the report reads the route by ------------------------------- */
+/* ---- The rules the report reads the route by: a note under the toolbar, as Movements' depot line */
 .dlv-rules {
-  display: grid; grid-template-columns: max-content minmax(0, 72ch); gap: 4px 16px;
-  margin: 8px var(--sp4-gutter, 12px) 0; padding: 12px 16px;
-  border-left: 2px solid var(--sp4-line-hi);
-  font-size: 12px; line-height: 1.5; color: var(--sp4-text-3);
+  display: grid; grid-template-columns: max-content minmax(0, 96ch); gap: 4px 14px;
+  margin: 6px var(--sp4-gutter, 12px) 0; padding: 0;
+  font-size: var(--sp4-body, 12px); line-height: 1.5; color: var(--sp4-text-3);
 }
 .dlv-rules dt { font-weight: 600; color: var(--sp4-text-2); }
 .dlv-rules dd { margin: 0; }
@@ -93,7 +103,7 @@
   .dlv-roster__row > .dlv-plan__plate { grid-row: 1; grid-column: 1; }
   .dlv-roster__row > .dlv-roster__count { grid-row: 1; grid-column: 2; }
   .dlv-roster__row > .dlv-plan__x { grid-row: 1; grid-column: 3; }
-  .dlv-roster__row > .dlv-roster__group { grid-row: 2; grid-column: 1 / -1; }
+  .dlv-roster__row > .dlv-roster__group { grid-row: 2; grid-column: 1 / -1; justify-self: start; width: min(100%, 280px); }
   .dlv-roster__row > .dlv-roster__stops { grid-row: 3; grid-column: 1; }
   .dlv-roster__row > .dlv-roster__paste { grid-row: 3; grid-column: 2 / -1; }
   .dlv-sheets .dlv-roster__row > * { grid-row: auto; grid-column: auto; }
@@ -102,12 +112,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dlv-plan__x { transition: none; }
+  .dlv-plan__x, .dlv-plan__group { transition: none; }
   .dlv-plan__x:active { transform: none; }
 }
 
-/* The confirm that moves a vehicle into another group, inside the card */
-.dlv-assign { margin: 0 16px 12px; border-radius: 8px; }
+/* The confirm that moves a vehicle into another group, inside the band */
+.dlv-assign { margin: 0 var(--sp4-gutter, 12px) 12px; border-radius: 8px; }
 
 /* The toolbar's summary: its parts set apart by space, not by dots */
 .dlv-sum__part { margin-left: 12px; }
