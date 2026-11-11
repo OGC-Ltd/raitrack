@@ -23,7 +23,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords, dayStart, daysCovering } from '../../lib/fleetReports';
-import { marksOf } from '../../lib/plannerDayMarks';
+import { marksOf, shortDay } from '../../lib/plannerDayMarks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDeliveryDay, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
@@ -124,6 +124,14 @@ function PinPaste({ vehicle, customers, onChange }) {
     </div>
   );
 }
+
+/** A vehicle copied from an earlier list: that day's plan again, not a carry-over, so its carried marks go. */
+const uncarried = (v) => {
+  const rest = { ...v };
+  delete rest.carried;
+  delete rest.carriedFrom;
+  return rest;
+};
 
 export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName }) {
   const now = Date.now();
@@ -631,7 +639,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               )}
             </div>
             {earlier && (
-              <button type="button" className="sp4-ghost-btn" onClick={() => change({ ...emptyPlan(), ...earlier.plan })}
+              <button type="button" className="sp4-ghost-btn" onClick={() => change({ ...emptyPlan(), vehicles: earlier.plan.vehicles.map(uncarried) })}
                       title={`Copy the list of ${earlier.day}`}>
                 <i className="ti ti-copy" aria-hidden="true" /> Copy {earlier.day}’s list
               </button>
@@ -674,6 +682,11 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 const picked = v.customers.length + (v.pins?.length ?? 0);
                 const isPasting = pasting.has(v.key);
                 const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
+                // Stops not done on an earlier day, carried here by the server after midnight (fleet-server deliveries/roll-over)
+                const carried = new Set(v.carried ?? []);
+                const pinWords = (pin) => pin.name || `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`;
+                const carriedNow = v.customers.filter((n) => carried.has(n)).length + (v.pins ?? []).filter((p) => carried.has(pinWords(p))).length;
+                const from = v.carriedFrom ? shortDay(v.carriedFrom) : 'an earlier day';
                 return (
                   <li key={v.key} className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{v.plate}</span>
@@ -695,11 +708,16 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
                     </button>
                     <span className="dlv-roster__count">
-                      <span><b>{picked}</b> stop{picked === 1 ? '' : 's'}{near ? `, ${near} at storage` : ''}</span>
+                      <span title={carriedNow ? `Not done on ${from}, carried over to this list` : undefined}>
+                        <b>{picked}</b> stop{picked === 1 ? '' : 's'}{near ? `, ${near} at storage` : ''}{carriedNow ? <span className="dlv-roster__carried">, {carriedNow} carried</span> : null}
+                      </span>
                       {picked > 0 && (
                         <span className={`dlv-meter${picked > 24 ? ' is-dense' : ''}`} aria-hidden="true">
-                          {v.customers.map((name) => <i key={name} title={name} className={customers.find((c) => c.name === name)?.nearStorage ? 'is-storage' : undefined} />)}
-                          {(v.pins ?? []).map((pin, i) => <i key={`pin${i}`} className="is-pin" title={pin.name || `${pin.lat}, ${pin.lng}`} />)}
+                          {v.customers.map((name) => carried.has(name)
+                            ? <i key={name} title={`${name}, carried from ${from}`} className="is-carried" />
+                            : <i key={name} title={name} className={customers.find((c) => c.name === name)?.nearStorage ? 'is-storage' : undefined} />)}
+                          {(v.pins ?? []).map((pin, i) => <i key={`pin${i}`} className={carried.has(pinWords(pin)) ? 'is-carried' : 'is-pin'}
+                                                             title={carried.has(pinWords(pin)) ? `${pinWords(pin)}, carried from ${from}` : pinWords(pin)} />)}
                         </span>
                       )}
                     </span>
