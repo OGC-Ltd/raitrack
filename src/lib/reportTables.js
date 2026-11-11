@@ -5,11 +5,26 @@
 // Pure: no React.
 
 import { km1, km2, minutesWords, OVERSPEED_MIN_SEC, OVER_STANDARD } from './fleetReports';
+import { statusWord } from './followUp';
 
+const DAY = 86_400_000;
 /** The day and second a unit reached its top speed: "Sat 07 Nov 2026 14:32:15", Nairobi. */
 const peakDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 export const peakWords = (ms) => (Number.isFinite(ms) ? peakDay.format(ms).replace(/,/g, '') : '-');
-import { statusWord } from './followUp';
+const peakClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+/**
+ * "Top speed at": the time alone, to the second, when the report covers one
+ * day ("14:32:15"); the day too over longer periods, as Mufindi's week needs
+ * (10 Nov 2026, the report may back a disciplinary case).
+ */
+export const peakTimeWords = (ms, ctx) => {
+  if (!Number.isFinite(ms)) return '-';
+  const oneDay = Number.isFinite(ctx?.from) && Number.isFinite(ctx?.to) && ctx.to - ctx.from <= DAY;
+  return oneDay ? peakClock.format(ms) : peakWords(ms);
+};
+/** Where the top speed was: its place name, else its coordinates, else a dash. */
+const peakPlaceWords = (r) => r.peakPlace
+  ?? (Number.isFinite(r.peak?.lat) && Number.isFinite(r.peak?.lng) ? `${r.peak.lat.toFixed(5)}, ${r.peak.lng.toFixed(5)}` : '–');
 
 /** "22:47", or "31 Oct 22:47" when the report covers more than one night. Nairobi. */
 const clockOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -170,13 +185,14 @@ export const REPORTS = {
     presetFor: { KASULU: 'lastWeek' },
     spans: [7, 31],
     maxDays: 31,
-    columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit', 'Top speed at'],
+    columns: () => ['Vehicle', 'Type', 'Driver', 'Overspeeds', 'Time over', 'Distance, km', 'Top / limit', 'Top speed at', 'Location'],
     /** Not figures, though after `num`: left as words. */
-    text: ['Top speed at'],
-    cells: (r) => [
+    text: ['Top speed at', 'Location'],
+    cells: (r, ctx) => [
       vehicleCell(r), typeOf(r), clean(r.driver), String(r.count), minutesWords(r.seconds / 60),
       km2(r.km), Number.isFinite(r.peakKmh) ? `${Math.round(r.peakKmh)} / ${Math.round(r.limitKmh)} km/h` : '',
-      peakWords(r.peakAt),
+      peakTimeWords(r.peakAt, ctx),
+      peakPlaceWords(r),
     ],
     sum: (r) => r.km,
     sumWords: (t) => `${km2(t)} km`,
@@ -240,7 +256,7 @@ export const REPORTS = {
 };
 
 /** Columns left out when no vehicle in the report has a value in them (operator, 1 Nov 2026). */
-const OPTIONAL = ['Type', 'Driver'];
+const OPTIONAL = ['Type', 'Driver', 'Location'];
 
 /**
  * The indexes of the columns to show for these rows: every column, less a

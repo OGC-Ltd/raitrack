@@ -77,6 +77,7 @@ import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
+import { placeNameAt } from '../../hooks/usePlaceName';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
@@ -1471,6 +1472,20 @@ export default function ReportsScreen() {
         rows = rows.map((row) => (row.peak ? { ...row, peakAt: found.peaks.get(row.peak)?.at ?? null } : row));
         if (ctx.events) ctx.events = ctx.events.map((e) => ({ ...e, peakAt: found.peaks.get(e)?.at ?? null }));
         ctx.peaksFailed = found.failed;
+        // Where each top speed was reached, by name (the server's reverse
+        // geocode, cached per grid cell; at most 3 asked at a time). Read
+        // before the report shows, so the screen, PDF, JPEG and CSV all carry
+        // the same names; one that cannot be found keeps its coordinates.
+        if (!live()) return;
+        const fixed = rows.filter((row) => row.peak?.lat != null && row.peak?.lng != null);
+        const onPlace = step('Finding where each top speed was reached, vehicle');
+        let placed = 0;
+        onPlace({ done: 0, total: fixed.length });
+        const names = await Promise.all(fixed.map((row) => placeNameAt(row.peak.lat, row.peak.lng)
+          .catch(() => null)
+          .finally(() => onPlace({ done: ++placed, total: fixed.length }))));
+        const placeOf = new Map(fixed.map((row, i) => [row, names[i]]));
+        rows = rows.map((row) => (placeOf.get(row) ? { ...row, peakPlace: placeOf.get(row) } : row));
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
