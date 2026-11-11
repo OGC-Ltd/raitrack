@@ -1,128 +1,64 @@
-/**
- * Idle-alert logic — pure functions, no React, no imports from the app.
- *
- * These run on the frontend today; when this moves to the backend, copy this
- * file into the server (Node.js) unchanged and swap the data source.
- *
- * A unit is "idle" when:
- *   - Its speed has been below MOVING_SPEED_KMH for the entire threshold period.
- *   - Idle = not moving. Engine state does not matter — a unit with the engine
- *     off and not moving for 3+ hours is still flagged (it may have broken down
- *     or been abandoned).
- *
- * Alerts do NOT clear automatically. Once an alert is raised it stays until a
- * user explicitly dismisses it. If a unit moves and stops again, a NEW alert
- * is created for that new idle period.
- *
- * ---
- * Backend contract (what /api/v1/idle-alerts should return when it exists):
- * {
- *   alerts: [
- *     {
- *       id:          string,       // e.g. "idle:KCE780B:1700000000"
- *       plate:       string,       // "KCE 780B"
- *       size:        string,       // "PROBOX"
- *       designation: string,       // "GT/MT"
- *       location:    string,       // last known location name
- *       lat:         number|null,
- *       lng:         number|null,
- *       idleSinceMs: number,       // unix ms when the unit stopped moving
- *       durationMs:  number,       // how long it has been stationary
- *       speed:       number,       // km/h at last update
- *       engine:      "on"|"off"|null,
- *       severity:    "warning"|"critical",  // warning=3h, critical=6h
- *       dismissed:   false,        // server always sends false (dismissals stored client-side until DB is ready)
- *     }
- *   ],
- *   generatedAt: number,  // unix ms
- * }
- */
+// Menengai's idle units, as the server's idle watch reports them (fleet-server
+// modules/idle-watch): a listed unit that has not moved for 3 hours of working
+// time (07:30–19:30), away from the yard and depots, critical at 6 hours.
+// The server decides once for everybody; this file only words and filters
+// what it sends. Pure: no React.
 
-/** Speed below which we treat a unit as not moving (km/h). */
-export const MOVING_SPEED_KMH = 2;
+const EAT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
-/** Idle duration that escalates from warning → critical (6 hours). */
-export const CRITICAL_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+/** "11 Nov 09:40", Nairobi; "—" for nothing. */
+export const eatWords = (ms) => (Number.isFinite(ms) ? EAT.format(ms).replace(/,/g, '') : '—');
 
-/**
- * Given a list of unit position snapshots and a threshold, return idle alerts.
- *
- * "idleSinceMs" is the timestamp when the unit last had speed >= MOVING_SPEED_KMH.
- * If the unit has never moved in the data we have, use its firstSeenMs.
- *
- * @param {Array<{
- *   plate: string,
- *   size?: string,
- *   designation?: string,
- *   location?: string,
- *   lat?: number,
- *   lng?: number,
- *   idleSinceMs: number,   // unix ms — when the unit last stopped moving
- *   speed?: number,        // km/h at last check
- *   engine?: "on"|"off",
- * }>} units
- * @param {number} thresholdMs  — idle threshold in ms (default 3 h)
- * @param {number} [nowMs]      — current time in ms (defaults to Date.now())
- * @returns {Array}             — idle alert objects (see backend contract above)
- */
-export function detectIdleAlerts(units, thresholdMs, nowMs = Date.now()) {
-  const alerts = [];
+/** "3 h 05 min", "1 d 4 h", "42 min" (fleet-server idle-watch.rules idleWords). */
+export function idleWords(ms) {
+  const min = Math.max(0, Math.floor((Number(ms) || 0) / 60_000));
+  const d = Math.floor(min / 1440);
+  const h = Math.floor((min % 1440) / 60);
+  if (d) return `${d} d ${h} h`;
+  if (!h) return `${min} min`;
+  return min % 60 ? `${h} h ${String(min % 60).padStart(2, '0')} min` : `${h} h`;
+}
 
-  for (const unit of units) {
-    const { plate, size = "", designation = "", location = "", lat = null, lng = null,
-            idleSinceMs, speed = 0, engine = null } = unit;
-
-    // Unit is currently moving — do not create an alert.
-    if ((speed ?? 0) >= MOVING_SPEED_KMH) continue;
-
-    const durationMs = nowMs - idleSinceMs;
-    if (durationMs < thresholdMs) continue;
-
-    alerts.push({
-      id:          `idle:${plate.replace(/\s/g, "")}:${idleSinceMs}`,
-      plate,
-      size,
-      designation,
-      location,
-      lat,
-      lng,
-      idleSinceMs,
-      durationMs,
-      speed,
-      engine,
-      severity:    durationMs >= CRITICAL_THRESHOLD_MS ? "critical" : "warning",
-      dismissed:   false,
-    });
+/** Where it stands: "at Naivas HQ", "1.2 km from Naivas HQ", else its coordinates. */
+export function whereWords(a) {
+  const n = a?.nearest;
+  if (n?.name) {
+    if (!(n.metres > 0)) return `at ${n.name}`;
+    return `${n.metres < 1000 ? `${n.metres} m` : `${(n.metres / 1000).toFixed(1)} km`} from ${n.name}`;
   }
+  return Number.isFinite(a?.lat) && Number.isFinite(a?.lng) ? `${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}` : '—';
+}
 
-  // Sort most critical / longest idle first.
-  alerts.sort((a, b) => b.durationMs - a.durationMs);
-  return alerts;
+export const mapUrl = (a) => (Number.isFinite(a?.lat) && Number.isFinite(a?.lng) ? `https://www.google.com/maps?q=${a.lat},${a.lng}` : null);
+
+/** The alert as text to paste into a message. */
+export function alertText(a) {
+  const lines = [
+    `Idle unit — ${a.plate} (${a.size} · ${a.designation})`,
+    `Stopped since: ${eatWords(a.since)}${a.sinceExact === false ? ' (at least)' : ''}`,
+    `Idle in working hours: ${idleWords(a.idleMs)}${a.severity === 'critical' ? ' (critical)' : ''}`,
+    `Where: ${whereWords(a)}`,
+  ];
+  const url = mapUrl(a);
+  if (url) lines.push(`Map: ${url}`);
+  return lines.join('\n');
+}
+
+const squash = (x) => String(x ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+/** The alerts a search keeps: by plate, size, designation or place. */
+export function searchAlerts(alerts, q) {
+  const s = squash(q);
+  if (!s) return alerts;
+  return alerts.filter((a) => [a.plate, a.size, a.designation, a.nearest?.name].some((x) => squash(x).includes(s)));
 }
 
 /**
- * Format idle duration as a human string, e.g. "3 h 42 min" or "1 d 2 h".
- * @param {number} ms
+ * Dismissed keys still worth keeping: those of alerts the server still sends.
+ * A key names one stop (`vehicleId|idle|since`), so once that stop ends it
+ * can never come back, and keeping it would only grow the store.
  */
-export function idleDuration(ms) {
-  const totalMin = Math.floor(ms / 60_000);
-  const days  = Math.floor(totalMin / 1440);
-  const hours = Math.floor((totalMin % 1440) / 60);
-  const mins  = totalMin % 60;
-
-  if (days > 0)  return `${days} d ${hours} h`;
-  if (hours > 0) return `${hours} h ${mins} min`;
-  return `${mins} min`;
-}
-
-/**
- * Merge a backend alert list with locally-stored dismissed IDs.
- * Alerts whose id is in dismissedIds are filtered out.
- *
- * @param {Array} alerts
- * @param {Set<string>} dismissedIds
- */
-export function applyDismissals(alerts, dismissedIds) {
-  if (!dismissedIds.size) return alerts;
-  return alerts.filter((a) => !dismissedIds.has(a.id));
-}
+export const liveDismissals = (dismissed, alerts) => {
+  const live = new Set((alerts ?? []).map((a) => a.key));
+  return new Set([...dismissed].filter((k) => live.has(k)));
+};

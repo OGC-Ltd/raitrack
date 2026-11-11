@@ -1,206 +1,48 @@
-/* ── Idle Alerts Tab ───────────────────────────────────────────────── */
+/* ── Alerts › Idle units ───────────────────────────────────────────── */
 
-.idle-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
+.idle-wrap { display: flex; flex-direction: column; gap: 0; }
 
-/* Summary bar */
-.idle-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--sp4-border, #e5e7eb);
-}
+/* The rule, said once above the list */
+.idle-rule { margin: 0; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid var(--sp4-border, #e5e7eb); }
+.idle-generated { display: block; margin-top: 4px; font-size: 12px; color: var(--sp4-muted, #6b7280); }
 
-.idle-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 20px;
-}
-.idle-badge--critical {
-  background: color-mix(in srgb, var(--sp4-crit, #e53e3e) 12%, transparent);
-  color: var(--sp4-crit, #e53e3e);
-}
-.idle-badge--warning {
-  background: color-mix(in srgb, var(--sp4-warn, #d97706) 12%, transparent);
-  color: var(--sp4-warn, #d97706);
-}
-
-.idle-generated {
-  font-size: 12px;
-  color: var(--sp4-muted, #6b7280);
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.idle-source-note {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--sp4-muted, #6b7280);
-  opacity: 0.75;
-}
-.idle-refresh-btn {
-  font-size: 12px;
-  padding: 3px 8px;
-}
-
-/* Table scroll wrapper */
-.idle-table-scroll {
-  overflow-x: auto;
-}
+.idle-table-scroll { overflow-x: auto; }
 
 /* Row severity colours */
 .idle-tr--critical > td { background: color-mix(in srgb, var(--sp4-crit, #e53e3e) 5%, transparent); }
 .idle-tr--warning  > td { background: color-mix(in srgb, var(--sp4-warn, #d97706) 4%, transparent); }
 .idle-tr--dismissed > td { opacity: 0.5; }
 
-/* Plate cell */
-.idle-plate {
-  display: block;
-  font-weight: 600;
-  font-size: 13.5px;
-}
-.idle-meta {
-  display: block;
-  font-size: 11.5px;
-  color: var(--sp4-muted, #6b7280);
-  margin-top: 1px;
-}
+.idle-plate { display: block; font-weight: 600; font-size: 13.5px; }
+.idle-meta { display: block; margin-top: 1px; font-size: 11.5px; color: var(--sp4-muted, #6b7280); }
 
-/* Location link */
-.idle-location-link {
-  color: var(--sp4-link, #2563eb);
-  text-decoration: none;
-  font-size: 13px;
-}
+.idle-location-link { color: var(--sp4-link, #2563eb); text-decoration: none; font-size: 13px; }
 .idle-location-link:hover { text-decoration: underline; }
 
-/* Idle-since time */
-.idle-since {
-  font-size: 12.5px;
-  color: var(--sp4-fg, #111827);
-}
+.idle-since { font-size: 12.5px; color: var(--sp4-fg, #111827); }
 
-/* Duration badge */
-.idle-duration {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 600;
-}
+.idle-duration { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; }
 .idle-duration .ti { font-size: 13px; }
 .idle-duration--critical { color: var(--sp4-crit, #e53e3e); }
 .idle-duration--warning  { color: var(--sp4-warn, #d97706); }
 
-/* Engine on/off */
-.idle-engine--on  { color: var(--sp4-ok, #16a34a); font-weight: 600; }
-.idle-engine--off { color: var(--sp4-muted, #6b7280); }
-.idle-engine--unknown { color: var(--sp4-muted, #6b7280); }
-
-/* Row action group: copy + dismiss side by side */
-.idle-row-acts {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Copy icon button */
-.idle-copy-btn {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 14px;
-  color: var(--sp4-muted, #6b7280);
-  flex-shrink: 0;
-}
+/* Copy and dismiss side by side */
+.idle-row-acts { display: inline-flex; align-items: center; gap: 6px; }
+.idle-copy-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; flex-shrink: 0; font-size: 14px; color: var(--sp4-muted, #6b7280); }
 .idle-copy-btn .ti { font-size: 14px; }
 .idle-copy-btn--copied { color: var(--sp4-ok, #16a34a) !important; }
 .idle-copy-btn--failed { color: var(--sp4-crit, #e53e3e) !important; }
+.idle-dismiss-btn { padding: 2px 10px; font-size: 12px; white-space: nowrap; }
 
-/* Dismiss button */
-.idle-dismiss-btn {
-  font-size: 12px;
-  padding: 2px 10px;
-  white-space: nowrap;
-}
+.idle-dismissed-section { margin: 12px 16px 4px; }
+.idle-dismissed-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--sp4-muted, #6b7280); }
+.idle-dismissed-table { margin-top: 8px; opacity: 0.7; }
 
-/* Dismissed section */
-.idle-dismissed-section {
-  margin: 12px 16px 4px;
-}
-.idle-dismissed-toggle {
-  font-size: 12px;
-  color: var(--sp4-muted, #6b7280);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.idle-dismissed-table {
-  margin-top: 8px;
-  opacity: 0.7;
-}
-
-/* No-alerts / pending state: fleet preview grid */
-.idle-no-alerts { padding: 0 16px 24px; }
-
-.idle-fleet-preview {
-  margin-top: 20px;
-}
-.idle-fleet-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--sp4-muted, #6b7280);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 10px;
-}
-.idle-fleet-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.idle-fleet-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: var(--sp4-surface2, #f3f4f6);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-.idle-fleet-pill__meta {
-  font-size: 11px;
-  color: var(--sp4-muted, #6b7280);
-}
-
-/* Pending state wrapper */
-.idle-pending {
-  padding: 0 16px 24px;
-}
+/* The listed units the rule cannot judge */
+.idle-fleet-preview { margin: 16px 16px 8px; }
+.idle-fleet-label { margin: 0 0 6px; font-size: 12px; color: var(--sp4-muted, #6b7280); }
 
 @media (prefers-color-scheme: dark) {
-  .idle-badge--critical {
-    background: color-mix(in srgb, var(--sp4-crit, #f87171) 15%, transparent);
-  }
-  .idle-badge--warning {
-    background: color-mix(in srgb, var(--sp4-warn, #fbbf24) 15%, transparent);
-  }
   .idle-tr--critical > td { background: color-mix(in srgb, var(--sp4-crit, #f87171) 8%, transparent); }
   .idle-tr--warning  > td { background: color-mix(in srgb, var(--sp4-warn, #fbbf24) 6%, transparent); }
-  .idle-fleet-pill { background: var(--sp4-surface2, #1f2937); }
 }

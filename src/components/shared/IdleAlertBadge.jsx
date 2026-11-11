@@ -1,44 +1,25 @@
 /**
- * Idle alert corner badge.
+ * Menengai's idle units: the runner and the corner badge.
  *
- * Mounted once in App.jsx (alongside StopWatch / ToastStack). Shows a fixed
- * bottom-right card whenever there are active (non-dismissed) idle alerts for
- * the Menengai fleet. Clicking "Open" switches the app to the Alerts page and
- * jumps straight to the Idle Alerts tab.
- *
- * Intentionally lightweight: it reads from useIdleAlerts() which is already
- * polling — no extra network calls.
+ * The server decides which listed units are idle (fleet-server
+ * modules/idle-watch: 3 hours of working time, 07:30–19:30, away from the yard
+ * and depots), once for everybody. While Menengai is on the account, this
+ * reads that list every CHECK_MS into the shared store (hooks/useIdleWatch),
+ * as StopWatch reads the stop watch. The badge shows only while Menengai is
+ * the company open; "Open" lands on the Alerts page's Idle units list.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useAppActions, useCompanies } from "../../context/AppContext";
-import { useIdleAlerts, requestIdleView } from "../../hooks/useIdleAlerts";
-import { useFleetLiveShared } from "../../context/FleetLiveContext";
+import { useAppActions, useAppSelector, useCompanies } from "../../context/AppContext";
+import { resolveOrgId } from "../../api/org";
+import { apiFetch } from "../../services/api";
 import { copyText } from "../../lib/copyText";
-import { idleDuration } from "../../lib/idleAlerts";
+import { alertText, idleWords } from "../../lib/idleAlerts";
+import { requestIdleView, setIdleWatch, useIdleWatch } from "../../hooks/useIdleWatch";
 import "./IdleAlertBadge.css";
 
-const EAT_FMT = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Africa/Nairobi",
-  day: "2-digit", month: "short",
-  hour: "2-digit", minute: "2-digit",
-  hour12: false,
-});
-const fmt = (ms) => ms ? EAT_FMT.format(ms) : "—";
-
-/** Build the clipboard text for one alert. */
-function alertCopyText(a) {
-  const lines = [
-    `Idle alert — ${a.plate} (${a.size} · ${a.designation})`,
-    `Idle since: ${fmt(a.idleSinceMs)}`,
-    `Duration:   ${idleDuration(a.durationMs)}`,
-    `Speed:      ${a.speed != null ? `${Math.round(a.speed)} km/h` : "—"}`,
-  ];
-  if (a.location) lines.push(`Location:   ${a.location}`);
-  if (a.lat != null && a.lng != null) lines.push(`Map:        https://www.google.com/maps?q=${a.lat},${a.lng}`);
-  lines.push(`Severity:   ${a.severity}`);
-  return lines.join("\n");
-}
+export const CHECK_MS = 60_000;
+const ORG = "menengai";
 
 function CopyBtn({ text }) {
   const [st, setSt] = useState("idle");
@@ -58,60 +39,90 @@ function CopyBtn({ text }) {
   );
 }
 
+/** Reads the server's list while Menengai is on the account; nothing runs otherwise. */
+function useIdleRunner(holds) {
+  useEffect(() => {
+    if (!holds) { setIdleWatch({ status: "off", alerts: [], notReporting: [], notOnPlatform: [] }); return undefined; }
+    let live = true;
+    let timer = null;
+    const check = async () => {
+      try {
+        const orgId = await resolveOrgId(ORG);
+        if (!orgId) throw new Error("Menengai is not on this account");
+        const { data } = await apiFetch(`/api/v1/organisations/${orgId}/idle-watch`);
+        if (!live) return;
+        const status = data?.status === "error" ? "error" : data?.status === "loading" ? "loading" : data?.status === "off" ? "off" : "done";
+        setIdleWatch({
+          status,
+          alerts: Array.isArray(data?.alerts) ? data.alerts : [],
+          notReporting: Array.isArray(data?.notReporting) ? data.notReporting : [],
+          notOnPlatform: Array.isArray(data?.notOnPlatform) ? data.notOnPlatform : [],
+          rule: data?.rule ?? null,
+          checkedAt: data?.checkedAt ?? Date.now(),
+          message: data?.message ?? null,
+        });
+      } catch (err) {
+        if (!live) return;
+        // Not on this server yet: no list, no badge, and nothing to report
+        if (err?.status === 404) setIdleWatch({ status: "off", alerts: [] });
+        else setIdleWatch({ status: "error", message: err?.message ?? String(err), checkedAt: Date.now() });
+      } finally {
+        if (live) timer = setTimeout(check, CHECK_MS);
+      }
+    };
+    setIdleWatch({ status: "loading" });
+    check();
+    return () => { live = false; clearTimeout(timer); };
+  }, [holds]);
+}
+
 export default function IdleAlertBadge() {
   const { companies } = useCompanies();
-  const holdsMenungai = companies.some((c) => c.id === "menengai");
+  const holds = companies.some((c) => c.id === ORG);
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const { setDesktopActiveTab } = useAppActions();
-  const { vehicles: liveVehicles } = useFleetLiveShared();
-  const { status, alerts } = useIdleAlerts({ vehicles: liveVehicles });
-  const [dismissed, setDismissed] = useState(false);
+  useIdleRunner(holds);
+  const watch = useIdleWatch();
+  const alerts = watch.alerts.filter((a) => !watch.dismissed.has(a.key));
+  const [hidden, setHidden] = useState(false);
 
-  // Reset local dismissed flag when alert count changes so new alerts re-surface.
+  // A new idle unit brings the badge back after it was closed
   const prevCount = useRef(0);
   useEffect(() => {
-    if (alerts.length !== prevCount.current) {
-      if (alerts.length > prevCount.current) setDismissed(false);
-      prevCount.current = alerts.length;
-    }
+    if (alerts.length > prevCount.current) setHidden(false);
+    prevCount.current = alerts.length;
   }, [alerts.length]);
 
-  if (!holdsMenungai) return null;
-  if (status !== "ok") return null;
-  if (alerts.length === 0) return null;
-  if (dismissed) return null;
+  if (activeCompanyId !== ORG || watch.status !== "done" || !alerts.length || hidden) return null;
 
   const critical = alerts.filter((a) => a.severity === "critical");
   const top = critical[0] ?? alerts[0];
-  const tone = critical.length > 0 ? "critical" : "warning";
-
+  const tone = critical.length ? "critical" : "warning";
   const open = () => {
     setDesktopActiveTab("alerts");
     requestIdleView();
-    setDismissed(true);
+    setHidden(true);
   };
 
   return (
-    <div className={`iab iab--${tone}`} role="alert" aria-live="polite">
+    <div className={`iab iab--${tone}`} role="status" aria-live="polite">
       <span className="iab__mark" aria-hidden="true">
         <i className={`ti ${tone === "critical" ? "ti-alert-triangle" : "ti-clock"}`} />
       </span>
       <div className="iab__body">
         <b className="iab__title">
           {alerts.length === 1
-            ? `${top.plate} idle ${idleDuration(top.durationMs)}`
-            : `${alerts.length} units idle — longest ${idleDuration(top.durationMs)}`}
+            ? `${top.plate} idle ${idleWords(top.idleMs)}`
+            : `${alerts.length} units idle, longest ${idleWords(alerts[0].idleMs)}`}
         </b>
         <span className="iab__sub">
-          {critical.length > 0
-            ? `${critical.length} critical (6+ h)`
-            : `All warning (3–6 h)`}
-          {" · "}{top.plate}
+          {critical.length ? `${critical.length} critical, idle 6 h or more` : "Idle 3 to 6 h"} in working hours · {top.plate}
         </span>
       </div>
       <div className="iab__acts">
-        <CopyBtn text={alertCopyText(top)} />
+        <CopyBtn text={alertText(top)} />
         <button type="button" className="iab__open" onClick={open}>Open</button>
-        <button type="button" className="iab__x" aria-label="Dismiss this badge" onClick={() => setDismissed(true)}>✕</button>
+        <button type="button" className="iab__x" aria-label="Close this badge" onClick={() => setHidden(true)}>✕</button>
       </div>
     </div>
   );
