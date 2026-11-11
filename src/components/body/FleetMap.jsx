@@ -7387,6 +7387,7 @@ export default function FleetMap() {
             DomMarker={DomMarkerRef.current}
             orgId={orgId}
             fences={zones?.features ?? []}
+            vehicles={vehicles}
             editing={fenceDraw.editing}
             canDelete={canDo("geofence:delete")}
             clickRef={fenceClickRef}

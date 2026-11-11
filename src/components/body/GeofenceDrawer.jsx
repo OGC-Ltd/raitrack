@@ -22,12 +22,23 @@
  *
  * A fence drawn here is ours: it can be renamed, reshaped and removed. A fence
  * imported from Wialon keeps its name and shape (the next import would put
- * them back), but its purpose and colour are ours to set.
+ * them back), but its purpose, colour and rule are ours to set.
+ *
+ * A rule says who may not use the fence and what alert that raises (operator,
+ * 2026-11-11: "tankers must not use this route"). Units are picked by fleet
+ * (the organisation's lists, data/fleetGroups) or by Wialon vehicle class,
+ * and the rule is said back in one sentence (lib/fenceRule). The server
+ * checks it on every live position (fleet-server lib/fence-rule-watch).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFence, updateFence, deleteFence } from "../../api/geofences";
 import { reloadEstateZones } from "../../hooks/useEstateZones";
 import { FENCE_PURPOSES, ZONE_STYLE, zoneColor } from "../../lib/zoneLegend";
+import {
+  SEVERITIES, TRIGGERS, blankRule, fleetsOf, ruleOf, rulePayload, ruleProblem, ruleWords, vehicleTypesOf,
+} from "../../lib/fenceRule";
+import { useCompanies } from "../../context/AppContext";
+import { ORG_CODE_BY_COMPANY } from "../../api/org";
 import {
   draftOf, fmtArea, fmtLength, formatPoints, measure, metresBetween, notesOf, outlineOf,
   parsePoints, pointsNeeded, problemsOf, shapeOf, toPayload, withBoxes,
@@ -61,13 +72,14 @@ const plain = (ll) => ({ lat: typeof ll.lat === "function" ? ll.lat() : ll.lat, 
  * @param {{
  *   map: object, maps: object, DomMarker: Function, orgId: string,
  *   fences: object[],            // the org's geofences (GeoJSON features)
+ *   vehicles: object[],          // the org's live units, for the rule's fleets and vehicle classes
  *   editing: object|null,        // the fence being changed, or null for a new one
  *   canDelete: boolean,
  *   clickRef: { current: Function|null },   // FleetMap forwards clicks that land on a fence
  *   onClose: () => void,
  * }} props
  */
-export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, editing, canDelete, clickRef, onClose }) {
+export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, vehicles, editing, canDelete, clickRef, onClose }) {
   const props0 = editing?.properties ?? {};
   const locked = Boolean(editing) && props0.source === "provider";
   const start = editing ? draftOf(editing) : null;
@@ -89,6 +101,16 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ed
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [rule, setRule] = useState(() => ruleOf(props0.rule));
+
+  const { activeCompany } = useCompanies();
+  const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
+  const fleetNames = useMemo(() => fleetsOf(orgCode), [orgCode]);
+  const classes = useMemo(() => vehicleTypesOf(vehicles), [vehicles]);
+  const rulePay = useMemo(() => rulePayload(rule, { vehicles, orgCode }), [rule, vehicles, orgCode]);
+  const ruleErr = ruleProblem(rulePay);
+  const editRule = (patch) => setRule((r) => ({ ...(r ?? blankRule()), ...patch }));
+  const toggleIn = (list, x) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
 
   const draft = useMemo(() => ({ kind, points, radiusM: Number(radiusM), widthM: Number(widthM) }), [kind, points, radiusM, widthM]);
   const shown = color ?? (purpose ? zoneColor(purpose) : "#1d4ed8");
@@ -373,7 +395,7 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ed
 
   const missing = !name.trim() ? "Give the geofence a name."
     : !purpose ? "Choose what the geofence is for."
-    : null;
+    : ruleErr;
   const canSave = !busy && !missing && (locked || (done && problems.length === 0));
 
   const save = async () => {
@@ -381,11 +403,11 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ed
     setBusy(true); setErr(null);
     try {
       if (locked) {
-        await updateFence(orgId, props0.id, { purpose, color: color ?? null });
+        await updateFence(orgId, props0.id, { purpose, color: color ?? null, rule: rulePay });
       } else {
         const body = toPayload(draft, { name, purpose, color });
-        if (editing) await updateFence(orgId, props0.id, { ...body, color: color ?? null });
-        else await createFence(orgId, body);
+        if (editing) await updateFence(orgId, props0.id, { ...body, color: color ?? null, rule: rulePay });
+        else await createFence(orgId, rulePay ? { ...body, rule: rulePay } : body);
       }
       await reloadEstateZones(orgId).catch(() => {});
       onClose({ saved: true });
@@ -421,7 +443,7 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ed
 
       <div className="gfd__body">
         {locked ? (
-          <p className="gfd__note">Its name and shape come from Wialon, so change them there. Its purpose and colour are set here.</p>
+          <p className="gfd__note">Its name and shape come from Wialon, so change them there. Its purpose, colour and rule are set here.</p>
         ) : (
           <>
             <div className="gfd__shapes" role="radiogroup" aria-label="Shape">
@@ -485,6 +507,96 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ed
               <i className="ti ti-palette" aria-hidden="true" />
             </label>
           </div>
+        </fieldset>
+
+        <fieldset className="gfd__field gfd__rule">
+          <legend>Rule</legend>
+          {!rule ? (
+            <button type="button" className="gfd__btn gfd__rule-add" onClick={() => setRule(blankRule())}>
+              <i className="ti ti-shield-x" aria-hidden="true" />
+              {purpose === "restricted" ? "Say who may not use it" : "Add a rule"}
+            </button>
+          ) : (
+            <>
+              <p className="gfd__rule-words" aria-live="polite">
+                <i className="ti ti-shield-x" aria-hidden="true" />
+                <span>{ruleWords(rulePay ?? rule)}</span>
+              </p>
+
+              <div className="gfd__rule-row">
+                <span className="gfd__rule-label">Who</span>
+                <div className="gfd__chips">
+                  {fleetNames.map((f) => (
+                    <button key={`f:${f}`} type="button" className="gfd__chip" aria-pressed={rule.fleets.includes(f)}
+                            title={`Every unit on the ${f} list`}
+                            onClick={() => editRule({ fleets: toggleIn(rule.fleets, f) })}>
+                      <i className="ti ti-list" aria-hidden="true" />{f}
+                    </button>
+                  ))}
+                  {classes.map(({ type, n }) => (
+                    <button key={`t:${type}`} type="button" className="gfd__chip" aria-pressed={rule.vehicleTypes.includes(type)}
+                            title={`Vehicle class ${type} from Wialon, ${n} ${n === 1 ? "unit" : "units"}`}
+                            onClick={() => editRule({ vehicleTypes: toggleIn(rule.vehicleTypes, type) })}>
+                      {type}<span className="gfd__chip-n">{n}</span>
+                    </button>
+                  ))}
+                  {/* A class saved before that no live unit has now */}
+                  {rule.vehicleTypes.filter((t) => !classes.some((c) => c.type === t)).map((t) => (
+                    <button key={`t:${t}`} type="button" className="gfd__chip" aria-pressed="true"
+                            onClick={() => editRule({ vehicleTypes: toggleIn(rule.vehicleTypes, t) })}>{t}</button>
+                  ))}
+                </div>
+              </div>
+              {!rule.fleets.length && !rule.vehicleTypes.length && (
+                <p className="gfd__sub">Nothing picked: the rule covers every unit.</p>
+              )}
+
+              <div className="gfd__rule-row">
+                <span className="gfd__rule-label">Alert when a unit</span>
+                <div className="gfd__seg" role="radiogroup" aria-label="Alert when a unit">
+                  {TRIGGERS.map((t) => (
+                    <button key={t.id} type="button" role="radio" aria-checked={rule.trigger === t.id}
+                            onClick={() => editRule({ trigger: t.id })}>{t.label}</button>
+                  ))}
+                </div>
+              </div>
+              <p className="gfd__sub">
+                {rule.trigger === "enter"
+                  ? "Once per entry, when a unit is seen crossing in."
+                  : "Once per visit, also for a unit already inside when the rule starts."}
+              </p>
+
+              <div className="gfd__rule-row">
+                <label className="gfd__check">
+                  <input type="checkbox" checked={Boolean(rule.hours)}
+                         onChange={(e) => editRule({ hours: e.target.checked ? { from: "18:00", to: "06:00" } : null })} />
+                  <span>Only between</span>
+                </label>
+                {rule.hours && (
+                  <span className="gfd__hours">
+                    <input type="time" value={rule.hours.from} aria-label="From"
+                           onChange={(e) => editRule({ hours: { ...rule.hours, from: e.target.value } })} />
+                    <span>and</span>
+                    <input type="time" value={rule.hours.to} aria-label="To"
+                           onChange={(e) => editRule({ hours: { ...rule.hours, to: e.target.value } })} />
+                  </span>
+                )}
+              </div>
+
+              <div className="gfd__rule-row">
+                <span className="gfd__rule-label">No-go alert</span>
+                <div className="gfd__seg" role="radiogroup" aria-label="Alert level">
+                  {SEVERITIES.map((v) => (
+                    <button key={v.id} type="button" role="radio" aria-checked={rule.alert.severity === v.id}
+                            onClick={() => editRule({ alert: { type: "nogo", severity: v.id } })}>{v.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {ruleErr && <p className="gfd__bad" role="alert">{ruleErr}</p>}
+              <button type="button" className="gfd__link" onClick={() => setRule(null)}>Remove the rule</button>
+            </>
+          )}
         </fieldset>
 
         {!locked && (

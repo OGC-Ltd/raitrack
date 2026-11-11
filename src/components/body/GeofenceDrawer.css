@@ -266,6 +266,84 @@
 .gfd__btn--armed:hover:not(:disabled) { border-color: var(--gfd-crit); background: var(--gfd-crit); color: var(--gfd-on-accent); }
 .gfd__btn--armed:active:not(:disabled) { background: var(--gfd-crit-deep); }
 
+/* The rule: who may not use the fence, and the alert it raises. The sentence
+ * leads, on the alert red's wash, so what was picked is read back before the
+ * controls that pick it. */
+.gfd__rule { gap: 8px; }
+.gfd__rule-add { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
+.gfd__rule-words {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--gfd-crit);
+  border-radius: 6px;
+  background: var(--gfd-crit-wash);
+  color: var(--gfd-ink);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.gfd__rule-words .ti { flex: none; margin-top: 1px; color: var(--gfd-crit); font-size: 16px; }
+.gfd__rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.gfd__rule-label { width: 100%; color: var(--gfd-text); font-size: 12px; font-weight: 600; }
+.gfd__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gfd__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--gfd-field-line);
+  border-radius: 999px;
+  background: var(--gfd-surface);
+  color: var(--gfd-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gfd__chip:hover { border-color: var(--gfd-sub); color: var(--gfd-ink); }
+.gfd__chip[aria-pressed="true"] { border-color: var(--gfd-accent); background: var(--gfd-accent-wash); color: var(--gfd-accent); }
+.gfd__chip-n { color: var(--gfd-sub); font-weight: 500; font-variant-numeric: tabular-nums; }
+.gfd__chip[aria-pressed="true"] .gfd__chip-n { color: var(--gfd-accent); }
+.gfd__seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--gfd-well); }
+.gfd__seg button {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--gfd-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gfd__seg button:hover { color: var(--gfd-ink); }
+.gfd__seg button[aria-checked="true"] { background: var(--gfd-surface); color: var(--gfd-accent); box-shadow: 0 1px 3px var(--gfd-shadow-soft); }
+.gfd__check { display: inline-flex; align-items: center; gap: 6px; color: var(--gfd-ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+.gfd__hours { display: inline-flex; align-items: center; gap: 6px; color: var(--gfd-sub); }
+.gfd__hours input {
+  padding: 4px 6px;
+  border: 1px solid var(--gfd-field-line);
+  border-radius: 6px;
+  background: var(--gfd-surface);
+  color: var(--gfd-ink);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.gfd__link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gfd-crit);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gfd__link:hover { text-decoration: underline; }
+
 .gfd button:focus-visible,
 .gfd input:focus-visible,
 .gfd select:focus-visible,

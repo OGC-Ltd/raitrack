@@ -8,9 +8,14 @@
 // them, so they cannot be escalated. Read marks are the bell's (lib/feedReads),
 // kept per organisation in this browser: an exit is the same line there.
 //
+// No-go alerts from a geofence's rule (NOGO_ZONE, fleet-server
+// lib/fence-rule-watch: "tankers must not use this road") are listed with
+// them, marked as such: the same history, the same day, the same geofences.
+//
 // Pure: no React, no network.
 
-export const EXIT_TYPES = ['ZONE_EXIT'];
+export const NOGO_TYPE = 'NOGO_ZONE';
+export const EXIT_TYPES = ['ZONE_EXIT', NOGO_TYPE];
 /** Pages of the history read per organisation, PAGE_SIZE each: a busy fleet's day can run to thousands. */
 export const PAGE_SIZE = 500;
 export const MAX_PAGES = 6;
@@ -27,7 +32,12 @@ export function exitRows(byOrg) {
       const key = `${orgId}|${n.id ?? `${n.plate}|${at}|${n.text}`}`;
       if (seen.has(key) || at == null) continue;
       seen.add(key);
-      rows.push({ key, orgId, at, id: n.id ?? null, ts: new Date(at).toISOString(), plate: n.plate ?? null, vehicleId: n.vehicleId ?? null, zoneId: zoneIdOf(n.id), text: String(n.text ?? '').trim() || 'Left a geofence' });
+      const nogo = n.alertType === NOGO_TYPE;
+      rows.push({
+        key, orgId, at, id: n.id ?? null, ts: new Date(at).toISOString(), plate: n.plate ?? null, vehicleId: n.vehicleId ?? null,
+        zoneId: zoneIdOf(n.id), nogo, severity: n.severity ?? null,
+        text: String(n.text ?? '').trim() || (nogo ? 'Entered a no-go zone' : 'Left a geofence'),
+      });
     }
   }
   return rows.sort((a, b) => b.at - a.at);
@@ -37,11 +47,16 @@ export function exitRows(byOrg) {
  * The geofence an exit was announced for. The server names each crossing
  * `zn-<vehicle>-<geofence>-o-<ms>` (fleet-server lib/zone-presence), and the
  * geofence is the part before `-o-`: geofence ids are cuids, with no dash.
+ * A no-go alert is `fr-<vehicle>-<geofence>-<ms>` (lib/fence-rule-watch).
  */
 export function zoneIdOf(id) {
-  const m = /-([^-]+)-o-\d+$/.exec(String(id ?? ''));
+  const s = String(id ?? '');
+  const m = /-([^-]+)-o-\d+$/.exec(s) ?? /^fr-[^-]+-([^-]+)-\d+$/.exec(s);
   return m ? m[1] : null;
 }
+
+/** What a row is, in the table and its panel. */
+export const rowLabel = (row) => (row?.nogo ? 'No-go zone' : 'Geofence exit');
 
 /**
  * Geofence id → { name, category } from the organisations' /geofences/geojson
@@ -69,7 +84,7 @@ export function exitCopyText(row, { type, zone, org } = {}) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(row.at);
   return [
-    `Geofence exit · ${row.plate ?? 'unit'}`,
+    `${rowLabel(row)} · ${row.plate ?? 'unit'}`,
     `When: ${when}`,
     zone || type ? `Geofence: ${[zone, type && `(${type})`].filter(Boolean).join(' ')}` : null,
     org ? `Organisation: ${org}` : null,
