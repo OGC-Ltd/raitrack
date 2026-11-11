@@ -694,16 +694,19 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     <button type="button" className="sp4-ghost-btn dlv-roster__paste" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
                       <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
                     </button>
-                    <span className="dlv-roster__count"><b>{picked}</b> stop{picked === 1 ? '' : 's'}{near ? `, ${near} at storage` : ''}</span>
+                    <span className="dlv-roster__count">
+                      <span><b>{picked}</b> stop{picked === 1 ? '' : 's'}{near ? `, ${near} at storage` : ''}</span>
+                      {picked > 0 && (
+                        <span className={`dlv-meter${picked > 24 ? ' is-dense' : ''}`} aria-hidden="true">
+                          {v.customers.map((name) => <i key={name} title={name} className={customers.find((c) => c.name === name)?.nearStorage ? 'is-storage' : undefined} />)}
+                          {(v.pins ?? []).map((pin, i) => <i key={`pin${i}`} className="is-pin" title={pin.name || `${pin.lat}, ${pin.lng}`} />)}
+                        </span>
+                      )}
+                    </span>
                     <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
                             aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
-                    {v.customers.length > 0 && (
-                      <ol className="dlv-roster__wide dlv-roster__picked" aria-label={`Geofences picked for ${v.plate}`}>
-                        {v.customers.map((name) => <li key={name} title={name}>{name}</li>)}
-                      </ol>
-                    )}
                     {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
                     {isPasting && <div className="dlv-roster__wide"><PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
                   </li>

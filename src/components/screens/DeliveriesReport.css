@@ -86,23 +86,16 @@
 .dlv-roster .mvr-types__pop { width: 460px; }
 .dlv-roster .mvr-type { align-items: flex-start; }
 .dlv-roster .mvr-type__name { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-/* The geofences picked, under the vehicle's row: one line per name, never wrapped (a long name wrapping
-   grew the row, 12 Nov). Tracks of at least 220px fill the row, so four stops sit on one line at
-   desktop width; a name longer than its track ends in an ellipsis and keeps the full name on hover
-   (the picker shows it whole) */
-.dlv-roster__picked {
-  margin: 0; padding: 0; list-style: none; counter-reset: picked;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); column-gap: 24px;
-  font-size: 12px; line-height: 20px; color: var(--sp4-text-2);
-}
-.dlv-roster__picked li {
-  counter-increment: picked; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.dlv-roster__picked li::before {
-  content: counter(picked) "."; display: inline-block; min-width: 18px;
-  color: var(--sp4-text-3); font-variant-numeric: tabular-nums;
-}
+/* The stops as a meter under the count, one mark per stop (operator, 12 Nov: no list of every
+   geofence under the row, a count and a bar instead). Each mark's hover names its geofence; the
+   picker lists them whole. Storage stops and pasted points are told apart by tone, never by a dot */
+.dlv-roster__count { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+/* A fixed 120px box, so every row's columns line up; past 24 stops the marks thin to fit 60 */
+.dlv-meter { display: flex; justify-content: flex-end; gap: 2px; width: 120px; height: 14px; overflow: hidden; }
+.dlv-meter i { flex: 0 1 3px; min-width: 1px; border-radius: 1px; background: var(--sp4-accent); }
+.dlv-meter.is-dense { gap: 1px; }
+.dlv-meter i.is-storage { background: var(--sp4-text-3); }
+.dlv-meter i.is-pin { background: var(--sp4-line-hi); }
 
 /* Before a run the body holds the roster AND the "Give each listed vehicle…" note. The shell's
    empty-note rule (.sp4-body:has(> .empty-note) { flex: 1 0 auto }) then let the body grow past the
