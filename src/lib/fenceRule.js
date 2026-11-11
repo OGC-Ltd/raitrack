@@ -7,7 +7,7 @@
 //
 // Pure: no React, no network.
 
-import { groupsFor, scopeUnits } from './fleetGroups';
+import { displayOf, groupsFor, keyOf, scopeUnits } from './fleetGroups';
 
 export const TRIGGERS = [
   { id: 'enter', label: 'Enters it', verb: 'must not enter', allowed: 'may enter' },
@@ -21,7 +21,7 @@ export const SEVERITIES = [
 
 /** A new rule, before anything is picked: everyone, on entry, a critical no-go alert. */
 export function blankRule() {
-  return { trigger: 'enter', vehicleTypes: [], fleets: [], vehicleIds: [], hours: null, alert: { type: 'nogo', severity: 'critical' } };
+  return { trigger: 'enter', vehicleTypes: [], fleets: [], vehicleIds: [], units: [], hours: null, alert: { type: 'nogo', severity: 'critical' } };
 }
 
 /** A stored rule (from the GeoJSON properties) as the form's state, or null. */
@@ -33,6 +33,7 @@ export function ruleOf(raw) {
     vehicleTypes: Array.isArray(raw.vehicleTypes) ? raw.vehicleTypes : [],
     fleets: Array.isArray(raw.fleets) ? raw.fleets : [],
     vehicleIds: Array.isArray(raw.vehicleIds) ? raw.vehicleIds : [],
+    units: Array.isArray(raw.units) ? raw.units.filter((u) => u?.id && u?.plate) : [],
     hours: raw.hours?.from && raw.hours?.to ? { from: raw.hours.from, to: raw.hours.to } : null,
     alert: { type: 'nogo', severity: raw.alert?.severity === 'warning' ? 'warning' : b.alert.severity },
   };
@@ -40,9 +41,17 @@ export function ruleOf(raw) {
 
 const upper = (t) => String(t ?? '').trim().toUpperCase();
 
-/** "Tankers", "Tankers and TANKER units", "No unit" (every unit is barred). */
+/** Units picked one by one are named up to this many; more are counted. */
+const NAMED_UNITS = 3;
+
+/** "Tankers", "Tankers and TANKER units", "KCT 507W and KCN 901F", "No unit" (every unit is barred). */
 export function whoWords(rule) {
-  const parts = [...(rule.fleets ?? []), ...(rule.vehicleTypes ?? []).map((t) => `${upper(t)} units`)];
+  const units = rule.units ?? [];
+  const parts = [
+    ...(rule.fleets ?? []),
+    ...(rule.vehicleTypes ?? []).map((t) => `${upper(t)} units`),
+    ...(units.length <= NAMED_UNITS ? units.map((u) => u.plate) : [`${units.length} chosen units`]),
+  ];
   const named = rule.fleets?.length ? 0 : new Set(rule.vehicleIds ?? []).size;
   if (named) parts.push(`${named} chosen ${named === 1 ? 'unit' : 'units'}`);
   if (!parts.length) return 'No unit';
@@ -113,7 +122,28 @@ export function rulePayload(rule, { vehicles, orgCode } = {}) {
     fleets: rule.fleets,
     // A fleet's units now; while the list cannot be read, the ids saved before
     vehicleIds: rule.fleets.length ? (fromFleets.length ? fromFleets : rule.vehicleIds) : [],
+    units: rule.units.map(({ id, plate }) => ({ id, plate })),
     hours: rule.hours,
     alert: { type: 'nogo', severity: rule.alert.severity },
   };
+}
+
+/**
+ * Units to pick one by one: those whose plate or name holds the search
+ * ("kct 507", "KCT507W", "FT 13"), not picked yet, by plate, at most `limit`.
+ * Two trackers on one truck show as two lines, each with what tells them apart.
+ */
+export function unitChoices(vehicles, q, picked = [], limit = 8) {
+  const s = keyOf(q);
+  if (!s) return [];
+  const taken = new Set(picked.map((u) => u.id));
+  const out = [];
+  for (const v of vehicles ?? []) {
+    const id = v?.vehicleId != null ? String(v.vehicleId) : null;
+    if (!id || taken.has(id)) continue;
+    const plate = displayOf(v) || id;
+    if (!keyOf(plate).includes(s) && !keyOf(v?.name).includes(s)) continue;
+    out.push({ id, plate, name: v?.name && v.name !== plate ? v.name : null, type: upper(v?.vehicleType) || null });
+  }
+  return out.sort((a, b) => a.plate.localeCompare(b.plate)).slice(0, limit);
 }

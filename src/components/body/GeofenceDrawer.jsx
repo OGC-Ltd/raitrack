@@ -26,7 +26,8 @@
  *
  * A rule says who may not use the fence and what alert that raises (operator,
  * 2026-11-11: "tankers must not use this route"). Units are picked by fleet
- * (the organisation's lists, data/fleetGroups) or by Wialon vehicle class,
+ * (the organisation's lists, data/fleetGroups), by Wialon vehicle class, or
+ * one by one by plate,
  * and the rule is said back in one sentence (lib/fenceRule). The server
  * checks it on every live position (fleet-server lib/fence-rule-watch).
  */
@@ -35,7 +36,7 @@ import { createFence, updateFence, deleteFence } from "../../api/geofences";
 import { reloadEstateZones } from "../../hooks/useEstateZones";
 import { FENCE_PURPOSES, ZONE_STYLE, zoneColor } from "../../lib/zoneLegend";
 import {
-  SEVERITIES, TRIGGERS, blankRule, fleetsOf, ruleOf, rulePayload, ruleProblem, ruleWords, vehicleTypesOf,
+  SEVERITIES, TRIGGERS, blankRule, fleetsOf, ruleOf, rulePayload, ruleProblem, ruleWords, unitChoices, vehicleTypesOf,
 } from "../../lib/fenceRule";
 import { useCompanies } from "../../context/AppContext";
 import { ORG_CODE_BY_COMPANY } from "../../api/org";
@@ -111,6 +112,13 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ve
   const ruleErr = ruleProblem(rulePay);
   const editRule = (patch) => setRule((r) => ({ ...(r ?? blankRule()), ...patch }));
   const toggleIn = (list, x) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+  // Units picked one by one: a plate search over the live units
+  const [unitQ, setUnitQ] = useState("");
+  const unitHits = useMemo(() => unitChoices(vehicles, unitQ, rule?.units ?? []), [vehicles, unitQ, rule?.units]);
+  const pickUnit = (u) => {
+    editRule({ units: [...(rule?.units ?? []), { id: u.id, plate: u.plate }] });
+    setUnitQ("");
+  };
 
   const draft = useMemo(() => ({ kind, points, radiusM: Number(radiusM), widthM: Number(widthM) }), [kind, points, radiusM, widthM]);
   const shown = color ?? (purpose ? zoneColor(purpose) : "#1d4ed8");
@@ -547,7 +555,46 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ve
                   ))}
                 </div>
               </div>
-              {!rule.fleets.length && !rule.vehicleTypes.length && (
+              <div className="gfd__rule-row gfd__units">
+                <span className="gfd__rule-label">Units</span>
+                {rule.units.length > 0 && (
+                  <div className="gfd__chips">
+                    {rule.units.map((u) => (
+                      <span key={u.id} className="gfd__chip gfd__chip--unit" aria-pressed="true">
+                        {u.plate}
+                        <button type="button" className="gfd__chip-x" aria-label={`Remove ${u.plate}`} title={`Remove ${u.plate}`}
+                                onClick={() => editRule({ units: rule.units.filter((x) => x.id !== u.id) })}>
+                          <i className="ti ti-x" aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="gfd__unit-find">
+                  <i className="ti ti-search" aria-hidden="true" />
+                  <input type="text" value={unitQ} placeholder="Find a unit by plate, e.g. KCT 507W"
+                         aria-label="Find a unit to add" aria-controls="gfd-unit-list"
+                         onChange={(e) => setUnitQ(e.target.value)}
+                         onKeyDown={(e) => {
+                           if (e.key === "Enter" && unitHits[0]) { e.preventDefault(); pickUnit(unitHits[0]); }
+                           if (e.key === "Escape" && unitQ) { e.preventDefault(); e.stopPropagation(); setUnitQ(""); }
+                         }} />
+                </div>
+                {unitQ.trim() && (
+                  <ul id="gfd-unit-list" className="gfd__unit-list" aria-label="Units found">
+                    {unitHits.length ? unitHits.map((u) => (
+                      <li key={u.id}>
+                        <button type="button" onClick={() => pickUnit(u)}>
+                          <i className="ti ti-plus" aria-hidden="true" />
+                          <span className="gfd__unit-plate">{u.plate}</span>
+                          {(u.name || u.type) && <span className="gfd__unit-sub">{[u.name, u.type].filter(Boolean).join(" · ")}</span>}
+                        </button>
+                      </li>
+                    )) : <li className="gfd__unit-none">No unit matches “{unitQ.trim()}”.</li>}
+                  </ul>
+                )}
+              </div>
+              {!rule.fleets.length && !rule.vehicleTypes.length && !rule.units.length && (
                 <p className="gfd__sub">Nothing picked: the rule covers every unit.</p>
               )}
 

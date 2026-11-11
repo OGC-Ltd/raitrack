@@ -30,6 +30,13 @@ describe('the geofence form\'s rule', () => {
     expect(html).toContain('Remove the rule');
   });
 
+  it('shows units picked one by one, each with its own remove', () => {
+    const html = draw(fence({ trigger: 'enter', units: [{ id: 'v2', plate: 'KBT 112R' }] }));
+    expect(html).toContain('KBT 112R must not enter. Raise a no-go alert.');
+    expect(html).toContain('aria-label="Remove KBT 112R"');
+    expect(html).toContain('Find a unit by plate');
+  });
+
   it('offers a rule on a fence without one', () => {
     const html = draw(fence(null));
     expect(html).toContain('Say who may not use it');

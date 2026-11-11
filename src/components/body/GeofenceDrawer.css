@@ -305,6 +305,65 @@
 .gfd__chip[aria-pressed="true"] { border-color: var(--gfd-accent); background: var(--gfd-accent-wash); color: var(--gfd-accent); }
 .gfd__chip-n { color: var(--gfd-sub); font-weight: 500; font-variant-numeric: tabular-nums; }
 .gfd__chip[aria-pressed="true"] .gfd__chip-n { color: var(--gfd-accent); }
+/* Units picked one by one: chips with their own remove button, and a plate search */
+.gfd__chip--unit { gap: 2px; padding-right: 2px; cursor: default; font-family: var(--font-mono); }
+.gfd__chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.gfd__chip-x:hover { background: var(--gfd-surface); }
+.gfd__chip-x .ti { font-size: 12px; }
+.gfd__units { flex-direction: column; align-items: stretch; }
+.gfd__unit-find { position: relative; }
+.gfd__unit-find .ti {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  color: var(--gfd-sub);
+  font-size: 14px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.gfd__field .gfd__unit-find input { padding-left: 28px; }
+.gfd__unit-list {
+  max-height: 220px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--gfd-line);
+  border-radius: 6px;
+  background: var(--gfd-surface);
+  list-style: none;
+}
+.gfd__unit-list button {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--gfd-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.gfd__unit-list button:hover { background: var(--gfd-accent-wash); }
+.gfd__unit-list .ti { align-self: center; color: var(--gfd-accent); font-size: 13px; }
+.gfd__unit-plate { font-family: var(--font-mono); font-weight: 600; white-space: nowrap; }
+.gfd__unit-sub { overflow: hidden; color: var(--gfd-sub); text-overflow: ellipsis; white-space: nowrap; }
+.gfd__unit-none { padding: 6px 8px; color: var(--gfd-sub); font-size: 12px; }
+
 .gfd__seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--gfd-well); }
 .gfd__seg button {
   padding: 4px 12px;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { blankRule, fleetVehicleIds, ruleOf, rulePayload, ruleProblem, ruleWords, vehicleTypesOf } from './fenceRule';
+import { blankRule, fleetVehicleIds, ruleOf, rulePayload, ruleProblem, ruleWords, unitChoices, vehicleTypesOf } from './fenceRule';
 import { exitRows, rowLabel, zoneIdOf } from './geofenceExits';
 
 const units = [
@@ -25,7 +25,7 @@ describe('a geofence rule on the form', () => {
   it('sends the fleets as unit ids, and classes in capitals', () => {
     const p = rulePayload({ ...blankRule(), fleets: ['Tankers'], vehicleTypes: ['lorry'] }, { vehicles: units, orgCode: 'MENENGAI' });
     expect(p).toEqual({
-      trigger: 'enter', vehicleTypes: ['LORRY'], fleets: ['Tankers'], vehicleIds: ['v1', 'v2', 'v4'], hours: null,
+      trigger: 'enter', vehicleTypes: ['LORRY'], fleets: ['Tankers'], vehicleIds: ['v1', 'v2', 'v4'], units: [], hours: null,
       alert: { type: 'nogo', severity: 'critical' },
     });
     expect(rulePayload(null)).toBeNull();
@@ -34,6 +34,23 @@ describe('a geofence rule on the form', () => {
   it('keeps the saved units while the live list cannot be read', () => {
     const saved = ruleOf({ fleets: ['Tankers'], vehicleIds: ['v9'] });
     expect(rulePayload(saved, { vehicles: [], orgCode: 'MENENGAI' }).vehicleIds).toEqual(['v9']);
+  });
+
+  it('names units picked one by one, and counts many', () => {
+    const u = (n) => Array.from({ length: n }, (_, i) => ({ id: `v${i}`, plate: `KCT 50${i}W` }));
+    expect(ruleWords({ ...blankRule(), units: u(1) })).toBe('KCT 500W must not enter. Raise a no-go alert.');
+    expect(ruleWords({ ...blankRule(), fleets: ['Tankers'], units: u(2) })).toBe('Tankers, KCT 500W and KCT 501W must not enter. Raise a no-go alert.');
+    expect(ruleWords({ ...blankRule(), units: u(5) })).toBe('5 chosen units must not enter. Raise a no-go alert.');
+    expect(rulePayload({ ...blankRule(), units: u(1) }).units).toEqual([{ id: 'v0', plate: 'KCT 500W' }]);
+  });
+
+  it('finds units to pick by plate, leaving out those picked', () => {
+    expect(unitChoices(units, 'kcn 901')).toEqual([
+      { id: 'v1', plate: 'KCN 901F', name: 'CPO - KCN 901F', type: 'TANKER' },
+      { id: 'v2', plate: 'KCN 901F', name: 'CPO - KCN 901F-CAMERA', type: 'TANKER' },
+    ]);
+    expect(unitChoices(units, 'KBT112R', [{ id: 'v3', plate: 'KBT 112R' }])).toEqual([]);
+    expect(unitChoices(units, '  ')).toEqual([]);
   });
 
   it('says what stops a save', () => {
