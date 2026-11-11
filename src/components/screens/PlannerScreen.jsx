@@ -33,11 +33,15 @@ import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWin
 import { trackersFor, actualFor, readSpan } from '../../lib/plannerReport';
 import { marksOf, shortDay } from '../../lib/plannerDayMarks';
 import { showPlanOnMap, focusPlanStop, requestFenceEdit, planOverlayNow, takePlanToOpen } from '../../lib/planOverlay';
-import { useAppActions } from '../../context/AppContext';
+import { useAppActions, useCompanies } from '../../context/AppContext';
 import DateRangePicker from '../layout/DateRangePicker';
 import EmptyNote from '../shared/EmptyNote';
 import PlannerStopPanel from './PlannerStopPanel';
 import { downloadTableCsv } from '../../utils/tableExport';
+import { ORG_CODE_BY_COMPANY } from '../../api/org';
+import { plannerFgDoc } from '../../lib/plannerFinishedGoods';
+import { docHtml } from '../../lib/docHtml';
+import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import '../body/SensorPanel.css';
 import './PlannerScreen.css';
 
@@ -702,6 +706,8 @@ export default function PlannerScreen() {
   const [open, setOpen] = useState(() => takePlanToOpen() ?? planOverlayNow().overlay?.planId ?? null);
   const [uploading, setUploading] = useState(false);
   const canWrite = can('planner:write');
+  const { activeCompany } = useCompanies();
+  const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
 
   const plans = useQuery({
     queryKey: ['planner', 'plans', orgId, range.from, range.to],
@@ -752,6 +758,27 @@ export default function PlannerScreen() {
     if (results.length === 1 && !leftOver) setOpen(results[0].planId);
   };
 
+  // The plans listed, printed as the Finished Goods Deliveries report (operator, 12 Nov 2026: "this is
+  // the template for the deliveries"): read as Deliveries reads a sheet, over the days picked
+  const [fg, setFg] = useState({ busy: null, error: null });
+  const printFg = async () => {
+    if (fg.busy || !list.length) return;
+    try {
+      const from = dayStart(range.from);
+      const at = Math.min(Date.now(), dayStart(range.to) + DAY);
+      const doc = await plannerFgDoc({
+        orgId, plans: list, vehicles, zones, from, at, orgCode,
+        fleet: activeCompany?.name ?? orgCode ?? 'Fleet',
+        onProgress: (words, done, total) => setFg({ busy: total ? `${words}: ${done} of ${total}` : `${words}…`, error: null }),
+      });
+      setFg({ busy: 'Making the PDF…', error: null });
+      await saveLetterheadPdf(docHtml(doc, { logos: letterheadLogos(), landscape: true }), { filename: `${doc.filename}.pdf`, landscape: true });
+      setFg({ busy: null, error: null });
+    } catch (err) {
+      setFg({ busy: null, error: `The report could not be made: ${err?.message ?? err}` });
+    }
+  };
+
   const remove = async (p) => {
     // A keyed plan is the Deliveries list's: it comes back on that list's next save unless taken off there
     const words = isKeyed(p)
@@ -789,6 +816,12 @@ export default function PlannerScreen() {
               <DateRangePicker from={range.from} to={range.to} today={today} maxDays={62}
                                onChange={(from, to) => setRange({ from, to })} />
               <span className="pl-grow" />
+              {fg.busy ? <span className="pl-quiet" role="status">{fg.busy}</span>
+                : fg.error ? <span className="pl-warn" role="status">{fg.error}</span> : null}
+              <button type="button" className="sp4-ghost-btn" onClick={printFg} disabled={Boolean(fg.busy) || !list.length || !zones}
+                      title="The plans listed, as the Finished Goods Deliveries report (PDF)">
+                <i className="ti ti-file-type-pdf" aria-hidden="true" /> Finished Goods report
+              </button>
               {canWrite && (
                 <button type="button" className="pl-primary" onClick={() => setUploading(true)}>
                   <i className="ti ti-upload" aria-hidden="true" /> Upload sheet
