@@ -34,6 +34,11 @@ export const cells = (list) => `<table class="cells"><tr>${list.map(([k, v]) => 
 /** An outlined tag, for a note on a row ("Check sensor", "2 trackers"). */
 export const tag = (text, strong = false) => `<span class="tag${strong ? ' s' : ''}">${esc(text)}</span>`;
 
+/** How many lines a printed report's Notes section gives to write on by hand. */
+export const NOTE_LINES = 6;
+/** That many full-width ruled lines, 8 mm apart, whatever the page width. */
+export const ruledLines = (n = NOTE_LINES) => Array.from({ length: n }, () => '<div class="rule"></div>').join('');
+
 const css = (landscape) => `
 @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 0 }
 :root { --bg:#fff; --ink:#1c1c1c; --mut:#5c5c5c; --rule:#bfbfbf; --soft:#e6e6e6; --shade:#f3f3f3; --band:#212121 }
@@ -73,6 +78,7 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 .tag.s { border-color:var(--ink); color:var(--ink); background:var(--shade) }
 .none { color:var(--mut); font-style:italic; padding:1mm 0 }
 .note { font-size:7pt; color:var(--mut); margin-top:.8mm }
+.rule { height:8mm; border-bottom:.5pt solid var(--rule); break-inside:avoid }
 .contact { font-size:7pt; font-style:italic; color:var(--mut); margin-top:6mm; padding-top:2mm; border-top:.5pt solid var(--rule) }
 .foot { display:flex; justify-content:space-between; color:var(--mut); font-size:7pt; padding:2mm 13mm 4mm; border-top:.6pt solid var(--rule); flex:none }
 #flow { position:absolute; left:-10000px; top:0; width:${landscape ? '271mm' : '184mm'} }

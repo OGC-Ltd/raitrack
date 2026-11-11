@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { drawable, driverDoc, driversDoc, nameCase } from './driverReportDocs';
+import { NOTE_LINES } from './letterhead';
 
 const NOW = Date.UTC(2026, 10, 10, 9, 0); // 10 Nov 2026 12:00 EAT
 
@@ -44,7 +45,21 @@ describe('nameCase', () => {
     expect(nameCase('JOSEPH OTIENO')).toBe('Joseph Otieno');
     expect(nameCase('mary McOmbaka')).toBe('Mary McOmbaka');
   });
+
+  it('capitalises after an apostrophe, straight or curly', () => {
+    expect(nameCase("PETER O'BRIEN")).toBe("Peter O'Brien");
+    expect(nameCase('PETER O’BRIEN')).toBe('Peter O’Brien');
+  });
 });
+
+/** The Notes section: a numbered heading, then the ruled rows to write on, last in the document. */
+const expectNotesLast = (doc, n) => {
+  const [h2, lines] = doc.blocks.slice(-2);
+  expect(h2).toEqual({ kind: 'h2', title: `${n}. Notes` });
+  expect(lines.kind).toBe('table');
+  expect(lines.rows).toHaveLength(NOTE_LINES);
+  expect(lines.rows.every((r) => r.length === 1 && !r[0].text.trim())).toBe(true);
+};
 
 describe('driversDoc', () => {
   const doc = driversDoc(roster, { details, fleet: 'Sukari', orgCode: 'SUKARI', now: NOW, weighbridge: true });
@@ -79,6 +94,10 @@ describe('driversDoc', () => {
     const typed = driversDoc(roster, { fleet: 'Sukari', orgCode: 'SUKARI', typeName: 'Trucks', now: NOW });
     expect(typed.meta.find((m) => m.label === 'Vehicles').value).toBe('Trucks');
     expect(typed.filename).toBe('Drivers Report Sukari Trucks 2026-11-10');
+  });
+
+  it('ends with ruled Notes, after the footnotes', () => {
+    expectNotesLast(doc, 4);
   });
 });
 
@@ -121,5 +140,12 @@ describe('driverDoc', () => {
     const quiet = driverDoc({ ...detail, incidents: {}, byDay: [] }, { fleet: 'Sukari', orgCode: 'SUKARI', now: NOW });
     expect(quiet.blocks.filter((b) => b.kind === 'none')).toHaveLength(3);
     expect(quiet.blocks.some((b) => b.title === '6. Daily Activity')).toBe(false);
+  });
+
+  it('ends with ruled Notes, numbered after Daily Activity when there is one', () => {
+    expectNotesLast(doc, 7);
+    const quiet = driverDoc({ ...detail, incidents: {}, byDay: [] }, { fleet: 'Sukari', orgCode: 'SUKARI', now: NOW });
+    fitsSchema(quiet);
+    expectNotesLast(quiet, 6);
   });
 });

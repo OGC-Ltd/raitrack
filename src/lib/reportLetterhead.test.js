@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { reportHtml, reportNumber } from './reportLetterhead';
+import { NOTE_LINES } from './letterhead';
 import { REPORTS, overspeedEventTable } from './reportTables';
 import { sections, overspeedRows, overspeedEvents } from './fleetReports';
 
@@ -29,6 +30,18 @@ describe('report on the letterhead', () => {
     expect(out.html).toContain('Not tracked on the platform');
     expect(out.html).toContain('Menengai &lt;Oil&gt;');
     expect(out.html).not.toContain('Menengai <Oil>');
+    // Room to write on the printed copy: full-width ruled lines, last section
+    expect(out.html.match(/<div class="rule"><\/div>/g)).toHaveLength(NOTE_LINES);
+    expect(out.html).toMatch(/<h2>\d+\. Notes<\/h2>/);
+  });
+
+  it('gives only the Driver Conduct Report a Notes section', () => {
+    const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, [{ durationSec: 60, distanceM: 1_400, peakKmh: 83, limitKmh: 80 }]]]));
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
+                   ctx: { from: at('2026-10-30T00:00:00'), to: at('2026-10-31T00:00:00') }, missing: [], units: 1, failed: 0 };
+    const { html } = reportHtml(REPORTS.overspeed, done, opts);
+    expect(html).not.toContain('Notes</h2>');
+    expect(html).not.toContain('class="rule"');
   });
 
   it('names the one unit an overspeeding report was made for', () => {

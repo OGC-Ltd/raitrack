@@ -5,7 +5,7 @@
 //
 // Pure: returns the HTML and what the PDF needs to know about it.
 
-import { renderLetterheadHtml, table, cells, tag, esc } from './letterhead';
+import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './letterhead';
 import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
@@ -195,6 +195,9 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     flow.push(table([{ h: 'Group', w: '38mm' }, { h: 'Vehicles', w: `${inner - 38}mm` }],
       [...byGroup].map(([g, plates]) => [{ html: `${esc(g)} (${plates.length})`, cls: 'b' }, { html: esc(plates.join(', ')), cls: 'wrap' }])));
   }
+
+  // Room to write by hand on the printed copy
+  if (def.key === 'behaviour') flow.push(`<h2>${next++}. Notes</h2>`, ruledLines());
 
   // Contact line removed (operator, 9 Nov 2026: "remove these words this is a system generated").
 
