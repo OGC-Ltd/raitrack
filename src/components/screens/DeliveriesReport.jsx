@@ -1,7 +1,7 @@
 /*
  * Deliveries Report (operator, 4 Nov 2026; Menengai's Finished Goods and Van
  * Sales): a tab under Movements. The operator picks a plate and inserts the
- * geofences it should deliver to (kept in this browser, lib/deliveryPlan); a
+ * geofences it should deliver to (saved on the server, api/deliveries); a
  * run plays each route back, finds its origin (MORL or the Nairobi depot, two
  * different places), and says when it left, how many of its stops it delivered
  * to (stood 1½ minutes in the geofence, within the window), where it is, and
@@ -820,7 +820,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                               {i === 2 ? (
                                 <input type="text" inputMode="numeric" className={`mvr-edit dlv-orders${r.typed ? ' mvr-edit--changed' : ''}${typed[r.plate] && !readOrders(typed[r.plate]) ? ' dlv-orders--bad' : ''}`}
                                        value={typed[r.plate] ?? v} readOnly={editor.edited} aria-label={`Orders fulfilled by ${r.plate}, e.g. 8/10`}
-                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : 'Type the orders fulfilled, e.g. 8/10. It is kept in this browser for the next report; clear it to use the report’s own count.'}
+                                       title={editor.edited ? 'The report has been edited: change this on the sheet, or undo the edits' : 'Type the orders fulfilled, e.g. 8/10. It is saved for everyone in the organisation for the next report; clear it to use the report’s own count.'}
                                        onChange={(e) => {
                                          const text = e.target.value;
                                          setTyped((t) => ({ ...t, [r.plate]: text }));
