@@ -162,18 +162,22 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const plan = dayList.data ?? emptyPlan();
   // Saves go one after another, each the whole list, so the last change is the one kept
   const saving = useRef(Promise.resolve());
-  const [saveState, setSaveState] = useState({ busy: 0, error: null });
+  // `failedDay`: a day whose list on screen is not yet on the server. The list is kept as the operator
+  // left it (never snapped back to the server's copy) until Try again, or the next change, saves it
+  const [saveState, setSaveState] = useState({ busy: 0, error: null, failedDay: null });
   const change = (next) => {
     const key = ['deliveries', 'day', orgId, day];
     const forDay = day;
     qc.setQueryData(key, next);
-    setSaveState((s) => ({ busy: s.busy + 1, error: null }));
+    setSaveState((s) => ({ busy: s.busy + 1, error: null, failedDay: null }));
     saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles))
       .then(() => setSaveState((s) => ({ ...s, busy: s.busy - 1 })))
-      .catch((err) => {
-        setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err) }));
-        qc.invalidateQueries({ queryKey: key });
-      });
+      .catch((err) => setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err), failedDay: forDay })));
+  };
+  const retrySave = () => {
+    const d = saveState.failedDay;
+    const list = d && qc.getQueryData(['deliveries', 'day', orgId, d]);
+    if (list && d === day) change(list);
   };
   const earlierQ = useQuery({
     queryKey: ['deliveries', 'before', orgId, day],
@@ -583,7 +587,12 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             </h3>
             <span className={`dlv-plan__keep${saveState.error || dayList.isError ? ' dlv-plan__keep--error' : ''}`} role="status">
               {dayList.isError ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> The list could not be read: {dayList.error?.message}</>
-                : saveState.error ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> Not saved: {saveState.error}</>
+                : saveState.error ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> Not saved: {saveState.error}
+                  {saveState.failedDay === day && (
+                    <button type="button" className="sp4-ghost-btn dlv-plan__retry" onClick={retrySave}>
+                      <i className="ti ti-refresh" aria-hidden="true" /> Try again
+                    </button>
+                  )}</>
                   : dayList.isLoading ? 'Reading the list…'
                     : saveState.busy > 0 ? 'Saving…'
                       : <><i className="ti ti-cloud-check" aria-hidden="true" /> Saved for everyone in {companyName ?? orgCode ?? 'the organisation'}</>}
