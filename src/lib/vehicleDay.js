@@ -167,7 +167,8 @@ export function _resetVehicleDay() {
 // ── What a day of pings says ────────────────────────────────────────────────
 
 const IDLE_SPEED_KMH = 3;            // engine on and slower than this = idling
-const MOVING_KMH     = 3;
+/** At or above this the unit is moving (also the night report's "Moving between"). */
+export const MOVING_KMH = 3;
 const MAX_GAP_MS     = 10 * 60_000;  // no evidence across a longer silence
 const MAX_KMH        = 200;          // a hop implying more than this is a GPS jump
 const REFILL_WINDOW_MS = 20 * 60_000;

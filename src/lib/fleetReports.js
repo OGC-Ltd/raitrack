@@ -10,7 +10,7 @@
 //
 // Times are fleet time, Africa/Nairobi (UTC+3 all year, no daylight saving).
 
-import { summariseDay } from './vehicleDay';
+import { summariseDay, MOVING_KMH } from './vehicleDay';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -401,19 +401,28 @@ export function summariseWindows(pings, windows) {
   // (lib/vehicleDay). fuelSensor: the unit reports fuel at all; fuelSeen: a
   // figure could be worked out (too few readings, or a level that ends higher
   // than it started with no refill, gives none).
-  const out = { km: 0, movingMin: 0, engineOnMin: 0, idleMin: 0, usedL: 0, fuelSeen: false, fuelSensor: false, readings: 0, firstMovingAt: null, latestMovingAt: null };
+  // firstMovingAt / latestMovingAt: the first and last reading at walking pace
+  // or faster, for the night report's "Moving between". nights: how many
+  // windows the period has (several: the times need their date);
+  // movingNights: in how many of them the unit moved.
+  const out = {
+    km: 0, movingMin: 0, engineOnMin: 0, idleMin: 0, usedL: 0, fuelSeen: false, fuelSensor: false, readings: 0,
+    firstMovingAt: null, latestMovingAt: null, nights: windows.length, movingNights: 0,
+  };
   for (const [a, b] of windows) {
     const sub = pings.filter((p) => p.t >= a && p.t < b);
     out.readings += sub.length;
     if (!out.fuelSensor && sub.some((p) => Number.isFinite(p.fuelLevelMl) || Number.isFinite(p.fuelUsedMl))) out.fuelSensor = true;
-    // Track the first and latest timestamp where the unit was actually moving (≥ 3 km/h).
-    for (const p of sub) {
-      if ((p.speedKmh ?? 0) >= 3) {
-        if (out.firstMovingAt == null || p.t < out.firstMovingAt) out.firstMovingAt = p.t;
-        if (out.latestMovingAt == null || p.t > out.latestMovingAt) out.latestMovingAt = p.t;
-      }
-    }
+    // One reading is no movement (a lone speed spike): the same rule as the sums below
     if (sub.length < 2) continue;
+    const moving = sub.filter((p) => (p.speedKmh ?? 0) >= MOVING_KMH);
+    if (moving.length) {
+      out.movingNights += 1;
+      const first = moving[0].t;
+      const last = moving[moving.length - 1].t;
+      if (out.firstMovingAt == null || first < out.firstMovingAt) out.firstMovingAt = first;
+      if (out.latestMovingAt == null || last > out.latestMovingAt) out.latestMovingAt = last;
+    }
     const s = summariseDay(sub, null);
     out.km += s.distanceKm ?? 0;
     out.movingMin += s.movingMin ?? 0;
