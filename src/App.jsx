@@ -15,6 +15,7 @@ import TabEmptyState from './components/shared/TabEmptyState';
 import ProductTour from './components/shared/ProductTour';
 import StopWatch from './components/shared/StopWatch';
 import ToastStack from './components/shared/ToastStack';
+import IdleAlertBadge from './components/shared/IdleAlertBadge';
 
 // New layout components
 import AppHeader          from './components/layout/AppHeader';
@@ -123,6 +124,11 @@ function AppShell() {
       {/* Every toast, made by the server: first in, first out, 8 s each */}
       <ErrorBoundary label="Toasts">
         <ToastStack />
+      </ErrorBoundary>
+
+      {/* Menengai idle alert corner badge */}
+      <ErrorBoundary label="Idle alert badge">
+        <IdleAlertBadge />
       </ErrorBoundary>
 
       {/* Mobile header — shown only on mobile (< 768px) */}
