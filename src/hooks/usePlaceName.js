@@ -10,7 +10,7 @@ import { apiFetch } from '../services/api'
 
 // -v2 discards labels cached under the previous single-word format; keep in
 // step with the server's key prefix in lib/geocode.ts.
-const LS_KEY = 'ft-geocode-v2'
+const LS_KEY = 'ft-geocode-v3'   // v3: Elburgon renames (server lib/geocode RENAMES) replace cached Kasarani labels
 const LS_MAX = 600           // cap the localStorage cache; reset when exceeded
 
 const mem = new Map()
