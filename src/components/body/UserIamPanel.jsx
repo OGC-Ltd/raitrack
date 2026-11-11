@@ -456,10 +456,11 @@ export default function UserIamPanel() {
   // Choices sent and not yet answered, key → effect: drawn as if saved.
   const [pending, setPending] = useState(() => new Map());
   const [find, setFind] = useState("");
-  // Rights groups folded shut, by resource. Kept across people, so a group
-  // folded away stays out of the way while working down the list.
-  const [folded, setFolded] = useState(() => new Set());
-  const toggleGroup = (resource) => setFolded((now) => {
+  // Rights groups opened, by resource: every group starts folded, its head
+  // carrying the group's Role gives / This person / Result. Kept across
+  // people, so a group opened stays open while working down the list.
+  const [opened, setOpened] = useState(() => new Set());
+  const toggleGroup = (resource) => setOpened((now) => {
     const next = new Set(now);
     if (next.has(resource)) next.delete(resource); else next.add(resource);
     return next;
@@ -603,6 +604,41 @@ export default function UserIamPanel() {
         {s === "all" ? "Can, in every organisation" : s === "none" ? "Cannot, anywhere" : `Can in ${r.held} of ${r.total} organisations`}
       </Result>
     );
+  };
+
+  /**
+   * A group's three values, for its head: how many of its rights the role
+   * gives, what this person holds on their own, and how many they end up
+   * with — in the scope on screen, as the rows below it say one by one.
+   */
+  const groupSummary = (permissions) => {
+    const n = permissions.length;
+    if (locked) {
+      return { role: `All ${n}`, person: "Given by the role", held: n, some: 0, n };
+    }
+    let given = 0, givenSome = 0, held = 0, heldSome = 0, allowed = 0, denied = 0, grantable = 0;
+    for (const p of permissions) {
+      if (scopeOrg) {
+        if (scopeOrg.fromRoles.includes(p.slug)) given += 1;
+        if (resolveIn(scopeOrg, p.slug, standing).held) held += 1;
+      } else {
+        const fromRole = resolveEverywhere(organisations, p.slug, new Map());
+        const r = spread(fromRole.fromRole, fromRole.total);
+        if (r === "all") given += 1; else if (r === "some") givenSome += 1;
+        const res = resolveEverywhere(organisations, p.slug, standing);
+        const s = spread(res.held, res.total);
+        if (s === "all") held += 1; else if (s === "some") heldSome += 1;
+      }
+      if (!p.grantable) continue;
+      grantable += 1;
+      const mine = personalHere(p.slug);
+      if (mine === "allow") allowed += 1; else if (mine === "deny") denied += 1;
+    }
+    const role = `${given} of ${n}${givenSome ? ` · ${givenSome} in some` : ""}`;
+    const person = grantable === 0 ? "Set by the role only"
+      : allowed + denied === 0 ? "Role"
+      : [allowed && `${allowed} allowed`, denied && `${denied} denied`].filter(Boolean).join(" · ");
+    return { role, person, held, some: heldSome, n };
   };
 
   const selectedUser = access?.user ?? (people.data?.users ?? []).find((u) => u.id === selectedId) ?? null;
@@ -756,8 +792,8 @@ export default function UserIamPanel() {
                     <input type="search" value={find} placeholder="Find a right" onChange={(e) => setFind(e.target.value)} />
                   </label>
                   <button type="button" className="ua-iam__button ua-iam__fold-all" disabled={Boolean(find.trim())}
-                          onClick={() => setFolded(folded.size > 0 ? new Set() : new Set(groups.map((g) => g.resource)))}>
-                    {folded.size > 0 ? "Open all" : "Fold all"}
+                          onClick={() => setOpened(opened.size > 0 ? new Set() : new Set(groups.map((g) => g.resource)))}>
+                    {opened.size > 0 ? "Fold all" : "Open all"}
                   </button>
                 </div>
 
@@ -776,34 +812,38 @@ export default function UserIamPanel() {
                       </thead>
                       {groups.map((group) => {
                         // A search shows every match, folded or not.
-                        const open = Boolean(find.trim()) || !folded.has(group.resource);
+                        const open = Boolean(find.trim()) || opened.has(group.resource);
                         const own = group.permissions.filter((p) => p.grantable && personalHere(p.slug) !== "inherit").length;
-                        const n = group.permissions.length;
                         // The whole group, not just a search's matches.
                         const marks = reach.filter((m) => m.resource === group.resource);
                         const has = heldOf(marks);
+                        const sum = groupSummary(group.permissions);
                         return (
                         <tbody key={group.resource}>
                           <tr className={open ? "ua-iam__group" : "ua-iam__group ua-iam__group--folded"}>
-                            <th scope="colgroup" colSpan={4}>
+                            <th scope="rowgroup">
                               <button type="button" className="ua-iam__group-toggle" aria-expanded={open}
                                       onClick={() => toggleGroup(group.resource)}>
                                 <span className="ua-iam__group-lead">
                                   <span className="ua-iam__group-name">{group.label}</span>
                                   {own > 0 && <span className="ua-iam__tag ua-iam__tag--own">{own} personal</span>}
                                 </span>
-                                <span className="ua-iam__group-meter">
-                                  {marks.length > 0 ? (
-                                    <>
-                                      <Marks marks={marks} small label={`${has} of ${marks.length} rights in ${group.label}`} />
-                                      <span className="ua-iam__group-count">{has} of {marks.length}</span>
-                                    </>
-                                  ) : (
-                                    <span className="ua-iam__group-count">{n} {n === 1 ? "right" : "rights"}, set by the role only</span>
-                                  )}
-                                </span>
+                                {marks.length > 0 && (
+                                  <span className="ua-iam__group-meter">
+                                    <Marks marks={marks} small label={`${has} of ${marks.length} rights in ${group.label}`} />
+                                  </span>
+                                )}
                               </button>
                             </th>
+                            <td className="ua-iam__group-cell" data-label="Role gives">{sum.role}</td>
+                            <td className="ua-iam__group-cell" data-label="This person">{sum.person}</td>
+                            <td className="ua-iam__group-cell">
+                              <Result held={sum.held + sum.some > 0}>
+                                {sum.held === sum.n ? `Can, all ${sum.n}`
+                                  : sum.held + sum.some === 0 ? `Cannot, any of ${sum.n}`
+                                  : `Can ${sum.held} of ${sum.n}${sum.some ? ` · ${sum.some} in some` : ""}`}
+                              </Result>
+                            </td>
                           </tr>
                           {open && group.permissions.map((p) => (
                             <tr key={p.slug} className={[
