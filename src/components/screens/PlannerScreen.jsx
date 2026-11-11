@@ -318,7 +318,7 @@ function UploadSheet({ orgId, units, onClose, onSaved }) {
                     {sh.preview.stops.map((s) => (
                       <tr key={s.sequence} className="sp4-tr sp4-tr--static">
                         <td className="sp4-td pl-r">{s.sequence}</td>
-                        <td className="sp4-td"><b>{s.customerName}</b><div className="pl-quiet">{s.customerCode}</div></td>
+                        <td className="sp4-td"><b>{s.customerName}</b><div className="pl-quiet">{s.planned ? (s.location || 'Place not named yet') : s.customerCode}</div></td>
                         {s.planned ? (
                           <>
                             <td className="sp4-td">{s.planned.at ? clockWords(Date.parse(s.planned.at)) : '-'}{s.planned.serviceMin ? <div className="pl-quiet">{s.planned.serviceMin} min there</div> : null}</td>
@@ -572,7 +572,11 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
                   <td className="sp4-td pl-rail"><span className={`pl-pin${a.at != null ? ' pl-pin--ok' : actual?.telemetry ? ' pl-pin--miss' : ''}`}>{s.sequence}</span></td>
                   <td className="sp4-td">
                     <b>{s.customer.name}</b>
-                    <div className="pl-meta pl-quiet"><span>{s.customer.code}</span>{s.rep && <span>Rep {s.rep}</span>}</div>
+                    <div className="pl-meta pl-quiet">
+                      {itin ? <span><i className="ti ti-map-pin" aria-hidden="true" /> {s.customer.location || `${s.customer.lat?.toFixed(5)}, ${s.customer.lng?.toFixed(5)}`}</span>
+                        : <span>{s.customer.code}</span>}
+                      {s.rep && <span>Rep {s.rep}</span>}
+                    </div>
                   </td>
                   {itin ? (
                     <>
