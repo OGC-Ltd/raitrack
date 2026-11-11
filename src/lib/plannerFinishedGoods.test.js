@@ -24,9 +24,17 @@ describe('the Planner printed as the Finished Goods report', () => {
     const rows = await plannerFgRows({ orgId: 'o', plans: [{ id: 'p1' }], vehicles: [{ vehicleId: 'v1', registrationPlate: 'KCA 226M' }], zones, at });
     expect(loadPings).toHaveBeenCalledOnce();
     expect(loadPings.mock.calls[0][0].vehicles).toEqual([{ vehicleId: 'v1' }]);
+    // The plan's own span: its day start, a day back to find where the truck began, 48 h on (capped at now)
+    const { from, to } = loadPings.mock.calls[0][0];
+    expect(to - from).toBeLessThanOrEqual(3 * 86_400_000);
     expect(rows).toHaveLength(1);
     expect(rows[0].plate).toBe('KCA 226M');
     expect(rows[0].customers.map((c) => c.label ?? c.name)).toEqual(['Dashama wholesalers', 'Gitare wholesalers']);
+  });
+
+  it('each plan reads only its own trucks, over its own span', async () => {
+    await plannerFgRows({ orgId: 'o', plans: [{ id: 'p1' }, { id: 'p1' }], vehicles: [{ vehicleId: 'v1', registrationPlate: 'KCA 226M' }], zones, at });
+    expect(loadPings).toHaveBeenCalledTimes(2);
   });
 
   it('a plate no unit carries is still printed, with why, and Movements failing does not stop it', async () => {

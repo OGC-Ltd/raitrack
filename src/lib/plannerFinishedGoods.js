@@ -36,21 +36,24 @@ export async function plannerFgRows({ orgId, plans, vehicles, zones, at, onProgr
   const storages = findStorages(zones, moves?.morl);
 
   const units = full.map((p) => ({ plan: p, trackers: trackersFor(p, vehicles), span: readSpan(p, dayStart, at) }));
-  const ids = [...new Set(units.flatMap((u) => u.trackers.map((v) => v.vehicleId)))];
-  const pings = new Map();
+  // Each plan's trucks over that plan's own span (about three days), one plan after another: a wide
+  // range of dates never reads every truck over all of it
+  const pings = new Map();   // plan id -> vehicle id -> readings
   const failed = new Set();
-  if (ids.length) {
-    const r = await loadPings({
-      orgId, vehicles: ids.map((vehicleId) => ({ vehicleId })),
-      from: Math.min(...units.map((u) => u.span.from)), to: Math.max(...units.map((u) => u.span.to)),
-      onProgress: ({ done, total }) => onProgress('Reading the trucks’ positions', done, total),
-    });
-    for (const [vid, list] of r.pings) pings.set(vid, list);
+  let n = 0;
+  for (const u of units) {
+    n += 1;
+    const got = new Map();
+    pings.set(u.plan.id, got);
+    if (!u.trackers.length) continue;
+    onProgress('Reading the trucks’ positions', n, units.length);
+    const r = await loadPings({ orgId, vehicles: u.trackers.map((v) => ({ vehicleId: v.vehicleId })), from: u.span.from, to: u.span.to });
+    for (const [vid, list] of r.pings) got.set(vid, list);
     r.failed.forEach((x) => failed.add(x));
   }
 
   return units.map(({ plan: p, trackers, span }) => {
-    const routes = trackers.map((v) => (pings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
+    const routes = trackers.map((v) => (pings.get(p.id)?.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
     const { actual } = actualFor(p, routes, zones, dayStart, at);
     const mv = trackers.map((v) => moveRow.get(v.vehicleId)).find(Boolean) ?? null;
     const why = !trackers.length ? 'No tracked unit carries this plate'
