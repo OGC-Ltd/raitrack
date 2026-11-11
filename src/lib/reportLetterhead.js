@@ -39,7 +39,8 @@ function columnsFor(def, ctx, keep, inner) {
     // Follow-up column removed from main table (9 Nov 2026: redundant with the section below).
     behaviour: [32, 26, 36, 14, 14, 14, 12, 11, 14, 10, ...(SHOW_FOLLOW_UP_COLUMN ? [18] : [])],
     night: [40, 34, 36, 34, 56],
-    overspeed: [30, 22, 36, 18, 20, 20, 22, 34],
+    // Location (11 Nov 2026): the place of the top speed, the widest words
+    overspeed: [28, 27, 30, 16, 16, 17, 22, 30, 46],
     utilisation: [32, 28, 26, 28, 30, 40],
     utilisationRated: [42, 21, 18, 18, 19, 22, 22, 22],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
@@ -162,7 +163,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
 
   const notes = [];
   if (def.key === 'overspeed') {
-    notes.push('Top speed at: the date and time of the GPS reading on which each vehicle reached its top speed in the period, Nairobi time.');
+    notes.push(`Top speed at: the ${ctx.to - ctx.from <= 86_400_000 ? 'time' : 'date and time'} of the GPS reading on which each vehicle reached its top speed in the period, Nairobi time; Location: where that reading was.`);
     if (ctx.peaksFailed) notes.push(`The readings of ${ctx.peaksFailed} vehicle${ctx.peaksFailed === 1 ? '' : 's'} could not be read: their top speed time shows as -.`);
   }
   if (def.key === 'behaviour') {

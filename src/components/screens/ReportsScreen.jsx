@@ -848,7 +848,7 @@ function MovementsReport({ orgId }) {
       for (let i = 0; i < reports.length; i++) {
         const vehicles = reports[i].groups.flatMap((g) => g.rows).map((r) => ({ vehicleId: r.vehicleId }));
         if (!vehicles.length) continue;
-        const words = "Reading each unit's distance and fuel";
+        const words = 'Reading each unit’s distance and fuel';
         const got = await loadDistances({
           orgId, vehicles, windows: [[reports[i].from, reports[i].to]],
           onProgress: ({ done, total }) => { if (id === runId.current) setRun({ status: 'loading', done: i, of: windows.length, words: `${words}, ${done} of ${total}` }); },
@@ -1472,32 +1472,30 @@ export default function ReportsScreen() {
         rows = rows.map((row) => (row.peak ? { ...row, peakAt: found.peaks.get(row.peak)?.at ?? null } : row));
         if (ctx.events) ctx.events = ctx.events.map((e) => ({ ...e, peakAt: found.peaks.get(e)?.at ?? null }));
         ctx.peaksFailed = found.failed;
+        // Where each top speed was reached, by name (the server's reverse
+        // geocode, cached per grid cell; at most 3 asked at a time). Read
+        // before the report shows, so the screen, PDF, JPEG and CSV all carry
+        // the same names; one that cannot be found keeps its coordinates.
+        if (!live()) return;
+        const fixed = rows.filter((row) => row.peak?.lat != null && row.peak?.lng != null);
+        const onPlace = step('Finding where each top speed was reached, vehicle');
+        let placed = 0;
+        onPlace({ done: 0, total: fixed.length });
+        const names = await Promise.all(fixed.map((row) => placeNameAt(row.peak.lat, row.peak.lng)
+          .catch(() => null)
+          .finally(() => onPlace({ done: ++placed, total: fixed.length }))));
+        const placeOf = new Map(fixed.map((row, i) => [row, names[i]]));
+        rows = rows.map((row) => (placeOf.get(row) ? { ...row, peakPlace: placeOf.get(row) } : row));
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
-        const r = await loadDistances({ orgId, vehicles: units.flatMap((u) => u.vehicles), windows, onProgress: step("Reading each vehicle's day") });
+        const r = await loadDistances({ orgId, vehicles: units.flatMap((u) => u.vehicles), windows, onProgress: step('Reading each vehicle’s day') });
         rows = key === 'night' ? nightRows(units, r.perVehicle) : utilisationRows(units, r.perVehicle, { rated: ctx.rated });
         failed = r.failed;
       }
       if (!live()) return;
       const secs = sections(rows, ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum);
       setRun({ status: 'done', rows, secs, ctx, missing, failed, units: units.length });
-      // Reverse-geocode each row's peak location in the background; update rows as names arrive.
-      if (key === 'overspeed') {
-        const rowsWithPeak = rows.filter((row) => row.peak?.lat != null && row.peak?.lng != null);
-        if (rowsWithPeak.length) {
-          rowsWithPeak.forEach((row) => {
-            placeNameAt(row.peak.lat, row.peak.lng).then((name) => {
-              if (!name || !live()) return;
-              setRun((prev) => {
-                if (prev.status !== 'done') return prev;
-                const nextRows = prev.rows.map((r) => (r === row || (r.unit === row.unit && r.peak === row.peak)) ? { ...r, peakPlace: name } : r);
-                return { ...prev, rows: nextRows, secs: sections(nextRows, ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum) };
-              });
-            }).catch(() => { /* place name is optional */ });
-          });
-        }
-      }
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
