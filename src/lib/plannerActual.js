@@ -239,6 +239,8 @@ export function planCsvRows(plan, actual) {
 export const ON_TIME_MS = 15 * 60_000;
 
 export const isItinerary = (plan) => plan?.source === 'itinerary';
+/** A plan keyed in on the Deliveries tab: one vehicle and the geofences it is tasked to that day. */
+export const isKeyed = (plan) => plan?.source === 'manual';
 
 const hhmm = (ms) => { const d = new Date(ms + 3 * 3_600_000); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 const mins = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(s ?? ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };

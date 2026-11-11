@@ -1,7 +1,8 @@
 /*
  * Deliveries Report (operator, 4 Nov 2026; Menengai's Finished Goods and Van
  * Sales): a tab under Movements. The operator picks a plate and inserts the
- * geofences it should deliver to (saved on the server, api/deliveries); a
+ * geofences it should deliver to (saved on the server, api/deliveries, which
+ * also keeps each listed vehicle as its Planner plan for the day); a
  * run plays each route back, finds its origin (MORL or the Nairobi depot, two
  * different places), and says when it left, how many of its stops it delivered
  * to (stood 1½ minutes in the geofence, within the window), where it is, and
@@ -35,7 +36,7 @@ import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
-import { kmWords } from '../../lib/plannerActual';
+import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAppActions } from '../../context/AppContext';
@@ -171,7 +172,11 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     qc.setQueryData(key, next);
     setSaveState((s) => ({ busy: s.busy + 1, error: null, failedDay: null }));
     saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles))
-      .then(() => setSaveState((s) => ({ ...s, busy: s.busy - 1 })))
+      .then(() => {
+        setSaveState((s) => ({ ...s, busy: s.busy - 1 }));
+        // The server keeps each listed vehicle as its Planner plan for the day: the Planner reads it afresh
+        qc.invalidateQueries({ queryKey: ['planner', 'plans', orgId] });
+      })
       .catch((err) => setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err), failedDay: forDay })));
   };
   const retrySave = () => {
@@ -202,7 +207,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const findSheets = async (from, to) => {
     // Every sheet the Planner lists over the last week, for now (lib/plannerReport ALL_SHEETS)
     const d = sheetDaysFor(from, to, fleetDay);
-    return sheetsForReport(await listPlans(orgId, d.from, d.to), from, to, dayStart);
+    // Plans keyed in here are this list itself, so only uploaded sheets and itineraries come in as sheets
+    return sheetsForReport((await listPlans(orgId, d.from, d.to)).filter((p) => !isKeyed(p)), from, to, dayStart);
   };
   const [sheets, setSheets] = useState({ status: 'idle', list: [] });
   const sheetSpanKey = daysOpen ? `days:${day}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
