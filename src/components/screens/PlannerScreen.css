@@ -341,3 +341,7 @@
 .pl-sheet .pl-tag { white-space: normal; }
 .pl-sheet .pl-x { margin: 4px 4px 0 0; }
 @media (prefers-reduced-motion: reduce) { .pl-sheet { transition: none; } }
+
+/* A Wialon itinerary's line above the preview table */
+.pl-itin-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 8px; }
+.pl-itin-note .ti { color: var(--pl-ink-4); }

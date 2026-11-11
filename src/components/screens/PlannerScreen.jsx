@@ -29,7 +29,7 @@ import { fileAsBase64, previewSheet, saveSheet, listPlans, getPlan, updateStop, 
 import { loadPings } from '../../api/fleetReports';
 import { fleetDay, dayStart } from '../../lib/fleetReports';
 import { displayOf } from '../../lib/fleetGroups';
-import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWindow } from '../../lib/plannerActual';
+import { fenceOf, spanWords, clockWords, kmWords, planCsvRows, OUTCOMES, planWindow, isItinerary, plannedVs, windowWords, onTimeCount } from '../../lib/plannerActual';
 import { trackersFor, actualFor, readSpan } from '../../lib/plannerReport';
 import { showPlanOnMap, focusPlanStop, requestFenceEdit, planOverlayNow, takePlanToOpen } from '../../lib/planOverlay';
 import { useAppActions } from '../../context/AppContext';
@@ -225,7 +225,7 @@ function UploadSheet({ orgId, units, onClose, onSaved }) {
             <input type="file" accept=".xlsx,.xls" multiple onChange={(e) => { pick(e.target.files); e.target.value = ''; }} className="pl-file" />
             <i className="ti ti-file-spreadsheet" aria-hidden="true" />
             <span>
-              {sheets.length ? <>Add more sheets</> : <>Drop one or more <b>Sales Order Booking Delivery Sheets</b> here, or <u>choose the .xlsx files</u></>}
+              {sheets.length ? <>Add more sheets</> : <>Drop one or more <b>Sales Order Booking Delivery Sheets</b> or <b>Wialon itineraries</b> here, or <u>choose the .xlsx files</u></>}
             </span>
           </label>
           {note && <p className="pl-warn">{note}</p>}
@@ -289,8 +289,16 @@ function UploadSheet({ orgId, units, onClose, onSaved }) {
                 </label>
               </div>
 
+              {sh.preview.route && (
+                <p className="pl-sub pl-itin-note">
+                  <i className="ti ti-route" aria-hidden="true" /> Wialon itinerary <b>{sh.preview.route.name}</b>
+                  {sh.preview.route.start && <> · planned {clockWords(Date.parse(sh.preview.route.start))} → {sh.preview.route.end ? clockWords(Date.parse(sh.preview.route.end)) : '?'}</>}
+                  {sh.preview.route.km != null && <> · {kmWords(sh.preview.route.km)}</>}
+                  {sh.preview.route.home && <> · from and back to {sh.preview.route.home.name}</>}
+                </p>
+              )}
               <div className="pl-summary">
-                <span className="pl-sub">{sh.preview.stops.length} lines</span>
+                <span className="pl-sub">{sh.preview.stops.length} {sh.preview.route ? 'stops' : 'lines'}</span>
                 {['new', 'linked', 'known', 'moved', 'no_point'].filter((k) => counts[k]).map((k) => (
                   <span key={k} className={`pl-tag pl-tag--${STATE_WORDS[k].tone}`}>{counts[k]} {counts[k] === 1 ? STATE_WORDS[k].text.toLowerCase() : STATE_WORDS[k].many}</span>
                 ))}
@@ -302,16 +310,28 @@ function UploadSheet({ orgId, units, onClose, onSaved }) {
               <div className="pl-up__table">
                 <table className="sp4-table pl-table">
                   <thead>
-                    <tr><th className="pl-r">No.</th><th>Customer</th><th>Location</th><th className="pl-r">Amount</th><th className="pl-r">Tonnage</th><th>Fence</th></tr>
+                    {sh.preview.route
+                      ? <tr><th className="pl-r">No.</th><th>Stop</th><th>Planned</th><th>Window</th><th className="pl-r">Leg</th><th>Fence</th></tr>
+                      : <tr><th className="pl-r">No.</th><th>Customer</th><th>Location</th><th className="pl-r">Amount</th><th className="pl-r">Tonnage</th><th>Fence</th></tr>}
                   </thead>
                   <tbody>
                     {sh.preview.stops.map((s) => (
                       <tr key={s.sequence} className="sp4-tr sp4-tr--static">
                         <td className="sp4-td pl-r">{s.sequence}</td>
                         <td className="sp4-td"><b>{s.customerName}</b><div className="pl-quiet">{s.customerCode}</div></td>
-                        <td className="sp4-td">{s.location}</td>
-                        <td className="sp4-td pl-r">{money(s.amount)}</td>
-                        <td className="sp4-td pl-r">{tons(s.tonnage)}</td>
+                        {s.planned ? (
+                          <>
+                            <td className="sp4-td">{s.planned.at ? clockWords(Date.parse(s.planned.at)) : '-'}{s.planned.serviceMin ? <div className="pl-quiet">{s.planned.serviceMin} min there</div> : null}</td>
+                            <td className="sp4-td">{windowWords(s.planned) ?? '-'}</td>
+                            <td className="sp4-td pl-r">{kmWords(s.planned.legKm)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="sp4-td">{s.location}</td>
+                            <td className="sp4-td pl-r">{money(s.amount)}</td>
+                            <td className="sp4-td pl-r">{tons(s.tonnage)}</td>
+                          </>
+                        )}
                         <td className="sp4-td">
                           <span className={`pl-tag pl-tag--${STATE_WORDS[fenceKey(sh, s)].tone}`}>{STATE_WORDS[fenceKey(sh, s)].text}{s.state === 'moved' ? ` ${s.movedM} m` : ''}</span>
                           {offersFences(s) && (
@@ -418,7 +438,9 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
   if (error || !plan) return <EmptyNote tone="error" icon="ti-alert-triangle" title="The plan could not be loaded">{error?.message}</EmptyNote>;
 
   const totals = plan.stops.reduce((a, s) => ({ amount: a.amount + (s.amount ?? 0), tonnage: a.tonnage + (s.tonnage ?? 0) }), { amount: 0, tonnage: 0 });
-  const home = actual?.origin?.short ?? 'Home';
+  const home = actual?.origin?.short ?? (plan.homeName || 'Home');
+  const itin = isItinerary(plan);
+  const timing = itin ? onTimeCount(plan, actual) : null;
   const telemetryNote = !trackers.length ? 'No tracked unit carries this plate'
     : pings.isLoading ? 'Reading the track…'
       : pings.error ? `Track not read: ${pings.error.message}`
@@ -433,7 +455,8 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
     doc.setFontSize(14);
     doc.text(`Delivery plan: ${plan.plate}, ${plan.planDate}`, 40, 40);
     doc.setFontSize(9);
-    doc.text(`Driver ${plan.driverName || '-'} · ${plan.stops.length} stops · ${money(totals.amount)} invoiced · ${tons(totals.tonnage)} t`
+    doc.text((isItinerary(plan) ? `${plan.routeName || 'Wialon itinerary'} · ${plan.stops.length} stops · ${kmWords(plan.plannedKm)} planned`
+      : `Driver ${plan.driverName || '-'} · ${plan.stops.length} stops · ${money(totals.amount)} invoiced · ${tons(totals.tonnage)} t`)
       + (actual?.telemetry ? ` · ${actual.visited} reached · ${kmWords(actual.km)} in ${spanWords(actual.durationMs)}` : ''), 40, 56);
     const [head, ...body] = planCsvRows(plan, actual);
     autoTable(doc, { head: [head], body, startY: 70, styles: { fontSize: 7 }, headStyles: { fillColor: [30, 41, 59] } });
@@ -455,7 +478,10 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
           <div className="pl-plan__facts">
             <span><i className="ti ti-calendar" aria-hidden="true" />{plan.planDate}</span>
             <span><i className="ti ti-steering-wheel" aria-hidden="true" />{plan.driverName || 'No driver'}</span>
-            {plan.sheetAt && <span>Printed {clockWords(Date.parse(plan.sheetAt))}</span>}
+            {itin
+              ? <span title="Uploaded from a Wialon Logistics itinerary"><i className="ti ti-route" aria-hidden="true" />{plan.routeName || 'Wialon itinerary'}</span>
+              : plan.sheetAt && <span>Printed {clockWords(Date.parse(plan.sheetAt))}</span>}
+            {itin && plan.plannedStart && <span>Planned {clockWords(Date.parse(plan.plannedStart))} → {plan.plannedEnd ? clockWords(Date.parse(plan.plannedEnd)) : '?'}</span>}
             {!plan.vehicle && <span className="pl-warn">Unit not matched</span>}
           </div>
         </div>
@@ -465,10 +491,19 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
             <span className="sp4-kpi-n">{reached ?? '-'}<span className="pl-of">/{plan.stops.length}</span></span>
             <span className="sp4-kpi-l">Reached</span>
           </div>
-          <div className="sp4-kpi"><span className="sp4-kpi-n">{kmWords(actual?.km)}</span><span className="sp4-kpi-l">Driven</span></div>
+          {itin && (
+            <div className={`sp4-kpi${!timing?.judged ? '' : timing.onTime === timing.judged ? ' pl-kpi--ok' : ' pl-kpi--open'}`}>
+              <span className="sp4-kpi-n">{timing?.judged ? timing.onTime : '-'}<span className="pl-of">/{timing?.judged ?? 0}</span></span>
+              <span className="sp4-kpi-l">On time</span>
+            </div>
+          )}
+          <div className="sp4-kpi">
+            <span className="sp4-kpi-n">{kmWords(actual?.km)}{itin && plan.plannedKm != null && <span className="pl-of"> of {kmWords(plan.plannedKm)}</span>}</span>
+            <span className="sp4-kpi-l">Driven</span>
+          </div>
           <div className="sp4-kpi"><span className="sp4-kpi-n">{spanWords(actual?.durationMs)}</span><span className="sp4-kpi-l">Out</span></div>
-          <div className="sp4-kpi"><span className="sp4-kpi-n">{money(totals.amount)}</span><span className="sp4-kpi-l">Invoiced</span></div>
-          <div className="sp4-kpi"><span className="sp4-kpi-n">{tons(totals.tonnage)}</span><span className="sp4-kpi-l">Tonnes</span></div>
+          {!itin && <div className="sp4-kpi"><span className="sp4-kpi-n">{money(totals.amount)}</span><span className="sp4-kpi-l">Invoiced</span></div>}
+          {!itin && <div className="sp4-kpi"><span className="sp4-kpi-n">{tons(totals.tonnage)}</span><span className="sp4-kpi-l">Tonnes</span></div>}
           <div className={`sp4-kpi${openStops ? ' pl-kpi--open' : ''}`}><span className="sp4-kpi-n">{openStops}</span><span className="sp4-kpi-l">Stops open</span></div>
         </div>
       </div>
@@ -498,10 +533,19 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
             <tr>
               <th aria-label="Stop" />
               <th>Customer</th>
-              <th>Location</th>
-              <th>Invoice</th>
-              <th className="pl-r">Amount</th>
-              <th className="pl-r">Tonnage</th>
+              {itin ? (
+                <>
+                  <th>Planned</th>
+                  <th>Window</th>
+                </>
+              ) : (
+                <>
+                  <th>Location</th>
+                  <th>Invoice</th>
+                  <th className="pl-r">Amount</th>
+                  <th className="pl-r">Tonnage</th>
+                </>
+              )}
               <th>Arrived</th>
               <th className="pl-r">Km</th>
               <th className="pl-r">Time there</th>
@@ -513,13 +557,15 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
           <tbody>
             <tr className="sp4-tr sp4-tr--static pl-route__home pl-route__start">
               <td className="sp4-td pl-rail"><span className="pl-pin pl-pin--home"><i className="ti ti-home" aria-hidden="true" /></span></td>
-              <td className="sp4-td" colSpan={5}><b>{actual?.origin?.label ?? 'Home'}</b><div className="pl-quiet">Start</div></td>
+              <td className="sp4-td" colSpan={itin ? 1 : 5}><b>{actual?.origin?.label ?? (plan.homeName || 'Home')}</b><div className="pl-quiet">Start</div></td>
+              {itin && <td className="sp4-td" colSpan={2}>{plan.plannedStart ? `Leave ${clockWords(Date.parse(plan.plannedStart))}` : '-'}</td>}
               <td className="sp4-td">{actual?.leftAt ? `Left ${clockWords(actual.leftAt)}` : '-'}</td>
               <td className="sp4-td pl-r">0 m</td>
               <td className="sp4-td" colSpan={canFence ? 4 : 3} />
             </tr>
             {plan.stops.map((s) => {
               const a = byStop.get(s.id) ?? {};
+              const v = itin ? plannedVs(s, a) : null;
               return (
                 <tr key={s.id} className={`sp4-tr${selected === s.id ? ' sp4-tr--selected' : ''}`} tabIndex={0}
                     onClick={() => pickStop(s)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) pickStop(s); }}>
@@ -528,17 +574,28 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
                     <b>{s.customer.name}</b>
                     <div className="pl-meta pl-quiet"><span>{s.customer.code}</span>{s.rep && <span>Rep {s.rep}</span>}</div>
                   </td>
-                  <td className="sp4-td">{s.customer.location}</td>
-                  <td className="sp4-td">{s.invoiceNo || '-'}</td>
-                  <td className="sp4-td pl-r">{money(s.amount)}</td>
-                  <td className="sp4-td pl-r">{tons(s.tonnage)}</td>
+                  {itin ? (
+                    <>
+                      <td className="sp4-td">{v ? clockWords(v.plannedAt) : '-'}{s.serviceMin ? <div className="pl-quiet">{s.serviceMin} min there</div> : null}</td>
+                      <td className="sp4-td">{windowWords(s) ?? '-'}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="sp4-td">{s.customer.location}</td>
+                      <td className="sp4-td">{s.invoiceNo || '-'}</td>
+                      <td className="sp4-td pl-r">{money(s.amount)}</td>
+                      <td className="sp4-td pl-r">{tons(s.tonnage)}</td>
+                    </>
+                  )}
                   <td className="sp4-td">
                     {a.at != null ? clockWords(a.at)
                       : actual?.telemetry ? <span className="pl-warn">{a.reachedAt != null ? `Passed ${clockWords(a.reachedAt).slice(-5)}, did not stop`
                         : a.nearestM != null ? `Not reached, closest ${kmWords(a.nearestM / 1000)}` : 'Not reached'}</span> : '-'}
+                    {v?.words && <div className={v.tone === 'warn' ? 'pl-warn' : 'pl-quiet'}>{v.words}</div>}
+                    {v?.inWindow === false && <div className="pl-warn">Outside its window</div>}
                     {a.visit != null && a.visit !== s.sequence && <div className="pl-quiet">Visited {a.visit}{a.visit === 1 ? 'st' : a.visit === 2 ? 'nd' : a.visit === 3 ? 'rd' : 'th'}</div>}
                   </td>
-                  <td className="sp4-td pl-r">{kmWords(a.kmFromPrev)}</td>
+                  <td className="sp4-td pl-r">{kmWords(a.kmFromPrev)}{itin && s.legKm != null && <div className="pl-quiet">plan {kmWords(s.legKm)}</div>}</td>
                   <td className="sp4-td pl-r">{a.stayMs != null ? spanWords(a.stayMs) : a.at != null ? 'Still there' : '-'}</td>
                   <td className="sp4-td" onClick={(e) => e.stopPropagation()}>
                     <div className="pl-seg" role="group" aria-label={`Outcome at ${s.customer.name}`}>
@@ -565,7 +622,8 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
             })}
             <tr className="sp4-tr sp4-tr--static pl-route__home pl-route__end">
               <td className="sp4-td pl-rail"><span className="pl-pin pl-pin--home"><i className="ti ti-home" aria-hidden="true" /></span></td>
-              <td className="sp4-td" colSpan={5}><b>{home}</b><div className="pl-quiet">Back</div></td>
+              <td className="sp4-td" colSpan={itin ? 1 : 5}><b>{home}</b><div className="pl-quiet">Back</div></td>
+              {itin && <td className="sp4-td" colSpan={2}>{plan.plannedEnd ? clockWords(Date.parse(plan.plannedEnd)) : '-'}</td>}
               <td className="sp4-td">{actual?.backAt ? clockWords(actual.backAt) : actual?.telemetry ? 'Not back' : '-'}</td>
               <td className="sp4-td pl-r">{kmWords(actual?.homeKm)}</td>
               <td className="sp4-td" colSpan={canFence ? 4 : 3} />
@@ -708,7 +766,7 @@ export default function PlannerScreen() {
                 : !list.length ? (
                   <EmptyNote icon="ti-calendar-time" title="No delivery plans in these dates"
                              action={canWrite ? { label: 'Upload sheet', onClick: () => setUploading(true) } : null}>
-                    Upload a truck’s Sales Order Booking Delivery Sheet to plan its day.
+                    Upload a truck’s Sales Order Booking Delivery Sheet, or its Wialon Logistics itinerary, to plan its day.
                   </EmptyNote>
                 ) : (
                   <div className="pl-scroll sp4-table-scroll">

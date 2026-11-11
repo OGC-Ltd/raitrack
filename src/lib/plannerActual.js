@@ -211,10 +211,16 @@ export const OUTCOMES = [
 /** The sheet with its actuals, as CSV rows. */
 export function planCsvRows(plan, actual) {
   const byId = new Map((actual?.stops ?? []).map((s) => [s.id, s]));
-  const head = ['No.', 'Customer ID', 'Customer', 'Location', 'Invoice', 'Amount', 'Tonnage', 'Arrived', 'Left', 'Time there', 'Km from previous', 'Visit order', 'Outcome', 'Remarks'];
+  const itin = isItinerary(plan);
+  const head = ['No.', 'Customer ID', 'Customer', 'Location', 'Invoice', 'Amount', 'Tonnage',
+    ...(itin ? ['Planned arrival', 'Window', 'Against plan'] : []),
+    'Arrived', 'Left', 'Time there', 'Km from previous', 'Visit order', 'Outcome', 'Remarks'];
   const rows = (plan?.stops ?? []).map((s) => {
     const a = byId.get(s.id) ?? {};
+    const v = itin ? plannedVs(s, a) : null;
     return [s.sequence, s.customer.code, s.customer.name, s.customer.location, s.invoiceNo, s.amount ?? '', s.tonnage ?? '',
+      ...(itin ? [v ? clockWords(v.plannedAt) : '', windowWords(s) ?? '',
+        v?.words ? `${v.words}${v.inWindow === false ? ', outside window' : ''}` : ''] : []),
       a.at ? clockWords(a.at) : a.reachedAt != null ? `Passed ${clockWords(a.reachedAt)}, did not stop`
         : (a.nearestM != null ? `Not reached, closest ${kmWords(a.nearestM / 1000)}` : 'Not reached'),
       a.leftAt ? clockWords(a.leftAt) : '', a.stayMs != null ? spanWords(a.stayMs) : '',
@@ -222,4 +228,56 @@ export function planCsvRows(plan, actual) {
       OUTCOMES.find((o) => o.id === s.outcome)?.label ?? '', s.remarks ?? ''];
   });
   return [head, ...rows];
+}
+
+// A Wialon Logistics itinerary uploaded as a plan (source 'itinerary') carries
+// a planned arrival, window, service time and leg for each stop; these set
+// them against what the truck did.
+
+/** Within this of the planned arrival is on time. */
+export const ON_TIME_MS = 15 * 60_000;
+
+export const isItinerary = (plan) => plan?.source === 'itinerary';
+
+const hhmm = (ms) => { const d = new Date(ms + 3 * 3_600_000); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+const mins = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(s ?? ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+
+/** "04:00–22:00", or null when the stop has no window. */
+export const windowWords = (s) => (s?.windowFrom && s?.windowTo ? `${s.windowFrom}–${s.windowTo}` : null);
+
+/** Whether an arrival (ms) falls in the stop's delivery window, read in EAT; null when either is unknown. */
+export function inWindow(stop, at) {
+  const from = mins(stop?.windowFrom); const to = mins(stop?.windowTo);
+  if (from == null || to == null || !Number.isFinite(at)) return null;
+  const t = hhmm(at);
+  return from <= to ? t >= from && t <= to : t >= from || t <= to;
+}
+
+/**
+ * A stop's arrival against its plan.
+ * @returns {{ plannedAt, lateMs, words, tone, inWindow }|null} null without a planned arrival
+ */
+export function plannedVs(stop, actualStop) {
+  const plannedAt = stop?.plannedAt ? Date.parse(stop.plannedAt) : NaN;
+  if (!Number.isFinite(plannedAt)) return null;
+  const at = actualStop?.at;
+  if (!Number.isFinite(at)) return { plannedAt, lateMs: null, words: null, tone: null, inWindow: null };
+  const lateMs = at - plannedAt;
+  const m = Math.round(Math.abs(lateMs) / 60_000);
+  const span = m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+  const words = Math.abs(lateMs) <= ON_TIME_MS ? 'On time' : lateMs > 0 ? `${span} late` : `${span} early`;
+  return { plannedAt, lateMs, words, tone: lateMs > ON_TIME_MS ? 'warn' : 'ok', inWindow: inWindow(stop, at) };
+}
+
+/** Stops reached within ON_TIME_MS of plan or earlier, of those reached. */
+export function onTimeCount(plan, actual) {
+  const byId = new Map((actual?.stops ?? []).map((s) => [s.id, s]));
+  let onTime = 0; let judged = 0;
+  for (const s of plan?.stops ?? []) {
+    const v = plannedVs(s, byId.get(s.id));
+    if (v?.lateMs == null) continue;
+    judged += 1;
+    if (v.lateMs <= ON_TIME_MS) onTime += 1;
+  }
+  return { onTime, judged };
 }
