@@ -57,14 +57,14 @@ describe('fleet time', () => {
     expect(presetRange('lastWeek', now)).toEqual({ from: at('2026-10-25T00:00:00'), to: at('2026-11-01T00:00:00') });
   });
 
-  it('night windows cut the period to 19:00–05:00, across midnight', () => {
+  it('night windows cut the period to 22:00–04:00, across midnight', () => {
     const w = nightWindows(at('2026-10-31T12:00:00'), at('2026-11-01T12:00:00'));
-    expect(w).toEqual([[at('2026-10-31T19:00:00'), at('2026-11-01T05:00:00')]]);
+    expect(w).toEqual([[at('2026-10-31T22:00:00'), at('2026-11-01T04:00:00')]]);
     const two = nightWindows(at('2026-10-30T00:00:00'), at('2026-11-01T00:00:00'));
     expect(two).toEqual([
-      [at('2026-10-30T00:00:00'), at('2026-10-30T05:00:00')],
-      [at('2026-10-30T19:00:00'), at('2026-10-31T05:00:00')],
-      [at('2026-10-31T19:00:00'), at('2026-11-01T00:00:00')],
+      [at('2026-10-30T00:00:00'), at('2026-10-30T04:00:00')],
+      [at('2026-10-30T22:00:00'), at('2026-10-31T04:00:00')],
+      [at('2026-10-31T22:00:00'), at('2026-11-01T00:00:00')],
     ]);
   });
 
@@ -201,6 +201,30 @@ describe('distance inside windows', () => {
     expect(all.km).toBeGreaterThan(170);
     expect(night.km / all.km).toBeGreaterThan(0.64);
     expect(night.km / all.km).toBeLessThan(0.69);
+  });
+
+  it('keeps the first and last moving reading, and the nights it moved in', () => {
+    // Parked 22:00–22:29, moving 22:30–23:09, parked again to 23:30
+    const night1 = [
+      ...pings(at('2026-10-31T22:00:00'), 30).map((p) => ({ ...p, speedKmh: 0 })),
+      ...pings(at('2026-10-31T22:30:00'), 40),
+      ...pings(at('2026-10-31T23:10:00'), 20).map((p) => ({ ...p, speedKmh: 0 })),
+    ];
+    const one = [[at('2026-10-31T22:00:00'), at('2026-11-01T04:00:00')]];
+    const s = summariseWindows(night1, one);
+    expect([s.firstMovingAt, s.latestMovingAt]).toEqual([at('2026-10-31T22:30:00'), at('2026-10-31T23:09:00')]);
+    expect([s.nights, s.movingNights]).toEqual([1, 1]);
+
+    // A second night with movement, and a third with one lone fast reading (not movement)
+    const night2 = pings(at('2026-11-02T01:00:00'), 10);
+    const lone = [{ t: at('2026-11-03T02:00:00'), lat: -0.3, lng: 36, speedKmh: 80 }];
+    const three = [one[0], [at('2026-11-01T22:00:00'), at('2026-11-02T04:00:00')], [at('2026-11-02T22:00:00'), at('2026-11-03T04:00:00')]];
+    const m = summariseWindows([...night1, ...night2, ...lone], three);
+    expect([m.firstMovingAt, m.latestMovingAt]).toEqual([at('2026-10-31T22:30:00'), at('2026-11-02T01:09:00')]);
+    expect([m.nights, m.movingNights]).toEqual([3, 2]);
+
+    const still = summariseWindows(night1.map((p) => ({ ...p, speedKmh: 0 })), one);
+    expect([still.firstMovingAt, still.latestMovingAt, still.movingNights]).toEqual([null, null, 0]);
   });
 
   it('night lists movers only; utilisation lists everyone, idle units included', () => {

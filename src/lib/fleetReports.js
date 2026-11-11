@@ -10,7 +10,7 @@
 //
 // Times are fleet time, Africa/Nairobi (UTC+3 all year, no daylight saving).
 
-import { summariseDay } from './vehicleDay';
+import { summariseDay, MOVING_KMH } from './vehicleDay';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -18,8 +18,8 @@ const OFFSET = 3 * HOUR;
 
 /** An overspeed must last longer than this to count (operator, 1 Nov 2026: continuous; 2 Nov 2026: 5 s, was 5 min). */
 export const OVERSPEED_MIN_SEC = 5;
-/** Night hours, by default 19:00 to 05:00. */
-export const NIGHT = { start: 19, end: 5 };
+/** Night hours, by default 22:00 to 04:00. */
+export const NIGHT = { start: 22, end: 4 };
 /** Harsh accelerations per day above which the count reads as a sensor fault, not driving. */
 export const HARSH_SUSPECT_PER_DAY = 100;
 /** Telemetry is read a unit-day at a time, so the distance reports are kept short. */
@@ -401,12 +401,28 @@ export function summariseWindows(pings, windows) {
   // (lib/vehicleDay). fuelSensor: the unit reports fuel at all; fuelSeen: a
   // figure could be worked out (too few readings, or a level that ends higher
   // than it started with no refill, gives none).
-  const out = { km: 0, movingMin: 0, engineOnMin: 0, idleMin: 0, usedL: 0, fuelSeen: false, fuelSensor: false, readings: 0 };
+  // firstMovingAt / latestMovingAt: the first and last reading at walking pace
+  // or faster, for the night report's "Moving between". nights: how many
+  // windows the period has (several: the times need their date);
+  // movingNights: in how many of them the unit moved.
+  const out = {
+    km: 0, movingMin: 0, engineOnMin: 0, idleMin: 0, usedL: 0, fuelSeen: false, fuelSensor: false, readings: 0,
+    firstMovingAt: null, latestMovingAt: null, nights: windows.length, movingNights: 0,
+  };
   for (const [a, b] of windows) {
     const sub = pings.filter((p) => p.t >= a && p.t < b);
     out.readings += sub.length;
     if (!out.fuelSensor && sub.some((p) => Number.isFinite(p.fuelLevelMl) || Number.isFinite(p.fuelUsedMl))) out.fuelSensor = true;
+    // One reading is no movement (a lone speed spike): the same rule as the sums below
     if (sub.length < 2) continue;
+    const moving = sub.filter((p) => (p.speedKmh ?? 0) >= MOVING_KMH);
+    if (moving.length) {
+      out.movingNights += 1;
+      const first = moving[0].t;
+      const last = moving[moving.length - 1].t;
+      if (out.firstMovingAt == null || first < out.firstMovingAt) out.firstMovingAt = first;
+      if (out.latestMovingAt == null || last > out.latestMovingAt) out.latestMovingAt = last;
+    }
     const s = summariseDay(sub, null);
     out.km += s.distanceKm ?? 0;
     out.movingMin += s.movingMin ?? 0;

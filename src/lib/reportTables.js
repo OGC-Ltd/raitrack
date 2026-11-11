@@ -11,6 +11,24 @@ const peakDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', w
 export const peakWords = (ms) => (Number.isFinite(ms) ? peakDay.format(ms).replace(/,/g, '') : '-');
 import { statusWord } from './followUp';
 
+/** "22:47", or "31 Oct 22:47" when the report covers more than one night. Nairobi. */
+const clockOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const clockDated = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const clockWords = (ms, dated) => (dated ? clockDated.format(ms).replace(/,/g, '') : clockOnly.format(ms));
+
+/**
+ * The night report's "Moving between": "22:30 – 23:40 Hrs" over one night.
+ * Over several, the times carry their date and the nights it moved are
+ * counted, so a range never reads backwards: "31 Oct 23:30 – 2 Nov 22:10 Hrs, 2 nights".
+ */
+export function movingRange(r) {
+  const { firstMovingAt: first, latestMovingAt: last } = r;
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return '-';
+  const dated = (r.nights ?? 1) > 1;
+  const span = first === last ? clockWords(first, dated) : `${clockWords(first, dated)} – ${clockWords(last, dated)}`;
+  return `${span} Hrs${(r.movingNights ?? 1) > 1 ? `, ${r.movingNights} nights` : ''}`;
+}
+
 /** Words that say there is no value: shown blank, and a column of nothing else is left out. */
 const NO_VALUE = new Set(['', '-', '–', 'unspecified', 'unknown', 'n/a', 'none']);
 export const isBlank = (v) => NO_VALUE.has(String(v ?? '').trim().toLowerCase());
@@ -123,12 +141,14 @@ export const REPORTS = {
     key: 'night',
     /** Columns from this index on are figures: right-aligned. */
     num: 2,
+    /** Words, not a figure: left-aligned though it sits past num. */
+    text: ['Moving between'],
     label: 'Night driving',
     title: 'Night Driving Report',
     preset: 'lastNight',
     maxDays: 7,
-    columns: () => ['Vehicle', 'Type', 'Night distance, km', 'Time moving'],
-    cells: (r) => [vehicleCell(r), typeOf(r), km1(r.km), minutesWords(r.movingMin)],
+    columns: () => ['Vehicle', 'Type', 'Night distance, km', 'Time moving', 'Moving between'],
+    cells: (r) => [vehicleCell(r), typeOf(r), km1(r.km), minutesWords(r.movingMin), movingRange(r)],
     sum: (r) => r.km,
     sumWords: (t) => `${km1(t)} km`,
     kpis: (rows) => [
