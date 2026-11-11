@@ -753,7 +753,11 @@ export default function PlannerScreen() {
   };
 
   const remove = async (p) => {
-    if (!window.confirm(`Remove the plan for ${p.plate} on ${p.planDate}? Its customers and their geofences stay.`)) return;
+    // A keyed plan is the Deliveries list's: it comes back on that list's next save unless taken off there
+    const words = isKeyed(p)
+      ? `Remove the plan for ${p.plate} on ${p.planDate}? It was keyed in on Deliveries and comes back the next time that day's list is saved; take ${p.plate} off the list there to drop it for good.`
+      : `Remove the plan for ${p.plate} on ${p.planDate}? Its customers and their geofences stay.`;
+    if (!window.confirm(words)) return;
     await deletePlan(orgId, p.id);
     qc.invalidateQueries({ queryKey: ['planner', 'plans', orgId] });
   };
