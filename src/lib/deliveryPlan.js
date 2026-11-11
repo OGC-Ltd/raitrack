@@ -1,8 +1,10 @@
 // The day's delivery list for the Deliveries Report (operator, 4 Nov 2026:
 // "just for specific vehicles that have been shared during the day"; "for now
 // let's keep it in the browser"): which vehicles, and each one's customers.
-// Kept in this browser (localStorage), a list per organisation per day; a
-// browser that cannot keep it holds it for as long as the page is open.
+// Now kept on the server (operator, 11 Nov 2026: "we don't want it to be kept
+// in the browser"; api/deliveries, read through the server's Redis cache).
+// loadPlan and loadOrders below only read what a browser kept before, so the
+// Deliveries screen can move it to the server once and then forget it.
 //
 // A plan: { vehicles: [{ key, plate, vehicleIds: [..], customers: [names], pins: [{ name, lat, lng, radiusM }] }] }
 // `pins`: delivery points pasted as coordinates (operator, 4 Nov 2026), for
@@ -40,6 +42,13 @@ export function savePlan(orgCode, day, plan) {
       if (key?.startsWith(prefix) && key.slice(prefix.length) < cut) localStorage.removeItem(key);
     }
   } catch { /* storage full or blocked: kept in memory */ }
+}
+
+/** Forget a day's list this browser kept, once it is on the server. */
+export function forgetLegacyPlan(orgCode, day) {
+  const k = KEY(orgCode, day);
+  memory.delete(k);
+  try { localStorage.removeItem(k); } catch { /* storage unavailable */ }
 }
 
 /** The most recent earlier day with a list, within KEEP_DAYS, or null. */
@@ -155,4 +164,11 @@ export function saveOrder(orgCode, plate, text, now = Date.now()) {
   else delete next[plate];
   ordersMemory.set(k, next);
   try { localStorage.setItem(k, JSON.stringify(next)); } catch { /* full or blocked: memory only */ }
+}
+
+/** Forget the counts this browser kept, once they are on the server. */
+export function forgetLegacyOrders(orgCode) {
+  const k = ORDERS_KEY(orgCode);
+  ordersMemory.delete(k);
+  try { localStorage.removeItem(k); } catch { /* storage unavailable */ }
 }

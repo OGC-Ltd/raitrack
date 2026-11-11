@@ -79,14 +79,14 @@ describe('Deliveries Report', () => {
   });
 
   it('says why there is no departure', () => {
-    expect(notLeftWords(tripOf([p('2026-11-04T06:00:00', MORL), p('2026-11-04T09:00:00', MORL)], storages, { to: at('2026-11-04T10:00:00') }))).toBe('At MORL, not left');
+    expect(notLeftWords(tripOf([p('2026-11-04T06:00:00', MORL), p('2026-11-04T09:00:00', MORL)], storages, { to: at('2026-11-04T10:00:00') }))).toBe('At MORL');
     expect(notLeftWords(tripOf([p('2026-11-04T06:00:00', ROAD)], storages, { to: at('2026-11-04T10:00:00') }))).toBe('Not at MORL/STO in 10 days');
   });
 
   it('trusts Movements for where the vehicle is now: a quiet tracker at MORL is at MORL', () => {
     const plan = { plate: 'KDE 127E', customers: [] };
     const quiet = deliveryRow(plan, [p('2026-11-01T06:00:00', ROAD)], storages, byName, { to: at('2026-11-04T17:00:00'), atMorl: true });
-    expect(rowCells(quiet)[1]).toBe('At MORL, not left');
+    expect(rowCells(quiet)[1]).toBe('At MORL');
     // Its last position, newer than the readings, is used: back at MORL
     const back = deliveryRow(plan, [p('2026-11-04T06:00:00', MORL), p('2026-11-04T07:00:00', ROAD)], storages, byName,
       { to: at('2026-11-04T17:00:00'), lastFix: { t: at('2026-11-04T16:00:00'), ...MORL } });
@@ -188,7 +188,7 @@ describe('every trip in the window, and only there', () => {
     ];
     const r = deliveryRow(plan, pings, storages, byName, { from: today, to });
     expect(r.fulfilled).toBe(0);
-    expect(rowCells(r)[1]).toBe('At MORL, not left');
+    expect(rowCells(r)[1]).toBe('At MORL');
     expect(r.trip.arrivedAt).toBeNull();
   });
 
@@ -331,11 +331,15 @@ describe('MORL and the Nairobi depot are different places, found by playing the 
   it('driving through a large geofence is not a delivery; standing in it is', () => {
     const town = { name: 'Town', label: 'Town', feature: sq('Town', A.lat, A.lng, 0.05) };
     const drive = [0, 1, 2, 3, 4].map((m) => ({ t: from + m * 60_000, ...A, speedKmh: 50 }));
-    expect(stopCheck([drive], town, { from, to })).toMatchObject({ at: null, reachedAt: from });
+    // The stand rule, with the temporary pass rule (PASS_COUNTS) off
+    const strict = { from, to, passCounts: false };
+    expect(stopCheck([drive], town, strict)).toMatchObject({ at: null, reachedAt: from });
     const stand = [0, 1, 2, 3].map((m) => ({ t: from + m * 60_000, ...A, speedKmh: m === 3 ? 30 : 0 }));
-    expect(stopCheck([stand], town, { from, to }).at).toBe(from);
+    expect(stopCheck([stand], town, strict).at).toBe(from);
     const crawl = [{ t: from, ...A, speedKmh: 0 }, { t: from + 30_000, ...A, speedKmh: 40 }, { t: from + 60_000, ...A, speedKmh: 0 }, { t: from + 90_000, ...A, speedKmh: 40 }];
-    expect(stopCheck([crawl], town, { from, to }).at).toBeNull();
+    expect(stopCheck([crawl], town, strict).at).toBeNull();
+    // Temporary (operator, 11 Nov 2026): driving through counts
+    expect(stopCheck([drive], town, { from, to }).at).toBe(from);
   });
   it('parked in the origin’s yard delivers nothing to a stop on its ground; a visit from the road does', () => {
     const yardShop = { lat: MORL.lat + 0.001, lng: MORL.lng };
@@ -373,10 +377,24 @@ describe('the whole route against each stop', () => {
     expect(r.at).toBe(t0 + min);
     expect(stopWords(r)).toBe(`Delivered ${stamp(t0 + min).slice(11, 16)}`);
   });
-  it('reached: drove through without stopping', () => {
-    const r = stopCheck([[{ t: t0, ...away }, { t: t0 + min, ...SHOP }, { t: t0 + min + 30_000, ...away }]], stop, window);
+  it('reached: drove through without stopping (stand rule, pass rule off)', () => {
+    const r = stopCheck([[{ t: t0, ...away }, { t: t0 + min, ...SHOP }, { t: t0 + min + 30_000, ...away }]], stop, { ...window, passCounts: false });
     expect(r).toMatchObject({ at: null, reachedAt: t0 + min });
     expect(stopWords(r)).toMatch(/^Reached \d\d:\d\d, did not stop$/);
+  });
+  it('temporary: driving through the stop counts as delivered', () => {
+    const r = stopCheck([[{ t: t0, ...away }, { t: t0 + min, ...SHOP }, { t: t0 + min + 30_000, ...away }]], stop, window);
+    expect(r).toMatchObject({ at: t0 + min, reachedAt: t0 + min, nearest: null });
+    expect(stopWords(r)).toBe(`Delivered ${stamp(t0 + min).slice(11, 16)}`);
+  });
+  it('temporary: passing within 100 m counts, 230 m does not', () => {
+    const small = pinStop({ name: 'Kiosk', ...SHOP, radiusM: 50 }, storages);
+    const near = { lat: SHOP.lat - 0.00072, lng: SHOP.lng };   // about 80 m
+    const far = { lat: SHOP.lat - 0.00207, lng: SHOP.lng };    // about 230 m
+    expect(stopCheck([[{ t: t0, ...away }, { t: t0 + min, ...near, speedKmh: 60 }, { t: t0 + 2 * min, ...away }]], small, window).at).toBe(t0 + min);
+    const missed = stopCheck([[{ t: t0, ...away }, { t: t0 + min, ...far, speedKmh: 60 }, { t: t0 + 2 * min, ...away }]], small, window);
+    expect(missed.at).toBeNull();
+    expect(stopWords(missed)).toMatch(/^Not reached, closest 230 m/);
   });
   it('missed: how close it came, and when', () => {
     const r = stopCheck([[{ t: t0, lat: -0.6, lng: 35.5 }, { t: t0 + min, ...away }]], stop, window);
@@ -408,7 +426,8 @@ describe('the whole route against each stop', () => {
     const windows = [{ from: day(2, 7), to: day(2, 20) }, { from: day(3, 7), to: day(3, 20) }];
     const row = (route) => deliveryRow({ plate: 'KDE 127E', customers: [], pins: [pin] }, route, storages, new Map(), { from: windows[0].from, to: windows[1].to, windows }).customers[0];
     expect(row([{ t: day(2, 21), ...SHOP }, { t: day(2, 22), ...SHOP }, { t: day(2, 23), ...away }])).toMatchObject({ at: null, reachedAt: null, nearest: null });
-    expect(row([{ t: day(2, 19, 59), ...SHOP }, { t: day(3, 7, 30), ...away }]).at).toBeNull();
+    // A single reading there at 19:59 counts under the temporary pass rule
+    expect(row([{ t: day(2, 19, 59), ...SHOP }, { t: day(3, 7, 30), ...away }]).at).toBe(day(2, 19, 59));
     expect(row([{ t: day(2, 8), ...away }, { t: day(3, 9), ...SHOP }, { t: day(3, 9, 3), ...SHOP }, { t: day(3, 9, 4), ...away }])).toMatchObject({ at: day(3, 9), nearest: null });
   });
   it('sends only what the server names, the words included', () => {
@@ -417,5 +436,24 @@ describe('the whole route against each stop', () => {
     const c = deliveriesPdfBody([r], { from: window.from, at: window.to, fleet: 'M' }).rows[0].customers[0];
     expect(Object.keys(c).sort()).toEqual(['at', 'label', 'note']);
     expect(c.note).toMatch(/^Not reached, closest 2\.2 km at 02\.11 /);
+  });
+});
+
+describe('a hand-listed vehicle: when it left the customer (operator, 11 Nov 2026)', () => {
+  it('reached 08:49, gone by the next reading away, back at MORL after', async () => {
+    const { deliveryRow, findStorages, pinStop } = await import('./deliveriesReport');
+    const storages = findStorages(null);
+    const t = (hm) => Date.parse(`2026-11-11T${hm}:00+03:00`);
+    const shop = { lat: -0.30, lng: 36.10 };
+    const pin = { name: 'MOONLIGHT EXPRESS', ...shop, radiusM: 50 };
+    const MORL = { lat: -0.28802969095623043, lng: 36.04494759379902 };
+    const p = (hm, at, kmh = 30) => ({ t: t(hm), lat: at.lat, lng: at.lng, speedKmh: kmh });
+    const pings = [p('06:00', MORL, 0), p('06:30', MORL, 0), p('08:38', { lat: -0.29, lng: 36.07 }), p('08:49', shop, 0), p('08:51', shop, 0),
+      p('08:55', { lat: -0.302, lng: 36.103 }), p('10:00', { lat: -0.29, lng: 36.07 }), p('14:27', MORL, 0), p('14:50', MORL, 0)];
+    const r = deliveryRow({ plate: 'KDM 138L', customers: [], pins: [pin] }, pings, storages, new Map(), { from: t('07:00'), to: t('16:00') });
+    const c = r.customers[0];
+    expect(c.at).toBe(t('08:49'));
+    expect(c.leftAt).toBe(t('08:55'));
+    expect(pinStop(pin).label).toBe('MOONLIGHT EXPRESS');
   });
 });

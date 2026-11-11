@@ -21,16 +21,20 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
-import { fleetDay, periodWords, dayStart } from '../../lib/fleetReports';
+import { fleetDay, periodWords, dayStart, daysCovering } from '../../lib/fleetReports';
+import { marksOf } from '../../lib/plannerDayMarks';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDeliveryDay, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
 } from '../../lib/deliveriesReport';
-import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, saveOrder, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
+import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
+import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan } from '../../api/planner';
-import { sheetDays, sheetsForWindow, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
 import { kmWords } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -38,7 +42,10 @@ import { useAppActions } from '../../context/AppContext';
 import { loadZones } from '../../hooks/useEstateZones';
 import { deliveriesDoc } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
+import './DeliveriesReport.css';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
+import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import { docHtml } from '../../lib/docHtml';
 import { saveFile } from '../../api/tripReport';
 import { downloadTableCsv } from '../../utils/tableExport';
 import JpegButton, { PreviewButton } from '../shared/JpegButton';
@@ -128,10 +135,57 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const dayOf = (next) => (next.mode === 'days' ? next.fromDay : today);
   const day = daysOpen ? draft.fromDay : today;
   const [group, setGroup] = useState(null);               // one group of the fleet list, or all
-  const [plan, setPlan] = useState(() => loadPlan(orgCode, day));
-  useEffect(() => { setPlan(loadPlan(orgCode, day)); }, [orgCode, day]);
-  const change = (next) => { setPlan(next); savePlan(orgCode, day, next); };
-  const earlier = useMemo(() => (plan.vehicles.length ? null : lastPlanBefore(orgCode, day)), [plan.vehicles.length, orgCode, day]);
+  // Van Sales (the report as it was) or Finished Goods (operator, 11 Nov 2026), kept in this browser
+  const [template, setTemplate] = useState(() => loadTemplate(orgCode));
+  useEffect(() => { setTemplate(loadTemplate(orgCode)); }, [orgCode]);
+  const isFg = template === 'finishedGoods';
+  // The day's list lives on the server, read through its Redis cache (operator, 11 Nov 2026: "we don't
+  // want it to be kept in the browser"). A list this browser kept before is moved up once, then forgotten
+  const qc = useQueryClient();
+  const dayQuery = (d) => ({
+    queryKey: ['deliveries', 'day', orgId, d],
+    queryFn: async () => {
+      const got = await getDeliveryDay(orgId, d);
+      const kept = loadPlan(orgCode, d);
+      if (!got.vehicles.length && kept.vehicles.length) {
+        await saveDeliveryDay(orgId, d, kept.vehicles);
+        forgetLegacyPlan(orgCode, d);
+        return { vehicles: kept.vehicles };
+      }
+      if (kept.vehicles.length) forgetLegacyPlan(orgCode, d);
+      return { vehicles: got.vehicles };
+    },
+    enabled: Boolean(orgId),
+    staleTime: 30_000,
+  });
+  const dayList = useQuery(dayQuery(day));
+  const plan = dayList.data ?? emptyPlan();
+  // Saves go one after another, each the whole list, so the last change is the one kept
+  const saving = useRef(Promise.resolve());
+  // `failedDay`: a day whose list on screen is not yet on the server. The list is kept as the operator
+  // left it (never snapped back to the server's copy) until Try again, or the next change, saves it
+  const [saveState, setSaveState] = useState({ busy: 0, error: null, failedDay: null });
+  const change = (next) => {
+    const key = ['deliveries', 'day', orgId, day];
+    const forDay = day;
+    qc.setQueryData(key, next);
+    setSaveState((s) => ({ busy: s.busy + 1, error: null, failedDay: null }));
+    saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles))
+      .then(() => setSaveState((s) => ({ ...s, busy: s.busy - 1 })))
+      .catch((err) => setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err), failedDay: forDay })));
+  };
+  const retrySave = () => {
+    const d = saveState.failedDay;
+    const list = d && qc.getQueryData(['deliveries', 'day', orgId, d]);
+    if (list && d === day) change(list);
+  };
+  const earlierQ = useQuery({
+    queryKey: ['deliveries', 'before', orgId, day],
+    queryFn: () => lastDeliveryDayBefore(orgId, day),
+    enabled: Boolean(orgId) && dayList.isSuccess && !plan.vehicles.length,
+    staleTime: 60_000,
+  });
+  const earlier = !plan.vehicles.length && earlierQ.data ? { day: earlierQ.data.day, plan: { vehicles: earlierQ.data.vehicles } } : null;
 
   // Every Menengai unit on the platform (operator, 4 Nov 2026: "search any
   // vehicle in Menengai"), with its group on the fleet list where it has one
@@ -146,8 +200,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const canSheets = can('planner:read');
   const { setDesktopActiveTab } = useAppActions();
   const findSheets = async (from, to) => {
-    const d = sheetDays(from, to, fleetDay);
-    return sheetsForWindow(await listPlans(orgId, d.from, d.to), from, to, dayStart);
+    // Every sheet the Planner lists over the last week, for now (lib/plannerReport ALL_SHEETS)
+    const d = sheetDaysFor(from, to, fleetDay);
+    return sheetsForReport(await listPlans(orgId, d.from, d.to), from, to, dayStart);
   };
   const [sheets, setSheets] = useState({ status: 'idle', list: [] });
   const sheetSpanKey = daysOpen ? `days:${day}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
@@ -191,8 +246,34 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   };
   // Orders fulfilled typed over the report's own count (operator, 4 Nov 2026: "the user should have the
   // option to edit the delivered like 8/10 and generate the report"), by plate; the last value typed for
-  // each plate is kept in this browser and comes back on the next report (operator, 5 Nov 2026)
-  const [typed, setTyped] = useState(() => loadOrders(orgCode));
+  // each plate is kept on the server and comes back on the next report (operator, 5 Nov 2026; out of the
+  // browser 11 Nov 2026). Counts this browser kept before are moved up once
+  const ordersQuery = {
+    queryKey: ['deliveries', 'orders', orgId],
+    queryFn: async () => {
+      const kept = Object.entries(loadOrders(orgCode));
+      let all = await getDeliveryOrders(orgId);
+      if (!kept.length) return all;
+      for (const [plate, text] of kept) if (!all[plate]) all = await saveDeliveryOrder(orgId, plate, text);
+      forgetLegacyOrders(orgCode);
+      return all;
+    },
+    enabled: Boolean(orgId),
+    staleTime: 30_000,
+  };
+  const orders = useQuery(ordersQuery);
+  const [typed, setTyped] = useState({});
+  useEffect(() => { if (orders.data) setTyped((t) => ({ ...orders.data, ...t })); }, [orders.data]);
+  // One save per plate once the typing stops
+  const orderTimers = useRef(new Map());
+  const keepOrder = (plate, text) => {
+    clearTimeout(orderTimers.current.get(plate));
+    orderTimers.current.set(plate, setTimeout(() => {
+      saveDeliveryOrder(orgId, plate, text)
+        .then((all) => qc.setQueryData(ordersQuery.queryKey, all))
+        .catch((err) => setSaveState((s) => ({ ...s, error: `The count for ${plate} was not saved: ${err?.message ?? err}` })));
+    }, 600));
+  };
   const findHits = useMemo(() => {
     const q = find.replace(/\s+/g, '').toUpperCase();
     if (!q) return [];
@@ -232,7 +313,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const execute = async (next) => {
     const windows = movementWindows(next);
     // This window's day decides the list: the page may still hold another day's
-    const runPlan = loadPlan(orgCode, dayOf(next));
+    const runPlan = orgId ? await qc.fetchQuery(dayQuery(dayOf(next))).catch(() => plan) : plan;
     setSel(next);
     if (!orgId || !windows.length) return;
     const windowFrom = windows[0].from;
@@ -240,7 +321,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     const id = ++runId.current;
     const live = () => id === runId.current;
     try {
-      setTyped(loadOrders(orgCode));
+      qc.fetchQuery(ordersQuery).then((o) => setTyped((t) => ({ ...o, ...t }))).catch(() => undefined);
       setRun({ status: 'loading', words: 'Finding MORL, the Nairobi depot and the customers', done: 0, total: 0 });
       // Each step says what it was doing when it fails; Movements (where each
       // vehicle is now) is help, not a need: without it the report still runs
@@ -313,6 +394,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         });
         return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
       });
+      const reportDays = daysCovering(windowFrom, to);
       const sheetRows = sheetUnits.map(({ plan: p, trackers, span }) => {
         const routes = trackers.map((v) => (sheetPings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
         const { actual } = actualFor(p, routes, fc, dayStart);
@@ -320,8 +402,16 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         const unit = units.find((u) => u.vehicles.some((x) => trackers.some((v) => v.vehicleId === x.vehicleId)));
         const why = !trackers.length ? 'No tracked unit carries this plate'
           : trackers.every((v) => failed.has(v.vehicleId)) ? 'Positions could not be read' : null;
-        const row = sheetRow(p, actual, { place: mv?.location ?? null, why });
-        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null };
+        // Where the truck is now: Movements' MORL reading, else its latest position against MORL/STO
+        const latest = routes.flat().reduce((a, x) => (!a || x.t > a.t ? x : a), null);
+        const nowAt = mv?.lat != null && mv?.lastAt != null && (!latest || mv.lastAt >= latest.t) ? { lat: mv.lat, lng: mv.lng } : latest;
+        const atStorage = (mv?.state === 'at' ? storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } : null)
+          ?? (nowAt ? storageAt(nowAt, storages) : null);
+        // "Mark for today" on the Planner: only the stops due on the report's days count (lib/plannerDayMarks)
+        const opts = { place: mv?.location ?? null, why, atStorage, days: reportDays };
+        const row = sheetRow(p, actual, { ...opts, marks: marksOf(p) });
+        // Kept so a mark made after the run is taken without running again (see `marked` below)
+        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
       rows.unshift(...sheetRows);
       setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });
@@ -330,7 +420,21 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     }
   };
 
-  const ran = run.status === 'done' ? run : null;
+  // Planner sheets made again with the marks as they are now: marking a stop "for today" on the
+  // Planner changes the counts at once, with no new run (operator, 11 Nov 2026). The Planner keeps
+  // each plan in the query cache under ['planner', 'plan', orgId, id]; a change there redraws these
+  const [planTick, setPlanTick] = useState(0);
+  useEffect(() => qc.getQueryCache().subscribe((e) => {
+    const k = e?.query?.queryKey;
+    if (e?.type === 'updated' && k?.[0] === 'planner' && k?.[1] === 'plan') setPlanTick((t) => t + 1);
+  }), [qc]);
+  const ranRaw = run.status === 'done' ? run : null;
+  const ran = useMemo(() => (ranRaw ? { ...ranRaw, rows: ranRaw.rows.map((r) => {
+    if (!r.remake) return r;
+    const latest = qc.getQueryData(['planner', 'plan', orgId, r.remake.plan.id]) ?? r.remake.plan;
+    return { ...sheetRow(r.remake.plan, r.remake.actual, { ...r.remake.opts, marks: marksOf(latest) }),
+      group: r.group, ownGroup: r.ownGroup, remake: r.remake };
+  }) } : null), [ranRaw, planTick, qc, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
   // The rows as the PDF, JPEG and CSV print them: a typed count over the report's
   const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter((r) => group == null || r.group === group).map((r) => {
     const t = readOrders(typed[r.plate]);
@@ -355,17 +459,43 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   ];
 
   // Edit (operator, 4 Nov 2026), as the other reports: a new run, group or choice of stops starts the sheet over
-  const editSource = useMemo(() => (done ? { done, showStops } : null), [done, showStops]);
+  // Finished Goods lines taken off with ✕ (operator, 11 Nov 2026), until the next run
+  const [dropped, setDropped] = useState(() => new Set());
+  useEffect(() => { setDropped(new Set()); }, [ranRaw]);
+  const drop = (key) => setDropped((d) => new Set(d).add(key));
+  const editSource = useMemo(() => (done ? { done, showStops, template, dropped } : null), [done, showStops, template, dropped]);
+  const fleetName = companyName ?? orgCode ?? 'Menengai';
+  const fgDoc = () => finishedGoodsDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, orgCode, dropped });
   const editor = useReportEditor({ orgId, source: editSource,
-    build: () => deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops, orgCode }) });
+    build: () => (isFg ? fgDoc() : deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, stops: showStops, orgCode })) });
+  const fgAll = useMemo(() => (done && isFg ? fgLines(done.rows, { at: done.at }) : []), [done, isFg]);
+  const fgShown = useMemo(() => fgAll.filter((l) => !dropped.has(l.key)), [fgAll, dropped]);
+  // Find a unit in the table (operator, 11 Nov 2026), as on Movements: "kcw475", "KCW 475E", "475e";
+  // a customer's name too on Finished Goods. The screen only: CSV, PDF and JPEG keep every line
+  const [unitSearch, setUnitSearch] = useState('');
+  const needle = unitSearch.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const hits = (...texts) => !needle || texts.some((t) => String(t ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(needle));
+  const fgVisible = useMemo(() => fgShown.filter((l) => hits(l.plate, l.customer)), [fgShown, needle]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowsVisible = useMemo(() => (done ? done.rows.filter((r) => hits(r.plate)) : []), [done, needle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The server draws the PDF from the rows (reports/deliveries.pdf), as the other Movements tabs; the JPEG comes from that PDF
-  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportPdf({ orgId, kind: 'deliveries', landscape,
+  // Finished Goods: always landscape, ten columns, drawn in the browser on the letterhead so its
+  // day bar can be black with white words (the server's bar is always blue)
+  const fgHtml = (continuous) => { const d = fgDoc(); return { d, html: docHtml(d, { logos: letterheadLogos(), landscape: true, continuous }) }; };
+  const makePdf = (landscape) => (editor.edited ? editor.make(isFg ? true : landscape)
+    : isFg ? (() => { const { d, html } = fgHtml(false); return saveLetterheadPdf(html, { filename: `${d.filename}.pdf`, landscape: true, keep: true }); })()
+    : makeReportPdf({ orgId, kind: 'deliveries', landscape,
     body: deliveriesPdfBody(done.rows, { from: done.from, at: done.at, fleet: companyName ?? orgCode ?? 'Menengai', group, stops: showStops }) }));
   const save = async (as, landscape = false) => {
     if (!done || file.busy) return;
     setFile({ busy: as, error: null });
     try {
+      if (isFg && !editor.edited && as === 'jpeg') {
+        const { d, html } = fgHtml(true);
+        await saveLetterheadJpeg(html, { filename: `${d.filename}.pdf`, landscape: true, continuous: true });
+        setFile({ busy: false, error: null });
+        return;
+      }
       const { blob, filename } = await makePdf(landscape);
       if (as === 'jpeg') await savePdfAsJpeg(blob, filename);
       else saveFile(blob, filename);
@@ -375,7 +505,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     }
   };
   const preview = usePdfPreview(makePdf);
-  const saveCsv = () => done && downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` });
+  const saveCsv = () => done && (isFg
+    ? downloadTableCsv({ ...fgCsv(fgShown), filenameSlug: `deliveries-finished-goods-${fleetDay(done.at)}` })
+    : downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` }));
   const flip = (s, k) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; };
   const toggle = (k) => setOpen((s) => flip(s, k));
 
@@ -431,6 +563,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                         ...groupNames.map((name) => ({ value: name, label: name, note: groupCount(name) }))]}
                       onChange={(g) => editor.guard('Show another group', () => setGroup(g))} />
 
+        <ChoicePicker icon="ti-template" label="Template" align="right" value={template}
+                      options={TEMPLATES.map((t) => ({ value: t.value, label: `${t.label} template` }))}
+                      onChange={(t) => editor.guard('Use another template', () => { setTemplate(t); saveTemplate(orgCode, t); })} />
+
         <button type="button" className="sp4-submit-btn frp-run rpt-run"
                 onClick={() => editor.guard('Make the report again', () => execute(daysOpen ? { mode: 'days', ...draft } : sel))}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
@@ -449,7 +585,18 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               {daysOpen && draft.toDay !== draft.fromDay ? 'Vehicles and stops for ' : 'Vehicles shared on '}
               {periodDays(Date.parse(`${day}T09:00:00+03:00`), Date.parse(`${daysOpen ? draft.toDay : day}T09:00:00+03:00`))}
             </h3>
-            <span className="rpt-sub">Kept in this browser.</span>
+            <span className={`dlv-plan__keep${saveState.error || dayList.isError ? ' dlv-plan__keep--error' : ''}`} role="status">
+              {dayList.isError ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> The list could not be read: {dayList.error?.message}</>
+                : saveState.error ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> Not saved: {saveState.error}
+                  {saveState.failedDay === day && (
+                    <button type="button" className="sp4-ghost-btn dlv-plan__retry" onClick={retrySave}>
+                      <i className="ti ti-refresh" aria-hidden="true" /> Try again
+                    </button>
+                  )}</>
+                  : dayList.isLoading ? 'Reading the list…'
+                    : saveState.busy > 0 ? 'Saving…'
+                      : <><i className="ti ti-cloud-check" aria-hidden="true" /> Saved for everyone in {companyName ?? orgCode ?? 'the organisation'}</>}
+            </span>
           </div>
           {zones.status === 'done' && !customers.length && (
             <p className="rpt-warn dlv-plan__warn">No geofences are on the platform for Menengai yet, so stops cannot be picked.</p>
@@ -498,9 +645,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               <p className="rpt-sub dlv-sheets__lede">
                 From the Planner: {sheets.list.length} sheet{sheets.list.length === 1 ? '' : 's'}, each read as the Planner reads it. Change a sheet’s stops in the Planner.
               </p>
-              <ul className="dlv-plan__list">
+              <ul className="dlv-plan__list dlv-roster">
                 {sheets.list.map((p) => (
-                  <li key={p.id} className="dlv-plan__veh">
+                  <li key={p.id} className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{p.plate}</span>
                     <span className="rpt-sub">{sheetWords({ sheet: { planDate: p.planDate, driverName: p.driverName } }, kmWords)}, {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}</span>
                     <button type="button" className="sp4-ghost-btn" onClick={() => openInPlanner(p.id)}>
@@ -512,38 +659,47 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             </div>
           )}
           {plan.vehicles.length > 0 && (
-            <ul className="dlv-plan__list">
+            <>
+            <div className="dlv-roster__head" aria-hidden="true">
+              <span>Vehicle</span><span>Group</span><span>Stops</span><span /><span className="dlv-roster__count">Picked</span><span />
+            </div>
+            <ul className="dlv-plan__list dlv-roster">
               {plan.vehicles.map((v) => {
                 const picked = v.customers.length + (v.pins?.length ?? 0);
                 const isPasting = pasting.has(v.key);
                 const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
                 return (
-                  <li key={v.key} className="dlv-plan__veh">
+                  <li key={v.key} className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{v.plate}</span>
+                    <span className="dlv-roster__group">
                     <select className="rpt-select dlv-plan__group" value={groupOfV(v) ?? ''} aria-label={`Group ${v.plate} is reported under`}
                             title={v.group && v.group !== ownGroup(v.key) ? `Assigned here today; on the fleet list it is ${ownGroup(v.key) ?? 'in no group'}` : 'The group it is reported under'}
                             onChange={(e) => e.target.value && moveTo(v, e.target.value)}>
                       {!groupOfV(v) && <option value="">No group</option>}
                       {groupNames.map((name) => <option key={name} value={name}>{name}</option>)}
                     </select>
-                    {v.group && v.group !== ownGroup(v.key) && <span className="rpt-sub dlv-plan__moved">from {ownGroup(v.key) ?? 'no group'}</span>}
-                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn">On a Planner sheet: the sheet is reported instead</span>}
+                    {v.group && v.group !== ownGroup(v.key) && <span className="dlv-plan__moved">from {ownGroup(v.key) ?? 'no group'}</span>}
+                    </span>
+                    <span className="dlv-roster__stops">
                     <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
                                  options={options} picked={v.customers} startOpen={justAdded === v.key}
                                  onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
-                    <button type="button" className="sp4-ghost-btn" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
+                    </span>
+                    <button type="button" className="sp4-ghost-btn dlv-roster__paste" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
                       <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
                     </button>
-                    <span className="rpt-sub">{picked} stop{picked === 1 ? '' : 's'}{near ? ` · ${near} at storage` : ''}</span>
+                    <span className="dlv-roster__count"><b>{picked}</b> stop{picked === 1 ? '' : 's'}{near ? `, ${near} at storage` : ''}</span>
                     <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
                             aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
-                    {isPasting && <PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} />}
+                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
+                    {isPasting && <div className="dlv-roster__wide"><PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
                   </li>
                 );
               })}
             </ul>
+            </>
           )}
         </section>
 
@@ -568,10 +724,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             <TableToolbar
               summary={<>
                 <strong>{done.rows.length}</strong> vehicle{done.rows.length === 1 ? '' : 's'}
-                <span className="rpt-sub"> · {periodWords(done.from, done.at)}</span>
-                {done.failed > 0 && <span className="rpt-warn"> · {done.failed} tracker{done.failed === 1 ? '' : 's'} could not be read</span>}
-                {done.rows.some((r) => backShort(r) > 0) && <span className="rpt-warn"> · {done.rows.filter((r) => backShort(r) > 0).length} back with stops undelivered</span>}
-                {done.noMoves && <span className="rpt-warn"> · Movements could not be read, so current locations are missing</span>}
+                <span className="rpt-sub dlv-sum__part">{periodWords(done.from, done.at)}</span>
+                {done.failed > 0 && <span className="rpt-warn dlv-sum__part">{done.failed} tracker{done.failed === 1 ? '' : 's'} could not be read</span>}
+                {done.rows.some((r) => backShort(r) > 0) && <span className="rpt-warn dlv-sum__part">{done.rows.filter((r) => backShort(r) > 0).length} back with stops undelivered</span>}
+                {done.noMoves && <span className="rpt-warn dlv-sum__part">Movements could not be read, so current locations are missing</span>}
               </>}
               onCsv={done.rows.length ? saveCsv : undefined}
               onPdf={file.busy || !done.rows.length ? undefined : (landscape) => save('pdf', landscape)} pdfWays
@@ -579,19 +735,72 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 {editor.button}
                 {file.busy ? <span className="rpt-sub">{file.busy === 'jpeg' ? 'Making the JPEG…' : 'Making the PDF…'}</span>
                   : file.error ? <span className="rpt-warn">{file.error}</span> : null}
-                <label className="dlv-stops-opt" title="The list of each vehicle's pick-up locations, ticked or not, under the table">
+                {!isFg && <label className="dlv-stops-opt" title="The list of each vehicle's pick-up locations, ticked or not, under the table">
                   <input type="checkbox" checked={showStops} onChange={(e) => { const on = e.target.checked; editor.guard(on ? 'Show the pick-up locations' : 'Leave the pick-up locations out', () => setShowStops(on)); }} /> Show pick-up locations
-                </label>
+                </label>}
                 <JpegButton className="sp4-ghost-btn rpt-log" onSave={(landscape) => save('jpeg', landscape)} disabled={Boolean(file.busy) || !done.rows.length} title="The PDF report as an image" />
                 <PreviewButton className="sp4-ghost-btn rpt-log" onPreview={preview.open} disabled={!done.rows.length} />
               </>}
             />
             {preview.state && <PdfPreview state={preview.state} title="Deliveries report" caption={periodWords(done.from, done.at)} onRetry={preview.retry} onClose={preview.close} />}
-            <p className="mvr-depots" role="note">
-              <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
-              <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>
-              {done.sheets > 0 && <span>Planner sheets: each read over the 48 hours from its printing, as on the Planner, so its rows match the plan there.</span>}
-            </p>
+            <dl className="dlv-rules" role="note" aria-label="How the report reads each route">
+              <dt>Delivered</dt>
+              {PASS_COUNTS
+                ? <dd>The vehicle came inside the stop’s geofence, or within {PASS_RADIUS_M} m of it, anywhere on the route in the hours picked. No stop needed for now.</dd>
+                : <dd>Stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</dd>}
+              <dt>Origin</dt>
+              <dd>The first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</dd>
+              {done.sheets > 0 && <><dt>Planner sheets</dt><dd>Each read over the 48 hours from its printing, as on the Planner, so its rows match the plan there.</dd></>}
+              {done.sheets > 0 && <><dt>Orders fulfilled on a sheet</dt><dd>When stops on it are marked for a day in the Planner (“Mark for today”), only those count on that day’s report; on a later day with no marks, the stops left over count.</dd></>}
+            </dl>
+            <div className="mvr-find dlv-search">
+              <div className="sp4-search-wrap mvr-find__box">
+                <i className="ti ti-search sp4-search-icon" aria-hidden="true" />
+                <input className="sp4-search" type="search" value={unitSearch}
+                       placeholder={isFg ? 'Find a unit or customer, e.g. KCW 475E' : 'Find a unit by plate, e.g. KCW 475E'}
+                       aria-label={isFg ? 'Find a unit by its plate, or a customer by name' : 'Find a unit by its registration plate'}
+                       onChange={(e) => setUnitSearch(e.target.value)} />
+                {unitSearch && <button type="button" className="sp4-search-clear" aria-label="Clear the search" onClick={() => setUnitSearch('')}>✕</button>}
+              </div>
+              {needle && (() => {
+                const [n, of, what] = isFg ? [fgVisible.length, fgShown.length, 'lines'] : [rowsVisible.length, done.rows.length, 'units'];
+                return (
+                  <span className={`mvr-find__note${n ? '' : ' mvr-find__note--none'}`} role="status">
+                    {n ? `${n} of ${of} ${what} shown. CSV, PDF and JPEG keep them all.` : isFg ? 'No unit or customer matches that.' : 'No unit matches that plate.'}
+                  </span>
+                );
+              })()}
+            </div>
+            {isFg ? (
+              <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
+                <table className="sp4-table rpt-table dlv-table dlv-fg">
+                  <thead>
+                    <tr><th colSpan={FG_HEADS.length + 1} className="dlv-day">{periodDays(done.from, done.at)} · Finished Goods · {fgShown.filter((l) => l.delivered).length}/{fgShown.length} customers reached
+                      {dropped.size > 0 && (
+                        <button type="button" className="dlv-fg__undo" onClick={() => editor.guard('Put the dropped lines back', () => setDropped(new Set()))}>
+                          Put back {dropped.size} dropped line{dropped.size === 1 ? '' : 's'}
+                        </button>
+                      )}
+                    </th></tr>
+                    <tr>{FG_HEADS.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col"><span className="mvr-sr">Drop</span></th></tr>
+                  </thead>
+                  <tbody>
+                    {fgVisible.map((l) => (
+                      <tr key={l.key} className={`sp4-tr dlv-fg__row dlv-fg__row--${fgState(l)}`}
+                          style={{ '--dlv-fg-fill': fgFill(l) }}>
+                        {fgCells(l).map((v, i) => <td key={i} className={i === 1 ? 'rpt-unit' : undefined}>{v}</td>)}
+                        <td className="dlv-fg__x">
+                          <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"
+                                  onClick={() => editor.guard('Drop a line', () => drop(l.key))}>
+                            <i className="ti ti-x" aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table dlv-table">
                 <thead>
@@ -599,7 +808,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                   <tr>{COLUMNS.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col"><span className="mvr-sr">Customers</span></th></tr>
                 </thead>
                 <tbody>
-                  {done.rows.map((r) => {
+                  {rowsVisible.map((r) => {
                     const cellsOf = rowCells(r);
                     const rowKey = r.key ?? r.plate;
                     const isOpen = open.has(rowKey);
@@ -616,7 +825,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                          const text = e.target.value;
                                          setTyped((t) => ({ ...t, [r.plate]: text }));
                                          // Kept once it reads as a count, or forgotten when cleared
-                                         if (!text.trim() || readOrders(text)) saveOrder(orgCode, r.plate, text);
+                                         if (!text.trim() || readOrders(text)) keepOrder(r.plate, text);
                                        }} />
                               ) : i === 0 && r.sheet ? (
                                 <>{v}<span className="rpt-sub dlv-sheet-line">{sheetWords(r, kmWords)}</span></>
@@ -660,6 +869,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

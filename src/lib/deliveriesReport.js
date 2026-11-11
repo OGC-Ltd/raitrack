@@ -18,6 +18,16 @@ import { metresToFence } from './movementDepots';
 export const STOP_MS = 90_000;
 /** Standing, for that: at this speed or under. A truck driving through a town-sized geofence is inside for minutes, and delivers nothing. */
 export const STAND_KMH = 5;
+/**
+ * TEMPORARY (operator, 11 Nov 2026): "if it passes at the area with a radius
+ * of about 100m it gets counted". While on, a customer is delivered to when
+ * the vehicle came inside its geofence, or within PASS_RADIUS_M of it, at any
+ * speed: no stop needed. Measured as the report's "closest" figure is: from a
+ * pasted point's centre, from a drawn geofence's edge. Set to false to go back
+ * to the stand rule (STOP_MS at STAND_KMH or under).
+ */
+export const PASS_COUNTS = true;
+export const PASS_RADIUS_M = 100;
 /** Out of storage and back within this is the fix wandering at the gate, not a trip. */
 export const BLIP_MS = 10 * 60_000;
 /** Shorter than this in a storage's circle is driving past it, not coming back to it: the road runs through the 1 km. */
@@ -260,7 +270,26 @@ export function pinStop(pin, storages = []) {
  *   from then; `reachedAt`: first inside; `nearest`: how close it came, when it
  *   did not deliver (null: no readings in the window).
  */
-export function stopCheck(routes, stop, { from, to }) {
+/**
+ * When the truck left a stop it got to at `at` (operator, 11 Nov 2026: "it shows they arrived at the
+ * customer but not the time they left"): the first reading after `at` outside the fence and further
+ * than PASS_RADIUS_M from it, measured as stopCheck measures. Null while it is still there.
+ */
+export function leftStopAt(routes, feature, at, to = Infinity) {
+  if (at == null || !feature) return null;
+  const centre = feature.geometry?.type === 'Point' ? middleOf(feature) : null;
+  const away = (p) => !fenceContains(p, feature) && (centre ? metres(p, centre) : metresToFence(p, feature)) > PASS_RADIUS_M;
+  let left = null;
+  for (const list of routes ?? []) {
+    // Only a track that saw the truck there
+    if (!(list ?? []).some((p) => p.t === at)) continue;
+    const p = list.find((x) => x.t > at && x.t <= to && Number.isFinite(x.lat) && away(x));
+    if (p && (left == null || p.t < left)) left = p.t;
+  }
+  return left;
+}
+
+export function stopCheck(routes, stop, { from, to, passCounts = PASS_COUNTS }) {
   const lists = routes.map((r) => (r ?? []).filter((p) => p.t >= from && p.t <= to && Number.isFinite(p?.lat) && Number.isFinite(p?.lng)));
   let at = null;
   let reachedAt = null;
@@ -284,12 +313,16 @@ export function stopCheck(routes, stop, { from, to }) {
   // From a circle's centre, the pasted point itself; from a polygon's edge
   const centre = stop.feature?.geometry?.type === 'Point' ? middleOf(stop.feature) : null;
   let nearest = null;
+  let passedAt = reachedAt;
   for (const list of lists) {
     for (const p of list) {
       const m = centre ? metres(p, centre) : metresToFence(p, stop.feature);
       if (nearest == null || m < nearest.m) nearest = { m, t: p.t };
+      if (m <= PASS_RADIUS_M && (passedAt == null || p.t < passedAt)) passedAt = p.t;
     }
   }
+  // Temporary: passing through, or within PASS_RADIUS_M, counts as delivered
+  if (passCounts && passedAt != null) return { at: passedAt, reachedAt: reachedAt ?? passedAt, nearest: null };
   return { at: null, reachedAt, nearest };
 }
 
@@ -350,7 +383,10 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
   const checked = picked.map((c) => {
     if (c.missing) return c;
     const home = isNear(c, origin);
-    return { ...c, ...checkOver(routes ?? [pings], c, home ? awaySpans : spans), ...(home ? { nearOrigin: origin.label } : {}) };
+    const got = checkOver(routes ?? [pings], c, home ? awaySpans : spans);
+    // When it left (operator, 11 Nov 2026: "arrived back at the premises yet it never left the customer")
+    const leftAt = got.at != null ? leftStopAt(routes ?? [pings], c.feature, got.at, to) : null;
+    return { ...c, ...got, leftAt, ...(home ? { nearOrigin: origin.label } : {}) };
   });
   if (from != null) {
     const run = deliveryRun(played.trips, checked.filter((c) => c.at != null).map((c) => c.at), { from, to });
@@ -481,7 +517,8 @@ export function matchGeofences(lines, customers) {
 export function notLeftWords(trip, days = MAX_LOOKBACK_DAYS) {
   if (trip.why) return trip.why;
   if (trip.unread) return 'Positions could not be read';
-  if (trip.inStorage) return `At ${trip.inStorage.label}, not left`;
+  // Plain "At MORL" (operator, 11 Nov 2026: "why dont we stick to At MORL")
+  if (trip.inStorage) return `At ${trip.inStorage.label}`;
   return `Not at MORL/STO in ${days} days`;
 }
 
