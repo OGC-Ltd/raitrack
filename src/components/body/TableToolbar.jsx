@@ -45,6 +45,7 @@
  *   under the cursor every time a selection changed.
  */
 import JpegButton from "../shared/JpegButton";
+import { exportExcelVia } from "../../utils/tableExport";
 
 export default function TableToolbar({
   summary, loading = false, onReload, onCsv, onPdf, pdfWays = false, disabled = false, actions,
@@ -74,6 +75,23 @@ export default function TableToolbar({
             disabled={disabled}
             title="CSV, the rows on screen, opens in Excel"
           >CSV</button>
+        )}
+        {onCsv && (
+          <button
+            type="button"
+            className="sp4-ghost-btn"
+            onClick={(e) => {
+              const btn = e.currentTarget;
+              exportExcelVia(onCsv).catch((err) => {
+                // Said on the button itself: no dialog over the report
+                console.error("Excel export", err);
+                btn.title = `The Excel file could not be made: ${err?.message ?? err}`;
+                btn.classList.add("sp4-ghost-btn--error");
+              });
+            }}
+            disabled={disabled}
+            title="Excel, the rows on screen, on the letterhead"
+          ><i className="ti ti-file-spreadsheet" aria-hidden="true" /> Excel</button>
         )}
         {onPdf && pdfWays && (
           <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={onPdf} disabled={disabled}

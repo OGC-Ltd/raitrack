@@ -67,7 +67,28 @@ function today() {
  * @param {(string|number)[][]} o.body   already filtered — the file IS the filtered set
  * @param {string} o.filenameSlug        names the filter, so two exports differ
  */
-export function downloadTableCsv({ head, body, filenameSlug = "report" }) {
+// The toolbar's Excel button (body/TableToolbar) runs the report's own CSV
+// handler with this set, so every report that exports a CSV gets the styled
+// .xlsx from the same rows without a change of its own (operator, 11 Nov 2026).
+let asExcel = null;
+
+/** Run `exportCsv` (a report's CSV handler), making the Excel file instead. */
+export async function exportExcelVia(exportCsv) {
+  const asked = [];
+  asExcel = asked;
+  try {
+    // A handler that reads first and then exports: held until it has
+    await exportCsv();
+  } finally {
+    asExcel = null;
+  }
+  if (!asked.length) return;
+  const { downloadTableXlsx } = await import("./xlsxExport");
+  for (const o of asked) await downloadTableXlsx(o);
+}
+
+export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc }) {
+  if (asExcel) { asExcel.push({ head, body, filenameSlug, title, meta, fills, doc }); return; }
   // The BOM is what makes Excel read this as UTF-8 rather than the local
   // codepage, which mangles the plates.
   const blob = new Blob(["﻿", buildCsv(head, body)], {
