@@ -559,7 +559,8 @@ select.mvr-edit { min-width: 110px; }
 .dlv-assign { border-radius: 8px; margin: 6px 0; }
 
 /* Deliveries, Finished Goods template (operator, 11 Nov 2026): the sheet's own colours,
-   yellow once the truck got to the customer, red while it has not */
+   green for a completed trip (delivered, then back at the yard), yellow once the truck
+   got to the customer, red while it has not */
 .dlv-fg th { white-space: nowrap; }
 .dlv-fg td { white-space: nowrap; }
 .dlv-fg td:nth-child(3), .dlv-fg td:nth-child(4), .dlv-fg td:nth-child(5) { white-space: normal; min-width: 140px; }

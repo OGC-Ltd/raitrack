@@ -30,7 +30,7 @@ import {
 import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, saveOrder, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
-import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, FG_FILL } from '../../lib/finishedGoodsReport';
+import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
 import { kmWords } from '../../lib/plannerActual';
@@ -686,8 +686,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                   </thead>
                   <tbody>
                     {fgVisible.map((l) => (
-                      <tr key={l.key} className={`sp4-tr dlv-fg__row ${l.delivered ? 'dlv-fg__row--ok' : 'dlv-fg__row--miss'}`}
-                          style={{ '--dlv-fg-fill': l.delivered ? FG_FILL.ok : FG_FILL.miss }}>
+                      <tr key={l.key} className={`sp4-tr dlv-fg__row dlv-fg__row--${fgState(l)}`}
+                          style={{ '--dlv-fg-fill': fgFill(l) }}>
                         {fgCells(l).map((v, i) => <td key={i} className={i === 1 ? 'rpt-unit' : undefined}>{v}</td>)}
                         <td className="dlv-fg__x">
                           <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { fgLines, fgCells, fgCsv, finishedGoodsDoc, fgDueNotes, regOf, FG_HEADS, FG_FILL, loadTemplate, saveTemplate } from './finishedGoodsReport';
+import { fgLines, fgCells, fgCsv, finishedGoodsDoc, fgDueNotes, regOf, FG_HEADS, FG_FILL, fgState, fgFill, loadTemplate, saveTemplate } from './finishedGoodsReport';
 
 // 30.10.2026 in Nairobi, as epoch ms
 const at = (hhmm) => Date.parse(`2026-10-30T${hhmm}:00+03:00`);
@@ -30,6 +30,14 @@ describe('Finished Goods template: one line per customer', () => {
     expect(lines.map((l) => l.delivered)).toEqual([true, false, true, false]);
     expect(fgCells(lines[1]).slice(6, 8)).toEqual(['', '']);
   });
+  it('green for a completed trip: delivered, then back at the yard', () => {
+    expect(lines.map(fgState)).toEqual(['ok', 'miss', 'done', 'miss']);
+    expect(fgFill(lines[2])).toBe(FG_FILL.done);
+    expect(fgCsv(lines).fills).toEqual([FG_FILL.ok, FG_FILL.miss, FG_FILL.done, FG_FILL.miss]);
+    // Back at the yard, but this customer never reached: still red
+    const missedBack = fgLines([{ ...backRow, customers: [{ name: 'x', label: 'X', at: null }] }], { at: at('20:00') });
+    expect(fgState(missedBack[0])).toBe('miss');
+  });
   it('back at the yard: its arrival, and the TAT from departure', () => {
     const c = fgCells(lines[2]);
     expect(c[4]).toBe('Nairobi depot');
@@ -51,6 +59,7 @@ describe('Finished Goods template: one line per customer', () => {
     expect(table.head).toEqual(FG_HEADS);
     expect(table.rows[0].every((c) => c.fill === FG_FILL.ok)).toBe(true);
     expect(table.rows[1].every((c) => c.fill === FG_FILL.miss)).toBe(true);
+    expect(table.rows[2].every((c) => c.fill === FG_FILL.done)).toBe(true);
     expect(Math.round(table.cols.reduce((a, c) => a + c.w, 0))).toBe(271);
   });
 });

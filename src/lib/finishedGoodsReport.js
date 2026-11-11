@@ -24,8 +24,16 @@ export const DEFAULT_TEMPLATE = 'vanSales';
 export const FG_HEADS = ['Date', 'Reg No', 'Customer name', 'Destination', 'Current location', 'Departure date & time',
   'Arrived at customer', 'Left customer', 'Arrived at yard', 'TAT'];
 
-/** The sheet's own colours: yellow, got there; red, not yet. */
-export const FG_FILL = { ok: '#ffff00', miss: '#ff0000' };
+/**
+ * The sheet's own colours: green, a completed trip (got to the customer and
+ * back at the yard); yellow, got there but not back yet; red, not yet there.
+ */
+export const FG_FILL = { done: '#00b050', ok: '#ffff00', miss: '#ff0000' };
+
+/** A line's state, as FG_FILL keys it. */
+export const fgState = (l) => (l.completed ? 'done' : l.delivered ? 'ok' : 'miss');
+/** A line's fill. */
+export const fgFill = (l) => FG_FILL[fgState(l)];
 
 // The template picked, per organisation, kept in this browser
 const keyOf = (orgCode) => `ft-deliveries-template:${String(orgCode ?? '').toUpperCase()}`;
@@ -85,6 +93,8 @@ export function fgLines(rows, { at }) {
         arriveAt,
         leftAt: c ? leftCustomer(c) : null,
         delivered: arriveAt != null,
+        // Completed trip: delivered here, then back at the yard after it
+        completed: arriveAt != null && base.yardAt != null && base.yardAt >= arriveAt,
       });
     }
   }
@@ -112,7 +122,7 @@ export function fgCells(l) {
 export function fgCsv(lines) {
   return { head: [...FG_HEADS, 'Delivered'], body: lines.map((l) => [...fgCells(l), l.delivered ? 'Yes' : 'No']),
     // The rows' colours, for the Excel file (utils/xlsxExport); the CSV has none
-    fills: lines.map((l) => (l.delivered ? FG_FILL.ok : FG_FILL.miss)) };
+    fills: lines.map(fgFill) };
 }
 
 // The PDF, landscape: the server's document (POST reports/document.pdf), as an edited report is drawn
@@ -134,7 +144,7 @@ export function finishedGoodsDoc(rows, { from, at, fleet, group = null, orgCode,
     { kind: 'bar', dark: true, title: dayWords(from) !== dayWords(at) ? `${dmy(from)} to ${dmy(at)}` : dmy(at), aside: `${got}/${lines.length} customers reached · ${plural(rows.length, 'vehicle')}` },
     lines.length
       ? { kind: 'table', cols, head: FG_HEADS, size: 6.8,
-        rows: lines.map((l) => fgCells(l).map((text, i) => ({ text: String(text ?? ''), fill: l.delivered ? FG_FILL.ok : FG_FILL.miss, ...(i === 1 || i === 2 ? { bold: true } : {}) }))) }
+        rows: lines.map((l) => fgCells(l).map((text, i) => ({ text: String(text ?? ''), fill: fgFill(l), ...(i === 1 || i === 2 ? { bold: true } : {}) }))) }
       : { kind: 'none', text: 'No vehicles in the report.' },
   ];
   return {
