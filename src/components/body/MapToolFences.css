@@ -1,0 +1,82 @@
+/* Hallmark · component: rail menu (Geofences) · genre: modern-minimal · theme: brand (the app's light tokens, index.css; the map tools' blue, MapToolRail.css) · v2.0.0
+ * states: default, hover, active, focus-visible, disabled, checked · axes: light/grotesk-sans/cool · contrast: pass */
+/* Hallmark · pre-emit critique: P4 H5 E5 S4 R5 V4 · weakest: P, on purpose: two rows beside the rail, set like the rail's other pops */
+/* Hallmark · dismissed 74 · #1d4ed8 is the map tools' blue (.mtr-btn--on, the ruler, the drawing panel), kept so the switch and the lit rail button agree */
+
+/* One Geofences button on the rail opens this: show the org's geofences on
+ * the map, and draw one. It sits beside the card, level with its button, as
+ * the search panel sits level with Search. The frame is .mtr-pop's. */
+
+:root {
+  --mtrf-ink: var(--color-text-primary, #0f172a);
+  --mtrf-text: var(--color-text-sec, #475569);
+  --mtrf-sub: var(--color-text-muted, #5f6e83);
+  --mtrf-hover: #f1f5f9;
+  --mtrf-press: #e2e8f0;
+  --mtrf-accent: #1d4ed8;
+  --mtrf-track: #cbd5e1;
+  --mtrf-knob: #ffffff;
+  --mtrf-knob-shadow: rgba(15, 23, 42, 0.25);
+}
+
+.mtr-fences {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 248px;
+  padding: 4px;
+  font-family: var(--font-body);
+}
+
+.mtr-fences__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--mtrf-ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.mtr-fences__item > .ti { flex: none; color: var(--mtrf-text); font-size: 18px; }
+.mtr-fences__item:hover:not(:disabled) { background: var(--mtrf-hover); }
+.mtr-fences__item:active:not(:disabled) { background: var(--mtrf-press); }
+.mtr-fences__item:focus-visible { outline: 2px solid var(--mtrf-accent); outline-offset: -2px; }
+.mtr-fences__item:disabled { color: var(--mtrf-sub); cursor: default; }
+
+.mtr-fences__text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.mtr-fences__sub { color: var(--mtrf-sub); font-size: 11.5px; font-weight: 400; }
+
+/* The switch: a track and a knob, on when the geofences are on the map. */
+.mtr-fences__switch {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--mtrf-track);
+}
+.mtr-fences__switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--mtrf-knob);
+  box-shadow: 0 1px 2px var(--mtrf-knob-shadow);
+  transition: transform 140ms ease;
+}
+[aria-checked="true"] > .mtr-fences__switch { background: var(--mtrf-accent); }
+[aria-checked="true"] > .mtr-fences__switch::after { transform: translateX(12px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mtr-fences__switch::after { transition: none; }
+}

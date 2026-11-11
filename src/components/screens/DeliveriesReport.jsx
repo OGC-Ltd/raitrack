@@ -11,11 +11,17 @@
  * day's list), a group, Run report; then JPEG, Preview, CSV and PDF over the group picked.
  * lib/deliveriesReport does the reading; this is the page, and the PDF, JPEG
  * and CSV.
+ *
+ * Sheets saved in the Planner (operator, 11 Nov 2026: "the planner already
+ * tracks, we just need to render a report on the deliveries report") come in
+ * as rows of their own: each is read exactly as the Planner reads it
+ * (lib/plannerReport), over its own 48 hours from printing, and a vehicle on
+ * a sheet is not checked again from the hand list.
  */
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
-import { fleetDay, periodWords } from '../../lib/fleetReports';
+import { fleetDay, periodWords, dayStart } from '../../lib/fleetReports';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
   COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
@@ -23,6 +29,12 @@ import {
 import { loadPlan, savePlan, lastPlanBefore, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, saveOrder, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
+import { listPlans, getPlan } from '../../api/planner';
+import { sheetDays, sheetsForWindow, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
+import { kmWords } from '../../lib/plannerActual';
+import { openPlanNext } from '../../lib/planOverlay';
+import { usePermissions } from '../../hooks/usePermissions';
+import { useAppActions } from '../../context/AppContext';
 import { loadZones } from '../../hooks/useEstateZones';
 import { deliveriesDoc } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
@@ -129,6 +141,31 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       .sort((a, b) => a.plate.localeCompare(b.plate, 'en', { numeric: true }));
   }, [vehicles]);
   const unitOf = (key) => units.find((u) => u.key === key);
+  // The Planner's sheets for the window shown, before a run: listed, then read on Run report
+  const { can } = usePermissions();
+  const canSheets = can('planner:read');
+  const { setDesktopActiveTab } = useAppActions();
+  const findSheets = async (from, to) => {
+    const d = sheetDays(from, to, fleetDay);
+    return sheetsForWindow(await listPlans(orgId, d.from, d.to), from, to, dayStart);
+  };
+  const [sheets, setSheets] = useState({ status: 'idle', list: [] });
+  const sheetSpanKey = daysOpen ? `days:${day}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
+  useEffect(() => {
+    if (!orgId || !canSheets) { setSheets({ status: 'idle', list: [] }); return undefined; }
+    let live = true;
+    const t = Date.now();
+    const from = daysOpen ? dayStart(day) : t - (sel.hours ?? 24) * 3600_000;
+    const to = daysOpen ? Math.min(t, dayStart(draft.toDay) + DAY) : t;
+    setSheets((x) => ({ ...x, status: 'loading' }));
+    findSheets(from, to)
+      .then((list) => { if (live) setSheets({ status: 'done', list }); })
+      .catch((err) => { if (live) setSheets({ status: 'error', list: [], message: err?.message ?? String(err) }); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, canSheets, sheetSpanKey]);
+  const sheetPlates = useMemo(() => new Set(sheets.list.map((p) => plateKey(p.plate))), [sheets.list]);
+  const openInPlanner = (planId) => { openPlanNext(planId); setDesktopActiveTab('planner'); };
   const [find, setFind] = useState('');
   const [justAdded, setJustAdded] = useState(null);       // its stops picker opens, as the geofences come next
   // A unit put under another group than its own asks first (operator, 5 Nov 2026: "before putting
@@ -189,7 +226,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const daysProblem = windowsProblem({ mode: 'days', ...draft });
   const problem = !orgId ? 'Waiting for the organisation to load'
     : daysOpen && daysProblem ? daysProblem
-      : !plan.vehicles.length ? 'Add the vehicles shared today'
+      : !plan.vehicles.length && !sheets.list.length ? (sheets.status === 'loading' ? 'Looking for the Planner’s sheets' : 'Add the vehicles shared today, or upload their sheets in the Planner')
         : null;
 
   const execute = async (next) => {
@@ -197,7 +234,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     // This window's day decides the list: the page may still hold another day's
     const runPlan = loadPlan(orgCode, dayOf(next));
     setSel(next);
-    if (!orgId || !windows.length || !runPlan.vehicles.length) return;
+    if (!orgId || !windows.length) return;
     const windowFrom = windows[0].from;
     const { to } = windows[windows.length - 1];
     const id = ++runId.current;
@@ -208,16 +245,23 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       // Each step says what it was doing when it fails; Movements (where each
       // vehicle is now) is help, not a need: without it the report still runs
       const step = (words, p) => p.catch((err) => { throw new Error(`${words}: ${err?.message ?? err}`); });
-      const [fc, moves] = await Promise.all([
+      const [fc, moves, sheetList] = await Promise.all([
         zones.fc ? Promise.resolve(zones.fc) : step('The geofences could not be read', loadZones(orgId)),
         loadMovementReport({ orgId, from: to - 3600_000, to }).catch(() => null),
+        canSheets ? step('The Planner’s sheets could not be read', findSheets(windowFrom, to)) : Promise.resolve([]),
       ]);
       if (!live()) return;
+      if (!runPlan.vehicles.length && !sheetList.length) {
+        setRun({ status: 'error', message: 'No sheets were saved in the Planner for these hours, and no vehicles are on the list.' });
+        return;
+      }
       const storages = findStorages(fc, moves?.morl);
       const all = customersIn(fc, storages);
       const byName = new Map(all.map((c) => [c.name, c]));
       const moveRow = new Map((moves?.groups ?? []).flatMap((g) => g.rows).map((row) => [row.vehicleId, row]));
-      const planned = runPlan.vehicles.map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds }));
+      // A vehicle on a sheet is the sheet's row: not checked again from the list
+      const onSheets = new Set(sheetList.map((p) => plateKey(p.plate)));
+      const planned = runPlan.vehicles.filter((v) => !onSheets.has(plateKey(v.plate))).map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds }));
       // Every reading of the last days, then a day further back at a time for
       // the vehicles not yet seen leaving a storage, up to MAX_LOOKBACK_DAYS
       const held = new Map();
@@ -232,10 +276,27 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       };
       // A vehicle with two trackers: the one that reported most
       const best = (v) => [...v.vehicleIds].sort((a, b) => (held.get(b)?.length ?? 0) - (held.get(a)?.length ?? 0))[0];
-      let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
-      await read(planned.flatMap((v) => v.vehicleIds), start, to, 'Reading each vehicle’s positions');
+      // The sheets: each read as the Planner reads it, over its own span
+      setRun({ status: 'loading', words: 'Reading the Planner’s sheets', done: 0, total: 0 });
+      const sheetPlans = await step('A sheet could not be read', Promise.all(sheetList.map((p) => getPlan(orgId, p.id))));
       if (!live()) return;
-      for (let back = LOOKBACK_DAYS + 1; back <= MAX_LOOKBACK_DAYS; back++) {
+      const sheetUnits = sheetPlans.map((p) => ({ plan: p, trackers: trackersFor(p, vehicles), span: readSpan(p, dayStart) }));
+      const sheetPings = new Map();
+      const sheetTrackers = [...new Set(sheetUnits.flatMap((x) => x.trackers.map((v) => v.vehicleId)))];
+      if (sheetTrackers.length) {
+        const r = await loadPings({
+          orgId, vehicles: sheetTrackers.map((vehicleId) => ({ vehicleId })),
+          from: Math.min(...sheetUnits.map((x) => x.span.from)), to: Math.max(...sheetUnits.map((x) => x.span.to)),
+          onProgress: ({ done, total }) => { if (live()) setRun({ status: 'loading', words: 'Reading the sheets’ trucks', done, total }); },
+        });
+        if (!live()) return;
+        for (const [vid, pings] of r.pings) sheetPings.set(vid, pings);
+        r.failed.forEach((x) => failed.add(x));
+      }
+      let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
+      if (planned.length) await read(planned.flatMap((v) => v.vehicleIds), start, to, 'Reading each vehicle’s positions');
+      if (!live()) return;
+      for (let back = LOOKBACK_DAYS + 1; planned.length && back <= MAX_LOOKBACK_DAYS; back++) {
         const need = planned.filter((v) => tripOf(held.get(best(v)) ?? [], storages, { to }).need);
         if (!need.length) break;
         await read(need.flatMap((v) => v.vehicleIds), start - DAY, start - 1, `Finding when ${need.length === 1 ? need[0].plate : `${need.length} vehicles`} left MORL or the depot, ${back} days back`);
@@ -252,7 +313,18 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         });
         return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
       });
-      setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves });
+      const sheetRows = sheetUnits.map(({ plan: p, trackers, span }) => {
+        const routes = trackers.map((v) => (sheetPings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
+        const { actual } = actualFor(p, routes, fc, dayStart);
+        const mv = trackers.map((v) => moveRow.get(v.vehicleId)).find(Boolean) ?? null;
+        const unit = units.find((u) => u.vehicles.some((x) => trackers.some((v) => v.vehicleId === x.vehicleId)));
+        const why = !trackers.length ? 'No tracked unit carries this plate'
+          : trackers.every((v) => failed.has(v.vehicleId)) ? 'Positions could not be read' : null;
+        const row = sheetRow(p, actual, { place: mv?.location ?? null, why });
+        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null };
+      });
+      rows.unshift(...sheetRows);
+      setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
@@ -266,7 +338,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   }) } : null), [ran, typed, group]);
   // How many on the day's list in each group
   const groupNames = useMemo(() => groupsFor('MENENGAI').map((g) => g.name), []);
-  const groupCount = (name) => plan.vehicles.filter((v) => groupOfV(v) === name).length;
+  const sheetGroup = (p) => units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group ?? null;
+  const groupCount = (name) => plan.vehicles.filter((v) => !sheetPlates.has(plateKey(v.plate)) && groupOfV(v) === name).length
+    + sheets.list.filter((p) => sheetGroup(p) === name).length;
   const sums = done ? {
     out: done.rows.filter((x) => x.trip.leftAt != null && x.trip.arrivedAt == null).length,
     back: done.rows.filter((x) => x.trip.arrivedAt != null).length,
@@ -353,7 +427,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         </DateRangePicker>
 
         <ChoicePicker icon="ti-users-group" label="Group" align="right" value={group}
-                      options={[{ value: null, label: 'All groups', note: plan.vehicles.length },
+                      options={[{ value: null, label: 'All groups', note: plan.vehicles.filter((v) => !sheetPlates.has(plateKey(v.plate))).length + sheets.list.length },
                         ...groupNames.map((name) => ({ value: name, label: name, note: groupCount(name) }))]}
                       onChange={(g) => editor.guard('Show another group', () => setGroup(g))} />
 
@@ -418,6 +492,25 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       onClick={() => { const { go } = assign; setAssign(null); go(); }}>{assign.yes}</button>
             </div>
           )}
+          {sheets.status === 'error' && <p className="rpt-warn dlv-plan__warn">The Planner’s sheets could not be read: {sheets.message}</p>}
+          {sheets.list.length > 0 && (
+            <div className="dlv-sheets">
+              <p className="rpt-sub dlv-sheets__lede">
+                From the Planner: {sheets.list.length} sheet{sheets.list.length === 1 ? '' : 's'}, each read as the Planner reads it. Change a sheet’s stops in the Planner.
+              </p>
+              <ul className="dlv-plan__list">
+                {sheets.list.map((p) => (
+                  <li key={p.id} className="dlv-plan__veh">
+                    <span className="dlv-plan__plate">{p.plate}</span>
+                    <span className="rpt-sub">{sheetWords({ sheet: { planDate: p.planDate, driverName: p.driverName } }, kmWords)}, {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}</span>
+                    <button type="button" className="sp4-ghost-btn" onClick={() => openInPlanner(p.id)}>
+                      <i className="ti ti-calendar-time" aria-hidden="true" /> Open in Planner
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {plan.vehicles.length > 0 && (
             <ul className="dlv-plan__list">
               {plan.vehicles.map((v) => {
@@ -434,6 +527,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       {groupNames.map((name) => <option key={name} value={name}>{name}</option>)}
                     </select>
                     {v.group && v.group !== ownGroup(v.key) && <span className="rpt-sub dlv-plan__moved">from {ownGroup(v.key) ?? 'no group'}</span>}
+                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn">On a Planner sheet: the sheet is reported instead</span>}
                     <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
                                  options={options} picked={v.customers} startOpen={justAdded === v.key}
                                  onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
@@ -453,8 +547,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           )}
         </section>
 
-        {run.status === 'idle' && plan.vehicles.length > 0 && (
-          <EmptyNote icon="ti-truck-delivery" title="Deliveries">Give each vehicle the geofences it should deliver to, choose the window, then press Run report. Its origin, MORL or the Nairobi depot, comes from its route.</EmptyNote>
+        {run.status === 'idle' && (plan.vehicles.length > 0 || sheets.list.length > 0) && (
+          <EmptyNote icon="ti-truck-delivery" title="Deliveries">
+            {sheets.list.length ? 'The Planner’s sheets come in as they are. ' : ''}Give each listed vehicle the geofences it should deliver to, choose the window, then press Run report. Its origin, MORL or the Nairobi depot, comes from its route.
+          </EmptyNote>
         )}
         {run.status === 'loading' && (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report" progress={run.total ? run.done / run.total : null}>
@@ -494,6 +590,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             <p className="mvr-depots" role="note">
               <span>Delivered: stood {STOP_MS / 60_000 === 1.5 ? '1½' : STOP_MS / 60_000} min at {STAND_KMH} km/h or under, inside the stop’s geofence or within its pasted distance, anywhere on the route in the hours picked.</span>
               <span>Origin: the first of these the route was at, and a trip ends only back there: {done.storages.join(', ') || 'none found'}.</span>
+              {done.sheets > 0 && <span>Planner sheets: each read over the 48 hours from its printing, as on the Planner, so its rows match the plan there.</span>}
             </p>
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table dlv-table">
@@ -504,9 +601,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 <tbody>
                   {done.rows.map((r) => {
                     const cellsOf = rowCells(r);
-                    const isOpen = open.has(r.plate);
+                    const rowKey = r.key ?? r.plate;
+                    const isOpen = open.has(rowKey);
                     return (
-                      <Fragment key={r.plate}>
+                      <Fragment key={rowKey}>
                         <tr className="sp4-tr">
                           {cellsOf.map((v, i) => (
                             <td key={i} className={i === 0 ? 'rpt-unit' : undefined}>
@@ -520,11 +618,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                          // Kept once it reads as a count, or forgotten when cleared
                                          if (!text.trim() || readOrders(text)) saveOrder(orgCode, r.plate, text);
                                        }} />
+                              ) : i === 0 && r.sheet ? (
+                                <>{v}<span className="rpt-sub dlv-sheet-line">{sheetWords(r, kmWords)}</span></>
                               ) : v}
                             </td>
                           ))}
                           <td>
-                            <button type="button" className="sp4-ghost-btn dlv-more" onClick={() => toggle(r.plate)} aria-expanded={isOpen}>
+                            <button type="button" className="sp4-ghost-btn dlv-more" onClick={() => toggle(rowKey)} aria-expanded={isOpen}>
                               {isOpen ? 'Hide' : 'Customers'}
                             </button>
                           </td>
@@ -532,13 +632,21 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                         {isOpen && (
                           <tr className="dlv-cust">
                             <td colSpan={COLUMNS.length + 1}>
+                              {r.sheet && (
+                                <div className="dlv-sheet-head">
+                                  <span className="rpt-sub">Office marks: {outcomeWords(r) || 'none yet'}</span>
+                                  <button type="button" className="sp4-ghost-btn" onClick={() => openInPlanner(r.sheet.planId)}>
+                                    <i className="ti ti-calendar-time" aria-hidden="true" /> Open in Planner
+                                  </button>
+                                </div>
+                              )}
                               {!r.customers.length ? <span className="rpt-sub">No customers given.</span> : (
                                 <ul>
                                   {r.customers.map((c) => (
                                     <li key={c.name} className={c.at ? 'dlv-cust--done' : c.reachedAt ? 'dlv-cust--near' : 'dlv-cust--no'}>
                                       <i className={`ti ${c.at ? 'ti-circle-check' : c.reachedAt ? 'ti-alert-circle' : 'ti-circle-x'}`} aria-hidden="true" />
-                                      {c.label}
-                                      <span className="rpt-sub"> {stopWords(c, spansDays(done.from, done.at))}{c.nearStorage ? ' · at storage' : ''}</span>
+                                      {c.sequence != null ? `${c.sequence}. ` : ''}{c.label}
+                                      <span className="rpt-sub"> {stopWords(c, spansDays(done.from, done.at))}{c.nearStorage ? ' · at storage' : ''}{c.remarks ? `. ${c.remarks}` : ''}</span>
                                     </li>
                                   ))}
                                 </ul>

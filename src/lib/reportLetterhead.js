@@ -38,8 +38,8 @@ function columnsFor(def, ctx, keep, inner) {
     // Incident columns are centred rather than right-aligned.
     // Follow-up column removed from main table (9 Nov 2026: redundant with the section below).
     behaviour: [32, 26, 36, 14, 14, 14, 12, 11, 14, 10, ...(SHOW_FOLLOW_UP_COLUMN ? [18] : [])],
-    night: [48, 40, 48, 40, 36],
-    overspeed: [30, 22, 36, 18, 20, 20, 22, 34, 32],
+    night: [40, 34, 36, 34, 56],
+    overspeed: [30, 22, 36, 18, 20, 20, 22, 34],
     utilisation: [32, 28, 26, 28, 30, 40],
     utilisationRated: [42, 21, 18, 18, 19, 22, 22, 22],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];

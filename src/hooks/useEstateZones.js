@@ -37,6 +37,18 @@ export function loadZones(orgId) {
   return inflight.get(orgId)
 }
 
+// Mounted hooks per org, so a fence drawn on the map reaches every one of them.
+const listeners = new Map()
+
+/** Fetch an org's geofences again (after one is drawn, changed or removed). */
+export function reloadEstateZones(orgId) {
+  inflight.delete(orgId)
+  return loadZones(orgId).then((fc) => {
+    for (const fn of listeners.get(orgId) ?? []) fn(fc)
+    return fc
+  })
+}
+
 /**
  * @returns {{ zones: object|null, loading: boolean, error: Error|null }}
  *          `zones` is a GeoJSON FeatureCollection, or null until it arrives.
@@ -63,7 +75,11 @@ export function useEstateZones(orgId) {
       .then((fc) => { if (!cancelled) { setZones(fc); setError(null); setLoading(false) } })
       .catch((err) => { if (!cancelled) { setError(err); setLoading(false) } })
 
-    return () => { cancelled = true }
+    const onReload = (fc) => { if (!cancelled) setZones(fc) }
+    if (!listeners.has(orgId)) listeners.set(orgId, new Set())
+    listeners.get(orgId).add(onReload)
+
+    return () => { cancelled = true; listeners.get(orgId)?.delete(onReload) }
   }, [orgId])
 
   return { zones, loading, error }

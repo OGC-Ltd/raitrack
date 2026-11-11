@@ -21,7 +21,7 @@ import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
 import { HEADS as HEALTH_HEADS, KEY as HEALTH_KEY, NOT_WORKING, WORKING, byGroup as healthByGroup, rowCells as healthCells, summary as healthSummary } from './probeHealthReport';
 import { groupsFor } from './fleetGroups';
-import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, spansDays, stopWords } from './deliveriesReport';
+import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, sheetSub, spansDays, stopWords, SHEET_STOP_HEADS, sheetStopCells } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
 const PORTRAIT_MM = 184;
@@ -400,6 +400,9 @@ export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode
 }
 
 const DELIVERY_WIDTHS = [22, 42, 24, 52, 44];
+/** A sheet's stop table: the server's SHEET_STOP_WIDTHS, so an edited PDF reads as the drawn one. */
+const SHEET_STOP_WIDTHS = [6, 19, 20, 17, 12, 14, 14, 28, 17, 8, 15, 15];
+const sheetStopCols = columns(SHEET_STOP_WIDTHS, PORTRAIT_MM, { figures: new Set([0, 5, 6, 9]), wrap: new Set([1, 2, 3, 4, 7, 8, 10, 11]) });
 
 /** The Deliveries Report. `stops: false` is the sheet's table alone, as its PDF. */
 export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = true, orgCode, now = Date.now() }) {
@@ -429,7 +432,15 @@ export function deliveriesDoc(rows, { from, at, fleet, group = null, stops = tru
     );
     for (const r of rows) {
       blocks.push({ kind: 'h3', title: r.plate, aside: runWords(r, withDay) });
+      if (r.sheet) blocks.push({ kind: 'note', text: sheetSub(r) });
       if (!r.customers.length) { blocks.push({ kind: 'none', text: 'No customers given.' }); continue; }
+      // A Planner sheet: its own columns, customer ID and name first
+      if (r.customers.some((c) => c.stop)) {
+        blocks.push({ kind: 'table', cols: sheetStopCols, head: SHEET_STOP_HEADS, size: 6.2,
+          rows: r.customers.map((c) => sheetStopCells(c, withDay).map((t, i) => (i === 7
+            ? { text: t, ...(c.at != null ? { bold: true } : { tone: 'flag' }) } : textCell(t)))) });
+        continue;
+      }
       blocks.push({ kind: 'table', cols: [{ w: 0, wrap: true }, { w: 68, wrap: true }], head: ['Stop', 'Result'], size: 7.8,
         rows: r.customers.map((c) => [textCell(c.label),
           { text: stopWords(c, withDay), ...(c.at != null ? { bold: true } : c.missing ? { tone: 'mut' } : { tone: 'flag' }) }]) });

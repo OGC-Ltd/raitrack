@@ -60,6 +60,7 @@
 }
 .tst--warning .tst__mark { color: var(--tst-warn); }
 .tst--critical .tst__mark { color: var(--tst-crit); }
+.tst--success .tst__mark { color: var(--tst-ok); }
 .tst__mark .ti { font-size: 15px; }
 
 /* The organisation's mark in place of the bare icon; the severity rides on it */
@@ -111,6 +112,7 @@
 }
 .tst--warning .tst__life { background: var(--tst-warn); }
 .tst--critical .tst__life { background: var(--tst-crit); }
+.tst--success .tst__life { background: var(--tst-ok); }
 @keyframes tst-life {
   from { transform: scaleX(1); }
   to { transform: scaleX(0); }
