@@ -106,12 +106,12 @@ describe('Deliveries Report', () => {
     const r = deliveryRow(plan, pings, storages, byName, { to: at('2026-10-30T10:00:00'), place: 'Thanju' });
     expect(rowCells(r)).toEqual(['KCP 136P', '30.10.2026 04:05:02 (MORL)', '1/2', 'Thanju', '']);
     expect(r.customers.map((c) => Boolean(c.at))).toEqual([true, false]);
-    expect(csvTable([r]).body[0].slice(-2)).toEqual(['JOJAC INVESTMENTS 06:00', expect.stringMatching(/^THANJU SHOP \(Not reached, closest /)]);
+    expect(csvTable([r]).body[0].slice(-2)).toEqual(['Jojac Investments 06:00', expect.stringMatching(/^Thanju Shop \(Not reached, closest /)]);
     const body = deliveriesPdfBody([r], { from: at('2026-10-30T07:00:00'), at: at('2026-10-30T10:00:00'), fleet: 'Menengai Oil Refineries Ltd' });
     expect(body).toMatchObject({ fleet: 'Menengai Oil Refineries Ltd', group: 'all', stops: true });
     expect(body.rows[0]).toMatchObject({ plate: 'KCP 136P', fulfilled: 1, planned: 2, place: 'Thanju', notLeft: null, arrivedAt: null, arrivedTo: null });
     expect(body.rows[0].leftFrom).toEqual({ short: 'MORL', label: 'MORL' });
-    expect(body.rows[0].customers.map((c) => c.label)).toEqual(['JOJAC INVESTMENTS', 'THANJU SHOP']);
+    expect(body.rows[0].customers.map((c) => c.label)).toEqual(['Jojac Investments', 'Thanju Shop']);
     // Only what the server's schema names: no geofence shapes go up with the customers
     expect(Object.keys(body.rows[0].customers[0]).sort()).toEqual(['at', 'label', 'note']);
     expect(deliveriesPdfBody([r], { from: 1, at: 2, fleet: 'M', group: 'Van Sales', stops: false })).toMatchObject({ group: 'Van Sales', stops: false });

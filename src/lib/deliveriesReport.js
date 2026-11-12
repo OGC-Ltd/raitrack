@@ -11,6 +11,7 @@
 //
 // Pure: no React, no network.
 
+import { customerName } from './customerName';
 import { fenceContains } from './zoneContainment';
 import { metresToFence } from './movementDepots';
 import { PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from './deliveryPlan';
@@ -395,10 +396,11 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
   pings = all;
   // Its trackers could not be read at all: say so, rather than that it was nowhere
   if (unread && !all.length) trip = { ...trip, need: false, unread: true };
+  // Printed as names are written, "Kapu Tech LTD" not "KAPU TECH LTD" (operator, 12 Nov 2026)
   const picked = [
     ...(plan.customers ?? []).map((n) => customerByName.get(n) ?? { name: n, label: n, missing: true }),
     ...(plan.pins ?? []).map((pin) => pinStop(pin, storages, pinNames)),
-  ];
+  ].map((c) => ({ ...c, label: customerName(c.label) }));
   // The whole route in the window; with no window, the last trip
   const spans = from != null ? windows ?? [{ from, to }]
     : trip.leftAt != null ? [{ from: trip.leftAt, to: Math.min(trip.arrivedAt ?? to, to) }] : [];

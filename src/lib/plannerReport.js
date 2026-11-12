@@ -7,6 +7,7 @@
 //
 // Pure: no React, no network.
 
+import { customerName } from './customerName';
 import { displayOf } from './fleetGroups';
 import { findStorages } from './deliveriesReport';
 import { planActual, planWindow, LOOKBACK_MS, OUTCOMES, spanWords } from './plannerActual';
@@ -116,7 +117,7 @@ export function sheetRow(plan, actual, { place = null, lastAt = null, why = null
     const a = byId.get(s.id) ?? {};
     return {
       name: s.id,
-      label: [s.customer?.code, s.customer?.name].filter(Boolean).join(' '),
+      label: [s.customer?.code, customerName(s.customer?.name)].filter(Boolean).join(' '),
       at: a.at ?? null,
       reachedAt: a.at == null ? a.reachedAt ?? null : null,
       // planActual keeps the distance only; the time of the closest approach is not judged there

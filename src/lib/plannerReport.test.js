@@ -53,7 +53,7 @@ describe('a sheet as a Deliveries row', () => {
     expect(rowCells(r)).toEqual(['KDE 128E', '10.11.2026 08:00:00 (MORL)', '2/3', 'MORL', '10.11.2026 15:30:00 (MORL)']);
   });
   it('each stop says what the truck did, how long, and the office mark', () => {
-    expect(r.customers.map((c) => c.label)).toEqual(['100001 SAMPLE SHOP', '100002 OTHER SHOP', '100003 FAR SHOP']);
+    expect(r.customers.map((c) => c.label)).toEqual(['100001 Sample Shop', '100002 Other Shop', '100003 Far Shop']);
     expect(stopWords(r.customers[0])).toBe('Delivered 08:50, 18 min there, Full');
     expect(stopWords(r.customers[1])).toBe('Delivered 10:42, Rejected');
     expect(stopWords(r.customers[2])).toBe('Not reached, closest 1.2 km');
@@ -63,7 +63,7 @@ describe('a sheet as a Deliveries row', () => {
     expect(body.rows[0].customers[0].note).toBe('Delivered 08:50, 18 min there, Full');
     expect(body.rows[0].fulfilled).toBe(2);
     const csv = csvTable([r]);
-    expect(csv.body[0].at(-1)).toBe('100003 FAR SHOP (Not reached, closest 1.2 km)');
+    expect(csv.body[0].at(-1)).toBe('100003 Far Shop (Not reached, closest 1.2 km)');
   });
   it('the PDF gets the sheet’s columns per stop, and the driver on the run line', () => {
     const withCols = sheetRow({ ...plan, stops: plan.stops.map((s, i) => ({ ...s, invoiceNo: `INV${i + 1}`, amount: 12500.5, tonnage: 1.25,

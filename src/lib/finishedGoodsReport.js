@@ -10,6 +10,7 @@
 //
 // Pure: no React, no network.
 
+import { customerName } from './customerName';
 import { stamp, dayWords, notLeftWords } from './deliveriesReport';
 import { spanWords } from './plannerActual';
 import { reportNumber } from './reportLetterhead';
@@ -89,7 +90,7 @@ export function fgLines(rows, { at }) {
         ...base,
         key: `${base.key}|${c?.name ?? '-'}`,
         day: dayWords(departAt ?? arriveAt ?? at),
-        customer: c ? (c.stop?.name || c.label || c.name) : 'No customers given',
+        customer: c ? customerName(c.stop?.name || c.label || c.name) : 'No customers given',
         destination: placeWords(c?.stop?.location ?? c?.location ?? ''),
         arriveAt,
         leftAt: c ? leftCustomer(c) : null,
