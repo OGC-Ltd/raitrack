@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { fgLines, fgCells, fgCsv, finishedGoodsDoc, fgDueNotes, regOf, FG_HEADS, FG_FILL, fgState, fgFill, loadTemplate, saveTemplate } from './finishedGoodsReport';
+import { fgLines, fgCells, fgCsv, finishedGoodsDoc, fgDueNotes, regOf, FG_HEADS, FG_FILL, NOT_GEOFENCED, fgState, fgFill, loadTemplate, saveTemplate } from './finishedGoodsReport';
 
 // 30.10.2026 in Nairobi, as epoch ms
 const at = (hhmm) => Date.parse(`2026-10-30T${hhmm}:00+03:00`);
@@ -34,9 +34,14 @@ describe('Finished Goods template: one line per customer', () => {
     expect(lines.map(fgState)).toEqual(['ok', 'miss', 'done', 'miss']);
     expect(fgFill(lines[2])).toBe(FG_FILL.done);
     expect(fgCsv(lines).fills).toEqual([FG_FILL.ok, FG_FILL.miss, FG_FILL.done, FG_FILL.miss]);
-    // Back at the yard, but this customer never reached: still red
+    // Back at the yard with this customer never reached: green, and said so under the name
+    // (operator, 12 Nov 2026: "highlight under the customers name 'Customers Name Not Geofenced' and highlight the row as green")
     const missedBack = fgLines([{ ...backRow, customers: [{ name: 'x', label: 'X', at: null }] }], { at: at('20:00') });
-    expect(fgState(missedBack[0])).toBe('miss');
+    expect(fgState(missedBack[0])).toBe('done');
+    expect(missedBack[0].customer).toBe(`X (${NOT_GEOFENCED})`);
+    const noneBack = fgLines([{ ...backRow, customers: [] }], { at: at('20:00') });
+    expect(fgState(noneBack[0])).toBe('done');
+    expect(noneBack[0].customer).toBe(NOT_GEOFENCED);
   });
   it('back at the yard: its arrival, and the TAT from departure', () => {
     const c = fgCells(lines[2]);
@@ -124,5 +129,31 @@ describe('the PDF bar and dropped lines (operator, 11 Nov 2026)', () => {
     expect(table.rows).toHaveLength(1);
     expect(table.rows[0][2].text).toBe('Kisumu Bypass');
     expect(doc.blocks[0].aside).toBe('1/1 customers reached · 1 vehicle');
+  });
+});
+
+describe('back at the yard after the window, or out again since (operator, 12 Nov 2026: KCA 226M)', () => {
+  it('a yard arrival shows even when a later trip has begun', () => {
+    const r = { key: 'k', plate: 'KCA 226M', place: 'Rongai', trip: { leftAt: Date.parse('2026-11-11T04:11:27+03:00'), arrivedAt: Date.parse('2026-11-11T21:40:00+03:00'), arrivedTo: { label: 'MORL', short: 'MORL' }, outAgain: true },
+      customers: [{ name: 'd', label: 'Dashama Wholesalers', at: Date.parse('2026-11-11T09:21:49+03:00'), leftAt: Date.parse('2026-11-11T15:03:54+03:00') }] };
+    const [l] = fgLines([r], { at: Date.parse('2026-11-11T20:00:00+03:00') });
+    expect(fgCells(l)[8]).toBe('11.11.2026 21:40:00');
+    expect(fgCells(l)[4]).toBe('Rongai');
+    expect(fgState(l)).toBe('done');
+  });
+});
+
+describe('a customer the unit passed, picked for a line (operator, 12 Nov 2026)', () => {
+  it('takes its arrival and departure, keeps the customer\'s name, and colours the line', () => {
+    const [lines, state] = [fgLines, fgState];
+    const row = { plate: 'KBY 594Q', trip: { leftAt: 1000, arrivedAt: null }, customers: [{ name: 'Menengai: Mahadev Drappers', label: 'Menengai: Mahadev Drappers', at: null }] };
+    const [before] = lines([row], { at: 9000 });
+    expect(state(before)).toBe('miss');
+    const picks = new Map([[before.key, { at: 2000, leftAt: 2500, label: 'mahadev bungoma' }]]);
+    const [after] = lines([row], { at: 9000, picks });
+    expect(after).toMatchObject({ arriveAt: 2000, leftAt: 2500, delivered: true, picked: 'mahadev bungoma', customer: before.customer });
+    expect(state(after)).toBe('ok');                                   // yellow: arrived
+    const [back] = lines([{ ...row, trip: { leftAt: 1000, arrivedAt: 4000 } }], { at: 9000, picks });
+    expect(state(back)).toBe('done');                                  // green: arrived and back at the yard
   });
 });

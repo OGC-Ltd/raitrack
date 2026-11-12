@@ -708,7 +708,9 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
-    deliveries && { key: 'deliveries', label: 'Deliveries' },
+    // Deliveries as two tabs, one per template (operator, 12 Nov 2026: "to avoid confusion")
+    deliveries && { key: 'deliveriesVs', label: 'Deliveries VS' },
+    deliveries && { key: 'deliveriesFg', label: 'Deliveries FG' },
     geofences && { key: 'geofences', label: 'Geofences' },
     tatFuel && { key: 'tatFuel', label: 'TAT and Fuel' },
     recovery && { key: 'recovery', label: 'Recovery' },
@@ -735,11 +737,14 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
         <TankersReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} active={tab === 'tankers'} />
       </div>
       )}
-      {deliveries && (
-      <div className="mvt-panel" role="tabpanel" id="mvt-deliveries-panel" aria-labelledby="mvt-deliveries" hidden={tab !== 'deliveries'}>
-        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />
+      {deliveries && (<>
+      <div className="mvt-panel" role="tabpanel" id="mvt-deliveriesVs-panel" aria-labelledby="mvt-deliveriesVs" hidden={tab !== 'deliveriesVs'}>
+        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} template="vanSales" />
       </div>
-      )}
+      <div className="mvt-panel" role="tabpanel" id="mvt-deliveriesFg-panel" aria-labelledby="mvt-deliveriesFg" hidden={tab !== 'deliveriesFg'}>
+        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} template="finishedGoods" />
+      </div>
+      </>)}
       {geofences && (
       <div className="mvt-panel" role="tabpanel" id="mvt-geofences-panel" aria-labelledby="mvt-geofences" hidden={tab !== 'geofences'}>
         <GeofenceReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />

@@ -52,10 +52,13 @@ export const STORAGE_MARGIN_M = { morl: 200, nairobi: 150 };
  * MORL_RADIUS_M of this point is at MORL. MORL's own geofence counts too.
  */
 export const MORL_POINT = { lat: -0.28802969095623043, lng: 36.04494759379902 };
-export const MORL_RADIUS_M = 1000;
+// 500 m (operator, 12 Nov 2026: "use MORL and a radius of 500m"), was 1 km; only when the yard's geofence is missing
+export const MORL_RADIUS_M = 500;
 /** The Nairobi depot (STO) as Wialon Logistics has it, the same way: 1 km round its point, its geofence too. */
 export const STO_POINT = { lat: -1.3029466, lng: 36.8660916 };
 export const STO_RADIUS_M = 1000;
+/** "500 m", "1 km". */
+const roundWords = (m) => (m < 1000 ? `${m} m` : `${m / 1000} km`);
 /** A customer this close to a storage reads as being at it, and is flagged. */
 export const NEAR_STORAGE_M = 200;
 
@@ -82,20 +85,34 @@ export function findStorages(featureCollection, morlName = null) {
   const byName = (re) => areas.find((f) => re.test(nameOf(f)));
   const morl = (morlName && areas.find((f) => nameOf(f) === morlName))
     ?? byName(/^morl$/i) ?? byName(/nakuru\s*hq/i) ?? byName(/menengai\s*yard/i);
+  // MORL HOME, the 14 ha fence drawn round MORL HQ (operator, 12 Nov 2026: "link that as well"):
+  // inside it or the yard's fence is at MORL. By its whole name, never "MORL: …" on the Mombasa road
+  const home = byName(/^\s*morl\s*home\s*$/i);
+  // Inside any of MORL's geofences is at the yard (operator, 12 Nov 2026: KBB 880A "arrived at the
+  // Nakuru HQ which should show it arrived at the yard"): a fence named MORL no longer hides the HQ's
+  const yards = [...new Set([morl, byName(/^morl$/i), byName(/nakuru\s*hq/i), byName(/menengai\s*yard/i), home].filter(Boolean))];
   const nairobi = byName(/nairobi\s*depot/i);
   return [
-    { key: 'morl', label: 'MORL', short: 'MORL', marginM: 0, fence: morl ?? null,
-      feature: { type: 'Feature', properties: { name: 'MORL', radiusM: MORL_RADIUS_M }, geometry: { type: 'Point', coordinates: [MORL_POINT.lng, MORL_POINT.lat] } },
-      name: `${MORL_POINT.lat.toFixed(5)}, ${MORL_POINT.lng.toFixed(5)}, ${MORL_RADIUS_M / 1000} km round${morl ? `; geofence ${nameOf(morl)}` : ''}` },
+    // MORL is the Menengai yard's geofence alone where there is one (operator, 12 Nov 2026: "can't we use
+    // just the geofence if it enters Menengai yard?"); MORL_RADIUS_M round its point only without it
+    morl || home
+      ? { key: 'morl', label: 'MORL', short: 'MORL', marginM: 0, fence: morl ?? home, feature: home ?? morl, fences: yards,
+        name: yards.length > 1 ? `geofences ${yards.map(nameOf).join(', ')}` : `geofence ${nameOf(yards[0])}` }
+      : { key: 'morl', label: 'MORL', short: 'MORL', marginM: 0, fence: null,
+        feature: { type: 'Feature', properties: { name: 'MORL', radiusM: MORL_RADIUS_M }, geometry: { type: 'Point', coordinates: [MORL_POINT.lng, MORL_POINT.lat] } },
+        name: `${MORL_POINT.lat.toFixed(5)}, ${MORL_POINT.lng.toFixed(5)}, ${roundWords(MORL_RADIUS_M)} round (no Menengai yard geofence found)` },
     { key: 'nairobi', label: 'Nairobi depot', short: 'STO', marginM: 0, fence: nairobi ?? null,
       feature: { type: 'Feature', properties: { name: 'STO', radiusM: STO_RADIUS_M }, geometry: { type: 'Point', coordinates: [STO_POINT.lng, STO_POINT.lat] } },
-      name: `${STO_POINT.lat.toFixed(5)}, ${STO_POINT.lng.toFixed(5)}, ${STO_RADIUS_M / 1000} km round${nairobi ? `; geofence ${nameOf(nairobi)}` : ''}` },
+      name: `${STO_POINT.lat.toFixed(5)}, ${STO_POINT.lng.toFixed(5)}, ${roundWords(STO_RADIUS_M)} round${nairobi ? `; geofence ${nameOf(nairobi)}` : ''}` },
   ];
 }
 
 /** The storage a reading is at: inside its fence, or within its margin of it. */
 export function storageAt(p, storages) {
-  for (const s of storages) if (fenceContains(p, s.feature) || (s.fence && fenceContains(p, s.fence)) || metresToFence(p, s.feature) <= (s.marginM ?? 0)) return s;
+  for (const s of storages) {
+    if (fenceContains(p, s.feature) || (s.fence && fenceContains(p, s.fence)) || (s.fences ?? []).some((f) => fenceContains(p, f))
+      || metresToFence(p, s.feature) <= (s.marginM ?? 0)) return s;
+  }
   return null;
 }
 
@@ -124,7 +141,7 @@ export function middleOf(f) {
  * are marked VS or FG. `nearStorage`: within NEAR_STORAGE_M of a storage.
  */
 export function customersIn(featureCollection, storages = []) {
-  const skip = new Set(storages.flatMap((s) => (s.key === 'nairobi' ? [s.feature] : [s.feature, s.fence]).filter(Boolean)));
+  const skip = new Set(storages.flatMap((s) => (s.key === 'nairobi' ? [s.feature] : [s.feature, s.fence, ...(s.fences ?? [])]).filter(Boolean)));
   const mids = storages.map((s) => ({ m: middleOf(s.feature), r: Math.max(NEAR_STORAGE_M, s.marginM ?? 0, s.feature?.properties?.radiusM ?? 0) })).filter((x) => x.m);
   const seen = new Set();
   const out = [];
@@ -189,8 +206,9 @@ const overlaps = (trip, from, to) => trip.leftAt <= to && (trip.arrivedAt == nul
  * it stood: a trip that ended before the window is not this report's.
  * @returns {{ leftAt, leftFrom, arrivedAt, arrivedTo, need, inStorage? }}
  */
-export function tripOf(pings, storages, { from = -Infinity, to }) {
-  const { trips, inStorage, need } = tripsOf(pings, storages, { to });
+export function tripOf(pings, storages, { from = -Infinity, to, upTo = to }) {
+  // `upTo`: readings after the window, for when a trip in it got back (operator, 12 Nov 2026)
+  const { trips, inStorage, need } = tripsOf(pings, storages, { to: Math.max(to, upTo) });
   const shown = [...trips].reverse().find((x) => overlaps(x, from, to));
   if (shown) return { ...shown, need: false };
   return { leftAt: null, leftFrom: null, arrivedAt: null, arrivedTo: null, need, ...(inStorage ? { inStorage } : {}) };
@@ -426,15 +444,18 @@ export function dayRuns(sel, lists, { today, now = Date.now() }) {
   });
 }
 
-export function deliveryRow(plan, pings, storages, customerByName, { from = null, to, place = null, lastFix = null, atMorl = false, unread = false, routes = null, windows = null, pinNames = null }) {
+export function deliveryRow(plan, pings, storages, customerByName, { from = null, to, upTo = to, place = null, lastFix = null, atMorl = false, unread = false, routes = null, windows = null, pinNames = null }) {
+  // `upTo`: how far past the window the readings go, only to see a trip in it back at the yard
+  // (operator, 12 Nov 2026: "units that are back in the premises like KCA 226M not showing arrived at yard")
+  const until = Math.max(to, upTo);
   // Its last position as Movements has it, when newer than the readings: a
   // parked tracker can go quiet for days
   const all = lastFix && Number.isFinite(lastFix.lat) && Number.isFinite(lastFix.t) && lastFix.t <= to
     && !(pings ?? []).some((p) => p.t >= lastFix.t) ? [...(pings ?? []), lastFix] : (pings ?? []);
   const origin = originOf(all, storages, { to, from });
   const anchored = origin ? [origin] : storages;
-  const played = tripsOf(all, anchored, { to });
-  let trip = tripOf(all, anchored, { from: from ?? -Infinity, to });
+  const played = tripsOf(all, anchored, { to: until });
+  let trip = tripOf(all, anchored, { from: from ?? -Infinity, to, upTo: until });
   // Movements reads it at MORL (the server's own MORL geofence): it is, whatever the readings missed
   if (atMorl && trip.leftAt == null && !trip.inStorage && (!origin || origin.key === 'morl')) {
     trip = { ...trip, need: false, inStorage: storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } };
@@ -459,7 +480,7 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
     const home = isNear(c, origin);
     const got = checkOver(routes ?? [pings], c, home ? awaySpans : spans);
     // When it left (operator, 11 Nov 2026: "arrived back at the premises yet it never left the customer")
-    const leftAt = got.at != null ? leftStopAt(routes ?? [pings], c.feature, got.at, to) : null;
+    const leftAt = got.at != null ? leftStopAt(routes ?? [pings], c.feature, got.at, until) : null;
     return { ...c, ...got, leftAt, ...(home ? { nearOrigin: origin.label } : {}) };
   });
   if (from != null) {

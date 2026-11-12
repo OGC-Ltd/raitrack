@@ -149,3 +149,25 @@
 
 /* The toolbar's summary: its parts set apart by space, not by dots */
 .dlv-sum__part { margin-left: 12px; }
+
+/* The range's days in one list (operator, 12 Nov 2026): each vehicle's day under its plate */
+.dlv-plan__day { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; color: var(--sp4-text-3, #6b7280); font-variant-numeric: tabular-nums; }
+.dlv-plan__addto { align-self: center; margin-right: 4px; }
+
+/* A Finished Goods line opens the customers its unit passed, to pick the one that is it (operator, 12 Nov 2026) */
+.dlv-fg__row--click { cursor: pointer; }
+.dlv-fg__row--click:focus-visible { outline: 2px solid #0f172a; outline-offset: -2px; }
+.dlv-fg__row--open td { box-shadow: inset 0 -2px 0 #0f172a; }
+.dlv-fg__pickrow > td { background: var(--sp4-surface, #fff); padding: 0; }
+.dlv-fg__pick { padding: 12px 16px 14px; border-left: 4px solid #0f172a; }
+.dlv-fg__pickhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px; }
+.dlv-fg__pickhead .sp4-ghost-btn { margin-left: auto; }
+.dlv-fg__picklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.dlv-fg__picklist li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 6px; border: 1px solid var(--sp4-border, #e5e7eb); }
+.dlv-fg__picklist li.dlv-fg__picked { border-color: #00b050; background: rgba(0, 176, 80, 0.08); }
+.dlv-fg__pickname { font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 60rem) {
+  .dlv-fg__picklist li { grid-template-columns: minmax(0, 1fr) auto; }
+  .dlv-fg__picklist li .rpt-sub { grid-column: 1 / -1; grid-row: 2; }
+}

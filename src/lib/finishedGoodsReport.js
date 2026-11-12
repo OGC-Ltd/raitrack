@@ -31,6 +31,9 @@ export const FG_HEADS = ['Date', 'Reg No', 'Customer name', 'Destination', 'Curr
  */
 export const FG_FILL = { done: '#00b050', ok: '#ffff00', miss: '#ff0000' };
 
+/** Under the customer's name when the truck is back and no geofence saw the delivery. */
+export const NOT_GEOFENCED = 'Customers Name Not Geofenced';
+
 /** A line's state, as FG_FILL keys it. */
 export const fgState = (l) => (l.completed ? 'done' : l.delivered ? 'ok' : 'miss');
 /** A line's fill. */
@@ -66,17 +69,21 @@ const leftCustomer = (c) => (c.leftAt != null ? c.leftAt : c.at != null && Numbe
 /**
  * One line per customer of every row; a vehicle with no customers is one line
  * of its own, so it still shows. `at`: the report's "as at", for the Date of a
- * truck that has not left.
+ * truck that has not left. `picks`: line key → a customer geofence the unit passed,
+ * picked on the screen as this customer (operator, 12 Nov 2026): its arrival and
+ * departure are the line's, the customer's name stays as listed.
  */
-export function fgLines(rows, { at }) {
+export function fgLines(rows, { at, picks = null }) {
   const out = [];
   for (const r of rows ?? []) {
     const departAt = r.trip?.leftAt ?? null;
-    const yardAt = r.trip?.arrivedAt != null && !r.trip.outAgain ? r.trip.arrivedAt : null;
+    // Back at the yard, even when out again since (operator, 12 Nov 2026: KCA 226M); where it is now is Current location
+    const yardAt = r.trip?.arrivedAt != null ? r.trip.arrivedAt : null;
     // Departure is a date and time only (operator, 12 Nov 2026): a truck not
     // seen leaving has it blank, and why ("At MORL") goes under Current location
     const base = {
       key: r.key ?? r.plate,
+      rowKey: r.key ?? r.plate,
       plate: regOf(r.plate),
       place: nowAt(r) || (departAt == null ? notLeftWords(r.trip) : ''),
       departAt,
@@ -86,20 +93,28 @@ export function fgLines(rows, { at }) {
     const list = r.customers?.length ? r.customers : [null];
     for (const c of list) {
       const arriveAt = c?.at ?? null;
+      // Back at the yard with this customer not reached: delivered where no geofence says so (operator, 12 Nov 2026)
+      const notGeofenced = arriveAt == null && base.departAt != null && base.yardAt != null;
       out.push({
         ...base,
         key: `${base.key}|${c?.name ?? '-'}`,
         // A hand-listed unit is on the day it was listed (operator, 12 Nov 2026: "we added it
         // 12/11/2026"), however early it set out; a sheet's, the day it left
         day: r.listDay ? listDayWords(r.listDay) : dayWords(departAt ?? arriveAt ?? at),
-        customer: c ? customerName(c.stop?.name || c.label || c.name) : 'No customers given',
+        customer: !c ? (notGeofenced ? NOT_GEOFENCED : 'No customers given')
+          : notGeofenced ? `${customerName(c.stop?.name || c.label || c.name)} (${NOT_GEOFENCED})`
+            : customerName(c.stop?.name || c.label || c.name),
+        notGeofenced,
         destination: placeWords(c?.stop?.location ?? c?.location ?? ''),
         arriveAt,
         leftAt: c ? leftCustomer(c) : null,
         delivered: arriveAt != null,
-        // Completed trip: delivered here, then back at the yard after it
-        completed: arriveAt != null && base.yardAt != null && base.yardAt >= arriveAt,
+        // Completed trip: left and back at the yard, whatever happened at the customer (operator, 12 Nov 2026:
+        // "as long as it left and arrived back at the yard Menengai HQ then it should be highlighted as complete")
+        completed: base.departAt != null && base.yardAt != null,
       });
+      const pick = picks?.get(out[out.length - 1].key);
+      if (pick) Object.assign(out[out.length - 1], { arriveAt: pick.at, leftAt: pick.leftAt ?? null, delivered: true, picked: pick.label });
     }
   }
   return out;
@@ -138,8 +153,8 @@ const dmy = (ms) => dmyhm(ms).slice(0, 10);
 const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /** `dropped`: the keys of lines taken off with ✕ on the screen; they are left out everywhere. */
-export function finishedGoodsDoc(rows, { from, at, fleet, group = null, orgCode, now = Date.now(), dropped = null }) {
-  const lines = fgLines(rows, { at }).filter((l) => !dropped?.has(l.key));
+export function finishedGoodsDoc(rows, { from, at, fleet, group = null, orgCode, now = Date.now(), dropped = null, picks = null }) {
+  const lines = fgLines(rows, { at, picks }).filter((l) => !dropped?.has(l.key));
   const got = lines.filter((l) => l.delivered).length;
   const used = WIDTHS.reduce((a, x) => a + x, 0);
   const cols = WIDTHS.map((w, i) => ({ w: Math.round(((w * LANDSCAPE_MM) / used) * 10) / 10, wrap: i !== 0 && i !== 9 }));
