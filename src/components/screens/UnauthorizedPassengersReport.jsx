@@ -33,6 +33,8 @@ import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
 import { useReportEditor } from './ReportEditor';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
+import { useSitePick } from '../../hooks/useSitePick';
+import ChoicePicker from './ChoicePicker';
 import { downloadTableCsv } from '../../utils/tableExport';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -245,7 +247,9 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
   const [dialog,  setDialog]      = useState(null); // null | 'new' | { entry }
   const [file,    setFile]        = useState({ busy: false, error: null });
 
-  const fleet = companyName ?? orgCode ?? '';
+  // Naitiri's units alone, from the client's Excel lists, titled Naitiri (operator, 12 Nov 2026)
+  const sitePick = useSitePick(orgCode);
+  const fleet = sitePick.fleetWords(companyName ?? orgCode ?? '');
 
   // ── The period's incidents, from the server (reports/unauthorized-passengers) ─
   const loadId = useRef(0);
@@ -274,7 +278,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
   }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Newest first, as the server sends them.
-  const rows = incidents;
+  const rows = useMemo(() => (sitePick.site ? incidents.filter((r) => sitePick.keepRow(r.plate)) : incidents), [incidents, sitePick]);
   const isShared = (r) => r.sharedAt != null;
 
   // ── Save (new or edit) ──────────────────────────────────────────────────────
@@ -363,6 +367,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[]} label="Days"
                          onChange={(f, t) => setDays({ from: f, to: t ?? f })} />
+        {sitePick.picker && <ChoicePicker {...sitePick.picker} onChange={(v) => sitePick.setSite(v)} />}
         <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog('new')}>
           Log incident
         </button>

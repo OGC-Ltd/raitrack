@@ -55,6 +55,7 @@ import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
 import DeliveriesReport from './DeliveriesReport';
 import ChoicePicker from './ChoicePicker';
+import { useSitePick } from '../../hooks/useSitePick';
 import TatFuelReport from './TatFuelReport';
 import AlarmDistributionReport from './AlarmDistributionReport';
 import UnauthorizedPassengersReport from './UnauthorizedPassengersReport';
@@ -704,7 +705,7 @@ function TypePicker({ types, picked, counts, onChange }) {
  */
 function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, whoAmI }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -728,7 +729,7 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
         ))}
       </div>
       <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
-        <MovementsReport orgId={orgId} />
+        <MovementsReport orgId={orgId} orgCode={orgCode} />
       </div>
       {tankers && (
       <div className="mvt-panel" role="tabpanel" id="mvt-tankers-panel" aria-labelledby="mvt-tankers" hidden={tab !== 'tankers'}>
@@ -789,7 +790,9 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   );
 }
 
-function MovementsReport({ orgId }) {
+function MovementsReport({ orgId, orgCode = null }) {
+  // West Kenya's Naitiri from the client's lists (hooks/useSitePick): rows kept, and the title
+  const sitePick = useSitePick(orgCode);
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => movementsKept.get(orgId));
   const today = fleetDay(Date.now());
@@ -869,7 +872,12 @@ function MovementsReport({ orgId }) {
   // Opens made for the last hour, unless tables were kept for this organisation.
   useEffect(() => { if (!saved && orgId) execute(sel); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const reports = run.status === 'done' ? run.reports : null;
+  const reportsAll = run.status === 'done' ? run.reports : null;
+  // On screen and in every file: only the picked site's units, under its own name
+  const reports = useMemo(() => (reportsAll && sitePick.site
+    ? reportsAll.map((r) => ({ ...r, organisation: sitePick.fleetWords(r.organisation),
+      groups: (r.groups ?? []).map((g) => ({ ...g, rows: (g.rows ?? []).filter((row) => sitePick.keepRow(row.grouping, row.plate, row.name)) })) }))
+    : reportsAll), [reportsAll, sitePick]);
   const allTypes = useMemo(() => (reports ? vehicleTypes(reports) : []), [reports]);
   const picked = useMemo(() => types ?? [], [types]);
   // Menengai's fleet list, when its report is grouped by it: the menu lists every group of it
@@ -1071,6 +1079,8 @@ function MovementsReport({ orgId }) {
                           ...fleetList.map((g) => ({ value: g.name, label: g.name, note: typeCounts[g.name] ?? 0 }))]}
                         onChange={(v) => setTypes(v == null ? allTypes : [v])} />
         ) : allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
+
+        {sitePick.picker && <ChoicePicker {...sitePick.picker} onChange={(v) => sitePick.setSite(v)} />}
 
         <CheckPicker icon="ti-alert-triangle" label="Events" noun="events" noAll
                      options={EVENTS.map((e) => ({ value: e.key, label: e.label }))} picked={eventKinds}
@@ -1314,6 +1324,9 @@ export default function ReportsScreen() {
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key, NIGHT, orgCode));
   const [group, setGroup] = useState(null);
+  // West Kenya's Naitiri from the client's lists (hooks/useSitePick): the units, and the title
+  const sitePick = useSitePick(orgCode);
+  const siteVehicles = useMemo(() => vehicles.filter(sitePick.keepVehicle), [vehicles, sitePick]);
   // One unit, on the reports that take it (UNIT_REPORTS); null = every unit in the group
   const [unit, setUnit] = useState(null);
   const [night, setNight] = useState(NIGHT);
@@ -1392,10 +1405,10 @@ export default function ReportsScreen() {
   const byUnit = UNIT_REPORTS.has(key);
   // The units of the group picked, by plate, for the Unit picker
   const unitChoices = useMemo(() => (byUnit
-    ? scopeUnits(vehicles, groups, group).units
+    ? scopeUnits(siteVehicles, groups, group).units
       .map((u) => ({ value: u.key, label: u.plate, note: u.group ?? undefined }))
       .sort((x, y) => x.label.localeCompare(y.label, 'en', { numeric: true }))
-    : []), [byUnit, vehicles, groups, group]);
+    : []), [byUnit, siteVehicles, groups, group]);
   const today = fleetDay(Date.now());
   // Every report here takes its period on one calendar with the hours under it,
   // as Movements does (operator, 2 Nov): the first day at the start hour to the
@@ -1430,7 +1443,7 @@ export default function ReportsScreen() {
     if (problemFor(sp)) return;
     const id = ++runId.current;
     const live = () => id === runId.current;
-    const scoped = scopeUnits(vehicles, groups, group);
+    const scoped = scopeUnits(siteVehicles, groups, group);
     const one = byUnit && unit ? scoped.units.find((u) => u.key === unit) : null;
     const units = one ? [one] : scoped.units;
     const missing = one ? [] : scoped.missing;
@@ -1574,7 +1587,7 @@ export default function ReportsScreen() {
   const editor = useReportEditor({
     orgId, source: run,
     build: () => flowDoc(reportHtml(def, done, {
-      companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+      companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
       orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
     })),
   });
@@ -1589,7 +1602,7 @@ export default function ReportsScreen() {
         return;
       }
       const { html, landscape, filename } = reportHtml(def, done, {
-        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+        companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
       });
       await saveLetterheadPdf(html, { filename, landscape });
@@ -1613,7 +1626,7 @@ export default function ReportsScreen() {
         return;
       }
       const { html, landscape, filename } = reportHtml(def, done, {
-        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+        companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
       });
       await saveLetterheadJpeg(html, { filename, landscape });
@@ -1628,7 +1641,7 @@ export default function ReportsScreen() {
   const preview = usePdfPreview(async (turned) => {
     if (editor.edited) return editor.make(turned);
     const { html, landscape, filename } = reportHtml(def, done, {
-      companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+      companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
       orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: Boolean(turned),
     });
     return saveLetterheadPdf(html, { filename, landscape, keep: true });
@@ -1694,6 +1707,10 @@ export default function ReportsScreen() {
                         options={[{ value: null, label: 'All groups', note: groups.reduce((n, g) => n + g.units.length, 0) },
                           ...groups.map((g) => ({ value: g.name, label: g.name, note: g.units.length }))]}
                         onChange={(v) => { setGroup(v); setUnit(null); reset(); }} />
+        )}
+
+        {sitePick.picker && (
+          <ChoicePicker {...sitePick.picker} onChange={(v) => { sitePick.setSite(v); setUnit(null); reset(); }} />
         )}
 
         {byUnit && (

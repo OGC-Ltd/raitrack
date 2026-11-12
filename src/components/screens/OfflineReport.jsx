@@ -63,7 +63,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
         if (!oid) { unread.push(nameOf(c)); continue; }
         const moves = await loadMovementReport({ orgId: oid, from: now - WINDOW_MS, to: now, offline: true });
         if (!live()) return;
-        rows.push(...(moves?.groups ?? []).flatMap((g) => g.rows ?? []).filter((r) => keepUnit(c, r.grouping ?? r.plate)));
+        rows.push(...(moves?.groups ?? []).flatMap((g) => g.rows ?? []).filter((r) => keepUnit(c, r.grouping ?? r.plate) || keepUnit(c, r.plate)));
       }
       setRun({ status: 'done', rep: offlineReport(rows, now), now, day, fleet: pickedWords, unread });
     } catch (err) {

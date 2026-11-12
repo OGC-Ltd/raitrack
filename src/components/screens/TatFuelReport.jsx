@@ -38,7 +38,7 @@ const fmt = (n) => n.toLocaleString('en-GB');
 const KPI_LABELS = ['Trips', 'Fuel used, L', 'Distance, km', 'Rate, km/L', 'Not updating'];
 
 export default function TatFuelReport({ orgId, orgCode, companyName, active = true }) {
-  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
+  const { picked, several, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
   const [days, setDays] = useState(() => ({ from: yesterday(), to: yesterday() }));
   const [group, setGroup] = useState('all');
   const [run, setRun] = useState({ status: 'idle' });
@@ -63,7 +63,10 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
         for (const day of daysFrom(from, to)) sheets.push(await loadTatFuelReport({ orgId: oid, day }));
         reports.push({
           failed: sheets.reduce((n, r) => n + r.failed, 0),
-          rows: rowsOverDays(sheets.map((r) => r.rows)).filter((r) => keepUnit(c, r.base)),
+          // Naitiri Ex: each section is the unit's kind on the client's lists
+          // A row's base is its site ("Naitiri"), with no plate: the Ex lists are read off its plate (operator, 12 Nov 2026)
+          rows: rowsOverDays(sheets.map((r) => r.rows)).filter((r) => keepUnit(c, r.base) || keepUnit(c, r.plate))
+            .map((r) => ({ ...r, group: kindOf(r.plate) ?? r.group })),
         });
       }
       if (id !== runId.current) return;

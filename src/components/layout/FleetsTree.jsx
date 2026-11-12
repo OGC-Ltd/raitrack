@@ -41,6 +41,8 @@ import { useMapLayers } from '../../context/MapLayersContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { fleetTypeOptions, isInTransit } from '../../lib/vehicleMap';
 import { TreeCountsMasked, MASKED_COUNT } from './SideTree';
+import { mapSiteOptions } from '../../lib/siteLists';
+import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import './FleetsTree.css';
 
 /** Chips shown before "N more" (operator, 2026-10-13: "on the Fleets we only
@@ -73,7 +75,7 @@ function OpenRow({ icon, label, count = null, tone = 'plain', current = false, o
  * account may open them: { active, open }. Null hides the row.
  */
 export default function FleetsTree({ audit = null, report = null, review = null }) {
-  const { fleetTypes = [], inTransitOnly } = useAppFields("fleetTypes", "inTransitOnly");
+  const { fleetTypes = [], inTransitOnly, activeCompanyId } = useAppFields("fleetTypes", "inTransitOnly", "activeCompanyId");
   const { setFleetTypes, setInTransitOnly } = useAppActions();
   const { vehicles = [] } = useFleetLiveShared();
   const { setUnitsOpen, revealMap } = useMapLayers() ?? {};
@@ -82,6 +84,9 @@ export default function FleetsTree({ audit = null, report = null, review = null 
   const [allTypes, setAllTypes] = useState(false);
   const options  = useMemo(() => fleetTypeOptions(vehicles), [vehicles]);
   const selected = useMemo(() => new Set(fleetTypes), [fleetTypes]);
+  // Sites told apart by a list of their units: West Kenya's Naitiri (operator,
+  // 12 Nov 2026). A pill like the types', after them; lib/siteLists.
+  const siteOptions = useMemo(() => mapSiteOptions(ORG_CODE_BY_COMPANY[activeCompanyId], vehicles), [activeCompanyId, vehicles]);
 
   /* How many units are actually moving — isInTransit, the predicate the map
      marker, the vehicle card and the topbar's IN TRANSIT button use, so this
@@ -92,7 +97,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
   // A fleet of one machine type has nothing to narrow — the map funnel's rule.
   // Technicians narrow their flagged units by type too (operator, 2026-10-27).
   const canFilter = can('map:filter') || flaggedOnly;
-  const showTypes = canFilter && options.length > 1;
+  const showTypes = canFilter && (options.length > 1 || siteOptions.length > 0);
   const filtered  = selected.size > 0 || Boolean(inTransitOnly);
 
   /* Folded to the first CHIP_FOLD chips — but a ticked type is never hidden
@@ -166,6 +171,23 @@ export default function FleetsTree({ audit = null, report = null, review = null 
               {allTypes ? 'Less' : `${hiddenTypes} more`}
             </button>
           )}
+          {siteOptions.map(o => {
+            const on = selected.has(o.kind);
+            return (
+              <button
+                key={o.kind}
+                type="button"
+                className={`fleets__chip fleets__chip--site${on ? ' fleets__chip--on' : ''}`}
+                aria-pressed={on}
+                onClick={() => toggleType(o.kind)}
+                title={on ? `Stop narrowing the map to ${o.label}'s units` : `Show only ${o.label}'s units on the map (from its unit list)`}
+              >
+                <i className="ti ti-map-pin" aria-hidden="true" />
+                <span className="fleets__chip-label">{o.label}</span>
+                <span className="fleets__chip-count">{masked ? MASKED_COUNT : o.count}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

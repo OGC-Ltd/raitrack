@@ -12,6 +12,8 @@
 //
 // Pure: no React, no network.
 
+import { SITE_LISTS } from './siteLists';
+
 /**
  * West Kenya's report lists these, and only West Kenya's does (operator, 4 Nov
  * 2026): from Sukari or Kabras the report is about Sukari or Kabras alone.
@@ -26,7 +28,10 @@ const WEST_KENYA = {
     { key: 'KABRAS', label: 'Kabras', org: 'KABRAS' },
     { key: 'NZOIA', label: 'Nzoia', org: 'NZOIA' },
     { key: 'OLEPITO', label: 'Olepito', unit: /ole?i?p(?:i?t|ti)/i },
-    { key: 'NAITIRI', label: 'Naitiri', unit: /nait[ir]/i },
+    { key: 'NAITIRI', label: 'Naitiri', unit: SITE_LISTS.NAITIRI.test },
+    // From the client's Excel lists alone (operator, 12 Nov 2026), lib/siteLists
+    { key: 'NAITIRI_EX', label: SITE_LISTS.NAITIRI_EX.label, unit: SITE_LISTS.NAITIRI_EX.test },
+    { key: 'NAITIRI_TRUCKS_EX', label: SITE_LISTS.NAITIRI_TRUCKS_EX.label, unit: SITE_LISTS.NAITIRI_TRUCKS_EX.test },
   ],
 };
 
@@ -131,6 +136,6 @@ export function familyRuns(family, ticked, canSee) {
   const on = ticked == null ? members : members.filter((m) => ticked.includes(m.key));
   const sites = on.filter((m) => m.unit);
   const home = ticked == null ? [{ code: family.home, unit: null }]
-    : sites.length ? [{ code: family.home, unit: new RegExp(sites.map((m) => m.unit.source).join('|'), 'i') }] : [];
+    : sites.length ? [{ code: family.home, unit: { test: (name) => sites.some((m) => m.unit.test(name)) } }] : [];
   return [...home, ...on.filter((m) => m.org).map((m) => ({ code: m.org, unit: null }))];
 }

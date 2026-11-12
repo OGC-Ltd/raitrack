@@ -10,6 +10,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useCompanies } from '../context/AppContext';
 import { ORG_CODE_BY_COMPANY, resolveOrgId } from '../api/org';
 import { familyOf, familyMembers, familyRuns } from '../lib/reportTemplates';
+import { siteFleet, siteKind } from '../lib/siteLists';
 
 const codeOf = (company) => ORG_CODE_BY_COMPANY[company?.id] ?? String(company?.id ?? '').toUpperCase();
 
@@ -45,9 +46,13 @@ export function useReportOrgs(reportKey, { orgId, orgCode, companyName }) {
     return !unit || unit.test(String(name ?? ''));
   };
   /** What the report calls its fleet: the organisation, the family when all of it, or the names. */
+  // Naitiri's options alone: the report is Naitiri's, not West Kenya's (operator, 12 Nov 2026)
   const pickedWords = !family ? companyName ?? code
     : ticked == null ? family.name
-      : members.filter((m) => ticked.includes(m.key)).map((m) => m.label).join(', ');
+      : siteFleet(ticked) ?? members.filter((m) => ticked.includes(m.key)).map((m) => m.label).join(', ');
+
+  /** The unit's kind from the client's lists when a Naitiri Ex option is picked, else null (lib/siteLists siteKind). */
+  const kindOf = (name) => siteKind(ticked, name);
 
   /** Props for a CheckPicker; null when there is nothing to pick. */
   const picker = family ? {
@@ -57,5 +62,5 @@ export function useReportOrgs(reportKey, { orgId, orgCode, companyName }) {
     onChange: setTicked,
   } : null;
 
-  return { code, family, picked, several: picked.length > 1, orgIdOf, nameOf, keepUnit, pickedWords, picker };
+  return { code, family, picked, several: picked.length > 1, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker };
 }

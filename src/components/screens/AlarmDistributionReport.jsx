@@ -8,7 +8,7 @@
  * short count is never read as the whole.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadAlarmDistribution, makeReportDoc } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
@@ -20,6 +20,8 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
+import { useSitePick } from '../../hooks/useSitePick';
+import ChoicePicker from './ChoicePicker';
 import { downloadTableCsv } from '../../utils/tableExport';
 
 /** The kinds the server counts, in its order. Its Other is left out (operator, 11 Nov 2026), lib/reportDocs withoutOther. */
@@ -81,7 +83,9 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
 
-  const fleet = companyName ?? orgCode ?? '';
+  // Naitiri's units alone, from the client's Excel lists, titled Naitiri (operator, 12 Nov 2026)
+  const sitePick = useSitePick(orgCode);
+  const fleet = sitePick.fleetWords(companyName ?? orgCode ?? '');
 
   const execute = async () => {
     if (!orgId) return;
@@ -100,7 +104,8 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
   useEffect(() => { if (active && orgId && run.status === 'idle') execute(); }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = run.status === 'done' ? run : null;
-  const rows = done?.rows ?? NONE;
+  const allRows = done?.rows ?? NONE;
+  const rows = useMemo(() => (sitePick.site ? allRows.filter((r) => sitePick.keepRow(r.plate, r.name)) : allRows), [allRows, sitePick]);
 
   const sheet = () => alarmDistDoc(rows, { from: done.from, to: done.to, fleet, orgCode, partial: done.partial });
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
@@ -147,6 +152,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
           maxDays={MAX_DAYS} spans={[]} label="Days"
           onChange={(from, to) => setDays({ from, to: to ?? from })}
         />
+        {sitePick.picker && <ChoicePicker {...sitePick.picker} onChange={(v) => sitePick.setSite(v)} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
