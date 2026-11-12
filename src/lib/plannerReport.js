@@ -191,3 +191,45 @@ export function outcomeWords(r) {
   if (s.open) parts.push(`${s.open} not marked`);
   return parts.join(', ');
 }
+
+/**
+ * The Planner plan a vehicle added on the Deliveries list runs that day
+ * (operator, 13 Nov 2026: KDM 138L's itinerary "with the routes configured"
+ * should tick its geofences when the unit is picked): an uploaded sheet or
+ * itinerary, not a plan keyed in on Deliveries itself, whose span (printing,
+ * then 48 h) meets the day; the latest printed when there are several.
+ * @param {object[]} plans  listPlans' rows
+ * @param {string} plate
+ * @param {string} day      the list's fleet day, 'YYYY-MM-DD'
+ */
+export function planForDay(plans, plate, day, dayStartOf, now = Date.now()) {
+  const k = plateKey(plate);
+  if (!k) return null;
+  const from = dayStartOf(day);
+  const mine = sheetsForWindow((plans ?? []).filter((p) => p.source !== 'manual' && plateKey(p.plate) === k), from, from + DAY, dayStartOf, now);
+  return mine.sort((a, b) => planWindow(b, dayStartOf, now).from - planWindow(a, dayStartOf, now).from)[0] ?? null;
+}
+
+/**
+ * A plan's stops as a Deliveries vehicle's: each stop's geofence, by the name
+ * the stops picker knows it by, in route order; a stop whose fence is gone, or
+ * that never had one, as a point named after its customer, to be fenced like
+ * any added point (lib/pinFences).
+ * @param {object} plan  getPlan's plan
+ * @param {object} fc    the organisation's geofences
+ * @param {Set<string>} [pickable]  the names the stops picker offers; a fence not among them is a point instead
+ * @returns {{ names: string[], pins: Array<{ name, lat, lng, radiusM }> }}
+ */
+export function planStopsForList(plan, fc, pickable = null, radiusM = 100) {
+  const nameOf = new Map((fc?.features ?? []).map((f) => [f.properties?.id, String(f.properties?.name ?? '').trim()]));
+  const names = [];
+  const pins = [];
+  const stops = [...(plan?.stops ?? [])].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+  for (const s of stops) {
+    const c = s.customer ?? {};
+    const name = c.geofenceId ? nameOf.get(c.geofenceId) : null;
+    if (name && (!pickable || pickable.has(name))) { names.push(name); continue; }
+    if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) pins.push({ name: String(c.name ?? '').trim() || String(c.code ?? '').replace(/^\w+:/, ''), lat: c.lat, lng: c.lng, radiusM });
+  }
+  return { names: [...new Set(names)], pins };
+}

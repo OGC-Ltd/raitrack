@@ -30,17 +30,19 @@ import { LAST_HOURS, MAX_MOVEMENT_DAYS, windowsProblem } from '../../lib/movemen
 import {
   COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
 } from '../../lib/deliveriesReport';
-import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
+import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, mergePins, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers } from '../../api/planner';
-import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAppActions } from '../../context/AppContext';
-import { loadZones } from '../../hooks/useEstateZones';
+import { loadZones, reloadEstateZones } from '../../hooks/useEstateZones';
+import { createFence } from '../../api/geofences';
+import { pinFencePlan, drawPinFences, readNamedPaste, FENCE_RADIUS_M } from '../../lib/pinFences';
 import { deliveriesDoc } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
 import './DeliveriesReport.css';
@@ -53,6 +55,17 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import PdfPreview from '../shared/PdfPreview';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
+// When the day's list was last saved: " 09:41" today, " 12 Nov, 09:41" before; '' when never
+const SAVED_DAY = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Nairobi' });
+const SAVED_TIME = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Nairobi' });
+const savedAt = (iso) => {
+  const t = Date.parse(iso ?? '');
+  if (!Number.isFinite(t)) return '';
+  const day = SAVED_DAY.format(t);
+  return ` ${day === SAVED_DAY.format(Date.now()) ? '' : `${day}, `}${SAVED_TIME.format(t)}`;
+};
+// A day as the date picker writes it, "13 Nov", never the ISO key
+const dayWords = (key) => pickedText(key, key, null).replace(/ /g, ' ');
 import HourWindow, { hoursText } from './HourWindow';
 import ChoicePicker from './ChoicePicker';
 import TableToolbar from '../body/TableToolbar';
@@ -71,11 +84,50 @@ function Kpi({ value, label, tone }) {
   );
 }
 
-/** Stops pasted for one vehicle, geofence names or coordinates: the box, what it could not read, and the points held. */
-function PinPaste({ orgId, vehicle, customers, onChange }) {
+/** "3 new geofences drawn; 1 point kept: Forbidden": what fencing the points did, or null when there were none. */
+function fencedWords(f) {
+  if (!f) return null;
+  const parts = [];
+  if (f.drawn) parts.push(`${f.drawn} new geofence${f.drawn === 1 ? '' : 's'} drawn`);
+  if (f.kept) parts.push(`${f.kept} point${f.kept === 1 ? '' : 's'} kept without a geofence${f.error ? `: ${f.error}` : ''}`);
+  if (f.unnamed) parts.push(`${f.unnamed} point${f.unnamed === 1 ? '' : 's'} with no name, not fenced: name ${f.unnamed === 1 ? 'it' : 'them'} under Paste stops`);
+  return parts.length ? parts.join('; ') : null;
+}
+
+/** A point listed with no name: a box for the customer's name, and its geofence drawn once named. */
+function NamePin({ pin, onName }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try { await onName(pin, name.trim()); } finally { setBusy(false); }
+  };
+  return (
+    <span className="dlv-paste__name">
+      <input type="text" value={name} maxLength={120} placeholder="Customer name" disabled={busy}
+             aria-label={`Customer name for the point ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`}
+             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') go(); }} />
+      <button type="button" className="sp4-ghost-btn" disabled={!name.trim() || busy} onClick={go}
+              title="Name the point and give it a geofence">
+        <i className={`ti ${busy ? 'ti-loader-2' : 'ti-shape'}`} aria-hidden="true" /> {busy ? 'Drawing…' : 'Fence'}
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Stops added to one vehicle, geofence names or coordinates: the box, what it
+ * could not read, and the points held. Points go to `onAdd`, which gives each
+ * a geofence (operator, 13 Nov 2026) and answers what it did. Coordinates come
+ * with the customer's name on the same line (operator, 13 Nov 2026: "pasting
+ * coordinates but also the name should be provided"): a line without one stays
+ * in the box until it has one.
+ */
+function PinPaste({ orgId, vehicle, customers, onAdd, onRemovePins }) {
   const [text, setText] = useState('');
-  const [radius, setRadius] = useState(PIN_RADIUS_M);
-  const [told, setTold] = useState(null);                 // { added, bad } or { sheet: words, warn }
+  const [radius, setRadius] = useState(FENCE_RADIUS_M);
+  const [told, setTold] = useState(null);                 // { added, bad, fenced } or { sheet: words, warn }
   const [reading, setReading] = useState(false);
   const pins = vehicle.pins ?? [];
   // A Sales Order Booking Delivery Sheet, read by the Planner's own reader on
@@ -88,30 +140,37 @@ function PinPaste({ orgId, vehicle, customers, onChange }) {
       if (file.size > 2_000_000) throw new Error('The file is over 2 MB.');
       const preview = await previewSheet(orgId, { fileName: file.name, data: await fileAsBase64(file) });
       const got = sheetStops(preview, customers, radius);
-      if (got.pins.length || got.names.length) onChange(mergePins(pins, got.pins), got.names);
+      const fenced = got.pins.length || got.names.length ? await onAdd(got.pins, got.names) : null;
       const other = got.plate && plateKey(got.plate) !== plateKey(vehicle.plate);
       const words = [`${got.pins.length + got.names.length} added from the sheet${got.plate ? ` of ${got.plate}` : ''}`];
+      if (fencedWords(fenced)) words.push(fencedWords(fenced));
       if (got.unplaced.length) words.push(`${got.unplaced.length} with no point or geofence: ${got.unplaced.slice(0, 3).join(', ')}${got.unplaced.length > 3 ? ', …' : ''}`);
       if (other) words.push(`the sheet is for ${got.plate}, not ${vehicle.plate}`);
-      setTold({ sheet: words.join('; '), warn: Boolean(other || got.unplaced.length || !(got.pins.length + got.names.length)) });
+      setTold({ sheet: words.join('; '), warn: Boolean(other || got.unplaced.length || fenced?.kept || !(got.pins.length + got.names.length)) });
     } catch (err) {
       setTold({ sheet: `The sheet could not be read: ${err?.message ?? err}`, warn: true });
     } finally {
       setReading(false);
     }
   };
-  const add = () => {
-    const { pins: read, bad } = readCoordinates(text, radius);
+  const add = async () => {
+    if (reading) return;
+    const { pins: read, bad, nameless } = readNamedPaste(text, radius);
     const { names, rest } = matchGeofences(bad, customers);
-    if (read.length || names.length) onChange(mergePins(pins, read), names);
-    setTold({ added: read.length + names.length, bad: rest.length });
-    setText(rest.join('\n'));                             // what did not read stays, to be put right
+    setText([...nameless, ...rest].join('\n'));          // what did not read, or has no name, stays to be put right
+    setReading(true);
+    try {
+      const fenced = read.length || names.length ? await onAdd(read, names) : null;
+      setTold({ added: read.length + names.length, bad: rest.length, nameless: nameless.length, fenced });
+    } finally {
+      setReading(false);
+    }
   };
   return (
     <div className="dlv-paste">
       <textarea className="dlv-paste__box" rows={4} value={text} spellCheck={false}
                 aria-label={`Delivery stops for ${vehicle.plate}`}
-                placeholder={'One stop a line, a geofence’s name or coordinates from a sheet or a map:\nJOJAC INVESTMENTS\nNaivas Nakuru, -0.28802, 36.04494'}
+                placeholder={'One stop a line, a geofence’s name, or the customer’s name and its coordinates:\nJOJAC INVESTMENTS\nNaivas Nakuru, -0.28802, 36.04494'}
                 onChange={(e) => { setText(e.target.value); setTold(null); }} />
       <div className="dlv-paste__foot">
         <label className="dlv-paste__radius">
@@ -119,7 +178,7 @@ function PinPaste({ orgId, vehicle, customers, onChange }) {
           <input type="number" min={PIN_RADIUS_MIN_M} max={PIN_RADIUS_MAX_M} step={10} value={radius}
                  onChange={(e) => setRadius(e.target.value)} /> m
         </label>
-        <button type="button" className="sp4-ghost-btn" disabled={!text.trim()} onClick={add}>
+        <button type="button" className="sp4-ghost-btn" disabled={!text.trim() || reading} onClick={add}>
           <i className="ti ti-plus" aria-hidden="true" /> Add stops
         </button>
         <label className={`sp4-ghost-btn dlv-paste__sheet${reading ? ' is-busy' : ''}`}
@@ -130,12 +189,12 @@ function PinPaste({ orgId, vehicle, customers, onChange }) {
         </label>
         {told?.sheet && <span className={told.warn ? 'rpt-warn' : 'rpt-sub'} role="status">{told.sheet}</span>}
         {told && !told.sheet && (
-          <span className={told.bad ? 'rpt-warn' : 'rpt-sub'} role="status">
-            {told.added} added{told.bad ? `; ${told.bad} line${told.bad === 1 ? '' : 's'} left in the box matched no geofence and had no coordinates` : ''}
+          <span className={told.bad || told.nameless || told.fenced?.kept ? 'rpt-warn' : 'rpt-sub'} role="status">
+            {told.added} added{fencedWords(told.fenced) ? `; ${fencedWords(told.fenced)}` : ''}{told.nameless ? `; ${told.nameless} line${told.nameless === 1 ? ' has' : 's have'} coordinates but no name: write the customer’s name before the coordinates, then Add stops` : ''}{told.bad ? `; ${told.bad} line${told.bad === 1 ? '' : 's'} left in the box matched no geofence and had no coordinates` : ''}
           </span>
         )}
         {pins.length > 0 && (
-          <button type="button" className="sp4-ghost-btn dlv-paste__clear" onClick={() => onChange([])}>Remove all {pins.length}</button>
+          <button type="button" className="sp4-ghost-btn dlv-paste__clear" onClick={() => onRemovePins(pins)}>Remove all {pins.length}</button>
         )}
       </div>
       {pins.length > 0 && (
@@ -143,8 +202,9 @@ function PinPaste({ orgId, vehicle, customers, onChange }) {
           {pins.map((p) => (
             <li key={`${p.lat},${p.lng}`} className="dlv-paste__pin" title={`${p.lat}, ${p.lng}, within ${p.radiusM} m`}>
               <span>{p.name || `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`}</span>
+              {!p.name?.trim() && <NamePin pin={p} onName={(pin, name) => onAdd([{ ...pin, name }], [])} />}
               <span className="rpt-sub">{p.radiusM} m</span>
-              <button type="button" aria-label={`Remove ${p.name || 'this point'}`} onClick={() => onChange(pins.filter((x) => x !== p))}>
+              <button type="button" aria-label={`Remove ${p.name || 'this point'}`} onClick={() => onRemovePins([p])}>
                 <i className="ti ti-x" aria-hidden="true" />
               </button>
             </li>
@@ -182,12 +242,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       const got = await getDeliveryDay(orgId, d);
       const kept = loadPlan(orgCode, d);
       if (!got.vehicles.length && kept.vehicles.length) {
-        await saveDeliveryDay(orgId, d, kept.vehicles);
+        const stored = await saveDeliveryDay(orgId, d, kept.vehicles);
         forgetLegacyPlan(orgCode, d);
-        return { vehicles: kept.vehicles };
+        return { vehicles: kept.vehicles, updatedAt: stored?.updatedAt ?? null };
       }
       if (kept.vehicles.length) forgetLegacyPlan(orgCode, d);
-      return { vehicles: got.vehicles };
+      // `updatedAt`: when the list was last saved, for the header's "Saved 09:41"
+      return { vehicles: got.vehicles, updatedAt: got.updatedAt ?? null };
     },
     enabled: Boolean(orgId),
     staleTime: 30_000,
@@ -203,13 +264,15 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // `failedDay`: a day whose list on screen is not yet on the server. The list is kept as the operator
   // left it (never snapped back to the server's copy) until Try again, or the next change, saves it
   const [saveState, setSaveState] = useState({ busy: 0, error: null, failedDay: null });
-  const change = (next) => {
-    const key = ['deliveries', 'day', orgId, day];
-    const forDay = day;
+  const change = (next, forDay = day) => {
+    const key = ['deliveries', 'day', orgId, forDay];
     qc.setQueryData(key, next);
     setSaveState((s) => ({ busy: s.busy + 1, error: null, failedDay: null }));
     saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles))
-      .then(() => {
+      .then((stored) => {
+        // The list's saved time, from the server: the header's "Saved 09:41" follows each save
+        const at = stored?.updatedAt ?? new Date().toISOString();
+        qc.setQueryData(key, (cur) => (cur ? { ...cur, updatedAt: at } : cur));
         setSaveState((s) => ({ ...s, busy: s.busy - 1 }));
         // The server keeps each listed vehicle as its Planner plan for the day: the Planner reads it afresh
         qc.invalidateQueries({ queryKey: ['planner', 'plans', orgId] });
@@ -276,6 +339,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       const next = addVehicle(plan, u);
       change(group && group !== u.group ? setVehicleGroup(next, u.key, group) : next);
       setJustAdded(u.key); setFind('');
+      takePlannerStops(u.key, u.plate);                   // its Planner plan's geofences, ticked
     };
     if (group && u.group && group !== u.group && !plan.vehicles.some((v) => v.key === u.key)) {
       setAssign({ words: `${u.plate} belongs to ${u.group}. Assign it to ${group} anyway?`, yes: `Assign to ${group}`, go: put });
@@ -350,6 +414,76 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const fencedPins = useQuery(fencedPinsQuery);
   const pinNames = useMemo(() => fencedPinNames(fencedPins.data, zones.fc), [fencedPins.data, zones.fc]);
   const pinLabel = (pin) => pinNames.get(pinCode(pin)) || pin.name || `${pin.lat}, ${pin.lng}`;
+
+  // Every stop on the list a geofence (operator, 13 Nov 2026: "the selected vehicles to run a report on
+  // have the geofences configured"): a point added from an Excel sheet or pasted takes the fence it
+  // already has, else a circle is drawn at it named after the customer (lib/pinFences). The list then
+  // carries the fence's name, and the Planner plan made from it is fenced too. A point whose fence
+  // cannot be drawn (no geofence:create, or the server said no) stays a point, judged as one.
+  const canFence = can('geofence:create');
+  const [fencing, setFencing] = useState(() => new Set()); // vehicles whose points are being fenced
+  const fenceStops = async (key, pins, names = [], forDay = day) => {
+    const { use, draw, unnamed } = pinFencePlan(pins, customers, pinNames);
+    setFencing((s) => new Set(s).add(key));
+    let drawn = { names: [], kept: draw.map((d) => d.pin), error: draw.length ? 'you have no permission to draw geofences' : null };
+    try {
+      if (canFence && draw.length) {
+        drawn = await drawPinFences(draw, (body) => createFence(orgId, body));
+        if (drawn.names.length) {
+          // The new fences must be in the stops picker and the report's geofences before they are listed
+          const fc = await reloadEstateZones(orgId).catch(() => null);
+          if (fc) {
+            const storages = findStorages(fc);
+            setZones({ status: 'done', fc, storages, customers: customersIn(fc, storages) });
+          }
+        }
+      }
+    } finally {
+      setFencing((s) => { const n = new Set(s); n.delete(key); return n; });
+    }
+    const latest = qc.getQueryData(['deliveries', 'day', orgId, forDay]) ?? plan;
+    const v = latest.vehicles.find((x) => x.key === key);
+    if (v) {
+      const gone = new Set(pins.map(pinCode));
+      // Points not fenced stay points: those that could not be drawn, and those with no name yet
+      const left = mergePins((v.pins ?? []).filter((p) => !gone.has(pinCode(p))), [...drawn.kept, ...unnamed]);
+      change(setCustomers(setPins(latest, key, left), key, [...v.customers, ...names, ...use, ...drawn.names]), forDay);
+    }
+    return { reused: use.length, drawn: drawn.names.length, kept: drawn.kept.length, unnamed: unnamed.length, error: drawn.error };
+  };
+  // The Planner's plan for a vehicle on the list (operator, 13 Nov 2026: KDM 138L's itinerary "with the
+  // routes configured" should tick its geofences on Deliveries): its stops' geofences ticked in route
+  // order when the vehicle is added, or on From the Planner; a stop whose fence is gone is fenced as an
+  // added point is. `fromPlanner`: what it did, by vehicle
+  const [fromPlanner, setFromPlanner] = useState({});
+  const tell = (key, words, warn = false) => setFromPlanner((m) => ({ ...m, [key]: words ? { words, warn } : null }));
+  const takePlannerStops = async (key, plate, forDay = day) => {
+    if (!orgId || !canSheets) return;
+    tell(key, 'Looking for its plan in the Planner…');
+    try {
+      const d = sheetDays(dayStart(forDay), dayStart(forDay) + DAY - 1, fleetDay);
+      const p = planForDay(await listPlans(orgId, d.from, d.to), plate, forDay, dayStart);
+      if (!p) { tell(key, `No plan for ${plate} on ${dayWords(forDay)} in the Planner`); return; }
+      const [full, fc] = await Promise.all([getPlan(orgId, p.id), zones.fc ? Promise.resolve(zones.fc) : loadZones(orgId)]);
+      const pickable = new Set(customersIn(fc, findStorages(fc)).map((c) => c.name));
+      const { names, pins } = planStopsForList(full, fc, pickable, FENCE_RADIUS_M);
+      const what = full.source === 'itinerary' ? 'Wialon itinerary' : 'delivery sheet';
+      if (!names.length && !pins.length) { tell(key, `The Planner’s ${what} for ${plate} has no stops with a place`, true); return; }
+      const r = await fenceStops(key, pins, names, forDay);
+      const ticked = names.length + pins.length - r.kept - r.unnamed;
+      const words = [`${ticked} stop${ticked === 1 ? '' : 's'} ticked from the Planner’s ${what} of ${dayWords(full.planDate)}`];
+      if (fencedWords(r)) words.push(fencedWords(r));
+      tell(key, words.join('; '), Boolean(r.kept || r.unnamed));
+    } catch (err) {
+      tell(key, `The Planner’s stops could not be read: ${err?.message ?? err}`, true);
+    }
+  };
+  const removePins = (key, pins) => {
+    const v = plan.vehicles.find((x) => x.key === key);
+    if (!v) return;
+    const gone = new Set(pins.map(pinCode));
+    change(setPins(plan, key, (v.pins ?? []).filter((p) => !gone.has(pinCode(p)))));
+  };
 
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
@@ -684,8 +818,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     </button>
                   )}</>
                   : dayList.isLoading ? 'Reading the list…'
-                    : saveState.busy > 0 ? 'Saving…'
-                      : <><i className="ti ti-cloud-check" aria-hidden="true" /> Saved for everyone in {companyName ?? orgCode ?? 'the organisation'}</>}
+                    : saveState.busy > 0 ? <><i className="ti ti-loader-2" aria-hidden="true" /> Saving…</>
+                      : <span title={`Shared with everyone in ${companyName ?? orgCode ?? 'the organisation'}`}>
+                          <i className="ti ti-cloud-check" aria-hidden="true" /> Saved{savedAt(dayList.data?.updatedAt)}
+                        </span>}
             </span>
           </div>
           {rangeDays.length > 1 && (
@@ -802,8 +938,38 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                             aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
-                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
-                    {isPasting && <div className="dlv-roster__wide"><PinPaste orgId={orgId} vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
+                    {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide dlv-roster__note">On a Planner sheet: the sheet is reported instead</span>}
+                    {canSheets && (fromPlanner[v.key] || picked === 0 || sheetPlates.has(plateKey(v.plate))) && (
+                      <span className={`${fromPlanner[v.key]?.warn ? 'rpt-warn' : 'rpt-sub'} dlv-roster__wide dlv-roster__note`} role="status">
+                        {fromPlanner[v.key]?.words}
+                        <button type="button" className="sp4-ghost-btn" disabled={fencing.has(v.key)}
+                                title="Tick the geofences of this vehicle's plan in the Planner for the day, in route order"
+                                onClick={() => takePlannerStops(v.key, v.plate)}>
+                          <i className="ti ti-calendar-time" aria-hidden="true" /> From the Planner
+                        </button>
+                      </span>
+                    )}
+                    {v.pins?.length > 0 && (
+                      // Points listed before stops were fenced, or whose fence could not be drawn
+                      <span className="rpt-warn dlv-roster__wide dlv-roster__note" role="status">
+                        <i className="ti ti-map-pin-off" aria-hidden="true" /> {v.pins.length} stop{v.pins.length === 1 ? ' is a point' : 's are points'} with no geofence
+                        {canFence && zones.status === 'done' && (
+                          <button type="button" className="sp4-ghost-btn" disabled={fencing.has(v.key)}
+                                  title="Use the geofence each point already has, else draw a circle at it named after it"
+                                  onClick={() => fenceStops(v.key, v.pins)}>
+                            <i className={`ti ${fencing.has(v.key) ? 'ti-loader-2' : 'ti-shape'}`} aria-hidden="true" /> {fencing.has(v.key) ? 'Drawing…' : `Give ${v.pins.length === 1 ? 'it' : 'them'} geofences`}
+                          </button>
+                        )}
+                        {/* A point with no name is fenced only once named (unless the Planner has fenced it already) */}
+                        {v.pins.some((p) => !p.name?.trim() && !pinNames.has(pinCode(p))) && (
+                          <button type="button" className="sp4-ghost-btn dlv-roster__name-hint" onClick={() => setPasting((s) => new Set(s).add(v.key))}>
+                            Name the {v.pins.filter((p) => !p.name?.trim() && !pinNames.has(pinCode(p))).length === 1 ? 'point' : 'points'} with no name
+                          </button>
+                        )}
+                      </span>
+                    )}
+                    {isPasting && <div className="dlv-roster__wide"><PinPaste orgId={orgId} vehicle={v} customers={customers}
+                      onAdd={(pins, names) => fenceStops(v.key, pins, names)} onRemovePins={(pins) => removePins(v.key, pins)} /></div>}
                   </li>
                 );
               })}

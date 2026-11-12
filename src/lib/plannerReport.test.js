@@ -151,3 +151,45 @@ describe('no earlier day carried forward (operator, 12 Nov 2026)', async () => {
     expect(sheetOnDays(left(day('11', '06:51')), { s1: '2026-11-11' }, days, fleetDay)).toBe(false);
   });
 });
+
+describe('a vehicle added on Deliveries takes its Planner plan’s geofences (operator, 13 Nov 2026)', async () => {
+  const { planForDay, planStopsForList } = await import('./plannerReport');
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const plans = [
+    { id: 'keyed', plate: 'KDM 138L', source: 'manual', planDate: '2026-11-13', sheetAt: null },
+    { id: 'old', plate: 'KDM 138L', source: 'itinerary', planDate: '2026-11-10', sheetAt: '2026-11-10T03:00:00.000Z' },
+    { id: 'itin', plate: 'KDM 138L', source: 'itinerary', planDate: '2026-11-13', sheetAt: '2026-11-13T03:00:00.000Z' },
+    { id: 'sheet', plate: 'KDM 138L', source: 'sheet', planDate: '2026-11-12', sheetAt: '2026-11-12T06:36:00.000Z' },
+    { id: 'other', plate: 'KDE 128E', source: 'sheet', planDate: '2026-11-13', sheetAt: '2026-11-13T05:00:00.000Z' },
+  ];
+
+  it('the uploaded plan that day, the latest printed; never one keyed in on Deliveries, another plate or an old one', () => {
+    expect(planForDay(plans, 'kdm138l', '2026-11-13', dayStart, now)?.id).toBe('itin');
+    expect(planForDay(plans.filter((p) => p.id !== 'itin'), 'KDM 138L', '2026-11-13', dayStart, now)?.id).toBe('sheet');
+    expect(planForDay(plans, 'KDM 138L', '2026-11-20', dayStart, now)).toBeNull();
+    expect(planForDay(plans, 'KXX 1', '2026-11-13', dayStart, now)).toBeNull();
+    expect(planForDay(plans, '', '2026-11-13', dayStart, now)).toBeNull();
+  });
+
+  it('its stops’ geofences by name in route order; a stop with no fence left is a point named after its customer', () => {
+    const fc = { features: [
+      { properties: { id: 'g1', name: 'TUMAINI GEN SHOP' } },
+      { properties: { id: 'g2', name: 'WANDU SHOP' } },
+      { properties: { id: 'g9', name: 'Hidden' } },
+    ] };
+    const plan = { stops: [
+      { sequence: 2, customer: { code: 'WL:WANDU SHOP', name: 'WANDU SHOP', geofenceId: 'g2', lat: -0.12, lng: 36.1 } },
+      { sequence: 1, customer: { code: 'WL:TUMAINI GEN SHOP', name: 'TUMAINI GEN SHOP', geofenceId: 'g1', lat: -0.05, lng: 36.0 } },
+      { sequence: 3, customer: { code: 'WL:GONE', name: 'GONE DUKA', geofenceId: 'deleted', lat: -0.2, lng: 36.2 } },
+      { sequence: 4, customer: { code: 'WL:WANDU SHOP', name: 'WANDU SHOP', geofenceId: 'g2', lat: -0.12, lng: 36.1 } },
+      { sequence: 5, customer: { code: 'WL:HID', name: 'HID', geofenceId: 'g9', lat: -0.3, lng: 36.3 } },
+      { sequence: 6, customer: { code: 'X', name: 'NOWHERE', geofenceId: null, lat: null, lng: null } },
+    ] };
+    const r = planStopsForList(plan, fc, new Set(['TUMAINI GEN SHOP', 'WANDU SHOP']));
+    expect(r.names).toEqual(['TUMAINI GEN SHOP', 'WANDU SHOP']);
+    expect(r.pins).toEqual([
+      { name: 'GONE DUKA', lat: -0.2, lng: 36.2, radiusM: 100 },
+      { name: 'HID', lat: -0.3, lng: 36.3, radiusM: 100 },
+    ]);
+  });
+});
