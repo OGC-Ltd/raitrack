@@ -7,7 +7,6 @@
 import { isTheftIncident } from './fuelAlerts'
 import { plateIn } from './plate';
 import { groupsFor, unitKey, vehicleKeys } from './fleetGroups';
-import { SITE_KIND, vehicleOnSite } from './siteLists';
 
 /** Menengai's units the client's fleet list does not name (movementReport's NOT_ON_LIST). */
 const NOT_ON_LIST = 'Not on the list'
@@ -659,13 +658,6 @@ export function matchesTypeFilter(vehicle, kinds) {
   if (!kinds) return true
   const list = kinds instanceof Set ? kinds : new Set(kinds)
   if (list.size === 0) return true
-  // A site pill ("site:NAITIRI", lib/siteLists) narrows by the site's unit list;
-  // with machine types ticked too, both apply: Naitiri and Truck is Naitiri's
-  // trucks (operator, 12 Nov 2026).
-  const sites = [...list].filter((k) => String(k).startsWith(SITE_KIND))
-  const types = sites.length ? [...list].filter((k) => !String(k).startsWith(SITE_KIND)) : null
-  if (sites.length && !sites.some((k) => vehicleOnSite(vehicle, k.slice(SITE_KIND.length)))) return false
-  if (types) return types.length === 0 || types.includes(fleetType(vehicle))
   return list.has(fleetType(vehicle))
 }
 

@@ -70,10 +70,9 @@ describe('what is read', () => {
   });
 });
 
-describe('Naitiri by name, and by the client\'s Excel lists alone (operator, 12 Nov 2026)', async () => {
-  const { familyRuns: runsOf, familyOf: famOf } = await import('./reportTemplates');
-  const { useReportOrgs } = await import('../hooks/useReportOrgs');
-  const fam = famOf('speedReport', 'WESTSUGAR');
+describe('Naitiri by name, and by the client\'s Excel lists alone (operator, 12 Nov 2026)', () => {
+  const runsOf = familyRuns;
+  const fam = familyOf('speedReport', 'WESTSUGAR');
   const all = () => true;
   it('Naitiri: by the unit\'s name, as production has it', () => {
     const [run] = runsOf(fam, ['NAITIRI'], all);
@@ -85,10 +84,9 @@ describe('Naitiri by name, and by the client\'s Excel lists alone (operator, 12 
     for (const n of ['KTCC573E', 'KTCC 573E', 'WKS - KDE 319Q', 'KDK 821G', 'BELL BCH 14591']) expect(run.unit.test(n)).toBe(true);
     for (const n of ['WKS - Naitiri - Z', 'WKS - Magut - KDL 489D', 'KCY 999Z']) expect(run.unit.test(n)).toBe(false);
   });
-  it('Naitiri trucks Ex: the trucks list alone', () => {
+  it('Naitiri trucks Ex: the trucks (list and Truck tab), nothing else', () => {
     const [run] = runsOf(fam, ['NAITIRI_TRUCKS_EX'], all);
     for (const n of ['KCY 523U', 'WKS - KCY523U ZG 7017', 'KDW 548J']) expect(run.unit.test(n)).toBe(true);
     for (const n of ['KTCC573E', 'WKS - Naitiri - Z', 'KMGJ 377W']) expect(run.unit.test(n)).toBe(false);
   });
-  it('is a hook module', () => expect(typeof useReportOrgs).toBe('function'));
 });

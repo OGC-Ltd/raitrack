@@ -224,7 +224,3 @@
   .fleets__thumb,
   .fleets__row { transition: none; }
 }
-
-/* A site's pill (West Kenya's Naitiri, lib/siteLists): a type pill with a pin, after the types */
-.fleets__chip--site .ti { font-size: 13px; color: var(--fl-muted); }
-.fleets__chip--site.fleets__chip--on .ti { color: var(--fl-accent-ink); }

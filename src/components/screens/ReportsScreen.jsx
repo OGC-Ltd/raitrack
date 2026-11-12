@@ -791,10 +791,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
 }
 
 function MovementsReport({ orgId, orgCode = null }) {
-  // West Kenya's Naitiri from the client's lists (hooks/useSitePick): rows kept, and the title
-  const sitePick = useSitePick(orgCode);
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => movementsKept.get(orgId));
+  // West Kenya's Naitiri from the client's lists (hooks/useSitePick): rows kept, and the title.
+  // The site picked is kept with the tables, so coming back shows them as they were.
+  const sitePick = useSitePick(orgCode, saved?.site ?? null);
   const today = fleetDay(Date.now());
   const [sel, setSel] = useState(saved?.sel ?? { mode: 'last', hours: LAST_HOURS[0] });
   const [draft, setDraft] = useState(saved?.draft ?? { fromDay: today, toDay: today, start: 7, end: 20 });
@@ -818,9 +819,9 @@ function MovementsReport({ orgId, orgCode = null }) {
   // back finds them as they were. Only finished tables are kept.
   useEffect(() => {
     if (!orgId) return;
-    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types, eventKinds });
+    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types, eventKinds, site: sitePick.site });
     else movementsKept.delete(orgId);
-  }, [orgId, sel, draft, run, edits, day, types, eventKinds]);
+  }, [orgId, sel, draft, run, edits, day, types, eventKinds, sitePick.site]);
 
   const execute = async (next) => {
     if (!orgId) return;
@@ -873,10 +874,14 @@ function MovementsReport({ orgId, orgCode = null }) {
   useEffect(() => { if (!saved && orgId) execute(sel); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reportsAll = run.status === 'done' ? run.reports : null;
-  // On screen and in every file: only the picked site's units, under its own name
+  // On screen and in every file: only the picked site's units, under its own name. A group left
+  // with none of them goes (no "Saloons 0 vehicles"). The direction words stay the server's
+  // ("At West Kenya"): they name the factory fence the direction is read against, not the fleet.
   const reports = useMemo(() => (reportsAll && sitePick.site
     ? reportsAll.map((r) => ({ ...r, organisation: sitePick.fleetWords(r.organisation),
-      groups: (r.groups ?? []).map((g) => ({ ...g, rows: (g.rows ?? []).filter((row) => sitePick.keepRow(row.grouping, row.plate, row.name)) })) }))
+      groups: (r.groups ?? [])
+        .map((g) => ({ ...g, rows: (g.rows ?? []).filter((row) => sitePick.keepRow(row.grouping, row.plate, row.name)) }))
+        .filter((g) => g.rows.length > 0) }))
     : reportsAll), [reportsAll, sitePick]);
   const allTypes = useMemo(() => (reports ? vehicleTypes(reports) : []), [reports]);
   const picked = useMemo(() => types ?? [], [types]);
