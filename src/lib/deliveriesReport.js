@@ -247,15 +247,40 @@ export function deliveries(pings, customers, { from, to }) {
   return got;
 }
 
-/** A pasted delivery point as a stop: a circle, read as a customer's geofence is. */
-export function pinStop(pin, storages = []) {
+/** A pasted point's key, as the server's keyed plans write it (planner/keyed-plans pinCode). */
+export const pinCode = (pin) => `PIN:${pin.lat.toFixed(5)},${pin.lng.toFixed(5)}`;
+
+/**
+ * The names of the pasted points someone has fenced in the Planner (operator,
+ * 12 Nov 2026: "if a geofence is drawn then it can use the name given to the
+ * geofence as the customer name"): pin code → the fence's name as the
+ * geofences have it now, else the name the customer took when it was fenced.
+ * @param {Array<{ customerCode: string, name: string, geofenceId: string|null }>} customers  Planner customers
+ * @param {object} [fc] the organisation's geofences
+ */
+export function fencedPinNames(customers, fc) {
+  const fenceName = new Map((fc?.features ?? []).map((f) => [f.properties?.id, f.properties?.name]));
+  const out = new Map();
+  for (const c of customers ?? []) {
+    if (!c?.geofenceId || !String(c.customerCode).startsWith('PIN:')) continue;
+    const name = String(fenceName.get(c.geofenceId) || c.name || '').trim();
+    if (name) out.set(c.customerCode, name);
+  }
+  return out;
+}
+
+/**
+ * A pasted delivery point as a stop: a circle, read as a customer's geofence is.
+ * Named by its fence when one was drawn for it in the Planner, else by the name pasted with it.
+ */
+export function pinStop(pin, storages = [], fenceNames = null) {
   const at = { lat: pin.lat, lng: pin.lng };
   const near = storages.some((s) => {
     const m = middleOf(s.feature);
     return m && metres(at, m) <= Math.max(NEAR_STORAGE_M, s.marginM ?? 0, s.feature?.properties?.radiusM ?? 0);
   });
   return {
-    name: `pin:${pin.lat},${pin.lng}`, label: pin.name || `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`, kind: 'Pasted', nearStorage: near,
+    name: `pin:${pin.lat},${pin.lng}`, label: fenceNames?.get(pinCode(pin)) || pin.name || `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`, kind: 'Pasted', nearStorage: near,
     feature: { type: 'Feature', properties: { name: pin.name ?? '', radiusM: pin.radiusM }, geometry: { type: 'Point', coordinates: [pin.lng, pin.lat] } },
   };
 }
@@ -354,7 +379,7 @@ const isNear = (stop, storage) => {
  * @param {object[][]} [o.routes]  each of its trackers' readings, for the stops: `pings` alone when not given
  * @param {Array<{from, to}>} [o.windows]  the hours each day the stops are read over: [from, to] when not given
  */
-export function deliveryRow(plan, pings, storages, customerByName, { from = null, to, place = null, lastFix = null, atMorl = false, unread = false, routes = null, windows = null }) {
+export function deliveryRow(plan, pings, storages, customerByName, { from = null, to, place = null, lastFix = null, atMorl = false, unread = false, routes = null, windows = null, pinNames = null }) {
   // Its last position as Movements has it, when newer than the readings: a
   // parked tracker can go quiet for days
   const all = lastFix && Number.isFinite(lastFix.lat) && Number.isFinite(lastFix.t) && lastFix.t <= to
@@ -372,7 +397,7 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
   if (unread && !all.length) trip = { ...trip, need: false, unread: true };
   const picked = [
     ...(plan.customers ?? []).map((n) => customerByName.get(n) ?? { name: n, label: n, missing: true }),
-    ...(plan.pins ?? []).map((pin) => pinStop(pin, storages)),
+    ...(plan.pins ?? []).map((pin) => pinStop(pin, storages, pinNames)),
   ];
   // The whole route in the window; with no window, the last trip
   const spans = from != null ? windows ?? [{ from, to }]

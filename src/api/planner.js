@@ -53,6 +53,13 @@ export async function fenceCustomer(orgId, customerId, body) {
   return res.data
 }
 
+/** Planner customers; `fenced`: only those tied to a geofence. */
+export async function listCustomers(orgId, { q, fenced } = {}) {
+  const qs = new URLSearchParams({ ...(q ? { q } : {}), ...(fenced ? { fenced: 'true' } : {}) }).toString()
+  const res = await apiFetch(`${base(orgId)}/customers${qs ? `?${qs}` : ''}`)
+  return res.data
+}
+
 export async function deletePlan(orgId, id) {
   try {
     await apiFetch(`${base(orgId)}/plans/${id}`, { method: 'DELETE' })
