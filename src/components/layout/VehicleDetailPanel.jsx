@@ -10,7 +10,10 @@
 // Anything the server does not provide yet is shown as "Not available" — never invented.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../services/api';
+import { listPlans } from '../../api/planner';
+import { routePlanFor, routeWords } from '../../lib/deliveryRoute';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useAppSelector, useAppActions, useCompanies } from '../../context/AppContext';
 import { useMapLayers } from '../../context/MapLayersContext';
@@ -328,7 +331,7 @@ function EmptyNote({ icon, title, children, tone }) {
  * What the unit is doing as one lead sentence, then a line each for what to
  * know: flags first (red, then amber), then fuel, load and where it is going.
  */
-function unitSummary({ vehicle, readings, place, usedL }) {
+function unitSummary({ vehicle, readings, place, usedL, route }) {
   const where = place ? ` near ${place}` : '';
   let lead;
   if (!vehicle.online) {
@@ -359,6 +362,9 @@ function unitSummary({ vehicle, readings, place, usedL }) {
   if (usedL != null) items.push({ icon: 'ti-droplet', text: `${num(usedL, 1)} L used today.` });
   const loaded = vehicle.cargo && vehicle.cargo !== 'Empty' && vehicle.cargo !== 'No load expected';
   if (loaded) items.push({ icon: 'ti-package', text: `Carrying ${vehicle.cargo}${vehicle.weight ? ` (${vehicle.weight} t)` : ''}.` });
+  // On a delivery route from the start of its day: loaded, whatever the
+  // missing load cells say (operator, 12 Nov 2026)
+  else if (route) items.push({ icon: 'ti-package', text: `Carrying load, ${routeWords(route)}.` });
   // "Running empty" after the fuel line read as an empty tank
   else if (vehicle.cargo === 'Empty') items.push({ icon: 'ti-package-off', text: 'Carrying no load.' });
   if (vehicle.destination) items.push({ icon: 'ti-flag', text: `Heading to ${vehicle.destination}.` });
@@ -714,6 +720,16 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
     vehicle?.departure ? null : today.firstMove?.lng ?? null,
   );
 
+  // Today's Planner plans: a unit with one is on its delivery route, so loaded.
+  // The same key shape as the Planner's list, so saving there refreshes this.
+  const planDay = fleetDayKey();
+  const dayPlans = useQuery({
+    queryKey: ['planner', 'plans', orgId, planDay, planDay],
+    queryFn: () => listPlans(orgId, planDay, planDay),
+    enabled: Boolean(orgId) && can('planner:read'),
+    staleTime: 5 * 60_000,
+  });
+
   const todayRuns = useMemo(() => overspeedRuns(tele.pings, vehicle?.speedLimit ?? 80), [tele.pings, vehicle?.speedLimit]);
   const todayMoving = useMemo(() => movingSpans(tele.pings), [tele.pings]);
 
@@ -726,7 +742,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
   const fuelPct  = readings.fuelPct;
   const updated  = readings.lastReportedAt ? fmtTime(readings.lastReportedAt) : null;
   const rating   = Number.isFinite(vehicle.driverRatingScore) ? `${num(vehicle.driverRatingScore, 1)} / 5` : null;
-  const summary  = unitSummary({ vehicle, readings, place, usedL: today.usedL });
+  const summary  = unitSummary({ vehicle, readings, place, usedL: today.usedL, route: routePlanFor(dayPlans.data, vehicle) });
   const lastSeen = timeAgo(readings.lastReportedAt);
   // A unit that has reported has a tracker, whatever the provider's connection
   // verdict: `hasTracker` reads that verdict alone, and a fleet without one

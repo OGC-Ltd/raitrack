@@ -69,8 +69,9 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
 
 /**
  * The Geofences menu, beside its button: whether the org's geofences are on
- * the map, and the way into drawing one. A menu of two, because both are
- * about the same thing and the rail had them as two buttons in a row.
+ * the map, whether only the ones drawn here are, and the way into drawing one
+ * (where that is allowed). One menu, because all three are about the same
+ * thing and the rail had them as buttons in a row.
  */
 function FencesMenu({ top, zones, drawFence, onDone }) {
   const first = useRef(null);
@@ -97,7 +98,25 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
         </span>
         <span className="mtr-fences__switch" aria-hidden="true" />
       </button>
+      {/* Only the fences drawn here, not the ones imported from Wialon
+          (operator, 2026-11-12). Turning it on also shows the layer. */}
       <button
+        type="button" role="menuitemcheckbox" className="mtr-fences__item"
+        aria-checked={Boolean(zones?.ownOnly)} disabled={!zones?.ownCount && !zones?.ownOnly}
+        onClick={() => zones?.onOwnOnly()}
+      >
+        <i className="ti ti-pencil-pin" aria-hidden="true" />
+        <span className="mtr-fences__text">
+          Only our own
+          <span className="mtr-fences__sub">
+            {zones?.ownCount
+              ? `Hide Wialon's, show the ${zones.ownCount.toLocaleString()} drawn here`
+              : "None drawn here yet"}
+          </span>
+        </span>
+        <span className="mtr-fences__switch" aria-hidden="true" />
+      </button>
+      {drawFence && <button
         type="button" role="menuitem" className="mtr-fences__item"
         onClick={() => { drawFence.onToggle(); onDone(); }}
       >
@@ -106,7 +125,7 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
           {drawFence.on ? "Stop drawing" : "Draw a geofence"}
           <span className="mtr-fences__sub">{drawFence.on ? "Close the drawing panel" : "Polygon, rectangle, circle or road"}</span>
         </span>
-      </button>
+      </button>}
     </div>
   );
 }
@@ -344,8 +363,7 @@ export default function MapToolRail({
   onPickFence,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
-  // The Geofences menu: show them, or draw one. Only where drawing is allowed;
-  // otherwise the button is the plain show/hide switch it always was.
+  // The Geofences menu: show them (all, or only our own), or draw one.
   const [fencesOpen, setFencesOpen] = useState(false);
   const fencesBtn = useRef(null);
   const wrapRef = useRef(null);
@@ -383,6 +401,9 @@ export default function MapToolRail({
   useEffect(() => { if (fencesOpen) claimMapWindow("geofence-menu"); }, [fencesOpen]);
   useEffect(() => onMapWindowClaim(["geofence-menu", "geofence"], () => setFencesOpen(false)), []);
   const canDrawFence = Boolean(drawFence);
+  // The menu wherever there is something in it: the layer's two switches, and
+  // Draw a geofence where that is allowed.
+  const fencesMenu = canDrawFence || Boolean(zones);
 
   const close = () => setSearchOpen(false);
 
@@ -433,17 +454,17 @@ export default function MapToolRail({
             on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
           />
           {/* Geofences: one button (operator, 2026-11-10: not two on one
-              strip). Where geofences can be drawn it opens a menu, Show on
-              the map and Draw a geofence; elsewhere it is the show/hide
-              switch. Drawn for every company, disabled where no geofence
-              layer is offered: a tool that comes and goes between companies
-              reads as a broken rail. */}
-          {canDrawFence ? (
+              strip). It opens a menu: Show on the map, Only our own and,
+              where geofences can be drawn, Draw a geofence. Drawn for every
+              company, disabled where there is nothing to offer: a tool that
+              comes and goes between companies reads as a broken rail. */}
+          {fencesMenu ? (
             <RailButton
               btnRef={fencesBtn}
               icon="ti-map-pins" label="Geofences"
-              title={drawFence.on ? "Geofences: drawing one now" : "Geofences: show them, or draw one"}
-              on={Boolean(zones?.on) || drawFence.on} expanded={expanded}
+              title={drawFence?.on ? "Geofences: drawing one now"
+                : canDrawFence ? "Geofences: show them, or draw one" : "Geofences: show all, or only our own"}
+              on={Boolean(zones?.on) || Boolean(drawFence?.on)} expanded={expanded}
               menuOpen={fencesOpen}
               onClick={() => { setSearchOpen(false); setFencesOpen((v) => !v); }}
             />
@@ -525,7 +546,7 @@ export default function MapToolRail({
         />
       )}
 
-      {fencesOpen && canDrawFence && (
+      {fencesOpen && fencesMenu && (
         <FencesMenu
           top={fencesBtn.current?.offsetTop ?? 0}
           zones={zones}

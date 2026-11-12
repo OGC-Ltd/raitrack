@@ -192,3 +192,17 @@ describe("an organisation with more than one survey", () => {
     expect(layers["site:nzoia"]).toBe(true);
   });
 });
+
+describe("only our own geofences", () => {
+  beforeEach(() => store.clear());
+
+  it("is off until chosen, so every geofence shows as before", () => {
+    expect(readMapPrefs("menengai").layers["zones:own"]).toBe(false);
+  });
+
+  it("is kept per organisation, beside the layer switch", () => {
+    writeMapPrefs("menengai", { layers: { "zones:own": true, zones: true } });
+    expect(readMapPrefs("menengai").layers).toMatchObject({ zones: true, "zones:own": true });
+    expect(readMapPrefs("sukari").layers["zones:own"]).toBe(false);
+  });
+});

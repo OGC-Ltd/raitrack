@@ -2256,6 +2256,11 @@ export default function FleetMap() {
   // Latched: switching off keeps the built shapes, so the next on is instant.
   const [zonesWanted, setZonesWanted]       = useState(false);
   if (showZones && !zonesWanted) setZonesWanted(true);
+  // Only the geofences drawn here (source 'app'), not the ones imported from
+  // Wialon (operator, 2026-11-12: "a toggle to show the custom geofences").
+  const [zonesOwnOnly, setZonesOwnOnly]     = useState(
+    () => readMapPrefs(activeCompanyId).layers["zones:own"],
+  );
   const zoneLayerRef      = useRef(null);   // { shapes[], info, bounds, clearHover } | null
   /* Live traffic (Google's TrafficLayer, lib/googleBase) over the base map,
    * and the pinned unit's routed line. TomTom's tiles were switched off
@@ -2529,6 +2534,8 @@ export default function FleetMap() {
   // What the rail's search can find: the fences this layer can draw.
   const searchableFences = useMemo(() => (zones?.features ?? []).filter((f) =>
     !ZONE_SKIP_CATEGORIES.has(f.properties?.category) && !ZONE_EXCLUDE.has(zoneKey(f.properties?.name)) && !isDummyFence(f.properties?.name)), [zones]);
+  // How many of them were drawn here rather than imported from Wialon.
+  const ownFenceCount = useMemo(() => searchableFences.filter((f) => f.properties?.source === "app").length, [searchableFences]);
   // The surveys this organisation has. An empty list is also the gate: a
   // company absent from the table is offered no switch and draws nothing.
   const ownPlans = SITE_PLANS[activeCompanyId] ?? NO_PLANS;
@@ -4012,6 +4019,17 @@ export default function FleetMap() {
           writeMapPrefs(activeCompanyId, { layers: { zones: !v } });
           return !v;
         }),
+        // All of them, or only the ones drawn here. Choosing "ours" also turns
+        // the layer on, since that is what the operator came to see.
+        ownOnly: zonesOwnOnly,
+        ownCount: ownFenceCount,
+        onOwnOnly: () => {
+          const next = !zonesOwnOnly;
+          setZonesOwnOnly(next);
+          zonesRequestedRef.current = true;
+          if (next && !showZones) setShowZones(true);
+          writeMapPrefs(activeCompanyId, { layers: { "zones:own": next, ...(next ? { zones: true } : {}) } });
+        },
         note: null,
         legend: legendFor(zoneCategories, baseMap),
         hint: "Hover a group to list its fences · click it to zoom in · click a fence for detail",
@@ -4063,7 +4081,7 @@ export default function FleetMap() {
     });
     return out;
   }, [showTraffic, showWeather, weatherNote, showBridges, hasBridges, bridgesLoading, activeCompanyId,
-      showZones, hasZones, zoneCategories,
+      showZones, hasZones, zoneCategories, zonesOwnOnly, ownFenceCount,
       showPlan, planAllowed, planState,
       sitePlans, siteOn, siteStatus, siteCats, canDo, baseMap]);
 
@@ -4707,8 +4725,10 @@ export default function FleetMap() {
     // Each drawn shape with where it is and how big, for the grouping pass.
     const fences = [];
     const info   = new maps.InfoWindow();
-    // Accumulated while building, so the shared camera fit can frame the layer.
+    // Accumulated while building, so the shared camera fit can frame the layer;
+    // `ownBounds` frames it while only the fences drawn here are shown.
     const bounds = new maps.LatLngBounds();
+    const ownBounds = new maps.LatLngBounds();
 
     // Biggest first, so a fence inside another is drawn on top of it and the
     // pointer can reach it.
@@ -4724,6 +4744,7 @@ export default function FleetMap() {
       const geom  = f.geometry;
       const color = fenceColor(f);
       const alias = ZONE_PLAN_ALIAS[key];
+      const own = p.source === "app";
       let shape = null;
       // A circular fence arrives as its centre and radius; drawn as its ring.
       const isCircle = geom?.type === "Point";
@@ -4733,7 +4754,7 @@ export default function FleetMap() {
       if (isArea) {
         const ring = isCircle ? circleRing(geom.coordinates, p.radiusM) : geom.coordinates?.[0] ?? [];
         if (ring.length < 3) continue;
-        for (const [lng, lat] of ring) bounds.extend({ lat, lng });
+        for (const [lng, lat] of ring) { bounds.extend({ lat, lng }); if (own) ownBounds.extend({ lat, lng }); }
         shape = new maps.Polygon({
           paths: ring.map(([lng, lat]) => ({ lat, lng })),
           strokeColor: color, strokeWeight: 2, strokeOpacity: 0.95,
@@ -4743,7 +4764,7 @@ export default function FleetMap() {
       } else if (geom?.type === "LineString") {
         const path = geom.coordinates ?? [];
         if (path.length < 2) continue;
-        for (const [lng, lat] of path) bounds.extend({ lat, lng });
+        for (const [lng, lat] of path) { bounds.extend({ lat, lng }); if (own) ownBounds.extend({ lat, lng }); }
         // A corridor's real footprint is its width, which at estate zoom is a
         // few metres — far thinner than any drawable stroke. Draw it as a line
         // and put the width in the popup rather than pretending to scale it.
@@ -4795,12 +4816,12 @@ export default function FleetMap() {
 
       shapes.push(shape);
       fences.push({
-        id: fences.length, name: p.name, shape, shown: false,
+        id: fences.length, name: p.name, shape, shown: false, own,
         ...fenceExtent(isArea ? (isCircle ? circleRing(geom.coordinates, p.radiusM) : geom.coordinates[0]) : geom.coordinates),
       });
     }
 
-    zoneLayerRef.current = { shapes, fences, info, bounds, clearHover, showHover, showFenceList, closeListSoon };
+    zoneLayerRef.current = { shapes, fences, info, bounds, ownBounds, clearHover, showHover, showFenceList, closeListSoon };
 
     // Built hidden; the visibility effect below puts it on the map if the
     // toggle is already on.
@@ -4839,9 +4860,11 @@ export default function FleetMap() {
       fittedCompanyRef.current = activeCompanyId;
       pendingFitRef.current = false;
     };
+    // Only ours: the imported fences are neither drawn nor counted in a group.
+    const shownFences = zonesOwnOnly ? layer.fences.filter(f => f.own) : layer.fences;
     const pass = () => {
       layer.clearHover();
-      const { drawn, groups } = clusterFences(layer.fences, map.getZoom());
+      const { drawn, groups } = clusterFences(shownFences, map.getZoom());
       // In list order, biggest first, so a fence inside another stays on top.
       for (const f of layer.fences) {
         const want = drawn.has(f);
@@ -4890,7 +4913,7 @@ export default function FleetMap() {
     if (on && zonesRequestedRef.current) fitPlaceLayersRef.current();
     return () => { idle?.remove(); dropIcons(); };
     // zonesWanted: the layer is built by the effect above once the switch first goes on.
-  }, [showZones, mapReady, zones, zonesWanted, activeCompanyId]);
+  }, [showZones, zonesOwnOnly, mapReady, zones, zonesWanted, activeCompanyId]);
 
   // The GEOMETRY IS STILL FETCHED FOR EVERY ORG, and deliberately — this layer
   // is a reader of it, not its owner. Two things read the same rows and neither
@@ -4954,9 +4977,9 @@ export default function FleetMap() {
       // The boundaries and the drawing cover the same ground within a
       // kilometre, so unioning them costs no zoom — and when only the
       // boundaries are on, they are what there is to frame.
-      if (showZones && hasZones && zoneLayerRef.current
-          && !zoneLayerRef.current.bounds.isEmpty()) {
-        b.union(zoneLayerRef.current.bounds);
+      const zoneBounds = zoneLayerRef.current?.[zonesOwnOnly ? "ownBounds" : "bounds"];
+      if (showZones && hasZones && zoneBounds && !zoneBounds.isEmpty()) {
+        b.union(zoneBounds);
       }
       if (showBridges && hasBridges) {
         for (const m of bridgeMarkersRef.current ?? []) b.extend(m.getPosition());
@@ -4977,7 +5000,7 @@ export default function FleetMap() {
       fitMapToBounds(map, maps, b);
     }
   }, [showPlan, planAllowed, sitePlans, siteOn, showBridges, hasBridges,
-      showZones, hasZones, activeCompanyId]);
+      showZones, zonesOwnOnly, hasZones, activeCompanyId]);
 
   const fitPlaceLayersRef = useRef(fitPlaceLayers);
   useEffect(() => { fitPlaceLayersRef.current = fitPlaceLayers; }, [fitPlaceLayers]);
@@ -6381,6 +6404,7 @@ export default function FleetMap() {
     setSiteOn(siteOnFor(activeCompanyId));
     setShowBridges(layers.bridges);
     setShowZones(layers.zones);
+    setZonesOwnOnly(layers["zones:own"]);
     setZonesWanted(false);
     setShowTraffic(LIVE_TRAFFIC_AVAILABLE && layers.traffic);
     setShowWeather(layers.weather);
@@ -6636,7 +6660,11 @@ export default function FleetMap() {
     fittedCompanyRef.current = activeCompanyId;
     pendingFitRef.current = false;
     setShowZones(true);
-    writeMapPrefs(activeCompanyId, { layers: { zones: true } });
+    // An imported fence picked while only ours are shown: show them all, or it
+    // would be framed and not drawn.
+    const widen = p.source !== "app";
+    if (widen) setZonesOwnOnly(false);
+    writeMapPrefs(activeCompanyId, { layers: { zones: true, ...(widen ? { "zones:own": false } : {}) } });
     handlePickPlace({
       lat: onLine ? onLine[1] : box.lat,
       lng: onLine ? onLine[0] : box.lng,
