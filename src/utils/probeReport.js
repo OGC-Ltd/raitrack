@@ -18,6 +18,7 @@ import {
   createReport, addSectionTitle, addSummaryCards, addTable, downloadReport,
 } from "./pdfReport";
 import { PROBE_STATE_LABEL, CHANNEL_STATE_LABEL, faultAction } from "../api/probeHealth";
+import { takenForExcel } from "./tableExport";
 
 const stamp = (iso) => {
   if (!iso) return "";
@@ -78,6 +79,12 @@ export function buildProbeCsv(rows) {
 /** Download the rows as a CSV. The BOM is what makes Excel read it as UTF-8
  *  rather than the local codepage, which mangles the plates. */
 export function downloadProbeCsv(rows, { filenameSlug = "probes" } = {}) {
+  // The toolbar's Excel button: the same columns, as a table (utils/tableExport)
+  if (takenForExcel({
+    head: COLUMNS.map(([label]) => label),
+    body: rows.map((r) => COLUMNS.map(([, read]) => read(r))),
+    filenameSlug,
+  })) return;
   const blob = new Blob(["﻿", buildProbeCsv(rows)], {
     type: "text/csv;charset=utf-8;",
   });

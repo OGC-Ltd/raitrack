@@ -15,6 +15,7 @@ import TabEmptyState from './components/shared/TabEmptyState';
 import ProductTour from './components/shared/ProductTour';
 import StopWatch from './components/shared/StopWatch';
 import ToastStack from './components/shared/ToastStack';
+import IdleAlertBadge from './components/shared/IdleAlertBadge';
 
 // New layout components
 import AppHeader          from './components/layout/AppHeader';
@@ -33,6 +34,7 @@ import MaintenanceScreen from './components/screens/MaintenanceScreen';
 import AnalyticsScreen   from './components/screens/AnalyticsScreen';
 import ReportsScreen     from './components/screens/ReportsScreen';
 import WeighbridgesScreen from './components/screens/WeighbridgesScreen';
+import PlannerScreen     from './components/screens/PlannerScreen';
 import AuditScreen       from './components/screens/AuditScreen';
 import WorkshopScreen    from './components/screens/WorkshopScreen';
 import FuelReportScreen  from './components/screens/FuelReportScreen';
@@ -122,6 +124,11 @@ function AppShell() {
       {/* Every toast, made by the server: first in, first out, 8 s each */}
       <ErrorBoundary label="Toasts">
         <ToastStack />
+      </ErrorBoundary>
+
+      {/* Menengai idle alert corner badge */}
+      <ErrorBoundary label="Idle alert badge">
+        <IdleAlertBadge />
       </ErrorBoundary>
 
       {/* Mobile header — shown only on mobile (< 768px) */}
@@ -227,6 +234,14 @@ function AppShell() {
             </div>
           )}
 
+          {show('planner') && (
+            <div className="app-tab-panel app-tab-panel--screen">
+              <ErrorBoundary label="Planner" fullSection>
+                <PlannerScreen />
+              </ErrorBoundary>
+            </div>
+          )}
+
           {show('workshop') && (
             <div className="app-tab-panel app-tab-panel--screen">
               <ErrorBoundary label="Workshop" fullSection>
@@ -299,7 +314,7 @@ function AppShell() {
           // the unit comes back when the list closes.
           // Drivers as well (operator, 2026-10-03: "do the same with the
           // drivers page") — so the panel now takes width on the map only.
-          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'reports', 'maintenance', 'weighbridges', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
+          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'reports', 'maintenance', 'weighbridges', 'planner', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
             && !fuelAlertsOpen;
           const selectedVehicle = selectedVehicleId && panelAllowed
             ? _liveVehicles.find(v => v.id === selectedVehicleId) ?? { id: selectedVehicleId }

@@ -358,7 +358,7 @@
 /* Three tracks: the name on the left, the group's strip and count centred in
    the row, an empty right track as wide as the left so the centre is true. */
 .ua-iam__group-toggle {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; width: 100%;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%;
   padding: 12px 0 8px; border: 0; background: none; color: inherit;
   font: inherit; text-align: left; cursor: pointer;
 }
@@ -375,6 +375,11 @@
 .ua-iam__group-toggle:focus-visible { outline-offset: -2px; }
 .ua-iam__group--folded th { padding-bottom: 0; }
 .ua-iam__group--folded .ua-iam__group-toggle { padding-bottom: 12px; }
+.ua-iam__group-cell {
+  padding: 12px 14px 8px; border-bottom: 1px solid var(--iam-line);
+  color: var(--iam-text-2); font-size: 12px; font-weight: 600; vertical-align: middle; white-space: nowrap;
+}
+.ua-iam__group--folded .ua-iam__group-cell { padding-bottom: 12px; }
 .ua-iam__group-count { color: var(--iam-text-4); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .ua-iam__fold-all { flex: none; }
 .ua-iam__row { border-bottom: 1px solid var(--iam-line); transition: background-color 0.15s; }
@@ -537,7 +542,11 @@
 /* A narrow editor (a phone, or a desk under ~1000px): each right stacks.
    Its name; then what the role gives and the result; then the choice. */
 @container iam-editor (max-width: 639px) {
-  .ua-iam__group-toggle { grid-template-columns: minmax(0, 1fr) auto; }
+  .ua-iam__group { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 2px 16px; padding: 0 var(--iam-gutter) 10px; border-bottom: 1px solid var(--iam-line); }
+  .ua-iam__table tr.ua-iam__group > * { padding: 0; border-bottom: 0; }
+  .ua-iam__group th { grid-column: 1 / -1; }
+  .ua-iam__group-cell { font-size: 11.5px; }
+  .ua-iam__group-cell[data-label]::before { content: attr(data-label) " "; color: var(--iam-text-4); font-weight: 400; }
   .ua-iam__table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .ua-iam__table :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4)) { width: auto; }
   .ua-iam__row {

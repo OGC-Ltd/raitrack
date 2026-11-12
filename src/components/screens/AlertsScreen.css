@@ -364,6 +364,8 @@
   gap: 4px;
   white-space: nowrap;
 }
+/* A geofence rule's no-go alert, among the exits: the alert red, and its own icon */
+.alr-geo-alert--nogo { color: var(--accent-crit, #b91c1c); font-weight: 600; }
 /* The geofence type and the copy button.
  * Hallmark · component: geofence-exit type + copy · genre: modern-minimal
  * theme: sp4, preserved; the type's dot is the map's own colour for it

@@ -318,7 +318,7 @@
      enough for the tail (10px square, rises ~7px) to stop short of the bar. */
   top: calc(100% + 9px + 7px);
   right: 0;
-  width: 240px;
+  width: 216px;
   background: #fff;
   border: 1px solid var(--um-line);
   border-radius: 6px;
@@ -349,7 +349,7 @@
 }
 
 .app-header__user-info {
-  padding: 8px 10px 9px;
+  padding: 7px 9px 8px;
 }
 
 /* The menu is a fixed-width box. Neither line had any wrap control, so a real
@@ -363,8 +363,10 @@
    container and the ellipsis never gets a chance to apply. */
 .app-header__user-info { min-width: 0; }
 
+/* Type on the header menus' scale (Fleets, Map layers: 10-11.5px), not the
+   page's: at 13px this menu was the loudest thing on screen (operator, 2026-11-11). */
 .app-header__user-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--um-ink);
   overflow: hidden;
@@ -373,7 +375,7 @@
 }
 
 .app-header__user-email {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--um-ink-3);
   margin-top: 2px;
   /* An address has no spaces to break on, so the same treatment: it is a
@@ -394,14 +396,14 @@
 .app-header__user-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
+  height: 28px;
+  padding: 0 9px;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--um-ink-2);
   border-radius: 4px;
@@ -424,7 +426,7 @@
 }
 
 .app-header__user-item i {
-  font-size: 16px;
+  font-size: 14px;
   color: var(--um-ink-3);
 }
 

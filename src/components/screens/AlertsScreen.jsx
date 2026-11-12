@@ -50,6 +50,8 @@ import EmptyNote from "../shared/EmptyNote";
 import GeofenceExits from "./GeofenceExits";
 import UnauthorisedStops from "./UnauthorisedStops";
 import { useStopWatch } from "../../hooks/useStopWatch";
+import { useIdleWatch } from "../../hooks/useIdleWatch";
+import IdleAlertsTab from "./IdleAlertsTab";
 import { loadGeofenceExits } from "../../api/geofenceExits";
 import { exitRows } from "../../lib/geofenceExits";
 import { useOrgsFeedReads } from "../../lib/feedReads";
@@ -571,6 +573,11 @@ export default function AlertsScreen() {
   const watch = useStopWatch();
   // A pop-up's "Open" (components/shared/StopWatch) lands on the stops
   useEffect(() => { if (watch.open) setView("stops"); }, [watch.open]);
+  // Menengai's idle units (server idle watch); the corner badge's "Open" lands here
+  const idleWatch = useIdleWatch();
+  const idle = view === "idle";
+  const idleCount = idleWatch.alerts.filter((a) => !idleWatch.dismissed.has(a.key)).length;
+  useEffect(() => { if (idleWatch.open) setView("idle"); }, [idleWatch.open]);
   const [geoRead, setGeoRead] = useState({ status: "idle" });
   const [status, setStatus] = useState("open");
   const [orgs, setOrgs] = useState([]);
@@ -924,7 +931,12 @@ export default function AlertsScreen() {
 
       <div className="sp4-body">
         <TableToolbar
-          summary={stops ? (
+          summary={idle ? (
+            <>
+              <b>{idleCount}</b> Menengai unit{idleCount === 1 ? "" : "s"} idle now
+              {idleWatch.dismissed.size > 0 && <> · {idleWatch.dismissed.size} dismissed</>}
+            </>
+          ) : stops ? (
             <>
               <b>{watch.flags.length}</b> Menengai unit{watch.flags.length === 1 ? "" : "s"} flagged now
               {stopsUnread > 0 && <> · <b>{stopsUnread}</b> unread</>}
@@ -944,9 +956,9 @@ export default function AlertsScreen() {
               {first.stale && <span className="sp4-muted"> · updating…</span>}
             </>
           )}
-          loading={stops ? watch.status === "loading" : geo ? geoRead.status === "loading" : first.loading}
-          onReload={stops ? undefined : geo ? readGeo : refresh}
-          actions={(
+          loading={idle ? idleWatch.status === "loading" : stops ? watch.status === "loading" : geo ? geoRead.status === "loading" : first.loading}
+          onReload={idle || stops ? undefined : geo ? readGeo : refresh}
+          actions={idle ? undefined : (
             <button type="button" className="sp4-ghost-btn" onClick={stops ? markAllStops : geo ? markAllExits : markAll}
                     disabled={markingAll || (stops ? !stopsUnread : geo ? !exitsUnread : !page)}
                     title={stops ? "The stops flagged now, read in this browser"
@@ -994,6 +1006,10 @@ export default function AlertsScreen() {
               {watch.status !== "off" && watch.status !== "idle" && (
                 <Chip on={stops} onClick={() => setView("stops")} n={watch.status === "done" ? watch.flags.length : undefined}
                       title="Menengai units standing in a no-go zone, or stopped over 10 minutes outside every authorised place">Unauthorised stops</Chip>
+              )}
+              {idleWatch.status !== "off" && idleWatch.status !== "idle" && (
+                <Chip on={idle} onClick={() => setView("idle")} n={idleWatch.status === "done" ? idleCount : undefined}
+                      title="Listed Menengai units that have not moved for 3 hours of working time (07:30–19:30), away from the yard and depots">Idle units</Chip>
               )}
             </div>
           )}
@@ -1046,6 +1062,7 @@ export default function AlertsScreen() {
                          showOrg={geoOrgIds.length > 1} onRetry={readGeo} reads={exitReads} read={readF} />
         )}
         {stops && <UnauthorisedStops watch={watch} q={q} lines={stopLines} reads={stopReads} read={readF} />}
+        {idle && <IdleAlertsTab watch={idleWatch} q={q} />}
         {view === "alerts" && (<>
         {rows.length === 0 && first.loading ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Alerts">

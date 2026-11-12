@@ -515,18 +515,12 @@ select.mvr-edit { min-width: 110px; }
 .mvr-events__sub { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
 .mvr-events__note { margin: 0 0 6px; font-size: 12px; }
 
-.dlv-plan { margin: 10px var(--sp4-gutter, 12px); padding: 10px 12px; border: 1px solid var(--sp4-line, rgba(127,127,127,.25)); border-radius: 10px; }
-.dlv-plan__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
-.dlv-plan__title { margin: 0; font-size: 13px; font-weight: 700; }
-.dlv-plan__warn { margin: 4px 0 8px; font-size: 12px; }
-.dlv-plan__list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.dlv-plan__veh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.dlv-plan__plate { font-weight: 700; min-width: 80px; }
-.dlv-plan__x { padding: 2px 8px; }
-.dlv-plan__add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dlv-table th.dlv-day { text-align: center; background: #00b0f0; color: #0b1f2a; font-weight: 700; }
 .dlv-table td b.dlv-all { color: #2e7d32; }
 .dlv-more { padding: 2px 8px; font-size: 12px; }
+/* Planner sheets: listed above the hand list, a line under the plate, the marks over the stops */
+.dlv-sheet-line { display: block; min-width: 24ch; font-size: 11px; font-weight: 400; white-space: normal; }
+.dlv-sheet-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 4px 0 6px; font-size: 12px; }
 .dlv-cust td { background: color-mix(in srgb, var(--sp4-text-1, #000) 3%, transparent); }
 .dlv-cust ul { list-style: none; margin: 0; padding: 4px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
 .dlv-cust li { display: flex; align-items: center; gap: 6px; font-size: 12px; }
@@ -549,6 +543,28 @@ select.mvr-edit { min-width: 110px; }
 .dlv-stops-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .dlv-orders { width: 72px; text-align: right; font-weight: 700; }
 .dlv-orders--bad { outline: 2px solid #c62828; }
-.dlv-plan__group { max-width: 150px; font-size: 12.5px; padding: 2px 6px; }
-.dlv-plan__moved { color: #b45309; }
-.dlv-assign { border-radius: 8px; margin: 6px 0; }
+
+/* Deliveries, Finished Goods template (operator, 11 Nov 2026): the sheet's own colours,
+   green for a completed trip (delivered, then back at the yard), yellow once the truck
+   got to the customer, red while it has not */
+.dlv-fg th { white-space: nowrap; }
+.dlv-fg td { white-space: nowrap; }
+.dlv-fg td:nth-child(3), .dlv-fg td:nth-child(4), .dlv-fg td:nth-child(5) { white-space: normal; min-width: 140px; }
+.rpt-table.dlv-fg .dlv-fg__row td,
+.rpt-table.dlv-fg .dlv-fg__row:hover td { background: var(--dlv-fg-fill); color: #111; border-color: rgba(0, 0, 0, 0.12); }
+.rpt-table.dlv-fg thead tr:last-child th { background: #6fa8dc; color: #0b1f2a; font-weight: 700; }
+/* Finished Goods: the day bar black with white words (operator, 11 Nov 2026), ✕ to drop a line */
+.rpt-table.dlv-fg th.dlv-day { background: #000; color: #fff; }
+.dlv-fg__undo {
+  margin-left: 12px; padding: 2px 8px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 6px;
+  background: transparent; color: #fff; font: 600 11px/1.4 var(--font-body); cursor: pointer;
+}
+.dlv-fg__undo:hover { background: rgba(255, 255, 255, 0.15); }
+.dlv-fg__undo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.rpt-table.dlv-fg td.dlv-fg__x { width: 32px; padding: 0 6px; text-align: center; }
+.dlv-fg__x button {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px; background: rgba(255, 255, 255, 0.55); color: #111; cursor: pointer;
+}
+.dlv-fg__x button:hover { background: #fff; }
+.dlv-fg__x button:focus-visible { outline: 2px solid #000; outline-offset: 1px; }

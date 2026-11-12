@@ -117,11 +117,30 @@ export function fenceColorKey(feature) {
   const p = feature?.properties ?? {};
   const type = feature?.geometry?.type;
   const name = p.name ?? "";
+  // Chosen when the fence was drawn: what it is for decides its colour.
+  if (p.purpose && ZONE_STYLE[p.purpose]) return p.purpose;
   if (type === "LineString" && !NOT_A_ROUTE.has(p.category)) return "route";
   if (HQ_NAME.test(name)) return "hq";
   if (p.category === "shop" || SHOP_NAME.test(name)) return "shop";
   return type === "Point" ? "circle" : "fence";
 }
+
+/** The colour a geofence draws in: the one chosen for it, else its purpose's. */
+export function fenceColor(feature, base = "osm") {
+  const c = feature?.properties?.color;
+  return /^#[0-9a-f]{6}$/i.test(c ?? "") ? c : zoneColor(fenceColorKey(feature), base);
+}
+
+/**
+ * What a drawn fence can be for, in the order the Draw tool offers them. Each
+ * is a category the server knows (fleet-server lib/zone-taxonomy), so the
+ * live feed and the alerts read a drawn "Gate" exactly as the map does.
+ */
+export const FENCE_PURPOSES = [
+  "restricted", "perimeter", "gate", "factory", "weighing", "fuel", "parking",
+  "logistics", "facility", "shop", "customer", "road", "farm", "nursery",
+  "commercial", "rainfed", "wetland", "water", "drain", "other",
+];
 
 /** A dummy or test fence, which stays off the map and out of its search. */
 export const isDummyFence = (name) => DUMMY_NAME.test(name ?? "");

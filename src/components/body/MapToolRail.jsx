@@ -20,7 +20,9 @@ import { useAppSelector, useAppActions, useCompanies } from "../../context/AppCo
 import { useCrossOrgUnitHandoff } from "../../hooks/useCrossOrgUnits";
 import UnitTypeIcon from "../shared/UnitTypeIcon";
 import { usePermissions } from "../../hooks/usePermissions";
+import { claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 import "./MapToolRail.css";
+import "./MapToolFences.css";
 
 /* OpenStreetMap's geocoder: free, keyless, and limited to one request a second
    per client, which the 600 ms debounce on typing respects. */
@@ -31,15 +33,21 @@ const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 const RIPPLE_FROM = 30;
 
 // `tour`: the first-time tour's mark for this button (lib/productTour).
-function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn", tour }) {
+function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn", tour, menuOpen, btnRef }) {
+  // A button that opens a menu says so, and whether it is open, rather than
+  // being pressed.
+  const menu = menuOpen !== undefined;
   return (
     <button
+      ref={btnRef}
       type="button"
       className={`mtr-btn${on ? " mtr-btn--on" : ""}`}
       data-tour={tour}
       onClick={onClick}
       disabled={disabled}
-      aria-pressed={on}
+      aria-pressed={menu ? undefined : on}
+      aria-haspopup={menu ? "menu" : undefined}
+      aria-expanded={menu ? menuOpen : undefined}
       aria-label={count > 0 ? `${label}, ${count}` : label}
       title={count >= RIPPLE_FROM ?`${title ?? label} (${count})` : title ?? label}
     >
@@ -56,6 +64,50 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
       )}
       {expanded && <span className="mtr-btn__label">{label}</span>}
     </button>
+  );
+}
+
+/**
+ * The Geofences menu, beside its button: whether the org's geofences are on
+ * the map, and the way into drawing one. A menu of two, because both are
+ * about the same thing and the rail had them as two buttons in a row.
+ */
+function FencesMenu({ top, zones, drawFence, onDone }) {
+  const first = useRef(null);
+  useEffect(() => { first.current?.focus(); }, []);
+  // Up and Down move between the two items, as in any menu.
+  const onKey = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = [...e.currentTarget.querySelectorAll("[role^=menuitem]:not(:disabled)")];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+  };
+  return (
+    <div className="mtr-pop mtr-fences" role="menu" aria-label="Geofences" style={{ marginTop: top }} onKeyDown={onKey}>
+      <button
+        ref={first} type="button" role="menuitemcheckbox" className="mtr-fences__item"
+        aria-checked={Boolean(zones?.on)} disabled={!zones}
+        onClick={() => zones?.onToggle()}
+      >
+        <i className="ti ti-eye" aria-hidden="true" />
+        <span className="mtr-fences__text">
+          Show on the map
+          {!zones && <span className="mtr-fences__sub">None are drawn for this company</span>}
+        </span>
+        <span className="mtr-fences__switch" aria-hidden="true" />
+      </button>
+      <button
+        type="button" role="menuitem" className="mtr-fences__item"
+        onClick={() => { drawFence.onToggle(); onDone(); }}
+      >
+        <i className={`ti ${drawFence.on ? "ti-x" : "ti-shape"}`} aria-hidden="true" />
+        <span className="mtr-fences__text">
+          {drawFence.on ? "Stop drawing" : "Draw a geofence"}
+          <span className="mtr-fences__sub">{drawFence.on ? "Close the drawing panel" : "Polygon, rectangle, circle or road"}</span>
+        </span>
+      </button>
+    </div>
   );
 }
 
@@ -283,6 +335,7 @@ export default function MapToolRail({
   traffic,          // the "traffic" map layer ({ on, onToggle }) or null
   weather,          // the "weather" map layer ({ on, onToggle, note }) or null
   zones,            // the "zones" map layer ({ on, onToggle }) or null
+  drawFence,        // { on, onToggle } or null without geofence:create
   halted,          // { count, open, onOpen } or null without map:filter
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
   arrivals,         // { open, onOpen } or null while Google routing is off
@@ -291,6 +344,10 @@ export default function MapToolRail({
   onPickFence,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  // The Geofences menu: show them, or draw one. Only where drawing is allowed;
+  // otherwise the button is the plain show/hide switch it always was.
+  const [fencesOpen, setFencesOpen] = useState(false);
+  const fencesBtn = useRef(null);
   const wrapRef = useRef(null);
   // Technicians get no route, traffic, geofence or arrivals tools: removed,
   // not drawn disabled (operator, 2026-10-27).
@@ -304,6 +361,29 @@ export default function MapToolRail({
     return () => document.removeEventListener("pointerdown", onDown);
   }, [searchOpen]);
 
+  // The Geofences menu closes the same way, and on Escape, back to its button.
+  useEffect(() => {
+    if (!fencesOpen) return undefined;
+    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) setFencesOpen(false); };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      // Caught first, on the way down, so Escape closes only the menu and not
+      // a drawing open behind it.
+      e.preventDefault();
+      e.stopPropagation();
+      setFencesOpen(false);
+      fencesBtn.current?.focus();
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("pointerdown", onDown); window.removeEventListener("keydown", onKey, true); };
+  }, [fencesOpen]);
+  // One map window at a time: the menu opening closes Fuel alerts, Halted and
+  // the rest, and another window opening closes the menu.
+  useEffect(() => { if (fencesOpen) claimMapWindow("geofence-menu"); }, [fencesOpen]);
+  useEffect(() => onMapWindowClaim(["geofence-menu", "geofence"], () => setFencesOpen(false)), []);
+  const canDrawFence = Boolean(drawFence);
+
   const close = () => setSearchOpen(false);
 
   return (
@@ -312,7 +392,7 @@ export default function MapToolRail({
         <div className="mtr-group">
           <RailButton
             icon="ti-search" label="Search" title={fences?.length ? "Search for a plate, driver, geofence, place or road" : "Search for a plate, driver, place or road"} tour="map-search"
-            on={searchOpen} expanded={expanded} onClick={() => setSearchOpen((v) => !v)}
+            on={searchOpen} expanded={expanded} onClick={() => { setFencesOpen(false); setSearchOpen((v) => !v); }}
           />
           <RailButton
             icon={namesOn ? "ti-eye" : "ti-eye-off"} label={namesOn ? "Hide names" : "Show names"}
@@ -352,16 +432,30 @@ export default function MapToolRail({
               : "Weather is not available"}
             on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
           />
-          {/* Drawn for every company, disabled where no geofence layer is
-              offered: a tool that comes and goes between companies reads as
-              a broken rail. */}
-          <RailButton
-            icon="ti-map-pins" label={zones?.on ? "Hide geofences" : "Show geofences"}
-            title={zones
-              ? `${zones.on ? "Hide" : "Show"} geofences on the map`
-              : "No geofences are drawn for this company"}
-            on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
-          />
+          {/* Geofences: one button (operator, 2026-11-10: not two on one
+              strip). Where geofences can be drawn it opens a menu, Show on
+              the map and Draw a geofence; elsewhere it is the show/hide
+              switch. Drawn for every company, disabled where no geofence
+              layer is offered: a tool that comes and goes between companies
+              reads as a broken rail. */}
+          {canDrawFence ? (
+            <RailButton
+              btnRef={fencesBtn}
+              icon="ti-map-pins" label="Geofences"
+              title={drawFence.on ? "Geofences: drawing one now" : "Geofences: show them, or draw one"}
+              on={Boolean(zones?.on) || drawFence.on} expanded={expanded}
+              menuOpen={fencesOpen}
+              onClick={() => { setSearchOpen(false); setFencesOpen((v) => !v); }}
+            />
+          ) : (
+            <RailButton
+              icon="ti-map-pins" label={zones?.on ? "Hide geofences" : "Show geofences"}
+              title={zones
+                ? `${zones.on ? "Hide" : "Show"} geofences on the map`
+                : "No geofences are drawn for this company"}
+              on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
+            />
+          )}
           </>)}
           {/* Halted (operator, 2026-10-07: "right below geofences"): units
               that stopped mid-journey — on the highway or outside their
@@ -428,6 +522,15 @@ export default function MapToolRail({
           onPickFence={(f) => { close(); onPickFence?.(f); }}
           onPickPlace={(p) => { close(); onPickPlace(p); }}
           onClose={close}
+        />
+      )}
+
+      {fencesOpen && canDrawFence && (
+        <FencesMenu
+          top={fencesBtn.current?.offsetTop ?? 0}
+          zones={zones}
+          drawFence={drawFence}
+          onDone={() => setFencesOpen(false)}
         />
       )}
 

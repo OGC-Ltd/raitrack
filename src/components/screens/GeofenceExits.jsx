@@ -13,7 +13,16 @@ import { ZONE_STYLE } from "../../lib/zoneLegend";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
-import { byRead, exitCopyText, searchExits, zoneIndex } from "../../lib/geofenceExits";
+import { byRead, exitCopyText, rowLabel, searchExits, zoneIndex } from "../../lib/geofenceExits";
+
+/** "Geofence exit", or a rule's no-go alert in the alert red (lib/geofenceExits). */
+function RowKind({ row, className }) {
+  return (
+    <span className={`${className}${row.nogo ? " alr-geo-alert--nogo" : ""}`}>
+      <i className={`ti ${row.nogo ? "ti-shield-x" : "ti-map-pin-off"}`} aria-hidden="true" />{rowLabel(row)}
+    </span>
+  );
+}
 
 const clock = (ms) => new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false }).format(ms);
 
@@ -180,7 +189,7 @@ export default function GeofenceExits({ state, q, orgName, showOrg, onRetry, rea
                   </td>
                   <td className="sp4-td--left">{clock(r.at)}</td>
                   <td className="sp4-td--left">
-                    <span className="alr-geo-alert"><i className="ti ti-map-pin-off" aria-hidden="true" />Geofence exit</span>
+                    <RowKind row={r} className="alr-geo-alert" />
                   </td>
                   <td className="sp4-td--left"><ZoneType zone={zoneOf(zones.index, r)} /></td>
                   <td className="sp4-td--left"><span className="alr-geo-details">{r.text}</span></td>
@@ -202,10 +211,10 @@ export default function GeofenceExits({ state, q, orgName, showOrg, onRetry, rea
         </div>
       )}
       {openRow && (
-        <DetailSidebar id="geo-exit-panel" title="Geofence exit" label={`Geofence exit, ${openRow.plate ?? "unit"}`}
+        <DetailSidebar id="geo-exit-panel" title={rowLabel(openRow)} label={`${rowLabel(openRow)}, ${openRow.plate ?? "unit"}`}
                        itemKey={openRow.key} onClose={() => setOpenKey(null)}>
           <DetailSidebarIdent
-            kind={<span className="alr-kind"><i className="ti ti-map-pin-off" aria-hidden="true" />Geofence exit</span>}
+            kind={<RowKind row={openRow} className="alr-kind" />}
             name={openRow.plate ?? "-"} sub={orgName(openRow.orgId)}
           />
           <DetailSidebarFacts facts={[

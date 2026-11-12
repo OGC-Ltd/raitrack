@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { loadAlarmDistribution, makeReportDoc } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
-import { alarmDistDoc } from '../../lib/reportDocs';
+import { alarmDistDoc, withoutOther } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
 import DateRangePicker from '../layout/DateRangePicker';
 import EmptyNote from '../shared/EmptyNote';
@@ -22,7 +22,7 @@ import TableToolbar from '../body/TableToolbar';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
 
-/** The kinds the server counts, in its order; Other is drawn last. */
+/** The kinds the server counts, in its order. Its Other is left out (operator, 11 Nov 2026), lib/reportDocs withoutOther. */
 const ALARM_COLS = [
   { key: 'fatigue', label: 'Fatigue Driving' },
   { key: 'phone', label: 'Phone Call' },
@@ -66,8 +66,8 @@ export const PARTIAL_WORDS = 'The dashcam server returned only part of the alarm
 // ── CSV export ───────────────────────────────────────────────────────────────
 
 function toCsv(rows, period) {
-  const head = ['Device Name', 'Total', ...ALARM_COLS.map((c) => c.label), 'Other'];
-  const data = rows.map((r) => [r.plate, r.total, ...ALARM_COLS.map((c) => r[c.key]), r.other]);
+  const head = ['Device Name', 'Total', ...ALARM_COLS.map((c) => c.label)];
+  const data = rows.map((r) => [r.plate, r.total, ...ALARM_COLS.map((c) => r[c.key])]);
   return { head, rows: data, filenameSlug: `alarm-distribution-${period.replace(/\s/g, '')}` };
 }
 
@@ -90,7 +90,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
     try {
       const data = await loadAlarmDistribution({ orgId, from: days.from, to: days.to });
       if (id !== runId.current) return;
-      setRun({ status: 'done', rows: data.rows ?? [], partial: Boolean(data.partial || data.stale), period: periodLabel(days.from, days.to), from: days.from, to: days.to });
+      setRun({ status: 'done', rows: withoutOther(data.rows), partial: Boolean(data.partial || data.stale), period: periodLabel(days.from, days.to), from: days.from, to: days.to });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
@@ -124,7 +124,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
   const saveCsv = () => {
     if (!done) return;
     const { head, rows: data, filenameSlug } = toCsv(rows, done.period);
-    downloadTableCsv({ head, rows: data, filenameSlug });
+    downloadTableCsv({ head, body: data, filenameSlug });
   };
 
   const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : null;
@@ -202,7 +202,6 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
                     <th scope="col">Device Name</th>
                     <th scope="col" className="rpt-num">Total</th>
                     {ALARM_COLS.map((c) => <th key={c.key} scope="col" className="rpt-num">{c.label}</th>)}
-                    <th scope="col" className="rpt-num">Other</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -211,14 +210,12 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
                       <td className="rpt-unit">{r.plate}</td>
                       <td className="rpt-num rpt-strong">{fmt(r.total)}</td>
                       {ALARM_COLS.map((c) => <td key={c.key} className={`rpt-num${r[c.key] ? '' : ' rpt-nil'}`}>{r[c.key] || 0}</td>)}
-                      <td className={`rpt-num${r.other ? '' : ' rpt-nil'}`}>{r.other || 0}</td>
                     </tr>
                   ))}
                   <tr className="sp4-tr rpt-total">
                     <td className="rpt-unit">Total</td>
                     <td className="rpt-num">{fmt(total)}</td>
                     {ALARM_COLS.map((c) => <td key={c.key} className="rpt-num">{fmt(rows.reduce((n, r) => n + r[c.key], 0))}</td>)}
-                    <td className="rpt-num">{fmt(rows.reduce((n, r) => n + r.other, 0))}</td>
                   </tr>
                 </tbody>
               </table>

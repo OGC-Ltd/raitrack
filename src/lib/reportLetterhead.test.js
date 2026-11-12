@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { reportHtml, reportNumber } from './reportLetterhead';
+import { NOTE_LINES } from './letterhead';
 import { REPORTS, overspeedEventTable } from './reportTables';
 import { sections, overspeedRows, overspeedEvents } from './fleetReports';
 
@@ -29,6 +30,18 @@ describe('report on the letterhead', () => {
     expect(out.html).toContain('Not tracked on the platform');
     expect(out.html).toContain('Menengai &lt;Oil&gt;');
     expect(out.html).not.toContain('Menengai <Oil>');
+    // Room to write on the printed copy: full-width ruled lines, last section
+    expect(out.html.match(/<div class="rule"><\/div>/g)).toHaveLength(NOTE_LINES);
+    expect(out.html).toMatch(/<h2>\d+\. Notes<\/h2>/);
+  });
+
+  it('gives only the Driver Conduct Report a Notes section', () => {
+    const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, [{ durationSec: 60, distanceM: 1_400, peakKmh: 83, limitKmh: 80 }]]]));
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
+                   ctx: { from: at('2026-10-30T00:00:00'), to: at('2026-10-31T00:00:00') }, missing: [], units: 1, failed: 0 };
+    const { html } = reportHtml(REPORTS.overspeed, done, opts);
+    expect(html).not.toContain('Notes</h2>');
+    expect(html).not.toContain('class="rule"');
   });
 
   it('names the one unit an overspeeding report was made for', () => {
@@ -65,12 +78,32 @@ describe('report on the letterhead', () => {
     expect(html).toContain('3 min 48 s');
   });
 
+  it('gives the top speed time alone over one day, and where it was', () => {
+    const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, [{ durationSec: 60, distanceM: 1_400, peakKmh: 83, limitKmh: 80 }]]]))
+      .map((r) => ({ ...r, peakAt: at('2026-11-07T14:32:15'), peak: { lat: -0.82341, lng: 34.38449 } }));
+    const day = { from: at('2026-11-07T00:00:00'), to: at('2026-11-08T00:00:00') };
+    const heads = REPORTS.overspeed.columns();
+    const cell = (r, ctx, h) => REPORTS.overspeed.cells(r, ctx)[heads.indexOf(h)];
+    expect(cell(rows[0], day, 'Top speed at')).toBe('14:32:15');
+    // No name found: its coordinates; a name: the name; no fix at all: blank, and the column left out
+    expect(cell(rows[0], day, 'Location')).toBe('-0.82341, 34.38449');
+    expect(cell({ ...rows[0], peakPlace: 'A1, Stelah, Uriri' }, day, 'Location')).toBe('A1, Stelah, Uriri');
+    expect(cell({ ...rows[0], peak: null }, day, 'Location')).toBe('–');
+
+    const named = [{ ...rows[0], peakPlace: 'A1, Stelah, Uriri' }];
+    const done = { rows: named, secs: sections(named, ['Van Sales'], (r) => r.count), ctx: day, missing: [], units: 1, failed: 0 };
+    const { html } = reportHtml(REPORTS.overspeed, done, opts);
+    expect(html).toContain('A1, Stelah, Uriri');
+    expect(html).not.toMatch(/NaN/);    // a width for every column
+  });
+
   it('says when each vehicle reached its top speed, to the second', () => {
     const rows = overspeedRows([unit('KDE 132E', 'Van Sales')], new Map([[undefined, [{ durationSec: 60, distanceM: 1_400, peakKmh: 83, limitKmh: 80 }]]]))
       .map((r) => ({ ...r, peakAt: at('2026-11-07T14:32:15') }));
     const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.count),
                    ctx: { from: at('2026-11-02T00:00:00'), to: at('2026-11-09T00:00:00'), peaksFailed: 1 }, missing: [], units: 1, failed: 0 };
-    expect(REPORTS.overspeed.cells(rows[0], done.ctx).at(-1)).toBe('Sat 07 Nov 2026 14:32:15');
+    // Over a week the day is there too
+    expect(REPORTS.overspeed.cells(rows[0], done.ctx)[REPORTS.overspeed.columns().indexOf('Top speed at')]).toBe('Sat 07 Nov 2026 14:32:15');
     const html = reportHtml(REPORTS.overspeed, done, opts).html;
     expect(html).toContain('Top speed at');
     expect(html).toContain('Sat 07 Nov 2026 14:32:15');

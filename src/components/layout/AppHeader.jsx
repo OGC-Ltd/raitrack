@@ -447,7 +447,7 @@ export default function AppHeader() {
               <div className="app-header__user-divider" role="separator" />
               <button className="app-header__user-item" role="menuitem" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
                 <i className="ti ti-user-circle" aria-hidden="true" />
-                Account
+                Owner
               </button>
               {orgsWhere('user:read').length > 0 && (
                 <button className="app-header__user-item" role="menuitem" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>

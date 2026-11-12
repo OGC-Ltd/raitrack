@@ -103,7 +103,9 @@ import { useGoogleRoutingOn } from "../../lib/googleRouting";
 
 import { liveTrip } from "../../lib/tripProgress";
 
-import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor, fenceColorKey, isDummyFence } from "../../lib/zoneLegend";
+import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor, fenceColor, fenceColorKey, isDummyFence } from "../../lib/zoneLegend";
+import GeofenceDrawer from "./GeofenceDrawer";
+import PlanOnMap from "./PlanOnMap";
 import { fenceExtent, clusterFences, fenceBadgeLabel, fenceNames } from "../../lib/fenceCluster";
 import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
@@ -2322,6 +2324,15 @@ export default function FleetMap() {
   const [measurePts, setMeasurePts] = useState([]);
   const measuringRef = useRef(false);
   measuringRef.current = measuring;
+  // The Draw geofence tool: null, or { editing: the fence being changed | null }.
+  // While it is open the map's clicks are its corners, so the map's own click
+  // (deselect) and the fences' cards stand aside, as they do for the ruler.
+  const [fenceDraw, setFenceDraw] = useState(null);
+  const fenceDrawRef = useRef(null);
+  fenceDrawRef.current = fenceDraw;
+  // The drawer's click handler, for clicks that land on a drawn fence (which
+  // take the pointer, so the map never hears them).
+  const fenceClickRef = useRef(null);
   // Base map. Google only where a key was built in; otherwise OSM, always.
   const [baseMap, setBaseMap] = useState(() => {
     const stored = readCache(BASE_MAP_KEY);
@@ -2434,6 +2445,9 @@ export default function FleetMap() {
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
   const { can: canDo, orgId: permOrgId } = usePermissions();
+  // Read by the fence cards, which are HTML built inside the zone layer.
+  const canEditFencesRef = useRef(false);
+  canEditFencesRef.current = canDo("geofence:update");
   // Dashcam alarms (Control Tech VSS): the rail's camera button and its count of
   // today's alarms not yet reviewed. Null where the organisation has no cameras.
   const dashcamOn = canDo("vss:alarms");
@@ -2771,6 +2785,11 @@ export default function FleetMap() {
     setUnitsOpen(false);
   }), [setUnitsOpen, setStrandedOpen, setFuelAlertsOpen]);
   useEffect(() => onMapWindowClaim("arrivals", () => setArrivalsOpen(false)), []);
+  /* The Draw geofence panel is a map window too: opening it closes Fuel
+     alerts and the rest, and it closes for them. The rail's Geofences menu
+     does not close it, since that menu is how a drawing is stopped. */
+  useEffect(() => { if (fenceDraw) claimMapWindow("geofence"); }, [fenceDraw]);
+  useEffect(() => onMapWindowClaim(["geofence", "geofence-menu"], () => setFenceDraw(null)), []);
   /* The investigation does not claim: it only ever opens from a Halted row,
      and Halted is already the newest window. It closes for anything else. */
   useEffect(() => onMapWindowClaim(["investigation", "stranded"], () => setInvestigateSubject(null)), []);
@@ -4194,8 +4213,9 @@ export default function FleetMap() {
       // click, so the deselect gesture has to take both away or the annotated
       // line is left behind describing a unit that is no longer selected.
       map.addListener("click", () => {
-        // The ruler owns clicks while it is on (see the measure effect).
-        if (measuringRef.current) return;
+        // The ruler owns clicks while it is on (see the measure effect), and
+        // so does the Draw geofence tool.
+        if (measuringRef.current || fenceDrawRef.current) return;
         clearHover();
         clearTripPath();
         const prevId = activeRouteRef.current;
@@ -4474,6 +4494,7 @@ export default function FleetMap() {
   const toggleMeasure = useCallback(() => {
     setMeasuring(v => !v);
     setMeasurePts([]);
+    setFenceDraw(null);
   }, []);
 
   // While the ruler is on, a click on the map adds a point. Backspace takes
@@ -4519,6 +4540,38 @@ export default function FleetMap() {
     }
     return () => { line.setMap(null); for (const d of dots) d.setMap(null); total?.setMap(null); };
   }, [measurePts]);
+
+  // A fence card's Change button opens the drawer on that fence. The card is
+  // HTML in the map's info window, so its button is found by delegation.
+  useEffect(() => {
+    const onClick = (e) => {
+      const btn = e.target?.closest?.("[data-fence-edit]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-fence-edit");
+      const f = zonesRef.current?.features?.find((x) => x.properties?.id === id);
+      if (!f) return;
+      zoneLayerRef.current?.info?.close();
+      setMeasuring(false);
+      setFenceDraw({ editing: f });
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+  // Another company's map is not where a drawing in progress belongs.
+  useEffect(() => { setFenceDraw(null); }, [orgId]);
+  // The Planner's Fence button: this map's own tool, on that customer's fence
+  const onPlanFenceEdit = useCallback((f) => {
+    setMeasuring(false);
+    setFenceDraw({ editing: f });
+  }, []);
+
+  const toggleFenceDraw = useCallback(() => {
+    setFenceDraw((v) => (v && !v.editing ? null : { editing: null }));
+    setMeasuring(false);
+    setMeasurePts([]);
+    // The geofences layer is left as it was: the drawing shows itself, and
+    // turning the layer on was a second thing nobody asked for.
+  }, []);
 
   const measureText = measurePts.length > 1
     ? `${formatDistance(pathLengthM(measurePts))} · ${measurePts.length - 1} leg${measurePts.length > 2 ? "s" : ""}`
@@ -4669,7 +4722,7 @@ export default function FleetMap() {
       if (ZONE_EXCLUDE.has(key) || isDummyFence(p.name)) continue;
 
       const geom  = f.geometry;
-      const color = zoneColor(fenceColorKey(f));
+      const color = fenceColor(f);
       const alias = ZONE_PLAN_ALIAS[key];
       let shape = null;
       // A circular fence arrives as its centre and radius; drawn as its ring.
@@ -4716,19 +4769,28 @@ export default function FleetMap() {
              alias.planHa ? ` · ${alias.planHa.toLocaleString()} ha printed` : ""}</span>`
         : "";
       shape.addListener("click", (e) => {
+        // Drawing: a click on a fence is a corner of the new one.
+        if (fenceDrawRef.current) {
+          fenceClickRef.current?.({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+          return;
+        }
+        const editable = canEditFencesRef.current;
         info.setContent(
           `<div class="zone-info">
              <strong>${esc(p.name)}</strong>
              <span>${(ZONE_STYLE[p.category] ?? ZONE_FALLBACK).label} · ${detail}</span>
              ${planLine}
              <span class="zone-info-state">${p.isActive ? "Enforced" : "Not enforced"}</span>
+             ${editable && p.id ? `<button type="button" class="zone-info-edit" data-fence-edit="${esc(p.id)}">${
+               p.source === "app" ? "Change" : "Purpose and colour"}</button>` : ""}
            </div>`,
         );
         info.setPosition(e.latLng);
         info.open(map);
       });
-      shape.addListener("mouseover", (e) =>
-        showHover({ lat: e.latLng.lat(), lng: e.latLng.lng() }, p.name, color));
+      shape.addListener("mouseover", (e) => {
+        if (!fenceDrawRef.current) showHover({ lat: e.latLng.lat(), lng: e.latLng.lng() }, p.name, color);
+      });
       shape.addListener("mouseout", clearHover);
 
       shapes.push(shape);
@@ -6580,7 +6642,7 @@ export default function FleetMap() {
       lng: onLine ? onLine[0] : box.lng,
       bbox: [box.s, box.n, box.w, box.e],
       label: p.name,
-      labelColor: zoneColor(fenceColorKey(feature)),
+      labelColor: fenceColor(feature),
     });
   }, [activeCompanyId, handlePickPlace]);
 
@@ -7080,6 +7142,7 @@ export default function FleetMap() {
     setCameraId(null);
     setMeasuring(false);
     setMeasurePts([]);
+    setFenceDraw(null);
   }, [mapClearN, hideRoute, reIcon, clearHover, clearTripPath]);
 
   // Visibility is applied inside the reconcile pass (it depends on activeFilter).
@@ -7186,7 +7249,7 @@ export default function FleetMap() {
   }, [trackedSet, routeId, setActiveRoute]);
 
   return (
-    <div className={`fleet-map-body${namesOn ? " fleet-map--names" : ""}${measuring ? " mtr-measuring" : ""}`}>
+    <div className={`fleet-map-body${namesOn ? " fleet-map--names" : ""}${measuring ? " mtr-measuring" : ""}${fenceDraw ? " gfd-drawing" : ""}`}>
 
       <div className={`map-layer${showMobileMap ? " map-layer--visible" : ""}`}>
         <div ref={mapContainerRef} className="gmap-fill" />
@@ -7283,6 +7346,9 @@ export default function FleetMap() {
             traffic={mapLayers.find(l => l.id === "traffic") ?? null}
             weather={mapLayers.find(l => l.id === "weather") ?? null}
             zones={mapLayers.find(l => l.id === "zones") ?? null}
+            drawFence={canDo("geofence:create") && orgId
+              ? { on: Boolean(fenceDraw && !fenceDraw.editing), onToggle: toggleFenceDraw }
+              : null}
             bases={GOOGLE_BASE_AVAILABLE ? BASE_MAPS : null}
             base={baseMap}
             onBase={chooseBase}
@@ -7306,6 +7372,26 @@ export default function FleetMap() {
             dashcam={dashcamOn
               ? { count: dashcamBadge?.open ?? 0, critical: dashcamBadge?.critical ?? 0, onOpen: () => setDesktopActiveTab("dashcam") }
               : null}
+          />
+        )}
+        {/* A delivery plan the Planner put on the map (lib/planOverlay) */}
+        {mapReady && mapRef.current && (
+          <PlanOnMap map={mapRef.current} maps={mapsLibRef.current} DomMarker={DomMarkerRef.current}
+                     zones={zones} onEditFence={onPlanFenceEdit} />
+        )}
+        {fenceDraw && mapReady && mapRef.current && (
+          <GeofenceDrawer
+            key={fenceDraw.editing?.properties?.id ?? "new"}
+            map={mapRef.current}
+            maps={mapsLibRef.current}
+            DomMarker={DomMarkerRef.current}
+            orgId={orgId}
+            fences={zones?.features ?? []}
+            vehicles={vehicles}
+            editing={fenceDraw.editing}
+            canDelete={canDo("geofence:delete")}
+            clickRef={fenceClickRef}
+            onClose={() => setFenceDraw(null)}
           />
         )}
 

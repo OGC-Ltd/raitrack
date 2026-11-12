@@ -1,0 +1,49 @@
+/* Hallmark · component: side panel (one plan stop) · genre: modern-minimal · theme: brand (the sp4 light scale, the app's DetailSidebar as on Alerts) · signature: the drive to the customer, played on its own map
+ * states: default · hover · focus · active · disabled · loading (map) · error (map, copy) · success (copied) · empty (no telemetry)
+ * contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: P, on purpose: the frame is the shared DetailSidebar so it reads as Alerts' does */
+
+:root {
+  --psp-fence: #0369a1;
+  --psp-trail: #2563eb;
+  --psp-start: #16a34a;
+  --psp-halo: #ffffff;
+  --psp-map-bg: #eef2f6;
+}
+
+/* The map sits flush with the section, the transport under it on one line. */
+.psp-lede { margin: 0 0 var(--sp4-sm, 8px); font-size: var(--sp4-body, 12.5px); color: var(--sp4-text-2); text-wrap: pretty; }
+.psp-map { border: 1px solid var(--sp4-line); border-radius: 8px; overflow: hidden; background: var(--sp4-surface); }
+.psp-map__canvas { position: relative; height: 220px; background: var(--psp-map-bg); }
+.psp-map__note { margin: 0; padding: var(--sp4-sm, 8px) var(--sp4-md, 12px); font-size: var(--sp4-body, 12.5px); color: var(--sp4-crit); }
+
+/* The leg's speed under the map: point along it and the truck moves there. */
+.psp-trace { padding: 4px 8px 8px; border-top: 1px solid var(--sp4-line); background: var(--sp4-raised); }
+.psp-trace__read { display: flex; flex-wrap: wrap; gap: var(--sp4-sm, 8px); min-height: 18px; padding: 0 4px; font-size: var(--sp4-label, 11px); color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+.psp-trace__read b { color: var(--sp4-text-1); font-weight: 600; }
+.psp-trace__plot { height: 84px; cursor: crosshair; }
+
+/* Label beside value, as the Alerts panel's facts read. */
+.psp-list { display: grid; gap: var(--sp4-sm, 8px); margin: 0; }
+.psp-list > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: var(--sp4-sm, 8px); }
+.psp-list dt { font-size: var(--sp4-label, 11px); color: var(--sp4-text-3); }
+.psp-list dd { margin: 0; min-width: 0; font-size: var(--sp4-body, 12.5px); color: var(--sp4-text-1); overflow-wrap: anywhere; }
+.psp-list .pl-remark { width: 100%; }
+
+.psp-coords { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.psp-icon-btn {
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--sp4-text-3); cursor: pointer; transition: background-color 0.12s, color 0.12s;
+}
+.psp-icon-btn:hover { background: var(--sp4-raised); color: var(--sp4-text-1); }
+.psp-icon-btn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.psp-icon-btn:active { transform: translateY(1px); }
+.psp-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .psp-icon-btn { transition: none; }
+}
+@media (max-width: 767px) {
+  .psp-map__canvas { height: 240px; }
+  .psp-list > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
