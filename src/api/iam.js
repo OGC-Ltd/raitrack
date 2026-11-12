@@ -42,3 +42,16 @@ export async function saveIamGrants(userId, changes) {
   });
   return res.data;
 }
+
+/**
+ * Which part of one organisation's fleet a person sees: all of it
+ * (`allVehicles: true`), or only the categories named (vehicle group ids,
+ * Menengai's Tankers, Van Sales, …). Returns the person as they now stand.
+ */
+export async function saveIamFleet(userId, { organisationId, allVehicles, vehicleGroupIds = [] }) {
+  const res = await apiFetch(`${base}/users/${encodeURIComponent(userId)}/fleet`, {
+    method: "PUT",
+    body: JSON.stringify({ organisationId, allVehicles, vehicleGroupIds }),
+  });
+  return res.data;
+}

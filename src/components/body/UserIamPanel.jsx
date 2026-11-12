@@ -18,7 +18,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchIamCatalogue, fetchIamUser, listIamUsers, saveIamGrants } from "../../api/iam";
+import { fetchIamCatalogue, fetchIamUser, listIamUsers, saveIamFleet, saveIamGrants } from "../../api/iam";
 import {
   EVERYWHERE, keyOf, resolveEverywhere, resolveIn, spread, standingGrants, toChanges,
 } from "../../lib/iamAccess";
@@ -438,6 +438,120 @@ function Board({ resources, roles }) {
   );
 }
 
+/**
+ * Fleets: per organisation, the whole fleet or only some of its categories
+ * (operator, 2026-11-12: "assign an individual access to tankers or van sales
+ * or finished goods"). Menengai's categories are its fleet list's tabs.
+ *
+ * Saves on the click like everything else here. "Some categories" with
+ * nothing ticked is only on the page until one is ticked: the server will not
+ * store a fleet of nothing. The last category cannot be unticked; "All
+ * fleets" is how a restriction is lifted.
+ */
+function Fleets({ organisations, everyOrganisation, busy, onSave }) {
+  // Organisations switched to "Some categories" with none ticked yet.
+  const [choosing, setChoosing] = useState(() => new Set());
+  const setChoosingOrg = (orgId, on) => setChoosing((now) => {
+    const next = new Set(now);
+    if (on) next.add(orgId); else next.delete(orgId);
+    return next;
+  });
+
+  if (everyOrganisation) {
+    return (
+      <section className="ua-iam__fleets" aria-labelledby="ua-iam-fleets-title">
+        <h3 id="ua-iam-fleets-title" className="ua-iam__ledger-title">Fleets</h3>
+        <p className="ua-iam__fleet-note">Every fleet: their role covers every organisation.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="ua-iam__fleets" aria-labelledby="ua-iam-fleets-title">
+      <h3 id="ua-iam-fleets-title" className="ua-iam__ledger-title">Fleets</h3>
+      <ul className="ua-iam__fleet-list">
+        {organisations.map((o) => {
+          const f = o.fleet;
+          if (!f) return null;
+          const some = !f.allVehicles || choosing.has(o.id);
+          const saving = busy === o.id;
+          const held = new Set(f.groupIds);
+          const units = f.categories.filter((c) => held.has(c.id)).reduce((n, c) => n + c.units, 0);
+          const toggle = (id) => {
+            const next = held.has(id) ? f.groupIds.filter((g) => g !== id) : [...f.groupIds, id];
+            if (next.length === 0) return;
+            setChoosingOrg(o.id, false);
+            onSave(o, { allVehicles: false, vehicleGroupIds: next });
+          };
+          return (
+            <li key={o.id} className="ua-iam__fleet">
+              <div className="ua-iam__fleet-head">
+                <span className="ua-iam__fleet-org">{o.name}</span>
+                {f.narrowable ? (
+                  <div className="ua-iam__well" role="group" aria-label={`Fleets in ${o.name}`}>
+                    <button type="button" className="ua-iam__well-opt" aria-pressed={!some} disabled={saving}
+                            onClick={() => {
+                              setChoosingOrg(o.id, false);
+                              if (!f.allVehicles) onSave(o, { allVehicles: true, vehicleGroupIds: [] });
+                            }}>
+                      All fleets
+                    </button>
+                    <button type="button" className="ua-iam__well-opt" aria-pressed={some} disabled={saving}
+                            onClick={() => { if (f.allVehicles) setChoosingOrg(o.id, true); }}>
+                      Some categories
+                    </button>
+                  </div>
+                ) : (
+                  <span className="ua-iam__tag">{f.allVehicles ? "All fleets" : "Some categories"}</span>
+                )}
+                <span className="ua-iam__fleet-sum">
+                  {saving ? "Saving…"
+                    : !some ? "Sees every unit, and units added later"
+                    : f.groupIds.length === 0 ? "Tick the categories they may see"
+                    : `${f.groupIds.length} ${f.groupIds.length === 1 ? "category" : "categories"} · ${units} units${f.singleUnits ? ` + ${f.singleUnits} single` : ""}`}
+                </span>
+              </div>
+              {!f.narrowable && (
+                <p className="ua-iam__fleet-note">
+                  {f.reason}
+                  {!f.allVehicles && (
+                    <> <button type="button" className="ua-iam__fleet-link" disabled={saving}
+                               onClick={() => onSave(o, { allVehicles: true, vehicleGroupIds: [] })}>
+                      Give the whole fleet
+                    </button></>
+                  )}
+                </p>
+              )}
+              {f.narrowable && some && (
+                f.categories.length === 0 ? (
+                  <p className="ua-iam__fleet-note">This organisation has no categories yet.</p>
+                ) : (
+                  <div className="ua-iam__cats" role="group" aria-label={`Categories in ${o.name}`}>
+                    {f.categories.map((c) => {
+                      const on = held.has(c.id);
+                      const last = on && f.groupIds.length === 1;
+                      return (
+                        <button key={c.id} type="button" className="ua-iam__cat" aria-pressed={on}
+                                disabled={saving || last}
+                                title={last ? "The last category: choose All fleets to lift the limit" : undefined}
+                                onClick={() => toggle(c.id)}>
+                          <i className={`ti ${on ? "ti-square-check-filled" : "ti-square"}`} aria-hidden="true" />
+                          <span className="ua-iam__cat-name">{c.name}</span>
+                          <span className="ua-iam__cat-count">{c.units}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function Result({ held, children }) {
   return (
     <span className={held ? "ua-iam__result ua-iam__result--yes" : "ua-iam__result ua-iam__result--no"}>
@@ -468,6 +582,8 @@ export default function UserIamPanel() {
   const [savedOnce, setSavedOnce] = useState(false);
   const [problem, setProblem] = useState("");
   const [held, setHeld] = useState(false);
+  // The organisation whose fleet is being saved, or null.
+  const [fleetBusy, setFleetBusy] = useState(null);
   // One save at a time, in the order the choices were made.
   const queue = useRef(Promise.resolve());
 
@@ -506,7 +622,7 @@ export default function UserIamPanel() {
 
   const pick = (id) => {
     if (id === selectedId) return;
-    if (pending.size > 0) { setHeld(true); return; }
+    if (pending.size > 0 || fleetBusy) { setHeld(true); return; }
     setSelectedId(id);
     setProblem("");
     setSavedOnce(false);
@@ -536,6 +652,23 @@ export default function UserIamPanel() {
           rest.delete(key);
           return rest;
         });
+      }
+    });
+  };
+
+  const saveFleet = (org, choice) => {
+    const userId = selectedId;
+    setProblem("");
+    setFleetBusy(org.id);
+    queue.current = queue.current.then(async () => {
+      try {
+        const next = await saveIamFleet(userId, { organisationId: org.id, ...choice });
+        queryClient.setQueryData(["iam", "user", userId], next);
+        setSavedOnce(true);
+      } catch (err) {
+        setProblem(`Fleets in ${org.name} were not saved: ${firstMessage(err) ?? "the server did not answer."}`);
+      } finally {
+        setFleetBusy(null);
       }
     });
   };
@@ -747,8 +880,8 @@ export default function UserIamPanel() {
               </div>
               {reach.length > 0 && <Reach marks={reach} />}
               {!locked && (
-                <p className={pending.size > 0 ? "ua-iam__status ua-iam__status--busy" : "ua-iam__status"} role="status">
-                  {pending.size > 0 ? (
+                <p className={pending.size > 0 || fleetBusy ? "ua-iam__status ua-iam__status--busy" : "ua-iam__status"} role="status">
+                  {pending.size > 0 || fleetBusy ? (
                     <><i className="ti ti-loader-2" aria-hidden="true" /> Saving…</>
                   ) : savedOnce ? (
                     <><i className="ti ti-check" aria-hidden="true" /> Saved</>
@@ -771,6 +904,10 @@ export default function UserIamPanel() {
                 or take here. Change the role on Users to narrow it. */}
               <div className="ua-iam__body">
                 {!locked && <Ledger entries={ledger} />}
+                {!locked && (
+                  <Fleets key={selectedId} organisations={organisations} everyOrganisation={Boolean(access.everyOrganisation)}
+                          busy={fleetBusy} onSave={saveFleet} />
+                )}
                 <div className="ua-iam__bar">
                   {locked ? (
                     <p className="ua-iam__locked">
