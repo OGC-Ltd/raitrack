@@ -28,13 +28,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDeliveryDay, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
 } from '../../lib/deliveriesReport';
 import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
-import { listPlans, getPlan, fileAsBase64, previewSheet } from '../../api/planner';
+import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
@@ -333,6 +333,17 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const customers = useMemo(() => zones.customers ?? [], [zones.customers]);
   const options = useMemo(() => customers.map((c) => ({ value: c.name, label: c.label, title: c.name, note: c.nearStorage ? 'at storage' : c.kind })), [customers]);
 
+  // Pasted points fenced in the Planner take their fence's name (operator, 12 Nov 2026)
+  const fencedPinsQuery = {
+    queryKey: ['planner', 'customers', 'fenced-pins', orgId],
+    queryFn: () => listCustomers(orgId, { q: 'PIN:', fenced: true }),
+    enabled: Boolean(orgId && canSheets),
+    staleTime: 60_000,
+  };
+  const fencedPins = useQuery(fencedPinsQuery);
+  const pinNames = useMemo(() => fencedPinNames(fencedPins.data, zones.fc), [fencedPins.data, zones.fc]);
+  const pinLabel = (pin) => pinNames.get(pinCode(pin)) || pin.name || `${pin.lat}, ${pin.lng}`;
+
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const [open, setOpen] = useState(() => new Set());
@@ -362,11 +373,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       // Each step says what it was doing when it fails; Movements (where each
       // vehicle is now) is help, not a need: without it the report still runs
       const step = (words, p) => p.catch((err) => { throw new Error(`${words}: ${err?.message ?? err}`); });
-      const [fc, moves, sheetList] = await Promise.all([
+      const [fc, moves, sheetList, fenced] = await Promise.all([
         zones.fc ? Promise.resolve(zones.fc) : step('The geofences could not be read', loadZones(orgId)),
         loadMovementReport({ orgId, from: to - 3600_000, to }).catch(() => null),
         canSheets ? step('The Planner’s sheets could not be read', findSheets(windowFrom, to)) : Promise.resolve([]),
+        // Fresh, as a fence may have been drawn since the page opened; without them the points keep their own names
+        canSheets ? qc.fetchQuery({ ...fencedPinsQuery, staleTime: 0 }).catch(() => []) : Promise.resolve([]),
       ]);
+      const runPinNames = fencedPinNames(fenced, fc);
       if (!live()) return;
       if (!runPlan.vehicles.length && !sheetList.length) {
         setRun({ status: 'error', message: 'No sheets were saved in the Planner for these hours, and no vehicles are on the list.' });
@@ -446,7 +460,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         const mv = v.vehicleIds.map((id) => moveRow.get(id)).find(Boolean) ?? null;
         const id = mv?.vehicleId ?? best(v);
         const row = deliveryRow(v, held.get(id) ?? [], storages, byName, {
-          from: windowFrom, to, windows, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
+          from: windowFrom, to, windows, pinNames: runPinNames, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
         return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
@@ -731,7 +745,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       {picked > 0 && (
                         <span className={`dlv-meter${picked > 24 ? ' is-dense' : ''}`} aria-hidden="true">
                           {v.customers.map((name) => <i key={name} title={name} className={customers.find((c) => c.name === name)?.nearStorage ? 'is-storage' : undefined} />)}
-                          {(v.pins ?? []).map((pin, i) => <i key={`pin${i}`} className="is-pin" title={pin.name || `${pin.lat}, ${pin.lng}`} />)}
+                          {(v.pins ?? []).map((pin, i) => <i key={`pin${i}`} className="is-pin" title={pinLabel(pin)} />)}
                         </span>
                       )}
                     </span>

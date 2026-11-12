@@ -29,7 +29,7 @@ describe('the Planner printed as the Finished Goods report', () => {
     expect(to - from).toBeLessThanOrEqual(3 * 86_400_000);
     expect(rows).toHaveLength(1);
     expect(rows[0].plate).toBe('KCA 226M');
-    expect(rows[0].customers.map((c) => c.label ?? c.name)).toEqual(['Dashama wholesalers', 'Gitare wholesalers']);
+    expect(rows[0].customers.map((c) => c.label ?? c.name)).toEqual(['Dashama Wholesalers', 'Gitare Wholesalers']);
   });
 
   it('each plan reads only its own trucks, over its own span', async () => {

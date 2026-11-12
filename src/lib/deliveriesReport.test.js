@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findStorages, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays } from './deliveriesReport';
+import { findStorages, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays, pinCode, fencedPinNames } from './deliveriesReport';
 import { readCoordinates, mergePins } from './deliveryPlan';
 import { addVehicle, removeVehicle, setCustomers, emptyPlan } from './deliveryPlan';
 import { reportKeysFor, hasDeliveriesTab } from './reportNav';
@@ -106,12 +106,12 @@ describe('Deliveries Report', () => {
     const r = deliveryRow(plan, pings, storages, byName, { to: at('2026-10-30T10:00:00'), place: 'Thanju' });
     expect(rowCells(r)).toEqual(['KCP 136P', '30.10.2026 04:05:02 (MORL)', '1/2', 'Thanju', '']);
     expect(r.customers.map((c) => Boolean(c.at))).toEqual([true, false]);
-    expect(csvTable([r]).body[0].slice(-2)).toEqual(['JOJAC INVESTMENTS 06:00', expect.stringMatching(/^THANJU SHOP \(Not reached, closest /)]);
+    expect(csvTable([r]).body[0].slice(-2)).toEqual(['Jojac Investments 06:00', expect.stringMatching(/^Thanju Shop \(Not reached, closest /)]);
     const body = deliveriesPdfBody([r], { from: at('2026-10-30T07:00:00'), at: at('2026-10-30T10:00:00'), fleet: 'Menengai Oil Refineries Ltd' });
     expect(body).toMatchObject({ fleet: 'Menengai Oil Refineries Ltd', group: 'all', stops: true });
     expect(body.rows[0]).toMatchObject({ plate: 'KCP 136P', fulfilled: 1, planned: 2, place: 'Thanju', notLeft: null, arrivedAt: null, arrivedTo: null });
     expect(body.rows[0].leftFrom).toEqual({ short: 'MORL', label: 'MORL' });
-    expect(body.rows[0].customers.map((c) => c.label)).toEqual(['JOJAC INVESTMENTS', 'THANJU SHOP']);
+    expect(body.rows[0].customers.map((c) => c.label)).toEqual(['Jojac Investments', 'Thanju Shop']);
     // Only what the server's schema names: no geofence shapes go up with the customers
     expect(Object.keys(body.rows[0].customers[0]).sort()).toEqual(['at', 'label', 'note']);
     expect(deliveriesPdfBody([r], { from: 1, at: 2, fleet: 'M', group: 'Van Sales', stops: false })).toMatchObject({ group: 'Van Sales', stops: false });
@@ -484,5 +484,34 @@ describe('a delivery sheet into one vehicle’s stops (Import from Excel)', asyn
   it('a radius out of range is held to the paste box’s limits', () => {
     expect(sheetStops(preview, fences, 'x').pins[0].radiusM).toBeGreaterThan(0);
     expect(sheetStops({ stops: [] }, fences).pins).toEqual([]);
+  });
+});
+
+describe('a pasted point fenced in the Planner (operator, 12 Nov 2026)', () => {
+  const pin = { name: '', lat: 0.0107497411311564, lng: 37.07514009999999, radiusM: 100 };
+  const fc = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: 'f1', name: 'Kamau Stores' }, geometry: null }] };
+
+  it('keys the point as the server does', () => {
+    expect(pinCode(pin)).toBe('PIN:0.01075,37.07514');
+  });
+
+  it('takes the fence’s current name, else the customer’s; unfenced and non-point customers are left out', () => {
+    const names = fencedPinNames([
+      { customerCode: 'PIN:0.01075,37.07514', name: 'old name', geofenceId: 'f1' },
+      { customerCode: 'PIN:-1.00000,36.00000', name: 'Gone Fence Shop', geofenceId: 'f9' },
+      { customerCode: 'PIN:-2.00000,36.00000', name: '-2.00000, 36.00000', geofenceId: null },
+      { customerCode: '10023', name: 'Sheet customer', geofenceId: 'f1' },
+    ], fc);
+    expect([...names]).toEqual([['PIN:0.01075,37.07514', 'Kamau Stores'], ['PIN:-1.00000,36.00000', 'Gone Fence Shop']]);
+  });
+
+  it('the report names the stop by its fence, before the name pasted with it', () => {
+    const names = new Map([['PIN:0.01075,37.07514', 'Kamau Stores']]);
+    expect(pinStop(pin, [], names).label).toBe('Kamau Stores');
+    expect(pinStop({ ...pin, name: 'pasted' }, [], names).label).toBe('Kamau Stores');
+    expect(pinStop({ ...pin, name: 'pasted' }).label).toBe('pasted');
+    expect(pinStop(pin).label).toBe('0.01075, 37.07514');
+    const r = deliveryRow({ plate: 'X', customers: [], pins: [pin] }, [], findStorages(null), new Map(), { to: Date.now(), pinNames: names });
+    expect(r.customers[0].label).toBe('Kamau Stores');
   });
 });

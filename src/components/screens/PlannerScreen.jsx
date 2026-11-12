@@ -468,6 +468,7 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canNewFe
     setSelected(stop.id);
     await Promise.allSettled([reloadEstateZones(orgId), qc.invalidateQueries({ queryKey: key })]);
     qc.invalidateQueries({ queryKey: ['planner', 'plans', orgId] });
+    qc.invalidateQueries({ queryKey: ['planner', 'customers'] });   // Deliveries names the point by it
   };
 
   if (isLoading) return <EmptyNote icon="ti-loader" title="Loading the plan…" />;

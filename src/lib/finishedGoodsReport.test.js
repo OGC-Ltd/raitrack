@@ -23,7 +23,7 @@ describe('Finished Goods template: one line per customer', () => {
   const lines = fgLines([sheetRow, backRow, parked], { at: at('20:00') });
   it('lays out the ten columns of the sheet', () => {
     expect(FG_HEADS).toHaveLength(10);
-    expect(fgCells(lines[0])).toEqual(['30.10.2026', 'KCP 136P', 'MAGUNA ANDU MAKUTANO', 'Makutano', 'Thanju',
+    expect(fgCells(lines[0])).toEqual(['30.10.2026', 'KCP 136P', 'Maguna Andu Makutano', 'Makutano', 'Thanju',
       '30.10.2026 04:05:00', '30.10.2026 13:15:00', '30.10.2026 14:00:00', '', '']);
   });
   it('yellow when reached, red when not', () => {
@@ -112,7 +112,7 @@ describe('the PDF bar and dropped lines (operator, 11 Nov 2026)', () => {
     const doc = finishedGoodsDoc([r], { from: at('07:00'), at: at('14:00'), fleet: 'M', orgCode: 'MENENGAI', now: at('14:00'), dropped: new Set(['K|a']) });
     const table = doc.blocks.find((b) => b.kind === 'table');
     expect(table.rows).toHaveLength(1);
-    expect(table.rows[0][2].text).toBe('KISUMU BYPASS');
+    expect(table.rows[0][2].text).toBe('Kisumu Bypass');
     expect(doc.blocks[0].aside).toBe('1/1 customers reached · 1 vehicle');
   });
 });
