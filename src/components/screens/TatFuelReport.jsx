@@ -63,8 +63,8 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
         for (const day of daysFrom(from, to)) sheets.push(await loadTatFuelReport({ orgId: oid, day }));
         reports.push({
           failed: sheets.reduce((n, r) => n + r.failed, 0),
-          // Naitiri Ex: each section is the unit's kind on the client's lists
-          // A row's base is its site ("Naitiri"), with no plate: the Ex lists are read off its plate (operator, 12 Nov 2026)
+          // Naitiri: each section is the unit's kind on the client's Excel files
+          // A row's base is its site ("Naitiri"), with no plate: Naitiri's files are read off its plate (operator, 12 Nov 2026)
           rows: rowsOverDays(sheets.map((r) => r.rows)).filter((r) => keepUnit(c, r.base) || keepUnit(c, r.plate))
             .map((r) => ({ ...r, group: kindOf(r.plate) ?? r.group })),
         });

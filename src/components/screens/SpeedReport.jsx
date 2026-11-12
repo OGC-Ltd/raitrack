@@ -57,7 +57,7 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
         const oid = await orgIdOf(c);
         if (!oid) { unread.push(nameOf(c)); continue; }
         const rep = await loadSpeedReport({ orgId: oid, day });
-        // Naitiri Ex: the Group is the unit's kind on the client's lists (Tractors, Light vehicles, …), not the platform's Other
+        // Naitiri: the Group is the unit's kind on the client's lists (Tractors, Light vehicles, …), not the platform's Other
         reports.push({ ...rep, rows: rep.rows.filter((r) => keepUnit(c, r.name)).map((r) => ({ ...r, group: kindOf(r.name) ?? r.group })) });
       }
       if (id !== runId.current) return;

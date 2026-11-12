@@ -51,7 +51,7 @@ export function useReportOrgs(reportKey, { orgId, orgCode, companyName }) {
     : ticked == null ? family.name
       : siteFleet(ticked) ?? members.filter((m) => ticked.includes(m.key)).map((m) => m.label).join(', ');
 
-  /** The unit's kind from the client's lists when a Naitiri Ex option is picked, else null (lib/siteLists siteKind). */
+  /** The unit's kind from the client's lists when a Naitiri option is picked, else null (lib/siteLists siteKind). */
   const kindOf = (name) => siteKind(ticked, name);
 
   /** Props for a CheckPicker; null when there is nothing to pick. */

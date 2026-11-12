@@ -28,10 +28,9 @@ const WEST_KENYA = {
     { key: 'KABRAS', label: 'Kabras', org: 'KABRAS' },
     { key: 'NZOIA', label: 'Nzoia', org: 'NZOIA' },
     { key: 'OLEPITO', label: 'Olepito', unit: SITE_LISTS.OLEPITO.test },
-    { key: 'NAITIRI', label: 'Naitiri', unit: SITE_LISTS.NAITIRI.test },
-    // From the client's Excel lists alone (operator, 12 Nov 2026), lib/siteLists
-    { key: 'NAITIRI_EX', label: SITE_LISTS.NAITIRI_EX.label, unit: SITE_LISTS.NAITIRI_EX.test },
-    { key: 'NAITIRI_TRUCKS_EX', label: SITE_LISTS.NAITIRI_TRUCKS_EX.label, unit: SITE_LISTS.NAITIRI_TRUCKS_EX.test },
+    // Naitiri from the client's Excel files alone, not the unit's name (operator, 12 Nov 2026), lib/siteLists
+    { key: 'NAITIRI', label: SITE_LISTS.NAITIRI.label, unit: SITE_LISTS.NAITIRI.test },
+    { key: 'NAITIRI_TRUCKS', label: SITE_LISTS.NAITIRI_TRUCKS.label, unit: SITE_LISTS.NAITIRI_TRUCKS.test },
   ],
 };
 

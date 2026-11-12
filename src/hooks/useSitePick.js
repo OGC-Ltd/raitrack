@@ -1,6 +1,6 @@
 // A Site picker for the reports of an organisation with sites told apart by a
-// list or a name (lib/siteLists REPORT_SITES): West Kenya's sites, Naitiri's
-// "Naitiri all units Ex" and "Naitiri trucks Ex" among them (operator, 12 Nov
+// list or a name (lib/siteLists REPORT_SITES): West Kenya's sites, "Naitiri"
+// and "Naitiri trucks" from the client's Excel files among them (operator, 12 Nov
 // 2026: "I should be able to generate all reports I'm able to get from West
 // Kenya ... with a title of Naitiri").
 //

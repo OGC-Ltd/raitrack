@@ -1,8 +1,10 @@
 // Sites of an organisation told apart by a list of their units (operator, 12 Nov
 // 2026: Naitiri's units are under West Kenya; reports for Naitiri's units or its
 // trucks alone). Not a filter on the Fleets block: the operator does not want a
-// Naitiri pill there (12 Nov 2026). Beside the name rule the
-// report templates already had for a site (/nait[ir]/i), not instead of it.
+// Naitiri pill there (12 Nov 2026). Naitiri is read from the client's two Excel
+// files alone, not the unit's name (operator, 12 Nov 2026: two options, "Naitiri"
+// and "Naitiri trucks", both from the files; the name rule /nait[ir]/i is gone).
+// The other sites are still told apart by the unit's name.
 //
 // A unit is on a list when one of its plates is: the platform's name for a
 // unit carries its plate somewhere ("WKS - Naitiri - KCY 523U", "KTCC573E"), so
@@ -41,8 +43,8 @@ export const NAITIRI_ALL = [...new Set([...Object.values(NAITIRI_UNITS).flat(), 
 
 /**
  * Naitiri's trucks: the trucks list, and the assets file's Truck tab, which has three more
- * (KBV 405X, KCJ 987A, KCJ 049H). One rule, so a unit grouped as a truck under "Naitiri all
- * units Ex" is in "Naitiri trucks Ex" too (review, 12 Nov 2026).
+ * (KBV 405X, KCJ 987A, KCJ 049H). One rule, so a unit grouped as a truck under "Naitiri"
+ * is in "Naitiri trucks" too (review, 12 Nov 2026).
  */
 export const NAITIRI_TRUCKS_ALL = [...new Set([...NAITIRI_TRUCKS, ...NAITIRI_UNITS.Truck])];
 
@@ -53,9 +55,10 @@ const site = (label, re) => ({ label, fleet: label, test: byName(re) });
 /**
  * The sites, by key. `fleet`: what a report made for the site alone calls its fleet (operator,
  * 12 Nov 2026: "the reports should have a title of Naitiri and not West Kenya").
- *   NAITIRI            by the unit's name, as production has always read it (/nait[ir]/i)
- *   NAITIRI_EX         every unit on the client's two lists, and only those ("Naitiri all units Ex")
- *   NAITIRI_TRUCKS_EX  the trucks, NAITIRI_TRUCKS_ALL ("Naitiri trucks Ex")
+ *   NAITIRI            every unit on the client's two Excel files, and only those
+ *   NAITIRI_TRUCKS     the trucks, NAITIRI_TRUCKS_ALL
+ *   Both group a report by the files' kinds (Trucks, Tractors, ...). A unit named Naitiri on the
+ *   platform but on neither file is not Naitiri's: fix the plate in the file or in Wialon.
  *   the rest           West Sugar's other sites, by the unit's name (the rules lib/reportTemplates
  *                      has always used; KABRAS_SITE is West Kenya's own units named Kabras, not
  *                      the Kabras organisation)
@@ -63,9 +66,8 @@ const site = (label, re) => ({ label, fleet: label, test: byName(re) });
 export const SITE_LISTS = {
   KABRAS_SITE: site('Kabras', /kab(?:a)?ras/i),
   OLEPITO: site('Olepito', /ole?i?p(?:i?t|ti)/i),
-  NAITIRI: site('Naitiri', /nait[ir]/i),
-  NAITIRI_EX: { label: 'Naitiri all units Ex', fleet: 'Naitiri', test: listTest(NAITIRI_ALL), kinds: true },
-  NAITIRI_TRUCKS_EX: { label: 'Naitiri trucks Ex', fleet: 'Naitiri', test: listTest(NAITIRI_TRUCKS_ALL), kinds: true },
+  NAITIRI: { label: 'Naitiri', fleet: 'Naitiri', test: listTest(NAITIRI_ALL), kinds: true },
+  NAITIRI_TRUCKS: { label: 'Naitiri trucks', fleet: 'Naitiri', test: listTest(NAITIRI_TRUCKS_ALL), kinds: true },
   AMUKA: site('Amuka', /amuka/i),
   KHALABA: site('Khalaba', /khalaba/i),
   LAKE_AGRO: site('Lake Agro', /lake/i),
@@ -77,7 +79,7 @@ export const SITE_LISTS = {
 
 /**
  * Each unit's kind as the client's lists have it (operator, 12 Nov 2026: "a column that shows the type of
- * vehicle"), as a report's heading. The trucks first (the same list as "Naitiri trucks Ex"), then the
+ * vehicle"), as a report's heading. The trucks first (the same list as "Naitiri trucks"), then the
  * other tabs in the file's order.
  */
 const KIND_HEADING = { Tractor: 'Tractors', Motorbike: 'Motorbikes', 'Light vehicle': 'Light vehicles', 'Winch / Bell / shovel': 'Winches, Bell and shovels' };
@@ -105,7 +107,7 @@ export function siteKind(keys, label) {
 export const REPORT_SITES = {
   WESTSUGAR: {
     allWord: 'West Kenya',
-    keys: ['KABRAS_SITE', 'OLEPITO', 'NAITIRI', 'NAITIRI_EX', 'NAITIRI_TRUCKS_EX', 'AMUKA', 'KHALABA', 'LAKE_AGRO', 'MAGUT', 'MISIKHU', 'NAIROBI', 'SELIA'],
+    keys: ['KABRAS_SITE', 'OLEPITO', 'NAITIRI', 'NAITIRI_TRUCKS', 'AMUKA', 'KHALABA', 'LAKE_AGRO', 'MAGUT', 'MISIKHU', 'NAIROBI', 'SELIA'],
   },
 };
 
