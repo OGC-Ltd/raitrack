@@ -59,6 +59,47 @@ function today() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+// The toolbar's Excel button (body/TableToolbar) runs the report's own CSV
+// handler with this set, so every report that exports a CSV gets the styled
+// .xlsx from the same rows without a change of its own (operator, 11 Nov 2026).
+//
+// Set only while the handler runs synchronously: a CSV handler builds its rows
+// from what is on screen and saves at once. Holding it across an await would
+// turn an unrelated CSV click made meanwhile into Excel, and a handler that
+// saved later would escape it and give a CSV anyway.
+let asExcel = null;
+
+/**
+ * A table a CSV export is about to save, taken for the Excel file instead when
+ * the Excel button asked for it. True when taken: the caller saves nothing.
+ * For exports that write their own CSV (utils/probeReport) rather than
+ * through downloadTableCsv.
+ */
+export function takenForExcel(o) {
+  if (!asExcel) return false;
+  asExcel.push(o);
+  return true;
+}
+
+/** Run `exportCsv` (a report's CSV handler), making the Excel file instead. */
+export async function exportExcelVia(exportCsv) {
+  const asked = [];
+  asExcel = asked;
+  let ran;
+  try {
+    ran = exportCsv();
+  } finally {
+    asExcel = null;
+  }
+  if (!asked.length) {
+    // Never quietly: a handler that saved nothing, or one that saves later
+    if (ran && typeof ran.then === "function") throw new Error("This table saves its rows later, so it has no Excel file yet");
+    throw new Error("There were no rows to put in an Excel file");
+  }
+  const { downloadTableXlsx } = await import("./xlsxExport");
+  for (const o of asked) await downloadTableXlsx(o);
+}
+
 /**
  * Download a head/body table as a CSV.
  *
@@ -67,28 +108,8 @@ function today() {
  * @param {(string|number)[][]} o.body   already filtered — the file IS the filtered set
  * @param {string} o.filenameSlug        names the filter, so two exports differ
  */
-// The toolbar's Excel button (body/TableToolbar) runs the report's own CSV
-// handler with this set, so every report that exports a CSV gets the styled
-// .xlsx from the same rows without a change of its own (operator, 11 Nov 2026).
-let asExcel = null;
-
-/** Run `exportCsv` (a report's CSV handler), making the Excel file instead. */
-export async function exportExcelVia(exportCsv) {
-  const asked = [];
-  asExcel = asked;
-  try {
-    // A handler that reads first and then exports: held until it has
-    await exportCsv();
-  } finally {
-    asExcel = null;
-  }
-  if (!asked.length) return;
-  const { downloadTableXlsx } = await import("./xlsxExport");
-  for (const o of asked) await downloadTableXlsx(o);
-}
-
 export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc }) {
-  if (asExcel) { asExcel.push({ head, body, filenameSlug, title, meta, fills, doc }); return; }
+  if (takenForExcel({ head, body, filenameSlug, title, meta, fills, doc })) return;
   // The BOM is what makes Excel read this as UTF-8 rather than the local
   // codepage, which mangles the plates.
   const blob = new Blob(["﻿", buildCsv(head, body)], {

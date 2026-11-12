@@ -44,8 +44,33 @@
  *   appears and disappears at the END of the row would make Refresh jump
  *   under the cursor every time a selection changed.
  */
+import { useState } from "react";
 import JpegButton from "../shared/JpegButton";
 import { exportExcelVia } from "../../utils/tableExport";
+
+/**
+ * Excel beside CSV: the report's own CSV handler, made into the styled .xlsx
+ * (utils/tableExport). A failure is said on the button itself, no dialog over
+ * the report, and cleared by the next try.
+ */
+function ExcelButton({ onCsv, disabled }) {
+  const [error, setError] = useState(null);
+  return (
+    <button
+      type="button"
+      className={`sp4-ghost-btn${error ? " sp4-ghost-btn--error" : ""}`}
+      onClick={() => {
+        setError(null);
+        exportExcelVia(onCsv).catch((err) => {
+          console.error("Excel export", err);
+          setError(String(err?.message ?? err));
+        });
+      }}
+      disabled={disabled}
+      title={error ? `The Excel file could not be made: ${error}` : "Excel, the rows on screen, on the letterhead"}
+    ><i className="ti ti-file-spreadsheet" aria-hidden="true" /> Excel</button>
+  );
+}
 
 export default function TableToolbar({
   summary, loading = false, onReload, onCsv, onPdf, pdfWays = false, disabled = false, actions,
@@ -76,23 +101,7 @@ export default function TableToolbar({
             title="CSV, the rows on screen, opens in Excel"
           >CSV</button>
         )}
-        {onCsv && (
-          <button
-            type="button"
-            className="sp4-ghost-btn"
-            onClick={(e) => {
-              const btn = e.currentTarget;
-              exportExcelVia(onCsv).catch((err) => {
-                // Said on the button itself: no dialog over the report
-                console.error("Excel export", err);
-                btn.title = `The Excel file could not be made: ${err?.message ?? err}`;
-                btn.classList.add("sp4-ghost-btn--error");
-              });
-            }}
-            disabled={disabled}
-            title="Excel, the rows on screen, on the letterhead"
-          ><i className="ti ti-file-spreadsheet" aria-hidden="true" /> Excel</button>
-        )}
+        {onCsv && <ExcelButton onCsv={onCsv} disabled={disabled} />}
         {onPdf && pdfWays && (
           <JpegButton word="PDF" icon="ti-file-type-pdf" onSave={onPdf} disabled={disabled}
                       title="PDF, the rows on screen, as a filed record" />

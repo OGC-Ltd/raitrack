@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import ExcelJS from 'exceljs';
-import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue } from './xlsxExport';
+import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH } from './xlsxExport';
 import { exportExcelVia, downloadTableCsv } from './tableExport';
+import { downloadProbeCsv } from './probeReport';
 
 describe('the Excel export (operator, 11 Nov 2026)', () => {
   it('names the report from its file name, and the fleet from the tab title', () => {
@@ -50,5 +51,50 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
     delete globalThis.document;
     expect(saved.filter(Boolean)).toHaveLength(1);
     expect(saved.filter(Boolean)[0]).toMatch(/^unit-trips-\d{4}-\d{2}-\d{2}\.xlsx$/);
+  });
+  it('reads short and long colours, and drops what Excel would call broken', () => {
+    expect(argb('#fff')).toBe('FFFFFFFF');
+    expect(argb('#ff0000')).toBe('FFFF0000');
+    expect(argb('red')).toBeNull();
+    expect(argb('rgba(0,0,0,.1)')).toBeNull();
+  });
+  it('keeps columns to their cap after stretching to the page', () => {
+    const w = widthsFor([['a', 'b']], 2);
+    expect(Math.max(...w)).toBeLessThanOrEqual(60);
+    expect(widthsFor([Array.from({ length: 40 }, () => 'x')], 40).reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(PAGE_WIDTH);
+  });
+  it('says so when a CSV handler gave no rows, and never saves a CSV in its place', async () => {
+    await expect(exportExcelVia(() => undefined)).rejects.toThrow(/no rows/);
+    await expect(exportExcelVia(() => Promise.resolve().then(() => {}))).rejects.toThrow(/later/);
+  });
+  it('a CSV saved after the Excel click is a CSV, not taken into the Excel file', async () => {
+    const saved = [];
+    globalThis.document = { createElement: () => ({ click() {}, set download(v) { saved.push(v); } }), body: { appendChild() {}, removeChild() {} }, title: '' };
+    globalThis.URL.createObjectURL ??= () => 'blob:x';
+    const pending = exportExcelVia(() => downloadTableCsv({ head: ['Plate'], body: [['KDE 268P']], filenameSlug: 'one' }));
+    downloadTableCsv({ head: ['Plate'], body: [['KCS 078M']], filenameSlug: 'two' });
+    await pending;
+    delete globalThis.document;
+    expect(saved.find((n) => n.startsWith('two'))).toMatch(/\.csv$/);
+    expect(saved.find((n) => n.startsWith('one'))).toMatch(/\.xlsx$/);
+  });
+  it('the probe export, which writes its own CSV, gives Excel its columns', async () => {
+    const saved = [];
+    globalThis.document = { createElement: () => ({ click() {}, set download(v) { saved.push(v); } }), body: { appendChild() {}, removeChild() {} }, title: '' };
+    await exportExcelVia(() => downloadProbeCsv([{ plate: 'KDE 268P' }], { filenameSlug: 'probes' }));
+    delete globalThis.document;
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatch(/^probes-.*\.xlsx$/);
+  });
+  it('a document table with colours like #fff and no rows still makes a file', async () => {
+    const doc = { title: 'Probe Report', meta: [{ label: 'Fleet', value: 'Sukari & Co' }], blocks: [
+      { kind: 'table', head: ['Grouping', 'Direction'], rows: [[{ text: 'VS - KDE 125E', fill: '#fff' }, { text: 'On delivery' }]] },
+      { kind: 'table', head: ['Empty'] },
+    ] };
+    const wb = buildWorkbook(ExcelJS, { doc, fleet: 'Sukari & Co' });
+    const ws = wb.worksheets[0];
+    expect(ws.headerFooter.oddFooter).toContain('Sukari && Co');
+    const buf = await wb.xlsx.writeBuffer();
+    expect(buf.byteLength).toBeGreaterThan(3000);
   });
 });

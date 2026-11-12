@@ -124,7 +124,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
   const saveCsv = () => {
     if (!done) return;
     const { head, rows: data, filenameSlug } = toCsv(rows, done.period);
-    downloadTableCsv({ head, rows: data, filenameSlug });
+    downloadTableCsv({ head, body: data, filenameSlug });
   };
 
   const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : null;

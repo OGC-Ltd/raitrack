@@ -52,8 +52,12 @@ export function cellValue(v) {
 }
 
 const text = (c) => String(c?.text ?? c ?? '');
-/** "#FFFF00" → "FFFFFF00". */
-const argb = (hex) => `FF${String(hex).replace('#', '').toUpperCase()}`;
+/** "#FFFF00" → "FFFFFF00", "#fff" → "FFFFFFFF"; null for anything else, which Excel would call a broken file. */
+export function argb(hex) {
+  let h = String(hex ?? '').trim().replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/i.test(h)) h = h.replace(/./g, (c) => c + c);
+  return /^[0-9a-f]{6}$/i.test(h) ? `FF${h.toUpperCase()}` : null;
+}
 const solid = (c) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } });
 
 /** Each column's width: from what it holds, then all of them stretched to fill PAGE_WIDTH. */
@@ -64,7 +68,8 @@ export function widthsFor(lines, n) {
   });
   const sum = want.reduce((a, w) => a + w, 0);
   const k = sum < PAGE_WIDTH ? PAGE_WIDTH / sum : 1;
-  return want.map((w) => Math.round(w * k * 10) / 10);
+  // Still capped after the stretch: two columns are not 100 characters wide each
+  return want.map((w) => Math.round(Math.min(MAX_COL, w * k) * 10) / 10);
 }
 
 /** The document's parts as plain lines, for the column widths. */
@@ -92,14 +97,16 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
   wb.created = new Date(now);
   const ws = wb.addWorksheet(titleCase(name).slice(0, 31).replace(/[\\/?*[\]:]/g, ' '), {
     pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
-    headerFooter: { oddFooter: `&L${fleet ? `${fleet} · ` : ''}${titleCase(name)}&RPage &P of &N` },
+    // "&" starts a code in Excel's footers, so a name's own is doubled
+    headerFooter: { oddFooter: `&L${`${fleet ? `${fleet} · ` : ''}${titleCase(name)}`.replace(/&/g, '&&')}&RPage &P of &N` },
     views: [{ showGridLines: false }],
   });
   const n = doc ? docCols(doc) : Math.max(head.length, ...body.map((r) => r.length), 1);
   const lines = doc ? docLines(doc) : [head, ...body];
   // At least two columns, so the details have a label and a value
   const cols = Math.max(n, 2);
-  widthsFor(lines, cols).forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  const widths = widthsFor(lines, cols);
+  widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   const across = (r) => { if (cols > 1) ws.mergeCells(r, 1, r, cols); };
 
   // The letterhead band over the page's whole width, the logos at its ends
@@ -107,7 +114,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
     ws.getRow(r).height = 18;
     for (let c = 1; c <= cols; c++) ws.getCell(r, c).fill = solid(BAND);
   }
-  const pageWidthPx = widthsFor(lines, cols).reduce((a, w) => a + w * 7.2, 0);
+  const pageWidthPx = widths.reduce((a, w) => a + w * 7.2, 0);
   if (logos.rai) ws.addImage(wb.addImage(logos.rai), { tl: { col: 0.12, row: 0.15 }, ext: { width: 58, height: 70 } });
   if (logos.ogc) ws.addImage(wb.addImage(logos.ogc), { tl: { col: colAt(ws, cols, pageWidthPx - 130), row: 0.9 }, ext: { width: 112, height: 42 } });
 
@@ -138,6 +145,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
   // One table: a dark header row, then its rows
   const tableAt = (t, { filter = false, rowFills = null } = {}) => {
     const headRow = r;
+    const rows = t.rows ?? [];
     t.head.forEach((h, i) => {
       const cell = ws.getCell(r, i + 1);
       cell.value = String(h);
@@ -148,7 +156,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
     for (let c = t.head.length + 1; c <= cols; c++) ws.getCell(r, c).fill = solid(HEAD);
     ws.getRow(r).height = 28;
     r += 1;
-    t.rows.forEach((row, i) => {
+    rows.forEach((row, i) => {
       const rowFill = rowFills?.[i] ? argb(rowFills[i]) : null;
       row.forEach((v, j) => {
         const cell = ws.getCell(r, j + 1);
@@ -156,12 +164,12 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
         cell.font = { size: 10, bold: Boolean(v?.bold) };
         cell.alignment = { vertical: 'top', wrapText: true, horizontal: typeof cell.value === 'number' || t.cols?.[j]?.align === 'right' ? 'right' : 'left' };
         cell.border = { bottom: { style: 'thin', color: { argb: LINE } } };
-        const fill = v?.fill ? argb(v.fill) : rowFill ?? (i % 2 ? ZEBRA : null);
+        const fill = (v?.fill && argb(v.fill)) || rowFill || (i % 2 ? ZEBRA : null);
         if (fill) cell.fill = solid(fill);
       });
       r += 1;
     });
-    if (filter && t.rows.length) ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: headRow, column: t.head.length } };
+    if (filter && rows.length) ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: headRow, column: t.head.length } };
     return headRow;
   };
 
