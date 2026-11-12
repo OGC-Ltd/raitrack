@@ -457,3 +457,32 @@ describe('a hand-listed vehicle: when it left the customer (operator, 11 Nov 202
     expect(pinStop(pin).label).toBe('MOONLIGHT EXPRESS');
   });
 });
+
+describe('a delivery sheet into one vehicle’s stops (Import from Excel)', async () => {
+  const { sheetStops } = await import('./deliveriesReport');
+  const fences = [{ name: 'MENENGAI_VS: JOJAC INVESTMENTS' }, { name: 'Naivas Nakuru' }];
+  const preview = {
+    header: { plate: 'KDE 128E', planDate: '2026-11-09' },
+    stops: [
+      { sequence: 1, customerCode: 'C1', customerName: 'MAGUNA ANDU', lat: -0.0951, lng: 36.1271, keptPoint: null, fenceName: null },
+      { sequence: 2, customerCode: 'C2', customerName: 'RAFIKI', lat: null, lng: null, keptPoint: { lat: -0.3, lng: 36.07 }, fenceName: null },
+      { sequence: 3, customerCode: 'C3', customerName: 'JOJAC INVESTMENTS', lat: null, lng: null, keptPoint: null, fenceName: null },
+      { sequence: 4, customerCode: 'C4', customerName: 'NAKURU SHOP', lat: null, lng: null, keptPoint: null, fenceName: 'Naivas Nakuru' },
+      { sequence: 5, customerCode: 'C5', customerName: 'UNKNOWN DUKA', lat: null, lng: null, keptPoint: null, fenceName: null },
+    ],
+  };
+  it('a point on the sheet, or the customer’s kept point, is a pin; else its geofence; the rest are named', () => {
+    const r = sheetStops(preview, fences, 200);
+    expect(r.pins).toEqual([
+      { name: 'MAGUNA ANDU', lat: -0.0951, lng: 36.1271, radiusM: 200 },
+      { name: 'RAFIKI', lat: -0.3, lng: 36.07, radiusM: 200 },
+    ]);
+    expect(r.names).toEqual(['MENENGAI_VS: JOJAC INVESTMENTS', 'Naivas Nakuru']);
+    expect(r.unplaced).toEqual(['UNKNOWN DUKA']);
+    expect(r).toMatchObject({ plate: 'KDE 128E', planDate: '2026-11-09' });
+  });
+  it('a radius out of range is held to the paste box’s limits', () => {
+    expect(sheetStops(preview, fences, 'x').pins[0].radiusM).toBeGreaterThan(0);
+    expect(sheetStops({ stops: [] }, fences).pins).toEqual([]);
+  });
+});

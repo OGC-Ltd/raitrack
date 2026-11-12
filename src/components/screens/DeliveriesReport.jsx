@@ -28,13 +28,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDeliveryDay, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops,
 } from '../../lib/deliveriesReport';
 import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
-import { listPlans, getPlan } from '../../api/planner';
+import { listPlans, getPlan, fileAsBase64, previewSheet } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
@@ -72,11 +72,34 @@ function Kpi({ value, label, tone }) {
 }
 
 /** Stops pasted for one vehicle, geofence names or coordinates: the box, what it could not read, and the points held. */
-function PinPaste({ vehicle, customers, onChange }) {
+function PinPaste({ orgId, vehicle, customers, onChange }) {
   const [text, setText] = useState('');
   const [radius, setRadius] = useState(PIN_RADIUS_M);
-  const [told, setTold] = useState(null);                 // { added, bad }
+  const [told, setTold] = useState(null);                 // { added, bad } or { sheet: words, warn }
+  const [reading, setReading] = useState(false);
   const pins = vehicle.pins ?? [];
+  // A Sales Order Booking Delivery Sheet, read by the Planner's own reader on
+  // the server (it saves nothing), its stops added as a paste's would be
+  const fromSheet = async (file) => {
+    if (!file || reading) return;
+    setReading(true);
+    setTold(null);
+    try {
+      if (file.size > 2_000_000) throw new Error('The file is over 2 MB.');
+      const preview = await previewSheet(orgId, { fileName: file.name, data: await fileAsBase64(file) });
+      const got = sheetStops(preview, customers, radius);
+      if (got.pins.length || got.names.length) onChange(mergePins(pins, got.pins), got.names);
+      const other = got.plate && plateKey(got.plate) !== plateKey(vehicle.plate);
+      const words = [`${got.pins.length + got.names.length} added from the sheet${got.plate ? ` of ${got.plate}` : ''}`];
+      if (got.unplaced.length) words.push(`${got.unplaced.length} with no point or geofence: ${got.unplaced.slice(0, 3).join(', ')}${got.unplaced.length > 3 ? ', …' : ''}`);
+      if (other) words.push(`the sheet is for ${got.plate}, not ${vehicle.plate}`);
+      setTold({ sheet: words.join('; '), warn: Boolean(other || got.unplaced.length || !(got.pins.length + got.names.length)) });
+    } catch (err) {
+      setTold({ sheet: `The sheet could not be read: ${err?.message ?? err}`, warn: true });
+    } finally {
+      setReading(false);
+    }
+  };
   const add = () => {
     const { pins: read, bad } = readCoordinates(text, radius);
     const { names, rest } = matchGeofences(bad, customers);
@@ -99,7 +122,14 @@ function PinPaste({ vehicle, customers, onChange }) {
         <button type="button" className="sp4-ghost-btn" disabled={!text.trim()} onClick={add}>
           <i className="ti ti-plus" aria-hidden="true" /> Add stops
         </button>
-        {told && (
+        <label className={`sp4-ghost-btn dlv-paste__sheet${reading ? ' is-busy' : ''}`}
+               title="Add the stops of a Sales Order Booking Delivery Sheet (.xlsx)">
+          <input type="file" accept=".xlsx,.xls" hidden disabled={reading || !orgId}
+                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; fromSheet(f); }} />
+          <i className={`ti ${reading ? 'ti-loader-2' : 'ti-file-spreadsheet'}`} aria-hidden="true" /> {reading ? 'Reading the sheet…' : 'From an Excel sheet'}
+        </label>
+        {told?.sheet && <span className={told.warn ? 'rpt-warn' : 'rpt-sub'} role="status">{told.sheet}</span>}
+        {told && !told.sheet && (
           <span className={told.bad ? 'rpt-warn' : 'rpt-sub'} role="status">
             {told.added} added{told.bad ? `; ${told.bad} line${told.bad === 1 ? '' : 's'} left in the box matched no geofence and had no coordinates` : ''}
           </span>
@@ -710,7 +740,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
                     {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide">On a Planner sheet: the sheet is reported instead</span>}
-                    {isPasting && <div className="dlv-roster__wide"><PinPaste vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
+                    {isPasting && <div className="dlv-roster__wide"><PinPaste orgId={orgId} vehicle={v} customers={customers} onChange={(pins, names = []) => change(setCustomers(setPins(plan, v.key, pins), v.key, [...v.customers, ...names]))} /></div>}
                   </li>
                 );
               })}
