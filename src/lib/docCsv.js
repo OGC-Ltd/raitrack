@@ -39,7 +39,8 @@ export function docCsv(doc) {
       default: break;
     }
   }
-  return { head: [doc?.title ?? 'Report'], body };
+  // `doc` rides along for the Excel file (utils/xlsxExport), which lays the sections out as the PDF has them
+  return { head: [doc?.title ?? 'Report'], body, doc };
 }
 
 /** A filename slug from the document's name: "End of Shift Report Sukari 2026-11-04" → "end-of-shift-report-sukari-2026-11-04". */
