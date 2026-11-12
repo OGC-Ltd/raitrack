@@ -98,8 +98,8 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
         </span>
         <span className="mtr-fences__switch" aria-hidden="true" />
       </button>
-      {/* Only the fences drawn here, not the ones imported from Wialon
-          (operator, 2026-11-12). Turning it on also shows the layer. */}
+      {/* Custom geos: the fences drawn here, not the ones imported from
+          Wialon (operator, 2026-11-12). Independent of Show on the map. */}
       <button
         type="button" role="menuitemcheckbox" className="mtr-fences__item"
         aria-checked={Boolean(zones?.ownOnly)} disabled={!zones?.ownCount && !zones?.ownOnly}
@@ -107,10 +107,10 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
       >
         <i className="ti ti-pencil-pin" aria-hidden="true" />
         <span className="mtr-fences__text">
-          Only our own
+          Custom geos
           <span className="mtr-fences__sub">
             {zones?.ownCount
-              ? `Hide Wialon's, show the ${zones.ownCount.toLocaleString()} drawn here`
+              ? `The ${zones.ownCount.toLocaleString()} drawn here, not Wialon's`
               : "None drawn here yet"}
           </span>
         </span>
@@ -363,7 +363,7 @@ export default function MapToolRail({
   onPickFence,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
-  // The Geofences menu: show them (all, or only our own), or draw one.
+  // The Geofences menu: show them all, the custom ones, or draw one.
   const [fencesOpen, setFencesOpen] = useState(false);
   const fencesBtn = useRef(null);
   const wrapRef = useRef(null);
@@ -454,7 +454,7 @@ export default function MapToolRail({
             on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
           />
           {/* Geofences: one button (operator, 2026-11-10: not two on one
-              strip). It opens a menu: Show on the map, Only our own and,
+              strip). It opens a menu: Show on the map, Custom geos and,
               where geofences can be drawn, Draw a geofence. Drawn for every
               company, disabled where there is nothing to offer: a tool that
               comes and goes between companies reads as a broken rail. */}
@@ -463,8 +463,8 @@ export default function MapToolRail({
               btnRef={fencesBtn}
               icon="ti-map-pins" label="Geofences"
               title={drawFence?.on ? "Geofences: drawing one now"
-                : canDrawFence ? "Geofences: show them, or draw one" : "Geofences: show all, or only our own"}
-              on={Boolean(zones?.on) || Boolean(drawFence?.on)} expanded={expanded}
+                : canDrawFence ? "Geofences: show them, or draw one" : "Geofences: show all, or the custom ones"}
+              on={Boolean(zones?.on) || Boolean(zones?.ownOnly) || Boolean(drawFence?.on)} expanded={expanded}
               menuOpen={fencesOpen}
               onClick={() => { setSearchOpen(false); setFencesOpen((v) => !v); }}
             />
