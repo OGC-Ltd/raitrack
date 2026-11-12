@@ -564,13 +564,15 @@ export const ALARM_KINDS = ['fatigue', 'phone', 'smoking', 'covered', 'distracte
 /**
  * The rows without the server's Other (operator, 11 Nov 2026: "let's remove others in the AI alarms
  * report"): each Total is the six kinds shown, so the columns add up, and a unit with Other alone goes.
+ * Sorted again as the server sorts (most alarms first, then plate): its order was by the old Total.
  */
 export function withoutOther(rows) {
   return (rows ?? []).map((r) => {
     const rest = { ...r };
     delete rest.other;
     return { ...rest, total: ALARM_KINDS.reduce((n, k) => n + (r[k] ?? 0), 0) };
-  }).filter((r) => r.total > 0);
+  }).filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total || String(a.plate ?? '').localeCompare(String(b.plate ?? '')));
 }
 
 /** AI Alarm Distribution Report — per-vehicle breakdown of dashcam alarm types. */
@@ -586,7 +588,7 @@ export function alarmDistDoc(rows, { from, to, fleet, orgCode, partial = false, 
     { key: 'distracted', label: 'Distracted Driving' },
     { key: 'seatbelt',   label: 'No Seat Belt' },
   ];
-  // Widths: device name wide, then 8 numeric columns equal
+  // Widths: device name wide, then 7 numeric columns equal
   const NUM_COLS = ALARM_COLS.length + 1; // Total + each alarm type
   const nameW = 46;
   const numW = Math.round((LANDSCAPE_MM - nameW) / NUM_COLS * 10) / 10;

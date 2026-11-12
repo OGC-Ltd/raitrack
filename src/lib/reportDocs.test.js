@@ -226,6 +226,14 @@ describe('AI alarms without Other (operator, 11 Nov 2026)', async () => {
     expect(r[0].total).toBe(6);
     expect('other' in r[0]).toBe(false);
   });
+  it('re-sorted by the new Total: a unit high on Other alone drops below one with more real alarms', () => {
+    const r = withoutOther([
+      { plate: 'KAA 001A', total: 9, fatigue: 1, phone: 0, smoking: 0, covered: 0, distracted: 0, seatbelt: 0, other: 8 },
+      { plate: 'KBB 002B', total: 5, fatigue: 0, phone: 5, smoking: 0, covered: 0, distracted: 0, seatbelt: 0, other: 0 },
+      { plate: 'KAB 003C', total: 7, fatigue: 0, phone: 0, smoking: 1, covered: 0, distracted: 0, seatbelt: 0, other: 6 },
+    ]);
+    expect(r.map((x) => [x.plate, x.total])).toEqual([['KBB 002B', 5], ['KAA 001A', 1], ['KAB 003C', 1]]);
+  });
   it('the PDF has no Other column', () => {
     const doc = alarmDistDoc(withoutOther(rows), { from: '2026-11-10', to: '2026-11-10', fleet: 'Menengai', orgCode: 'MENENGAI' });
     const table = doc.blocks.find((b) => b.kind === 'table');
