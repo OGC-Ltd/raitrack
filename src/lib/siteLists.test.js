@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listTest, vehicleOnSite, siteFleet, siteKind, NAITIRI_ALL, NAITIRI_TRUCKS_ALL, SITE_LISTS, REPORT_SITES } from './siteLists';
+import { listTest, vehicleOnSite, siteFleet, siteKind, NAITIRI_ALL, NAITIRI_TRUCKS_ALL, SITE_LISTS, REPORT_SITES, SITE_KINDS } from './siteLists';
 import { NAITIRI_TRUCKS, NAITIRI_UNITS } from '../data/naitiriUnits';
 
 describe('Naitiri\'s units (operator, 12 Nov 2026)', () => {
@@ -75,5 +75,13 @@ describe("West Kenya's Site picker (operator, 12 Nov 2026)", () => {
     expect(vehicleOnSite({ id: 'm', name: 'WKS - Misikhu - KDL 607F' }, 'OLEPITO')).toBe(false);
     expect(siteFleet(['MISIKHU'])).toBe('Misikhu');
     expect(siteFleet(['KABRAS_SITE'])).toBe('Kabras');
+  });
+});
+
+describe('SITE_KINDS', () => {
+  it('Trucks first, then the assets file tabs', () => {
+    expect(SITE_KINDS[0]).toBe('Trucks');
+    expect(SITE_KINDS).toContain('Tractors');
+    expect(SITE_KINDS).not.toContain('Truck');
   });
 });

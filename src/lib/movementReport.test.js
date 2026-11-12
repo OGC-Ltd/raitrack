@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyEdits, pdfRequest, pdfRequests, splitsByType, byFleetList, NOT_ON_LIST, directionWords, statesFor, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from './movementReport';
+import { applyEdits, pdfRequest, pdfRequests, splitsByType, byFleetList, NOT_ON_LIST, directionWords, statesFor, isEdited, editedRow, countRows, stamp, isMoving, editCounts, locationChanged, isLoading, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes, bySiteKind } from './movementReport';
+import { SITE_KINDS, siteKind } from './siteLists';
 
 const row = (vehicleId, state, extra = {}) => ({
   vehicleId, plate: vehicleId, grouping: `CPO - Menengai - ${vehicleId}`, lastAt: 1_762_000_000_000,
@@ -237,4 +238,24 @@ describe('Aquamist place names (operator, 11 Nov 2026)', () => {
     expect(withEventPlaceSwaps(ev, 'AQUAMIST').map((e) => e.place)).toEqual(['Aquamist Mombasa', 'Voi', null]);
     expect(withEventPlaceSwaps(ev, 'SUKARI')).toBe(ev);
   });
+});
+
+describe('bySiteKind: Naitiri grouped by the Excel kinds (operator, 13 Nov 2026)', () => {
+  const r = (plate) => ({ vehicleId: plate, plate, grouping: `WKS - Naitiri - ${plate}`, state: 'at' });
+  const kindOf = (row) => siteKind(['NAITIRI'], row.plate);
+  const report = { orgCode: 'WESTSUGAR', groups: [
+    { name: 'Other', rows: [r('KTCC 573E'), r('KDW 548J')] },
+    { name: 'Saloons', rows: [r('KCY 523U'), r('KXX 111A')] },
+  ] };
+  const out = bySiteKind(report, kindOf, SITE_KINDS);
+  it('Trucks first, in the kinds order; a row with no kind keeps its own group, after them', () => {
+    expect(out.groups.map((g) => g.name)).toEqual(['Trucks', 'Tractors', 'Saloons']);
+    expect(out.groups[0].rows.map((x) => x.plate)).toEqual(['KCY 523U', 'KDW 548J']);
+    expect(out.groups[2].rows.map((x) => x.plate)).toEqual(['KXX 111A']);
+  });
+  it('the types menu reads the kinds, and Trucks alone is the trucks', () => {
+    expect(vehicleTypes([out])).toEqual(['Trucks', 'Tractors', 'Saloons']);
+    expect(onlyTypes(out, ['Trucks']).counts.total).toBe(2);
+  });
+  it('counts the rows again', () => expect(out.counts.total).toBe(4));
 });

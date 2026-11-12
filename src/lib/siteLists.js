@@ -88,6 +88,9 @@ const KIND_TESTS = [
   ...Object.entries(NAITIRI_UNITS).filter(([k]) => k !== 'Truck').map(([k, plates]) => [KIND_HEADING[k] ?? k, listTest(plates)]),
 ];
 
+/** The kinds on the client's lists, in the order a report shows them: Trucks first. */
+export const SITE_KINDS = KIND_TESTS.map(([k]) => k);
+
 /**
  * The unit's kind on the client's lists, else null. Only for a unit one of the Ex sites picked holds:
  * with Sukari ticked too, a Sukari unit keeps its own group even when its plate is on a Naitiri list.

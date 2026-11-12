@@ -10,16 +10,21 @@
 import { useMemo, useState } from 'react';
 import { REPORT_SITES, SITE_LISTS, siteFleet, vehicleOnSite } from '../lib/siteLists';
 
+const NONE = [];
+
 /**
  * @param orgCode  the organisation's code; only those in REPORT_SITES get a picker
  * @param initial  the sites picked when the report opens (Movements keeps them with its tables)
+ * @param omit     site keys this report does not offer (Movements: Naitiri trucks, picked from its types menu instead)
  */
-export function useSitePick(orgCode, initial = null) {
+export function useSitePick(orgCode, initial = null, omit = NONE) {
   const code = String(orgCode ?? '').toUpperCase();
   const [picked, setSite] = useState(initial);       // null: every unit; else the site keys ticked
+  const omitKey = omit.join('|');
   return useMemo(() => {
     const sites = REPORT_SITES[code] ?? null;
-    const keys = sites?.keys ?? [];
+    const left = omitKey ? omitKey.split('|') : [];
+    const keys = (sites?.keys ?? []).filter((k) => !left.includes(k));
     const ticked = Array.isArray(picked) ? picked.filter((k) => keys.includes(k)) : null;
     const on = ticked?.length ? ticked : null;
     const tests = on ? on.map((k) => SITE_LISTS[k].test) : null;
@@ -49,5 +54,5 @@ export function useSitePick(orgCode, initial = null) {
         onChange: setSite,
       } : null,
     };
-  }, [code, picked]);
+  }, [code, picked, omitKey]);
 }

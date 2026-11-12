@@ -79,7 +79,8 @@ import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
 import { placeNameAt } from '../../hooks/usePlaceName';
-import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes, bySiteKind } from '../../lib/movementReport';
+import { SITE_KINDS, siteKind } from '../../lib/siteLists';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -790,12 +791,31 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   );
 }
 
+// Movements offers Naitiri alone: its trucks are the Trucks item of the types menu (operator, 13 Nov 2026)
+const MOVEMENTS_OMIT = ['NAITIRI_TRUCKS'];
+
+/**
+ * Movements narrowed to the sites picked, under their name. A group left with none of them goes
+ * (no "Saloons 0 vehicles"). Under Naitiri the rows are grouped by the kind on the client's Excel
+ * files, so the types menu reads Trucks, Tractors... The direction words stay the server's
+ * ("At West Kenya"): they name the factory fence the direction is read against, not the fleet.
+ */
+function movementsForSite(reports, sitePick) {
+  if (!reports || !sitePick.site) return reports;
+  const site = sitePick.site;
+  const kindOf = (row) => [row.plate, row.name, row.grouping].reduce((k, l) => k ?? (l ? siteKind(site, l) : null), null);
+  return reports.map((r) => bySiteKind({ ...r, organisation: sitePick.fleetWords(r.organisation),
+    groups: (r.groups ?? [])
+      .map((g) => ({ ...g, rows: (g.rows ?? []).filter((row) => sitePick.keepRow(row.grouping, row.plate, row.name)) }))
+      .filter((g) => g.rows.length > 0) }, kindOf, SITE_KINDS));
+}
+
 function MovementsReport({ orgId, orgCode = null }) {
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => movementsKept.get(orgId));
   // West Kenya's Naitiri from the client's lists (hooks/useSitePick): rows kept, and the title.
   // The site picked is kept with the tables, so coming back shows them as they were.
-  const sitePick = useSitePick(orgCode, saved?.site ?? null);
+  const sitePick = useSitePick(orgCode, saved?.site ?? null, MOVEMENTS_OMIT);
   const today = fleetDay(Date.now());
   const [sel, setSel] = useState(saved?.sel ?? { mode: 'last', hours: LAST_HOURS[0] });
   const [draft, setDraft] = useState(saved?.draft ?? { fromDay: today, toDay: today, start: 7, end: 20 });
@@ -861,7 +881,7 @@ function MovementsReport({ orgId, orgCode = null }) {
         if (id !== runId.current) return;
         if (got) reports[i] = withTrips(reports[i], got.perVehicle);
       }
-      const all = vehicleTypes(reports);
+      const all = vehicleTypes(movementsForSite(reports, sitePick));
       setTypes((t) => (t?.some((x) => all.includes(x)) ? t.filter((x) => all.includes(x)) : defaultTypes(all)));
       setEdits(reports.map(() => ({})));
       setDay(reports.length - 1);
@@ -874,16 +894,18 @@ function MovementsReport({ orgId, orgCode = null }) {
   useEffect(() => { if (!saved && orgId) execute(sel); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reportsAll = run.status === 'done' ? run.reports : null;
-  // On screen and in every file: only the picked site's units, under its own name. A group left
-  // with none of them goes (no "Saloons 0 vehicles"). The direction words stay the server's
-  // ("At West Kenya"): they name the factory fence the direction is read against, not the fleet.
-  const reports = useMemo(() => (reportsAll && sitePick.site
-    ? reportsAll.map((r) => ({ ...r, organisation: sitePick.fleetWords(r.organisation),
-      groups: (r.groups ?? [])
-        .map((g) => ({ ...g, rows: (g.rows ?? []).filter((row) => sitePick.keepRow(row.grouping, row.plate, row.name)) }))
-        .filter((g) => g.rows.length > 0) }))
-    : reportsAll), [reportsAll, sitePick]);
+  // On screen and in every file: only the picked sites' units (movementsForSite)
+  const reports = useMemo(() => movementsForSite(reportsAll, sitePick), [reportsAll, sitePick]);
   const allTypes = useMemo(() => (reports ? vehicleTypes(reports) : []), [reports]);
+  // Another site picked: the types are its own (Trucks, Tractors... under Naitiri), every one of them
+  // ticked (CPO only where there are CPO types). Not when the page opens with what was kept.
+  const siteKey = (sitePick.site ?? []).join('|');
+  const typesSite = useRef(siteKey);
+  useEffect(() => {
+    if (typesSite.current === siteKey || !allTypes.length) return;
+    typesSite.current = siteKey;
+    setTypes(defaultTypes(allTypes));
+  }, [siteKey, allTypes]);
   const picked = useMemo(() => types ?? [], [types]);
   // Menengai's fleet list, when its report is grouped by it: the menu lists every group of it
   const fleetList = reports?.some((r) => r.byList) ? groupsFor(reports[0].orgCode) : null;
