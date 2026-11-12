@@ -13,6 +13,7 @@
 
 import { fenceContains } from './zoneContainment';
 import { metresToFence } from './movementDepots';
+import { PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from './deliveryPlan';
 
 /** At least this long inside a customer's geofence is a delivery. */
 export const STOP_MS = 90_000;
@@ -511,6 +512,34 @@ export function matchGeofences(lines, customers) {
     if (hit) names.push(hit); else rest.push(line);
   }
   return { names, rest };
+}
+
+/**
+ * A Sales Order Booking Delivery Sheet's stops, as the Planner's reader gave
+ * them (api/planner previewSheet, which writes nothing), for one vehicle's
+ * list: a stop with a point on the sheet, or a customer already known, is a
+ * pin of `radiusM`; one without is its geofence when one goes by its name;
+ * the rest are named back, to be put right by hand.
+ * @returns {{ pins: object[], names: string[], unplaced: string[], plate: string|null, planDate: string|null }}
+ */
+export function sheetStops(preview, customers, radiusM = PIN_RADIUS_M) {
+  const r = Number(radiusM);
+  const radius = Number.isFinite(r) && r > 0 ? Math.min(PIN_RADIUS_MAX_M, Math.max(PIN_RADIUS_MIN_M, Math.round(r))) : PIN_RADIUS_M;
+  const pins = [];
+  const lost = [];
+  for (const s of preview?.stops ?? []) {
+    const name = String(s.customerName || s.customerCode || `Stop ${s.sequence}`).trim();
+    const at = s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : s.keptPoint;
+    if (Number.isFinite(at?.lat) && Number.isFinite(at?.lng)) pins.push({ name, lat: at.lat, lng: at.lng, radiusM: radius });
+    else lost.push({ name, fence: s.fenceName });
+  }
+  const names = [];
+  const unplaced = [];
+  for (const l of lost) {
+    const hit = matchGeofences([l.fence, l.name].filter(Boolean), customers ?? []).names[0];
+    if (hit) names.push(hit); else unplaced.push(l.name);
+  }
+  return { pins, names: [...new Set(names)], unplaced, plate: preview?.header?.plate ?? null, planDate: preview?.header?.planDate ?? null };
 }
 
 /** Why there is no time left: in a storage since the readings began, or not at one in them. */
