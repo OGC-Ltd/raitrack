@@ -501,7 +501,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           from: run.from, to: run.to, windows: [{ from: run.from, to: run.to }], pinNames: runPinNames, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
-        return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key), ...(multi ? { day: run.day, key: `${run.day}|${v.key}` } : {}) };
+        return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key), listDay: run.day, ...(multi ? { day: run.day, key: `${run.day}|${v.key}` } : {}) };
       });
       rows.unshift(...sheetRows);
       setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });

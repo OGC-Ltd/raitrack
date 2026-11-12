@@ -73,6 +73,16 @@ describe('Finished Goods template: one line per customer', () => {
   });
 });
 
+describe('the Date of a line (operator, 12 Nov 2026)', () => {
+  it('a hand-listed unit is on the day it was listed, however early it set out', () => {
+    const early = { ...backRow, listDay: '2026-10-31' };
+    expect(fgCells(fgLines([early], { at: at('20:00') })[0]).slice(0, 2)).toEqual(['31.10.2026', 'KCT 346W']);
+  });
+  it('a sheet, with no list day, keeps the day it left', () => {
+    expect(fgLines([sheetRow], { at: at('20:00') })[0].day).toBe('30.10.2026');
+  });
+});
+
 describe('the template picked', () => {
   afterEach(() => { delete globalThis.localStorage; });
   it('is Van Sales until Finished Goods is picked, per organisation', () => {
