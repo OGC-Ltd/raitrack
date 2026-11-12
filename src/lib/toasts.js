@@ -1,52 +1,60 @@
-// The toast queue (operator, 10 Nov 2026: "the toast should stack on each
-// other that first in first out should render for 8s and disappear").
+// The toast queue. Last in, first out (operator, 12 Nov 2026): the newest
+// toast sits in front and is the only one drawn; the rest wait behind it,
+// unseen, and the next newest comes forward when the front one is closed or
+// runs out. Nothing shows that others are waiting.
 //
 // The server makes every toast (fleet-server lib/toasts) and sends it down
 // the live stream (hooks/useFleetLive, `toast` frames); this only queues and
-// times them. First in, first out: up to MAX_VISIBLE show at once, oldest on
-// top, and each leaves LIFE_MS after it came into view. While a pointer rests
-// on the stack the clocks stand still, so Copy or Open can be reached.
+// times them. Only the front toast's clock runs: it leaves LIFE_MS after it
+// came forward, and one pushed back by a newer toast gets its full LIFE_MS
+// again when it returns. While a pointer rests on the toast the clock stands
+// still, so Copy or Open can be reached.
 //
 // Pure apart from timers: no React, no network.
 
 export const LIFE_MS = 8_000;
-export const MAX_VISIBLE = 4;
-/** Beyond this many waiting, the oldest waiting are dropped: a flood is not worth replaying. */
-const MAX_WAITING = 30;
+/** Beyond this many behind the front, the oldest are dropped: a flood is not worth replaying. */
+export const MAX_BEHIND = 30;
 /** Ids already seen, so a stream replay or a second frame does not show one twice. */
 const SEEN_MAX = 500;
 
-let entries = [];          // { toast, left, startedAt, timer }
+let entries = [];          // oldest first, the front last: { toast, left, startedAt, timer }
 let paused = false;
 const seen = new Set();
-let snapshot = { shown: [], waiting: 0 };
+let snapshot = { front: null, behind: 0 };
 const listeners = new Set();
 
+const frontEntry = () => entries[entries.length - 1] ?? null;
+
 function emit() {
-  snapshot = { shown: entries.slice(0, MAX_VISIBLE).map((e) => e.toast), waiting: Math.max(0, entries.length - MAX_VISIBLE) };
+  snapshot = { front: frontEntry()?.toast ?? null, behind: Math.max(0, entries.length - 1) };
   for (const l of listeners) l();
 }
 
-function start(e) {
+function stop(e) {
+  clearTimeout(e.timer);
+  e.timer = null;
+}
+
+/** Run the front toast's clock, if it is not running and nothing holds it. */
+function runFront() {
+  const e = frontEntry();
+  if (!e || e.timer || paused) return;
   e.startedAt = Date.now();
   e.timer = setTimeout(() => dismissToast(e.toast.id), e.left);
 }
 
-/** Start the clock of each toast that has come into view. */
-function promote() {
-  if (paused) return;
-  for (const e of entries.slice(0, MAX_VISIBLE)) if (!e.timer) start(e);
-}
-
-/** Queue a toast from the server. Returns false when it was seen already. */
+/** Queue a toast from the server, in front of the rest. Returns false when it was seen already. */
 export function addToast(toast) {
   if (!toast?.id || seen.has(toast.id)) return false;
   seen.add(toast.id);
   if (seen.size > SEEN_MAX) seen.delete(seen.values().next().value);
+  const prev = frontEntry();
+  if (prev) { stop(prev); prev.left = LIFE_MS; }
   entries.push({ toast, left: LIFE_MS, startedAt: null, timer: null });
-  const over = entries.length - MAX_VISIBLE - MAX_WAITING;
-  if (over > 0) entries.splice(MAX_VISIBLE, over);
-  promote();
+  const over = entries.length - 1 - MAX_BEHIND;
+  if (over > 0) entries.splice(0, over);
+  runFront();
   emit();
   return true;
 }
@@ -54,26 +62,23 @@ export function addToast(toast) {
 export function dismissToast(id) {
   const i = entries.findIndex((e) => e.toast.id === id);
   if (i < 0) return;
-  clearTimeout(entries[i].timer);
+  stop(entries[i]);
   entries.splice(i, 1);
-  promote();
+  runFront();
   emit();
 }
 
-/** Hold every running clock (pointer on the stack), or let them run again. */
+/** Hold the front toast's clock (pointer on it), or let it run again. */
 export function pauseToasts(on) {
   if (on === paused) return;
   paused = on;
+  const e = frontEntry();
   if (on) {
-    const now = Date.now();
-    for (const e of entries) {
-      if (!e.timer) continue;
-      clearTimeout(e.timer);
-      e.timer = null;
-      e.left = Math.max(400, e.left - (now - e.startedAt));
-    }
+    if (!e?.timer) return;
+    stop(e);
+    e.left = Math.max(400, e.left - (Date.now() - e.startedAt));
   } else {
-    promote();
+    runFront();
   }
 }
 
