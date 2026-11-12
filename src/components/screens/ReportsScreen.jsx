@@ -78,7 +78,7 @@ import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
 import { placeNameAt } from '../../hooks/usePlaceName';
-import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -920,7 +920,8 @@ function MovementsReport({ orgId }) {
           const missing = eventKinds.filter((k) => !held.has(key(r, k)));
           if (!missing.length) continue;
           const got = await loadMovementEvents({ orgId, from: r.from, to: r.to, kinds: missing });
-          for (const k of missing) held.set(key(r, k), { events: got.events.filter((e) => e.kind === k), notes: got.notes });
+          // Their places read as the table's do (Aquamist: Mvita / Liwatoni → Aquamist Mombasa)
+          for (const k of missing) held.set(key(r, k), { events: withEventPlaceSwaps(got.events.filter((e) => e.kind === k), r.orgCode), notes: got.notes });
           if (live) setEventRead({ status: 'loading', ...gather(), message: null });
         }
         if (live) setEventRead({ status: 'done', ...gather(), message: null });

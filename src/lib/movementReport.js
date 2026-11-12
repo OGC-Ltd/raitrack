@@ -158,6 +158,12 @@ export function withPlaceSwaps(report) {
   };
 }
 
+/** The events picked on the report (stops, overspeeding, …) with their places swapped the same way. */
+export function withEventPlaceSwaps(events, orgCode) {
+  if (!events || !PLACE_SWAPS[String(orgCode ?? '').trim().toUpperCase()]) return events;
+  return events.map((e) => (e?.place == null ? e : { ...e, place: swapPlace(e.place, orgCode) }));
+}
+
 /** The row as it now reads: the server's row with the operator's edit over it. */
 export function editedRow(row, edit) {
   if (!edit) return row;

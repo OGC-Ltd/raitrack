@@ -231,4 +231,10 @@ describe('Aquamist place names (operator, 11 Nov 2026)', () => {
     const other = { orgCode: 'SUKARI', groups: [] };
     expect(withPlaceSwaps(other)).toBe(other);
   });
+  it('the events on the report read the same: a stop at Mvita is at Aquamist Mombasa', async () => {
+    const { withEventPlaceSwaps } = await import('./movementReport');
+    const ev = [{ kind: 'stop', place: 'Mvita, Mombasa' }, { kind: 'stop', place: 'Voi' }, { kind: 'overspeed', place: null }];
+    expect(withEventPlaceSwaps(ev, 'AQUAMIST').map((e) => e.place)).toEqual(['Aquamist Mombasa', 'Voi', null]);
+    expect(withEventPlaceSwaps(ev, 'SUKARI')).toBe(ev);
+  });
 });
