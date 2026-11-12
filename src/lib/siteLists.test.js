@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listTest, vehicleOnSite, siteFleet, siteKind, NAITIRI_ALL, NAITIRI_TRUCKS_ALL, SITE_LISTS } from './siteLists';
+import { listTest, vehicleOnSite, siteFleet, siteKind, NAITIRI_ALL, NAITIRI_TRUCKS_ALL, SITE_LISTS, REPORT_SITES } from './siteLists';
 import { NAITIRI_TRUCKS, NAITIRI_UNITS } from '../data/naitiriUnits';
 
 describe('Naitiri\'s units (operator, 12 Nov 2026)', () => {
@@ -56,5 +56,23 @@ describe('siteKind: the kind on the client lists, for the Ex options', () => {
     expect(siteKind(null, 'WKS - Naitiri - KCY 520U')).toBe(null);
     expect(siteKind(['NAITIRI'], 'WKS - Naitiri - KCY 520U')).toBe(null);
     expect(siteKind(['NAITIRI_EX'], 'WKS - Kabras - KAA 111A')).toBe(null);
+  });
+});
+
+describe("West Kenya's Site picker (operator, 12 Nov 2026)", () => {
+  it("names the whole fleet first, then every site with units, Naitiri's lists among them", () => {
+    expect(REPORT_SITES.WESTSUGAR.all).toBe('All West Kenya units');
+    expect(REPORT_SITES.WESTSUGAR.keys.map((k) => SITE_LISTS[k].label)).toEqual([
+      'Kabras', 'Olepito', 'Naitiri', 'Naitiri all units Ex', 'Naitiri trucks Ex',
+      'Amuka', 'Khalaba', 'Lake Agro', 'Magut', 'Misikhu', 'Nairobi', 'Selia',
+    ]);
+    expect(REPORT_SITES.SUKARI).toBeUndefined();
+  });
+  it("a named site by the unit's name, misspellings included, and titled by it", () => {
+    expect(vehicleOnSite({ id: 'k', name: 'WKS - kabaras - KDE 321Q' }, 'KABRAS_SITE')).toBe(true);
+    expect(vehicleOnSite({ id: 'm', name: 'WKS -Misikhu - KDL 607F' }, 'MISIKHU')).toBe(true);
+    expect(vehicleOnSite({ id: 'm', name: 'WKS - Misikhu - KDL 607F' }, 'OLEPITO')).toBe(false);
+    expect(siteFleet(['MISIKHU'])).toBe('Misikhu');
+    expect(siteFleet(['KABRAS_SITE'])).toBe('Kabras');
   });
 });

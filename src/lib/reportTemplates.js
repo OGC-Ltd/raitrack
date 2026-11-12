@@ -27,7 +27,7 @@ const WEST_KENYA = {
     { key: 'SUKARI', label: 'Sukari', org: 'SUKARI' },
     { key: 'KABRAS', label: 'Kabras', org: 'KABRAS' },
     { key: 'NZOIA', label: 'Nzoia', org: 'NZOIA' },
-    { key: 'OLEPITO', label: 'Olepito', unit: /ole?i?p(?:i?t|ti)/i },
+    { key: 'OLEPITO', label: 'Olepito', unit: SITE_LISTS.OLEPITO.test },
     { key: 'NAITIRI', label: 'Naitiri', unit: SITE_LISTS.NAITIRI.test },
     // From the client's Excel lists alone (operator, 12 Nov 2026), lib/siteLists
     { key: 'NAITIRI_EX', label: SITE_LISTS.NAITIRI_EX.label, unit: SITE_LISTS.NAITIRI_EX.test },
@@ -43,13 +43,13 @@ const WEST_KENYA_SITES = {
   ...WEST_KENYA,
   members: [
     ...WEST_KENYA.members,
-    { key: 'AMUKA', label: 'Amuka', unit: /amuka/i },
-    { key: 'KHALABA', label: 'Khalaba', unit: /khalaba/i },
-    { key: 'LAKE_AGRO', label: 'Lake Agro', unit: /lake/i },
-    { key: 'MAGUT', label: 'Magut', unit: /magut/i },
-    { key: 'MISIKHU', label: 'Misikhu', unit: /misikhu/i },
-    { key: 'NAIROBI', label: 'Nairobi', unit: /nairobi/i },
-    { key: 'SELIA', label: 'Selia', unit: /seli/i },
+    { key: 'AMUKA', label: 'Amuka', unit: SITE_LISTS.AMUKA.test },
+    { key: 'KHALABA', label: 'Khalaba', unit: SITE_LISTS.KHALABA.test },
+    { key: 'LAKE_AGRO', label: 'Lake Agro', unit: SITE_LISTS.LAKE_AGRO.test },
+    { key: 'MAGUT', label: 'Magut', unit: SITE_LISTS.MAGUT.test },
+    { key: 'MISIKHU', label: 'Misikhu', unit: SITE_LISTS.MISIKHU.test },
+    { key: 'NAIROBI', label: 'Nairobi', unit: SITE_LISTS.NAIROBI.test },
+    { key: 'SELIA', label: 'Selia', unit: SITE_LISTS.SELIA.test },
   ],
 };
 

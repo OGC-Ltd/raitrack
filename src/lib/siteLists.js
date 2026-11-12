@@ -46,18 +46,33 @@ export const NAITIRI_ALL = [...new Set([...Object.values(NAITIRI_UNITS).flat(), 
  */
 export const NAITIRI_TRUCKS_ALL = [...new Set([...NAITIRI_TRUCKS, ...NAITIRI_UNITS.Truck])];
 
+/** A site told apart by the unit's name, misspellings included ("WKS - kabaras - KDE 321Q"). */
+const byName = (re) => ({ test: (label) => re.test(String(label ?? '')) });
+const site = (label, re) => ({ label, fleet: label, test: byName(re) });
+
 /**
  * The sites, by key. `fleet`: what a report made for the site alone calls its fleet (operator,
  * 12 Nov 2026: "the reports should have a title of Naitiri and not West Kenya").
  *   NAITIRI            by the unit's name, as production has always read it (/nait[ir]/i)
  *   NAITIRI_EX         every unit on the client's two lists, and only those ("Naitiri all units Ex")
  *   NAITIRI_TRUCKS_EX  the trucks, NAITIRI_TRUCKS_ALL ("Naitiri trucks Ex")
+ *   the rest           West Sugar's other sites, by the unit's name (the rules lib/reportTemplates
+ *                      has always used; KABRAS_SITE is West Kenya's own units named Kabras, not
+ *                      the Kabras organisation)
  */
-const NAITIRI_NAME = /nait[ir]/i;
 export const SITE_LISTS = {
-  NAITIRI: { label: 'Naitiri', fleet: 'Naitiri', test: { test: (label) => NAITIRI_NAME.test(String(label ?? '')) } },
+  KABRAS_SITE: site('Kabras', /kab(?:a)?ras/i),
+  OLEPITO: site('Olepito', /ole?i?p(?:i?t|ti)/i),
+  NAITIRI: site('Naitiri', /nait[ir]/i),
   NAITIRI_EX: { label: 'Naitiri all units Ex', fleet: 'Naitiri', test: listTest(NAITIRI_ALL), kinds: true },
   NAITIRI_TRUCKS_EX: { label: 'Naitiri trucks Ex', fleet: 'Naitiri', test: listTest(NAITIRI_TRUCKS_ALL), kinds: true },
+  AMUKA: site('Amuka', /amuka/i),
+  KHALABA: site('Khalaba', /khalaba/i),
+  LAKE_AGRO: site('Lake Agro', /lake/i),
+  MAGUT: site('Magut', /magut/i),
+  MISIKHU: site('Misikhu', /misikhu/i),
+  NAIROBI: site('Nairobi', /nairobi/i),
+  SELIA: site('Selia', /seli/i),
 };
 
 /**
@@ -81,8 +96,18 @@ export function siteKind(keys, label) {
   return KIND_TESTS.find(([, t]) => t.test(label))?.[0] ?? null;
 }
 
-/** The organisations whose reports offer these sites in a Site picker (hooks/useSitePick). */
-export const REPORT_SITES = { WESTSUGAR: ['NAITIRI_EX', 'NAITIRI_TRUCKS_EX'] };
+/**
+ * The organisations whose reports offer these sites in a Site picker (hooks/useSitePick), and
+ * what its "every unit" option says (operator, 12 Nov 2026: West Kenya's other sites as well as
+ * Naitiri's; "All sites" read as if they had gone). Sukari and Nzoia are not offered: they are
+ * organisations of their own, and West Kenya has 1 unit and none named for them.
+ */
+export const REPORT_SITES = {
+  WESTSUGAR: {
+    all: 'All West Kenya units',
+    keys: ['KABRAS_SITE', 'OLEPITO', 'NAITIRI', 'NAITIRI_EX', 'NAITIRI_TRUCKS_EX', 'AMUKA', 'KHALABA', 'LAKE_AGRO', 'MAGUT', 'MISIKHU', 'NAIROBI', 'SELIA'],
+  },
+};
 
 /** What a report for these sites calls its fleet: their own name when they share one, else null. */
 export function siteFleet(keys) {

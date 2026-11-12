@@ -1,7 +1,8 @@
 // A Site picker for the reports of an organisation with sites told apart by a
-// list (lib/siteLists REPORT_SITES): West Kenya's "Naitiri all units Ex" and
-// "Naitiri trucks Ex" (operator, 12 Nov 2026: "I should be able to generate all
-// reports I'm able to get from West Kenya ... with a title of Naitiri").
+// list or a name (lib/siteLists REPORT_SITES): West Kenya's sites, Naitiri's
+// "Naitiri all units Ex" and "Naitiri trucks Ex" among them (operator, 12 Nov
+// 2026: "I should be able to generate all reports I'm able to get from West
+// Kenya ... with a title of Naitiri").
 //
 // For the reports without the organisations picker (hooks/useReportOrgs): the
 // fleet reports, Movements, Alarm Distribution, Unauthorized Passengers.
@@ -17,7 +18,8 @@ export function useSitePick(orgCode, initial = null) {
   const code = String(orgCode ?? '').toUpperCase();
   const [site, setSite] = useState(initial);        // null: every unit
   return useMemo(() => {
-    const keys = REPORT_SITES[code] ?? [];
+    const sites = REPORT_SITES[code] ?? null;
+    const keys = sites?.keys ?? [];
     const on = site && keys.includes(site) ? site : null;
     const test = on ? SITE_LISTS[on].test : null;
     return {
@@ -30,12 +32,13 @@ export function useSitePick(orgCode, initial = null) {
       /** The report's fleet: the site's name when one is picked, else the organisation's. */
       fleetWords: (orgName) => (on ? SITE_LISTS[on].fleet : orgName),
       /**
-       * Props for a ChoicePicker; null when the organisation has no sites. "Site" and "All sites",
-       * not "Units": the sidebar reports have a Unit picker beside it that reads "All units" (review, 12 Nov 2026).
+       * Props for a ChoicePicker; null when the organisation has no sites. "Site", not "Units": the
+       * sidebar reports have a Unit picker beside it. Its first option names the organisation's
+       * whole fleet ("All West Kenya units"), so nothing reads as left out (operator, 12 Nov 2026).
        */
       picker: keys.length ? {
         icon: 'ti-map-pin', label: 'Site', align: 'right', value: on,
-        options: [{ value: null, label: 'All sites' }, ...keys.map((k) => ({ value: k, label: SITE_LISTS[k].label }))],
+        options: [{ value: null, label: sites.all }, ...keys.map((k) => ({ value: k, label: SITE_LISTS[k].label }))],
       } : null,
     };
   }, [code, site]);

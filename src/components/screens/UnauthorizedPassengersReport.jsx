@@ -278,7 +278,19 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
   }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Newest first, as the server sends them.
-  const rows = useMemo(() => (sitePick.site ? incidents.filter((r) => sitePick.keepRow(r.plate)) : incidents), [incidents, sitePick]);
+  // An incident carries the plate alone; a site told apart by name (Olepito, Misikhu, …) is
+  // read off the live unit's name for that plate
+  const nameByPlate = useMemo(() => {
+    const m = new Map();
+    for (const v of vehicles ?? []) {
+      const p = String(displayOf(v) ?? '').toUpperCase().replace(/\s/g, '');
+      if (p && v?.name) m.set(p, v.name);
+    }
+    return m;
+  }, [vehicles]);
+  const rows = useMemo(() => (sitePick.site
+    ? incidents.filter((r) => sitePick.keepRow(r.plate, nameByPlate.get(String(r.plate ?? '').toUpperCase().replace(/\s/g, ''))))
+    : incidents), [incidents, sitePick, nameByPlate]);
   const isShared = (r) => r.sharedAt != null;
 
   // ── Save (new or edit) ──────────────────────────────────────────────────────
