@@ -61,7 +61,7 @@ describe('siteKind: the kind on the client lists, for the Ex options', () => {
 
 describe("West Kenya's Site picker (operator, 12 Nov 2026)", () => {
   it("names the whole fleet first, then every site with units, Naitiri's lists among them", () => {
-    expect(REPORT_SITES.WESTSUGAR.all).toBe('All West Kenya units');
+    expect(REPORT_SITES.WESTSUGAR.allWord).toBe('West Kenya');
     expect(REPORT_SITES.WESTSUGAR.keys.map((k) => SITE_LISTS[k].label)).toEqual([
       'Kabras', 'Olepito', 'Naitiri', 'Naitiri all units Ex', 'Naitiri trucks Ex',
       'Amuka', 'Khalaba', 'Lake Agro', 'Magut', 'Misikhu', 'Nairobi', 'Selia',

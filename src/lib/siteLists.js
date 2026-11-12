@@ -98,13 +98,13 @@ export function siteKind(keys, label) {
 
 /**
  * The organisations whose reports offer these sites in a Site picker (hooks/useSitePick), and
- * what its "every unit" option says (operator, 12 Nov 2026: West Kenya's other sites as well as
- * Naitiri's; "All sites" read as if they had gone). Sukari and Nzoia are not offered: they are
+ * what the picker calls them all, "West Kenya (12)" as the Organisations picker reads "West Kenya (7)"
+ * (operator, 12 Nov 2026: West Kenya's other sites as well as Naitiri's). Sukari and Nzoia are not offered: they are
  * organisations of their own, and West Kenya has 1 unit and none named for them.
  */
 export const REPORT_SITES = {
   WESTSUGAR: {
-    all: 'All West Kenya units',
+    allWord: 'West Kenya',
     keys: ['KABRAS_SITE', 'OLEPITO', 'NAITIRI', 'NAITIRI_EX', 'NAITIRI_TRUCKS_EX', 'AMUKA', 'KHALABA', 'LAKE_AGRO', 'MAGUT', 'MISIKHU', 'NAIROBI', 'SELIA'],
   },
 };

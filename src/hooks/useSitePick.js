@@ -8,38 +8,46 @@
 // fleet reports, Movements, Alarm Distribution, Unauthorized Passengers.
 
 import { useMemo, useState } from 'react';
-import { REPORT_SITES, SITE_LISTS, vehicleOnSite } from '../lib/siteLists';
+import { REPORT_SITES, SITE_LISTS, siteFleet, vehicleOnSite } from '../lib/siteLists';
 
 /**
  * @param orgCode  the organisation's code; only those in REPORT_SITES get a picker
- * @param initial  the site picked when the report opens (Movements keeps it with its tables)
+ * @param initial  the sites picked when the report opens (Movements keeps them with its tables)
  */
 export function useSitePick(orgCode, initial = null) {
   const code = String(orgCode ?? '').toUpperCase();
-  const [site, setSite] = useState(initial);        // null: every unit
+  const [picked, setSite] = useState(initial);       // null: every unit; else the site keys ticked
   return useMemo(() => {
     const sites = REPORT_SITES[code] ?? null;
     const keys = sites?.keys ?? [];
-    const on = site && keys.includes(site) ? site : null;
-    const test = on ? SITE_LISTS[on].test : null;
+    const ticked = Array.isArray(picked) ? picked.filter((k) => keys.includes(k)) : null;
+    const on = ticked?.length ? ticked : null;
+    const tests = on ? on.map((k) => SITE_LISTS[k].test) : null;
     return {
+      /** The site keys picked, or null for every unit. */
       site: on,
       setSite,
-      /** Is this live unit in the report? */
-      keepVehicle: (v) => !test || vehicleOnSite(v, on),
+      /** Is this live unit in the report? On any of the sites picked. */
+      keepVehicle: (v) => !on || on.some((k) => vehicleOnSite(v, k)),
       /** Is a server row in the report, by any of its names (plate, grouping, unit name)? */
-      keepRow: (...labels) => !test || labels.some((l) => l && test.test(l)),
-      /** The report's fleet: the site's name when one is picked, else the organisation's. */
-      fleetWords: (orgName) => (on ? SITE_LISTS[on].fleet : orgName),
+      keepRow: (...labels) => !tests || labels.some((l) => l && tests.some((t) => t.test(l))),
       /**
-       * Props for a ChoicePicker; null when the organisation has no sites. "Site", not "Units": the
-       * sidebar reports have a Unit picker beside it. Its first option names the organisation's
-       * whole fleet ("All West Kenya units"), so nothing reads as left out (operator, 12 Nov 2026).
+       * The report's fleet: the organisation's when every unit is in, the sites' own name when
+       * they share one (Naitiri's three), else their names (lib/useReportOrgs pickedWords' rule).
+       */
+      fleetWords: (orgName) => (!on ? orgName : siteFleet(on) ?? on.map((k) => SITE_LISTS[k].label).join(', ')),
+      /**
+       * Props for a CheckPicker, as the Organisations picker on Geofences and TAT and Fuel has
+       * them (operator, 12 Nov 2026: "match those in geofences, TAT & Fuel"): "West Kenya (12)"
+       * with every site in, a West Kenya chip to put them all back. Null when the organisation
+       * has no sites.
        */
       picker: keys.length ? {
-        icon: 'ti-map-pin', label: 'Site', align: 'right', value: on,
-        options: [{ value: null, label: sites.all }, ...keys.map((k) => ({ value: k, label: SITE_LISTS[k].label }))],
+        icon: 'ti-map-pin', label: 'Sites', noun: 'sites', allWord: sites.allWord, minOne: true,
+        options: keys.map((k) => ({ value: k, label: SITE_LISTS[k].label })),
+        picked: on,
+        onChange: setSite,
       } : null,
     };
-  }, [code, site]);
+  }, [code, picked]);
 }

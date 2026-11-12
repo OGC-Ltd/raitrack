@@ -21,7 +21,7 @@ import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { useSitePick } from '../../hooks/useSitePick';
-import ChoicePicker from './ChoicePicker';
+import CheckPicker from './CheckPicker';
 import { downloadTableCsv } from '../../utils/tableExport';
 
 /** The kinds the server counts, in its order. Its Other is left out (operator, 11 Nov 2026), lib/reportDocs withoutOther. */
@@ -152,7 +152,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
           maxDays={MAX_DAYS} spans={[]} label="Days"
           onChange={(from, to) => setDays({ from, to: to ?? from })}
         />
-        {sitePick.picker && <ChoicePicker {...sitePick.picker} onChange={(v) => sitePick.setSite(v)} />}
+        {sitePick.picker && <CheckPicker {...sitePick.picker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}

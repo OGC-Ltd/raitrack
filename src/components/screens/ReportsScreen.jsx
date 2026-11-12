@@ -1085,7 +1085,7 @@ function MovementsReport({ orgId, orgCode = null }) {
                         onChange={(v) => setTypes(v == null ? allTypes : [v])} />
         ) : allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
 
-        {sitePick.picker && <ChoicePicker {...sitePick.picker} onChange={(v) => sitePick.setSite(v)} />}
+        {sitePick.picker && <CheckPicker {...sitePick.picker} />}
 
         <CheckPicker icon="ti-alert-triangle" label="Events" noun="events" noAll
                      options={EVENTS.map((e) => ({ value: e.key, label: e.label }))} picked={eventKinds}
@@ -1715,7 +1715,7 @@ export default function ReportsScreen() {
         )}
 
         {sitePick.picker && (
-          <ChoicePicker {...sitePick.picker} onChange={(v) => { sitePick.setSite(v); setUnit(null); reset(); }} />
+          <CheckPicker {...sitePick.picker} onChange={(v) => { sitePick.setSite(v); setUnit(null); reset(); }} />
         )}
 
         {byUnit && (

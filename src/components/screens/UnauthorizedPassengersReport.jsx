@@ -34,7 +34,7 @@ import TableToolbar from '../body/TableToolbar';
 import { useReportEditor } from './ReportEditor';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { useSitePick } from '../../hooks/useSitePick';
-import ChoicePicker from './ChoicePicker';
+import CheckPicker from './CheckPicker';
 import { downloadTableCsv } from '../../utils/tableExport';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[]} label="Days"
                          onChange={(f, t) => setDays({ from: f, to: t ?? f })} />
-        {sitePick.picker && <ChoicePicker {...sitePick.picker} onChange={(v) => sitePick.setSite(v)} />}
+        {sitePick.picker && <CheckPicker {...sitePick.picker} />}
         <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog('new')}>
           Log incident
         </button>
