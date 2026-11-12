@@ -2255,12 +2255,16 @@ export default function FleetMap() {
   );
   // Latched: switching off keeps the built shapes, so the next on is instant.
   const [zonesWanted, setZonesWanted]       = useState(false);
-  if (showZones && !zonesWanted) setZonesWanted(true);
-  // Only the geofences drawn here (source 'app'), not the ones imported from
-  // Wialon (operator, 2026-11-12: "a toggle to show the custom geofences").
+  // Custom geos: the geofences drawn here (source 'app'), not the ones imported
+  // from Wialon (operator, 2026-11-12). Its own switch, independent of Show on
+  // the map: either one draws the layer, and the custom one alone draws only
+  // the custom fences.
   const [zonesOwnOnly, setZonesOwnOnly]     = useState(
     () => readMapPrefs(activeCompanyId).layers["zones:own"],
   );
+  const zonesDrawn = showZones || zonesOwnOnly;
+  const customOnly = zonesOwnOnly && !showZones;
+  if (zonesDrawn && !zonesWanted) setZonesWanted(true);
   const zoneLayerRef      = useRef(null);   // { shapes[], info, bounds, clearHover } | null
   /* Live traffic (Google's TrafficLayer, lib/googleBase) over the base map,
    * and the pinned unit's routed line. TomTom's tiles were switched off
@@ -4019,16 +4023,15 @@ export default function FleetMap() {
           writeMapPrefs(activeCompanyId, { layers: { zones: !v } });
           return !v;
         }),
-        // All of them, or only the ones drawn here. Choosing "ours" also turns
-        // the layer on, since that is what the operator came to see.
+        // Custom geos: the ones drawn here, a switch of its own. Neither switch
+        // moves the other (operator, 2026-11-12); with both on, all are drawn.
         ownOnly: zonesOwnOnly,
         ownCount: ownFenceCount,
         onOwnOnly: () => {
           const next = !zonesOwnOnly;
           setZonesOwnOnly(next);
-          zonesRequestedRef.current = true;
-          if (next && !showZones) setShowZones(true);
-          writeMapPrefs(activeCompanyId, { layers: { "zones:own": next, ...(next ? { zones: true } : {}) } });
+          zonesRequestedRef.current = next;
+          writeMapPrefs(activeCompanyId, { layers: { "zones:own": next } });
         },
         note: null,
         legend: legendFor(zoneCategories, baseMap),
@@ -4842,7 +4845,7 @@ export default function FleetMap() {
 
     const maps = mapsLibRef.current;
     const DomMarker = DomMarkerRef.current;
-    const on = showZones;
+    const on = zonesDrawn;
     // Off-screen groups stay off the page; each pass brings on what moved in.
     const icons = new Map();
     const dropIcons = (keep) => {
@@ -4860,8 +4863,8 @@ export default function FleetMap() {
       fittedCompanyRef.current = activeCompanyId;
       pendingFitRef.current = false;
     };
-    // Only ours: the imported fences are neither drawn nor counted in a group.
-    const shownFences = zonesOwnOnly ? layer.fences.filter(f => f.own) : layer.fences;
+    // Custom geos alone: the imported fences are neither drawn nor counted in a group.
+    const shownFences = customOnly ? layer.fences.filter(f => f.own) : layer.fences;
     const pass = () => {
       layer.clearHover();
       const { drawn, groups } = clusterFences(shownFences, map.getZoom());
@@ -4913,7 +4916,7 @@ export default function FleetMap() {
     if (on && zonesRequestedRef.current) fitPlaceLayersRef.current();
     return () => { idle?.remove(); dropIcons(); };
     // zonesWanted: the layer is built by the effect above once the switch first goes on.
-  }, [showZones, zonesOwnOnly, mapReady, zones, zonesWanted, activeCompanyId]);
+  }, [zonesDrawn, customOnly, mapReady, zones, zonesWanted, activeCompanyId]);
 
   // The GEOMETRY IS STILL FETCHED FOR EVERY ORG, and deliberately — this layer
   // is a reader of it, not its owner. Two things read the same rows and neither
@@ -4977,8 +4980,8 @@ export default function FleetMap() {
       // The boundaries and the drawing cover the same ground within a
       // kilometre, so unioning them costs no zoom — and when only the
       // boundaries are on, they are what there is to frame.
-      const zoneBounds = zoneLayerRef.current?.[zonesOwnOnly ? "ownBounds" : "bounds"];
-      if (showZones && hasZones && zoneBounds && !zoneBounds.isEmpty()) {
+      const zoneBounds = zoneLayerRef.current?.[customOnly ? "ownBounds" : "bounds"];
+      if (zonesDrawn && hasZones && zoneBounds && !zoneBounds.isEmpty()) {
         b.union(zoneBounds);
       }
       if (showBridges && hasBridges) {
@@ -5000,7 +5003,7 @@ export default function FleetMap() {
       fitMapToBounds(map, maps, b);
     }
   }, [showPlan, planAllowed, sitePlans, siteOn, showBridges, hasBridges,
-      showZones, zonesOwnOnly, hasZones, activeCompanyId]);
+      zonesDrawn, customOnly, hasZones, activeCompanyId]);
 
   const fitPlaceLayersRef = useRef(fitPlaceLayers);
   useEffect(() => { fitPlaceLayersRef.current = fitPlaceLayers; }, [fitPlaceLayers]);
@@ -6660,11 +6663,7 @@ export default function FleetMap() {
     fittedCompanyRef.current = activeCompanyId;
     pendingFitRef.current = false;
     setShowZones(true);
-    // An imported fence picked while only ours are shown: show them all, or it
-    // would be framed and not drawn.
-    const widen = p.source !== "app";
-    if (widen) setZonesOwnOnly(false);
-    writeMapPrefs(activeCompanyId, { layers: { zones: true, ...(widen ? { "zones:own": false } : {}) } });
+    writeMapPrefs(activeCompanyId, { layers: { zones: true } });
     handlePickPlace({
       lat: onLine ? onLine[1] : box.lat,
       lng: onLine ? onLine[0] : box.lng,
