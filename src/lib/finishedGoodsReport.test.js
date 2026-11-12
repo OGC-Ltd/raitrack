@@ -44,8 +44,17 @@ describe('Finished Goods template: one line per customer', () => {
     expect(c[8]).toBe('30.10.2026 18:10:00');
     expect(c[9]).toBe('11 h 26 min');
   });
-  it('a vehicle with no customers still shows, with why it has not left', () => {
-    expect(fgCells(lines[3]).slice(1, 6)).toEqual(['KDE 268P', 'No customers given', '-', 'MORL', 'At MORL']);
+  it('a vehicle with no customers still shows; not left, its Departure is blank, never a place (operator, 12 Nov 2026)', () => {
+    expect(fgCells(lines[3]).slice(1, 6)).toEqual(['KDE 268P', 'No customers given', '-', 'MORL', '']);
+  });
+  it('a truck with no place and no departure says why under Current location', async () => {
+    const { fgLines: lines_ } = await import('./finishedGoodsReport');
+    const [l] = lines_([{ plate: 'KCS 074M', place: null, trip: { leftAt: null, unread: true }, customers: [] }], { at: at('20:00') });
+    expect(fgCells(l)[4]).toBe('Positions could not be read');
+    expect(fgCells(l)[5]).toBe('');
+  });
+  it('every Departure cell is a date and time or blank', () => {
+    for (const l of lines) expect(fgCells(l)[5]).toMatch(/^(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}(:\d{2})?)?$/);
   });
   it('CSV adds Delivered', () => {
     const t = fgCsv(lines);
