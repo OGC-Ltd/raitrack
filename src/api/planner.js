@@ -44,6 +44,15 @@ export async function updateStop(orgId, planId, stopId, body) {
   return res.data
 }
 
+/**
+ * A fence for a customer that has none: a circle `{ name, lat, lng, radiusM }`
+ * drawn and tied to the customer. Answers `{ customerId, geofence }`.
+ */
+export async function fenceCustomer(orgId, customerId, body) {
+  const res = await apiFetch(`${base(orgId)}/customers/${customerId}/fence`, { method: 'POST', body: JSON.stringify(body) })
+  return res.data
+}
+
 export async function deletePlan(orgId, id) {
   try {
     await apiFetch(`${base(orgId)}/plans/${id}`, { method: 'DELETE' })

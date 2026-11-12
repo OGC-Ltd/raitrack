@@ -196,7 +196,7 @@ function CopyCoords({ lat, lng }) {
  * @param {object} [props.vehicle]         the live unit, for its sprite
  */
 export default function PlannerStopPanel({ plan, stop, actual, track, window_, zonesById, vehicle, homeLabel,
-  canWrite, canMap, canFence, onOutcome, RemarkInput, onClose, onShowOnMap, onFence }) {
+  canWrite, canMap, canFence, hasFence = true, onOutcome, RemarkInput, onClose, onShowOnMap, onFence }) {
   const a = actual?.stops.find((s) => s.id === stop.id) ?? {};
   const c = stop.customer;
   const fence = useMemo(() => fenceOf(c, zonesById), [c, zonesById]);
@@ -227,7 +227,9 @@ export default function PlannerStopPanel({ plan, stop, actual, track, window_, z
             </a>
           )}
           {canFence && (
-            <button type="button" className="sp4-ghost-btn" onClick={onFence}><i className="ti ti-pencil" aria-hidden="true" /> Redraw fence</button>
+            <button type="button" className="sp4-ghost-btn" onClick={onFence}>
+              {hasFence ? <><i className="ti ti-pencil" aria-hidden="true" /> Redraw fence</> : <><i className="ti ti-plus" aria-hidden="true" /> Draw a fence</>}
+            </button>
           )}
           {canMap && (
             <button type="button" className="sp4-ghost-btn" onClick={onShowOnMap}><i className="ti ti-map-2" aria-hidden="true" /> Show on Live Map</button>
