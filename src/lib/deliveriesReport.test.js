@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findStorages, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays, pinCode, fencedPinNames } from './deliveriesReport';
+import { findStorages, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays, pinCode, fencedPinNames, dayRuns, daysFrom, plateWords } from './deliveriesReport';
 import { readCoordinates, mergePins } from './deliveryPlan';
 import { addVehicle, removeVehicle, setCustomers, emptyPlan } from './deliveryPlan';
 import { reportKeysFor, hasDeliveriesTab } from './reportNav';
@@ -513,5 +513,73 @@ describe('a pasted point fenced in the Planner (operator, 12 Nov 2026)', () => {
     expect(pinStop(pin).label).toBe('0.01075, 37.07514');
     const r = deliveryRow({ plate: 'X', customers: [], pins: [pin] }, [], findStorages(null), new Map(), { to: Date.now(), pinNames: names });
     expect(r.customers[0].label).toBe('Kamau Stores');
+  });
+});
+
+describe('a range of days: every day with its own list and hours (operator, 12 Nov 2026)', () => {
+  const KCA = { key: 'kca', plate: 'KCA 226M', customers: ['MENENGAI_VS: JOJAC INVESTMENTS'] };
+  const KDE = { key: 'kde', plate: 'KDE 136E', customers: ['MENENGAI_FG:THANJU SHOP'] };
+  const lists = { '2026-11-11': [KCA], '2026-11-12': [KCA, KDE] };
+  const sel = { mode: 'days', fromDay: '2026-11-11', toDay: '2026-11-12', start: 7, end: 20 };
+
+  it('11/11 to 12/11 is both days, each its own hours, the last day included', () => {
+    const runs = dayRuns(sel, lists, { today: '2026-11-12', now: at('2026-11-12T23:00:00') });
+    expect(runs.map((r) => [r.day, r.from, r.to, r.vehicles.map((v) => v.plate)])).toEqual([
+      ['2026-11-11', at('2026-11-11T07:00:00'), at('2026-11-11T20:00:00'), ['KCA 226M']],
+      ['2026-11-12', at('2026-11-12T07:00:00'), at('2026-11-12T20:00:00'), ['KCA 226M', 'KDE 136E']],
+    ]);
+  });
+
+  it('whole days run midnight to midnight in Nairobi time, not UTC', () => {
+    const runs = dayRuns({ ...sel, start: 0, end: 24 }, lists, { today: '2026-11-13', now: at('2026-11-13T08:00:00') });
+    expect(runs.map((r) => [r.from, r.to])).toEqual([
+      [Date.parse('2026-11-10T21:00:00Z'), Date.parse('2026-11-11T21:00:00Z')],
+      [Date.parse('2026-11-11T21:00:00Z'), Date.parse('2026-11-12T21:00:00Z')],
+    ]);
+  });
+
+  it('today ends at now, and a day whose hours have not begun is left out', () => {
+    const now = at('2026-11-12T10:30:00');
+    expect(dayRuns(sel, lists, { today: '2026-11-12', now }).map((r) => [r.day, r.to]))
+      .toEqual([['2026-11-11', at('2026-11-11T20:00:00')], ['2026-11-12', now]]);
+    expect(dayRuns(sel, lists, { today: '2026-11-12', now: at('2026-11-12T06:59:00') }).map((r) => r.day)).toEqual(['2026-11-11']);
+  });
+
+  it('a longer range: seven days across a month end, empty days kept as days with no vehicles', () => {
+    const runs = dayRuns({ ...sel, fromDay: '2026-10-30', toDay: '2026-11-05' }, { '2026-11-01': [KDE] }, { today: '2026-11-12', now: at('2026-11-12T12:00:00') });
+    expect(runs.map((r) => r.day)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05']);
+    expect(runs.map((r) => r.vehicles.length)).toEqual([0, 0, 1, 0, 0, 0, 0]);
+    expect(daysFrom('2026-11-11', '2026-11-12')).toEqual(['2026-11-11', '2026-11-12']);
+    expect(daysFrom('2026-11-12', '2026-11-11')).toEqual([]);
+  });
+
+  it('the last hours: one run with today\u2019s list', () => {
+    const now = at('2026-11-12T10:00:00');
+    expect(dayRuns({ mode: 'last', hours: 2 }, lists, { today: '2026-11-12', now }))
+      .toEqual([{ day: '2026-11-12', from: now - 2 * 3_600_000, to: now, vehicles: [KCA, KDE] }]);
+  });
+
+  it('each day\u2019s row counts only that day\u2019s delivery; the edges of the hours hold', () => {
+    const storages = findStorages(zones);
+    const byName = new Map(customersIn(zones, storages).map((c) => [c.name, c]));
+    const pings = [
+      p('2026-11-11T05:00:00', MORL), p('2026-11-11T06:30:00', ROAD),
+      p('2026-11-11T06:58:00', A), p('2026-11-11T06:59:30', A),            // before 07:00 on the 11th: not that day's
+      p('2026-11-11T07:30:00', ROAD), p('2026-11-11T09:00:00', MORL), p('2026-11-12T06:00:00', MORL),
+      p('2026-11-12T08:00:00', ROAD), p('2026-11-12T19:58:00', A), p('2026-11-12T19:59:59', A), // just inside 20:00 on the 12th
+      p('2026-11-12T21:00:00', MORL),
+    ];
+    const rows = dayRuns(sel, lists, { today: '2026-11-12', now: at('2026-11-12T23:00:00') })
+      .flatMap((run) => run.vehicles.filter((v) => v.key === 'kca').map((v) => ({ day: run.day,
+        row: deliveryRow(v, pings, storages, byName, { from: run.from, to: run.to, windows: [{ from: run.from, to: run.to }] }) })));
+    expect(rows.map((x) => [x.day, x.row.fulfilled, x.row.planned])).toEqual([['2026-11-11', 0, 1], ['2026-11-12', 1, 1]]);
+  });
+
+  it('a row of a range says its day beside the plate, on screen, CSV and PDF', () => {
+    const r = { plate: 'KCA 226M', day: '2026-11-12', trip: { leftAt: null }, fulfilled: 0, planned: 1, customers: [] };
+    expect(plateWords(r)).toBe('KCA 226M (2026-11-12)');
+    expect(rowCells(r)[0]).toBe('KCA 226M (2026-11-12)');
+    expect(deliveriesPdfBody([r], { from: at('2026-11-11T07:00:00'), at: at('2026-11-12T20:00:00'), fleet: 'Menengai' }).rows[0].plate).toBe('KCA 226M (2026-11-12)');
+    expect(plateWords({ plate: 'KCA 226M' })).toBe('KCA 226M');
   });
 });

@@ -37,6 +37,8 @@
   padding: 12px var(--sp4-gutter, 12px) 12px;
 }
 .dlv-plan .dlv-find { position: relative; flex: 0 1 380px; min-width: 0; max-width: none; }
+/* A range: one chip a day, each day keeping its own list; the one picked is the list below */
+.dlv-plan__days { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px var(--sp4-gutter, 12px) 0; }
 
 /* One row per vehicle: plate, group, stops, paste, count, remove; extras span the row */
 .dlv-roster { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--sp4-line); }

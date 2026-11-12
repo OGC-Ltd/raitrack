@@ -8,8 +8,8 @@
  * to (stood 1½ minutes in the geofence, within the window), where it is, and
  * when it came back, all delivered or not. Stops are geofences, or points pasted as coordinates, and
  * the vehicle's whole route in the window is run against them. The bar is
- * Movements': the last hours or days and the same hours on each (with the first
- * day's list), a group, Run report; then JPEG, Preview, CSV and PDF over the group picked.
+ * Movements': the last hours or days and the same hours on each (each day with
+ * its own list), a group, Run report; then JPEG, Preview, CSV and PDF over the group picked.
  * lib/deliveriesReport does the reading; this is the page, and the PDF, JPEG
  * and CSV.
  *
@@ -24,11 +24,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords, dayStart, daysCovering } from '../../lib/fleetReports';
 import { marksOf } from '../../lib/plannerDayMarks';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDeliveryDay, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
-import { LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem } from '../../lib/movementReport';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDeliveryDay, getDeliveryDays, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
+import { LAST_HOURS, MAX_MOVEMENT_DAYS, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
+  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
 } from '../../lib/deliveriesReport';
 import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, readCoordinates, mergePins, PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
@@ -159,12 +159,15 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const now = Date.now();
   const today = fleetDay(now);
   // The window, as Movements': the last hours, or days and hours. The list of
-  // vehicles is a day's: a range of days runs its first day's list
+  // vehicles is a day's: a range runs each day's own list over that day's hours
+  // (operator, 12 Nov 2026: "11/11/2026 to 12/11/2026 should show both days in full")
   const [sel, setSel] = useState({ mode: 'last', hours: LAST_HOURS[0] });
   const [draft, setDraft] = useState({ fromDay: today, toDay: today, start: 7, end: 20 });
   const [daysOpen, setDaysOpen] = useState(true);
-  const dayOf = (next) => (next.mode === 'days' ? next.fromDay : today);
-  const day = daysOpen ? draft.fromDay : today;
+  const rangeDays = useMemo(() => (daysOpen ? daysFrom(draft.fromDay, draft.toDay) : [today]), [daysOpen, draft.fromDay, draft.toDay, today]);
+  // The day whose list is open for editing: one of the range's, the first until another is picked
+  const [pickDay, setPickDay] = useState(null);
+  const day = daysOpen ? (rangeDays.includes(pickDay) ? pickDay : draft.fromDay) : today;
   const [group, setGroup] = useState(null);               // one group of the fleet list, or all
   // Van Sales (the report as it was) or Finished Goods (operator, 11 Nov 2026), kept in this browser
   const [template, setTemplate] = useState(() => loadTemplate(orgCode));
@@ -191,6 +194,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   });
   const dayList = useQuery(dayQuery(day));
   const plan = dayList.data ?? emptyPlan();
+  // Every day of a range, for its count and so a range with vehicles on a later day only can run
+  const rangeLists = useQueries({ queries: rangeDays.length > 1 ? rangeDays.map((d) => dayQuery(d)) : [] });
+  const listedOn = (i) => rangeLists[i]?.data?.vehicles.length ?? null;
+  const anyListed = rangeDays.length > 1 ? rangeLists.some((q) => q.data?.vehicles.length) : plan.vehicles.length > 0;
   // Saves go one after another, each the whole list, so the last change is the one kept
   const saving = useRef(Promise.resolve());
   // `failedDay`: a day whose list on screen is not yet on the server. The list is kept as the operator
@@ -241,12 +248,12 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     return sheetsForReport((await listPlans(orgId, d.from, d.to)).filter((p) => !isKeyed(p)), from, to, dayStart);
   };
   const [sheets, setSheets] = useState({ status: 'idle', list: [] });
-  const sheetSpanKey = daysOpen ? `days:${day}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
+  const sheetSpanKey = daysOpen ? `days:${draft.fromDay}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
   useEffect(() => {
     if (!orgId || !canSheets) { setSheets({ status: 'idle', list: [] }); return undefined; }
     let live = true;
     const t = Date.now();
-    const from = daysOpen ? dayStart(day) : t - (sel.hours ?? 24) * 3600_000;
+    const from = daysOpen ? dayStart(draft.fromDay) : t - (sel.hours ?? 24) * 3600_000;
     const to = daysOpen ? Math.min(t, dayStart(draft.toDay) + DAY) : t;
     setSheets((x) => ({ ...x, status: 'loading' }));
     findSheets(from, to)
@@ -354,17 +361,42 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const daysProblem = windowsProblem({ mode: 'days', ...draft });
   const problem = !orgId ? 'Waiting for the organisation to load'
     : daysOpen && daysProblem ? daysProblem
-      : !plan.vehicles.length && !sheets.list.length ? (sheets.status === 'loading' ? 'Looking for the Planner’s sheets' : 'Add the vehicles shared today, or upload their sheets in the Planner')
+      : !anyListed && !sheets.list.length ? (sheets.status === 'loading' ? 'Looking for the Planner’s sheets' : 'Add the vehicles shared today, or upload their sheets in the Planner')
         : null;
 
+  // Each day's list for a run, as the server has it now: one read for a range (GET days?from=&to=),
+  // each day's own read for one day, or when the server cannot read a range yet
+  const listsFor = async (days) => {
+    await saving.current.catch(() => undefined);          // a save under way reaches the server first
+    const own = (d) => (d === saveState.failedDay && qc.getQueryData(['deliveries', 'day', orgId, d])) // not saved: as on screen
+      || qc.fetchQuery(dayQuery(d));
+    let got;
+    if (days.length > 1) {
+      try {
+        const all = await getDeliveryDays(orgId, days[0], days[days.length - 1]);
+        got = await Promise.all(days.map((d) => {
+          const listed = all.find((x) => x.day === d)?.vehicles ?? [];
+          // A list this browser kept before the server, or has not saved, goes through the day's own read
+          return d === saveState.failedDay || (!listed.length && loadPlan(orgCode, d).vehicles.length) ? own(d) : { vehicles: listed };
+        }));
+      } catch {
+        got = await Promise.all(days.map(own));
+      }
+    } else got = await Promise.all(days.map(own));
+    return Object.fromEntries(days.map((d, i) => [d, got[i]?.vehicles ?? []]));
+  };
+
   const execute = async (next) => {
-    const windows = movementWindows(next);
-    // This window's day decides the list: the page may still hold another day's
-    const runPlan = orgId ? await qc.fetchQuery(dayQuery(dayOf(next))).catch(() => plan) : plan;
+    // Each day's own list: the page may hold another day's, and a range holds several
+    const days = next.mode === 'days' ? daysFrom(next.fromDay, next.toDay) : [today];
+    const lists = orgId ? await listsFor(days).catch(() => ({ [day]: plan.vehicles })) : { [day]: plan.vehicles };
+    const runs = dayRuns(next, lists, { today });
     setSel(next);
-    if (!orgId || !windows.length) return;
-    const windowFrom = windows[0].from;
-    const { to } = windows[windows.length - 1];
+    if (!orgId || !runs.length) return;
+    const windowFrom = runs[0].from;
+    const { to } = runs[runs.length - 1];
+    // Rows say their day only when there is more than one
+    const multi = runs.length > 1;
     const id = ++runId.current;
     const live = () => id === runId.current;
     try {
@@ -382,7 +414,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       ]);
       const runPinNames = fencedPinNames(fenced, fc);
       if (!live()) return;
-      if (!runPlan.vehicles.length && !sheetList.length) {
+      if (!runs.some((r) => r.vehicles.length) && !sheetList.length) {
         setRun({ status: 'error', message: 'No sheets were saved in the Planner for these hours, and no vehicles are on the list.' });
         return;
       }
@@ -442,16 +474,21 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       });
       // Only the sheets this report's days ran (lib/plannerReport sheetOnDays): no earlier day carried forward
       const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay));
-      // A vehicle on a kept sheet is the sheet's row: not checked again from the list
-      const onSheets = new Set(sheetRows.map((r) => plateKey(r.plate)));
-      const planned = runPlan.vehicles.filter((v) => !onSheets.has(plateKey(v.plate))).map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds }));
+      // A vehicle on a kept sheet is the sheet's row: not checked again from the list (on a range, that day's list)
+      const planned = runs.flatMap((run) => {
+        const onSheets = new Set(sheetRows.filter((r) => !multi || sheetOnDays(r, marksOf(r.remake.plan), [run.day], fleetDay)).map((r) => plateKey(r.plate)));
+        return run.vehicles.filter((v) => !onSheets.has(plateKey(v.plate)))
+          .map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds, run }));
+      });
+      const idsOf = (list) => [...new Set(list.flatMap((v) => v.vehicleIds))];
       let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
-      if (planned.length) await read(planned.flatMap((v) => v.vehicleIds), start, to, 'Reading each vehicle’s positions');
+      if (planned.length) await read(idsOf(planned), start, to, 'Reading each vehicle’s positions');
       if (!live()) return;
       for (let back = LOOKBACK_DAYS + 1; planned.length && back <= MAX_LOOKBACK_DAYS; back++) {
-        const need = planned.filter((v) => tripOf(held.get(best(v)) ?? [], storages, { to }).need);
+        const need = planned.filter((v) => tripOf(held.get(best(v)) ?? [], storages, { to: v.run.to }).need);
         if (!need.length) break;
-        await read(need.flatMap((v) => v.vehicleIds), start - DAY, start - 1, `Finding when ${need.length === 1 ? need[0].plate : `${need.length} vehicles`} left MORL or the depot, ${back} days back`);
+        const plates = [...new Set(need.map((v) => v.plate))];
+        await read(idsOf(need), start - DAY, start - 1, `Finding when ${plates.length === 1 ? plates[0] : `${plates.length} vehicles`} left MORL or the depot, ${back} days back`);
         if (!live()) return;
         start -= DAY;
       }
@@ -459,11 +496,12 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         // The tracker Movements reads for it, else the one that reported most
         const mv = v.vehicleIds.map((id) => moveRow.get(id)).find(Boolean) ?? null;
         const id = mv?.vehicleId ?? best(v);
+        const { run } = v;
         const row = deliveryRow(v, held.get(id) ?? [], storages, byName, {
-          from: windowFrom, to, windows, pinNames: runPinNames, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
+          from: run.from, to: run.to, windows: [{ from: run.from, to: run.to }], pinNames: runPinNames, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
-        return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
+        return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key), ...(multi ? { day: run.day, key: `${run.day}|${v.key}` } : {}) };
       });
       rows.unshift(...sheetRows);
       setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });
@@ -634,8 +672,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         <section className="dlv-plan" aria-label="Today’s vehicles">
           <div className="dlv-plan__head">
             <h3 className="dlv-plan__title">
-              {daysOpen && draft.toDay !== draft.fromDay ? 'Vehicles and stops for ' : 'Vehicles shared on '}
-              {periodDays(Date.parse(`${day}T09:00:00+03:00`), Date.parse(`${daysOpen ? draft.toDay : day}T09:00:00+03:00`))}
+              {rangeDays.length > 1 ? 'Vehicles and stops for ' : 'Vehicles shared on '}
+              {periodDays(Date.parse(`${rangeDays[0]}T09:00:00+03:00`), Date.parse(`${rangeDays[rangeDays.length - 1]}T09:00:00+03:00`))}
             </h3>
             <span className={`dlv-plan__keep${saveState.error || dayList.isError ? ' dlv-plan__keep--error' : ''}`} role="status">
               {dayList.isError ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> The list could not be read: {dayList.error?.message}</>
@@ -650,6 +688,17 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       : <><i className="ti ti-cloud-check" aria-hidden="true" /> Saved for everyone in {companyName ?? orgCode ?? 'the organisation'}</>}
             </span>
           </div>
+          {rangeDays.length > 1 && (
+            // Each day of the range keeps its own list and is run with it: pick the day to change
+            <div className="sp4-filter-group dlv-plan__days" role="group" aria-label="The day whose list is shown">
+              {rangeDays.map((d, i) => (
+                <button key={d} type="button" aria-pressed={d === day}
+                        className={`sp4-filter-chip${d === day ? ' sp4-filter-chip--on' : ''}`} onClick={() => setPickDay(d)}>
+                  {d} · {listedOn(i) == null ? '…' : `${listedOn(i)} vehicle${listedOn(i) === 1 ? '' : 's'}`}
+                </button>
+              ))}
+            </div>
+          )}
           {zones.status === 'done' && !customers.length && (
             <p className="rpt-warn dlv-plan__warn">No geofences are on the platform for Menengai yet, so stops cannot be picked.</p>
           )}

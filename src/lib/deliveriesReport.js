@@ -15,6 +15,7 @@ import { customerName } from './customerName';
 import { fenceContains } from './zoneContainment';
 import { metresToFence } from './movementDepots';
 import { PIN_RADIUS_M, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from './deliveryPlan';
+import { MAX_MOVEMENT_DAYS, movementWindows } from './movementReport';
 
 /** At least this long inside a customer's geofence is a delivery. */
 export const STOP_MS = 90_000;
@@ -380,6 +381,40 @@ const isNear = (stop, storage) => {
  * @param {object[][]} [o.routes]  each of its trackers' readings, for the stops: `pings` alone when not given
  * @param {Array<{from, to}>} [o.windows]  the hours each day the stops are read over: [from, to] when not given
  */
+/** The fleet days from `from` to `to`, both kept: "2026-11-11" to "2026-11-12" is two days. */
+export function daysFrom(from, to, max = MAX_MOVEMENT_DAYS) {
+  const out = [];
+  if (!from || !to) return out;
+  // Noon UTC steps whole calendar days; the keys are fleet days already
+  for (let t = Date.parse(`${from}T12:00:00Z`), end = Date.parse(`${to}T12:00:00Z`); t <= end && out.length < max; t += 86_400_000) {
+    out.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/**
+ * The report day by day (operator, 12 Nov 2026: "11/11/2026 to 12/11/2026
+ * should show both days in full"): each fleet day of a days-and-hours choice
+ * with its own window and its own list of vehicles. A range used to run its
+ * first day's list alone, so every vehicle shared on a later day was missing.
+ * A day whose hours have not begun yet is left out, as movementWindows does.
+ * The last hours: one run, with today's list.
+ * @param {object} sel    { mode: 'last', hours } or { mode: 'days', fromDay, toDay, start, end }
+ * @param {object} lists  { 'YYYY-MM-DD': vehicles[] }
+ * @returns {Array<{ day, from, to, vehicles }>}
+ */
+export function dayRuns(sel, lists, { today, now = Date.now() }) {
+  const of = (d) => lists?.[d] ?? [];
+  if (sel.mode === 'last') {
+    const [w] = movementWindows(sel, now);
+    return w ? [{ day: today, from: w.from, to: w.to, vehicles: of(today) }] : [];
+  }
+  return daysFrom(sel.fromDay, sel.toDay).flatMap((day) => {
+    const [w] = movementWindows({ ...sel, fromDay: day, toDay: day }, now);
+    return w ? [{ day, from: w.from, to: w.to, vehicles: of(day) }] : [];
+  });
+}
+
 export function deliveryRow(plan, pings, storages, customerByName, { from = null, to, place = null, lastFix = null, atMorl = false, unread = false, routes = null, windows = null, pinNames = null }) {
   // Its last position as Movements has it, when newer than the readings: a
   // parked tracker can go quiet for days
@@ -590,9 +625,12 @@ export function readOrders(text) {
   return fulfilled <= planned ? { fulfilled, planned } : null;
 }
 
+/** The plate, with its list's day when the report spans several (`r.day` is set only then). */
+export const plateWords = (r) => (r.day ? `${r.plate} (${r.day})` : r.plate);
+
 export function rowCells(r) {
   return [
-    r.plate,
+    plateWords(r),
     r.trip.leftAt != null ? `${stamp(r.trip.leftAt)} (${r.trip.leftFrom?.short ?? ''})` : notLeftWords(r.trip),
     `${r.fulfilled}/${r.planned}`,
     r.trip.arrivedAt != null && r.trip.arrivedTo && !r.trip.outAgain ? r.trip.arrivedTo.label : (r.place ?? '-'),
@@ -621,7 +659,7 @@ export function deliveriesPdfBody(rows, { from, at, fleet, group = null, stops =
   return {
     fleet, from: Math.round(from), at: Math.round(at), group: group ?? 'all', stops,
     rows: rows.map((r) => ({
-      plate: r.plate,
+      plate: plateWords(r),
       leftAt: r.trip.leftAt ?? null,
       leftFrom: r.trip.leftFrom ? { short: r.trip.leftFrom.short, label: r.trip.leftFrom.label } : null,
       notLeft: r.trip.leftAt != null ? null : notLeftWords(r.trip),

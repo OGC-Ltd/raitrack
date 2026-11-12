@@ -19,6 +19,12 @@ export async function saveDeliveryDay(orgId, day, vehicles) {
   return res.data
 }
 
+/** Every day's list from `from` to `to`, both kept: [{ day, vehicles, updatedAt }], in order. */
+export async function getDeliveryDays(orgId, from, to) {
+  const res = await apiFetch(`${base(orgId)}/days?from=${from}&to=${to}`)
+  return res.data ?? []
+}
+
 /** The latest earlier day with vehicles on it (two weeks back at most), or null. */
 export async function lastDeliveryDayBefore(orgId, day) {
   const res = await apiFetch(`${base(orgId)}/days?before=${day}`)
