@@ -512,6 +512,15 @@ describe('a delivery sheet into one vehicle’s stops (Import from Excel)', asyn
     expect(r.unplaced).toEqual(['UNKNOWN DUKA']);
     expect(r).toMatchObject({ plate: 'KDE 128E', planDate: '2026-11-09' });
   });
+  it('a customer with a geofence is that geofence, even with a point on the sheet (operator, 13 Nov 2026)', () => {
+    const r = sheetStops({ stops: [
+      { sequence: 1, customerCode: 'C1', customerName: 'MAGUNA ANDU', lat: -0.0951, lng: 36.1271, keptPoint: { lat: -0.0951, lng: 36.1271 }, fenceName: 'Naivas Nakuru' },
+      { sequence: 2, customerCode: 'C2', customerName: 'RAFIKI', lat: -0.3, lng: 36.07, keptPoint: null, fenceName: 'JOJAC INVESTMENTS' },
+      { sequence: 3, customerCode: 'C3', customerName: 'GONE', lat: -0.4, lng: 36.1, keptPoint: null, fenceName: 'A fence not loaded' },
+    ] }, fences, 100);
+    expect(r.names).toEqual(['Naivas Nakuru', 'MENENGAI_VS: JOJAC INVESTMENTS']);
+    expect(r.pins).toEqual([{ name: 'GONE', lat: -0.4, lng: 36.1, radiusM: 100 }]);
+  });
   it('a radius out of range is held to the paste box’s limits', () => {
     expect(sheetStops(preview, fences, 'x').pins[0].radiusM).toBeGreaterThan(0);
     expect(sheetStops({ stops: [] }, fences).pins).toEqual([]);

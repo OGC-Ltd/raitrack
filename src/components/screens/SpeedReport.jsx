@@ -37,7 +37,7 @@ const fmt = (n) => n.toLocaleString('en-GB');
 const KPI_LABELS = ['Units over', 'Occurrences', 'Highest, km/h', 'Distance over, km', 'Mileage, km'];
 
 export default function SpeedReport({ orgId, orgCode, companyName, active = true }) {
-  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('speedReport', { orgId, orgCode, companyName });
+  const { picked, several, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker } = useReportOrgs('speedReport', { orgId, orgCode, companyName });
   const [day, setDay] = useState(() => yesterday());
   const [group, setGroup] = useState('all');
   const [run, setRun] = useState({ status: 'idle' });
@@ -57,7 +57,8 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
         const oid = await orgIdOf(c);
         if (!oid) { unread.push(nameOf(c)); continue; }
         const rep = await loadSpeedReport({ orgId: oid, day });
-        reports.push({ ...rep, rows: rep.rows.filter((r) => keepUnit(c, r.name)) });
+        // Naitiri: the Group is the unit's kind on the client's lists (Tractors, Light vehicles, …), not the platform's Other
+        reports.push({ ...rep, rows: rep.rows.filter((r) => keepUnit(c, r.name)).map((r) => ({ ...r, group: kindOf(r.name) ?? r.group })) });
       }
       if (id !== runId.current) return;
       setGroup('all');

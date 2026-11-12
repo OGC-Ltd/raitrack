@@ -12,6 +12,8 @@
 //
 // Pure: no React, no network.
 
+import { SITE_LISTS } from './siteLists';
+
 /**
  * West Kenya's report lists these, and only West Kenya's does (operator, 4 Nov
  * 2026): from Sukari or Kabras the report is about Sukari or Kabras alone.
@@ -25,8 +27,10 @@ const WEST_KENYA = {
     { key: 'SUKARI', label: 'Sukari', org: 'SUKARI' },
     { key: 'KABRAS', label: 'Kabras', org: 'KABRAS' },
     { key: 'NZOIA', label: 'Nzoia', org: 'NZOIA' },
-    { key: 'OLEPITO', label: 'Olepito', unit: /ole?i?p(?:i?t|ti)/i },
-    { key: 'NAITIRI', label: 'Naitiri', unit: /nait[ir]/i },
+    { key: 'OLEPITO', label: 'Olepito', unit: SITE_LISTS.OLEPITO.test },
+    // Naitiri from the client's Excel files alone, not the unit's name (operator, 12 Nov 2026), lib/siteLists
+    { key: 'NAITIRI', label: SITE_LISTS.NAITIRI.label, unit: SITE_LISTS.NAITIRI.test },
+    { key: 'NAITIRI_TRUCKS', label: SITE_LISTS.NAITIRI_TRUCKS.label, unit: SITE_LISTS.NAITIRI_TRUCKS.test },
   ],
 };
 
@@ -38,13 +42,13 @@ const WEST_KENYA_SITES = {
   ...WEST_KENYA,
   members: [
     ...WEST_KENYA.members,
-    { key: 'AMUKA', label: 'Amuka', unit: /amuka/i },
-    { key: 'KHALABA', label: 'Khalaba', unit: /khalaba/i },
-    { key: 'LAKE_AGRO', label: 'Lake Agro', unit: /lake/i },
-    { key: 'MAGUT', label: 'Magut', unit: /magut/i },
-    { key: 'MISIKHU', label: 'Misikhu', unit: /misikhu/i },
-    { key: 'NAIROBI', label: 'Nairobi', unit: /nairobi/i },
-    { key: 'SELIA', label: 'Selia', unit: /seli/i },
+    { key: 'AMUKA', label: 'Amuka', unit: SITE_LISTS.AMUKA.test },
+    { key: 'KHALABA', label: 'Khalaba', unit: SITE_LISTS.KHALABA.test },
+    { key: 'LAKE_AGRO', label: 'Lake Agro', unit: SITE_LISTS.LAKE_AGRO.test },
+    { key: 'MAGUT', label: 'Magut', unit: SITE_LISTS.MAGUT.test },
+    { key: 'MISIKHU', label: 'Misikhu', unit: SITE_LISTS.MISIKHU.test },
+    { key: 'NAIROBI', label: 'Nairobi', unit: SITE_LISTS.NAIROBI.test },
+    { key: 'SELIA', label: 'Selia', unit: SITE_LISTS.SELIA.test },
   ],
 };
 
@@ -131,6 +135,6 @@ export function familyRuns(family, ticked, canSee) {
   const on = ticked == null ? members : members.filter((m) => ticked.includes(m.key));
   const sites = on.filter((m) => m.unit);
   const home = ticked == null ? [{ code: family.home, unit: null }]
-    : sites.length ? [{ code: family.home, unit: new RegExp(sites.map((m) => m.unit.source).join('|'), 'i') }] : [];
+    : sites.length ? [{ code: family.home, unit: { test: (name) => sites.some((m) => m.unit.test(name)) } }] : [];
   return [...home, ...on.filter((m) => m.org).map((m) => ({ code: m.org, unit: null }))];
 }

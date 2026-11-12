@@ -334,6 +334,28 @@ export function byFleetList(report, groups) {
   return { ...report, groups: ordered, byList: true };
 }
 
+/**
+ * West Kenya's report regrouped by the kind on the client's Excel files when Naitiri is
+ * picked (operator, 13 Nov 2026: a Trucks item in the types menu, not a "Naitiri trucks"
+ * site), so the types menu lists Trucks, Tractors, Motorbikes, Light vehicles, Winches.
+ * A row with no kind (another site picked beside Naitiri) keeps its own group, after them.
+ * @param kindOf  row -> the kind, or null
+ * @param order   the kinds in the order shown (lib/siteLists SITE_KINDS)
+ */
+export function bySiteKind(report, kindOf, order = []) {
+  const buckets = new Map(order.map((k) => [k, []]));
+  for (const g of report.groups) {
+    for (const r of g.rows) {
+      const name = kindOf(r) ?? g.name;
+      if (!buckets.has(name)) buckets.set(name, []);
+      buckets.get(name).push(r);
+    }
+  }
+  const groups = [...buckets.entries()].filter(([, list]) => list.length)
+    .map(([name, list]) => ({ name, rows: [...list].sort((a, b) => byPlate(a.plate, b.plate)) }));
+  return { ...report, groups, counts: countRows(groups) };
+}
+
 /** The report with only the picked types, counted again. */
 export function onlyTypes(report, types) {
   const keep = new Set(types);

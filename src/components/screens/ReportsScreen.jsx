@@ -55,6 +55,7 @@ import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
 import DeliveriesReport from './DeliveriesReport';
 import ChoicePicker from './ChoicePicker';
+import { useSitePick } from '../../hooks/useSitePick';
 import TatFuelReport from './TatFuelReport';
 import AlarmDistributionReport from './AlarmDistributionReport';
 import UnauthorizedPassengersReport from './UnauthorizedPassengersReport';
@@ -78,7 +79,8 @@ import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
 import { placeNameAt } from '../../hooks/usePlaceName';
-import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes } from '../../lib/movementReport';
+import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes, bySiteKind } from '../../lib/movementReport';
+import { SITE_KINDS, siteKind } from '../../lib/siteLists';
 import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
@@ -704,7 +706,7 @@ function TypePicker({ types, picked, counts, onChange }) {
  */
 function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, whoAmI }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -730,7 +732,7 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
         ))}
       </div>
       <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
-        <MovementsReport orgId={orgId} />
+        <MovementsReport orgId={orgId} orgCode={orgCode} />
       </div>
       {tankers && (
       <div className="mvt-panel" role="tabpanel" id="mvt-tankers-panel" aria-labelledby="mvt-tankers" hidden={tab !== 'tankers'}>
@@ -794,9 +796,31 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   );
 }
 
-function MovementsReport({ orgId }) {
+// Movements offers Naitiri alone: its trucks are the Trucks item of the types menu (operator, 13 Nov 2026)
+const MOVEMENTS_OMIT = ['NAITIRI_TRUCKS'];
+
+/**
+ * Movements narrowed to the sites picked, under their name. A group left with none of them goes
+ * (no "Saloons 0 vehicles"). Under Naitiri the rows are grouped by the kind on the client's Excel
+ * files, so the types menu reads Trucks, Tractors... The direction words stay the server's
+ * ("At West Kenya"): they name the factory fence the direction is read against, not the fleet.
+ */
+function movementsForSite(reports, sitePick) {
+  if (!reports || !sitePick.site) return reports;
+  const site = sitePick.site;
+  const kindOf = (row) => [row.plate, row.name, row.grouping].reduce((k, l) => k ?? (l ? siteKind(site, l) : null), null);
+  return reports.map((r) => bySiteKind({ ...r, organisation: sitePick.fleetWords(r.organisation),
+    groups: (r.groups ?? [])
+      .map((g) => ({ ...g, rows: (g.rows ?? []).filter((row) => sitePick.keepRow(row.grouping, row.plate, row.name)) }))
+      .filter((g) => g.rows.length > 0) }, kindOf, SITE_KINDS));
+}
+
+function MovementsReport({ orgId, orgCode = null }) {
   // Mounted afresh for each organisation (key={orgId}), from what was kept for it.
   const [saved] = useState(() => movementsKept.get(orgId));
+  // West Kenya's Naitiri from the client's lists (hooks/useSitePick): rows kept, and the title.
+  // The site picked is kept with the tables, so coming back shows them as they were.
+  const sitePick = useSitePick(orgCode, saved?.site ?? null, MOVEMENTS_OMIT);
   const today = fleetDay(Date.now());
   const [sel, setSel] = useState(saved?.sel ?? { mode: 'last', hours: LAST_HOURS[0] });
   const [draft, setDraft] = useState(saved?.draft ?? { fromDay: today, toDay: today, start: 7, end: 20 });
@@ -820,9 +844,9 @@ function MovementsReport({ orgId }) {
   // back finds them as they were. Only finished tables are kept.
   useEffect(() => {
     if (!orgId) return;
-    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types, eventKinds });
+    if (run.status === 'done') movementsKept.set(orgId, { sel, draft, reports: run.reports, edits, day, types, eventKinds, site: sitePick.site });
     else movementsKept.delete(orgId);
-  }, [orgId, sel, draft, run, edits, day, types, eventKinds]);
+  }, [orgId, sel, draft, run, edits, day, types, eventKinds, sitePick.site]);
 
   const execute = async (next) => {
     if (!orgId) return;
@@ -862,7 +886,7 @@ function MovementsReport({ orgId }) {
         if (id !== runId.current) return;
         if (got) reports[i] = withTrips(reports[i], got.perVehicle);
       }
-      const all = vehicleTypes(reports);
+      const all = vehicleTypes(movementsForSite(reports, sitePick));
       setTypes((t) => (t?.some((x) => all.includes(x)) ? t.filter((x) => all.includes(x)) : defaultTypes(all)));
       setEdits(reports.map(() => ({})));
       setDay(reports.length - 1);
@@ -874,8 +898,19 @@ function MovementsReport({ orgId }) {
   // Opens made for the last hour, unless tables were kept for this organisation.
   useEffect(() => { if (!saved && orgId) execute(sel); }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const reports = run.status === 'done' ? run.reports : null;
+  const reportsAll = run.status === 'done' ? run.reports : null;
+  // On screen and in every file: only the picked sites' units (movementsForSite)
+  const reports = useMemo(() => movementsForSite(reportsAll, sitePick), [reportsAll, sitePick]);
   const allTypes = useMemo(() => (reports ? vehicleTypes(reports) : []), [reports]);
+  // Another site picked: the types are its own (Trucks, Tractors... under Naitiri), every one of them
+  // ticked (CPO only where there are CPO types). Not when the page opens with what was kept.
+  const siteKey = (sitePick.site ?? []).join('|');
+  const typesSite = useRef(siteKey);
+  useEffect(() => {
+    if (typesSite.current === siteKey || !allTypes.length) return;
+    typesSite.current = siteKey;
+    setTypes(defaultTypes(allTypes));
+  }, [siteKey, allTypes]);
   const picked = useMemo(() => types ?? [], [types]);
   // Menengai's fleet list, when its report is grouped by it: the menu lists every group of it
   const fleetList = reports?.some((r) => r.byList) ? groupsFor(reports[0].orgCode) : null;
@@ -1076,6 +1111,8 @@ function MovementsReport({ orgId }) {
                           ...fleetList.map((g) => ({ value: g.name, label: g.name, note: typeCounts[g.name] ?? 0 }))]}
                         onChange={(v) => setTypes(v == null ? allTypes : [v])} />
         ) : allTypes.length > 0 && <TypePicker types={allTypes} picked={picked} counts={typeCounts} onChange={setTypes} />}
+
+        {sitePick.picker && <CheckPicker {...sitePick.picker} />}
 
         <CheckPicker icon="ti-alert-triangle" label="Events" noun="events" noAll
                      options={EVENTS.map((e) => ({ value: e.key, label: e.label }))} picked={eventKinds}
@@ -1319,6 +1356,9 @@ export default function ReportsScreen() {
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key, NIGHT, orgCode));
   const [group, setGroup] = useState(null);
+  // West Kenya's Naitiri from the client's lists (hooks/useSitePick): the units, and the title
+  const sitePick = useSitePick(orgCode);
+  const siteVehicles = useMemo(() => vehicles.filter(sitePick.keepVehicle), [vehicles, sitePick]);
   // One unit, on the reports that take it (UNIT_REPORTS); null = every unit in the group
   const [unit, setUnit] = useState(null);
   const [night, setNight] = useState(NIGHT);
@@ -1397,10 +1437,10 @@ export default function ReportsScreen() {
   const byUnit = UNIT_REPORTS.has(key);
   // The units of the group picked, by plate, for the Unit picker
   const unitChoices = useMemo(() => (byUnit
-    ? scopeUnits(vehicles, groups, group).units
+    ? scopeUnits(siteVehicles, groups, group).units
       .map((u) => ({ value: u.key, label: u.plate, note: u.group ?? undefined }))
       .sort((x, y) => x.label.localeCompare(y.label, 'en', { numeric: true }))
-    : []), [byUnit, vehicles, groups, group]);
+    : []), [byUnit, siteVehicles, groups, group]);
   const today = fleetDay(Date.now());
   // Every report here takes its period on one calendar with the hours under it,
   // as Movements does (operator, 2 Nov): the first day at the start hour to the
@@ -1435,7 +1475,7 @@ export default function ReportsScreen() {
     if (problemFor(sp)) return;
     const id = ++runId.current;
     const live = () => id === runId.current;
-    const scoped = scopeUnits(vehicles, groups, group);
+    const scoped = scopeUnits(siteVehicles, groups, group);
     const one = byUnit && unit ? scoped.units.find((u) => u.key === unit) : null;
     const units = one ? [one] : scoped.units;
     const missing = one ? [] : scoped.missing;
@@ -1579,7 +1619,7 @@ export default function ReportsScreen() {
   const editor = useReportEditor({
     orgId, source: run,
     build: () => flowDoc(reportHtml(def, done, {
-      companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+      companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
       orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(),
     })),
   });
@@ -1594,7 +1634,7 @@ export default function ReportsScreen() {
         return;
       }
       const { html, landscape, filename } = reportHtml(def, done, {
-        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+        companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
       });
       await saveLetterheadPdf(html, { filename, landscape });
@@ -1618,7 +1658,7 @@ export default function ReportsScreen() {
         return;
       }
       const { html, landscape, filename } = reportHtml(def, done, {
-        companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+        companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
         orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: turned,
       });
       await saveLetterheadJpeg(html, { filename, landscape });
@@ -1633,7 +1673,7 @@ export default function ReportsScreen() {
   const preview = usePdfPreview(async (turned) => {
     if (editor.edited) return editor.make(turned);
     const { html, landscape, filename } = reportHtml(def, done, {
-      companyName: activeCompany?.name ?? orgCode ?? 'Fleet',
+      companyName: sitePick.fleetWords(activeCompany?.name ?? orgCode ?? 'Fleet'),
       orgCode, groupWords, periodWords, nightWords, logos: letterheadLogos(), landscape: Boolean(turned),
     });
     return saveLetterheadPdf(html, { filename, landscape, keep: true });
@@ -1699,6 +1739,10 @@ export default function ReportsScreen() {
                         options={[{ value: null, label: 'All groups', note: groups.reduce((n, g) => n + g.units.length, 0) },
                           ...groups.map((g) => ({ value: g.name, label: g.name, note: g.units.length }))]}
                         onChange={(v) => { setGroup(v); setUnit(null); reset(); }} />
+        )}
+
+        {sitePick.picker && (
+          <CheckPicker {...sitePick.picker} onChange={(v) => { sitePick.setSite(v); setUnit(null); reset(); }} />
         )}
 
         {byUnit && (
