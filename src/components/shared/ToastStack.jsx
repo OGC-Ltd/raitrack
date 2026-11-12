@@ -2,9 +2,10 @@
  * The toast stack, mounted once for the whole app. Every toast comes from the
  * server down the live stream (lib/serverToasts): Menengai's unauthorised
  * stops and every web push. The page itself adds a few of its own, level
- * 'success' (the Planner's saved sheets). First in, first out: the oldest sits on top and
- * leaves first, each 8 seconds after it came into view (lib/toasts). A pointer
- * on the stack holds the clocks so Copy or Open can be reached.
+ * 'success' (the Planner's saved sheets). Last in, first out: only the newest
+ * is drawn, the rest wait unseen behind it and the next comes forward when it
+ * is closed or its 8 seconds run out (lib/toasts). A pointer on it holds the
+ * clock so Copy or Open can be reached.
  */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -88,16 +89,17 @@ function Toast({ t }) {
 }
 
 export default function ToastStack() {
-  const { shown, waiting } = useSyncExternalStore(subscribeToasts, toastsSnapshot, toastsSnapshot);
-  // Nothing under the pointer once the stack empties: let the clocks run again
-  useEffect(() => { if (!shown.length) pauseToasts(false); }, [shown.length]);
-  if (!shown.length) return null;
+  const { front } = useSyncExternalStore(subscribeToasts, toastsSnapshot, toastsSnapshot);
+  // Nothing under the pointer once the stack empties: let the clock run again
+  useEffect(() => { if (!front) pauseToasts(false); }, [front]);
+  if (!front) return null;
   return (
     <div className="tst-stack" role="region" aria-label="Notifications"
          onMouseEnter={() => pauseToasts(true)} onMouseLeave={() => pauseToasts(false)}
          onFocus={() => pauseToasts(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) pauseToasts(false); }}>
-      {shown.map((t) => <Toast key={t.id} t={t} />)}
-      {waiting > 0 && <div className="tst-stack__more">{waiting} more waiting</div>}
+      {/* Keyed by id: each toast that comes forward is a fresh card, so it
+          slides in and its 8-second line starts full. */}
+      <Toast key={front.id} t={front} />
     </div>
   );
 }

@@ -121,7 +121,7 @@ function AppShell() {
       <ErrorBoundary label="Stop watch">
         <StopWatch />
       </ErrorBoundary>
-      {/* Every toast, made by the server: first in, first out, 8 s each */}
+      {/* Every toast, made by the server: newest in front, the rest unseen behind it, 8 s each */}
       <ErrorBoundary label="Toasts">
         <ToastStack />
       </ErrorBoundary>
