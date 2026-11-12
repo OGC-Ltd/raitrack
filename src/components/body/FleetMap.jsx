@@ -729,6 +729,9 @@ const DEFAULT_CENTER = { lat: -0.0236, lng: 37.9062 };
 // calculates the correct zoom automatically based on fleet spread.
 // 14 = street level, enough to stop a single parked vehicle filling the screen.
 const FIT_MAX_ZOOM   = 14;
+// Framing geofences and nothing else: close enough that a 100 m shop fence is
+// past FENCE_DRAW_PX (lib/fenceCluster) and drawn as itself, not a group icon.
+const FENCE_FIT_MAX_ZOOM = 17;
 
 /**
  * Share of the fleet the default view is fitted to.
@@ -4962,6 +4965,7 @@ export default function FleetMap() {
     if (!map || !maps) return;
 
     const b = new maps.LatLngBounds();
+    let fencesOnly = false;   // the geofences are all there is to frame
     const extendData = (data) =>
       data?.forEach(f => f.getGeometry()?.forEachLatLng(ll => b.extend(ll)));
 
@@ -4983,6 +4987,7 @@ export default function FleetMap() {
       const zoneBounds = zoneLayerRef.current?.[customOnly ? "ownBounds" : "bounds"];
       if (zonesDrawn && hasZones && zoneBounds && !zoneBounds.isEmpty()) {
         b.union(zoneBounds);
+        fencesOnly = !(showPlan && planAllowed) && !(showBridges && hasBridges);
       }
       if (showBridges && hasBridges) {
         for (const m of bridgeMarkersRef.current ?? []) b.extend(m.getPosition());
@@ -5000,13 +5005,22 @@ export default function FleetMap() {
       const { min, max } = subject.fit ?? { min: SITE_MIN_ZOOM, max: SITE_MAX_ZOOM };
       fitMapToBounds(map, maps, b, SITE_FIT_PADDING, { min, max });
     } else {
-      fitMapToBounds(map, maps, b);
+      // Fences alone may go past the fleet's street-level ceiling: at 14 a
+      // drawn shop (100 m) is still under the size it is drawn at and shows as
+      // a group icon, so framing it would land on a speck.
+      fitMapToBounds(map, maps, b, 70, fencesOnly ? { max: FENCE_FIT_MAX_ZOOM } : {});
     }
   }, [showPlan, planAllowed, sitePlans, siteOn, showBridges, hasBridges,
       zonesDrawn, customOnly, hasZones, activeCompanyId]);
 
+  // Assigned while rendering, not in an effect: the geofence layer's effect,
+  // which calls this on a toggle, is declared ABOVE here and so runs before any
+  // effect down here could update the ref. It used to get the previous render's
+  // function, which still had the switch off, found nothing to frame, and left
+  // the camera on the whole fleet with the fences as specks (operator,
+  // 2026-11-12: "custom geofences are not shown on the map").
   const fitPlaceLayersRef = useRef(fitPlaceLayers);
-  useEffect(() => { fitPlaceLayersRef.current = fitPlaceLayers; }, [fitPlaceLayers]);
+  fitPlaceLayersRef.current = fitPlaceLayers;
 
   // ── estate PLAN (CAD drawing) overlay ───────────────────────────────────
   //
