@@ -156,4 +156,14 @@ describe('a customer the unit passed, picked for a line (operator, 12 Nov 2026)'
     const [back] = lines([{ ...row, trip: { leftAt: 1000, arrivedAt: 4000 } }], { at: 9000, picks });
     expect(state(back)).toBe('done');                                  // green: arrived and back at the yard
   });
+
+  it('a line picked after the truck is back is no longer "Not Geofenced"', () => {
+    const row = { plate: 'KBY 594Q', trip: { leftAt: 1000, arrivedAt: 4000 }, customers: [{ name: 'Menengai: Mahadev Drappers', label: 'Menengai: Mahadev Drappers', at: null }] };
+    const [before] = fgLines([row], { at: 9000 });
+    expect(before.notGeofenced).toBe(true);
+    expect(before.customer).toMatch(/Not Geofenced/);
+    const [after] = fgLines([row], { at: 9000, picks: new Map([[before.key, { at: 2000, leftAt: 2500, label: 'mahadev bungoma' }]]) });
+    expect(after.notGeofenced).toBe(false);
+    expect(after.customer).not.toMatch(/Not Geofenced/);
+  });
 });

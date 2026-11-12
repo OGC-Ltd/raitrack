@@ -114,7 +114,11 @@ export function fgLines(rows, { at, picks = null }) {
         completed: base.departAt != null && base.yardAt != null,
       });
       const pick = picks?.get(out[out.length - 1].key);
-      if (pick) Object.assign(out[out.length - 1], { arriveAt: pick.at, leftAt: pick.leftAt ?? null, delivered: true, picked: pick.label });
+      // A picked customer is reached: its name plain again, never "Not Geofenced"
+      if (pick) {
+        Object.assign(out[out.length - 1], { arriveAt: pick.at, leftAt: pick.leftAt ?? null, delivered: true, picked: pick.label,
+          notGeofenced: false, ...(c ? { customer: customerName(c.stop?.name || c.label || c.name) } : {}) });
+      }
     }
   }
   return out;

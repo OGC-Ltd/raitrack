@@ -53,7 +53,7 @@ import { flowDoc } from '../../lib/reportDocs';
 import TankersReport from './TankersReport';
 import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
-import DeliveriesReport from './DeliveriesReport';
+import { DeliveriesReports } from './DeliveriesReport';
 import ChoicePicker from './ChoicePicker';
 import { useSitePick } from '../../hooks/useSitePick';
 import TatFuelReport from './TatFuelReport';
@@ -710,9 +710,8 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
-    // Deliveries as two tabs, one per template (operator, 12 Nov 2026: "to avoid confusion")
-    deliveries && { key: 'deliveriesVs', label: 'Deliveries VS' },
-    deliveries && { key: 'deliveriesFg', label: 'Deliveries FG' },
+    // One Deliveries tab; its Van Sales and Finished Goods reports are picked inside it (operator, 13 Nov 2026)
+    deliveries && { key: 'deliveries', label: 'Deliveries' },
     geofences && { key: 'geofences', label: 'Geofences' },
     tatFuel && { key: 'tatFuel', label: 'TAT and Fuel' },
     recovery && { key: 'recovery', label: 'Recovery' },
@@ -739,14 +738,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
         <TankersReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} active={tab === 'tankers'} />
       </div>
       )}
-      {deliveries && (<>
-      <div className="mvt-panel" role="tabpanel" id="mvt-deliveriesVs-panel" aria-labelledby="mvt-deliveriesVs" hidden={tab !== 'deliveriesVs'}>
-        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} template="vanSales" />
+      {deliveries && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-deliveries-panel" aria-labelledby="mvt-deliveries" hidden={tab !== 'deliveries'}>
+        <DeliveriesReports orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />
       </div>
-      <div className="mvt-panel" role="tabpanel" id="mvt-deliveriesFg-panel" aria-labelledby="mvt-deliveriesFg" hidden={tab !== 'deliveriesFg'}>
-        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} template="finishedGoods" />
-      </div>
-      </>)}
+      )}
       {geofences && (
       <div className="mvt-panel" role="tabpanel" id="mvt-geofences-panel" aria-labelledby="mvt-geofences" hidden={tab !== 'geofences'}>
         <GeofenceReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />

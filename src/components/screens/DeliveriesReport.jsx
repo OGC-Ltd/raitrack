@@ -219,15 +219,53 @@ function PinPaste({ orgId, vehicle, customers, onAdd, onRemovePins }) {
 /** How far past a window's end the report reads, to see its trips back at the yard (operator, 12 Nov 2026). */
 const RETURN_DAYS = 2;
 
-/** The tab's own template (operator, 12 Nov 2026: Deliveries split into Deliveries VS and Deliveries FG):
- *  the report opens on that template's group, with no template to pick. Without it, the picker as before. */
+/** The report's own template (operator, 12 Nov 2026: Van Sales and Finished Goods kept apart; 13 Nov: one
+ *  Deliveries tab, the two picked inside it): it opens on that template's group, with no template to pick. */
 const TAB_GROUP = { vanSales: 'Van Sales', finishedGoods: 'Finished Goods' };
-/** Each tab's own list on the day (operator, 12 Nov 2026): a vehicle without `list` is FG's, as every list kept before. */
+/** Each report's own list on the day (operator, 12 Nov 2026): a vehicle without `list` is FG's, as every list kept before. */
 const TAB_LIST = { vanSales: 'vs', finishedGoods: 'fg' };
 const listOf = (v) => (v?.list === 'vs' ? 'vs' : 'fg');
 const tagList = (v, list) => { const { list: _was, ...rest } = v; return list === 'vs' ? { ...rest, list: 'vs' } : rest; }; // eslint-disable-line no-unused-vars
 
-export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName, template: fixedTemplate = null }) {
+/** The two Deliveries reports, in the order the switch offers them. */
+const REPORT_KINDS = [
+  { value: 'vanSales', label: 'Van Sales' },
+  { value: 'finishedGoods', label: 'Finished Goods' },
+];
+
+/**
+ * The Deliveries tab (operator, 13 Nov 2026: "instead of having tabs for delivery fg and delivery vs we
+ * keep our deliveries tab and within the deliveries we have a breadcrumb that gives the two options"):
+ * Deliveries › Van Sales | Finished Goods. Both reports stay mounted, so each keeps its list, run and
+ * edits while the other is shown; the one picked last is kept in this browser.
+ */
+export function DeliveriesReports(props) {
+  const { orgCode } = props;
+  const [kind, setKind] = useState(() => loadTemplate(orgCode));
+  useEffect(() => { setKind(loadTemplate(orgCode)); }, [orgCode]);
+  const pick = (k) => { setKind(k); saveTemplate(orgCode, k); };
+  const crumbs = (
+    <nav className="dlv-crumbs" aria-label="Deliveries reports">
+      <span className="dlv-crumbs__root">Deliveries</span>
+      <i className="ti ti-chevron-right dlv-crumbs__sep" aria-hidden="true" />
+      <span className="sp4-filter-group dlv-crumbs__kinds" role="group" aria-label="Report">
+        {REPORT_KINDS.map((k) => (
+          <button key={k.value} type="button" aria-pressed={kind === k.value} onClick={() => pick(k.value)}
+                  className={`sp4-filter-chip${kind === k.value ? ' sp4-filter-chip--on' : ''}`}>
+            {k.label}
+          </button>
+        ))}
+      </span>
+    </nav>
+  );
+  return REPORT_KINDS.map((k) => (
+    <div key={k.value} className="mvt-panel" hidden={kind !== k.value}>
+      <DeliveriesReport {...props} template={k.value} crumbs={crumbs} />
+    </div>
+  ));
+}
+
+export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName, template: fixedTemplate = null, crumbs = null }) {
   const now = Date.now();
   const today = fleetDay(now);
   // The window, as Movements': the last hours, or days and hours. The list of
@@ -380,8 +418,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const addUnit = (u) => {
     const there = tabList && fullPlan.vehicles.find((v) => v.key === u.key && !mine(v));
     if (there) {
-      const name = tabList === 'vs' ? 'Deliveries FG' : 'Deliveries VS';
-      setAssign({ words: `${u.plate} is on the ${name} list for ${day}. Move it to this list?`, yes: 'Move it here',
+      const name = tabList === 'vs' ? 'Finished Goods' : 'Van Sales';
+      setAssign({ words: `${u.plate} is on the ${name} list for ${dayWords(day)}. Move it to this list?`, yes: 'Move it here',
         go: () => { saveFull({ ...fullPlan, vehicles: fullPlan.vehicles.map((v) => (v.key === u.key ? tagList(v, tabList) : v)) }); setFind(''); } });
       return;
     }
@@ -548,6 +586,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     : daysOpen && daysProblem ? daysProblem
       : !anyListed && !sheets.list.length ? (sheets.status === 'loading' ? 'Looking for the Planner’s sheets' : 'Add the vehicles shared today, or upload their sheets in the Planner')
         : null;
+  // An empty list keeps Run report off, its reason on the button's hover only: not written beside it
+  // (operator, 13 Nov 2026: "remove the advisory text")
+  const problemShown = !anyListed && !sheets.list.length && sheets.status !== 'loading' && !(daysOpen && daysProblem) ? null : problem;
 
   // Each day's list for a run, as the server has it now: one read for a range (GET days?from=&to=),
   // each day's own read for one day, or when the server cannot read a range yet
@@ -823,6 +864,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             <Kpi key={k.label} label={k.label} tone={k.tone} value={k.value ?? <span className="frp-kpi-none">-</span>} />
           ))}
         </div>
+        {crumbs /* Deliveries › Van Sales | Finished Goods, on the right of the figures (operator, 13 Nov 2026) */}
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
@@ -877,7 +919,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
-        {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
+        {problemShown && orgId && <span className="rpt-problem" role="status">{problemShown}</span>}
       </div>
 
       {editor.overlay}
