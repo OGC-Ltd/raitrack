@@ -35,7 +35,7 @@ import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan } from '../../api/planner';
-import { sheetDaysFor, sheetsForReport, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -346,9 +346,6 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       const all = customersIn(fc, storages);
       const byName = new Map(all.map((c) => [c.name, c]));
       const moveRow = new Map((moves?.groups ?? []).flatMap((g) => g.rows).map((row) => [row.vehicleId, row]));
-      // A vehicle on a sheet is the sheet's row: not checked again from the list
-      const onSheets = new Set(sheetList.map((p) => plateKey(p.plate)));
-      const planned = runPlan.vehicles.filter((v) => !onSheets.has(plateKey(v.plate))).map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds }));
       // Every reading of the last days, then a day further back at a time for
       // the vehicles not yet seen leaving a storage, up to MAX_LOOKBACK_DAYS
       const held = new Map();
@@ -380,6 +377,30 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         for (const [vid, pings] of r.pings) sheetPings.set(vid, pings);
         r.failed.forEach((x) => failed.add(x));
       }
+      const reportDays = daysCovering(windowFrom, to);
+      const sheetRowsAll = sheetUnits.map(({ plan: p, trackers, span }) => {
+        const routes = trackers.map((v) => (sheetPings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
+        const { actual } = actualFor(p, routes, fc, dayStart);
+        const mv = trackers.map((v) => moveRow.get(v.vehicleId)).find(Boolean) ?? null;
+        const unit = units.find((u) => u.vehicles.some((x) => trackers.some((v) => v.vehicleId === x.vehicleId)));
+        const why = !trackers.length ? 'No tracked unit carries this plate'
+          : trackers.every((v) => failed.has(v.vehicleId)) ? 'Positions could not be read' : null;
+        // Where the truck is now: Movements' MORL reading, else its latest position against MORL/STO
+        const latest = routes.flat().reduce((a, x) => (!a || x.t > a.t ? x : a), null);
+        const nowAt = mv?.lat != null && mv?.lastAt != null && (!latest || mv.lastAt >= latest.t) ? { lat: mv.lat, lng: mv.lng } : latest;
+        const atStorage = (mv?.state === 'at' ? storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } : null)
+          ?? (nowAt ? storageAt(nowAt, storages) : null);
+        // "Mark for today" on the Planner: only the stops due on the report's days count (lib/plannerDayMarks)
+        const opts = { place: mv?.location ?? null, why, atStorage, days: reportDays };
+        const row = sheetRow(p, actual, { ...opts, marks: marksOf(p) });
+        // Kept so a mark made after the run is taken without running again (see `marked` below)
+        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
+      });
+      // Only the sheets this report's days ran (lib/plannerReport sheetOnDays): no earlier day carried forward
+      const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay));
+      // A vehicle on a kept sheet is the sheet's row: not checked again from the list
+      const onSheets = new Set(sheetRows.map((r) => plateKey(r.plate)));
+      const planned = runPlan.vehicles.filter((v) => !onSheets.has(plateKey(v.plate))).map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds }));
       let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
       if (planned.length) await read(planned.flatMap((v) => v.vehicleIds), start, to, 'Reading each vehicle’s positions');
       if (!live()) return;
@@ -399,25 +420,6 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
         return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key) };
-      });
-      const reportDays = daysCovering(windowFrom, to);
-      const sheetRows = sheetUnits.map(({ plan: p, trackers, span }) => {
-        const routes = trackers.map((v) => (sheetPings.get(v.vehicleId) ?? []).filter((x) => x.t >= span.from && x.t <= span.to));
-        const { actual } = actualFor(p, routes, fc, dayStart);
-        const mv = trackers.map((v) => moveRow.get(v.vehicleId)).find(Boolean) ?? null;
-        const unit = units.find((u) => u.vehicles.some((x) => trackers.some((v) => v.vehicleId === x.vehicleId)));
-        const why = !trackers.length ? 'No tracked unit carries this plate'
-          : trackers.every((v) => failed.has(v.vehicleId)) ? 'Positions could not be read' : null;
-        // Where the truck is now: Movements' MORL reading, else its latest position against MORL/STO
-        const latest = routes.flat().reduce((a, x) => (!a || x.t > a.t ? x : a), null);
-        const nowAt = mv?.lat != null && mv?.lastAt != null && (!latest || mv.lastAt >= latest.t) ? { lat: mv.lat, lng: mv.lng } : latest;
-        const atStorage = (mv?.state === 'at' ? storages.find((s) => s.key === 'morl') ?? { key: 'morl', label: 'MORL', short: 'MORL' } : null)
-          ?? (nowAt ? storageAt(nowAt, storages) : null);
-        // "Mark for today" on the Planner: only the stops due on the report's days count (lib/plannerDayMarks)
-        const opts = { place: mv?.location ?? null, why, atStorage, days: reportDays };
-        const row = sheetRow(p, actual, { ...opts, marks: marksOf(p) });
-        // Kept so a mark made after the run is taken without running again (see `marked` below)
-        return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
       rows.unshift(...sheetRows);
       setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });

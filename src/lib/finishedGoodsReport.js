@@ -72,12 +72,13 @@ export function fgLines(rows, { at }) {
   for (const r of rows ?? []) {
     const departAt = r.trip?.leftAt ?? null;
     const yardAt = r.trip?.arrivedAt != null && !r.trip.outAgain ? r.trip.arrivedAt : null;
+    // Departure is a date and time only (operator, 12 Nov 2026): a truck not
+    // seen leaving has it blank, and why ("At MORL") goes under Current location
     const base = {
       key: r.key ?? r.plate,
       plate: regOf(r.plate),
-      place: nowAt(r),
+      place: nowAt(r) || (departAt == null ? notLeftWords(r.trip) : ''),
       departAt,
-      departWords: departAt != null ? null : notLeftWords(r.trip),
       yardAt,
       tatMs: departAt != null && yardAt != null && yardAt > departAt ? yardAt - departAt : null,
     };
@@ -115,7 +116,7 @@ export function fgDueNotes(rows) {
 /** The line's ten cells, as FG_HEADS. */
 export function fgCells(l) {
   return [l.day, l.plate, l.customer, l.destination || '-', l.place || '-',
-    l.departAt != null ? stamp(l.departAt) : l.departWords ?? '',
+    when(l.departAt),
     when(l.arriveAt), when(l.leftAt), when(l.yardAt), l.tatMs != null ? spanWords(l.tatMs) : ''];
 }
 

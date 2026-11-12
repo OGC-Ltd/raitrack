@@ -123,23 +123,31 @@ describe('the truck’s trackers', () => {
   });
 });
 
-describe('every sheet from the Planner, for now (operator, 11 Nov 2026)', async () => {
-  const { sheetDaysFor, sheetsForReport, ALL_SHEETS_DAYS } = await import('./plannerReport');
+describe('no earlier day carried forward (operator, 12 Nov 2026)', async () => {
+  const { sheetDaysFor, sheetsForReport, sheetOnDays, ALL_SHEETS } = await import('./plannerReport');
   const day = (d, hm = '00:00') => Date.parse(`2026-11-${d}T${hm}:00+03:00`);
-  const from = day('11', '07:00');
-  const to = day('11', '20:00');
-  it('asks the Planner for the last week', () => {
-    expect(ALL_SHEETS_DAYS).toBe(7);
-    expect(sheetDaysFor(from, to, fleetDay)).toEqual({ from: '2026-11-05', to: '2026-11-11' });
-    expect(sheetDaysFor(from, to, fleetDay, false)).toEqual({ from: '2026-11-10', to: '2026-11-11' });
+  const from = day('12', '00:00');
+  const to = day('12', '03:24');
+  it('the every-sheet switch is off: only the window’s days and the day before are asked for', () => {
+    expect(ALL_SHEETS).toBe(false);
+    expect(sheetDaysFor(from, to, fleetDay)).toEqual({ from: '2026-11-11', to: '2026-11-12' });
   });
-  it('keeps a 9 Nov sheet whose 48 hours ended before the window', () => {
+  it('drops a 9 Nov sheet whose 48 hours ended before the window', () => {
     const plans = [
       { id: 'kbb', planDate: '2026-11-09', sheetAt: '2026-11-09T04:00:00+03:00' },
       { id: 'kax', planDate: '2026-11-11', sheetAt: '2026-11-11T06:00:00+03:00' },
-      { id: 'later', planDate: '2026-11-11', sheetAt: '2026-11-11T21:00:00+03:00' },
     ];
-    expect(sheetsForReport(plans, from, to, dayStart, to).map((p) => p.id)).toEqual(['kbb', 'kax']);
-    expect(sheetsForReport(plans, from, to, dayStart, to, false).map((p) => p.id)).toEqual(['kax']);
+    expect(sheetsForReport(plans, from, to, dayStart, to).map((p) => p.id)).toEqual(['kax']);
+  });
+  it('a sheet belongs to the day its truck left', () => {
+    const days = ['2026-11-12'];
+    const left = (t) => ({ trip: { leftAt: t } });
+    expect(sheetOnDays(left(day('11', '06:51')), {}, days, fleetDay)).toBe(false);
+    expect(sheetOnDays(left(day('12', '01:10')), {}, days, fleetDay)).toBe(true);
+    // Not left yet: booked yesterday, driven today
+    expect(sheetOnDays(left(null), {}, days, fleetDay)).toBe(true);
+    // Marked for today with "Mark for today": an order that takes two days
+    expect(sheetOnDays(left(day('11', '06:51')), { s1: '2026-11-12' }, days, fleetDay)).toBe(true);
+    expect(sheetOnDays(left(day('11', '06:51')), { s1: '2026-11-11' }, days, fleetDay)).toBe(false);
   });
 });

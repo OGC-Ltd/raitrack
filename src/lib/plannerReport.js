@@ -45,13 +45,12 @@ export function sheetDays(from, to, dayOf) {
 }
 
 /**
- * TEMPORARY (operator, 11 Nov 2026: "show everything from the planner atm"):
- * every sheet the Planner lists over its default range, the last
- * ALL_SHEETS_DAYS days to the window's end, not only those whose 48 hours meet
- * the window. Each is still read over its own span, so its row matches the
- * Planner. Set ALL_SHEETS to false to go back to sheetsForWindow alone.
+ * Every sheet the Planner lists over the last ALL_SHEETS_DAYS days, when on
+ * (operator, 11 Nov 2026: "show everything from the planner atm"). OFF since
+ * 12 Nov 2026: it put the 11 Nov trucks on the 12 Nov report, and the operator
+ * wants no earlier day's work carried onto a day (see sheetOnDays).
  */
-export const ALL_SHEETS = true;
+export const ALL_SHEETS = false;
 export const ALL_SHEETS_DAYS = 7;
 
 /** The days to ask the Planner for: the window's sheets, or the last ALL_SHEETS_DAYS days while ALL_SHEETS is on. */
@@ -75,6 +74,24 @@ export function sheetsForWindow(plans, from, to, dayStartOf, now = Date.now()) {
     const w = planWindow(p, dayStartOf, now);
     return w.from < to && w.to > from;
   });
+}
+
+/**
+ * Whether a sheet's row belongs on a report over these fleet days (operator,
+ * 12 Nov 2026: no carried-forward records). A truck that left for it belongs to
+ * the day it left; one that has not left yet stays on (its sheet is booked the
+ * day before it is driven); and stops marked for one of the days with "Mark for
+ * today" keep a sheet from an earlier day on, as an order that takes two days.
+ * @param {object} row    sheetRow's row
+ * @param {object} marks  the sheet's marks, { stopId: 'YYYY-MM-DD' } (lib/plannerDayMarks)
+ * @param {string[]} days the report's fleet days
+ * @param {(ms: number) => string} dayOf  a time's fleet day
+ */
+export function sheetOnDays(row, marks, days, dayOf) {
+  const want = new Set(days ?? []);
+  if (Object.values(marks ?? {}).some((d) => want.has(d))) return true;
+  const left = row?.trip?.leftAt;
+  return left == null || want.has(dayOf(left));
 }
 
 const outcomeLabel = (id) => OUTCOMES.find((o) => o.id === id)?.label ?? null;
