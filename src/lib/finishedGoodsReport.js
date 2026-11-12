@@ -11,7 +11,7 @@
 // Pure: no React, no network.
 
 import { customerName } from './customerName';
-import { stamp, dayWords, notLeftWords } from './deliveriesReport';
+import { stamp, dayWords, notLeftWords, listDayWords } from './deliveriesReport';
 import { spanWords } from './plannerActual';
 import { reportNumber } from './reportLetterhead';
 
@@ -89,7 +89,9 @@ export function fgLines(rows, { at }) {
       out.push({
         ...base,
         key: `${base.key}|${c?.name ?? '-'}`,
-        day: dayWords(departAt ?? arriveAt ?? at),
+        // A hand-listed unit is on the day it was listed (operator, 12 Nov 2026: "we added it
+        // 12/11/2026"), however early it set out; a sheet's, the day it left
+        day: r.listDay ? listDayWords(r.listDay) : dayWords(departAt ?? arriveAt ?? at),
         customer: c ? customerName(c.stop?.name || c.label || c.name) : 'No customers given',
         destination: placeWords(c?.stop?.location ?? c?.location ?? ''),
         arriveAt,

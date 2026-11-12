@@ -575,11 +575,38 @@ describe('a range of days: every day with its own list and hours (operator, 12 N
     expect(rows.map((x) => [x.day, x.row.fulfilled, x.row.planned])).toEqual([['2026-11-11', 0, 1], ['2026-11-12', 1, 1]]);
   });
 
+  it('KDE 141E (12 Nov): set out from the depot it was at when the day began, not the first one read', () => {
+    const storages = findStorages(zones);
+    const byName = new Map(customersIn(zones, storages).map((c) => [c.name, c]));
+    const AWAY = { lat: -1.2, lng: 36.7 };
+    // Its real route: MORL to the Nairobi depot on the 9th, back to MORL on the 10th, out of MORL on the 12th
+    const pings = [
+      p('2026-11-09T00:00:00', MORL), p('2026-11-09T05:00:00', MORL), p('2026-11-09T05:07:00', ROAD),
+      p('2026-11-09T09:22:00', NBI), p('2026-11-10T06:00:00', NBI), p('2026-11-10T06:22:00', AWAY),
+      p('2026-11-10T16:15:00', NBI), p('2026-11-10T17:00:00', NBI), p('2026-11-10T17:23:00', ROAD),
+      p('2026-11-10T21:32:00', MORL), p('2026-11-11T12:00:00', MORL), p('2026-11-12T04:00:00', MORL),
+      p('2026-11-12T04:23:00', ROAD), p('2026-11-12T09:00:00', A), p('2026-11-12T09:05:00', A), p('2026-11-12T10:00:00', ROAD),
+    ];
+    const from = at('2026-11-12T00:00:00');
+    const to = at('2026-11-12T12:00:00');
+    expect(originOf(pings, storages, { to }).key).toBe('morl');                // the first stay read: also MORL here
+    expect(originOf(pings.slice(3), storages, { to }).key).toBe('nairobi');    // read from the 9th's depot onwards…
+    expect(originOf(pings.slice(3), storages, { to, from }).key).toBe('morl'); // …but the 12th began at MORL
+    const row = deliveryRow({ plate: 'KDE 141E', customers: ['MENENGAI_VS: JOJAC INVESTMENTS'] }, pings.slice(3), storages, byName, { from, to, windows: [{ from, to }] });
+    expect(stamp(row.trip.leftAt)).toBe('12.11.2026 04:23:00');
+    expect(row.trip.leftFrom.key).toBe('morl');
+    expect(row.fulfilled).toBe(1);
+    // On the 10th it set out from the Nairobi depot and came back there
+    const day10 = deliveryRow({ plate: 'KDE 141E', customers: [] }, pings.slice(3), storages, byName,
+      { from: at('2026-11-10T00:00:00'), to: at('2026-11-10T20:00:00'), windows: [{ from: at('2026-11-10T00:00:00'), to: at('2026-11-10T20:00:00') }] });
+    expect([stamp(day10.trip.leftAt), day10.trip.leftFrom.key, stamp(day10.trip.arrivedAt)]).toEqual(['10.11.2026 06:22:00', 'nairobi', '10.11.2026 16:15:00']);
+  });
+
   it('a row of a range says its day beside the plate, on screen, CSV and PDF', () => {
     const r = { plate: 'KCA 226M', day: '2026-11-12', trip: { leftAt: null }, fulfilled: 0, planned: 1, customers: [] };
-    expect(plateWords(r)).toBe('KCA 226M (2026-11-12)');
-    expect(rowCells(r)[0]).toBe('KCA 226M (2026-11-12)');
-    expect(deliveriesPdfBody([r], { from: at('2026-11-11T07:00:00'), at: at('2026-11-12T20:00:00'), fleet: 'Menengai' }).rows[0].plate).toBe('KCA 226M (2026-11-12)');
+    expect(plateWords(r)).toBe('KCA 226M (12.11.2026)');
+    expect(rowCells(r)[0]).toBe('KCA 226M (12.11.2026)');
+    expect(deliveriesPdfBody([r], { from: at('2026-11-11T07:00:00'), at: at('2026-11-12T20:00:00'), fleet: 'Menengai' }).rows[0].plate).toBe('KCA 226M (12.11.2026)');
     expect(plateWords({ plate: 'KCA 226M' })).toBe('KCA 226M');
   });
 });

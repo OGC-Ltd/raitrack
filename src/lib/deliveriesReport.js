@@ -179,7 +179,7 @@ export function tripsOf(pings, storages, { to }) {
     trips.push({ leftAt: s.end, leftFrom: s.at, arrivedAt: back?.start ?? null, arrivedTo: back?.at ?? null });
   });
   const last = merged[merged.length - 1];
-  return { trips, inStorage: last?.end == null ? last?.at ?? null : null, need: !merged.length, first: merged[0]?.at ?? null };
+  return { trips, stays: merged, inStorage: last?.end == null ? last?.at ?? null : null, need: !merged.length, first: merged[0]?.at ?? null };
 }
 
 const overlaps = (trip, from, to) => trip.leftAt <= to && (trip.arrivedAt == null || trip.arrivedAt >= from);
@@ -199,10 +199,21 @@ export function tripOf(pings, storages, { from = -Infinity, to }) {
 /**
  * Where a unit works from, MORL or the Nairobi depot, and they are different
  * places (operator, 5 Nov 2026: "we can achieve the result by playing back behind
- * the scene"): its readings played back, the first stay at either. A trip then
- * ends only back there; the other depot is a place on the route.
+ * the scene"): its readings played back. A trip then ends only back there; the
+ * other depot is a place on the route.
+ *
+ * With a window, the depot it was at, or last at, when the window began: the
+ * one it set out from that day (operator, 12 Nov 2026: KDE 141E, listed on
+ * 12 Nov, went MORL to STO on 9 Nov, back to MORL on 10 Nov, and left MORL at
+ * 04:23 on 12 Nov; taking the first stay of the days read, STO, printed its
+ * departure as 10 Nov). No stay before the window, or no window: the first stay.
  */
-export const originOf = (pings, storages, { to }) => tripsOf(pings, storages, { to }).first;
+export function originOf(pings, storages, { to, from = null }) {
+  const { stays, first } = tripsOf(pings, storages, { to });
+  if (from == null) return first;
+  const before = stays.filter((s) => s.start <= from);
+  return before.length ? before[before.length - 1].at : first;
+}
 
 /**
  * The run the row shows (operator, 5 Nov 2026: "a unit might not deliver all
@@ -420,7 +431,7 @@ export function deliveryRow(plan, pings, storages, customerByName, { from = null
   // parked tracker can go quiet for days
   const all = lastFix && Number.isFinite(lastFix.lat) && Number.isFinite(lastFix.t) && lastFix.t <= to
     && !(pings ?? []).some((p) => p.t >= lastFix.t) ? [...(pings ?? []), lastFix] : (pings ?? []);
-  const origin = originOf(all, storages, { to });
+  const origin = originOf(all, storages, { to, from });
   const anchored = origin ? [origin] : storages;
   const played = tripsOf(all, anchored, { to });
   let trip = tripOf(all, anchored, { from: from ?? -Infinity, to });
@@ -625,8 +636,10 @@ export function readOrders(text) {
   return fulfilled <= planned ? { fulfilled, planned } : null;
 }
 
+/** A list's day, "2026-11-12", as the report prints dates: "12.11.2026". */
+export const listDayWords = (day) => dayWords(Date.parse(`${day}T12:00:00+03:00`));
 /** The plate, with its list's day when the report spans several (`r.day` is set only then). */
-export const plateWords = (r) => (r.day ? `${r.plate} (${r.day})` : r.plate);
+export const plateWords = (r) => (r.day ? `${r.plate} (${listDayWords(r.day)})` : r.plate);
 
 export function rowCells(r) {
   return [
