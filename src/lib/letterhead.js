@@ -57,8 +57,8 @@ html, body { background:var(--bg); color:var(--ink); font-family:Calibri, Carlit
 .title .ref { color:var(--mut); font-size:8pt } .title .ref b { color:var(--ink) }
 table { width:100%; border-collapse:collapse }
 .info { margin-top:2.2mm }
-.info th { text-align:left; font-weight:400; color:var(--mut); width:23mm; padding:.55mm 0; vertical-align:top }
-.info td { padding:.55mm 3mm .55mm 0; font-weight:700 }
+.info th { text-align:left; font-weight:400; color:var(--mut); width:23mm; padding:.55mm 3mm .55mm 0; vertical-align:top; white-space:nowrap }
+.info td { padding:.55mm 3mm .55mm 0; font-weight:700; vertical-align:top }
 h2 { font-size:8.6pt; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink);
   border-bottom:.6pt solid var(--rule); padding-bottom:.6mm; margin:3.2mm 0 1.4mm }
 h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; color:var(--mut); font-size:7.6pt }
