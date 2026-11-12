@@ -37,6 +37,7 @@ import { useAppActions, useCompanies } from '../../context/AppContext';
 import DateRangePicker from '../layout/DateRangePicker';
 import EmptyNote from '../shared/EmptyNote';
 import PlannerStopPanel from './PlannerStopPanel';
+import PlannerFenceDialog from './PlannerFenceDialog';
 import { downloadTableCsv } from '../../utils/tableExport';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { plannerFgDoc } from '../../lib/plannerFinishedGoods';
@@ -380,11 +381,13 @@ function UploadSheet({ orgId, units, onClose, onSaved }) {
 
 /* ── One plan ─────────────────────────────────────────────────────────── */
 
-function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, onBack }) {
+function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canNewFence, canMap, onBack }) {
   const qc = useQueryClient();
   const key = ['planner', 'plan', orgId, planId];
   const { data: plan, error, isLoading } = useQuery({ queryKey: key, queryFn: () => getPlan(orgId, planId), enabled: Boolean(orgId && planId) });
   const [selected, setSelected] = useState(null);
+  // A stop with no fence being given one (PlannerFenceDialog)
+  const [fencing, setFencing] = useState(null);
   const { setDesktopActiveTab } = useAppActions();
 
   // The truck's trackers: the plan's unit and any other carrying its plate
@@ -438,14 +441,33 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
     });
     setDesktopActiveTab('fleet');
   };
-  // Fence: the Live Map's own geofence tool on this customer's fence
+  // Fence: the Live Map's own geofence tool on this customer's fence. A stop
+  // with none (a point keyed in as coordinates, or its fence deleted) gets the
+  // dialog that names one and draws it there (operator, 12 Nov 2026)
+  const hasFence = (stop) => Boolean(stop.customer.geofenceId && zonesById.get(stop.customer.geofenceId));
+  const mayFence = (stop) => (hasFence(stop) ? canFence : canNewFence);
   const redraw = (stop) => {
-    if (!stop.customer.geofenceId || !zonesById.get(stop.customer.geofenceId)) {
+    if (hasFence(stop)) {
+      toMap(stop.id);
+      requestFenceEdit(stop.customer.geofenceId);
+      return;
+    }
+    if (stop.customer.geofenceId && !zones) {
       window.alert('This customer’s fence is not loaded yet; try again in a moment.');
       return;
     }
-    toMap(stop.id);
-    requestFenceEdit(stop.customer.geofenceId);
+    setFencing(stop);
+  };
+  const fenced = async (stop, made) => {
+    setFencing(null);
+    addToast({
+      id: `planner-fence-${made.geofence.id}`, level: 'success',
+      title: `${made.geofence.name} drawn`,
+      body: `A ${made.geofence.radiusM} m geofence at stop ${stop.sequence}; the stop is read by it from now on.`,
+    });
+    setSelected(stop.id);
+    await Promise.allSettled([reloadEstateZones(orgId), qc.invalidateQueries({ queryKey: key })]);
+    qc.invalidateQueries({ queryKey: ['planner', 'plans', orgId] });
   };
 
   if (isLoading) return <EmptyNote icon="ti-loader" title="Loading the plan…" />;
@@ -567,7 +589,7 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
               <th className="pl-r">Time there</th>
               <th>Outcome</th>
               <th>Remarks</th>
-              {canFence && <th aria-label="Fence" />}
+              {(canFence || canNewFence) && <th aria-label="Fence" />}
             </tr>
           </thead>
           <tbody>
@@ -577,7 +599,7 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
               {itin && <td className="sp4-td" colSpan={2}>{plan.plannedStart ? `Leave ${clockWords(Date.parse(plan.plannedStart))}` : '-'}</td>}
               <td className="sp4-td">{actual?.leftAt ? `Left ${clockWords(actual.leftAt)}` : '-'}</td>
               <td className="sp4-td pl-r">0 m</td>
-              <td className="sp4-td" colSpan={canFence ? 4 : 3} />
+              <td className="sp4-td" colSpan={canFence || canNewFence ? 4 : 3} />
             </tr>
             {plan.stops.map((s) => {
               const a = byStop.get(s.id) ?? {};
@@ -644,11 +666,17 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
                   <td className="sp4-td" onClick={(e) => e.stopPropagation()}>
                     <RemarkInput value={s.remarks} disabled={!canWrite} onSave={(remarks) => setStop(s, { remarks })} label={`Remarks for ${s.customer.name}`} />
                   </td>
-                  {canFence && (
+                  {(canFence || canNewFence) && (
                     <td className="sp4-td" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="sp4-ghost-btn" title="Redraw this customer's geofence on the Live Map" onClick={() => redraw(s)}>
-                        <i className="ti ti-pencil" aria-hidden="true" /> Fence
-                      </button>
+                      {mayFence(s) && (hasFence(s) ? (
+                        <button type="button" className="sp4-ghost-btn" title="Redraw this customer's geofence on the Live Map" onClick={() => redraw(s)}>
+                          <i className="ti ti-pencil" aria-hidden="true" /> Fence
+                        </button>
+                      ) : (
+                        <button type="button" className="sp4-ghost-btn" title="This stop has no geofence: name one and draw it here" onClick={() => redraw(s)}>
+                          <i className="ti ti-plus" aria-hidden="true" /> Fence
+                        </button>
+                      ))}
                     </td>
                   )}
                 </tr>
@@ -660,7 +688,7 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
               {itin && <td className="sp4-td" colSpan={2}>{plan.plannedEnd ? clockWords(Date.parse(plan.plannedEnd)) : '-'}</td>}
               <td className="sp4-td">{actual?.backAt ? clockWords(actual.backAt) : actual?.telemetry ? 'Not back' : '-'}</td>
               <td className="sp4-td pl-r">{kmWords(actual?.homeKm)}</td>
-              <td className="sp4-td" colSpan={canFence ? 4 : 3} />
+              <td className="sp4-td" colSpan={canFence || canNewFence ? 4 : 3} />
             </tr>
           </tbody>
         </table>
@@ -670,12 +698,15 @@ function PlanView({ orgId, planId, vehicles, zones, canWrite, canFence, canMap, 
         <PlannerStopPanel
           plan={plan} stop={openStop} actual={actual} track={mainTrack} window_={window_} zonesById={zonesById}
           vehicle={trackers[0]} homeLabel={actual?.origin?.label ?? 'home'}
-          canWrite={canWrite} canMap={canMap} canFence={canFence} RemarkInput={RemarkInput}
+          canWrite={canWrite} canMap={canMap} canFence={mayFence(openStop)} hasFence={hasFence(openStop)} RemarkInput={RemarkInput}
           onOutcome={(body) => setStop(openStop, body)}
           onClose={() => setSelected(null)}
           onShowOnMap={() => toMap(openStop.id)}
           onFence={() => redraw(openStop)}
         />
+      )}
+      {fencing && (
+        <PlannerFenceDialog orgId={orgId} stop={fencing} onClose={() => setFencing(null)} onSaved={(made) => fenced(fencing, made)} />
       )}
     </div>
   );
@@ -809,7 +840,7 @@ export default function PlannerScreen() {
       <div className="sp4-body pl-body">
         {open ? (
           <PlanView orgId={orgId} planId={open} vehicles={vehicles} zones={zones}
-                    canWrite={canWrite} canFence={can('geofence:update') && can('map:read')} canMap={can('map:read')} onBack={() => setOpen(null)} />
+                    canWrite={canWrite} canFence={can('geofence:update') && can('map:read')} canNewFence={canWrite && can('geofence:create')} canMap={can('map:read')} onBack={() => setOpen(null)} />
         ) : (
           <>
             <div className="pl-band">

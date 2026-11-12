@@ -333,6 +333,17 @@
   .pl-plan__actions { width: 100%; }
 }
 
+/* A fence for a stop that has none: the name, then its point and radius on one row */
+.pl-fd__lede { margin: 0; font-size: var(--sp4-body); line-height: 1.5; color: var(--pl-ink-2); }
+.pl-fd__pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 90px); gap: var(--sp4-sm); }
+.pl-fd__num { font-variant-numeric: tabular-nums; }
+.pl-fd .sp4-input[aria-invalid="true"] { border-color: var(--pl-crit); }
+.pl-fd__hint { margin: 0; font-size: var(--sp4-label); color: var(--pl-warn); }
+.pl-fd__err { color: var(--pl-crit); font-size: var(--sp4-body); }
+@media (max-width: 480px) {
+  .pl-fd__pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
 /* Several sheets in one upload: one row each, the one being checked marked */
 .pl-drop--slim { padding: var(--sp4-xs) var(--sp4-md); }
 .pl-drop--slim .ti { font-size: 18px; }
