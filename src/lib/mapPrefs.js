@@ -48,6 +48,7 @@ const key = (companyId) => `ft-map-prefs:${companyId}`;
  */
 export const LAYERS = [
   "plan", "site", "bridges", "zones",
+  "zones:own",     // the geofences layer narrowed to the ones drawn here, not imported from Wialon
   "traffic",       // Google live traffic, any org
   "weather",       // Google current weather, any org; off until asked for
   "site:nzoia",    // Nzoia's survey while it sat under West Kenya; kept so old blobs still read
