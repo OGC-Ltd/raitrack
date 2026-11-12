@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findStorages, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays, pinCode, fencedPinNames, dayRuns, daysFrom, plateWords } from './deliveriesReport';
+import { findStorages, storageAt, customersIn, tripOf, tripsOf, originOf, deliveryRun, backShort, runWords, matchGeofences, deliveries, deliveryRow, rowCells, csvTable, deliveriesPdfBody, stamp, notLeftWords, readOrders, stopCheck, stopWords, pinStop, periodDays, pinCode, fencedPinNames, dayRuns, daysFrom, plateWords } from './deliveriesReport';
 import { readCoordinates, mergePins } from './deliveryPlan';
 import { addVehicle, removeVehicle, setCustomers, emptyPlan } from './deliveryPlan';
 import { reportKeysFor, hasDeliveriesTab } from './reportNav';
@@ -58,15 +58,46 @@ describe('Deliveries Report', () => {
     expect(stamp(trip.leftAt)).toBe('04.11.2026 06:20:00');
   });
 
-  it('takes MORL as 1 km round its Logistics point', () => {
+  it('takes MORL as the Menengai yard geofence alone (operator, 12 Nov 2026)', () => {
     const m = storages.find((s) => s.key === 'morl');
-    expect(m.feature.geometry.coordinates).toEqual([36.04494759379902, -0.28802969095623043]);
-    expect(m.fence).toBeTruthy();
-    const nearby = { lat: -0.288 + 0.008, lng: 36.0449 };     // ~900 m off the point
-    const out = { lat: -0.288 + 0.011, lng: 36.0449 };        // ~1.2 km off
-    const trip = tripOf([p('2026-11-04T06:00:00', nearby), p('2026-11-04T06:30:00', out), p('2026-11-04T09:00:00', ROAD)], storages, { to: at('2026-11-04T10:00:00') });
+    expect(m.feature.properties.name).toBe('Menengai Yard - Nakuru HQ');
+    expect(m.name).toBe('geofence Menengai Yard - Nakuru HQ');
+    const inside = { lat: -0.288 + 0.002, lng: 36.0449 };     // ~220 m off the point, in the yard
+    const out = { lat: -0.288 + 0.0036, lng: 36.0449 };       // ~400 m off, out of the yard
+    const trip = tripOf([p('2026-11-04T06:00:00', inside), p('2026-11-04T06:30:00', out), p('2026-11-04T09:00:00', ROAD)], storages, { to: at('2026-11-04T10:00:00') });
     expect(trip.leftFrom.label).toBe('MORL');
     expect(stamp(trip.leftAt)).toBe('04.11.2026 06:30:00');
+  });
+  it('MORL HOME counts as MORL too, beside the yard (operator, 12 Nov 2026)', () => {
+    const home = sq('MORL HOME', MORL.lat - 0.006, MORL.lng, 0.002);   // south of the yard, ~670 m off the point
+    const both = findStorages({ features: [home, ...zones.features] });
+    const m = both.find((s) => s.key === 'morl');
+    expect(m.name).toBe('geofences Menengai Yard - Nakuru HQ, MORL HOME');
+    const inHome = { lat: MORL.lat - 0.006, lng: MORL.lng };
+    const inYard = { lat: MORL.lat, lng: MORL.lng };
+    const out = { lat: MORL.lat - 0.012, lng: MORL.lng };
+    expect(storageAt(inHome, both)?.key).toBe('morl');
+    expect(storageAt(inYard, both)?.key).toBe('morl');
+    expect(storageAt(out, both)).toBeNull();
+    // Alone, it is MORL; a fence that only begins "MORL" is not
+    expect(findStorages({ features: [home] })[0].name).toBe('geofence MORL HOME');
+    expect(findStorages({ features: [sq('MORL HOME YARD 2', 0, 37)] })[0].feature.geometry.type).toBe('Point');
+  });
+  it('inside Nakuru HQ is at the yard even where a fence is named MORL (operator, 12 Nov 2026: KBB 880A)', () => {
+    const named = sq('MORL', MORL.lat + 0.01, MORL.lng, 0.001);         // a small "MORL" fence ~1 km off the yard
+    const all = findStorages({ features: [named, sq('MORL HOME', MORL.lat - 0.006, MORL.lng, 0.002), ...zones.features] });
+    expect(storageAt({ lat: MORL.lat, lng: MORL.lng }, all)?.key).toBe('morl');                 // Nakuru HQ
+    expect(storageAt({ lat: MORL.lat + 0.01, lng: MORL.lng }, all)?.key).toBe('morl');          // MORL
+    expect(storageAt({ lat: MORL.lat - 0.006, lng: MORL.lng }, all)?.key).toBe('morl');         // MORL HOME
+    // and its trip ends there, from its own readings alone
+    const trip = tripOf([p('2026-11-11T05:00:00', MORL), p('2026-11-11T06:14:10', ROAD), p('2026-11-12T09:30:00', MORL)], all,
+      { from: at('2026-11-11T00:00:00'), to: at('2026-11-11T23:59:59'), upTo: at('2026-11-12T18:00:00') });
+    expect(trip.arrivedAt).toBe(at('2026-11-12T09:30:00'));
+  });
+  it('without the yard geofence, MORL is 500 m round its Logistics point', () => {
+    const m = findStorages(null).find((s) => s.key === 'morl');
+    expect(m.feature.geometry.coordinates).toEqual([36.04494759379902, -0.28802969095623043]);
+    expect(m.feature.properties.radiusM).toBe(500);
   });
 
   it('takes the Nairobi depot (STO) as 1 km round its Logistics point', () => {
@@ -619,3 +650,20 @@ describe('a range of days: every day with its own list and hours (operator, 12 N
     expect(plateWords({ plate: 'KCA 226M' })).toBe('KCA 226M');
   });
 });
+
+describe('a trip in the window, back at the yard after it (operator, 12 Nov 2026)', () => {
+  it('reads the return past the window\'s end when told to', async () => {
+    const { deliveryRow, findStorages, MORL_POINT } = await import('./deliveriesReport');
+    const storages = findStorages(null);
+    const t = (d, hm) => Date.parse(`2026-11-${d}T${hm}:00+03:00`);
+    const p = (d, hm, at, kmh = 40) => ({ t: t(d, hm), lat: at.lat, lng: at.lng, speedKmh: kmh });
+    const away = { lat: -0.20, lng: 35.90 };
+    const pings = [p('11', '03:00', MORL_POINT, 0), p('11', '03:40', MORL_POINT, 0), p('11', '04:11', { lat: -0.27, lng: 36.02 }),
+      p('11', '12:00', away), p('11', '19:00', away), p('11', '21:40', MORL_POINT, 0), p('11', '22:30', MORL_POINT, 0)];
+    const opts = { from: t('11', '07:00'), to: t('11', '20:00') };
+    expect(deliveryRow({ plate: 'KCA 226M', customers: [] }, pings, storages, new Map(), opts).trip.arrivedAt).toBeNull();
+    const row = deliveryRow({ plate: 'KCA 226M', customers: [] }, pings, storages, new Map(), { ...opts, upTo: t('12', '13:00') });
+    expect(row.trip.arrivedAt).toBe(t('11', '21:40'));
+  });
+});
+

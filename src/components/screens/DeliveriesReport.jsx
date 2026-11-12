@@ -28,7 +28,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDeliveryDay, getDeliveryDays, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
+  COLUMNS, stamp, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
 } from '../../lib/deliveriesReport';
 import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, mergePins, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
@@ -44,6 +44,7 @@ import { loadZones, reloadEstateZones } from '../../hooks/useEstateZones';
 import { createFence } from '../../api/geofences';
 import { pinFencePlan, drawPinFences, readNamedPaste, FENCE_RADIUS_M } from '../../lib/pinFences';
 import { deliveriesDoc } from '../../lib/reportDocs';
+import { customerVisits, visitCustomers } from '../../lib/customerVisits';
 import { useReportEditor } from './ReportEditor';
 import './DeliveriesReport.css';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
@@ -215,7 +216,56 @@ function PinPaste({ orgId, vehicle, customers, onAdd, onRemovePins }) {
   );
 }
 
-export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName }) {
+/** How far past a window's end the report reads, to see its trips back at the yard (operator, 12 Nov 2026). */
+const RETURN_DAYS = 2;
+
+/** The report's own template (operator, 12 Nov 2026: Van Sales and Finished Goods kept apart; 13 Nov: one
+ *  Deliveries tab, the two picked inside it): it opens on that template's group, with no template to pick. */
+const TAB_GROUP = { vanSales: 'Van Sales', finishedGoods: 'Finished Goods' };
+/** Each report's own list on the day (operator, 12 Nov 2026): a vehicle without `list` is FG's, as every list kept before. */
+const TAB_LIST = { vanSales: 'vs', finishedGoods: 'fg' };
+const listOf = (v) => (v?.list === 'vs' ? 'vs' : 'fg');
+const tagList = (v, list) => { const { list: _was, ...rest } = v; return list === 'vs' ? { ...rest, list: 'vs' } : rest; }; // eslint-disable-line no-unused-vars
+
+/** The two Deliveries reports, in the order the switch offers them. */
+const REPORT_KINDS = [
+  { value: 'vanSales', label: 'Van Sales' },
+  { value: 'finishedGoods', label: 'Finished Goods' },
+];
+
+/**
+ * The Deliveries tab (operator, 13 Nov 2026: "instead of having tabs for delivery fg and delivery vs we
+ * keep our deliveries tab and within the deliveries we have a breadcrumb that gives the two options"):
+ * Deliveries › Van Sales | Finished Goods. Both reports stay mounted, so each keeps its list, run and
+ * edits while the other is shown; the one picked last is kept in this browser.
+ */
+export function DeliveriesReports(props) {
+  const { orgCode } = props;
+  const [kind, setKind] = useState(() => loadTemplate(orgCode));
+  useEffect(() => { setKind(loadTemplate(orgCode)); }, [orgCode]);
+  const pick = (k) => { setKind(k); saveTemplate(orgCode, k); };
+  const crumbs = (
+    <nav className="dlv-crumbs" aria-label="Deliveries reports">
+      <span className="dlv-crumbs__root">Deliveries</span>
+      <i className="ti ti-chevron-right dlv-crumbs__sep" aria-hidden="true" />
+      <span className="sp4-filter-group dlv-crumbs__kinds" role="group" aria-label="Report">
+        {REPORT_KINDS.map((k) => (
+          <button key={k.value} type="button" aria-pressed={kind === k.value} onClick={() => pick(k.value)}
+                  className={`sp4-filter-chip${kind === k.value ? ' sp4-filter-chip--on' : ''}`}>
+            {k.label}
+          </button>
+        ))}
+      </span>
+    </nav>
+  );
+  return REPORT_KINDS.map((k) => (
+    <div key={k.value} className="mvt-panel" hidden={kind !== k.value}>
+      <DeliveriesReport {...props} template={k.value} crumbs={crumbs} />
+    </div>
+  ));
+}
+
+export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName, template: fixedTemplate = null, crumbs = null }) {
   const now = Date.now();
   const today = fleetDay(now);
   // The window, as Movements': the last hours, or days and hours. The list of
@@ -227,11 +277,12 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const rangeDays = useMemo(() => (daysOpen ? daysFrom(draft.fromDay, draft.toDay) : [today]), [daysOpen, draft.fromDay, draft.toDay, today]);
   // The day whose list is open for editing: one of the range's, the first until another is picked
   const [pickDay, setPickDay] = useState(null);
-  const day = daysOpen ? (rangeDays.includes(pickDay) ? pickDay : draft.fromDay) : today;
-  const [group, setGroup] = useState(null);               // one group of the fleet list, or all
+  const day = daysOpen ? (rangeDays.includes(pickDay) ? pickDay : rangeDays[rangeDays.length - 1]) : today;
+  const [group, setGroup] = useState(() => TAB_GROUP[fixedTemplate] ?? null);   // one group of the fleet list, or all
   // Van Sales (the report as it was) or Finished Goods (operator, 11 Nov 2026), kept in this browser
-  const [template, setTemplate] = useState(() => loadTemplate(orgCode));
+  const [pickedTemplate, setTemplate] = useState(() => loadTemplate(orgCode));
   useEffect(() => { setTemplate(loadTemplate(orgCode)); }, [orgCode]);
+  const template = fixedTemplate ?? pickedTemplate;
   const isFg = template === 'finishedGoods';
   // The day's list lives on the server, read through its Redis cache (operator, 11 Nov 2026: "we don't
   // want it to be kept in the browser"). A list this browser kept before is moved up once, then forgotten
@@ -254,17 +305,43 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     staleTime: 30_000,
   });
   const dayList = useQuery(dayQuery(day));
-  const plan = dayList.data ?? emptyPlan();
+  // Each tab keeps its own list (operator, 12 Nov 2026: "in this VS, the page should be blank until we
+  // feed data for VS, only the FG to maintain the current data"). The day's list on the server holds
+  // both: a vehicle added on Deliveries VS carries list 'vs'; one without (every list kept before) is FG's
+  const tabList = TAB_LIST[fixedTemplate] ?? null;
+  const mine = (v) => !tabList || listOf(v) === tabList;
+  const fullPlan = dayList.data ?? emptyPlan();
+  const plan = useMemo(() => (tabList ? { ...fullPlan, vehicles: fullPlan.vehicles.filter(mine) } : fullPlan), [fullPlan, tabList]); // eslint-disable-line react-hooks/exhaustive-deps
   // Every day of a range, for its count and so a range with vehicles on a later day only can run
   const rangeLists = useQueries({ queries: rangeDays.length > 1 ? rangeDays.map((d) => dayQuery(d)) : [] });
-  const listedOn = (i) => rangeLists[i]?.data?.vehicles.length ?? null;
-  const anyListed = rangeDays.length > 1 ? rangeLists.some((q) => q.data?.vehicles.length) : plan.vehicles.length > 0;
+  const listedOn = (i) => (rangeLists[i]?.data ? rangeLists[i].data.vehicles.filter(mine).length : null);
+  const anyListed = rangeDays.length > 1 ? rangeLists.some((q) => q.data?.vehicles.some(mine)) : plan.vehicles.length > 0;
+  // Every day of the range in one list, each vehicle with its day (operator, 12 Nov 2026: "I want to see
+  // units for both 11th and 12th in one list if I have picked the dates, not separately")
+  const multiDay = rangeDays.length > 1;
+  const listRows = multiDay
+    ? rangeDays.flatMap((d, i) => (rangeLists[i]?.data?.vehicles ?? []).filter(mine).map((v) => ({ ...v, day: d })))
+    : plan.vehicles.map((v) => ({ ...v, day }));
+  // A day's list for this tab, as it is now
+  const planOn = (d) => {
+    const full = qc.getQueryData(['deliveries', 'day', orgId, d]) ?? (d === day ? fullPlan : emptyPlan());
+    return tabList ? { ...full, vehicles: full.vehicles.filter(mine) } : full;
+  };
   // Saves go one after another, each the whole list, so the last change is the one kept
   const saving = useRef(Promise.resolve());
   // `failedDay`: a day whose list on screen is not yet on the server. The list is kept as the operator
   // left it (never snapped back to the server's copy) until Try again, or the next change, saves it
   const [saveState, setSaveState] = useState({ busy: 0, error: null, failedDay: null });
-  const change = (next, forDay = day) => {
+  // `next`: this tab's list for the day; the other tab's vehicles are kept as they are
+  const changeOn = (d, next) => {
+    const key = ['deliveries', 'day', orgId, d];
+    if (!tabList) { saveFullOn(d, next); return; }
+    const others = (qc.getQueryData(key) ?? (d === day ? fullPlan : emptyPlan())).vehicles.filter((v) => !mine(v));
+    saveFullOn(d, { ...next, vehicles: [...others, ...next.vehicles.map((v) => tagList(v, tabList))] });
+  };
+  const change = (next, forDay = day) => changeOn(forDay, next);
+  const saveFull = (next) => saveFullOn(day, next);
+  const saveFullOn = (forDay, next) => {
     const key = ['deliveries', 'day', orgId, forDay];
     qc.setQueryData(key, next);
     setSaveState((s) => ({ busy: s.busy + 1, error: null, failedDay: null }));
@@ -282,7 +359,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const retrySave = () => {
     const d = saveState.failedDay;
     const list = d && qc.getQueryData(['deliveries', 'day', orgId, d]);
-    if (list && d === day) change(list);
+    if (list) saveFullOn(d, list);
   };
   const earlierQ = useQuery({
     queryKey: ['deliveries', 'before', orgId, day],
@@ -290,7 +367,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     enabled: Boolean(orgId) && dayList.isSuccess && !plan.vehicles.length,
     staleTime: 60_000,
   });
-  const earlier = !plan.vehicles.length && earlierQ.data ? { day: earlierQ.data.day, plan: { vehicles: earlierQ.data.vehicles } } : null;
+  const earlierMine = (earlierQ.data?.vehicles ?? []).filter(mine);
+  const earlier = !plan.vehicles.length && earlierMine.length ? { day: earlierQ.data.day, plan: { vehicles: earlierMine } } : null;
 
   // Every Menengai unit on the platform (operator, 4 Nov 2026: "search any
   // vehicle in Menengai"), with its group on the fleet list where it has one
@@ -310,7 +388,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     // Plans keyed in here are this list itself, so only uploaded sheets and itineraries come in as sheets
     return sheetsForReport((await listPlans(orgId, d.from, d.to)).filter((p) => !isKeyed(p)), from, to, dayStart);
   };
-  const [sheets, setSheets] = useState({ status: 'idle', list: [] });
+  const [sheetsRead, setSheets] = useState({ status: 'idle', list: [] });
+  // On a tab, the Planner's sheets of its own units: Van Sales units' on VS, the rest on FG
+  const sheetTab = (g) => !tabList || (g === TAB_GROUP.vanSales ? 'vs' : 'fg') === tabList;
+  const sheets = useMemo(() => (tabList ? { ...sheetsRead, list: sheetsRead.list.filter((p) => sheetTab(units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group ?? null)) } : sheetsRead), [sheetsRead, tabList, units]); // eslint-disable-line react-hooks/exhaustive-deps
   const sheetSpanKey = daysOpen ? `days:${draft.fromDay}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
   useEffect(() => {
     if (!orgId || !canSheets) { setSheets({ status: 'idle', list: [] }); return undefined; }
@@ -335,10 +416,17 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const ownGroup = (key) => unitOf(key)?.group ?? null;
   const groupOfV = (v) => v.group ?? ownGroup(v.key);
   const addUnit = (u) => {
+    const there = tabList && fullPlan.vehicles.find((v) => v.key === u.key && !mine(v));
+    if (there) {
+      const name = tabList === 'vs' ? 'Finished Goods' : 'Van Sales';
+      setAssign({ words: `${u.plate} is on the ${name} list for ${dayWords(day)}. Move it to this list?`, yes: 'Move it here',
+        go: () => { saveFull({ ...fullPlan, vehicles: fullPlan.vehicles.map((v) => (v.key === u.key ? tagList(v, tabList) : v)) }); setFind(''); } });
+      return;
+    }
     const put = () => {
       const next = addVehicle(plan, u);
       change(group && group !== u.group ? setVehicleGroup(next, u.key, group) : next);
-      setJustAdded(u.key); setFind('');
+      setJustAdded(`${day}|${u.key}`); setFind('');
       takePlannerStops(u.key, u.plate);                   // its Planner plan's geofences, ticked
     };
     if (group && u.group && group !== u.group && !plan.vehicles.some((v) => v.key === u.key)) {
@@ -347,7 +435,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   };
   const moveTo = (v, g) => {
     const own = ownGroup(v.key);
-    const go = () => change(setVehicleGroup(plan, v.key, g === own ? null : g));
+    const go = () => changeOn(v.day, setVehicleGroup(planOn(v.day), v.key, g === own ? null : g));
     if (own && g !== own) setAssign({ words: `${v.plate} belongs to ${own}. Assign it to ${g} anyway?`, yes: `Assign to ${g}`, go });
     else go();
   };
@@ -441,7 +529,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     } finally {
       setFencing((s) => { const n = new Set(s); n.delete(key); return n; });
     }
-    const latest = qc.getQueryData(['deliveries', 'day', orgId, forDay]) ?? plan;
+    const latest = planOn(forDay);                       // this tab's list: change() keeps the other's
     const v = latest.vehicles.find((x) => x.key === key);
     if (v) {
       const gone = new Set(pins.map(pinCode));
@@ -478,11 +566,12 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       tell(key, `The Planner’s stops could not be read: ${err?.message ?? err}`, true);
     }
   };
-  const removePins = (key, pins) => {
-    const v = plan.vehicles.find((x) => x.key === key);
+  const removePins = (key, pins, forDay = day) => {
+    const list = planOn(forDay);
+    const v = list.vehicles.find((x) => x.key === key);
     if (!v) return;
     const gone = new Set(pins.map(pinCode));
-    change(setPins(plan, key, (v.pins ?? []).filter((p) => !gone.has(pinCode(p)))));
+    change(setPins(list, key, (v.pins ?? []).filter((p) => !gone.has(pinCode(p)))), forDay);
   };
 
   const [run, setRun] = useState({ status: 'idle' });
@@ -497,6 +586,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     : daysOpen && daysProblem ? daysProblem
       : !anyListed && !sheets.list.length ? (sheets.status === 'loading' ? 'Looking for the Planner’s sheets' : 'Add the vehicles shared today, or upload their sheets in the Planner')
         : null;
+  // An empty list keeps Run report off, its reason on the button's hover only: not written beside it
+  // (operator, 13 Nov 2026: "remove the advisory text")
+  const problemShown = !anyListed && !sheets.list.length && sheets.status !== 'loading' && !(daysOpen && daysProblem) ? null : problem;
 
   // Each day's list for a run, as the server has it now: one read for a range (GET days?from=&to=),
   // each day's own read for one day, or when the server cannot read a range yet
@@ -517,7 +609,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         got = await Promise.all(days.map(own));
       }
     } else got = await Promise.all(days.map(own));
-    return Object.fromEntries(days.map((d, i) => [d, got[i]?.vehicles ?? []]));
+    return Object.fromEntries(days.map((d, i) => [d, (got[i]?.vehicles ?? []).filter(mine)]));
   };
 
   const execute = async (next) => {
@@ -607,7 +699,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
       // Only the sheets this report's days ran (lib/plannerReport sheetOnDays): no earlier day carried forward
-      const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay));
+      const listedPlates = new Set(runs.flatMap((r) => r.vehicles.map((v) => plateKey(v.plate))));
+      const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay))
+        .map((r) => ({ ...r, listed: listedPlates.has(plateKey(r.plate)) }));
       // A vehicle on a kept sheet is the sheet's row: not checked again from the list (on a range, that day's list)
       const planned = runs.flatMap((run) => {
         const onSheets = new Set(sheetRows.filter((r) => !multi || sheetOnDays(r, marksOf(r.remake.plan), [run.day], fleetDay)).map((r) => plateKey(r.plate)));
@@ -616,7 +710,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       });
       const idsOf = (list) => [...new Set(list.flatMap((v) => v.vehicleIds))];
       let start = Math.min(to - LOOKBACK_DAYS * DAY, windowFrom - DAY);
-      if (planned.length) await read(idsOf(planned), start, to, 'Reading each vehicle’s positions');
+      // On past the window, up to now and at most RETURN_DAYS: when each trip got back to the yard
+      const upTo = Math.min(Date.now(), to + RETURN_DAYS * DAY);
+      if (planned.length) await read(idsOf(planned), start, upTo, 'Reading each vehicle’s positions');
       if (!live()) return;
       for (let back = LOOKBACK_DAYS + 1; planned.length && back <= MAX_LOOKBACK_DAYS; back++) {
         const need = planned.filter((v) => tripOf(held.get(best(v)) ?? [], storages, { to: v.run.to }).need);
@@ -626,19 +722,23 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         if (!live()) return;
         start -= DAY;
       }
+      const routesOf = new Map();
       const rows = planned.map((v) => {
         // The tracker Movements reads for it, else the one that reported most
         const mv = v.vehicleIds.map((id) => moveRow.get(id)).find(Boolean) ?? null;
         const id = mv?.vehicleId ?? best(v);
         const { run } = v;
         const row = deliveryRow(v, held.get(id) ?? [], storages, byName, {
-          from: run.from, to: run.to, windows: [{ from: run.from, to: run.to }], pinNames: runPinNames, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
+          from: run.from, to: run.to, upTo: Math.min(Date.now(), run.to + RETURN_DAYS * DAY), windows: [{ from: run.from, to: run.to }], pinNames: runPinNames, routes: v.vehicleIds.map((x) => held.get(x) ?? []), place: mv?.location ?? null, atMorl: mv?.state === 'at', unread: v.vehicleIds.every((x) => failed.has(x)),
           lastFix: mv?.lat != null && mv?.lastAt != null ? { t: mv.lastAt, lat: mv.lat, lng: mv.lng } : null,
         });
-        return { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key), listDay: run.day, ...(multi ? { day: run.day, key: `${run.day}|${v.key}` } : {}) };
+        const out = { ...row, group: groupOfV(v), ownGroup: ownGroup(v.key), listDay: run.day, ...(multi ? { day: run.day, key: `${run.day}|${v.key}` } : {}) };
+        // Its readings, for the customers it passed (picked on the Finished Goods sheet)
+        routesOf.set(out.key ?? out.plate, { routes: v.vehicleIds.map((x) => held.get(x) ?? []), from: run.from, to: Math.min(Date.now(), run.to + RETURN_DAYS * DAY) });
+        return out;
       });
       rows.unshift(...sheetRows);
-      setRun({ status: 'done', rows, from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });
+      setRun({ status: 'done', rows, routesOf, passable: visitCustomers(all), from: windowFrom, at: to, storages: storages.map((s) => `${s.label} (${s.name})`), failed: failed.size, noMoves: !moves, sheets: sheetRows.length });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
@@ -657,17 +757,22 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     if (!r.remake) return r;
     const latest = qc.getQueryData(['planner', 'plan', orgId, r.remake.plan.id]) ?? r.remake.plan;
     return { ...sheetRow(r.remake.plan, r.remake.actual, { ...r.remake.opts, marks: marksOf(latest) }),
-      group: r.group, ownGroup: r.ownGroup, remake: r.remake };
+      group: r.group, ownGroup: r.ownGroup, remake: r.remake, listed: r.listed };
   }) } : null), [ranRaw, planTick, qc, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
   // The rows as the PDF, JPEG and CSV print them: a typed count over the report's
-  const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter((r) => group == null || r.group === group).map((r) => {
+  // On a tab every vehicle on its list is reported, whatever its group (operator, 12 Nov 2026: "all
+  // should appear in the report"); its Planner sheets by their units' group
+  // A sheet whose unit is on this tab's list stands in for it here, so the unit is never lost
+  const keepRow = (r) => (r.remake ? (r.listed || sheetTab(r.group)) : true)
+    && (group == null || r.group === group || (tabList != null && group === TAB_GROUP[fixedTemplate]));
+  const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter(keepRow).map((r) => {
     const t = readOrders(typed[r.plate]);
     return t ? { ...r, fulfilled: t.fulfilled, planned: t.planned, typed: true } : r;
-  }) } : null), [ran, typed, group]);
+  }) } : null), [ran, typed, group, tabList]); // eslint-disable-line react-hooks/exhaustive-deps
   // How many on the day's list in each group
   const groupNames = useMemo(() => groupsFor('MENENGAI').map((g) => g.name), []);
   const sheetGroup = (p) => units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group ?? null;
-  const groupCount = (name) => plan.vehicles.filter((v) => !sheetPlates.has(plateKey(v.plate)) && groupOfV(v) === name).length
+  const groupCount = (name) => listRows.filter((v) => !sheetPlates.has(plateKey(v.plate)) && groupOfV(v) === name).length
     + sheets.list.filter((p) => sheetGroup(p) === name).length;
   const sums = done ? {
     out: done.rows.filter((x) => x.trip.leftAt != null && x.trip.arrivedAt == null).length,
@@ -685,14 +790,29 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // Edit (operator, 4 Nov 2026), as the other reports: a new run, group or choice of stops starts the sheet over
   // Finished Goods lines taken off with ✕ (operator, 11 Nov 2026), until the next run
   const [dropped, setDropped] = useState(() => new Set());
-  useEffect(() => { setDropped(new Set()); }, [ranRaw]);
+  // A customer geofence the unit passed, picked for a line (operator, 12 Nov 2026: "the rows become clickable
+  // ... show the customer list the vehicle passed by, they can choose the one that looks the same")
+  const [picks, setPicks] = useState(() => new Map());
+  const [openLine, setOpenLine] = useState(null);
+  useEffect(() => { setDropped(new Set()); setPicks(new Map()); setOpenLine(null); }, [ranRaw]);
   const drop = (key) => setDropped((d) => new Set(d).add(key));
-  const editSource = useMemo(() => (done ? { done, showStops, template, dropped } : null), [done, showStops, template, dropped]);
+  const pickFor = (key, pick) => setPicks((m) => { const n = new Map(m); if (pick) n.set(key, pick); else n.delete(key); return n; });
+  const editSource = useMemo(() => (done ? { done, showStops, template, dropped, picks } : null), [done, showStops, template, dropped, picks]);
   const fleetName = companyName ?? orgCode ?? 'Menengai';
-  const fgDoc = () => finishedGoodsDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, orgCode, dropped });
+  const fgDoc = () => finishedGoodsDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, orgCode, dropped, picks });
   const editor = useReportEditor({ orgId, source: editSource,
     build: () => (isFg ? fgDoc() : deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, stops: showStops, orgCode })) });
-  const fgAll = useMemo(() => (done && isFg ? fgLines(done.rows, { at: done.at }) : []), [done, isFg]);
+  const fgAll = useMemo(() => (done && isFg ? fgLines(done.rows, { at: done.at, picks }) : []), [done, isFg, picks]);
+  // The customers the open line's unit passed on its trip: out to back, else its day and after
+  const passed = useMemo(() => {
+    const l = openLine && fgAll.find((x) => x.key === openLine);
+    const got = l && ranRaw?.routesOf?.get(l.rowKey);
+    if (!got) return l ? [] : null;
+    const from = l.departAt ?? got.from;
+    const to = l.yardAt ?? got.to;
+    const pings = got.routes.flat().sort((a, b) => a.t - b.t);
+    return customerVisits(pings, ranRaw.passable ?? [], { from, to }).sort((a, b) => a.enteredAt - b.enteredAt);
+  }, [openLine, fgAll, ranRaw]);
   const fgShown = useMemo(() => fgAll.filter((l) => !dropped.has(l.key)), [fgAll, dropped]);
   // Find a unit in the table (operator, 11 Nov 2026), as on Movements: "kcw475", "KCW 475E", "475e";
   // a customer's name too on Finished Goods. The screen only: CSV, PDF and JPEG keep every line
@@ -744,6 +864,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             <Kpi key={k.label} label={k.label} tone={k.tone} value={k.value ?? <span className="frp-kpi-none">-</span>} />
           ))}
         </div>
+        {crumbs /* Deliveries › Van Sales | Finished Goods, on the right of the figures (operator, 13 Nov 2026) */}
       </div>
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
@@ -783,20 +904,22 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         </DateRangePicker>
 
         <ChoicePicker icon="ti-users-group" label="Group" align="right" value={group}
-                      options={[{ value: null, label: 'All groups', note: plan.vehicles.filter((v) => !sheetPlates.has(plateKey(v.plate))).length + sheets.list.length },
+                      options={[{ value: null, label: 'All groups', note: listRows.filter((v) => !sheetPlates.has(plateKey(v.plate))).length + sheets.list.length },
                         ...groupNames.map((name) => ({ value: name, label: name, note: groupCount(name) }))]}
                       onChange={(g) => editor.guard('Show another group', () => setGroup(g))} />
 
-        <ChoicePicker icon="ti-template" label="Template" align="right" value={template}
-                      options={TEMPLATES.map((t) => ({ value: t.value, label: `${t.label} template` }))}
-                      onChange={(t) => editor.guard('Use another template', () => { setTemplate(t); saveTemplate(orgCode, t); })} />
+        {!fixedTemplate && (
+          <ChoicePicker icon="ti-template" label="Template" align="right" value={template}
+                        options={TEMPLATES.map((t) => ({ value: t.value, label: `${t.label} template` }))}
+                        onChange={(t) => editor.guard('Use another template', () => { setTemplate(t); saveTemplate(orgCode, t); })} />
+        )}
 
         <button type="button" className="sp4-submit-btn frp-run rpt-run"
                 onClick={() => editor.guard('Make the report again', () => execute(daysOpen ? { mode: 'days', ...draft } : sel))}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
-        {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
+        {problemShown && orgId && <span className="rpt-problem" role="status">{problemShown}</span>}
       </div>
 
       {editor.overlay}
@@ -826,9 +949,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           </div>
           {rangeDays.length > 1 && (
             // Each day of the range keeps its own list and is run with it: pick the day to change
-            <div className="sp4-filter-group dlv-plan__days" role="group" aria-label="The day whose list is shown">
+            <div className="sp4-filter-group dlv-plan__days" role="group" aria-label="The day new vehicles are added to">
+              <span className="rpt-sub dlv-plan__addto">Add new vehicles to</span>
               {rangeDays.map((d, i) => (
-                <button key={d} type="button" aria-pressed={d === day}
+                <button key={d} type="button" aria-pressed={d === day} title={`New vehicles go on ${d}’s list`}
                         className={`sp4-filter-chip${d === day ? ' sp4-filter-chip--on' : ''}`} onClick={() => setPickDay(d)}>
                   {d} · {listedOn(i) == null ? '…' : `${listedOn(i)} vehicle${listedOn(i) === 1 ? '' : 's'}`}
                 </button>
@@ -895,19 +1019,22 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               </ul>
             </div>
           )}
-          {plan.vehicles.length > 0 && (
+          {listRows.length > 0 && (
             <>
             <div className="dlv-roster__head" aria-hidden="true">
               <span>Vehicle</span><span>Group</span><span>Stops</span><span /><span className="dlv-roster__count">Picked</span><span />
             </div>
             <ul className="dlv-plan__list dlv-roster">
-              {plan.vehicles.map((v) => {
+              {listRows.map((v) => {
+                const rk = `${v.day}|${v.key}`;
+                const plan = planOn(v.day);
+                const change = (next) => changeOn(v.day, next);
                 const picked = v.customers.length + (v.pins?.length ?? 0);
-                const isPasting = pasting.has(v.key);
+                const isPasting = pasting.has(rk);
                 const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
                 return (
-                  <li key={v.key} className="dlv-plan__veh dlv-roster__row">
-                    <span className="dlv-plan__plate">{v.plate}</span>
+                  <li key={rk} className="dlv-plan__veh dlv-roster__row">
+                    <span className="dlv-plan__plate">{v.plate}{multiDay && <span className="dlv-plan__day">{dayWords(v.day)}</span>}</span>
                     <span className="dlv-roster__group">
                     <select className="rpt-select dlv-plan__group" value={groupOfV(v) ?? ''} aria-label={`Group ${v.plate} is reported under`}
                             title={v.group && v.group !== ownGroup(v.key) ? `Assigned here today; on the fleet list it is ${ownGroup(v.key) ?? 'in no group'}` : 'The group it is reported under'}
@@ -919,10 +1046,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     </span>
                     <span className="dlv-roster__stops">
                     <CheckPicker icon="ti-map-pin" label={`Stops for ${v.plate}`} noun="geofences" search noAll
-                                 options={options} picked={v.customers} startOpen={justAdded === v.key}
+                                 options={options} picked={v.customers} startOpen={justAdded === rk}
                                  onChange={(names) => change(setCustomers(plan, v.key, names ?? []))} />
                     </span>
-                    <button type="button" className="sp4-ghost-btn dlv-roster__paste" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, v.key))}>
+                    <button type="button" className="sp4-ghost-btn dlv-roster__paste" aria-expanded={isPasting} onClick={() => setPasting((s) => flip(s, rk))}>
                       <i className="ti ti-clipboard-text" aria-hidden="true" /> Paste stops{v.pins?.length ? ` (${v.pins.length})` : ''}
                     </button>
                     <span className="dlv-roster__count">
@@ -935,7 +1062,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       )}
                     </span>
                     <button type="button" className="sp4-ghost-btn dlv-plan__x" onClick={() => change(removeVehicle(plan, v.key))}
-                            aria-label={`Remove ${v.plate}`} title="Remove this vehicle from today’s list">
+                            aria-label={`Remove ${v.plate}`} title={`Remove this vehicle from ${v.day}’s list`}>
                       <i className="ti ti-x" aria-hidden="true" />
                     </button>
                     {sheetPlates.has(plateKey(v.plate)) && <span className="rpt-warn dlv-roster__wide dlv-roster__note">On a Planner sheet: the sheet is reported instead</span>}
@@ -944,7 +1071,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                         {fromPlanner[v.key]?.words}
                         <button type="button" className="sp4-ghost-btn" disabled={fencing.has(v.key)}
                                 title="Tick the geofences of this vehicle's plan in the Planner for the day, in route order"
-                                onClick={() => takePlannerStops(v.key, v.plate)}>
+                                onClick={() => takePlannerStops(v.key, v.plate, v.day)}>
                           <i className="ti ti-calendar-time" aria-hidden="true" /> From the Planner
                         </button>
                       </span>
@@ -956,20 +1083,20 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                         {canFence && zones.status === 'done' && (
                           <button type="button" className="sp4-ghost-btn" disabled={fencing.has(v.key)}
                                   title="Use the geofence each point already has, else draw a circle at it named after it"
-                                  onClick={() => fenceStops(v.key, v.pins)}>
+                                  onClick={() => fenceStops(v.key, v.pins, [], v.day)}>
                             <i className={`ti ${fencing.has(v.key) ? 'ti-loader-2' : 'ti-shape'}`} aria-hidden="true" /> {fencing.has(v.key) ? 'Drawing…' : `Give ${v.pins.length === 1 ? 'it' : 'them'} geofences`}
                           </button>
                         )}
                         {/* A point with no name is fenced only once named (unless the Planner has fenced it already) */}
                         {v.pins.some((p) => !p.name?.trim() && !pinNames.has(pinCode(p))) && (
-                          <button type="button" className="sp4-ghost-btn dlv-roster__name-hint" onClick={() => setPasting((s) => new Set(s).add(v.key))}>
+                          <button type="button" className="sp4-ghost-btn dlv-roster__name-hint" onClick={() => setPasting((s) => new Set(s).add(rk))}>
                             Name the {v.pins.filter((p) => !p.name?.trim() && !pinNames.has(pinCode(p))).length === 1 ? 'point' : 'points'} with no name
                           </button>
                         )}
                       </span>
                     )}
                     {isPasting && <div className="dlv-roster__wide"><PinPaste orgId={orgId} vehicle={v} customers={customers}
-                      onAdd={(pins, names) => fenceStops(v.key, pins, names)} onRemovePins={(pins) => removePins(v.key, pins)} /></div>}
+                      onAdd={(pins, names) => fenceStops(v.key, pins, names, v.day)} onRemovePins={(pins) => removePins(v.key, pins, v.day)} /></div>}
                   </li>
                 );
               })}
@@ -978,7 +1105,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
           )}
         </section>
 
-        {run.status === 'idle' && (plan.vehicles.length > 0 || sheets.list.length > 0) && (
+        {run.status === 'idle' && (listRows.length > 0 || sheets.list.length > 0) && (
           <EmptyNote icon="ti-truck-delivery" title="Deliveries">
             {sheets.list.length ? 'The Planner’s sheets come in as they are. ' : ''}Give each listed vehicle the geofences it should deliver to, choose the window, then press Run report. Its origin, MORL or the Nairobi depot, comes from its route.
           </EmptyNote>
@@ -1060,18 +1187,62 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     <tr>{FG_HEADS.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col"><span className="mvr-sr">Drop</span></th></tr>
                   </thead>
                   <tbody>
-                    {fgVisible.map((l) => (
-                      <tr key={l.key} className={`sp4-tr dlv-fg__row dlv-fg__row--${fgState(l)}`}
-                          style={{ '--dlv-fg-fill': fgFill(l) }}>
-                        {fgCells(l).map((v, i) => <td key={i} className={i === 1 ? 'rpt-unit' : undefined}>{v}</td>)}
-                        <td className="dlv-fg__x">
-                          <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"
-                                  onClick={() => editor.guard('Drop a line', () => drop(l.key))}>
-                            <i className="ti ti-x" aria-hidden="true" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {fgVisible.map((l) => {
+                      const isOpen = openLine === l.key;
+                      const toggle = () => setOpenLine(isOpen ? null : l.key);
+                      return (
+                        <Fragment key={l.key}>
+                          <tr className={`sp4-tr dlv-fg__row dlv-fg__row--${fgState(l)} dlv-fg__row--click${isOpen ? ' dlv-fg__row--open' : ''}`}
+                              style={{ '--dlv-fg-fill': fgFill(l) }} onClick={toggle} tabIndex={0} aria-expanded={isOpen}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                              title="Show the customers this unit passed, to pick the one that is this customer">
+                            {fgCells(l).map((v, i) => <td key={i} className={i === 1 ? 'rpt-unit' : undefined}>{v}</td>)}
+                            <td className="dlv-fg__x">
+                              <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"
+                                      onClick={(e) => { e.stopPropagation(); editor.guard('Drop a line', () => drop(l.key)); }}>
+                                <i className="ti ti-x" aria-hidden="true" />
+                              </button>
+                            </td>
+                          </tr>
+                          {isOpen && (
+                            <tr className="dlv-fg__pickrow">
+                              <td colSpan={FG_HEADS.length + 1}>
+                                <div className="dlv-fg__pick">
+                                  <div className="dlv-fg__pickhead">
+                                    <strong>Customers {l.plate} passed</strong>
+                                    <span className="rpt-sub">{l.departAt != null ? 'From leaving the yard' : 'Over its day'}{l.yardAt != null ? ' to getting back' : ''}. Pick the one that is “{l.customer}”.</span>
+                                    {l.picked && (
+                                      <button type="button" className="sp4-ghost-btn" onClick={() => editor.guard('Undo a pick', () => pickFor(l.key, null))}>
+                                        <i className="ti ti-arrow-back-up" aria-hidden="true" /> Undo pick ({l.picked})
+                                      </button>
+                                    )}
+                                  </div>
+                                  {passed == null || !passed.length ? (
+                                    <p className="rpt-sub">{ranRaw?.routesOf?.get(l.rowKey) ? 'It came within 100 m of no customer’s geofence on this trip.' : 'No readings kept for this line.'}</p>
+                                  ) : (
+                                    <ul className="dlv-fg__picklist">
+                                      {passed.map((v) => {
+                                        const on = l.picked === v.label && l.arriveAt === v.enteredAt;
+                                        return (
+                                          <li key={`${v.name}|${v.enteredAt}`} className={on ? 'dlv-fg__picked' : undefined}>
+                                            <span className="dlv-fg__pickname">{v.label}</span>
+                                            <span className="rpt-sub">{stamp(v.enteredAt)}{v.leftAt != null ? ` to ${stamp(v.leftAt).slice(11)}` : ', still there'} · {v.stoodMs >= STOP_MS ? `stopped ${Math.round(v.stoodMs / 60_000)} min` : 'passed through'}</span>
+                                            <button type="button" className={on ? 'sp4-btn-primary' : 'sp4-ghost-btn'} disabled={on}
+                                                    onClick={() => editor.guard('Pick a customer', () => { pickFor(l.key, { at: v.enteredAt, leftAt: v.leftAt, label: v.label }); setOpenLine(null); })}>
+                                              {on ? 'Picked' : 'Use this'}
+                                            </button>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -53,7 +53,7 @@ import { flowDoc } from '../../lib/reportDocs';
 import TankersReport from './TankersReport';
 import HourWindow, { hh, hoursText } from './HourWindow';
 import GeofenceReport from './GeofenceReport';
-import DeliveriesReport from './DeliveriesReport';
+import { DeliveriesReports } from './DeliveriesReport';
 import ChoicePicker from './ChoicePicker';
 import { useSitePick } from '../../hooks/useSitePick';
 import TatFuelReport from './TatFuelReport';
@@ -710,6 +710,7 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
+    // One Deliveries tab; its Van Sales and Finished Goods reports are picked inside it (operator, 13 Nov 2026)
     deliveries && { key: 'deliveries', label: 'Deliveries' },
     geofences && { key: 'geofences', label: 'Geofences' },
     tatFuel && { key: 'tatFuel', label: 'TAT and Fuel' },
@@ -739,7 +740,7 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
       )}
       {deliveries && (
       <div className="mvt-panel" role="tabpanel" id="mvt-deliveries-panel" aria-labelledby="mvt-deliveries" hidden={tab !== 'deliveries'}>
-        <DeliveriesReport orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />
+        <DeliveriesReports orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={companyName} />
       </div>
       )}
       {geofences && (
