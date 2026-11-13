@@ -39,6 +39,7 @@ const SOURCE_WORDS = {
   "allow-all": "given in every organisation",
   deny: "taken here",
   "deny-all": "taken in every organisation",
+  full: "by Full access",
 };
 
 // One role held under two slugs ("Admin" in an organisation and on the platform) is one name.

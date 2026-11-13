@@ -75,3 +75,21 @@ describe("withChoice and toChanges", () => {
     ]);
   });
 });
+
+describe("Full access", () => {
+  const org = { id: "a", fromRoles: ["map:read"] };
+  it("carries every right but the excluded ones once given", () => {
+    const standing = new Map([[keyOf("a", "access:full"), "allow"]]);
+    expect(resolveIn(org, "user:delete", standing)).toMatchObject({ held: true, source: "full" });
+    expect(resolveIn(org, "repair:take_jobs", standing).held).toBe(false);
+    expect(resolveIn(org, "vehicle:flagged_only", standing).held).toBe(false);
+  });
+  it("a denial still wins", () => {
+    const standing = new Map([[keyOf("a", "access:full"), "allow"], [keyOf("a", "user:delete"), "deny"]]);
+    expect(resolveIn(org, "user:delete", standing).held).toBe(false);
+  });
+  it("carries nothing in another organisation", () => {
+    const standing = new Map([[keyOf("a", "access:full"), "allow"]]);
+    expect(resolveIn({ id: "b", fromRoles: [] }, "user:delete", standing).held).toBe(false);
+  });
+});

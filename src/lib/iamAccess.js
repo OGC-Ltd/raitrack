@@ -33,6 +33,7 @@ export function standingGrants(grants, pending) {
  *           "allow-all"      given to them in every organisation
  *           "deny"           taken from them in this organisation
  *           "deny-all"       taken from them in every organisation
+ *           "full"           carried by Full access (access:full)
  */
 export function resolveIn(org, permission, standing) {
   const fromRole = (org?.fromRoles ?? []).includes(permission);
@@ -42,8 +43,30 @@ export function resolveIn(org, permission, standing) {
   if (all === "deny") return { held: false, fromRole, source: "deny-all" };
   if (here === "allow") return { held: true, fromRole, source: "allow" };
   if (all === "allow") return { held: true, fromRole, source: "allow-all" };
-  return { held: fromRole, fromRole, source: "role" };
+  if (fromRole) return { held: true, fromRole, source: "role" };
+  if (carriedByFullAccess(permission) && resolveIn(org, FULL_ACCESS, standing).held) {
+    return { held: true, fromRole, source: "full" };
+  }
+  return { held: false, fromRole, source: "role" };
 }
+
+/**
+ * Full access in one organisation (user, 2026-11-14): one right that stands
+ * for every other but these. A copy of fleet-server lib/permissions
+ * FULL_ACCESS / FULL_ACCESS_EXCLUDED: change both together.
+ */
+export const FULL_ACCESS = "access:full";
+export const FULL_ACCESS_EXCLUDED = new Set([
+  "vehicle:flagged_only",
+  "organisation:create", "organisation:delete",
+  "notification:push_control_room", "notification:push_tickets",
+  "notification:push_completed", "notification:push_stores",
+  "notification:fuel_audit_mail",
+  "repair:take_jobs", "security_case:hold",
+  "platform:admin", "platform:read_all",
+]);
+export const carriedByFullAccess = (permission) =>
+  permission !== FULL_ACCESS && !FULL_ACCESS_EXCLUDED.has(permission);
 
 /**
  * One permission across every organisation the person reaches: in how many
