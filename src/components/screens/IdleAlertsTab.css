@@ -46,3 +46,11 @@
   .idle-tr--critical > td { background: color-mix(in srgb, var(--sp4-crit, #f87171) 8%, transparent); }
   .idle-tr--warning  > td { background: color-mix(in srgb, var(--sp4-warn, #fbbf24) 6%, transparent); }
 }
+
+/* Now / History, and History's days */
+.idle-mode { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--sp4-border, #e5e7eb); }
+.idle-hist { display: flex; flex-direction: column; }
+.idle-hist-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; border-bottom: 1px solid var(--sp4-border, #e5e7eb); }
+.idle-hist-day { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--sp4-muted, #6b7280); }
+.idle-hist-count { font-size: 12px; }
+.idle-hist-open { font-size: 12.5px; font-weight: 600; color: var(--sp4-warn, #d97706); }

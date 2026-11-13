@@ -2,7 +2,7 @@
  * Menengai's idle units: the runner and the corner badge.
  *
  * The server decides which listed units are idle (fleet-server
- * modules/idle-watch: 3 hours of working time, 07:30–19:30, away from the yard
+ * modules/idle-watch: 2 hours of working time, 07:30–19:30, away from the yard
  * and depots), once for everybody. While Menengai is on the account, this
  * reads that list every CHECK_MS into the shared store (hooks/useIdleWatch),
  * as StopWatch reads the stop watch. The badge shows only while Menengai is

@@ -1,6 +1,6 @@
 /**
  * The Alerts page's Idle units: Menengai's listed units that have not moved
- * for 3 hours of working time (07:30–19:30), away from the yard and depots,
+ * for 2 hours of working time (07:30–19:30), away from the yard and depots,
  * as the server's idle watch has them now (hooks/useIdleWatch). Critical at
  * 6 hours. Below, the listed units the rule cannot judge: trackers silent a
  * day or more, and plates no tracked unit carries.
@@ -12,6 +12,7 @@ import TablePager, { usePager } from "../body/TablePager";
 import { dismissIdle, undismissIdle } from "../../hooks/useIdleWatch";
 import { alertText, eatWords, idleWords, mapUrl, searchAlerts, whereWords } from "../../lib/idleAlerts";
 import { copyText } from "../../lib/copyText";
+import IdleHistory from "./IdleHistory";
 import "./IdleAlertsTab.css";
 
 function CopyBtn({ alert }) {
@@ -115,24 +116,43 @@ function Unjudged({ watch }) {
   );
 }
 
+/**
+ * Now (the server's live list) or History (the idle alerts kept, by day):
+ * operator, 2026-11-13.
+ */
 export default function IdleAlertsTab({ watch, q = "" }) {
+  const [mode, setMode] = useState("now");
+  const switcher = (
+    <div className="idle-mode" role="group" aria-label="Idle units">
+      <button type="button" className={"sp4-filter-chip" + (mode === "now" ? " sp4-filter-chip--on" : "")}
+              aria-pressed={mode === "now"} onClick={() => setMode("now")}>Now</button>
+      <button type="button" className={"sp4-filter-chip" + (mode === "history" ? " sp4-filter-chip--on" : "")}
+              aria-pressed={mode === "history"} onClick={() => setMode("history")}>History</button>
+    </div>
+  );
+  if (mode === "history") return <div className="idle-wrap alr-table">{switcher}<IdleHistory q={q} /></div>;
+  return <IdleNow watch={watch} q={q} switcher={switcher} />;
+}
+
+function IdleNow({ watch, q, switcher }) {
   const active = useMemo(() => watch.alerts.filter((a) => !watch.dismissed.has(a.key)), [watch.alerts, watch.dismissed]);
   const shown = useMemo(() => searchAlerts(active, q), [active, q]);
   const dismissed = useMemo(() => watch.alerts.filter((a) => watch.dismissed.has(a.key)), [watch.alerts, watch.dismissed]);
   const pager = usePager(shown, q);
   const rule = watch.rule
     ? `${idleWords(watch.rule.idleMs)} still in working hours (${watch.rule.hours}), away from ${watch.rule.excluded.join(" and ")}`
-    : "3 h still in working hours, away from the yard and depots";
+    : "2 h still in working hours, away from the yard and depots";
 
   if (watch.status === "loading" || watch.status === "idle") {
-    return <EmptyNote icon="ti-loader-2" tone="busy" title="Reading Idle Units">Asking the server which Menengai units are idle.</EmptyNote>;
+    return <div className="idle-wrap alr-table">{switcher}<EmptyNote icon="ti-loader-2" tone="busy" title="Reading Idle Units">Asking the server which Menengai units are idle.</EmptyNote></div>;
   }
   if (watch.status === "error") {
-    return <EmptyNote icon="ti-alert-triangle" tone="error" title="Could Not Read Idle Units">{watch.message}. It is read again every minute.</EmptyNote>;
+    return <div className="idle-wrap alr-table">{switcher}<EmptyNote icon="ti-alert-triangle" tone="error" title="Could Not Read Idle Units">{watch.message}. It is read again every minute.</EmptyNote></div>;
   }
 
   return (
     <div className="idle-wrap alr-table">
+      {switcher}
       {shown.length === 0 ? (
         <EmptyNote icon="ti-circle-check" tone="ok" title="No Idle Units">
           {q ? "No idle Menengai unit matches the search." : `No listed Menengai unit has stood ${rule}.`}
