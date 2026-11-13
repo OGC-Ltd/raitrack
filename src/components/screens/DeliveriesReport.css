@@ -270,7 +270,9 @@
 
 /* The customers a line's unit passed: a timeline, read top to bottom, capped so the time, the name and
    its button stay within one glance instead of spanning the table (13 Nov 2026) */
-.dlv-visits { max-width: 76rem; padding: 16px; border-top: 1px solid var(--sp4-line); }
+/* The Finished Goods table keeps its cells on one line (.dlv-fg td); the list under a row wraps, so a long
+   name or tag folds inside its column instead of running under Use this (13 Nov 2026) */
+.dlv-visits { max-width: 76rem; padding: 16px; border-top: 1px solid var(--sp4-line); white-space: normal; }
 .dlv-visits__head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; margin-bottom: 12px; }
 .dlv-visits__lede { flex: 1 1 20rem; min-width: 0; }
 .dlv-visits__title { margin: 0; font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-1); overflow-wrap: break-word; }
@@ -297,8 +299,10 @@
 
 .dlv-visit__what { display: grid; gap: 2px; min-width: 0; }
 .dlv-visit__name { font-weight: 500; color: var(--sp4-text-1); overflow-wrap: anywhere; }
-.dlv-visit__how { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--sp4-text-3); }
-.dlv-visit__tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; font-weight: 600; border: 1px solid transparent; }
+.dlv-visit__how { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; font-size: 12px; color: var(--sp4-text-3); }
+/* 6px, the strip's radius: a tag that wraps to two lines stays a tidy box, not a squashed pill */
+.dlv-visit__tag { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; padding: 0 8px; border-radius: 6px; font-weight: 600; border: 1px solid transparent; overflow-wrap: anywhere; }
+.dlv-visit__tag .ti { flex: none; }
 .dlv-visit__tag .ti { font-size: 12px; }
 .dlv-visit__tag--stop { color: var(--sp4-ok); background: color-mix(in srgb, var(--sp4-ok) 10%, transparent); border-color: color-mix(in srgb, var(--sp4-ok) 30%, transparent); }
 .dlv-visit__tag--like { color: var(--sp4-accent); background: color-mix(in srgb, var(--sp4-accent) 8%, transparent); border-color: color-mix(in srgb, var(--sp4-accent) 28%, transparent); }
@@ -313,10 +317,11 @@
 .dlv-visit--on:hover { background: color-mix(in srgb, var(--sp4-ok) 10%, transparent); }
 .dlv-visit--on .dlv-visit__time { border-left-color: var(--sp4-ok); }
 
-/* The sheet's customer, above the list: where it is and how close the route came (operator, 13 Nov 2026) */
+/* The sheet's customer, above the list: where it is and how close the route came (operator, 13 Nov 2026).
+   A flat tint, no border or side stripe: the operator read the boxed strip as a heavy shadow */
 .dlv-visits__target {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 0 0 12px; padding: 8px 12px;
-  border: 1px solid var(--sp4-line-hi); border-left: 3px solid var(--sp4-accent); border-radius: 6px;
+  border-radius: 6px; background: color-mix(in srgb, var(--sp4-accent) 7%, transparent);
   font-size: 12.5px; color: var(--sp4-text-2); font-variant-numeric: tabular-nums;
 }
 .dlv-visits__target > .ti { color: var(--sp4-accent); font-size: 16px; }
