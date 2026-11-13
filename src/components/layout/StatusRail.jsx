@@ -31,8 +31,9 @@ import './StatusRail.css';
 export default function StatusRail({ vehicles = [], loading = false, activeFilter = 'all', onFilter, afterToggle = false }) {
   const scrollerRef = useRef(null);
 
-  const { flaggedOnly } = usePermissions();
-  const stats   = flaggedOnly ? STATUS_STATS.filter((s) => !FLAGGED_ONLY_HIDDEN.has(s.key)) : STATUS_STATS;
+  // Idling, Warning and Critical are fleet:status_counts (since 2026-11-14).
+  const { can } = usePermissions();
+  const stats   = can('fleet:status_counts') ? STATUS_STATS : STATUS_STATS.filter((s) => !FLAGGED_ONLY_HIDDEN.has(s.key));
   const counts  = countStatuses(vehicles);
   const waiting = loading && vehicles.length === 0;
 

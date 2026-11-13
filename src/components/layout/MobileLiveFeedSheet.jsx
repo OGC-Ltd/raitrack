@@ -21,8 +21,8 @@ function dotColor(type) {
 
 export default function MobileLiveFeedSheet({ open, onClose }) {
   const { feed: liveFeed = [], orgId } = useFleetLiveShared();
-  const { flaggedOnly } = usePermissions();
-  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed, null, { allDays: flaggedOnly });
+  const { repairFeedOnly } = usePermissions();
+  const { items: feed, loading, loadingMore, atEnd, loadMore } = useVehicleFeed(null, open ? orgId : null, liveFeed, null, { allDays: repairFeedOnly });
   const unread = feed.filter(f => ALERT_TYPES.has(f.type)).length;
 
   return (
@@ -70,7 +70,7 @@ export default function MobileLiveFeedSheet({ open, onClose }) {
             </div>
             );
           })}
-          <FeedFooter count={feed.length} loadingMore={loadingMore} atEnd={atEnd} loadMore={loadMore} allDays={flaggedOnly} />
+          <FeedFooter count={feed.length} loadingMore={loadingMore} atEnd={atEnd} loadMore={loadMore} allDays={repairFeedOnly} />
         </div>
       </div>
     </>

@@ -119,8 +119,14 @@ export function usePermissions() {
     orgId: org?.id ?? null,
     isPlatform,
     can,
-    /** Restricted to units with an open repair job (technicians). */
+    /** Restricted to units with an open repair job (technicians, or set in IAM). */
     flaggedOnly,
+    /**
+     * The live feed carries repair notices only: restricted to flagged units
+     * AND without notification:all_events (a right in IAM since 2026-11-14,
+     * held by every role to start with). The server applies the same rule.
+     */
+    repairFeedOnly: flaggedOnly && !can("notification:all_events"),
     /** True only if EVERY slug is held — for controls that need a pair. */
     canAll: (...slugs) => slugs.every(can),
     /** True if ANY slug is held — for a screen reachable several ways. */

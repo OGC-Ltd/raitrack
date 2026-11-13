@@ -370,9 +370,13 @@ export default function MapToolRail({
   const [fencesOpen, setFencesOpen] = useState(false);
   const fencesBtn = useRef(null);
   const wrapRef = useRef(null);
-  // Technicians get no route, traffic, geofence or arrivals tools: removed,
-  // not drawn disabled (operator, 2026-10-27).
-  const { flaggedOnly } = usePermissions();
+  // Each tool is a right of its own since 2026-11-14 (map:traffic,
+  // map:weather, map:geofences / map:custom_geos, map:arrivals): a tool the
+  // person does not hold is removed, not drawn disabled. Technicians lost
+  // these by a fixed rule until then (operator, 2026-10-27); every role
+  // starts with them now and IAM takes one away per person.
+  const { can } = usePermissions();
+  const mayFences = can("map:geofences") || can("map:custom_geos");
 
   // The search panel closes on a press outside the rail, like the layers menu.
   useEffect(() => {
@@ -439,8 +443,8 @@ export default function MapToolRail({
             title={measuring ? "Stop measuring (Esc)" : "Measure a distance: click points on the map"}
             on={measuring} expanded={expanded} onClick={onToggleMeasure}
           />
-          {!flaggedOnly && (<>
           {/* Live traffic: its own tool rather than a row in the Maps panel. */}
+          {can("map:traffic") && (
           <RailButton
             icon="ti-traffic-lights" label={traffic?.on ? "Hide traffic" : "Live traffic"}
             title={traffic
@@ -448,7 +452,9 @@ export default function MapToolRail({
               : "Live traffic is not available"}
             on={Boolean(traffic?.on)} disabled={!traffic} expanded={expanded} onClick={traffic?.onToggle}
           />
+          )}
           {/* Weather, the same kind of switch (operator, 2026-10-27). */}
+          {can("map:weather") && (
           <RailButton
             icon="ti-cloud-rain" label={weather?.on ? "Hide weather" : "Weather"}
             title={weather
@@ -456,12 +462,13 @@ export default function MapToolRail({
               : "Weather is not available"}
             on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
           />
+          )}
           {/* Geofences: one button (operator, 2026-11-10: not two on one
               strip). It opens a menu: Show on the map, Custom geos and,
               where geofences can be drawn, Draw a geofence. Drawn for every
               company, disabled where there is nothing to offer: a tool that
               comes and goes between companies reads as a broken rail. */}
-          {fencesMenu ? (
+          {(mayFences || canDrawFence) && (fencesMenu ? (
             <RailButton
               btnRef={fencesBtn}
               icon="ti-map-pins" label="Geofences"
@@ -479,8 +486,7 @@ export default function MapToolRail({
                 : "No geofences are drawn for this company"}
               on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
             />
-          )}
-          </>)}
+          ))}
           {/* Halted (operator, 2026-10-07: "right below geofences"): units
               that stopped mid-journey — on the highway or outside their
               geofences. Opens the same window the sidebar row used to. */}
@@ -519,7 +525,7 @@ export default function MapToolRail({
             />
           )}
           {/* Arrivals at a hub: every unit's live drive time in. */}
-          {arrivals && !flaggedOnly && (
+          {arrivals && can("map:arrivals") && (
             <RailButton
               icon="ti-target-arrow" label="Arrivals" tour="map-arrivals"
               title="Arrivals: who can reach a hub, and when, with live traffic"

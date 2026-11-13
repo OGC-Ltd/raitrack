@@ -22,8 +22,8 @@ const FleetLiveContext = createContext(null);
 
 export function FleetLiveProvider({ children }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
-  const { flaggedOnly, vehicleIds } = usePermissions();
-  const live = useFleetLive(activeCompanyId, { keepFeed: flaggedOnly });
+  const { flaggedOnly, repairFeedOnly, vehicleIds } = usePermissions();
+  const live = useFleetLive(activeCompanyId, { keepFeed: repairFeedOnly });
   // Incidents deleted in the incident window leave the fleet here, once, so the
   // alerts list, the map, the side panel and the window all drop them together.
   // UI only: see lib/fuelDismissals.
@@ -36,7 +36,8 @@ export function FleetLiveProvider({ children }) {
     const kept = withoutDismissed(live.vehicles, dismissed, deriveStatus);
     return flagged && kept ? kept.filter((v) => flagged.has(v.vehicleId)) : kept;
   }, [live.vehicles, dismissed, flagged]);
-  const feed = useMemo(() => (flaggedOnly ? repairOnly(live.feed) : live.feed), [flaggedOnly, live.feed]);
+  // Repair notices only without notification:all_events (since 2026-11-14).
+  const feed = useMemo(() => (repairFeedOnly ? repairOnly(live.feed) : live.feed), [repairFeedOnly, live.feed]);
   const fleet = useMemo(
     () => (vehicles === live.vehicles && feed === live.feed ? live : { ...live, vehicles, feed }),
     [live, vehicles, feed],

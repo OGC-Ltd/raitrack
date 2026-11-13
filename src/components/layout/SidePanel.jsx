@@ -229,7 +229,7 @@ export default function SidePanel() {
   }, [desktopActiveTab]);
   const { setDesktopActiveTab } = useAppActions();
   const { activeCompany } = useCompanies();
-  const { can, flaggedOnly } = usePermissions();
+  const { can } = usePermissions();
   const mainNavItems = NAV_ITEMS.filter(item => !item.section && can(item.permission));
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
   const { orgId } = useFleetLiveShared();
@@ -344,7 +344,9 @@ export default function SidePanel() {
             // Online + Offline = All; then Idling (part of Online) and the two
             // alerts, which overlap and sum to nothing.
             const order = ['all', 'online', 'offline', 'idling', 'warning', 'critical']
-              .filter(key => !(flaggedOnly && FLAGGED_ONLY_HIDDEN.has(key)));
+              // Idling, Warning and Critical are fleet:status_counts (a right
+              // since 2026-11-14; technicians lost them by a fixed rule before).
+              .filter(key => can('fleet:status_counts') || !FLAGGED_ONLY_HIDDEN.has(key));
             const total = counts.all || 0;
             const onShare = !waiting && total ? counts.online / total : 0;
             return (
@@ -517,9 +519,11 @@ export default function SidePanel() {
           Outside the scrolling body like Fuel Audit below, so it stays put
           however long the trees get; the two never share the foot, since this
           needs map:read and that one is drawn only without it. */}
-      {/* Not for technicians: a summary of the whole fleet says nothing about
-          the flagged units they are limited to (operator, 2026-10-27). */}
-      {!collapsed && can('map:read') && !flaggedOnly && (
+      {/* The fleet AI insight is the dashboard's (/dashboard/ai-insight,
+          dashboard:read), so it is shown to whoever holds that right; it was
+          hidden from technicians by a fixed rule until 2026-11-14 (they do
+          not hold dashboard:read, so they still do not see it). */}
+      {!collapsed && can('map:read') && can('dashboard:read') && (
         <div className="sp-foot">
           <ErrorBoundary label="Fleet AI insight">
             <FleetAIInsightCard companyId={activeCompany?.id} unit={aiUnit} className="sp-ai-card" />

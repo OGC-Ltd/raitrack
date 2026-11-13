@@ -92,7 +92,7 @@ export default function AppHeader() {
   useEffect(() => { refreshPush(activeCompanyId); }, [activeCompanyId]);
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
-  const { can, orgsWhere, flaggedOnly } = usePermissions();
+  const { can, orgsWhere, repairFeedOnly } = usePermissions();
   const { user, logout } = useAuth();
 
   /* The server's field is `fullName`. This header asked for `user.name`, which
@@ -212,9 +212,10 @@ export default function AppHeader() {
 
   const toggleStat = (key) => setActiveStat((prev) => (prev === key ? null : key));
 
-  // No In transit or Empty card for a technician (operator, 2026-10-27).
+  // The In transit and Empty cards are fleet:load_status (a right since
+  // 2026-11-14; technicians lost them by a fixed rule before, 2026-10-27).
   const statButtons = statMeta(liveSummary, activeProducts)
-    .filter(({ key }) => !(flaggedOnly && (key === "inTransit" || key === "empty")))
+    .filter(({ key }) => can("fleet:load_status") || !(key === "inTransit" || key === "empty"))
     .map(({ key, label, color, icon }) => {
     const { value, unit, sub } = statValues(key, liveSummary, cargoWord, products);
     return (
@@ -376,7 +377,7 @@ export default function AppHeader() {
         {!limited && (
         <button
           data-tour="alerts"
-          className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}${unreadCount > 0 ? ' app-header__bell--news' : ''}${flaggedOnly ? ' app-header__bell--figure' : ''}`}
+          className={`app-header__bell${feedOpen ? ' app-header__bell--active' : ''}${unreadCount > 0 ? ' app-header__bell--news' : ''}${repairFeedOnly ? ' app-header__bell--figure' : ''}`}
           onClick={toggleFeed}
           // The count lives in the name: a label on the badge inside a labelled
           // button is never read out.
@@ -395,9 +396,9 @@ export default function AppHeader() {
             // A dot, no figure (operator 2026-10-19): it says "something to
             // read" and goes once everything is read. Keyed on the swing so it
             // pops when news arrives.
-            // A technician's bell carries the figure (operator, 2026-10-27):
-            // their feed is the repair notices sent to them, few enough to count.
-            flaggedOnly
+            // A repair-notices-only bell carries the figure (operator,
+            // 2026-10-27): those notices are few enough to count.
+            repairFeedOnly
               ? <span key={`dot-${swing}`} className="app-header__bell-count app-header__bell-count--figure" aria-hidden="true">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
