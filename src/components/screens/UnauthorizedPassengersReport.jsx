@@ -380,6 +380,7 @@ export default function UnauthorizedPassengersReport({ orgId, orgCode, vehicles,
         <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[]} label="Days"
                          onChange={(f, t) => setDays({ from: f, to: t ?? f })} />
         {sitePick.picker && <CheckPicker {...sitePick.picker} />}
+        {sitePick.typePicker && <CheckPicker {...sitePick.typePicker} />}
         <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog('new')}>
           Log incident
         </button>

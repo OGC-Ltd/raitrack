@@ -77,8 +77,8 @@ function toCsv(rows, period) {
 
 export default function AlarmDistributionReport({ orgId, orgCode, companyName, active = true }) {
   const today = fleetDay(Date.now());
-  const yesterday = fleetDay(Date.now() - 86_400_000);
-  const [days, setDays] = useState({ from: yesterday, to: yesterday });
+  // Today until another day is picked (operator, 13 Nov 2026)
+  const [days, setDays] = useState({ from: today, to: today });
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
@@ -153,6 +153,7 @@ export default function AlarmDistributionReport({ orgId, orgCode, companyName, a
           onChange={(from, to) => setDays({ from, to: to ?? from })}
         />
         {sitePick.picker && <CheckPicker {...sitePick.picker} />}
+        {sitePick.typePicker && <CheckPicker {...sitePick.typePicker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}

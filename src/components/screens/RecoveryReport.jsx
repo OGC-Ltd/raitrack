@@ -68,7 +68,8 @@ function RouteTrace({ vehicle }) {
 }
 
 export default function RecoveryReport({ orgId, orgCode, companyName, active = true }) {
-  const [day, setDay] = useState(() => yesterday());
+  // Today until another day is picked (operator, 13 Nov 2026)
+  const [day, setDay] = useState(() => yesterday(Date.now() + 86_400_000));
   const [vehicle, setVehicle] = useState('');
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });

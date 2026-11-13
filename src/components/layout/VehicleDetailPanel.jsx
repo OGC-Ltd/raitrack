@@ -24,6 +24,8 @@ import { usePlaceName } from '../../hooks/usePlaceName';
 import { fleetDayKey } from '../../hooks/useFuelEvents';
 import { vehicleReadings } from '../../lib/vehicleReadings';
 import { menengaiGroup, fleetTypeLabel } from '../../lib/vehicleMap';
+import { unitSite } from '../../lib/siteLists';
+import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { burnAgainst, burnRate, cachedDay, dayBounds, loadDay, overWords, summariseDay, movingSpans } from '../../lib/vehicleDay';
 import { useFuelEpisodes, useVehicleFuelEventsRange } from '../../hooks/useVehicleFuelEvents';
 import { clampRange, daysBetween, joinDays, rangeWords } from '../../lib/dayRange';
@@ -741,6 +743,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
   const hasDriver = Boolean(vehicle.driver && vehicle.driver !== 'Unassigned');
   const fuelPct  = readings.fuelPct;
   const updated  = readings.lastReportedAt ? fmtTime(readings.lastReportedAt) : null;
+  const site     = unitSite(vehicle, activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id]);
   const rating   = Number.isFinite(vehicle.driverRatingScore) ? `${num(vehicle.driverRatingScore, 1)} / 5` : null;
   const summary  = unitSummary({ vehicle, readings, place, usedL: today.usedL, route: routePlanFor(dayPlans.data, vehicle) });
   const lastSeen = timeAgo(readings.lastReportedAt);
@@ -817,6 +820,12 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           {menengaiGroup(vehicle) && (
             <span className={`vh-group${menengaiGroup(vehicle) === 'mg:' ? ' vh-group--none' : ''}`} title="Group on the fleet list">
               <i className="ti ti-users-group" aria-hidden="true" />{fleetTypeLabel(menengaiGroup(vehicle))}
+            </span>
+          )}
+          {/* West Kenya's site (Naitiri, Olepito, …), the same chip (operator, 13 Nov 2026) */}
+          {site && (
+            <span className="vh-group" title="Site">
+              <i className="ti ti-map-pin" aria-hidden="true" />{site}
             </span>
           )}
           <span className="vh-fact" title="Driver">

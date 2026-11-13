@@ -14,10 +14,13 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
   // The ticked ones go first as the list opens and when a search is cleared, not under the pointer
   const [held, setHeld] = useState(() => new Set(picked ?? []));
   const [q, setQ] = useState('');
+  // Clear on a picker that needs one ticked (operator, 13 Nov 2026): every box empties in the list
+  // and the next tick is the pick; closing with none ticked keeps what was picked before
+  const [cleared, setCleared] = useState(false);
   const rootRef = useRef(null);
   const values = options.map((o) => o.value);
-  const set = new Set(picked ?? values);
-  const all = picked == null || values.every((v) => set.has(v));
+  const set = cleared ? new Set() : new Set(picked ?? values);
+  const all = !cleared && (picked == null || values.every((v) => set.has(v)));
   const text = !options.length ? `No ${noun}`
     : all ? `${allWord} (${options.length})`
       : !set.size ? `No ${noun}`
@@ -25,7 +28,7 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
           : `${set.size} of ${options.length} ${noun}`;
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) { setCleared(false); return undefined; }
     const onDown = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
     const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
     document.addEventListener('pointerdown', onDown, true);
@@ -52,6 +55,7 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
   const toggle = (v) => {
     const next = set.has(v) ? values.filter((x) => set.has(x) && x !== v) : values.filter((x) => set.has(x) || x === v);
     if (minOne && !next.length) return;
+    setCleared(false);
     onChange(next.length === values.length ? null : next);
   };
 
@@ -68,8 +72,8 @@ export default function CheckPicker({ icon, label, options, picked, onChange, no
       {open && (
         <div className="drp-pop mvr-types__pop" role="group" aria-label={label}>
           <div className="drp-quick">
-            {!noAll && <button type="button" className={`drp-chip${all ? ' drp-chip--on' : ''}`} onClick={() => onChange(null)}>{allWord}</button>}
-            {!minOne && <button type="button" className="drp-chip" onClick={() => onChange([])} disabled={!set.size}>Clear</button>}
+            {!noAll && <button type="button" className={`drp-chip${all ? ' drp-chip--on' : ''}`} onClick={() => { setCleared(false); onChange(null); }}>{allWord}</button>}
+            <button type="button" className="drp-chip" onClick={() => (minOne ? setCleared(true) : onChange([]))} disabled={!set.size}>Clear</button>
           </div>
           {search && options.length > 8 && (
             <input type="search" className="rpt-select gfr-pick__q" placeholder={`Find ${noun}`} value={q} autoFocus

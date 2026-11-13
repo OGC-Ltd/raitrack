@@ -102,6 +102,28 @@ export function siteKind(keys, label) {
 }
 
 /**
+ * Is a unit in the report by the types picked (operator, 13 Nov 2026: "Naitiri trucks" is Naitiri
+ * and the Trucks type, not an option of its own)? Only a unit on the Naitiri lists has a type: any
+ * other unit, and every unit while no type is picked (`types` null), stays.
+ * @param keys    the sites or organisations picked
+ * @param types   the kinds picked (SITE_KINDS), or null for all
+ * @param labels  the unit's plate, name, grouping…
+ */
+export function keptByKind(keys, types, labels) {
+  if (!types) return true;
+  const kind = labels.reduce((k, l) => k ?? (l ? siteKind(keys, l) : null), null);
+  return kind == null || types.includes(kind);
+}
+
+/** Props for the Unit types picker beside a Sites or Organisations picker with Naitiri ticked. */
+export const kindPicker = (types, setTypes) => ({
+  icon: 'ti-truck', label: 'Unit types', noun: 'types', allWord: 'All types', minOne: true,
+  options: SITE_KINDS.map((k) => ({ value: k, label: k })),
+  picked: types,
+  onChange: setTypes,
+});
+
+/**
  * The organisations whose reports offer these sites in a Site picker (hooks/useSitePick), and
  * what the picker calls them all, "West Kenya (12)" as the Organisations picker reads "West Kenya (7)"
  * (operator, 12 Nov 2026: West Kenya's other sites as well as Naitiri's). Sukari and Nzoia are not offered: they are
@@ -110,7 +132,8 @@ export function siteKind(keys, label) {
 export const REPORT_SITES = {
   WESTSUGAR: {
     allWord: 'West Kenya',
-    keys: ['KABRAS_SITE', 'OLEPITO', 'NAITIRI', 'NAITIRI_TRUCKS', 'AMUKA', 'KHALABA', 'LAKE_AGRO', 'MAGUT', 'MISIKHU', 'NAIROBI', 'SELIA'],
+    // No "Naitiri trucks": Naitiri and the Trucks type (operator, 13 Nov 2026)
+    keys: ['KABRAS_SITE', 'OLEPITO', 'NAITIRI', 'AMUKA', 'KHALABA', 'LAKE_AGRO', 'MAGUT', 'MISIKHU', 'NAIROBI', 'SELIA'],
   },
 };
 
@@ -125,4 +148,21 @@ export function vehicleOnSite(v, siteKey) {
   const t = SITE_LISTS[siteKey]?.test;
   if (!t) return false;
   return [v?.regPlate, v?.name, v?.id].some((label) => label && t.test(label));
+}
+
+/**
+ * The site a live unit belongs to, as a badge on the map's unit card and the unit panel (operator,
+ * 13 Nov 2026: "just like how Menengai sees the unit on the map for what it is, such as Tanker and
+ * VAS, in West Kenya label each unit by the organisation, e.g. Naitiri"). Naitiri first, because the
+ * client's Excel files decide it even when the unit is named for another site; then the other sites
+ * by the unit's name, the same rules the reports use. Null for another organisation's unit, and for
+ * a West Kenya unit no site claims.
+ * @param orgCode  the active organisation's code (api/org ORG_CODE_BY_COMPANY), e.g. 'WESTSUGAR'
+ */
+export function unitSite(vehicle, orgCode) {
+  const keys = REPORT_SITES[orgCode]?.keys;
+  if (!keys || !vehicle) return null;
+  const order = keys.includes('NAITIRI') ? ['NAITIRI', ...keys.filter((k) => k !== 'NAITIRI')] : keys;
+  const key = order.find((k) => vehicleOnSite(vehicle, k));
+  return key ? SITE_LISTS[key].label : null;
 }

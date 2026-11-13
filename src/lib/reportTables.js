@@ -180,7 +180,7 @@ export const REPORTS = {
     num: 3,
     label: 'Overspeeding',
     title: 'Overspeeding Report',
-    preset: 'yesterday',
+    preset: 'today',
     // Mufindi reads it weekly (10 Nov 2026): its daily figures are on the end of shift sheet
     presetFor: { KASULU: 'lastWeek' },
     spans: [7, 31],
@@ -211,7 +211,7 @@ export const REPORTS = {
     num: 2,
     label: 'Vehicle utilization',
     title: 'Vehicle Utilization Report',
-    preset: 'yesterday',
+    preset: 'today',
     maxDays: 7,
     // Mufindi (ctx.rated): each unit against the register, in its own basis.
     columns: (ctx) => (ctx?.rated

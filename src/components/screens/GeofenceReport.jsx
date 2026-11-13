@@ -47,7 +47,7 @@ function Kpi({ value, label, tone }) {
 
 export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }) {
   // This organisation, or several of its family together (hooks/useReportOrgs)
-  const { code, picked: pickedOrgs, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('geofences', { orgId, orgCode, companyName });
+  const { code, picked: pickedOrgs, several, orgIdOf, nameOf, keepUnit, pickedWords, picker, typePicker } = useReportOrgs('geofences', { orgId, orgCode, companyName });
 
   // The period: from today's midnight to now, unless picked
   const today = fleetDay(Date.now());
@@ -193,6 +193,7 @@ export default function GeofenceReport({ orgId, orgCode, vehicles, companyName }
           )}
         </DateRangePicker>
         {picker && <CheckPicker {...picker} />}
+        {typePicker && <CheckPicker {...typePicker} />}
         <CheckPicker icon="ti-map-pin" label="Geofences" noun="geofences" allWord="All geofences" search
                      options={names.map((n) => ({ value: n, label: n }))} picked={places}
                      onChange={setPlaces} />

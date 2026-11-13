@@ -55,8 +55,8 @@ function toCsv(rows, period) {
 
 export default function FuelConsumptionRateReport({ orgId, orgCode, companyName }) {
   const today = fleetDay(Date.now());
-  const yesterday = fleetDay(Date.now() - 86_400_000);
-  const [days, setDays] = useState({ from: yesterday, to: yesterday });
+  // Today until another day is picked (operator, 13 Nov 2026)
+  const [days, setDays] = useState({ from: today, to: today });
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);

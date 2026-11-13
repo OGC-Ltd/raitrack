@@ -4,6 +4,8 @@
  */
 /* Hallmark · waive 24b · .dlv-plan__head 14px/6px, .dlv-rules 14px gap and 6px margin · copied from Movements' .rpt-group th and .mvr-depots so the two tabs share one rhythm, by request */
 /* Hallmark · redesign: polish (13 Nov: the roster row's notes) · critique: the Planner note ran from the plate's edge at body size with an ISO date, so it read as a second plate line, outranked the stops it describes and its button matched Paste stops · answered: notes start under the stops column at 12px with 24px buttons, the day written as the picker writes it */
+/* Hallmark · redesign: full (13 Nov: the move/assign question, one component) · component: inline confirm · theme: brand (sp4 tokens) · states: default, hover, focus-visible, active from the shared sp4 buttons · critique: a full-width amber band read as an error and put Cancel and Move it here 1,400px from the plate they answer · answered: sized to its sentence on the gutter, plate in bold, answers beside it, warn hue on the icon only, the shell's primary button */
+/* Hallmark · redesign: full (13 Nov: the customers a Finished Goods line's unit passed, one component) · component: pick list · theme: brand (sp4 tokens) · signature: the time column, in and out, run down a rule that turns green at a stop · states: default, hover, focus-visible, active from the shared sp4 ghost button; picked as a row state · critique: twelve full-width boxed rows put the name, its times and Use this 1,400px apart, repeated the day on every line, joined facts with a middle dot, and gave a five-minute stop the same weight as a drive-past · answered: capped at 76rem in two columns read top to bottom, hairline rows, HH:MM in and out with the day only where it changes, stops bold with a green tag, a "Name matches" hint from the sheet's customer, Picked as a row state instead of a disabled button */
 /* Hallmark · waive 26b · the remove button is never disabled · disabled states belong to the shared sp4 buttons and pickers this panel reuses */
 /*
  *
@@ -35,11 +37,25 @@
 }
 /* Headed as a Movements group row: the name bold, its state beside it in grey */
 .dlv-plan__head {
-  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: 4px 16px; margin: 0; padding: 14px var(--sp4-gutter, 12px) 6px;
   border-bottom: 1px solid var(--sp4-line-hi);
 }
 .dlv-plan__title { margin: 0; font-size: var(--sp4-strong); font-weight: 800; line-height: 1.3; color: var(--sp4-text-1); }
+/* The fold: a chevron before the title, turned when the list is folded away */
+.dlv-plan__lede { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dlv-plan__fold {
+  display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0;
+  border: 1px solid var(--sp4-line); border-radius: 6px; background: var(--sp4-surface); color: var(--sp4-text-2); cursor: pointer;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.dlv-plan__fold .ti { font-size: 16px; transition: transform 160ms ease-out; }
+.dlv-plan__fold[aria-expanded="false"] .ti { transform: rotate(-90deg); }
+.dlv-plan__fold:hover { background: color-mix(in srgb, var(--sp4-text-1) 6%, var(--sp4-surface)); color: var(--sp4-text-1); }
+.dlv-plan__fold:active { transform: translateY(1px); }
+.dlv-plan__fold:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.dlv-plan__count { font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-3); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .dlv-plan__fold, .dlv-plan__fold .ti { transition: none; } }
 .dlv-plan__keep { display: inline-flex; align-items: center; gap: 8px; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-3); }
 .dlv-plan__keep--error { color: var(--sp4-crit); }
 /* "Saved 09:41": the icon, the word and the time it was last saved, the time in even figures */
@@ -52,7 +68,8 @@
   display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px;
   padding: 12px var(--sp4-gutter, 12px) 12px;
 }
-.dlv-plan .dlv-find { position: relative; flex: 0 1 380px; min-width: 0; max-width: none; }
+/* The add-a-vehicle search sits on the right, after Copy … list (operator, 13 Nov 2026) */
+.dlv-plan .dlv-find { position: relative; flex: 0 1 380px; min-width: 0; max-width: none; order: 1; margin-left: auto; }
 /* A range: one chip a day, each day keeping its own list; the one picked is the list below */
 .dlv-plan__days { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px var(--sp4-gutter, 12px) 0; }
 
@@ -182,7 +199,32 @@
 }
 
 /* The confirm that moves a vehicle into another group, inside the band */
-.dlv-assign { margin: 0 var(--sp4-gutter, 12px) 12px; border-radius: 8px; }
+/* ---- Asked before a unit changes list or group (operator, 5 and 13 Nov 2026) ---- */
+/* A question about one unit, so it is sized to the sentence and sits on the gutter under the find row:
+   the plate in bold, the answer beside it. It was a full-width amber band whose buttons sat 1,400px
+   from the words they answer. The shell's own buttons, the shell's warn hue on the icon only. */
+.dlv-assign {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp4-xs) var(--sp4-sm);
+  width: fit-content; max-width: calc(100% - 2 * var(--sp4-gutter, 12px)); box-sizing: border-box;
+  margin: 0 var(--sp4-gutter, 12px) var(--sp4-sm);
+  padding: var(--sp4-xs) var(--sp4-xs) var(--sp4-xs) var(--sp4-sm);
+  background: var(--sp4-surface);
+  border: 1px solid var(--sp4-line-hi); border-radius: 8px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--sp4-text-1) 6%, transparent),
+              0 6px 16px color-mix(in srgb, var(--sp4-text-1) 7%, transparent);
+  font-size: var(--sp4-body); line-height: 1.4; color: var(--sp4-text-2);
+  animation: dlv-assign-in 160ms ease-out;
+}
+.dlv-assign__icon { flex: none; font-size: 16px; color: var(--sp4-warn); }
+.dlv-assign__words { flex: 1 1 18rem; min-width: 0; margin: 0; overflow-wrap: break-word; }
+.dlv-assign__words strong { font-weight: 700; color: var(--sp4-text-1); }
+.dlv-assign__actions { display: flex; gap: var(--sp4-xs); margin-left: auto; }
+.dlv-assign__btn { min-height: 32px; padding-inline: var(--sp4-sm); font-size: var(--sp4-body); }
+.dlv-assign__go { color: var(--sp4-on-accent); }
+.dlv-assign__go:hover, .dlv-assign__go.is-hover { background: color-mix(in srgb, var(--sp4-accent-fill) 86%, var(--sp4-text-1)); color: var(--sp4-on-accent); }
+.dlv-assign__go:active, .dlv-assign__go.is-active { transform: translateY(1px); }
+@keyframes dlv-assign-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .dlv-assign { animation: none; } }
 
 /* The toolbar's summary: its parts set apart by space, not by dots */
 .dlv-sum__part { margin-left: 12px; }
@@ -195,16 +237,115 @@
 .dlv-fg__row--click { cursor: pointer; }
 .dlv-fg__row--click:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; }
 .dlv-fg__row--open td { box-shadow: inset 0 -2px 0 var(--sp4-text-1); }
-.dlv-fg__pickrow > td { background: var(--sp4-surface); padding: 0; }
-.dlv-fg__pick { padding: 12px 16px 14px; border-top: 1px solid var(--sp4-line); }
-.dlv-fg__pickhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px; }
-.dlv-fg__pickhead .sp4-ghost-btn { margin-left: auto; }
-.dlv-fg__picklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.dlv-fg__picklist li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 10px;
-  padding: 6px 8px; border-radius: 6px; border: 1px solid var(--sp4-line); }
-.dlv-fg__picklist li.dlv-fg__picked { border-color: var(--sp4-ok); background: color-mix(in srgb, var(--sp4-ok) 8%, transparent); }
-.dlv-fg__pickname { font-weight: 600; overflow-wrap: anywhere; }
-@media (max-width: 60rem) {
-  .dlv-fg__picklist li { grid-template-columns: minmax(0, 1fr) auto; }
-  .dlv-fg__picklist li .rpt-sub { grid-column: 1 / -1; grid-row: 2; }
+/* A row's colour by hand, from the sheet's three (13 Nov 2026): a palette beside ✕, swatches under it */
+.rpt-table.dlv-fg td.dlv-fg__x { position: relative; width: 64px; }
+.dlv-fg__tools { display: inline-flex; gap: 4px; }
+.dlv-fg__x .dlv-fg__paint--on { background: var(--sp4-surface); border-color: var(--sp4-text-1); }
+.dlv-fg__swatches {
+  position: absolute; z-index: 5; top: calc(100% - 4px); right: 4px; min-width: 15rem;
+  display: grid; gap: 2px; padding: 4px; text-align: left; white-space: nowrap;
+  background: var(--sp4-surface); border: 1px solid var(--sp4-line-hi); border-radius: 8px;
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--sp4-text-1) 12%, transparent);
+  animation: dlv-swatches-in 120ms ease-out;
 }
+.dlv-fg__x .dlv-fg__swatch {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: auto; min-height: 32px; padding: 4px 8px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--sp4-text-1); font: inherit; font-size: 13px; cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.dlv-fg__x .dlv-fg__swatch:hover { background: color-mix(in srgb, var(--sp4-text-1) 6%, transparent); }
+.dlv-fg__x .dlv-fg__swatch:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; }
+.dlv-fg__x .dlv-fg__swatch:active { transform: translateY(1px); }
+.dlv-fg__swatch b { font-weight: 700; }
+.dlv-fg__swatch span:not(.dlv-fg__chip) { color: var(--sp4-text-2); }
+.dlv-fg__swatch b { color: var(--sp4-text-1); }
+.dlv-fg__chip { flex: none; width: 18px; height: 18px; border-radius: 4px; background: var(--dlv-swatch); border: 1px solid color-mix(in srgb, var(--sp4-text-1) 25%, transparent); }
+.dlv-fg__tick { margin-left: auto; color: var(--sp4-text-1); }
+.dlv-fg__swatch--on { background: color-mix(in srgb, var(--sp4-text-1) 4%, transparent); }
+.dlv-fg__x .dlv-fg__swatch--reset { border-top: 1px solid var(--sp4-line); border-radius: 0 0 6px 6px; color: var(--sp4-text-2); }
+@keyframes dlv-swatches-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dlv-fg__swatches { animation: none; } .dlv-fg__x .dlv-fg__swatch { transition: none; } }
+
+.dlv-fg__pickrow > td { background: var(--sp4-surface); padding: 0; }
+
+/* The customers a line's unit passed: a timeline, read top to bottom, capped so the time, the name and
+   its button stay within one glance instead of spanning the table (13 Nov 2026) */
+.dlv-visits { max-width: 76rem; padding: 16px; border-top: 1px solid var(--sp4-line); }
+.dlv-visits__head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; margin-bottom: 12px; }
+.dlv-visits__lede { flex: 1 1 20rem; min-width: 0; }
+.dlv-visits__title { margin: 0; font-size: var(--sp4-body); font-weight: 700; color: var(--sp4-text-1); overflow-wrap: break-word; }
+.dlv-visits__sub { margin: 2px 0 0; font-size: 12.5px; color: var(--sp4-text-3); }
+.dlv-visits__sub strong { color: var(--sp4-text-1); font-weight: 700; }
+.dlv-visits__undo { flex: none; }
+.dlv-visits__none { margin: 0; font-size: 12.5px; color: var(--sp4-text-3); }
+
+/* Two columns, read down the first then the second, so a long trip is half as tall (operator, 13 Nov 2026);
+   one column where two would not each fit 24rem */
+.dlv-visits__list { list-style: none; margin: 0; padding: 0; columns: 2 24rem; column-gap: 32px; }
+.dlv-visit {
+  display: grid; grid-template-columns: 4.25rem minmax(0, 1fr) auto; align-items: center; gap: 4px 16px;
+  padding: 8px 8px 8px 0; border-top: 1px solid var(--sp4-line); break-inside: avoid;
+  transition: background-color 120ms ease-out;
+}
+.dlv-visit:hover { background: color-mix(in srgb, var(--sp4-text-1) 3%, transparent); }
+
+/* Time in, time out: the column the eye runs down */
+.dlv-visit__time { display: grid; padding-left: 12px; border-left: 2px solid var(--sp4-line-hi); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.dlv-visit__day { font-size: 11px; color: var(--sp4-text-3); }
+.dlv-visit__in { font-weight: 700; color: var(--sp4-text-1); }
+.dlv-visit__out { font-size: 12px; color: var(--sp4-text-3); }
+
+.dlv-visit__what { display: grid; gap: 2px; min-width: 0; }
+.dlv-visit__name { font-weight: 500; color: var(--sp4-text-1); overflow-wrap: anywhere; }
+.dlv-visit__how { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--sp4-text-3); }
+.dlv-visit__tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; font-weight: 600; border: 1px solid transparent; }
+.dlv-visit__tag .ti { font-size: 12px; }
+.dlv-visit__tag--stop { color: var(--sp4-ok); background: color-mix(in srgb, var(--sp4-ok) 10%, transparent); border-color: color-mix(in srgb, var(--sp4-ok) 30%, transparent); }
+.dlv-visit__tag--like { color: var(--sp4-accent); background: color-mix(in srgb, var(--sp4-accent) 8%, transparent); border-color: color-mix(in srgb, var(--sp4-accent) 28%, transparent); }
+
+/* A stop is the likelier delivery: its name and its rule carry more weight than a drive-past */
+.dlv-visit--stop .dlv-visit__name { font-weight: 700; }
+.dlv-visit--stop .dlv-visit__time { border-left-color: var(--sp4-ok); }
+
+.dlv-visit__use { min-height: 28px; }
+.dlv-visit__picked { display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; min-height: 28px; font-weight: 700; color: var(--sp4-ok); }
+.dlv-visit--on { background: color-mix(in srgb, var(--sp4-ok) 8%, transparent); }
+.dlv-visit--on:hover { background: color-mix(in srgb, var(--sp4-ok) 10%, transparent); }
+.dlv-visit--on .dlv-visit__time { border-left-color: var(--sp4-ok); }
+
+/* The sheet's customer, above the list: where it is and how close the route came (operator, 13 Nov 2026) */
+.dlv-visits__target {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 0 0 12px; padding: 8px 12px;
+  border: 1px solid var(--sp4-line-hi); border-left: 3px solid var(--sp4-accent); border-radius: 6px;
+  font-size: 12.5px; color: var(--sp4-text-2); font-variant-numeric: tabular-nums;
+}
+.dlv-visits__target > .ti { color: var(--sp4-accent); font-size: 16px; }
+.dlv-visits__target strong { color: var(--sp4-text-1); font-weight: 700; }
+
+/* Each customer's coordinates, the route's closest point to it and its speed there */
+.dlv-visit__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font-size: 12px; color: var(--sp4-text-2); font-variant-numeric: tabular-nums; }
+.dlv-visit__facts > span { display: inline-flex; align-items: center; gap: 4px; }
+.dlv-visit__facts .ti { font-size: 12px; color: var(--sp4-text-3); }
+.dlv-coord {
+  display: inline-flex; align-items: center; gap: 4px; color: var(--sp4-text-2); text-decoration: underline;
+  text-decoration-color: var(--sp4-line-hi); text-underline-offset: 2px; border-radius: 2px;
+  transition: color 120ms ease-out, text-decoration-color 120ms ease-out;
+}
+.dlv-coord .ti { color: var(--sp4-text-3); }
+.dlv-coord:hover { color: var(--sp4-accent); text-decoration-color: currentColor; }
+.dlv-coord:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.dlv-coord:active { opacity: 0.8; }
+
+.dlv-visit__tag--target { color: var(--sp4-text-1); background: color-mix(in srgb, var(--sp4-accent) 14%, transparent); border-color: var(--sp4-accent); }
+.dlv-visit__tag--near { color: var(--sp4-warn); background: color-mix(in srgb, var(--sp4-warn) 10%, transparent); border-color: color-mix(in srgb, var(--sp4-warn) 32%, transparent); }
+/* Near the sheet's customer but never within 100 m: listed, set back */
+.dlv-visit--near .dlv-visit__time { border-left-style: dashed; }
+.dlv-visit--near .dlv-visit__name { color: var(--sp4-text-2); }
+@media (prefers-reduced-motion: reduce) { .dlv-coord { transition: none; } }
+
+@media (max-width: 40rem) {
+  .dlv-visits { padding: 12px; }
+  .dlv-visit { grid-template-columns: 3.75rem minmax(0, 1fr); }
+  .dlv-visit__use, .dlv-visit__picked { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .dlv-visit { transition: none; } }

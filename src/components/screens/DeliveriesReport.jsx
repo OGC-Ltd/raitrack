@@ -28,12 +28,12 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDeliveryDay, getDeliveryDays, saveDeliveryDay, lastDeliveryDayBefore, getDeliveryOrders, saveDeliveryOrder } from '../../api/deliveries';
 import { LAST_HOURS, MAX_MOVEMENT_DAYS, windowsProblem } from '../../lib/movementReport';
 import {
-  COLUMNS, stamp, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
+  COLUMNS, stamp, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, middleOf, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
 } from '../../lib/deliveriesReport';
 import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, mergePins, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
-import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill } from '../../lib/finishedGoodsReport';
+import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
@@ -44,7 +44,7 @@ import { loadZones, reloadEstateZones } from '../../hooks/useEstateZones';
 import { createFence } from '../../api/geofences';
 import { pinFencePlan, drawPinFences, readNamedPaste, FENCE_RADIUS_M } from '../../lib/pinFences';
 import { deliveriesDoc } from '../../lib/reportDocs';
-import { customerVisits, visitCustomers } from '../../lib/customerVisits';
+import { customerVisits, visitCustomers, visitLength, nameLike, closestPass, customersNear, distanceWords, coordWords, metresApart, NEAR_TARGET_M } from '../../lib/customerVisits';
 import { useReportEditor } from './ReportEditor';
 import './DeliveriesReport.css';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
@@ -265,6 +265,19 @@ export function DeliveriesReports(props) {
   ));
 }
 
+/** "34 km/h" at the closest reading; a reading without a speed says so. */
+const speedWords = (kmh) => (Number.isFinite(kmh) ? `${Math.round(kmh)} km/h` : 'speed not read');
+
+/** A fence's middle as coordinates, opening the place on Google Maps in a new tab. */
+function CoordLink({ at }) {
+  return (
+    <a className="dlv-coord" href={`https://www.google.com/maps?q=${at.lat.toFixed(6)},${at.lng.toFixed(6)}`} target="_blank" rel="noopener noreferrer"
+       title="Open on Google Maps" onClick={(e) => e.stopPropagation()}>
+      <i className="ti ti-map-pin" aria-hidden="true" />{coordWords(at)}
+    </a>
+  );
+}
+
 export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName, template: fixedTemplate = null, crumbs = null }) {
   const now = Date.now();
   const today = fleetDay(now);
@@ -272,7 +285,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // vehicles is a day's: a range runs each day's own list over that day's hours
   // (operator, 12 Nov 2026: "11/11/2026 to 12/11/2026 should show both days in full")
   const [sel, setSel] = useState({ mode: 'last', hours: LAST_HOURS[0] });
-  const [draft, setDraft] = useState({ fromDay: today, toDay: today, start: 7, end: 20 });
+  // Today, midnight to midnight, until the operator picks other hours (operator, 13 Nov 2026)
+  const [draft, setDraft] = useState({ fromDay: today, toDay: today, start: 0, end: 24 });
   const [daysOpen, setDaysOpen] = useState(true);
   const rangeDays = useMemo(() => (daysOpen ? daysFrom(draft.fromDay, draft.toDay) : [today]), [daysOpen, draft.fromDay, draft.toDay, today]);
   // The day whose list is open for editing: one of the range's, the first until another is picked
@@ -319,6 +333,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // Every day of the range in one list, each vehicle with its day (operator, 12 Nov 2026: "I want to see
   // units for both 11th and 12th in one list if I have picked the dates, not separately")
   const multiDay = rangeDays.length > 1;
+  // The vehicle list open or folded away, remembered in this browser (operator, 13 Nov 2026)
+  const [listOpen, setListOpenState] = useState(() => { try { return localStorage.getItem('dlv.listOpen') !== '0'; } catch { return true; } });
+  const setListOpen = (on) => { setListOpenState(on); try { localStorage.setItem('dlv.listOpen', on ? '1' : '0'); } catch { /* storage blocked: open for this visit only */ } };
   const listRows = multiDay
     ? rangeDays.flatMap((d, i) => (rangeLists[i]?.data?.vehicles ?? []).filter(mine).map((v) => ({ ...v, day: d })))
     : plan.vehicles.map((v) => ({ ...v, day }));
@@ -419,7 +436,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     const there = tabList && fullPlan.vehicles.find((v) => v.key === u.key && !mine(v));
     if (there) {
       const name = tabList === 'vs' ? 'Finished Goods' : 'Van Sales';
-      setAssign({ words: `${u.plate} is on the ${name} list for ${dayWords(day)}. Move it to this list?`, yes: 'Move it here',
+      setAssign({ plate: u.plate, icon: 'ti-arrows-exchange', words: `${u.plate} is on the ${name} list for ${dayWords(day)}. Move it to this list?`, yes: 'Move it here',
         go: () => { saveFull({ ...fullPlan, vehicles: fullPlan.vehicles.map((v) => (v.key === u.key ? tagList(v, tabList) : v)) }); setFind(''); } });
       return;
     }
@@ -430,13 +447,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       takePlannerStops(u.key, u.plate);                   // its Planner plan's geofences, ticked
     };
     if (group && u.group && group !== u.group && !plan.vehicles.some((v) => v.key === u.key)) {
-      setAssign({ words: `${u.plate} belongs to ${u.group}. Assign it to ${group} anyway?`, yes: `Assign to ${group}`, go: put });
+      setAssign({ plate: u.plate, icon: 'ti-users-group', words: `${u.plate} belongs to ${u.group}. Assign it to ${group} anyway?`, yes: `Assign to ${group}`, go: put });
     } else put();
   };
   const moveTo = (v, g) => {
     const own = ownGroup(v.key);
     const go = () => changeOn(v.day, setVehicleGroup(planOn(v.day), v.key, g === own ? null : g));
-    if (own && g !== own) setAssign({ words: `${v.plate} belongs to ${own}. Assign it to ${g} anyway?`, yes: `Assign to ${g}`, go });
+    if (own && g !== own) setAssign({ plate: v.plate, icon: 'ti-users-group', words: `${v.plate} belongs to ${own}. Assign it to ${g} anyway?`, yes: `Assign to ${g}`, go });
     else go();
   };
   // Orders fulfilled typed over the report's own count (operator, 4 Nov 2026: "the user should have the
@@ -578,7 +595,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [file, setFile] = useState({ busy: false, error: null });
   const [open, setOpen] = useState(() => new Set());
   const [pasting, setPasting] = useState(() => new Set()); // vehicles with the coordinates box open
-  const [showStops, setShowStops] = useState(true);       // the pick-up locations on the PDF and JPEG
+  const [showStops, setShowStops] = useState(false);      // the pick-up locations on the PDF and JPEG; off until ticked (operator, 13 Nov 2026)
   const runId = useRef(0);
 
   const daysProblem = windowsProblem({ mode: 'days', ...draft });
@@ -794,25 +811,51 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // ... show the customer list the vehicle passed by, they can choose the one that looks the same")
   const [picks, setPicks] = useState(() => new Map());
   const [openLine, setOpenLine] = useState(null);
-  useEffect(() => { setDropped(new Set()); setPicks(new Map()); setOpenLine(null); }, [ranRaw]);
+  // A line's colour set by hand, from the sheet's three (operator, 13 Nov 2026); `painting`: the line whose swatches are open
+  const [colours, setColours] = useState(() => new Map());
+  const [painting, setPainting] = useState(null);
+  useEffect(() => { setDropped(new Set()); setPicks(new Map()); setColours(new Map()); setOpenLine(null); setPainting(null); }, [ranRaw]);
+  const paint = (key, state) => setColours((m) => { const n = new Map(m); if (state) n.set(key, state); else n.delete(key); return n; });
+  useEffect(() => {
+    if (!painting) return undefined;
+    const away = (e) => { if (!e.target.closest?.('.dlv-fg__x')) setPainting(null); };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [painting]);
   const drop = (key) => setDropped((d) => new Set(d).add(key));
   const pickFor = (key, pick) => setPicks((m) => { const n = new Map(m); if (pick) n.set(key, pick); else n.delete(key); return n; });
-  const editSource = useMemo(() => (done ? { done, showStops, template, dropped, picks } : null), [done, showStops, template, dropped, picks]);
+  const editSource = useMemo(() => (done ? { done, showStops, template, dropped, picks, colours } : null), [done, showStops, template, dropped, picks, colours]);
   const fleetName = companyName ?? orgCode ?? 'Menengai';
-  const fgDoc = () => finishedGoodsDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, orgCode, dropped, picks });
+  const fgDoc = () => finishedGoodsDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, orgCode, dropped, picks, colours });
   const editor = useReportEditor({ orgId, source: editSource,
     build: () => (isFg ? fgDoc() : deliveriesDoc(done.rows, { from: done.from, at: done.at, fleet: fleetName, group, stops: showStops, orgCode })) });
   const fgAll = useMemo(() => (done && isFg ? fgLines(done.rows, { at: done.at, picks }) : []), [done, isFg, picks]);
-  // The customers the open line's unit passed on its trip: out to back, else its day and after
+  // The customers the open line's unit passed on its trip: out to back, else its day and after. With
+  // each, its coordinates, how close the route came and its speed there; and the customers around the
+  // one on the sheet, passed or not (operator, 13 Nov 2026). `target`: the sheet's customer, by its geofence
   const passed = useMemo(() => {
     const l = openLine && fgAll.find((x) => x.key === openLine);
-    const got = l && ranRaw?.routesOf?.get(l.rowKey);
-    if (!got) return l ? [] : null;
+    if (!l) return null;
+    const row = done?.rows?.find((r) => (r.key ?? r.plate) === l.rowKey);
+    const sheet = row?.customers?.find((c) => `${l.rowKey}|${c.name}` === l.key);
+    const feature = sheet && !sheet.missing ? sheet.feature ?? null : null;
+    const got = ranRaw?.routesOf?.get(l.rowKey);
+    if (!got) return { list: [], target: feature ? { mid: middleOf(feature), pass: null } : null, read: false };
     const from = l.departAt ?? got.from;
     const to = l.yardAt ?? got.to;
     const pings = got.routes.flat().sort((a, b) => a.t - b.t);
-    return customerVisits(pings, ranRaw.passable ?? [], { from, to }).sort((a, b) => a.enteredAt - b.enteredAt);
-  }, [openLine, fgAll, ranRaw]);
+    const target = feature ? { mid: middleOf(feature), pass: closestPass(pings, feature, { from, to }), name: sheet.name } : null;
+    const isTarget = (c) => Boolean(feature) && (c.feature === feature || c.name === sheet.name);
+    const visits = customerVisits(pings, ranRaw.passable ?? [], { from, to }).map((v) => ({
+      ...v, target: isTarget(v), fromTarget: target ? metresApart(target.mid, v.mid) : null,
+      pass: closestPass(pings, v.feature, { from: v.enteredAt, to: v.leftAt ?? to }) }));
+    const seen = new Set(visits.map((v) => v.name));
+    const near = feature ? customersNear(ranRaw.passable ?? [], feature).filter((c) => !seen.has(c.name) && !isTarget(c)).flatMap((c) => {
+      const pass = closestPass(pings, c.feature, { from, to });
+      return pass ? [{ ...c, near: true, pass, enteredAt: pass.t, leftAt: null, stoodMs: 0 }] : [];
+    }) : [];
+    return { list: [...visits, ...near].sort((a, b) => a.enteredAt - b.enteredAt), target, read: true };
+  }, [openLine, fgAll, ranRaw, done]);
   const fgShown = useMemo(() => fgAll.filter((l) => !dropped.has(l.key)), [fgAll, dropped]);
   // Find a unit in the table (operator, 11 Nov 2026), as on Movements: "kcw475", "KCW 475E", "475e";
   // a customer's name too on Finished Goods. The screen only: CSV, PDF and JPEG keep every line
@@ -850,7 +893,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   };
   const preview = usePdfPreview(makePdf);
   const saveCsv = () => done && (isFg
-    ? downloadTableCsv({ ...fgCsv(fgShown), filenameSlug: `deliveries-finished-goods-${fleetDay(done.at)}` })
+    ? downloadTableCsv({ ...fgCsv(fgShown, colours), filenameSlug: `deliveries-finished-goods-${fleetDay(done.at)}` })
     : downloadTableCsv({ ...csvTable(done.rows, { withDay: spansDays(done.from, done.at) }), filenameSlug: `deliveries-${fleetDay(done.at)}` }));
   const flip = (s, k) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; };
   const toggle = (k) => setOpen((s) => flip(s, k));
@@ -928,10 +971,23 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         {/* The day's list: the vehicles shared, each with its customers */}
         <section className="dlv-plan" aria-label="Today’s vehicles">
           <div className="dlv-plan__head">
-            <h3 className="dlv-plan__title">
-              {rangeDays.length > 1 ? 'Vehicles and stops for ' : 'Vehicles shared on '}
-              {periodDays(Date.parse(`${rangeDays[0]}T09:00:00+03:00`), Date.parse(`${rangeDays[rangeDays.length - 1]}T09:00:00+03:00`))}
-            </h3>
+            <div className="dlv-plan__lede">
+              {/* Fold the list away to give the report the screen (operator, 13 Nov 2026); remembered per browser */}
+              <button type="button" className="dlv-plan__fold" aria-expanded={listOpen} aria-controls="dlv-plan-body"
+                      aria-label={listOpen ? 'Collapse the list of vehicles' : 'Expand the list of vehicles'}
+                      title={listOpen ? 'Collapse the list' : 'Expand the list'} onClick={() => setListOpen(!listOpen)}>
+                <i className="ti ti-chevron-down" aria-hidden="true" />
+              </button>
+              <h3 className="dlv-plan__title">
+                {rangeDays.length > 1 ? 'Vehicles and stops for ' : 'Vehicles shared on '}
+                {periodDays(Date.parse(`${rangeDays[0]}T09:00:00+03:00`), Date.parse(`${rangeDays[rangeDays.length - 1]}T09:00:00+03:00`))}
+              </h3>
+              {!listOpen && !dayList.isLoading && (
+                <span className="dlv-plan__count">{listRows.length} vehicle{listRows.length === 1 ? '' : 's'}</span>
+              )}
+            </div>
+            {/* No words while the list loads: the loader below says it (operator, 13 Nov 2026) */}
+            {!dayList.isLoading && (
             <span className={`dlv-plan__keep${saveState.error || dayList.isError ? ' dlv-plan__keep--error' : ''}`} role="status">
               {dayList.isError ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> The list could not be read: {dayList.error?.message}</>
                 : saveState.error ? <><i className="ti ti-alert-triangle" aria-hidden="true" /> Not saved: {saveState.error}
@@ -940,13 +996,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       <i className="ti ti-refresh" aria-hidden="true" /> Try again
                     </button>
                   )}</>
-                  : dayList.isLoading ? 'Reading the list…'
-                    : saveState.busy > 0 ? <><i className="ti ti-loader-2" aria-hidden="true" /> Saving…</>
-                      : <span title={`Shared with everyone in ${companyName ?? orgCode ?? 'the organisation'}`}>
-                          <i className="ti ti-cloud-check" aria-hidden="true" /> Saved{savedAt(dayList.data?.updatedAt)}
-                        </span>}
+                  : saveState.busy > 0 ? <><i className="ti ti-loader-2" aria-hidden="true" /> Saving…</>
+                    : <span title={`Shared with everyone in ${companyName ?? orgCode ?? 'the organisation'}`}>
+                        <i className="ti ti-cloud-check" aria-hidden="true" /> Saved{savedAt(dayList.data?.updatedAt)}
+                      </span>}
             </span>
+            )}
           </div>
+          <div id="dlv-plan-body" hidden={!listOpen}>
           {rangeDays.length > 1 && (
             // Each day of the range keeps its own list and is run with it: pick the day to change
             <div className="sp4-filter-group dlv-plan__days" role="group" aria-label="The day new vehicles are added to">
@@ -993,11 +1050,19 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             )}
           </div>
           {assign && (
-            <div className="mvr-confirm dlv-assign" role="alertdialog" aria-labelledby="dlv-assign-words">
-              <span id="dlv-assign-words">{assign.words}</span>
-              <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setAssign(null)} autoFocus>Cancel</button>
-              <button type="button" className="sp4-submit-btn frp-run mvr-confirm__go"
-                      onClick={() => { const { go } = assign; setAssign(null); go(); }}>{assign.yes}</button>
+            <div className="dlv-assign" role="alertdialog" aria-labelledby="dlv-assign-words">
+              <i className={`ti ${assign.icon ?? 'ti-help-circle'} dlv-assign__icon`} aria-hidden="true" />
+              {/* The plate leads, in bold: the sentence is about that one unit */}
+              <p id="dlv-assign-words" className="dlv-assign__words">
+                {assign.plate && assign.words.startsWith(assign.plate)
+                  ? <><strong>{assign.plate}</strong>{assign.words.slice(assign.plate.length)}</>
+                  : assign.words}
+              </p>
+              <div className="dlv-assign__actions">
+                <button type="button" className="sp4-ghost-btn dlv-assign__btn" onClick={() => setAssign(null)} autoFocus>Cancel</button>
+                <button type="button" className="sp4-submit-btn dlv-assign__btn dlv-assign__go"
+                        onClick={() => { const { go } = assign; setAssign(null); go(); }}>{assign.yes}</button>
+              </div>
             </div>
           )}
           {sheets.status === 'error' && <p className="rpt-warn dlv-plan__warn">The Planner’s sheets could not be read: {sheets.message}</p>}
@@ -1019,6 +1084,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               </ul>
             </div>
           )}
+          {/* The loader the other pages use, while the day's list is read */}
+          {dayList.isLoading && <EmptyNote icon="ti-loader-2" tone="busy" title="Loading the vehicles" />}
           {listRows.length > 0 && (
             <>
             <div className="dlv-roster__head" aria-hidden="true">
@@ -1103,6 +1170,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
             </ul>
             </>
           )}
+          </div>
         </section>
 
         {run.status === 'idle' && (listRows.length > 0 || sheets.list.length > 0) && (
@@ -1193,48 +1261,136 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                       return (
                         <Fragment key={l.key}>
                           <tr className={`sp4-tr dlv-fg__row dlv-fg__row--${fgState(l)} dlv-fg__row--click${isOpen ? ' dlv-fg__row--open' : ''}`}
-                              style={{ '--dlv-fg-fill': fgFill(l) }} onClick={toggle} tabIndex={0} aria-expanded={isOpen}
+                              style={{ '--dlv-fg-fill': fgFill(l, colours) }} onClick={toggle} tabIndex={0} aria-expanded={isOpen}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
                               title="Show the customers this unit passed, to pick the one that is this customer">
                             {fgCells(l).map((v, i) => <td key={i} className={i === 1 ? 'rpt-unit' : undefined}>{v}</td>)}
-                            <td className="dlv-fg__x">
-                              <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"
-                                      onClick={(e) => { e.stopPropagation(); editor.guard('Drop a line', () => drop(l.key)); }}>
-                                <i className="ti ti-x" aria-hidden="true" />
-                              </button>
+                            <td className="dlv-fg__x" onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setPainting(null); }}>
+                              <span className="dlv-fg__tools">
+                                <button type="button" className={`dlv-fg__paint${colours.has(l.key) ? ' dlv-fg__paint--on' : ''}`}
+                                        aria-haspopup="menu" aria-expanded={painting === l.key}
+                                        aria-label={`Change the colour of ${l.customer} (${l.plate})`} title="Change the row’s colour"
+                                        onClick={() => setPainting(painting === l.key ? null : l.key)}>
+                                  <i className="ti ti-palette" aria-hidden="true" />
+                                </button>
+                                <button type="button" aria-label={`Drop ${l.customer} (${l.plate}) from the report`} title="Leave this line out of the table, CSV, PDF and JPEG"
+                                        onClick={() => editor.guard('Drop a line', () => drop(l.key))}>
+                                  <i className="ti ti-x" aria-hidden="true" />
+                                </button>
+                              </span>
+                              {painting === l.key && (
+                                <div className="dlv-fg__swatches" role="menu" aria-label={`Colour for ${l.customer}`}>
+                                  {FG_COLOURS.map((c) => {
+                                    const on = fgColour(l, colours) === c.state;
+                                    return (
+                                      <button key={c.state} type="button" role="menuitemradio" aria-checked={on} autoFocus={on}
+                                              className={`dlv-fg__swatch${on ? ' dlv-fg__swatch--on' : ''}`} style={{ '--dlv-swatch': FG_FILL[c.state] }}
+                                              onClick={() => editor.guard('Change a row’s colour', () => { paint(l.key, c.state === fgState(l) ? null : c.state); setPainting(null); })}>
+                                        <span className="dlv-fg__chip" aria-hidden="true" />
+                                        <span><b>{c.label}</b> {c.means}</span>
+                                        {on && <i className="ti ti-check dlv-fg__tick" aria-hidden="true" />}
+                                      </button>
+                                    );
+                                  })}
+                                  {colours.has(l.key) && (
+                                    <button type="button" role="menuitem" className="dlv-fg__swatch dlv-fg__swatch--reset"
+                                            onClick={() => editor.guard('Change a row’s colour', () => { paint(l.key, null); setPainting(null); })}>
+                                      <i className="ti ti-arrow-back-up" aria-hidden="true" /> Back to automatic
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </td>
                           </tr>
                           {isOpen && (
                             <tr className="dlv-fg__pickrow">
                               <td colSpan={FG_HEADS.length + 1}>
-                                <div className="dlv-fg__pick">
-                                  <div className="dlv-fg__pickhead">
-                                    <strong>Customers {l.plate} passed</strong>
-                                    <span className="rpt-sub">{l.departAt != null ? 'From leaving the yard' : 'Over its day'}{l.yardAt != null ? ' to getting back' : ''}. Pick the one that is “{l.customer}”.</span>
+                                {/* The customers its unit passed, as a timeline to pick from (operator, 13 Nov 2026, Hallmark) */}
+                                <div className="dlv-visits">
+                                  <div className="dlv-visits__head">
+                                    <div className="dlv-visits__lede">
+                                      <h4 className="dlv-visits__title">Customers {l.plate} passed</h4>
+                                      <p className="dlv-visits__sub">
+                                        {l.departAt != null ? 'From leaving the yard' : 'Over its day'}{l.yardAt != null ? ' to getting back' : ''}. Pick the one that is <strong>{l.customer}</strong>.
+                                      </p>
+                                    </div>
                                     {l.picked && (
-                                      <button type="button" className="sp4-ghost-btn" onClick={() => editor.guard('Undo a pick', () => pickFor(l.key, null))}>
+                                      <button type="button" className="sp4-ghost-btn dlv-visits__undo" onClick={() => editor.guard('Undo a pick', () => pickFor(l.key, null))}>
                                         <i className="ti ti-arrow-back-up" aria-hidden="true" /> Undo pick ({l.picked})
                                       </button>
                                     )}
                                   </div>
-                                  {passed == null || !passed.length ? (
-                                    <p className="rpt-sub">{ranRaw?.routesOf?.get(l.rowKey) ? 'It came within 100 m of no customer’s geofence on this trip.' : 'No readings kept for this line.'}</p>
+                                  {passed && (
+                                    <p className="dlv-visits__target">
+                                      <i className="ti ti-target-arrow" aria-hidden="true" />
+                                      <span className="dlv-visits__target-name">On the sheet: <strong>{l.customer}</strong></span>
+                                      {!passed.target ? <span>No geofence on the map for this customer</span> : (<>
+                                        {coordWords(passed.target.mid) && <CoordLink at={passed.target.mid} />}
+                                        <span>{!passed.target.pass ? 'No readings on this trip'
+                                          : passed.target.pass.inside ? `Went in at ${stamp(passed.target.pass.t).slice(11, 16)}, ${speedWords(passed.target.pass.speedKmh)}`
+                                            : `Closest ${distanceWords(passed.target.pass.m)} at ${stamp(passed.target.pass.t).slice(11, 16)}, ${speedWords(passed.target.pass.speedKmh)}`}</span>
+                                      </>)}
+                                    </p>
+                                  )}
+                                  {passed == null || !passed.list.length ? (
+                                    <p className="dlv-visits__none">{passed?.read ? `It came within 100 m of no customer’s geofence on this trip${passed.target ? `, and none lies within ${NEAR_TARGET_M} m of ${l.customer}` : ''}.` : 'No readings kept for this line.'}</p>
                                   ) : (
-                                    <ul className="dlv-fg__picklist">
-                                      {passed.map((v) => {
+                                    <ol className="dlv-visits__list">
+                                      {passed.list.map((v, i, list) => {
                                         const on = l.picked === v.label && l.arriveAt === v.enteredAt;
+                                        const stopped = v.stoodMs >= STOP_MS;
+                                        const like = nameLike(v.label, l.customer);
+                                        const at = stamp(v.enteredAt);
+                                        const newDay = i > 0 && at.slice(0, 10) !== stamp(list[i - 1].enteredAt).slice(0, 10);
+                                        const inside = v.leftAt != null ? visitLength(v.leftAt - v.enteredAt) : null;
                                         return (
-                                          <li key={`${v.name}|${v.enteredAt}`} className={on ? 'dlv-fg__picked' : undefined}>
-                                            <span className="dlv-fg__pickname">{v.label}</span>
-                                            <span className="rpt-sub">{stamp(v.enteredAt)}{v.leftAt != null ? ` to ${stamp(v.leftAt).slice(11)}` : ', still there'} · {v.stoodMs >= STOP_MS ? `stopped ${Math.round(v.stoodMs / 60_000)} min` : 'passed through'}</span>
-                                            <button type="button" className={on ? 'sp4-btn-primary' : 'sp4-ghost-btn'} disabled={on}
-                                                    onClick={() => editor.guard('Pick a customer', () => { pickFor(l.key, { at: v.enteredAt, leftAt: v.leftAt, label: v.label }); setOpenLine(null); })}>
-                                              {on ? 'Picked' : 'Use this'}
-                                            </button>
+                                          <li key={`${v.name}|${v.enteredAt}`}
+                                              className={`dlv-visit${stopped ? ' dlv-visit--stop' : ''}${v.near ? ' dlv-visit--near' : ''}${on ? ' dlv-visit--on' : ''}`}>
+                                            <span className="dlv-visit__time">
+                                              {newDay && <span className="dlv-visit__day">{at.slice(0, 5)}</span>}
+                                              <span className="dlv-visit__in">{at.slice(11, 16)}</span>
+                                              <span className="dlv-visit__out">{v.near ? 'closest' : v.leftAt != null ? stamp(v.leftAt).slice(11, 16) : 'still there'}</span>
+                                            </span>
+                                            <span className="dlv-visit__what">
+                                              <span className="dlv-visit__name">{v.label}</span>
+                                              <span className="dlv-visit__how">
+                                                {v.near ? <span>Not within 100 m</span>
+                                                  : stopped
+                                                    ? <span className="dlv-visit__tag dlv-visit__tag--stop"><i className="ti ti-player-pause" aria-hidden="true" />Stopped {visitLength(v.stoodMs)}</span>
+                                                    : <span>Passed through{inside ? ` in ${inside}` : ''}</span>}
+                                                {v.target && <span className="dlv-visit__tag dlv-visit__tag--target"><i className="ti ti-target-arrow" aria-hidden="true" />On the sheet</span>}
+                                                {!v.target && like && <span className="dlv-visit__tag dlv-visit__tag--like"><i className="ti ti-equal" aria-hidden="true" />Name matches</span>}
+                                                {!v.target && v.fromTarget != null && v.fromTarget <= NEAR_TARGET_M && (
+                                                  <span className="dlv-visit__tag dlv-visit__tag--near"><i className="ti ti-map-pin" aria-hidden="true" />{distanceWords(v.fromTarget)} from {l.customer}</span>
+                                                )}
+                                              </span>
+                                              <span className="dlv-visit__facts">
+                                                {coordWords(v.mid) && <CoordLink at={v.mid} />}
+                                                {v.pass && (
+                                                  <span>
+                                                    <i className="ti ti-route" aria-hidden="true" />
+                                                    {v.pass.inside ? 'Went in' : `Closest ${distanceWords(v.pass.m)}`}, {speedWords(v.pass.speedKmh)}
+                                                  </span>
+                                                )}
+                                                {!v.target && v.fromTarget != null && v.fromTarget > NEAR_TARGET_M && (
+                                                  <span><i className="ti ti-ruler-measure" aria-hidden="true" />{distanceWords(v.fromTarget)} from {l.customer}</span>
+                                                )}
+                                              </span>
+                                            </span>
+                                            {on ? (
+                                              <span className="dlv-visit__picked"><i className="ti ti-check" aria-hidden="true" />Picked</span>
+                                            ) : (
+                                              <button type="button" className="sp4-ghost-btn dlv-visit__use"
+                                                      aria-label={`Use ${v.label} at ${at.slice(11, 16)} for ${l.customer}`}
+                                                      onClick={() => editor.guard('Pick a customer', () => { pickFor(l.key, { at: v.enteredAt, leftAt: v.leftAt, label: v.label }); setOpenLine(null); })}>
+                                                Use this
+                                              </button>
+                                            )}
                                           </li>
                                         );
                                       })}
-                                    </ul>
+                                    </ol>
                                   )}
                                 </div>
                               </td>

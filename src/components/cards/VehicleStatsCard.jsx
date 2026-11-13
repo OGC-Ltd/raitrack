@@ -20,6 +20,9 @@ import { useJourneySoFar } from "../../hooks/useJourneySoFar";
 import { burnAgainst, overWords } from "../../lib/vehicleDay";
 import { displayPlate } from "../../lib/plate";
 import TripReportButton from "../shared/TripReportButton";
+import { useAppSelector } from "../../context/AppContext";
+import { ORG_CODE_BY_COMPANY } from "../../api/org";
+import { unitSite } from "../../lib/siteLists";
 
 const STATUS_COLORS = {
   ok:       ONLINE_COLORS.transit,
@@ -448,6 +451,10 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
   // Menengai's fleet-list group (Tankers, Van Sales, …), highlighted on the
   // card (operator, 2 Nov 2026); null for any other organisation's unit.
   const group = menengaiGroup(vehicle);
+  // West Kenya's site (Naitiri, Olepito, …), the same chip (operator, 13 Nov
+  // 2026); null for another organisation's unit or one no site claims.
+  const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
+  const site = unitSite(vehicle, ORG_CODE_BY_COMPANY[activeCompanyId]);
 
   // Alerts only. Activity belongs to the one chip below, so it is stated once.
   const stateLabel = STATE_LABELS[vehicle.status];
@@ -471,6 +478,7 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
               {fleetTypeLabel(group)}
             </span>
           )}
+          {site && <span className="vt-group-badge" title="Site">{site}</span>}
         </div>
         <div className="vt-header-right">
           {/* CONNECTION — always rendered, independent of everything else.

@@ -30,7 +30,7 @@ const WEST_KENYA = {
     { key: 'OLEPITO', label: 'Olepito', unit: SITE_LISTS.OLEPITO.test },
     // Naitiri from the client's Excel files alone, not the unit's name (operator, 12 Nov 2026), lib/siteLists
     { key: 'NAITIRI', label: SITE_LISTS.NAITIRI.label, unit: SITE_LISTS.NAITIRI.test },
-    { key: 'NAITIRI_TRUCKS', label: SITE_LISTS.NAITIRI_TRUCKS.label, unit: SITE_LISTS.NAITIRI_TRUCKS.test },
+    // Its trucks: Naitiri and the Trucks type (operator, 13 Nov 2026), hooks/useReportOrgs typePicker
   ],
 };
 

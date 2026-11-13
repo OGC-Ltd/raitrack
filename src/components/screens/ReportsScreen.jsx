@@ -160,13 +160,10 @@ const SHIFT_PRESETS = [
   { key: 'whole', label: 'Whole day', start: 0, end: 24 },
 ];
 /**
- * The day shift today, or yesterday's while today's has not begun (before
- * 07:30 the last day shift is yesterday's).
+ * Today, midnight to midnight (operator, 13 Nov 2026: every picker opens on the
+ * current day at midnight; it was the 07:30-19:30 day shift). Day and Night stay one click away.
  */
-const SHIFT_TODAY = (today, now = Date.now()) => {
-  const day = dayStart(today) + 7.5 * HOUR_MS > now ? fleetDay(dayStart(today) - 12 * HOUR_MS) : today;
-  return { fromDay: day, toDay: day, start: 7.5, end: 19.5 };
-};
+const SHIFT_TODAY = (today) => ({ fromDay: today, toDay: today, start: 0, end: 24 });
 const HOUR_MS = 3_600_000;
 
 /** Why a period cannot be made, or null. */
@@ -792,9 +789,6 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
   );
 }
 
-// Movements offers Naitiri alone: its trucks are the Trucks item of the types menu (operator, 13 Nov 2026)
-const MOVEMENTS_OMIT = ['NAITIRI_TRUCKS'];
-
 /**
  * Movements narrowed to the sites picked, under their name. A group left with none of them goes
  * (no "Saloons 0 vehicles"). Under Naitiri the rows are grouped by the kind on the client's Excel
@@ -816,10 +810,11 @@ function MovementsReport({ orgId, orgCode = null }) {
   const [saved] = useState(() => movementsKept.get(orgId));
   // West Kenya's Naitiri from the client's lists (hooks/useSitePick): rows kept, and the title.
   // The site picked is kept with the tables, so coming back shows them as they were.
-  const sitePick = useSitePick(orgCode, saved?.site ?? null, MOVEMENTS_OMIT);
+  const sitePick = useSitePick(orgCode, saved?.site ?? null);
   const today = fleetDay(Date.now());
   const [sel, setSel] = useState(saved?.sel ?? { mode: 'last', hours: LAST_HOURS[0] });
-  const [draft, setDraft] = useState(saved?.draft ?? { fromDay: today, toDay: today, start: 7, end: 20 });
+  // Today, midnight to midnight (operator, 13 Nov 2026)
+  const [draft, setDraft] = useState(saved?.draft ?? { fromDay: today, toDay: today, start: 0, end: 24 });
   const [daysOpen, setDaysOpen] = useState(saved?.sel?.mode === 'days');
   const [run, setRun] = useState(saved ? { status: 'done', reports: saved.reports } : { status: 'idle' });
   const [edits, setEdits] = useState(saved?.edits ?? []);   // per day: by vehicleId { location?, state?, removed? }
@@ -1739,6 +1734,9 @@ export default function ReportsScreen() {
 
         {sitePick.picker && (
           <CheckPicker {...sitePick.picker} onChange={(v) => { sitePick.setSite(v); setUnit(null); reset(); }} />
+        )}
+        {sitePick.typePicker && (
+          <CheckPicker {...sitePick.typePicker} onChange={(v) => { sitePick.setTypes(v); setUnit(null); reset(); }} />
         )}
 
         {byUnit && (

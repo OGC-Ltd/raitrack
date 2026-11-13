@@ -10,7 +10,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useCompanies } from '../context/AppContext';
 import { ORG_CODE_BY_COMPANY, resolveOrgId } from '../api/org';
 import { familyOf, familyMembers, familyRuns } from '../lib/reportTemplates';
-import { siteFleet, siteKind } from '../lib/siteLists';
+import { keptByKind, kindPicker, siteFleet, siteKind } from '../lib/siteLists';
 
 const codeOf = (company) => ORG_CODE_BY_COMPANY[company?.id] ?? String(company?.id ?? '').toUpperCase();
 
@@ -22,6 +22,8 @@ export function useReportOrgs(reportKey, { orgId, orgCode, companyName }) {
   const seen = useMemo(() => new Map(companies.map((c) => [codeOf(c), c])), [companies]);
   const members = useMemo(() => (family ? familyMembers(family, (c) => seen.has(c)) : []), [family, seen]);
   const [ticked, setTicked] = useState(null);       // null: all of them
+  const [types, setTypes] = useState(null);         // Naitiri's unit types: null for all of them
+  const naitiri = Array.isArray(ticked) && ticked.includes('NAITIRI');
   const runs = useMemo(
     () => (family ? familyRuns(family, ticked, (c) => seen.has(c)) : [{ code, unit: null }]),
     [family, ticked, seen, code],
@@ -43,7 +45,9 @@ export function useReportOrgs(reportKey, { orgId, orgCode, companyName }) {
   /** Is this unit, by its name, on the report when read from organisation `c`? A site is part of its organisation. */
   const keepUnit = (c, name) => {
     const unit = runs.find((r) => r.code === c)?.unit;
-    return !unit || unit.test(String(name ?? ''));
+    if (unit && !unit.test(String(name ?? ''))) return false;
+    // Naitiri's types sort West Kenya's own units only: a Sukari unit keeps its place
+    return !naitiri || c !== family?.home || keptByKind(ticked, types, [name]);
   };
   /** What the report calls its fleet: the organisation, the family when all of it, or the names. */
   // Naitiri's options alone: the report is Naitiri's, not West Kenya's (operator, 12 Nov 2026)
@@ -62,5 +66,8 @@ export function useReportOrgs(reportKey, { orgId, orgCode, companyName }) {
     onChange: setTicked,
   } : null;
 
-  return { code, family, picked, several: picked.length > 1, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker };
+  /** Naitiri's unit types (Trucks, Tractors…), shown while Naitiri is ticked: its trucks are Naitiri and Trucks. */
+  const typePicker = naitiri ? kindPicker(types, setTypes) : null;
+
+  return { code, family, picked, several: picked.length > 1, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker, typePicker };
 }

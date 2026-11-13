@@ -38,8 +38,9 @@ const fmt = (n) => n.toLocaleString('en-GB');
 const KPI_LABELS = ['Trips', 'Fuel used, L', 'Distance, km', 'Rate, km/L', 'Not updating'];
 
 export default function TatFuelReport({ orgId, orgCode, companyName, active = true }) {
-  const { picked, several, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
-  const [days, setDays] = useState(() => ({ from: yesterday(), to: yesterday() }));
+  const { picked, several, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker, typePicker } = useReportOrgs('tatFuel', { orgId, orgCode, companyName });
+  // Today until another day is picked (operator, 13 Nov 2026)
+  const [days, setDays] = useState(() => ({ from: yesterday(Date.now() + 86_400_000), to: yesterday(Date.now() + 86_400_000) }));
   const [group, setGroup] = useState('all');
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
@@ -133,6 +134,7 @@ export default function TatFuelReport({ orgId, orgCode, companyName, active = tr
           </label>
         )}
         {picker && <CheckPicker {...picker} />}
+        {typePicker && <CheckPicker {...typePicker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}

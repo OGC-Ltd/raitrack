@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { familyMembers, familyOf, familyRuns, templateFor } from './reportTemplates';
+import { keptByKind } from './siteLists';
 
 const REPORTS = ['geofences', 'offline', 'speedReport'];
 const family = familyOf('geofences', 'WESTSUGAR');
@@ -8,7 +9,7 @@ const canSee = () => true;
 describe('TAT and Fuel lists the sites too', () => {
   const tat = familyOf('tatFuel', 'WESTSUGAR');
   it('after the organisations', () => {
-    expect(familyMembers(tat, canSee).map((m) => m.label)).toEqual(['Sukari', 'Kabras', 'Nzoia', 'Olepito', 'Naitiri', 'Naitiri trucks', 'Amuka', 'Khalaba', 'Lake Agro', 'Magut', 'Misikhu', 'Nairobi', 'Selia']);
+    expect(familyMembers(tat, canSee).map((m) => m.label)).toEqual(['Sukari', 'Kabras', 'Nzoia', 'Olepito', 'Naitiri', 'Amuka', 'Khalaba', 'Lake Agro', 'Magut', 'Misikhu', 'Nairobi', 'Selia']);
   });
   it('a site is read from West Sugar, its units alone', () => {
     const [run, ...rest] = familyRuns(tat, ['SELIA'], canSee);
@@ -25,7 +26,7 @@ describe('TAT and Fuel lists the sites too', () => {
 describe('who picks what', () => {
   it('lists the five under West Kenya, in every report', () => {
     for (const r of REPORTS) {
-      expect(familyMembers(familyOf(r, 'WESTSUGAR'), canSee).map((m) => m.label)).toEqual(['Sukari', 'Kabras', 'Nzoia', 'Olepito', 'Naitiri', 'Naitiri trucks']);
+      expect(familyMembers(familyOf(r, 'WESTSUGAR'), canSee).map((m) => m.label)).toEqual(['Sukari', 'Kabras', 'Nzoia', 'Olepito', 'Naitiri']);
     }
   });
   it('lists nothing from Sukari, Kabras or Nzoia, each of which has the report', () => {
@@ -37,7 +38,7 @@ describe('who picks what', () => {
     }
   });
   it('leaves out an organisation this user cannot see, but not a site', () => {
-    expect(familyMembers(family, (c) => c !== 'SUKARI').map((m) => m.key)).toEqual(['KABRAS', 'NZOIA', 'OLEPITO', 'NAITIRI', 'NAITIRI_TRUCKS']);
+    expect(familyMembers(family, (c) => c !== 'SUKARI').map((m) => m.key)).toEqual(['KABRAS', 'NZOIA', 'OLEPITO', 'NAITIRI']);
   });
 });
 
@@ -79,9 +80,11 @@ describe('Naitiri by the client\'s Excel files alone, not the name (operator, 12
     for (const n of ['KTCC573E', 'KTCC 573E', 'WKS - KDE 319Q', 'KDK 821G', 'BELL BCH 14591']) expect(run.unit.test(n)).toBe(true);
     for (const n of ['WKS - Naitiri - Z', 'WKS - Naitiri - KAS 447G', 'WKS - Magut - KDL 489D', 'KCY 999Z']) expect(run.unit.test(n)).toBe(false);
   });
-  it('Naitiri trucks: the trucks (list and Truck tab), nothing else', () => {
-    const [run] = runsOf(fam, ['NAITIRI_TRUCKS'], all);
-    for (const n of ['KCY 523U', 'WKS - KCY523U ZG 7017', 'KDW 548J']) expect(run.unit.test(n)).toBe(true);
-    for (const n of ['KTCC573E', 'WKS - Naitiri - Z', 'KMGJ 377W']) expect(run.unit.test(n)).toBe(false);
+  it('no "Naitiri trucks" option: its trucks are Naitiri and the Trucks type (operator, 13 Nov 2026)', () => {
+    expect(familyMembers(fam, all).map((m) => m.key)).not.toContain('NAITIRI_TRUCKS');
+    const [run] = runsOf(fam, ['NAITIRI'], all);
+    const trucks = ['KCY 523U', 'WKS - KCY523U ZG 7017', 'KDW 548J'].filter((n) => run.unit.test(n) && keptByKind(['NAITIRI'], ['Trucks'], [n]));
+    expect(trucks).toHaveLength(3);
+    for (const n of ['KTCC573E', 'KMGJ 377W']) expect(run.unit.test(n) && keptByKind(['NAITIRI'], ['Trucks'], [n])).toBe(false);
   });
 });
