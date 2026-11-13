@@ -152,6 +152,34 @@ describe('no earlier day carried forward (operator, 12 Nov 2026)', async () => {
   });
 });
 
+describe('a sheet is carried by the list of its own day only (operator, 13 Nov 2026: KDM 138L)', async () => {
+  const { sheetListed, sheetRunDays } = await import('./plannerReport');
+  const day = (d, hm = '00:00') => Date.parse(`2026-11-${d}T${hm}:00+03:00`);
+  // KDM 138L: on the 11 Nov Finished Goods list, and a Van Sales itinerary for 13 Nov
+  const itinerary = { planDate: '2026-11-13', source: 'itinerary' };
+  const kdm = (leftAt) => ({ plate: 'KDM 138L', trip: { leftAt } });
+  const runs = [
+    { day: '2026-11-11', vehicles: [{ plate: 'KDM 138L' }, { plate: 'KCA 226M' }] },
+    { day: '2026-11-12', vehicles: [{ plate: 'KCA 226M' }] },
+    { day: '2026-11-13', vehicles: [{ plate: 'KCA 226M' }] },
+  ];
+  it('a unit listed on 11 Nov does not bring its 13 Nov itinerary onto the 11 to 13 Nov report', () => {
+    expect(sheetListed(kdm(day('13', '06:40')), itinerary, {}, runs, fleetDay)).toBe(false);
+    expect(sheetListed(kdm(null), itinerary, {}, runs, fleetDay)).toBe(false);
+  });
+  it('listed on the sheet’s own day, it is', () => {
+    const on13 = runs.map((r) => (r.day === '2026-11-13' ? { ...r, vehicles: [...r.vehicles, { plate: 'kdm138l' }] } : r));
+    expect(sheetListed(kdm(day('13', '06:40')), itinerary, {}, on13, fleetDay)).toBe(true);
+    expect(sheetListed(kdm(null), itinerary, {}, on13, fleetDay)).toBe(true);
+  });
+  it('a sheet’s days: the day it left; before that its plan day, a sales sheet’s next day too; marked days', () => {
+    expect([...sheetRunDays(kdm(day('12', '01:10')), itinerary, {}, fleetDay)]).toEqual(['2026-11-12']);
+    expect([...sheetRunDays(kdm(null), itinerary, {}, fleetDay)]).toEqual(['2026-11-13']);
+    expect([...sheetRunDays(kdm(null), { planDate: '2026-11-11', source: 'sheet' }, {}, fleetDay)].sort()).toEqual(['2026-11-11', '2026-11-12']);
+    expect([...sheetRunDays(kdm(day('11', '06:51')), itinerary, { s1: '2026-11-12' }, fleetDay)].sort()).toEqual(['2026-11-11', '2026-11-12']);
+  });
+});
+
 describe('a vehicle added on Deliveries takes its Planner plan’s geofences (operator, 13 Nov 2026)', async () => {
   const { planForDay, planStopsForList } = await import('./plannerReport');
   const now = Date.parse('2026-11-13T12:00:00Z');

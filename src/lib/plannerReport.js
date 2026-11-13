@@ -95,6 +95,36 @@ export function sheetOnDays(row, marks, days, dayOf) {
   return left == null || want.has(dayOf(left));
 }
 
+/**
+ * The fleet days a sheet's own run is on: the day its truck left; before it
+ * leaves, its plan's day (a sales sheet also the next, as it is booked the day
+ * before it is driven); and any day one of its stops is marked for.
+ */
+export function sheetRunDays(row, plan, marks, dayOf) {
+  const days = new Set(Object.values(marks ?? {}));
+  const left = row?.trip?.leftAt;
+  if (left != null) days.add(dayOf(left));
+  else if (plan?.planDate) {
+    const d = String(plan.planDate).slice(0, 10);
+    days.add(d);
+    if (plan.source !== 'itinerary') days.add(new Date(Date.parse(`${d}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+/**
+ * Whether a sheet's unit is on this report's list for one of the sheet's own
+ * days (`runs`: [{ day, vehicles }]). Only then does the list carry the sheet
+ * onto another template's report (operator, 13 Nov 2026: KDM 138L, listed on
+ * Finished Goods for 11 Nov, brought its 13 Nov Van Sales itinerary onto the
+ * 11 to 13 Nov Finished Goods report as a record nobody added).
+ */
+export function sheetListed(row, plan, marks, runs, dayOf) {
+  const days = sheetRunDays(row, plan, marks, dayOf);
+  const key = plateKey(row?.plate);
+  return (runs ?? []).some((run) => days.has(run.day) && run.vehicles.some((v) => plateKey(v.plate) === key));
+}
+
 const outcomeLabel = (id) => OUTCOMES.find((o) => o.id === id)?.label ?? null;
 
 /**

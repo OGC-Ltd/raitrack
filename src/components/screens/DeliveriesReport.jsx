@@ -35,7 +35,7 @@ import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL, NOT_GEOFENCED } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers } from '../../api/planner';
-import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, sheetOnDays, sheetListed, sheetRunDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -716,12 +716,15 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
       // Only the sheets this report's days ran (lib/plannerReport sheetOnDays): no earlier day carried forward
-      const listedPlates = new Set(runs.flatMap((r) => r.vehicles.map((v) => plateKey(v.plate))));
+      // `listed`: its unit is on this report's list for the sheet's own day, never another day of the range
       const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay))
-        .map((r) => ({ ...r, listed: listedPlates.has(plateKey(r.plate)) }));
-      // A vehicle on a kept sheet is the sheet's row: not checked again from the list (on a range, that day's list)
+        .map((r) => ({ ...r, listed: sheetListed(r, r.remake.plan, marksOf(r.remake.plan), runs, fleetDay) }));
+      // A vehicle on a kept sheet is the sheet's row: not checked again from the list (on a range, that day's list).
+      // Only a sheet this report shows, and on a range only on the sheet's own day: KDM 138L's 13 Nov Van Sales
+      // itinerary neither replaces nor hides its 11 Nov Finished Goods line (operator, 13 Nov 2026)
       const planned = runs.flatMap((run) => {
-        const onSheets = new Set(sheetRows.filter((r) => !multi || sheetOnDays(r, marksOf(r.remake.plan), [run.day], fleetDay)).map((r) => plateKey(r.plate)));
+        const onSheets = new Set(sheetRows.filter((r) => (r.listed || sheetTab(r.group))
+          && (!multi || sheetRunDays(r, r.remake.plan, marksOf(r.remake.plan), fleetDay).has(run.day))).map((r) => plateKey(r.plate)));
         return run.vehicles.filter((v) => !onSheets.has(plateKey(v.plate)))
           .map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds, run }));
       });
