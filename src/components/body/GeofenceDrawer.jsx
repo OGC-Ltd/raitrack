@@ -80,6 +80,15 @@ const plain = (ll) => ({ lat: typeof ll.lat === "function" ? ll.lat() : ll.lat, 
  *   onClose: () => void,
  * }} props
  */
+/**
+ * A Wialon vehicle class as the chips say it, in sentence case beside the fleet lists' names
+ * (operator, 13 Nov 2026): "UNSPECIFIED" reads "Unspecified", "LIGHT VEHICLE" "Light vehicle";
+ * two capitals or a word with a figure ("FG", "4WD") is an abbreviation and stays. The rule keeps Wialon's own value.
+ */
+const classWords = (type) => String(type ?? "").split(/(\s+)/)
+  .map((w, i) => (/^[A-Z]{1,2}$|^(?=[A-Z]*\d)[A-Z0-9]+$/.test(w) ? w : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase()))
+  .join("");
+
 export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, vehicles, editing, canDelete, clickRef, onClose }) {
   const props0 = editing?.properties ?? {};
   const locked = Boolean(editing) && props0.source === "provider";
@@ -538,20 +547,20 @@ export default function GeofenceDrawer({ map, maps, DomMarker, orgId, fences, ve
                     <button key={`f:${f}`} type="button" className="gfd__chip" aria-pressed={rule.fleets.includes(f)}
                             title={`Every unit on the ${f} list`}
                             onClick={() => editRule({ fleets: toggleIn(rule.fleets, f) })}>
-                      <i className="ti ti-list" aria-hidden="true" />{f}
+                      {f}
                     </button>
                   ))}
                   {classes.map(({ type, n }) => (
                     <button key={`t:${type}`} type="button" className="gfd__chip" aria-pressed={rule.vehicleTypes.includes(type)}
                             title={`Vehicle class ${type} from Wialon, ${n} ${n === 1 ? "unit" : "units"}`}
                             onClick={() => editRule({ vehicleTypes: toggleIn(rule.vehicleTypes, type) })}>
-                      {type}<span className="gfd__chip-n">{n}</span>
+                      {classWords(type)}<span className="gfd__chip-n">{n}</span>
                     </button>
                   ))}
                   {/* A class saved before that no live unit has now */}
                   {rule.vehicleTypes.filter((t) => !classes.some((c) => c.type === t)).map((t) => (
                     <button key={`t:${t}`} type="button" className="gfd__chip" aria-pressed="true"
-                            onClick={() => editRule({ vehicleTypes: toggleIn(rule.vehicleTypes, t) })}>{t}</button>
+                            onClick={() => editRule({ vehicleTypes: toggleIn(rule.vehicleTypes, t) })}>{classWords(t)}</button>
                   ))}
                 </div>
               </div>

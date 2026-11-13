@@ -33,7 +33,7 @@ import {
 import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, mergePins, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
-import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL } from '../../lib/finishedGoodsReport';
+import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL, NOT_GEOFENCED } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, sheetOnDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
@@ -1257,6 +1257,8 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                   <tbody>
                     {fgVisible.map((l) => {
                       const isOpen = openLine === l.key;
+                      // The sheet's customer as the pick list names it: without the table's "(Customers Name Not Geofenced)"
+                      const who = l.customer.replace(` (${NOT_GEOFENCED})`, '');
                       const toggle = () => setOpenLine(isOpen ? null : l.key);
                       return (
                         <Fragment key={l.key}>
@@ -1312,7 +1314,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                     <div className="dlv-visits__lede">
                                       <h4 className="dlv-visits__title">Customers {l.plate} passed</h4>
                                       <p className="dlv-visits__sub">
-                                        {l.departAt != null ? 'From leaving the yard' : 'Over its day'}{l.yardAt != null ? ' to getting back' : ''}. Pick the one that is <strong>{l.customer}</strong>.
+                                        {l.departAt != null ? 'From leaving the yard' : 'Over its day'}{l.yardAt != null ? ' to getting back' : ''}. Pick the one that is <strong>{who}</strong>.
                                       </p>
                                     </div>
                                     {l.picked && (
@@ -1324,7 +1326,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                   {passed && (
                                     <p className="dlv-visits__target">
                                       <i className="ti ti-target-arrow" aria-hidden="true" />
-                                      <span className="dlv-visits__target-name">On the sheet: <strong>{l.customer}</strong></span>
+                                      <span className="dlv-visits__target-name">On the sheet: <strong>{who}</strong></span>
                                       {!passed.target ? <span>No geofence on the map for this customer</span> : (<>
                                         {coordWords(passed.target.mid) && <CoordLink at={passed.target.mid} />}
                                         <span>{!passed.target.pass ? 'No readings on this trip'
@@ -1334,13 +1336,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                     </p>
                                   )}
                                   {passed == null || !passed.list.length ? (
-                                    <p className="dlv-visits__none">{passed?.read ? `It came within 100 m of no customer’s geofence on this trip${passed.target ? `, and none lies within ${NEAR_TARGET_M} m of ${l.customer}` : ''}.` : 'No readings kept for this line.'}</p>
+                                    <p className="dlv-visits__none">{passed?.read ? `It came within 100 m of no customer’s geofence on this trip${passed.target ? `, and none lies within ${NEAR_TARGET_M} m of ${who}` : ''}.` : 'No readings kept for this line.'}</p>
                                   ) : (
                                     <ol className="dlv-visits__list">
                                       {passed.list.map((v, i, list) => {
                                         const on = l.picked === v.label && l.arriveAt === v.enteredAt;
                                         const stopped = v.stoodMs >= STOP_MS;
-                                        const like = nameLike(v.label, l.customer);
+                                        const like = nameLike(v.label, who);
                                         const at = stamp(v.enteredAt);
                                         const newDay = i > 0 && at.slice(0, 10) !== stamp(list[i - 1].enteredAt).slice(0, 10);
                                         const inside = v.leftAt != null ? visitLength(v.leftAt - v.enteredAt) : null;
@@ -1362,7 +1364,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                                 {v.target && <span className="dlv-visit__tag dlv-visit__tag--target"><i className="ti ti-target-arrow" aria-hidden="true" />On the sheet</span>}
                                                 {!v.target && like && <span className="dlv-visit__tag dlv-visit__tag--like"><i className="ti ti-equal" aria-hidden="true" />Name matches</span>}
                                                 {!v.target && v.fromTarget != null && v.fromTarget <= NEAR_TARGET_M && (
-                                                  <span className="dlv-visit__tag dlv-visit__tag--near"><i className="ti ti-map-pin" aria-hidden="true" />{distanceWords(v.fromTarget)} from {l.customer}</span>
+                                                  <span className="dlv-visit__tag dlv-visit__tag--near"><i className="ti ti-map-pin" aria-hidden="true" />{distanceWords(v.fromTarget)} from {who}</span>
                                                 )}
                                               </span>
                                               <span className="dlv-visit__facts">
@@ -1374,7 +1376,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                                                   </span>
                                                 )}
                                                 {!v.target && v.fromTarget != null && v.fromTarget > NEAR_TARGET_M && (
-                                                  <span><i className="ti ti-ruler-measure" aria-hidden="true" />{distanceWords(v.fromTarget)} from {l.customer}</span>
+                                                  <span><i className="ti ti-ruler-measure" aria-hidden="true" />{distanceWords(v.fromTarget)} from {who}</span>
                                                 )}
                                               </span>
                                             </span>
