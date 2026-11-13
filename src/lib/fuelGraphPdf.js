@@ -106,7 +106,7 @@ export function altitudeSeries(pings, { from = -Infinity, to = Infinity } = {}) 
 /** The figures in the bottom quarter, from the Fuel Consumption Rate row. */
 export function graphFacts(row, { from, to }) {
   const km = Number(row.distanceKm);
-  const kmPerL = row.kmPerL != null ? Number(row.kmPerL) : null;
+  const kmPerL = row.kmPerL != null && Number(row.kmPerL) > 0 ? Number(row.kmPerL) : null;
   return [
     ['Vehicle reg', row.plate ?? ''],
     ['Date', from === to ? dayWords(from) : `${dayWords(from)} – ${dayWords(to)}`],

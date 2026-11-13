@@ -77,3 +77,14 @@ describe("Menengai's fuel consumption sheet (operator, 13 Nov 2026)", () => {
     expect(ws.getCell(headRow + 1, 14).fill.fgColor.argb).toBe('FF63BE7B');
   });
 });
+
+describe("Menengai's sheet as a CSV (review, 13 Nov 2026)", async () => {
+  const { morlFcrSheet } = await import('./fuelRateMorl');
+  const { buildCsv } = await import('../utils/tableExport');
+  it('writes the cells, not [object Object]', () => {
+    const s = morlFcrSheet([{ plate: 'KCK 456G', distanceKm: 100, consumedL: 50, theftL: 0, startL: 200, filledL: 0, endL: 150, kmPerL: 2 }]);
+    const csv = buildCsv(s.head, s.body);
+    expect(csv).not.toContain('[object Object]');
+    expect(csv.split('\r\n')[1].startsWith('KCK 456G,')).toBe(true);
+  });
+});

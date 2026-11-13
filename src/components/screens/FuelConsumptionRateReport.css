@@ -1,3 +1,13 @@
+/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: Menengai's sheet, their head colours as bands over the app's table, the rate shaded best to worst · states: idle, loading, error, empty, full, ticked, making, made · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 · weakest: V, on purpose: both tabs must read as the reports around them */
+
+/* Menengai's head colours (their Excel sheet, lib/fuelRateMorl): the same in both modes, they name the column groups */
+:root {
+  --fcr-band-base: #9dc3e6;
+  --fcr-band-with: #ffc000;
+  --fcr-band-minus: #00b050;
+}
+
 /* Fuel Consumption Rate Report ──────────────────────────────────────────────
  * Table layout and cell colours for the per-vehicle fuel consumption report.
  * KPI strip uses existing sp4-kpi / sp4-kpi-n / sp4-kpi-l tokens.
@@ -33,7 +43,7 @@
 /* Comment – flexible width, left-aligned, wraps */
 .fcr-comment {
   text-align: left;
-  width: 0; /* takes the rest */
+  width: auto; /* takes the rest (0 under table-layout: fixed left it no room at all) */
   min-width: 80px;
   word-break: break-word;
 }
@@ -53,20 +63,19 @@
 
 /* Consumption Rate column – green when at/above target, amber when below */
 .fcr-rate { font-weight: 600; }
-.fcr-ok   { color: #16a34a; }
-.fcr-below { color: #d97706; }
+.fcr-ok   { color: var(--sp4-ok); }
+.fcr-below { color: var(--sp4-warn); }
 
 /* Zero / missing cells: muted, not blue */
 .fcr-zero {
-  color: var(--sp4-text-4, #6b7280);
-  opacity: 0.6;
+  color: var(--sp4-text-4);
 }
 
 /* ── Footer / totals row ────────────────────────────────────────────────── */
 .fcr-total-row td {
   font-weight: 700;
   border-top: 1px solid var(--sp4-line);
-  padding-top: 6px;
+  padding-top: 8px;
 }
 
 /* ── Narrow screen ──────────────────────────────────────────────────────── */
@@ -75,22 +84,54 @@
   .fcr-reg  { width: 90px; }
 }
 
-/* ── Menengai's own sheet (13 Nov 2026): their columns, gridlines and head colours, as in Excel ── */
-.fcr-morl-range { text-align: center; font-weight: 700; padding: 6px 0; font-size: 13px; }
-.fcr-morl { border-collapse: collapse; width: 100%; min-width: 1300px; font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
-.fcr-morl th, .fcr-morl td { border: 1px solid #000; padding: 2px 5px; }
-.fcr-morl th { font-weight: 700; text-align: left; vertical-align: bottom; background: #fff; line-height: 1.15; }
-.fcr-morl td { white-space: nowrap; }
-.fcr-morl td:last-child { min-width: 120px; }
-.fcr-morl__num { text-align: left; font-variant-numeric: tabular-nums; }
+/* ── Menengai's own sheet (13 Nov 2026) ───────────────────────────────
+   Their fifteen columns in the app's table: their head colours (light blue,
+   orange for "with thefts", green for "minus thefts") as a band over each
+   head, so the type and the surfaces stay the app's in both modes. The PDF
+   and the Excel file carry their colours as fills. */
+.fcr-morl { min-width: 1240px; }
+.fcr-morl__range {
+  caption-side: top;
+  text-align: left;
+  padding: 8px var(--sp4-gutter);
+  font-size: var(--sp4-label);
+  color: var(--sp4-text-3);
+}
+/* Their heads are long: in their own sentence case, untracked, so fifteen of them stay readable */
+.sp4-table.fcr-morl thead th.fcr-morl__th { vertical-align: bottom; white-space: normal; line-height: 1.25; min-width: 72px; text-transform: none; letter-spacing: normal; }
+.sp4-table.fcr-morl thead th.fcr-morl__th--base  { box-shadow: inset 0 3px 0 var(--fcr-band-base); }
+.sp4-table.fcr-morl thead th.fcr-morl__th--with  { box-shadow: inset 0 3px 0 var(--fcr-band-with); }
+.sp4-table.fcr-morl thead th.fcr-morl__th--minus { box-shadow: inset 0 3px 0 var(--fcr-band-minus); }
+.fcr-morl__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The rate's colour scale, as Excel draws it, mixed into the surface so the ink stays the theme's */
+.fcr-morl__rate { font-weight: 600; background: color-mix(in srgb, var(--fcr-scale, transparent) 55%, var(--sp4-surface)); }
+.fcr-morl__words { min-width: 120px; white-space: nowrap; color: var(--sp4-text-2); }
 
-/* ── Fuel Graph Report (13 Nov 2026): tick units, make a page of graph each ── */
+/* ── Fuel Graphs (13 Nov 2026): tick units, a page of graph each ──────── */
 .fgr-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.fgr-below { display: inline-flex; align-items: center; gap: 6px; }
-.fgr-below input { width: 72px; padding: 4px 6px; border: 1px solid var(--sp4-line, #d1d5db); border-radius: 6px; }
-.fgr-make { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; }
-.fgr-make .sp4-submit-btn { display: inline-flex; align-items: center; gap: 6px; }
-.fgr-tick { width: 36px; text-align: center; }
-.fcr-table tr.fgr-on td { background: rgba(37, 99, 235, 0.07); }
-.fcr-table tbody tr { cursor: pointer; }
+.fgr-below { display: inline-flex; align-items: center; gap: 8px; }
+.fgr-below input {
+  width: 72px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--sp4-field-line);
+  border-radius: 5px;
+  background: var(--sp4-surface);
+  color: var(--sp4-text-1);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.fgr-below input:hover { border-color: var(--sp4-line-hi); }
+.fgr-below input:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.fgr-unit { color: var(--sp4-text-3); }
+.fgr-make { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
+.fgr-make .sp4-submit-btn { display: inline-flex; align-items: center; gap: 4px; }
+.fgr-tick { width: 40px; text-align: center; }
+.fgr-tick input { width: 16px; height: 16px; accent-color: var(--sp4-accent); cursor: pointer; }
+/* Sized by what is in it: a tick column and a comment make fixed widths squeeze the plates and the heads */
+.fcr-table.fgr-table { table-layout: auto; min-width: 960px; }
+.fgr-table .fcr-reg { max-width: 220px; }
+.fgr-table tbody tr { cursor: pointer; }
+.fgr-table tbody tr:active td { background: color-mix(in srgb, var(--sp4-accent) 14%, var(--sp4-surface)); }
+.fgr-table tbody tr.fgr-on td { background: color-mix(in srgb, var(--sp4-accent) 8%, var(--sp4-surface)); }
 @media (max-width: 60rem) { .fgr-make { margin-left: 0; } }

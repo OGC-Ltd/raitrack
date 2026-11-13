@@ -61,3 +61,11 @@ describe('the Fuel Graph report (operator, 13 Nov 2026)', () => {
     if (globalThis.process?.env?.FG_OUT) (await import('fs')).writeFileSync(globalThis.process.env.FG_OUT, new Uint8Array(doc.output('arraybuffer')));
   });
 });
+
+describe('the figures under the graph (review, 13 Nov 2026)', async () => {
+  const { graphFacts } = await import('./fuelGraphPdf');
+  it('no consumption figure for a rate of 0, never Infinity L/100 km', () => {
+    const facts = Object.fromEntries(graphFacts({ plate: 'KAA 001A', kmPerL: 0, distanceKm: 0 }, { from: '2026-11-13', to: '2026-11-13' }));
+    expect(facts.Consumption).toBe('—');
+  });
+});

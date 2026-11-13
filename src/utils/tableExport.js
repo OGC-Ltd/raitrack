@@ -32,7 +32,9 @@ import { buildSensorReport } from "./sensorReport";
  * cannot run.
  */
 export function csvField(value) {
-  const s = value == null ? "" : String(value);
+  // A styled cell ({ text, fill }, as the Excel file takes them) is its text here
+  const v = value != null && typeof value === "object" && "text" in value ? value.text : value;
+  const s = v == null ? "" : String(v);
   const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }

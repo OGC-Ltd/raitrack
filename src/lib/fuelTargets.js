@@ -11,7 +11,6 @@
 // Pure: no React, no network.
 
 import { fleetListEntry, fleetListMap } from './probeHealthReport';
-import { MORL_FLEET } from '../data/morlFleet';
 import { groupsFor, unitKey } from './fleetGroups';
 
 /** FUEL_RATES_FOR_FLEET_2.xlsx Sheet 2, as the server has it (fleet-server reports/fuel-target-rates). */
@@ -59,14 +58,14 @@ export function targetForType(type) {
   return r ? { kmPerL: r.loaded, words: `${r.loaded}-${r.empty}`, source: 'type', model } : null;
 }
 
-const BUILT_IN = fleetListMap(MORL_FLEET);
-
 /**
  * The rows with a target from the fleet Excel's TYPE where the server gave none, and below target
- * judged against it. `list`: an uploaded fleet list (lib/fleetListFile entries), else the one built in.
+ * judged against it. `entries`: the organisation's fleet list (lib/fleetListFile fleetEntriesFor);
+ * none, and the rows are as the server gave them.
  */
 export function withTypeTargets(rows, entries = null) {
-  const list = entries ? fleetListMap(entries) : BUILT_IN;
+  if (!entries) return rows ?? [];
+  const list = fleetListMap(entries);
   return (rows ?? []).map((r) => {
     if (r.target) return r;
     const target = targetForType(fleetListEntry(r, list)?.type);

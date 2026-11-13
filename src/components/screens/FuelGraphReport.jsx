@@ -9,7 +9,7 @@ import { useMemo, useRef, useState } from 'react';
 import './FuelConsumptionRateReport.css';
 import { withTypeTargets, fuelGroupsFor, rowsInGroup, groupCounts } from '../../lib/fuelTargets';
 import ChoicePicker from './ChoicePicker';
-import { loadFleetList } from '../../lib/fleetListFile';
+import { fleetEntriesFor } from '../../lib/fleetListFile';
 import { loadFuelConsumptionRate } from '../../api/reports';
 import { loadPings } from '../../api/fleetReports';
 import { fuelGraphsPdf, dayStart, dayEnd } from '../../lib/fuelGraphPdf';
@@ -58,7 +58,7 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
       const data = await loadFuelConsumptionRate({ orgId, from: days.from, to: days.to });
       if (id !== runId.current) return;
       // A target from the fleet Excel's TYPE where none is set by registration (operator, 13 Nov 2026)
-      const rows = withTypeTargets(data.rows ?? [], loadFleetList(orgCode)?.entries ?? null)
+      const rows = withTypeTargets(data.rows ?? [], fleetEntriesFor(orgCode))
         .sort((a, b) => (a.kmPerL ?? Infinity) - (b.kmPerL ?? Infinity));
       setRun({ status: 'done', rows, from: days.from, to: days.to });
     } catch (err) {
@@ -139,8 +139,9 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
             <span><strong>{ticked.size}</strong> of {rows.length} units ticked</span>
             <button type="button" className="sp4-ghost-btn" onClick={() => tickWhere((r) => r.belowTarget === true)}>Tick below target</button>
             <span className="fgr-below">
-              Tick below
-              <input type="number" min="0" step="0.1" inputMode="decimal" value={below} onChange={(e) => setBelow(e.target.value)} aria-label="km per litre" placeholder="km/L" />
+              <label htmlFor="fgr-below-input">Tick below</label>
+              <input id="fgr-below-input" type="number" min="0" step="0.1" inputMode="decimal" value={below} onChange={(e) => setBelow(e.target.value)} placeholder="3.0" />
+              <span className="fgr-unit">km/L</span>
               <button type="button" className="sp4-ghost-btn" disabled={!(limit > 0)} onClick={() => tickWhere((r) => r.kmPerL != null && r.kmPerL < limit)}>Tick</button>
             </span>
             <button type="button" className="sp4-ghost-btn" onClick={() => tickWhere(() => true)}>Tick all</button>
@@ -155,7 +156,7 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
             </span>
           </div>
           <div className="sp4-table-scroll rpt-scroll">
-            <table className="sp4-table rpt-table fcr-table">
+            <table className="sp4-table rpt-table fcr-table fgr-table">
               <thead>
                 <tr>
                   <th className="fgr-tick" aria-label="Ticked" />

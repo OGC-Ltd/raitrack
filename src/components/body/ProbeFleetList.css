@@ -1,0 +1,44 @@
+/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: the fleet list the report reads, named with its source · states: built-in, uploaded, none, reading, read, error, edited · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V3 · weakest: V, on purpose: a strip that must read as the toolbar beside it */
+
+/* ── Probe & Sensor Health › the fleet list ────────────────────────────
+   One strip under the toolbar, on its gutter, so its text lines up with
+   the table's. What it reads, then its two actions at the right; the
+   reading's outcome on its own line under it. */
+
+.pfl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-inline: var(--sp4-gutter);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sp4-line);
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.pfl__icon { font-size: 16px; color: var(--sp4-ok); }
+.pfl__what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0; flex: 1 1 320px; min-width: 0; }
+.pfl__label { font-weight: 600; color: var(--sp4-text-1); }
+.pfl__src { color: var(--sp4-text-3); overflow-wrap: break-word; min-width: 0; }
+.pfl__src b { font-weight: 600; color: var(--sp4-text-2); }
+.pfl__src--none { color: var(--sp4-text-3); }
+.pfl__acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+
+.pfl__btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: var(--sp4-text-2); }
+.pfl__btn:hover:not(:disabled) { color: var(--sp4-text-1); border-color: var(--sp4-text-3); }
+.pfl__btn:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.pfl__btn:active:not(:disabled) { transform: translateY(1px); }
+.pfl__btn:disabled { opacity: .55; cursor: not-allowed; }
+.pfl__btn[aria-busy="true"] { cursor: progress; }
+.pfl__spin { animation: sp4spin 1s linear infinite; }
+
+.pfl__note { flex-basis: 100%; margin: 0; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.pfl__note--error { color: var(--sp4-crit); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pfl__spin { animation: none; }
+  .pfl__btn:active:not(:disabled) { transform: none; }
+}

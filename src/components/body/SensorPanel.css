@@ -4430,12 +4430,3 @@
 /* The Excel button when its file could not be made (body/TableToolbar); the reason is in its title */
 .sp4-ghost-btn.sp4-ghost-btn--error { color: #b42318; border-color: #f1b5ae; }
 
-/* The fleet list the Probe & Sensor Health report reads drivers and statuses from (13 Nov 2026) */
-/* A strip like the toolbar and filters around it: the same gutter, so its text lines up with theirs */
-.sp4-fleetlist { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 0;
-  margin-inline: var(--sp4-gutter); background: none; font-size: var(--sp4-body); color: var(--sp4-text-1);
-  flex-shrink: 0; }
-.sp4-fleetlist > .ti { font-size: 16px; color: #16a34a; }
-.sp4-fleetlist__up { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
-.sp4-fleetlist__up:has(input:disabled) { opacity: .55; cursor: not-allowed; }
-@media (max-width: 60rem) { .sp4-fleetlist__up { margin-left: 0; } }

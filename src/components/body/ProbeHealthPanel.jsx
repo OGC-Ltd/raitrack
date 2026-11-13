@@ -35,7 +35,7 @@
 // and should not acquire one: it sits directly above that grid, inside those
 // tabs, and a second visual language on one screen reads as two products.
 
-import { useCallback, useEffect, useMemo, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import TablePager, { usePager } from "./TablePager";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { vehicleReadings } from "../../lib/vehicleReadings";
@@ -45,8 +45,8 @@ import {
 import { downloadProbeCsv } from "../../utils/probeReport";
 import { probeHealthDoc } from "../../lib/reportDocs";
 import { fleetListMap } from "../../lib/probeHealthReport";
-import { readFleetWorkbook, loadFleetList, saveFleetList, forgetFleetList } from "../../lib/fleetListFile";
-import { MORL_FLEET } from "../../data/morlFleet";
+import { readFleetWorkbook, loadFleetList, saveFleetList, forgetFleetList, builtInFleetList } from "../../lib/fleetListFile";
+import "./ProbeFleetList.css";
 import { makeReportDoc } from "../../api/reports";
 import { saveFile } from "../../api/tripReport";
 import { savePdfAsJpeg } from "../../api/pdfJpeg";
@@ -326,7 +326,10 @@ export default function ProbeHealthPanel({
   // Drivers and statuses: the fleet Excel uploaded here, else the list built in (operator, 13 Nov 2026)
   const [uploaded, setUploaded] = useState(() => loadFleetList(orgCode));
   useEffect(() => { setUploaded(loadFleetList(orgCode)); }, [orgCode]);
-  const fleetList = useMemo(() => fleetListMap(uploaded?.entries ?? MORL_FLEET), [uploaded]);
+  // The built-in list is Menengai's alone: another organisation reads only a file uploaded for it
+  const builtIn = builtInFleetList(orgCode);
+  const fleetList = useMemo(() => fleetListMap(uploaded?.entries ?? builtIn ?? {}), [uploaded, builtIn]);
+  const fileInput = useRef(null);
   const [listNote, setListNote] = useState(null);
   const takeFleetFile = async (f) => {
     if (!f) return;
@@ -396,29 +399,38 @@ export default function ProbeHealthPanel({
         </>}
       />
       {/* The drivers and statuses the report's Driver and Status columns read: upload the fleet Excel before making it */}
-      <div className="sp4-fleetlist" role="group" aria-label="Fleet list for the Driver and Status columns">
-        <i className="ti ti-file-spreadsheet" aria-hidden="true" />
-        <span>
-          Drivers &amp; status:{" "}
-          <b>{uploaded ? uploaded.fileName : "built-in fleet list"}</b>
-          <span className="rpt-sub">
-            {" · "}{uploaded ? `${uploaded.count} units, uploaded ${new Date(uploaded.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} on this computer` : `${Object.keys(MORL_FLEET).length} units, MORL_FLEET of 13 Nov 2026`}
-          </span>
-        </span>
-        <label className="sp4-ghost-btn sp4-fleetlist__up" title="Upload the fleet Excel (as MORL_FLEET.xlsx): its drivers and statuses are used for the report on this computer">
-          <i className="ti ti-upload" aria-hidden="true" /> {listNote?.busy ? "Reading…" : "Upload fleet Excel"}
-          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden
-                 disabled={Boolean(listNote?.busy) || editor.edited}
+      <div className="pfl" role="group" aria-label="Fleet list for the Driver and Status columns">
+        <i className="ti ti-file-spreadsheet pfl__icon" aria-hidden="true" />
+        <p className="pfl__what">
+          <span className="pfl__label">Drivers and status</span>
+          {uploaded ? (
+            <span className="pfl__src"><b>{uploaded.fileName}</b>, {uploaded.count} units, uploaded {new Date(uploaded.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} on this computer</span>
+          ) : builtIn ? (
+            <span className="pfl__src"><b>Built-in fleet list</b>, {Object.keys(builtIn).length} units from MORL_FLEET of 13 Nov 2026</span>
+          ) : (
+            <span className="pfl__src pfl__src--none">No fleet list for this organisation. Upload one to add the Driver and Status columns.</span>
+          )}
+        </p>
+        <div className="pfl__acts">
+          <input ref={fileInput} type="file" hidden tabIndex={-1}
+                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; takeFleetFile(f); }} />
-        </label>
-        {uploaded && (
-          <button type="button" className="sp4-ghost-btn" disabled={editor.edited}
-                  onClick={() => { forgetFleetList(orgCode); setUploaded(null); setListNote(null); }}>
-            Use built-in list
+          <button type="button" className="sp4-ghost-btn pfl__btn" disabled={Boolean(listNote?.busy) || editor.edited}
+                  aria-busy={Boolean(listNote?.busy)} onClick={() => fileInput.current?.click()}
+                  title={editor.edited ? "Discard your edits to read a new list" : "Upload the fleet Excel (laid out as MORL_FLEET.xlsx): its drivers and statuses are used for the report on this computer"}>
+            <i className={`ti ${listNote?.busy ? "ti-loader-2 pfl__spin" : "ti-upload"}`} aria-hidden="true" />
+            {listNote?.busy ? "Reading…" : "Upload fleet Excel"}
           </button>
+          {uploaded && (
+            <button type="button" className="sp4-ghost-btn pfl__btn" disabled={editor.edited}
+                    onClick={() => { forgetFleetList(orgCode); setUploaded(null); setListNote(null); }}>
+              {builtIn ? "Use built-in list" : "Remove list"}
+            </button>
+          )}
+        </div>
+        {(listNote?.words || listNote?.error) && (
+          <p className={`pfl__note${listNote.error ? " pfl__note--error" : ""}`} role="status">{listNote.error ?? listNote.words}</p>
         )}
-        {listNote?.words && <span className="rpt-sub">{listNote.words}</span>}
-        {listNote?.error && <span className="rpt-warn">{listNote.error}</span>}
       </div>
       {editor.overlay}
       {preview.state && <PdfPreview state={preview.state} title="Probe & sensor health" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}

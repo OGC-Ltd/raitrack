@@ -85,6 +85,13 @@ export async function readFleetWorkbook(file) {
   return readFleetSheets(sheets);
 }
 
+import { MORL_FLEET } from '../data/morlFleet';
+
+/** The list built into the app: Menengai's (MORL_FLEET.xlsx) alone. */
+export const builtInFleetList = (orgCode) => (String(orgCode ?? '').toUpperCase() === 'MENENGAI' ? MORL_FLEET : null);
+/** The list a report reads for the organisation: the file uploaded here, else the one built in, else null. */
+export const fleetEntriesFor = (orgCode) => loadFleetList(orgCode)?.entries ?? builtInFleetList(orgCode);
+
 // Kept in this browser, per organisation
 const keyOf = (orgCode) => `ft-fleet-list:${String(orgCode ?? '').toUpperCase()}`;
 /** The list uploaded here for the organisation: { entries, fileName, at, count }, or null. */

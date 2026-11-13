@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { targetForType, withTypeTargets } from './fuelTargets';
+import { MORL_FLEET } from '../data/morlFleet';
 
 const row = (plate, kmPerL, target = null) => ({ vehicleId: plate, plate, kmPerL, target, belowTarget: null });
 
@@ -14,11 +15,15 @@ describe('a target from the fleet Excel TYPE (operator, 13 Nov 2026)', () => {
     expect(targetForType('FG')).toBeNull();
   });
   it('fills the units the server had none for, from the built-in list, and judges them', () => {
-    const [vs, own, tanker] = withTypeTargets([row('KDE 134E', 11.85), row('KDE 142E', 4.8, { kmPerL: 6.183, words: '6.18', source: 'vehicle' }), row('KCK 456G', 2)]);
+    const [vs, own, tanker] = withTypeTargets([row('KDE 134E', 11.85), row('KDE 142E', 4.8, { kmPerL: 6.183, words: '6.18', source: 'vehicle' }), row('KCK 456G', 2)], MORL_FLEET);
     expect(vs.target).toMatchObject({ kmPerL: 7, source: 'type' });          // KDE 134E: HYUNDAI on the VS sheet
     expect(vs.belowTarget).toBe(false);
     expect(own.target.source).toBe('vehicle');                                // set by registration: kept
     expect(tanker.target).toBeNull();                                         // TANKER names no make
+  });
+  it('none without a list (another organisation, nothing uploaded)', () => {
+    const [r] = withTypeTargets([row('KDE 134E', 11.85)], null);
+    expect(r.target).toBeNull();
   });
   it('from an uploaded list when there is one', () => {
     const [r] = withTypeTargets([row('KAA 001A', 3)], { 'KAA 001A': { driver: '', status: '', type: 'FUSO', list: 'X' } });
