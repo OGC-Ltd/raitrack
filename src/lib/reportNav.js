@@ -73,7 +73,10 @@ export const hasUnauthorizedPassengersTab = (can) => can('telemetry:read');
  * Does Movements carry a Fuel Consumption Rate tab (per-vehicle fuel
  * efficiency over a custom date range)? Menengai only (operator, Nov 2026).
  */
-export const hasFuelConsumptionTab = (can, orgCode) => can('telemetry:read') && templateFor('fuelConsumption', orgCode) != null;
+// Fuel Consumption Rate, and with it the Fuel Graphs: every organisation (operator, 13 Nov 2026: "should
+// be across all organizations"), was Menengai's alone. Target rates are on file for Menengai's units only;
+// elsewhere none is judged against one. Menengai keeps its own sheet (lib/fuelRateMorl)
+export const hasFuelConsumptionTab = (can) => can('telemetry:read');
 
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);

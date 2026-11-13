@@ -88,9 +88,9 @@ const docCols = (doc) => Math.max(1, ...docLines(doc).map((r) => r.length));
 
 /**
  * The workbook. `ExcelJS`: the library; `logos`: { rai, ogc } as { buffer, extension }, either may be missing.
- * @param {object} o  { head, body, doc, title, fleet, meta: [label, value][], fills: (hex|null)[], now }
+ * @param {object} o  { head, body, doc, title, fleet, meta: [label, value][], fills: (hex|null)[], headFills: (hex|null)[], now }
  */
-export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, now = Date.now() }, logos = {}) {
+export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, now = Date.now() }, logos = {}) {
   const name = String(doc?.title ?? title ?? 'Report');
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAI Operations';
@@ -149,8 +149,11 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
     t.head.forEach((h, i) => {
       const cell = ws.getCell(r, i + 1);
       cell.value = String(h);
-      cell.font = { bold: true, color: { argb: WHITE }, size: 10 };
-      cell.fill = solid(HEAD);
+      // A head of the sheet's own colour (Menengai's fuel sheet, 13 Nov 2026): dark text on it, thin rules round it
+      const own = t.headFills ? (t.headFills[i] ? argb(t.headFills[i]) : 'FFFFFFFF') : null;
+      cell.font = { bold: true, color: { argb: own ? 'FF000000' : WHITE }, size: 10 };
+      cell.fill = solid(own ?? HEAD);
+      if (own) cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       cell.alignment = { vertical: 'middle', wrapText: true, horizontal: t.cols?.[i]?.align === 'right' ? 'right' : 'left' };
     });
     for (let c = t.head.length + 1; c <= cols; c++) ws.getCell(r, c).fill = solid(HEAD);
@@ -163,8 +166,8 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
         cell.value = cellValue(text(v));
         cell.font = { size: 10, bold: Boolean(v?.bold) };
         cell.alignment = { vertical: 'top', wrapText: true, horizontal: typeof cell.value === 'number' || t.cols?.[j]?.align === 'right' ? 'right' : 'left' };
-        cell.border = { bottom: { style: 'thin', color: { argb: LINE } } };
-        const fill = (v?.fill && argb(v.fill)) || rowFill || (i % 2 ? ZEBRA : null);
+        cell.border = t.headFills ? { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } } : { bottom: { style: 'thin', color: { argb: LINE } } };
+        const fill = (v?.fill && argb(v.fill)) || rowFill || (!t.headFills && i % 2 ? ZEBRA : null);
         if (fill) cell.fill = solid(fill);
       });
       r += 1;
@@ -174,7 +177,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
   };
 
   if (!doc) {
-    const headRow = tableAt({ head, rows: body }, { filter: true, rowFills: fills });
+    const headRow = tableAt({ head, rows: body, headFills }, { filter: true, rowFills: fills });
     ws.views = [{ state: 'frozen', ySplit: headRow, showGridLines: false }];
   } else {
     // Each section as the PDF has it
@@ -275,11 +278,11 @@ async function logoBuffer(url, extension) {
 }
 
 /** Make the .xlsx and download it. Same arguments as downloadTableCsv, plus optional doc, title, meta and fills. */
-export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null }) {
+export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null, headFills = null }) {
   const { default: ExcelJS } = await import('exceljs');
   const [rai, ogc] = await Promise.all([logoBuffer(raiLogo, 'jpeg'), logoBuffer(ogcLogo, 'png')]);
   const wb = buildWorkbook(ExcelJS, {
-    head, body, doc, fills, meta,
+    head, body, doc, fills, headFills, meta,
     title: title ?? titleFromSlug(filenameSlug),
     fleet: fleetFromTitle(typeof document !== 'undefined' ? document.title : ''),
   }, { rai, ogc });

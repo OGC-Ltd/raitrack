@@ -44,6 +44,9 @@ import {
 } from "../../api/probeHealth";
 import { downloadProbeCsv } from "../../utils/probeReport";
 import { probeHealthDoc } from "../../lib/reportDocs";
+import { fleetListMap } from "../../lib/probeHealthReport";
+import { readFleetWorkbook, loadFleetList, saveFleetList, forgetFleetList } from "../../lib/fleetListFile";
+import { MORL_FLEET } from "../../data/morlFleet";
 import { makeReportDoc } from "../../api/reports";
 import { saveFile } from "../../api/tripReport";
 import { savePdfAsJpeg } from "../../api/pdfJpeg";
@@ -320,9 +323,31 @@ export default function ProbeHealthPanel({
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
   const fleet = activeCompany?.name ?? orgCode ?? "Fleet";
-  const sheet = () => probeHealthDoc(rows, { note: filterNote, fleet, trucks: trucksOnly, orgCode });
+  // Drivers and statuses: the fleet Excel uploaded here, else the list built in (operator, 13 Nov 2026)
+  const [uploaded, setUploaded] = useState(() => loadFleetList(orgCode));
+  useEffect(() => { setUploaded(loadFleetList(orgCode)); }, [orgCode]);
+  const fleetList = useMemo(() => fleetListMap(uploaded?.entries ?? MORL_FLEET), [uploaded]);
+  const [listNote, setListNote] = useState(null);
+  const takeFleetFile = async (f) => {
+    if (!f) return;
+    setListNote({ busy: true });
+    try {
+      const got = await readFleetWorkbook(f);
+      const count = Object.keys(got.entries).length;
+      if (!count) throw new Error("no sheet with TRUCK NO and DRIVER NAME columns was found");
+      const list = { entries: got.entries, fileName: f.name, at: Date.now(), count, sheets: got.sheets };
+      const kept = saveFleetList(orgCode, list);
+      setUploaded(list);
+      setListNote({ words: `${count} units read from ${got.sheets.length} sheet${got.sheets.length === 1 ? "" : "s"}`
+        + (got.conflicts.length ? `; ${got.conflicts.length} plate${got.conflicts.length === 1 ? " is" : "s are"} on two sheets, the first kept (${got.conflicts.map((c) => c.plate).join(", ")})` : "")
+        + (kept ? "" : ". This browser could not keep it: it applies until the page is closed") });
+    } catch (err) {
+      setListNote({ error: `The file could not be read: ${err?.message ?? err}` });
+    }
+  };
+  const sheet = (landscape = false) => probeHealthDoc(rows, { note: filterNote, fleet, trucks: trucksOnly, orgCode, landscape, fleetList });
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
-  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
+  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet(landscape) }));
   const preview = usePdfPreview(makePdf);
   const [file, setFile] = useState({ busy: false, error: null });
   const save = async (as, landscape = false) => {
@@ -359,7 +384,7 @@ export default function ProbeHealthPanel({
         note={filterNote}
         loading={loading}
         onReload={() => editor.guard("Reload the probes", onReload)}
-        onCsv={() => downloadProbeCsv(rows, { filenameSlug })}
+        onCsv={() => downloadProbeCsv(rows, { filenameSlug, fleetList })}
         disabled={!rows.length}
         actions={ready && <>
           {editor.button}
@@ -370,6 +395,31 @@ export default function ProbeHealthPanel({
           <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
         </>}
       />
+      {/* The drivers and statuses the report's Driver and Status columns read: upload the fleet Excel before making it */}
+      <div className="sp4-fleetlist" role="group" aria-label="Fleet list for the Driver and Status columns">
+        <i className="ti ti-file-spreadsheet" aria-hidden="true" />
+        <span>
+          Drivers &amp; status:{" "}
+          <b>{uploaded ? uploaded.fileName : "built-in fleet list"}</b>
+          <span className="rpt-sub">
+            {" · "}{uploaded ? `${uploaded.count} units, uploaded ${new Date(uploaded.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} on this computer` : `${Object.keys(MORL_FLEET).length} units, MORL_FLEET of 13 Nov 2026`}
+          </span>
+        </span>
+        <label className="sp4-ghost-btn sp4-fleetlist__up" title="Upload the fleet Excel (as MORL_FLEET.xlsx): its drivers and statuses are used for the report on this computer">
+          <i className="ti ti-upload" aria-hidden="true" /> {listNote?.busy ? "Reading…" : "Upload fleet Excel"}
+          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden
+                 disabled={Boolean(listNote?.busy) || editor.edited}
+                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; takeFleetFile(f); }} />
+        </label>
+        {uploaded && (
+          <button type="button" className="sp4-ghost-btn" disabled={editor.edited}
+                  onClick={() => { forgetFleetList(orgCode); setUploaded(null); setListNote(null); }}>
+            Use built-in list
+          </button>
+        )}
+        {listNote?.words && <span className="rpt-sub">{listNote.words}</span>}
+        {listNote?.error && <span className="rpt-warn">{listNote.error}</span>}
+      </div>
       {editor.overlay}
       {preview.state && <PdfPreview state={preview.state} title="Probe & sensor health" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
 

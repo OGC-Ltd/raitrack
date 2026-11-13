@@ -88,3 +88,11 @@ describe('Naitiri by the client\'s Excel files alone, not the name (operator, 12
     for (const n of ['KTCC573E', 'KMGJ 377W']) expect(run.unit.test(n) && keptByKind(['NAITIRI'], ['Trucks'], [n])).toBe(false);
   });
 });
+
+describe('Fuel Consumption Rate and Fuel Graphs (13 Nov 2026)', () => {
+  it('for every organisation that can read telemetry', async () => {
+    const { hasFuelConsumptionTab } = await import('./reportNav');
+    for (const code of ['MENENGAI', 'WESTSUGAR', 'SUKARI', 'KASULU']) expect(hasFuelConsumptionTab(() => true, code)).toBe(true);
+    expect(hasFuelConsumptionTab(() => false, 'MENENGAI')).toBe(false);
+  });
+});

@@ -19,6 +19,7 @@ import {
 } from "./pdfReport";
 import { PROBE_STATE_LABEL, CHANNEL_STATE_LABEL, faultAction } from "../api/probeHealth";
 import { takenForExcel } from "./tableExport";
+import { fleetListEntry, hasFleetList } from "../lib/probeHealthReport";
 
 const stamp = (iso) => {
   if (!iso) return "";
@@ -69,23 +70,35 @@ const COLUMNS = [
   ["Readings (30 d)",    (r) => r.fuelProbe?.pings ?? ""],
 ];
 
-export function buildProbeCsv(rows) {
-  const head = COLUMNS.map(([label]) => field(label)).join(",");
-  const body = rows.map((r) => COLUMNS.map(([, read]) => field(read(r))).join(","));
+/** The columns for these rows: Driver and Status from the client's fleet list after Fleet, when its units are on it (13 Nov 2026). */
+function columnsFor(rows, list) {
+  if (!hasFleetList(rows, list)) return COLUMNS;
+  const at = COLUMNS.findIndex(([label]) => label === "Fleet") + 1;
+  return [...COLUMNS.slice(0, at),
+    ["Driver", (r) => fleetListEntry(r, list)?.driver ?? ""],
+    ["Status", (r) => fleetListEntry(r, list)?.status ?? ""],
+    ...COLUMNS.slice(at)];
+}
+
+export function buildProbeCsv(rows, { fleetList } = {}) {
+  const cols = columnsFor(rows, fleetList);
+  const head = cols.map(([label]) => field(label)).join(",");
+  const body = rows.map((r) => cols.map(([, read]) => field(read(r))).join(","));
   // CRLF because that is what Excel expects from a .csv on every platform.
   return [head, ...body].join("\r\n");
 }
 
 /** Download the rows as a CSV. The BOM is what makes Excel read it as UTF-8
  *  rather than the local codepage, which mangles the plates. */
-export function downloadProbeCsv(rows, { filenameSlug = "probes" } = {}) {
+export function downloadProbeCsv(rows, { filenameSlug = "probes", fleetList } = {}) {
   // The toolbar's Excel button: the same columns, as a table (utils/tableExport)
+  const cols = columnsFor(rows, fleetList);
   if (takenForExcel({
-    head: COLUMNS.map(([label]) => label),
-    body: rows.map((r) => COLUMNS.map(([, read]) => read(r))),
+    head: cols.map(([label]) => label),
+    body: rows.map((r) => cols.map(([, read]) => read(r))),
     filenameSlug,
   })) return;
-  const blob = new Blob(["﻿", buildProbeCsv(rows)], {
+  const blob = new Blob(["﻿", buildProbeCsv(rows, { fleetList })], {
     type: "text/csv;charset=utf-8;",
   });
   const url = URL.createObjectURL(blob);

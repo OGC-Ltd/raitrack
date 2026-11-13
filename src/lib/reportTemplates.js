@@ -97,11 +97,6 @@ export const TEMPLATES = {
     orgs: { SUKARI: {}, WESTSUGAR: {}, KABRAS: {}, NZOIA: {}, MENENGAI: {} },
     families: [WEST_KENYA],
   },
-  // Per-vehicle fuel consumption rate over a custom date range (FuelConsumptionRateReport):
-  // Menengai only, using TAT fuel API data with target rates from their Excel file.
-  fuelConsumption: {
-    orgs: { MENENGAI: {} },
-  },
 };
 
 const up = (code) => String(code ?? '').trim().toUpperCase();
