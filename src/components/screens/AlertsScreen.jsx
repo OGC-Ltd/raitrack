@@ -52,6 +52,7 @@ import UnauthorisedStops from "./UnauthorisedStops";
 import { useStopWatch } from "../../hooks/useStopWatch";
 import { useIdleWatch } from "../../hooks/useIdleWatch";
 import IdleAlertsTab from "./IdleAlertsTab";
+import { idleHistoryQuery, searchHistory } from "./IdleHistory";
 import { loadGeofenceExits } from "../../api/geofenceExits";
 import { exitRows } from "../../lib/geofenceExits";
 import { useOrgsFeedReads } from "../../lib/feedReads";
@@ -577,7 +578,12 @@ export default function AlertsScreen() {
   const idleWatch = useIdleWatch();
   const idle = view === "idle";
   const idleCount = idleWatch.alerts.filter((a) => !idleWatch.dismissed.has(a.key)).length;
-  useEffect(() => { if (idleWatch.open) setView("idle"); }, [idleWatch.open]);
+  useEffect(() => { if (idleWatch.open) { setView("idle"); setIdleMode("now"); } }, [idleWatch.open]);
+  // Idle units: Now (the live list) or History (the idle stops kept), and
+  // History's days, the last 7 by default: filter-bar rows like Overspeeding's.
+  const [idleMode, setIdleMode] = useState("now");
+  const [idleDays, setIdleDays] = useState(() => ({ from: fleetDay(Date.now() - 6 * 86_400_000), to: fleetDay() }));
+  const idleHistory = useQuery({ ...idleHistoryQuery(idleDays.from, idleDays.to), enabled: idle && idleMode === "history" });
   const [geoRead, setGeoRead] = useState({ status: "idle" });
   const [status, setStatus] = useState("open");
   const [orgs, setOrgs] = useState([]);
@@ -931,10 +937,15 @@ export default function AlertsScreen() {
 
       <div className="sp4-body">
         <TableToolbar
-          summary={idle ? (
+          summary={idle && idleMode === "history" ? (
+            (() => {
+              const n = searchHistory(idleHistory.data?.rows ?? [], q).length;
+              return <><b>{n}</b> idle stop{n === 1 ? "" : "s"}, {daysWords({ fromDay: idleDays.from, toDay: idleDays.to })}</>;
+            })()
+          ) : idle ? (
             <>
               <b>{idleCount}</b> Menengai unit{idleCount === 1 ? "" : "s"} idle now
-              {idleWatch.dismissed.size > 0 && <> · {idleWatch.dismissed.size} dismissed</>}
+              {idleWatch.dismissed.size > 0 && <>, {idleWatch.dismissed.size} dismissed</>}
             </>
           ) : stops ? (
             <>
@@ -1009,8 +1020,26 @@ export default function AlertsScreen() {
               )}
               {idleWatch.status !== "off" && idleWatch.status !== "idle" && (
                 <Chip on={idle} onClick={() => setView("idle")} n={idleWatch.status === "done" ? idleCount : undefined}
-                      title="Listed Menengai units that have not moved for 3 hours of working time (07:30–19:30), away from the yard and depots">Idle units</Chip>
+                      title="Listed Menengai units that have not moved for 2 hours of working time (07:30–19:30), away from the yard and depots">Idle units</Chip>
               )}
+            </div>
+          )}
+          {idle && (
+            <div className="sp4-filter-group">
+              <span className="sp4-filter-label">View</span>
+              <Chip on={idleMode === "now"} onClick={() => setIdleMode("now")} n={idleWatch.status === "done" ? idleCount : undefined}
+                    title="The units idle right now">Now</Chip>
+              <Chip on={idleMode === "history"} onClick={() => setIdleMode("history")}
+                    title="Every idle stop kept, for the days you pick">History</Chip>
+            </div>
+          )}
+          {idle && idleMode === "history" && (
+            <div className="sp4-filter-group">
+              <span className="sp4-filter-label">Days</span>
+              <DayField label="From" value={idleDays.from} max={today}
+                        onPick={(d) => setIdleDays((v) => (d ? { from: d, to: d > v.to ? d : v.to } : v))} />
+              <DayField label="To" value={idleDays.to} max={today}
+                        onPick={(d) => setIdleDays((v) => (d ? { from: d < v.from ? d : v.from, to: d } : v))} />
             </div>
           )}
           {(geo || stops) && (
@@ -1062,7 +1091,7 @@ export default function AlertsScreen() {
                          showOrg={geoOrgIds.length > 1} onRetry={readGeo} reads={exitReads} read={readF} />
         )}
         {stops && <UnauthorisedStops watch={watch} q={q} lines={stopLines} reads={stopReads} read={readF} />}
-        {idle && <IdleAlertsTab watch={idleWatch} q={q} />}
+        {idle && <IdleAlertsTab watch={idleWatch} q={q} mode={idleMode} days={idleDays} />}
         {view === "alerts" && (<>
         {rows.length === 0 && first.loading ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Alerts">
