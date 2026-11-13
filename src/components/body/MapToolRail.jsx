@@ -86,7 +86,9 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
   };
   return (
     <div className="mtr-pop mtr-fences" role="menu" aria-label="Geofences" style={{ marginTop: top }} onKeyDown={onKey}>
-      <button
+      {/* Each switch is a right of its own (map:geofences, map:custom_geos):
+          a switch this person does not hold is left out. */}
+      {(!zones || zones.canAll !== false) && <button
         ref={first} type="button" role="menuitemcheckbox" className="mtr-fences__item"
         aria-checked={Boolean(zones?.on)} disabled={!zones}
         onClick={() => zones?.onToggle()}
@@ -97,10 +99,11 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
           {!zones && <span className="mtr-fences__sub">None are drawn for this company</span>}
         </span>
         <span className="mtr-fences__switch" aria-hidden="true" />
-      </button>
+      </button>}
       {/* Custom geos: the fences drawn here, not the ones imported from
           Wialon (operator, 2026-11-12). Independent of Show on the map. */}
-      <button
+      {zones?.canOwn !== false && <button
+        ref={zones?.canAll === false ? first : undefined}
         type="button" role="menuitemcheckbox" className="mtr-fences__item"
         aria-checked={Boolean(zones?.ownOnly)} disabled={!zones?.ownCount && !zones?.ownOnly}
         onClick={() => zones?.onOwnOnly()}
@@ -115,7 +118,7 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
           </span>
         </span>
         <span className="mtr-fences__switch" aria-hidden="true" />
-      </button>
+      </button>}
       {drawFence && <button
         type="button" role="menuitem" className="mtr-fences__item"
         onClick={() => { drawFence.onToggle(); onDone(); }}

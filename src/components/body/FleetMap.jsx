@@ -2265,9 +2265,6 @@ export default function FleetMap() {
   const [zonesOwnOnly, setZonesOwnOnly]     = useState(
     () => readMapPrefs(activeCompanyId).layers["zones:own"],
   );
-  const zonesDrawn = showZones || zonesOwnOnly;
-  const customOnly = zonesOwnOnly && !showZones;
-  if (zonesDrawn && !zonesWanted) setZonesWanted(true);
   const zoneLayerRef      = useRef(null);   // { shapes[], info, bounds, clearHover } | null
   /* Live traffic (Google's TrafficLayer, lib/googleBase) over the base map,
    * and the pinned unit's routed line. TomTom's tiles were switched off
@@ -2457,6 +2454,14 @@ export default function FleetMap() {
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
   const { can: canDo, orgId: permOrgId } = usePermissions();
+  // The Geofences menu's two switches, each a right of its own (operator,
+  // 2026-11-13): "Show on the map" is map:geofences, "Custom geos" is
+  // map:custom_geos. A switch the person may not use counts as off.
+  const mayAllZones = canDo("map:geofences");
+  const mayOwnZones = canDo("map:custom_geos");
+  const zonesDrawn = (showZones && mayAllZones) || (zonesOwnOnly && mayOwnZones);
+  const customOnly = zonesOwnOnly && mayOwnZones && !(showZones && mayAllZones);
+  if (zonesDrawn && !zonesWanted) setZonesWanted(true);
   // Read by the fence cards, which are HTML built inside the zone layer.
   const canEditFencesRef = useRef(false);
   canEditFencesRef.current = canDo("geofence:update");
@@ -3953,7 +3958,43 @@ export default function FleetMap() {
     const out = [];
     // MapLayersMenu already hides itself on an empty list, so withholding the
     // entries removes the control rather than leaving a dead button.
-    if (!canDo("map:layers")) return out;
+    // The Geofences menu, also for a role that has the map's geofence rights
+    // but cannot toggle the other layers (the live Operator role: map:read,
+    // no map:layers; operator, 2026-11-13).
+    const pushZones = () => {
+      if (hasZones && (mayAllZones || mayOwnZones)) {
+        const onOwnOnly = () => {
+          const next = !zonesOwnOnly;
+          setZonesOwnOnly(next);
+          zonesRequestedRef.current = next;
+          writeMapPrefs(activeCompanyId, { layers: { "zones:own": next } });
+        };
+        out.push({
+          id: "zones",
+          label: mayAllZones ? "Geofences" : "Custom geos",
+          // Which of the menu's two switches this person may use (map:geofences,
+          // map:custom_geos). With only Custom geos, the plain switch (the phone's
+          // layers menu) is that one.
+          canAll: mayAllZones,
+          canOwn: mayOwnZones,
+          on: mayAllZones ? showZones : zonesOwnOnly,
+          onToggle: mayAllZones ? () => setShowZones(v => {
+            zonesRequestedRef.current = !v;
+            writeMapPrefs(activeCompanyId, { layers: { zones: !v } });
+            return !v;
+          }) : onOwnOnly,
+          // Custom geos: the ones drawn here, a switch of its own. Neither switch
+          // moves the other (operator, 2026-11-12); with both on, all are drawn.
+          ownOnly: mayOwnZones && zonesOwnOnly,
+          ownCount: ownFenceCount,
+          onOwnOnly,
+          note: null,
+          legend: legendFor(zoneCategories, baseMap),
+          hint: "Hover a group to list its fences · click it to zoom in · click a fence for detail",
+        });
+      }
+    };
+    if (!canDo("map:layers")) { pushZones(); return out; }
     // The scales. Offered where the ORGANISATION has any: the server scopes the
     // feed to the yards this fleet weighs in, so the switch appears where
     // weighbridges exist without an org name being written down here.
@@ -4016,31 +4057,7 @@ export default function FleetMap() {
           : "Names appear as you zoom in · click a place for detail",
       });
     }
-    if (hasZones) {
-      out.push({
-        id: "zones",
-        label: "Geofences",
-        on: showZones,
-        onToggle: () => setShowZones(v => {
-          zonesRequestedRef.current = !v;
-          writeMapPrefs(activeCompanyId, { layers: { zones: !v } });
-          return !v;
-        }),
-        // Custom geos: the ones drawn here, a switch of its own. Neither switch
-        // moves the other (operator, 2026-11-12); with both on, all are drawn.
-        ownOnly: zonesOwnOnly,
-        ownCount: ownFenceCount,
-        onOwnOnly: () => {
-          const next = !zonesOwnOnly;
-          setZonesOwnOnly(next);
-          zonesRequestedRef.current = next;
-          writeMapPrefs(activeCompanyId, { layers: { "zones:own": next } });
-        },
-        note: null,
-        legend: legendFor(zoneCategories, baseMap),
-        hint: "Hover a group to list its fences · click it to zoom in · click a fence for detail",
-      });
-    }
+    pushZones();
     if (planAllowed) {
       out.push({
         id: "plan",
@@ -4087,7 +4104,7 @@ export default function FleetMap() {
     });
     return out;
   }, [showTraffic, showWeather, weatherNote, showBridges, hasBridges, bridgesLoading, activeCompanyId,
-      showZones, hasZones, zoneCategories, zonesOwnOnly, ownFenceCount,
+      showZones, hasZones, zoneCategories, zonesOwnOnly, ownFenceCount, mayAllZones, mayOwnZones,
       showPlan, planAllowed, planState,
       sitePlans, siteOn, siteStatus, siteCats, canDo, baseMap]);
 
