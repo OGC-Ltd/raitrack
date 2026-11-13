@@ -10,6 +10,8 @@ import './FuelConsumptionRateReport.css';
 import { withTypeTargets, fuelGroupsFor, rowsInGroup, groupCounts } from '../../lib/fuelTargets';
 import ChoicePicker from './ChoicePicker';
 import { fleetEntriesFor } from '../../lib/fleetListFile';
+import { useQueryClient } from '@tanstack/react-query';
+import { fleetListEntries } from '../../hooks/useFleetList';
 import { loadFuelConsumptionRate } from '../../api/reports';
 import { loadPings } from '../../api/fleetReports';
 import { fuelGraphsPdf, dayStart, dayEnd } from '../../lib/fuelGraphPdf';
@@ -47,6 +49,7 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
   const [below, setBelow] = useState('');
   const [make, setMake] = useState({ busy: false, words: '', error: null });
   const runId = useRef(0);
+  const qc = useQueryClient();
   const fleet = companyName ?? orgCode ?? '';
 
   const execute = async () => {
@@ -55,10 +58,13 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
     setRun({ status: 'loading' });
     setTicked(new Set());
     try {
-      const data = await loadFuelConsumptionRate({ orgId, from: days.from, to: days.to });
+      const [data, uploadedList] = await Promise.all([
+        loadFuelConsumptionRate({ orgId, from: days.from, to: days.to }),
+        fleetListEntries(qc, orgId),
+      ]);
       if (id !== runId.current) return;
       // A target from the fleet Excel's TYPE where none is set by registration (operator, 13 Nov 2026)
-      const rows = withTypeTargets(data.rows ?? [], fleetEntriesFor(orgCode))
+      const rows = withTypeTargets(data.rows ?? [], fleetEntriesFor(orgCode, uploadedList))
         .sort((a, b) => (a.kmPerL ?? Infinity) - (b.kmPerL ?? Infinity));
       setRun({ status: 'done', rows, from: days.from, to: days.to });
     } catch (err) {

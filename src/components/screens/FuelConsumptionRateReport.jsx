@@ -16,6 +16,8 @@ import './FuelConsumptionRateReport.css';
 import { withTypeTargets, fuelGroupsFor, rowsInGroup, groupCounts, totalsOf } from '../../lib/fuelTargets';
 import ChoicePicker from './ChoicePicker';
 import { fleetEntriesFor } from '../../lib/fleetListFile';
+import { useQueryClient } from '@tanstack/react-query';
+import { fleetListEntries } from '../../hooks/useFleetList';
 import { loadFuelConsumptionRate, makeReportDoc } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
@@ -69,6 +71,7 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
   const groups = fuelGroupsFor(orgCode);
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
+  const qc = useQueryClient();
 
   const fleet = companyName ?? orgCode ?? '';
 
@@ -77,11 +80,14 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
     const id = ++runId.current;
     setRun({ status: 'loading' });
     try {
-      const data = await loadFuelConsumptionRate({ orgId, from: days.from, to: days.to });
+      const [data, uploadedList] = await Promise.all([
+        loadFuelConsumptionRate({ orgId, from: days.from, to: days.to }),
+        fleetListEntries(qc, orgId),
+      ]);
       if (id !== runId.current) return;
       const period = days.from === days.to ? days.from : `${days.from} – ${days.to}`;
       // A target from the fleet Excel's TYPE where none is set by registration (operator, 13 Nov 2026)
-      const rows = withTypeTargets(data.rows ?? [], fleetEntriesFor(orgCode));
+      const rows = withTypeTargets(data.rows ?? [], fleetEntriesFor(orgCode, uploadedList));
       setRun({ status: 'done', rows, totals: data.totals, period, from: days.from, to: days.to });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });

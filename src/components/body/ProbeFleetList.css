@@ -1,4 +1,4 @@
-/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: the fleet list the report reads, named with its source · states: built-in, uploaded, none, reading, read, error, edited · v2.0.0 */
+/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: the fleet list the report reads, named with its source · states: loading, built-in, uploaded, none, read-only, reading, saving, saved, error, edited, history · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V3 · weakest: V, on purpose: a strip that must read as the toolbar beside it */
 
 /* ── Probe & Sensor Health › the fleet list ────────────────────────────
@@ -25,6 +25,7 @@
 .pfl__src { color: var(--sp4-text-3); overflow-wrap: break-word; min-width: 0; }
 .pfl__src b { font-weight: 600; color: var(--sp4-text-2); }
 .pfl__src--none { color: var(--sp4-text-3); }
+.pfl__src--error { color: var(--sp4-warn); }
 .pfl__acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
 
 .pfl__btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: var(--sp4-text-2); }
@@ -37,6 +38,13 @@
 
 .pfl__note { flex-basis: 100%; margin: 0; font-size: var(--sp4-label); color: var(--sp4-text-3); }
 .pfl__note--error { color: var(--sp4-crit); }
+
+/* Every upload is kept (fleet_list_versions): the earlier ones, newest first, under a disclosure */
+.pfl__history { flex-basis: 100%; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.pfl__history summary { cursor: pointer; width: fit-content; color: var(--sp4-text-2); }
+.pfl__history summary:hover { color: var(--sp4-text-1); }
+.pfl__history summary:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.pfl__history ul { margin: 4px 0 0; padding-left: 16px; display: grid; gap: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   .pfl__spin { animation: none; }

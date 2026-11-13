@@ -1,8 +1,8 @@
 // The client's fleet list as an Excel file, uploaded on the Probe & Sensor Health page before the
 // report is made (operator, 13 Nov 2026: "make it able for the user to upload this file before
-// generating the report so new details can be captured if there have been changes"). Kept in this
-// browser, for this organisation, until a newer file is uploaded or it is reset; without one, the
-// list built into the app (data/morlFleet) is used.
+// generating the report so new details can be captured if there have been changes"). Read here, in
+// the browser; what it read is kept by the server for the organisation, for every user, each upload
+// on record (api/fleetList). Without one, the list built into the app (data/morlFleet) is used.
 //
 // Every sheet laid out as MORL_FLEET.xlsx is read: a heading row with TRUCK NO and DRIVER NAME, the
 // status under STATUS in the row above it (else the column after NTSA). Only plate, driver and status
@@ -89,21 +89,5 @@ import { MORL_FLEET } from '../data/morlFleet';
 
 /** The list built into the app: Menengai's (MORL_FLEET.xlsx) alone. */
 export const builtInFleetList = (orgCode) => (String(orgCode ?? '').toUpperCase() === 'MENENGAI' ? MORL_FLEET : null);
-/** The list a report reads for the organisation: the file uploaded here, else the one built in, else null. */
-export const fleetEntriesFor = (orgCode) => loadFleetList(orgCode)?.entries ?? builtInFleetList(orgCode);
-
-// Kept in this browser, per organisation
-const keyOf = (orgCode) => `ft-fleet-list:${String(orgCode ?? '').toUpperCase()}`;
-/** The list uploaded here for the organisation: { entries, fileName, at, count }, or null. */
-export function loadFleetList(orgCode) {
-  try {
-    const v = JSON.parse(localStorage.getItem(keyOf(orgCode)) ?? 'null');
-    return v && v.entries && typeof v.entries === 'object' ? v : null;
-  } catch { return null; }
-}
-export function saveFleetList(orgCode, list) {
-  try { localStorage.setItem(keyOf(orgCode), JSON.stringify(list)); return true; } catch { return false; }
-}
-export function forgetFleetList(orgCode) {
-  try { localStorage.removeItem(keyOf(orgCode)); } catch { /* blocked */ }
-}
+/** The list a report reads: the one uploaded for the organisation (the server's), else the one built in, else null. */
+export const fleetEntriesFor = (orgCode, uploaded = null) => uploaded ?? builtInFleetList(orgCode);

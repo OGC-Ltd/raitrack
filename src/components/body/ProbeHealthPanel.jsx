@@ -45,7 +45,8 @@ import {
 import { downloadProbeCsv } from "../../utils/probeReport";
 import { probeHealthDoc } from "../../lib/reportDocs";
 import { fleetListMap } from "../../lib/probeHealthReport";
-import { readFleetWorkbook, loadFleetList, saveFleetList, forgetFleetList, builtInFleetList } from "../../lib/fleetListFile";
+import { readFleetWorkbook, builtInFleetList } from "../../lib/fleetListFile";
+import { useFleetList } from "../../hooks/useFleetList";
 import "./ProbeFleetList.css";
 import { makeReportDoc } from "../../api/reports";
 import { saveFile } from "../../api/tripReport";
@@ -323,31 +324,44 @@ export default function ProbeHealthPanel({
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
   const fleet = activeCompany?.name ?? orgCode ?? "Fleet";
-  // Drivers and statuses: the fleet Excel uploaded here, else the list built in (operator, 13 Nov 2026)
-  const [uploaded, setUploaded] = useState(() => loadFleetList(orgCode));
-  useEffect(() => { setUploaded(loadFleetList(orgCode)); }, [orgCode]);
+  // Drivers and statuses: the fleet Excel uploaded for the organisation, kept by the server for every
+  // user (operator, 13 Nov 2026), else the list built in
+  const { can } = usePermissions();
+  const mayUpload = can("vehicle:update");
+  const shared = useFleetList(orgId);
+  const uploaded = shared.data?.current ?? null;
+  const history = shared.data?.history ?? [];
   // The built-in list is Menengai's alone: another organisation reads only a file uploaded for it
   const builtIn = builtInFleetList(orgCode);
   const fleetList = useMemo(() => fleetListMap(uploaded?.entries ?? builtIn ?? {}), [uploaded, builtIn]);
   const fileInput = useRef(null);
   const [listNote, setListNote] = useState(null);
+  const busy = Boolean(listNote?.busy) || shared.saving;
   const takeFleetFile = async (f) => {
     if (!f) return;
     setListNote({ busy: true });
+    let got;
     try {
-      const got = await readFleetWorkbook(f);
-      const count = Object.keys(got.entries).length;
-      if (!count) throw new Error("no sheet with TRUCK NO and DRIVER NAME columns was found");
-      const list = { entries: got.entries, fileName: f.name, at: Date.now(), count, sheets: got.sheets };
-      const kept = saveFleetList(orgCode, list);
-      setUploaded(list);
-      setListNote({ words: `${count} units read from ${got.sheets.length} sheet${got.sheets.length === 1 ? "" : "s"}`
-        + (got.conflicts.length ? `; ${got.conflicts.length} plate${got.conflicts.length === 1 ? " is" : "s are"} on two sheets, the first kept (${got.conflicts.map((c) => c.plate).join(", ")})` : "")
-        + (kept ? "" : ". This browser could not keep it: it applies until the page is closed") });
+      got = await readFleetWorkbook(f);
+      if (!Object.keys(got.entries).length) throw new Error("no sheet with TRUCK NO and DRIVER NAME columns was found");
     } catch (err) {
       setListNote({ error: `The file could not be read: ${err?.message ?? err}` });
+      return;
+    }
+    try {
+      const saved = await shared.upload({ fileName: f.name, entries: got.entries, sheets: got.sheets, conflicts: got.conflicts });
+      const count = saved?.current?.count ?? Object.keys(got.entries).length;
+      setListNote({ words: `${count} units read from ${got.sheets.length} sheet${got.sheets.length === 1 ? "" : "s"}, saved for everyone in ${fleet}`
+        + (got.conflicts.length ? `; ${got.conflicts.length} plate${got.conflicts.length === 1 ? " is" : "s are"} on two sheets, the first kept (${got.conflicts.map((c) => c.plate).join(", ")})` : "") });
+    } catch (err) {
+      setListNote({ error: `The list could not be saved: ${err?.message ?? err}` });
     }
   };
+  const putBack = async () => {
+    setListNote(null);
+    try { await shared.reset(); } catch (err) { setListNote({ error: `The list could not be changed: ${err?.message ?? err}` }); }
+  };
+  const when = (ms) => new Date(ms).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
   const sheet = (landscape = false) => probeHealthDoc(rows, { note: filterNote, fleet, trucks: trucksOnly, orgCode, landscape, fleetList });
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
   const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet(landscape) }));
@@ -403,31 +417,46 @@ export default function ProbeHealthPanel({
         <i className="ti ti-file-spreadsheet pfl__icon" aria-hidden="true" />
         <p className="pfl__what">
           <span className="pfl__label">Drivers and status</span>
-          {uploaded ? (
-            <span className="pfl__src"><b>{uploaded.fileName}</b>, {uploaded.count} units, uploaded {new Date(uploaded.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} on this computer</span>
+          {shared.isLoading ? (
+            <span className="pfl__src">Reading the organisation&apos;s list…</span>
+          ) : uploaded ? (
+            <span className="pfl__src"><b>{uploaded.fileName}</b>, {uploaded.count} units, uploaded {when(uploaded.at)}{uploaded.by ? ` by ${uploaded.by}` : ""}</span>
           ) : builtIn ? (
             <span className="pfl__src"><b>Built-in fleet list</b>, {Object.keys(builtIn).length} units from MORL_FLEET of 13 Nov 2026</span>
           ) : (
-            <span className="pfl__src pfl__src--none">No fleet list for this organisation. Upload one to add the Driver and Status columns.</span>
+            <span className="pfl__src pfl__src--none">No fleet list for this organisation.{mayUpload ? " Upload one to add the Driver and Status columns." : ""}</span>
           )}
+          {shared.error && <span className="pfl__src pfl__src--error">The organisation&apos;s list could not be read, so the built-in one is used.</span>}
         </p>
+        {mayUpload && (
         <div className="pfl__acts">
           <input ref={fileInput} type="file" hidden tabIndex={-1}
                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; takeFleetFile(f); }} />
-          <button type="button" className="sp4-ghost-btn pfl__btn" disabled={Boolean(listNote?.busy) || editor.edited}
-                  aria-busy={Boolean(listNote?.busy)} onClick={() => fileInput.current?.click()}
-                  title={editor.edited ? "Discard your edits to read a new list" : "Upload the fleet Excel (laid out as MORL_FLEET.xlsx): its drivers and statuses are used for the report on this computer"}>
-            <i className={`ti ${listNote?.busy ? "ti-loader-2 pfl__spin" : "ti-upload"}`} aria-hidden="true" />
-            {listNote?.busy ? "Reading…" : "Upload fleet Excel"}
+          <button type="button" className="sp4-ghost-btn pfl__btn" disabled={busy || editor.edited}
+                  aria-busy={busy} onClick={() => fileInput.current?.click()}
+                  title={editor.edited ? "Discard your edits to read a new list" : `Upload the fleet Excel (laid out as MORL_FLEET.xlsx): its drivers and statuses are used for everyone in ${fleet}`}>
+            <i className={`ti ${busy ? "ti-loader-2 pfl__spin" : "ti-upload"}`} aria-hidden="true" />
+            {listNote?.busy ? "Reading…" : shared.saving ? "Saving…" : "Upload fleet Excel"}
           </button>
           {uploaded && (
-            <button type="button" className="sp4-ghost-btn pfl__btn" disabled={editor.edited}
-                    onClick={() => { forgetFleetList(orgCode); setUploaded(null); setListNote(null); }}>
-              {builtIn ? "Use built-in list" : "Remove list"}
+            <button type="button" className="sp4-ghost-btn pfl__btn" disabled={busy || editor.edited} onClick={putBack}
+                    title="Stop using the uploaded list; it stays on record">
+              {builtIn ? "Use built-in list" : "Stop using this list"}
             </button>
           )}
         </div>
+        )}
+        {history.length > 1 && (
+          <details className="pfl__history">
+            <summary>Earlier lists ({history.length - 1})</summary>
+            <ul>
+              {history.slice(1).map((h) => (
+                <li key={h.id}>{h.reset ? "Back to the built-in list" : `${h.fileName}, ${h.count} units`}, {when(h.at)}{h.by ? ` by ${h.by}` : ""}</li>
+              ))}
+            </ul>
+          </details>
+        )}
         {(listNote?.words || listNote?.error) && (
           <p className={`pfl__note${listNote.error ? " pfl__note--error" : ""}`} role="status">{listNote.error ?? listNote.words}</p>
         )}
