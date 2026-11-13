@@ -47,6 +47,7 @@ import { probeHealthDoc } from "../../lib/reportDocs";
 import { fleetListMap } from "../../lib/probeHealthReport";
 import { readFleetWorkbook, builtInFleetList } from "../../lib/fleetListFile";
 import { useFleetList } from "../../hooks/useFleetList";
+import { fleetListFileLink, MAX_FLEET_FILE_BYTES } from "../../api/fleetList";
 import "./ProbeFleetList.css";
 import { makeReportDoc } from "../../api/reports";
 import { saveFile } from "../../api/tripReport";
@@ -339,6 +340,10 @@ export default function ProbeHealthPanel({
   const busy = Boolean(listNote?.busy) || shared.saving;
   const takeFleetFile = async (f) => {
     if (!f) return;
+    if (f.size > MAX_FLEET_FILE_BYTES) {
+      setListNote({ error: `The file is over ${MAX_FLEET_FILE_BYTES / 1024 / 1024} MB, the most that can be kept.` });
+      return;
+    }
     setListNote({ busy: true });
     let got;
     try {
@@ -349,12 +354,30 @@ export default function ProbeHealthPanel({
       return;
     }
     try {
-      const saved = await shared.upload({ fileName: f.name, entries: got.entries, sheets: got.sheets, conflicts: got.conflicts });
+      const saved = await shared.upload({ file: f, fileName: f.name, entries: got.entries, sheets: got.sheets, conflicts: got.conflicts });
       const count = saved?.current?.count ?? Object.keys(got.entries).length;
       setListNote({ words: `${count} units read from ${got.sheets.length} sheet${got.sheets.length === 1 ? "" : "s"}, saved for everyone in ${fleet}`
         + (got.conflicts.length ? `; ${got.conflicts.length} plate${got.conflicts.length === 1 ? " is" : "s are"} on two sheets, the first kept (${got.conflicts.map((c) => c.plate).join(", ")})` : "") });
     } catch (err) {
       setListNote({ error: `The list could not be saved: ${err?.message ?? err}` });
+    }
+  };
+  // The Excel as it was uploaded, kept in S3: a short-lived link the browser downloads (the server names the file)
+  const [fetching, setFetching] = useState(null);
+  const downloadList = async (v) => {
+    setFetching(v.id);
+    try {
+      const { url } = await fleetListFileLink(orgId, v.id);
+      const a = document.createElement("a");
+      a.href = url;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setListNote({ error: `${v.fileName ?? "The file"} could not be downloaded: ${err?.message ?? err}` });
+    } finally {
+      setFetching(null);
     }
   };
   const putBack = async () => {
@@ -439,6 +462,13 @@ export default function ProbeHealthPanel({
             <i className={`ti ${busy ? "ti-loader-2 pfl__spin" : "ti-upload"}`} aria-hidden="true" />
             {listNote?.busy ? "Reading…" : shared.saving ? "Saving…" : "Upload fleet Excel"}
           </button>
+          {uploaded?.file && (
+            <button type="button" className="sp4-ghost-btn pfl__btn" disabled={fetching === uploaded.id} aria-busy={fetching === uploaded.id}
+                    onClick={() => downloadList(uploaded)} title={`Download ${uploaded.fileName} as it was uploaded`}>
+              <i className={`ti ${fetching === uploaded.id ? "ti-loader-2 pfl__spin" : "ti-download"}`} aria-hidden="true" />
+              Download
+            </button>
+          )}
           {uploaded && (
             <button type="button" className="sp4-ghost-btn pfl__btn" disabled={busy || editor.edited} onClick={putBack}
                     title="Stop using the uploaded list; it stays on record">
@@ -452,7 +482,15 @@ export default function ProbeHealthPanel({
             <summary>Earlier lists ({history.length - 1})</summary>
             <ul>
               {history.slice(1).map((h) => (
-                <li key={h.id}>{h.reset ? "Back to the built-in list" : `${h.fileName}, ${h.count} units`}, {when(h.at)}{h.by ? ` by ${h.by}` : ""}</li>
+                <li key={h.id}>
+                  {h.reset ? "Back to the built-in list" : `${h.fileName}, ${h.count} units`}, {when(h.at)}{h.by ? ` by ${h.by}` : ""}
+                  {mayUpload && h.file && (
+                    <button type="button" className="pfl__link" disabled={fetching === h.id} aria-busy={fetching === h.id}
+                            onClick={() => downloadList(h)} aria-label={`Download ${h.fileName}, uploaded ${when(h.at)}`}>
+                      {fetching === h.id ? "Downloading…" : "Download"}
+                    </button>
+                  )}
+                </li>
               ))}
             </ul>
           </details>

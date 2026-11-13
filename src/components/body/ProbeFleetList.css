@@ -1,4 +1,4 @@
-/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: the fleet list the report reads, named with its source · states: loading, built-in, uploaded, none, read-only, reading, saving, saved, error, edited, history · v2.0.0 */
+/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: the fleet list the report reads, named with its source · states: loading, built-in, uploaded, none, read-only, reading, saving, saved, error, edited, history, download · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V3 · weakest: V, on purpose: a strip that must read as the toolbar beside it */
 
 /* ── Probe & Sensor Health › the fleet list ────────────────────────────
@@ -45,6 +45,15 @@
 .pfl__history summary:hover { color: var(--sp4-text-1); }
 .pfl__history summary:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
 .pfl__history ul { margin: 4px 0 0; padding-left: 16px; display: grid; gap: 4px; }
+
+/* An earlier list's own Excel, kept in S3: a quiet text action after its line */
+.pfl__link {
+  margin-left: 8px; padding: 2px 4px; border: 0; border-radius: 4px; background: none;
+  font: inherit; color: var(--sp4-accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.pfl__link:hover:not(:disabled) { color: var(--sp4-text-1); }
+.pfl__link:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 2px; }
+.pfl__link:disabled { cursor: progress; opacity: .7; }
 
 @media (prefers-reduced-motion: reduce) {
   .pfl__spin { animation: none; }
