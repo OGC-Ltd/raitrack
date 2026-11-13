@@ -36,8 +36,22 @@ export const NOT_GEOFENCED = 'Customers Name Not Geofenced';
 
 /** A line's state, as FG_FILL keys it. */
 export const fgState = (l) => (l.completed ? 'done' : l.delivered ? 'ok' : 'miss');
-/** A line's fill. */
-export const fgFill = (l) => FG_FILL[fgState(l)];
+/**
+ * The colours an operator can give a line by hand, the sheet's own three (operator, 13 Nov 2026: "change the
+ * colour of a row ... based on the options of colour being used"), in the sheet's order.
+ */
+export const FG_COLOURS = [
+  { state: 'done', label: 'Green', means: 'completed' },
+  { state: 'ok', label: 'Yellow', means: 'at the customer' },
+  { state: 'miss', label: 'Red', means: 'not there yet' },
+];
+/** The line's colour: the one picked for it (`colours`, line key → FG_FILL key), else its state's. */
+export const fgColour = (l, colours) => {
+  const picked = colours instanceof Map ? colours.get(l.key) : null;
+  return FG_FILL[picked] ? picked : fgState(l);
+};
+/** A line's fill. `colours` as fgColour; anything else (an index from .map) is ignored. */
+export const fgFill = (l, colours) => FG_FILL[fgColour(l, colours)];
 
 // The template picked, per organisation, kept in this browser
 const keyOf = (orgCode) => `ft-deliveries-template:${String(orgCode ?? '').toUpperCase()}`;
@@ -142,10 +156,10 @@ export function fgCells(l) {
     when(l.arriveAt), when(l.leftAt), when(l.yardAt), l.tatMs != null ? spanWords(l.tatMs) : ''];
 }
 
-export function fgCsv(lines) {
+export function fgCsv(lines, colours = null) {
   return { head: [...FG_HEADS, 'Delivered'], body: lines.map((l) => [...fgCells(l), l.delivered ? 'Yes' : 'No']),
-    // The rows' colours, for the Excel file (utils/xlsxExport); the CSV has none
-    fills: lines.map(fgFill) };
+    // The rows' colours, picked ones included, for the Excel file (utils/xlsxExport); the CSV has none
+    fills: lines.map((l) => fgFill(l, colours)) };
 }
 
 // The PDF, landscape: the server's document (POST reports/document.pdf), as an edited report is drawn
@@ -156,8 +170,8 @@ const dmyhm = (ms) => { const s = new Date(ms + OFFSET).toISOString(); return `$
 const dmy = (ms) => dmyhm(ms).slice(0, 10);
 const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-/** `dropped`: the keys of lines taken off with ✕ on the screen; they are left out everywhere. */
-export function finishedGoodsDoc(rows, { from, at, fleet, group = null, orgCode, now = Date.now(), dropped = null, picks = null }) {
+/** `dropped`: the keys of lines taken off with ✕ on the screen; they are left out everywhere. `colours`: as fgColour. */
+export function finishedGoodsDoc(rows, { from, at, fleet, group = null, orgCode, now = Date.now(), dropped = null, picks = null, colours = null }) {
   const lines = fgLines(rows, { at, picks }).filter((l) => !dropped?.has(l.key));
   const got = lines.filter((l) => l.delivered).length;
   const used = WIDTHS.reduce((a, x) => a + x, 0);
@@ -167,7 +181,7 @@ export function finishedGoodsDoc(rows, { from, at, fleet, group = null, orgCode,
     { kind: 'bar', dark: true, title: dayWords(from) !== dayWords(at) ? `${dmy(from)} to ${dmy(at)}` : dmy(at), aside: `${got}/${lines.length} customers reached · ${plural(rows.length, 'vehicle')}` },
     lines.length
       ? { kind: 'table', cols, head: FG_HEADS, size: 6.8,
-        rows: lines.map((l) => fgCells(l).map((text, i) => ({ text: String(text ?? ''), fill: fgFill(l), ...(i === 1 || i === 2 ? { bold: true } : {}) }))) }
+        rows: lines.map((l) => fgCells(l).map((text, i) => ({ text: String(text ?? ''), fill: fgFill(l, colours), ...(i === 1 || i === 2 ? { bold: true } : {}) }))) }
       : { kind: 'none', text: 'No vehicles in the report.' },
   ];
   return {

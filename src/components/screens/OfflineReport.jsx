@@ -41,7 +41,7 @@ function Kpi({ value, label, tone }) {
 }
 
 export default function OfflineReport({ orgId, orgCode, companyName, active = true }) {
-  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('offline', { orgId, orgCode, companyName });
+  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker, typePicker } = useReportOrgs('offline', { orgId, orgCode, companyName });
   const today = fleetDay(Date.now());
   const [day, setDay] = useState(today);
   const [run, setRun] = useState({ status: 'idle' });
@@ -118,6 +118,7 @@ export default function OfflineReport({ orgId, orgCode, companyName, active = tr
         <DateRangePicker from={day} to={day} today={today} maxDays={1} spans={[]} label="As at" on onChange={(d) => setDay(d)} />
         <span className="rpt-sub">As at {done ? asAtWords(done.now) : 'now'}</span>
         {picker && <CheckPicker {...picker} />}
+        {typePicker && <CheckPicker {...typePicker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report as at this day'}>
           {run.status === 'loading' ? 'Running…' : done?.day === day ? 'Refresh' : 'Run report'}

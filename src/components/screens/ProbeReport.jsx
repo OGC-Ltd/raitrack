@@ -40,8 +40,9 @@ const KPI_LABELS = ['Units', 'Disconnections', 'Alerts'];
 const plural = (n, one) => `${fmt(n)} ${one}${n === 1 ? '' : 's'}`;
 
 export default function ProbeReport({ orgId, orgCode, companyName, active = true }) {
-  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker } = useReportOrgs('probeReport', { orgId, orgCode, companyName });
-  const [days, setDays] = useState(() => ({ from: yesterday(), to: yesterday() }));
+  const { picked, several, orgIdOf, nameOf, keepUnit, pickedWords, picker, typePicker } = useReportOrgs('probeReport', { orgId, orgCode, companyName });
+  // Today until another day is picked (operator, 13 Nov 2026)
+  const [days, setDays] = useState(() => ({ from: yesterday(Date.now() + 86_400_000), to: yesterday(Date.now() + 86_400_000) }));
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
@@ -117,6 +118,7 @@ export default function ProbeReport({ orgId, orgCode, companyName, active = true
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[]} label="Days" on onChange={(from, to) => setDays({ from, to: to ?? from })} />
         {picker && <CheckPicker {...picker} />}
+        {typePicker && <CheckPicker {...typePicker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}

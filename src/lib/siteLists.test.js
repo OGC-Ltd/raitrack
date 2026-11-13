@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listTest, vehicleOnSite, siteFleet, siteKind, NAITIRI_ALL, NAITIRI_TRUCKS_ALL, SITE_LISTS, REPORT_SITES, SITE_KINDS } from './siteLists';
+import { listTest, vehicleOnSite, siteFleet, siteKind, keptByKind, kindPicker, unitSite, NAITIRI_ALL, NAITIRI_TRUCKS_ALL, SITE_LISTS, REPORT_SITES, SITE_KINDS } from './siteLists';
 import { NAITIRI_TRUCKS, NAITIRI_UNITS } from '../data/naitiriUnits';
 
 describe('Naitiri\'s units (operator, 12 Nov 2026)', () => {
@@ -64,7 +64,7 @@ describe("West Kenya's Site picker (operator, 12 Nov 2026)", () => {
   it("names the whole fleet first, then every site with units, Naitiri's lists among them", () => {
     expect(REPORT_SITES.WESTSUGAR.allWord).toBe('West Kenya');
     expect(REPORT_SITES.WESTSUGAR.keys.map((k) => SITE_LISTS[k].label)).toEqual([
-      'Kabras', 'Olepito', 'Naitiri', 'Naitiri trucks',
+      'Kabras', 'Olepito', 'Naitiri',
       'Amuka', 'Khalaba', 'Lake Agro', 'Magut', 'Misikhu', 'Nairobi', 'Selia',
     ]);
     expect(REPORT_SITES.SUKARI).toBeUndefined();
@@ -83,5 +83,43 @@ describe('SITE_KINDS', () => {
     expect(SITE_KINDS[0]).toBe('Trucks');
     expect(SITE_KINDS).toContain('Tractors');
     expect(SITE_KINDS).not.toContain('Truck');
+  });
+});
+
+describe('Naitiri by unit type (operator, 13 Nov 2026: Naitiri and Trucks, not "Naitiri trucks")', () => {
+  it('keeps only the types picked, among Naitiri units', () => {
+    expect(keptByKind(['NAITIRI'], ['Trucks'], ['KCY 523U'])).toBe(true);
+    expect(keptByKind(['NAITIRI'], ['Trucks'], ['KTCC 573E'])).toBe(false);   // a tractor
+    expect(keptByKind(['NAITIRI'], ['Tractors'], ['KTCC 573E'])).toBe(true);
+  });
+  it('Naitiri and Trucks is exactly what "Naitiri trucks" was', () => {
+    const plates = [...NAITIRI_ALL, 'KDW 548J', 'KMGJ 377W'];
+    const viaType = plates.filter((p) => SITE_LISTS.NAITIRI.test.test(p) && keptByKind(['NAITIRI'], ['Trucks'], [p]));
+    expect(new Set(viaType)).toEqual(new Set(NAITIRI_TRUCKS_ALL));
+  });
+  it('leaves every other unit alone, and everything while no type is picked', () => {
+    expect(keptByKind(['NAITIRI', 'OLEPITO'], ['Trucks'], ['WKS - Olepito - KDE 1A'])).toBe(true);
+    expect(keptByKind(['NAITIRI'], null, ['KTCC 573E'])).toBe(true);
+  });
+  it('offers the kinds, Trucks first, and needs one ticked', () => {
+    const p = kindPicker(null, () => {});
+    expect(p.options.map((o) => o.value)).toEqual(SITE_KINDS);
+    expect(p.options[0].value).toBe('Trucks');
+    expect(p.minOne).toBe(true);
+  });
+});
+
+describe('unitSite: the site badge on the map (operator, 13 Nov 2026)', () => {
+  it('names a West Kenya unit by its site', () => {
+    expect(unitSite({ name: 'WKS - Olepito - KDA 123B' }, 'WESTSUGAR')).toBe('Olepito');
+    expect(unitSite({ regPlate: 'KTCC 573E', name: 'KTCC573E' }, 'WESTSUGAR')).toBe('Naitiri');
+  });
+  it('lets the Excel files win over a name for another site', () => {
+    expect(unitSite({ name: `WKS - Amuka - ${NAITIRI_TRUCKS[0]}` }, 'WESTSUGAR')).toBe('Naitiri');
+  });
+  it('is null for another organisation, and for a unit no site claims', () => {
+    expect(unitSite({ name: 'WKS - Olepito - KDA 123B' }, 'MENENGAI')).toBeNull();
+    expect(unitSite({ name: 'West Sugar - KZZ 999Z' }, 'WESTSUGAR')).toBeNull();
+    expect(unitSite(null, 'WESTSUGAR')).toBeNull();
   });
 });

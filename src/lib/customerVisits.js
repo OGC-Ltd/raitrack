@@ -55,7 +55,8 @@ function near(p, c) {
  * The visits in [from, to], latest first.
  * @param {object[]} pings      the unit's readings
  * @param {object[]} customers  lib/deliveriesReport customersIn(), storages and their yards left out
- * @returns {Array<{ name, label, kind, enteredAt, leftAt, stoodMs }>} leftAt null: still there at the last reading
+ * @returns {Array<{ name, label, kind, mid, feature, enteredAt, leftAt, stoodMs }>} leftAt null: still there at the last reading;
+ *   `mid`: the fence's middle, for its coordinates
  */
 export function customerVisits(pings, customers, { from, to }) {
   const list = (pings ?? []).filter((p) => p.t >= from && p.t <= to && fix(p)).sort((a, b) => a.t - b.t);
@@ -72,7 +73,7 @@ export function customerVisits(pings, customers, { from, to }) {
     for (const c of fences) {
       if (metres(p, c.mid) > c.reach || !near(p, c)) continue;
       here.add(c.name);
-      if (!open.has(c.name)) open.set(c.name, { name: c.name, label: customerLabel(c.label ?? c.name), kind: c.kind, enteredAt: p.t, lastAt: p.t, leftAt: null, stoodMs: 0 });
+      if (!open.has(c.name)) open.set(c.name, { name: c.name, label: customerLabel(c.label ?? c.name), kind: c.kind, mid: c.mid, feature: c.feature, enteredAt: p.t, lastAt: p.t, leftAt: null, stoodMs: 0 });
       const cur = open.get(c.name);
       if (prev && cur.lastAt === prev.t && !(p.speedKmh > STAND_KMH) && !(prev.speedKmh > STAND_KMH)) cur.stoodMs += p.t - prev.t;
       cur.lastAt = p.t;
@@ -92,7 +93,7 @@ export function customerVisits(pings, customers, { from, to }) {
       before.stoodMs += r.stoodMs;
       continue;
     }
-    const v = { name: r.name, label: r.label, kind: r.kind, enteredAt: r.enteredAt, leftAt: r.leftAt, stoodMs: r.stoodMs };
+    const v = { name: r.name, label: r.label, kind: r.kind, mid: r.mid, feature: r.feature, enteredAt: r.enteredAt, leftAt: r.leftAt, stoodMs: r.stoodMs };
     visits.push(v);
     last.set(r.name, v);
   }
@@ -134,3 +135,83 @@ export function yardStays(pings, storages, { from, to }, key = 'morl') {
 
 /** The customers the tab reads: every area geofence but the storages and the yards beside them. */
 export const visitCustomers = (customers) => (customers ?? []).filter((c) => !c.nearStorage);
+
+/** How long a visit lasted, as the pick list says it: "18 s", "12 min", "1 h 4 min". */
+export function visitLength(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  if (ms < 60_000) return `${Math.round(ms / 1000)} s`;
+  const m = Math.round(ms / 60_000);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
+}
+
+// Words every shop, road and depot name shares: never a reason to call two names alike
+const COMMON = new Set(['SHOP', 'SHOPS', 'STORE', 'STORES', 'DRIVE', 'ROAD', 'TRADERS', 'TRADER', 'WHOLESALER', 'WHOLESALERS',
+  'WHOLESALE', 'ENTERPRISES', 'ENTERPRISE', 'LIMITED', 'GENERAL', 'HARDWARE', 'SUPERMARKET', 'AGENCIES', 'MINIMART', 'DEPOT',
+  'KENYA', 'MENENGAI', 'MENENGAIVS', 'CENTRE', 'CENTER', 'STAGE', 'MARKET', 'NORTH', 'SOUTH', 'HEADING', 'TANKERS']);
+const wordsOf = (s) => String(s ?? '').toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 4 && !COMMON.has(w));
+
+/**
+ * Does a geofence's name share a distinctive word with the customer on the sheet ("MAMA BEN SHOP" and
+ * "Mama Ben")? Only a hint on the pick list (operator, 13 Nov 2026: pick the one that is the customer);
+ * the operator still picks.
+ */
+export function nameLike(fence, customer) {
+  const want = new Set(wordsOf(customer));
+  return want.size > 0 && wordsOf(fence).some((w) => want.has(w));
+}
+
+/** Customers this close to the one on the sheet are listed beside it, the nearest first, at most NEAR_TARGET_MAX. */
+export const NEAR_TARGET_M = 500;
+export const NEAR_TARGET_MAX = 8;
+
+/**
+ * How the route went by a customer (operator, 13 Nov 2026: "how far the car passed away from that
+ * customer and the speed it was on"): its closest reading in [from, to], measured as stopCheck measures,
+ * from a pasted point's centre, from a drawn geofence's edge, 0 inside it.
+ * @returns {{ m, t, speedKmh, inside }|null} speedKmh null: the reading has none; null: no readings
+ */
+export function closestPass(pings, feature, { from = -Infinity, to = Infinity } = {}) {
+  if (!feature?.geometry) return null;
+  const centre = feature.geometry.type === 'Point' ? middleOf(feature) : null;
+  let best = null;
+  for (const p of pings ?? []) {
+    if (p.t < from || p.t > to || !fix(p)) continue;
+    const inside = fenceContains(p, feature);
+    const m = inside ? 0 : centre ? metres(p, centre) : metresToFence(p, feature);
+    if (!best || m < best.m) best = { m, t: p.t, speedKmh: Number.isFinite(p.speedKmh) ? p.speedKmh : null, inside };
+  }
+  return best;
+}
+
+/**
+ * The customers around the one on the sheet (operator, 13 Nov 2026: "include the customer close to the
+ * actual customer we were targeting"): fences whose middle is within `radiusM` of its middle, the nearest
+ * first, itself left out. Each with `mid` and `fromTarget` (metres, middle to middle).
+ */
+export function customersNear(customers, feature, { radiusM = NEAR_TARGET_M, max = NEAR_TARGET_MAX } = {}) {
+  const at = middleOf(feature);
+  if (!at) return [];
+  const own = feature?.properties?.name;
+  const out = [];
+  for (const c of customers ?? []) {
+    if (c.feature === feature) continue;
+    const mid = middleOf(c.feature);
+    if (!mid) continue;
+    const fromTarget = metres(at, mid);
+    // The same fence under the sheet's name: itself
+    if (fromTarget <= radiusM && !(fromTarget < 1 && own && c.name === own)) out.push({ ...c, label: customerLabel(c.label ?? c.name), mid, fromTarget });
+  }
+  return out.sort((a, b) => a.fromTarget - b.fromTarget).slice(0, max);
+}
+
+/** Metres between two points, null when either is missing. */
+export const metresApart = (a, b) => (a && b ? metres(a, b) : null);
+
+/** A distance as the pick list says it: "40 m", "1.2 km". */
+export function distanceWords(m) {
+  if (!Number.isFinite(m)) return null;
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+}
+
+/** "-0.28331, 36.07120": a fence's middle as coordinates are copied. */
+export const coordWords = (p) => (p && Number.isFinite(p.lat) && Number.isFinite(p.lng) ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : null);

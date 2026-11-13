@@ -98,6 +98,10 @@
   --sp4-info:   #93c5fd;
   --sp4-warn:   #f59e0b;
   --sp4-accent: #3b82f6;   /* active tab underline, focus ring             */
+  /* A filled blue button and the text on it. Never black on blue (operator, 13 Nov 2026):
+     white on #2563eb is 5.2:1, where white on the ring's #3b82f6 would be 3.7:1. */
+  --sp4-accent-fill: #2563eb;
+  --sp4-on-accent:   #ffffff;
   /* The edge of an INPUT, which has to be seen rather than merely implied.
      `--sp4-line-hi` is a hairline BETWEEN rows — it reads at 1.6:1 against the
      panel, which is fine for a table rule and fails 1.4.11 for the boundary of
@@ -1147,6 +1151,7 @@
   --sp4-info:   var(--accent-info, #0369a1);
   --sp4-warn:   var(--accent-warn, #b45309);
   --sp4-accent: var(--accent-info, #0369a1);
+  --sp4-accent-fill: var(--accent-info, #0369a1);   /* white on it: 5.9:1 */
   /* #a78bfa is ~2.2:1 on white. Same hue, driven down the lightness axis. */
   --sp4-stat:   #6d28d9;
 }
@@ -2417,9 +2422,9 @@
    measured. Matching its weight here and beating it by one below is what keeps
    the selected outcome visible in both themes. */
 .sp4-filter-chip.sp4-out-chip--on {
-  background: var(--sp4-accent);
-  border-color: var(--sp4-accent);
-  color: #050505;
+  background: var(--sp4-accent-fill);
+  border-color: var(--sp4-accent-fill);
+  color: var(--sp4-on-accent);
 }
 .sp4-filter-chip.sp4-out-chip--needs_spare.sp4-out-chip--on { background: var(--sp4-warn); border-color: var(--sp4-warn); }
 .sp4-filter-chip.sp4-out-chip--cannot_fix.sp4-out-chip--on  { background: var(--sp4-crit); border-color: var(--sp4-crit); }
@@ -2533,10 +2538,11 @@
 }
 .sp4-submit-btn {
   padding: 5px 14px;
-  border: 1px solid var(--sp4-accent);
+  /* Fallbacks for panels that set their own --sp4-accent outside .sp4-root (UserIamPanel, UserLoginActivityPanel) */
+  border: 1px solid var(--sp4-accent-fill, var(--sp4-accent));
   border-radius: 5px;
-  background: var(--sp4-accent);
-  color: #050505;
+  background: var(--sp4-accent-fill, var(--sp4-accent));
+  color: var(--sp4-on-accent, #ffffff);
   font-family: inherit;
   font-size: var(--sp4-label);
   font-weight: 700;
@@ -2609,7 +2615,7 @@
    where picking the wrong one is a claim about a vehicle's fate. */
 .sp4-filter-chip.sp4-out-chip--fixed.sp4-out-chip--on  { background: var(--sp4-ok);   border-color: var(--sp4-ok); }
 .sp4-filter-chip.sp4-out-chip--failed.sp4-out-chip--on { background: var(--sp4-crit); border-color: var(--sp4-crit); }
-.app--light .sp4-submit-btn { color: #fff; }
+.app--light .sp4-submit-btn { color: var(--sp4-on-accent); }
 
 /* Hallmark · component: dialog + combobox · genre: modern-minimal
  * theme: in-project (SensorPanel sp4 tokens, preserved) · pre-emit: P5 H5 E5 S5 R5 V4
@@ -3208,10 +3214,9 @@
   font-size: 9.5px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.1em;
   padding: 2px 6px; border-radius: 999px;
-  /* The panel's own ground, not #fff. White on `--sp4-accent` measured 3.68:1
-     on dark — a fail at 9.5px, and the two toned variants below already spell
-     their text with `--sp4-bg`, so this was also the odd one out. */
-  background: var(--sp4-accent); color: var(--sp4-bg);
+  /* White on the darker fill, never black on blue (operator, 13 Nov 2026): white on
+     `--sp4-accent` was 3.68:1 on dark, on `--sp4-accent-fill` it is 5.2:1 (light: 5.9:1). */
+  background: var(--sp4-accent-fill); color: var(--sp4-on-accent);
 }
 /* text-3, not text-4, and the same for the meta line below.
    `--sp4-text-4` is the token for "least-important aside", and measured 4.14:1

@@ -37,8 +37,9 @@ const fmt = (n) => n.toLocaleString('en-GB');
 const KPI_LABELS = ['Units over', 'Occurrences', 'Highest, km/h', 'Distance over, km', 'Mileage, km'];
 
 export default function SpeedReport({ orgId, orgCode, companyName, active = true }) {
-  const { picked, several, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker } = useReportOrgs('speedReport', { orgId, orgCode, companyName });
-  const [day, setDay] = useState(() => yesterday());
+  const { picked, several, orgIdOf, nameOf, keepUnit, kindOf, pickedWords, picker, typePicker } = useReportOrgs('speedReport', { orgId, orgCode, companyName });
+  // Today until another day is picked (operator, 13 Nov 2026)
+  const [day, setDay] = useState(() => yesterday(Date.now() + 86_400_000));
   const [group, setGroup] = useState('all');
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
@@ -128,6 +129,7 @@ export default function SpeedReport({ orgId, orgCode, companyName, active = true
           </label>
         )}
         {picker && <CheckPicker {...picker} />}
+        {typePicker && <CheckPicker {...typePicker} />}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', execute)}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for this day'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}

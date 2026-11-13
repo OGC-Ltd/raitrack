@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { customerVisits, customerLabel, isFgVs, VISIT_GAP_MS } from './customerVisits';
+import { customerVisits, customerLabel, isFgVs, VISIT_GAP_MS, visitLength, nameLike } from './customerVisits';
 
 const t0 = Date.parse('2026-11-11T07:00:00+03:00');
 const min = 60_000;
@@ -56,5 +56,52 @@ describe('MORL HQ among the customers (operator, 12 Nov 2026)', async () => {
   });
   it('none away from MORL', () => {
     expect(yardStays([at(0, away.lat, away.lng), at(10, -0.30, 36.10)], storages, span)).toEqual([]);
+  });
+});
+
+describe('the pick list words (operator, 13 Nov 2026)', () => {
+  it('says how long a visit lasted', () => {
+    expect(visitLength(18_000)).toBe('18 s');
+    expect(visitLength(12 * 60_000)).toBe('12 min');
+    expect(visitLength(64 * 60_000)).toBe('1 h 4 min');
+    expect(visitLength(120 * 60_000)).toBe('2 h');
+    expect(visitLength(null)).toBeNull();
+  });
+  it('calls two names alike only on a distinctive word', () => {
+    expect(nameLike('MUSTAKIM SHOP', 'Mustakim')).toBe(true);
+    expect(nameLike('SV shop', 'Mustakim shop')).toBe(false);
+    expect(nameLike('MENENGAIVS: SP WHOLESALER', 'Menengai wholesaler')).toBe(false);
+    expect(nameLike('rai farm', '-')).toBe(false);
+  });
+});
+
+describe('the customer on the sheet and those around it (operator, 13 Nov 2026)', async () => {
+  const { closestPass, customersNear, distanceWords, coordWords } = await import('./customerVisits');
+  it('how close the route came to a customer, and its speed there', () => {
+    // 0.001° of latitude is about 111 m
+    const pings = [at(0, -0.31, 36.10, 60), at(5, -0.301, 36.10, 42), at(10, -0.305, 36.10, 50)];
+    const c = closestPass(pings, A.feature, span);
+    expect(c.t).toBe(t0 + 5 * min);
+    expect(c.speedKmh).toBe(42);
+    expect(c.inside).toBe(false);
+    expect(Math.round(c.m / 10)).toBe(11);
+  });
+  it('0 m inside, with the reading\'s speed; null with no readings', () => {
+    expect(closestPass([at(0, -0.30, 36.10, 8)], A.feature, span)).toMatchObject({ m: 0, inside: true, speedKmh: 8 });
+    expect(closestPass([], A.feature, span)).toBeNull();
+  });
+  it('the customers within 500 m of the target, nearest first, itself left out', () => {
+    const near1 = pin('menengai: Next door', -0.3005, 36.10);
+    const near2 = pin('menengai: Down the road', -0.303, 36.10);
+    const far = pin('menengai: Far away', -0.31, 36.10);
+    const got = customersNear([far, near2, A, near1], A.feature);
+    expect(got.map((c) => c.label)).toEqual(['Next door', 'Down the road']);
+    expect(Math.round(got[0].fromTarget)).toBeGreaterThan(50);
+  });
+  it('says distances and coordinates', () => {
+    expect(distanceWords(40.4)).toBe('40 m');
+    expect(distanceWords(1234)).toBe('1.2 km');
+    expect(distanceWords(23_400)).toBe('23 km');
+    expect(coordWords({ lat: -0.283311, lng: 36.0712 })).toBe('-0.28331, 36.07120');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { fgLines, fgCells, fgCsv, finishedGoodsDoc, fgDueNotes, regOf, FG_HEADS, FG_FILL, NOT_GEOFENCED, fgState, fgFill, loadTemplate, saveTemplate } from './finishedGoodsReport';
+import { fgLines, fgCells, fgCsv, finishedGoodsDoc, fgDueNotes, regOf, FG_HEADS, FG_FILL, NOT_GEOFENCED, fgState, fgFill, fgColour, FG_COLOURS, loadTemplate, saveTemplate } from './finishedGoodsReport';
 
 // 30.10.2026 in Nairobi, as epoch ms
 const at = (hhmm) => Date.parse(`2026-10-30T${hhmm}:00+03:00`);
@@ -34,6 +34,14 @@ describe('Finished Goods template: one line per customer', () => {
     expect(lines.map(fgState)).toEqual(['ok', 'miss', 'done', 'miss']);
     expect(fgFill(lines[2])).toBe(FG_FILL.done);
     expect(fgCsv(lines).fills).toEqual([FG_FILL.ok, FG_FILL.miss, FG_FILL.done, FG_FILL.miss]);
+    // A colour picked by hand wins, on screen and in the Excel (operator, 13 Nov 2026)
+    const colours = new Map([[lines[1].key, 'done']]);
+    expect(fgColour(lines[1], colours)).toBe('done');
+    expect(fgColour(lines[0], colours)).toBe('ok');
+    expect(fgFill(lines[1], 1)).toBe(FG_FILL.miss);
+    expect(fgColour(lines[1], new Map([[lines[1].key, 'purple']]))).toBe('miss');
+    expect(fgCsv(lines, colours).fills).toEqual([FG_FILL.ok, FG_FILL.done, FG_FILL.done, FG_FILL.miss]);
+    expect(FG_COLOURS.map((c) => c.state)).toEqual(['done', 'ok', 'miss']);
     // Back at the yard with this customer never reached: green, and said so under the name
     // (operator, 12 Nov 2026: "highlight under the customers name 'Customers Name Not Geofenced' and highlight the row as green")
     const missedBack = fgLines([{ ...backRow, customers: [{ name: 'x', label: 'X', at: null }] }], { at: at('20:00') });
@@ -129,6 +137,11 @@ describe('the PDF bar and dropped lines (operator, 11 Nov 2026)', () => {
     expect(table.rows).toHaveLength(1);
     expect(table.rows[0][2].text).toBe('Kisumu Bypass');
     expect(doc.blocks[0].aside).toBe('1/1 customers reached · 1 vehicle');
+  });
+  it('a colour picked for a line fills its PDF row', () => {
+    const doc = finishedGoodsDoc([r], { from: at('07:00'), at: at('14:00'), fleet: 'M', orgCode: 'MENENGAI', now: at('14:00'), colours: new Map([['K|a', 'done']]) });
+    const table = doc.blocks.find((b) => b.kind === 'table');
+    expect(table.rows.map((row) => row[0].fill)).toEqual([FG_FILL.done, FG_FILL.ok]);
   });
 });
 
