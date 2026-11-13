@@ -11,8 +11,13 @@
  * and the kilometres between trips.
  */
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import './FuelConsumptionRateReport.css';
+import { withTypeTargets, fuelGroupsFor, rowsInGroup, groupCounts, totalsOf } from '../../lib/fuelTargets';
+import ChoicePicker from './ChoicePicker';
+import { fleetEntriesFor } from '../../lib/fleetListFile';
+import { useQueryClient } from '@tanstack/react-query';
+import { fleetListEntries } from '../../hooks/useFleetList';
 import { loadFuelConsumptionRate, makeReportDoc } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
@@ -25,8 +30,11 @@ import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
+import { isMorlFcr, fcrMorlDoc, morlFcrSheet, morlFcrTable, MORL_FCR_COLUMNS, RATE_COL } from '../../lib/fuelRateMorl';
 
 const MAX_DAYS = 31;
+/** Which of their head colours a column's band is (lib/fuelRateMorl): blue, orange (with thefts) or green (minus thefts). */
+const bandOf = (fill) => ({ '#ffc000': 'with', '#00b050': 'minus' }[String(fill).toLowerCase()] ?? 'base');
 /** One empty list, so the editor (which resets when its rows change) sees the same one each render. */
 const NONE = [];
 
@@ -58,8 +66,12 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
   // Today until another day is picked (operator, 13 Nov 2026)
   const [days, setDays] = useState({ from: today, to: today });
   const [run, setRun] = useState({ status: 'idle' });
+  // One category or all (operator, 13 Nov 2026): the organisation's fleet groups, Tankers, Finished Goods …
+  const [group, setGroup] = useState(null);
+  const groups = fuelGroupsFor(orgCode);
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
+  const qc = useQueryClient();
 
   const fleet = companyName ?? orgCode ?? '';
 
@@ -68,23 +80,40 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
     const id = ++runId.current;
     setRun({ status: 'loading' });
     try {
-      const data = await loadFuelConsumptionRate({ orgId, from: days.from, to: days.to });
+      const [data, uploadedList] = await Promise.all([
+        loadFuelConsumptionRate({ orgId, from: days.from, to: days.to }),
+        fleetListEntries(qc, orgId),
+      ]);
       if (id !== runId.current) return;
       const period = days.from === days.to ? days.from : `${days.from} – ${days.to}`;
-      setRun({ status: 'done', rows: data.rows ?? [], totals: data.totals, period, from: days.from, to: days.to });
+      // A target from the fleet Excel's TYPE where none is set by registration (operator, 13 Nov 2026)
+      const rows = withTypeTargets(data.rows ?? [], fleetEntriesFor(orgCode, uploadedList));
+      setRun({ status: 'done', rows, totals: data.totals, period, from: days.from, to: days.to });
     } catch (err) {
       if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
 
   const done = run.status === 'done' ? run : null;
-  const rows = done?.rows ?? NONE;
-  const totals = done?.totals ?? null;
+  const allRows = done?.rows ?? NONE;
+  const rows = useMemo(() => (group ? rowsInGroup(allRows, orgCode, group) : allRows), [allRows, orgCode, group]);
+  // The whole fleet's as the server gave them; one category's worked out the same way over its rows
+  const totals = group ? totalsOf(rows) : (done?.totals ?? null);
+  const counts = useMemo(() => groupCounts(allRows, orgCode), [allRows, orgCode]);
 
-  const sheet = () => fcrDoc(rows, { from: done.from, to: done.to, fleet, orgCode, totals });
+  // Menengai's own sheet, their columns and colours (operator, 13 Nov 2026); the general one elsewhere
+  const morl = isMorlFcr(orgCode);
+  const fleetWords = group ? `${fleet} · ${group}` : fleet;
+  const sheet = () => (morl ? fcrMorlDoc(rows, { from: done.from, to: done.to, fleet: fleetWords, orgCode })
+    : fcrDoc(rows, { from: done.from, to: done.to, fleet: fleetWords, orgCode, totals }));
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
 
-  const makePdf = (landscape = true) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
+  // Menengai's fifteen columns are laid out across a landscape page (lib/fuelRateMorl): the server turns
+  // the page only when asked, so their sheet is always asked for landscape, whichever way is picked
+  const makePdf = (picked = true) => {
+    const landscape = morl || picked;
+    return editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() });
+  };
   const preview = usePdfPreview(makePdf);
 
   const save = async (as, landscape = true) => {
@@ -102,7 +131,13 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
 
   const saveCsv = () => {
     if (!done) return;
-    const { head, rows: data, filenameSlug } = toCsv(rows, done.period);
+    const { head, rows: data, filenameSlug: slug } = toCsv(rows, done.period);
+    const filenameSlug = group ? `${slug}-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : slug;
+    if (morl) {
+      const s = morlFcrSheet(rows);
+      downloadTableCsv({ head: s.head, headFills: s.headFills, body: s.body, filenameSlug });
+      return;
+    }
     downloadTableCsv({ head, body: data, filenameSlug });
   };
 
@@ -117,6 +152,12 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
           maxDays={MAX_DAYS} spans={[7, 14, 31]} label="Date range"
           onChange={(from, to) => setDays({ from, to: to ?? from })}
         />
+        {groups && (
+          <ChoicePicker icon="ti-users-group" label="Category" value={group}
+                        options={[{ value: null, label: 'All', ...(done ? { note: allRows.length } : {}) },
+                          ...groups.map((g) => ({ value: g.name, label: g.name, ...(done ? { note: counts[g.name] ?? 0 } : {}) }))]}
+                        onChange={setGroup} />
+        )}
         <button
           type="button" className="sp4-submit-btn frp-run rpt-run"
           onClick={execute}
@@ -145,7 +186,7 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
 
       {done && rows.length === 0 && (
         <EmptyNote icon="ti-mood-happy" title="No Data">
-          No units to report in this period.
+          {group ? `No ${group} units to report in this period.` : 'No units to report in this period.'}
         </EmptyNote>
       )}
 
@@ -181,7 +222,7 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
           <TableToolbar
             summary={<>
               Fuel Consumption Rate · <strong>{rows.length}</strong> vehicle{rows.length === 1 ? '' : 's'}
-              <span className="rpt-sub"> · {fleet} · {done.period} · fleet rate over the {totals?.measured ?? 0} units with a measured figure</span>
+              <span className="rpt-sub"> · {fleetWords} · {done.period} · fleet rate over the {totals?.measured ?? 0} units with a measured figure</span>
             </>}
             onCsv={saveCsv}
             onPdf={file.busy ? undefined : (landscape) => save('pdf', landscape)} pdfWays
@@ -196,6 +237,29 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
           />
           {preview.state && <PdfPreview state={preview.state} title="Fuel Consumption Rate report" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
 
+          {morl ? (
+            <div className="sp4-table-scroll rpt-scroll">
+              {/* Menengai's sheet: their columns and their head colours, as a band over each head, in the app's type */}
+              <table className="sp4-table rpt-table fcr-morl" aria-describedby="fcr-morl-range">
+                <caption id="fcr-morl-range" className="fcr-morl__range">{done.from === done.to ? done.from : `${done.from} to ${done.to}`}</caption>
+                <thead>
+                  <tr>{MORL_FCR_COLUMNS.map((c, i) => (
+                    <th key={c.head} scope="col" className={`fcr-morl__th${c.fill ? ` fcr-morl__th--${bandOf(c.fill)}` : ''}${i > 0 && i < MORL_FCR_COLUMNS.length - 1 ? ' sp4-th--right' : ''}`}>{c.head}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  {morlFcrTable(rows).body.map((cells, ri) => (
+                    <tr key={ri} className="sp4-tr">
+                      {cells.map((c, i) => (
+                        <td key={i} className={i === 0 ? 'fcr-plate' : i < MORL_FCR_COLUMNS.length - 1 ? `fcr-morl__num${i === RATE_COL ? ' fcr-morl__rate' : ''}` : 'fcr-morl__words'}
+                            style={i === RATE_COL && c.fill ? { '--fcr-scale': c.fill } : undefined}>{c.text}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
           <div className="sp4-table-scroll rpt-scroll">
             <table className="sp4-table rpt-table fcr-table">
               <thead>
@@ -246,6 +310,7 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
               </tfoot>
             </table>
           </div>
+          )}
         </>
       )}
     </div>

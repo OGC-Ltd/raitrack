@@ -60,6 +60,7 @@ import TatFuelReport from './TatFuelReport';
 import AlarmDistributionReport from './AlarmDistributionReport';
 import UnauthorizedPassengersReport from './UnauthorizedPassengersReport';
 import FuelConsumptionRateReport from './FuelConsumptionRateReport';
+import FuelGraphReport from './FuelGraphReport';
 import RecoveryReport from './RecoveryReport';
 import SpeedReport from './SpeedReport';
 import ProbeReport from './ProbeReport';
@@ -718,6 +719,8 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
     alarmDist && { key: 'alarmDist', label: 'Alarm Distribution' },
     unauthorizedPassengers && { key: 'unauthorizedPassengers', label: 'Unauthorized Passengers' },
     fuelConsumption && { key: 'fuelConsumption', label: 'Fuel Consumption Rate' },
+    // Each unit's fuel graph on a page, its figures under it (operator, 13 Nov 2026)
+    fuelConsumption && { key: 'fuelGraphs', label: 'Fuel Graphs' },
   ].filter(Boolean);
   return (
     <>
@@ -783,6 +786,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
       {fuelConsumption && (
       <div className="mvt-panel" role="tabpanel" id="mvt-fuelConsumption-panel" aria-labelledby="mvt-fuelConsumption" hidden={tab !== 'fuelConsumption'}>
         <FuelConsumptionRateReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'fuelConsumption'} />
+      </div>
+      )}
+      {fuelConsumption && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-fuelGraphs-panel" aria-labelledby="mvt-fuelGraphs" hidden={tab !== 'fuelGraphs'}>
+        <FuelGraphReport orgId={orgId} orgCode={orgCode} companyName={companyName} />
       </div>
       )}
     </>

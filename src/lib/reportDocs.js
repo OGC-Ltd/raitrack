@@ -19,7 +19,7 @@ import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCe
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
-import { HEADS as HEALTH_HEADS, KEY as HEALTH_KEY, NOT_WORKING, WORKING, byGroup as healthByGroup, rowCells as healthCells, summary as healthSummary } from './probeHealthReport';
+import { KEY as HEALTH_KEY, NOT_WORKING, WORKING, byGroup as healthByGroup, cellsFor as healthCells, headsFor as healthHeads, hasFleetList, summary as healthSummary } from './probeHealthReport';
 import { groupsFor } from './fleetGroups';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, sheetSub, spansDays, stopWords, SHEET_STOP_HEADS, sheetStopCells } from './deliveriesReport';
 
@@ -369,18 +369,26 @@ export function probeDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
  * saying which filter. `trucks` names it for the Trucks filter. Grouped by the
  * fleet's list (lib/fleetGroups) when it has one.
  */
-export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode, groups = groupsFor(orgCode), now = Date.now() }) {
+export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode, groups = groupsFor(orgCode), now = Date.now(), landscape = false, fleetList = undefined }) {
   const asAt = dmyhm(now);
   const items = healthSummary(rows).map((x) => ({ label: x.label, value: fmt(x.value), ...(x.flag ? { flag: true } : {}) }));
   const blocks = [{ kind: 'h2', title: '1. Overview', aside: `as at ${asAt}` }];
   for (let i = 0; i < items.length; i += 3) blocks.push({ kind: 'figures', items: items.slice(i, i + 3) });
   blocks.push({ kind: 'h2', title: '2. Hardware by unit', aside: note || plural(rows.length, 'unit') });
-  const cols = columns([40, 28, 29, 29, 29, 29], PORTRAIT_MM, { wrap: new Set([0]) });
-  // Faulty hardware stands out; what cannot be judged steps back.
-  const cell = (t, i) => (i < 2 ? textCell(t, i === 0)
+  // Driver and Status from the client's fleet list, when its units are on it (operator, 13 Nov 2026)
+  const listed = hasFleetList(rows, fleetList);
+  const head = healthHeads(rows, fleetList);
+  const info = listed ? 4 : 2;             // the columns before the parts
+  // Across the whole page, upright or turned (operator, 13 Nov 2026: "the columns are so squeezed")
+  const body = landscape ? LANDSCAPE_MM : PORTRAIT_MM;
+  const cols = listed
+    ? columns([22, 24, 38, 21, 19, 19, 19, 19], body, { wrap: new Set([0, 2]) })
+    : columns([40, 28, 29, 29, 29, 29], body, { wrap: new Set([0]) });
+  // Faulty hardware stands out; what cannot be judged steps back. A truck in an accident stands out too
+  const cell = (t, i) => (i < info ? (listed && i === 3 && t === 'Accident' ? { text: t, bold: true, tone: 'flag' } : textCell(t, i === 0))
     : t === NOT_WORKING ? { text: t, bold: true, tone: 'flag', fill: '#fbe3e0' }
     : t === WORKING ? textCell(t) : { text: t, tone: 'mut' });
-  const table = (list) => ({ kind: 'table', cols, head: HEALTH_HEADS, size: 7.8, rows: list.map((r) => healthCells(r).map(cell)) });
+  const table = (list) => ({ kind: 'table', cols, head, size: 7.8, rows: list.map((r) => healthCells(r, listed, fleetList).map(cell)) });
   // By the client's fleet-list groups (Tankers, Finished Goods, ...) where the
   // fleet has a list; one table otherwise.
   const grouped = healthByGroup(rows, groups);

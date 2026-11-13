@@ -4429,3 +4429,4 @@
 .sp4-silent-icon { font-size: 28px; line-height: 1; color: var(--sp4-crit, #ef4444); }
 /* The Excel button when its file could not be made (body/TableToolbar); the reason is in its title */
 .sp4-ghost-btn.sp4-ghost-btn--error { color: #b42318; border-color: #f1b5ae; }
+

@@ -35,7 +35,7 @@
 // and should not acquire one: it sits directly above that grid, inside those
 // tabs, and a second visual language on one screen reads as two products.
 
-import { useCallback, useEffect, useMemo, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import TablePager, { usePager } from "./TablePager";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { vehicleReadings } from "../../lib/vehicleReadings";
@@ -44,6 +44,11 @@ import {
 } from "../../api/probeHealth";
 import { downloadProbeCsv } from "../../utils/probeReport";
 import { probeHealthDoc } from "../../lib/reportDocs";
+import { fleetListMap } from "../../lib/probeHealthReport";
+import { readFleetWorkbook, builtInFleetList } from "../../lib/fleetListFile";
+import { useFleetList } from "../../hooks/useFleetList";
+import { fleetListFileLink, MAX_FLEET_FILE_BYTES } from "../../api/fleetList";
+import "./ProbeFleetList.css";
 import { makeReportDoc } from "../../api/reports";
 import { saveFile } from "../../api/tripReport";
 import { savePdfAsJpeg } from "../../api/pdfJpeg";
@@ -320,9 +325,69 @@ export default function ProbeHealthPanel({
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
   const fleet = activeCompany?.name ?? orgCode ?? "Fleet";
-  const sheet = () => probeHealthDoc(rows, { note: filterNote, fleet, trucks: trucksOnly, orgCode });
+  // Drivers and statuses: the fleet Excel uploaded for the organisation, kept by the server for every
+  // user (operator, 13 Nov 2026), else the list built in
+  const { can } = usePermissions();
+  const mayUpload = can("vehicle:update");
+  const shared = useFleetList(orgId);
+  const uploaded = shared.data?.current ?? null;
+  const history = shared.data?.history ?? [];
+  // The built-in list is Menengai's alone: another organisation reads only a file uploaded for it
+  const builtIn = builtInFleetList(orgCode);
+  const fleetList = useMemo(() => fleetListMap(uploaded?.entries ?? builtIn ?? {}), [uploaded, builtIn]);
+  const fileInput = useRef(null);
+  const [listNote, setListNote] = useState(null);
+  const busy = Boolean(listNote?.busy) || shared.saving;
+  const takeFleetFile = async (f) => {
+    if (!f) return;
+    if (f.size > MAX_FLEET_FILE_BYTES) {
+      setListNote({ error: `The file is over ${MAX_FLEET_FILE_BYTES / 1024 / 1024} MB, the most that can be kept.` });
+      return;
+    }
+    setListNote({ busy: true });
+    let got;
+    try {
+      got = await readFleetWorkbook(f);
+      if (!Object.keys(got.entries).length) throw new Error("no sheet with TRUCK NO and DRIVER NAME columns was found");
+    } catch (err) {
+      setListNote({ error: `The file could not be read: ${err?.message ?? err}` });
+      return;
+    }
+    try {
+      const saved = await shared.upload({ file: f, fileName: f.name, entries: got.entries, sheets: got.sheets, conflicts: got.conflicts });
+      const count = saved?.current?.count ?? Object.keys(got.entries).length;
+      setListNote({ words: `${count} units read from ${got.sheets.length} sheet${got.sheets.length === 1 ? "" : "s"}, saved for everyone in ${fleet}`
+        + (got.conflicts.length ? `; ${got.conflicts.length} plate${got.conflicts.length === 1 ? " is" : "s are"} on two sheets, the first kept (${got.conflicts.map((c) => c.plate).join(", ")})` : "") });
+    } catch (err) {
+      setListNote({ error: `The list could not be saved: ${err?.message ?? err}` });
+    }
+  };
+  // The Excel as it was uploaded, kept in S3: a short-lived link the browser downloads (the server names the file)
+  const [fetching, setFetching] = useState(null);
+  const downloadList = async (v) => {
+    setFetching(v.id);
+    try {
+      const { url } = await fleetListFileLink(orgId, v.id);
+      const a = document.createElement("a");
+      a.href = url;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setListNote({ error: `${v.fileName ?? "The file"} could not be downloaded: ${err?.message ?? err}` });
+    } finally {
+      setFetching(null);
+    }
+  };
+  const putBack = async () => {
+    setListNote(null);
+    try { await shared.reset(); } catch (err) { setListNote({ error: `The list could not be changed: ${err?.message ?? err}` }); }
+  };
+  const when = (ms) => new Date(ms).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  const sheet = (landscape = false) => probeHealthDoc(rows, { note: filterNote, fleet, trucks: trucksOnly, orgCode, landscape, fleetList });
   const editor = useReportEditor({ orgId, source: rows, build: sheet });
-  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet() }));
+  const makePdf = (landscape) => (editor.edited ? editor.make(landscape) : makeReportDoc({ orgId, landscape, doc: sheet(landscape) }));
   const preview = usePdfPreview(makePdf);
   const [file, setFile] = useState({ busy: false, error: null });
   const save = async (as, landscape = false) => {
@@ -359,7 +424,7 @@ export default function ProbeHealthPanel({
         note={filterNote}
         loading={loading}
         onReload={() => editor.guard("Reload the probes", onReload)}
-        onCsv={() => downloadProbeCsv(rows, { filenameSlug })}
+        onCsv={() => downloadProbeCsv(rows, { filenameSlug, fleetList })}
         disabled={!rows.length}
         actions={ready && <>
           {editor.button}
@@ -370,6 +435,70 @@ export default function ProbeHealthPanel({
           <PreviewButton onPreview={preview.open} disabled={Boolean(file.busy)} />
         </>}
       />
+      {/* The drivers and statuses the report's Driver and Status columns read: upload the fleet Excel before making it */}
+      <div className="pfl" role="group" aria-label="Fleet list for the Driver and Status columns">
+        <i className="ti ti-file-spreadsheet pfl__icon" aria-hidden="true" />
+        <p className="pfl__what">
+          <span className="pfl__label">Drivers and status</span>
+          {shared.isLoading ? (
+            <span className="pfl__src">Reading the organisation&apos;s list…</span>
+          ) : uploaded ? (
+            <span className="pfl__src"><b>{uploaded.fileName}</b>, {uploaded.count} units, uploaded {when(uploaded.at)}{uploaded.by ? ` by ${uploaded.by}` : ""}</span>
+          ) : builtIn ? (
+            <span className="pfl__src"><b>Built-in fleet list</b>, {Object.keys(builtIn).length} units from MORL_FLEET of 13 Nov 2026</span>
+          ) : (
+            <span className="pfl__src pfl__src--none">No fleet list for this organisation.{mayUpload ? " Upload one to add the Driver and Status columns." : ""}</span>
+          )}
+          {shared.error && <span className="pfl__src pfl__src--error">The organisation&apos;s list could not be read, so the built-in one is used.</span>}
+        </p>
+        {mayUpload && (
+        <div className="pfl__acts">
+          <input ref={fileInput} type="file" hidden tabIndex={-1}
+                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; takeFleetFile(f); }} />
+          <button type="button" className="sp4-ghost-btn pfl__btn" disabled={busy || editor.edited}
+                  aria-busy={busy} onClick={() => fileInput.current?.click()}
+                  title={editor.edited ? "Discard your edits to read a new list" : `Upload the fleet Excel (laid out as MORL_FLEET.xlsx): its drivers and statuses are used for everyone in ${fleet}`}>
+            <i className={`ti ${busy ? "ti-loader-2 pfl__spin" : "ti-upload"}`} aria-hidden="true" />
+            {listNote?.busy ? "Reading…" : shared.saving ? "Saving…" : "Upload fleet Excel"}
+          </button>
+          {uploaded?.file && (
+            <button type="button" className="sp4-ghost-btn pfl__btn" disabled={fetching === uploaded.id} aria-busy={fetching === uploaded.id}
+                    onClick={() => downloadList(uploaded)} title={`Download ${uploaded.fileName} as it was uploaded`}>
+              <i className={`ti ${fetching === uploaded.id ? "ti-loader-2 pfl__spin" : "ti-download"}`} aria-hidden="true" />
+              Download
+            </button>
+          )}
+          {uploaded && (
+            <button type="button" className="sp4-ghost-btn pfl__btn" disabled={busy || editor.edited} onClick={putBack}
+                    title="Stop using the uploaded list; it stays on record">
+              {builtIn ? "Use built-in list" : "Stop using this list"}
+            </button>
+          )}
+        </div>
+        )}
+        {history.length > 1 && (
+          <details className="pfl__history">
+            <summary>Earlier lists ({history.length - 1})</summary>
+            <ul>
+              {history.slice(1).map((h) => (
+                <li key={h.id}>
+                  {h.reset ? "Back to the built-in list" : `${h.fileName}, ${h.count} units`}, {when(h.at)}{h.by ? ` by ${h.by}` : ""}
+                  {mayUpload && h.file && (
+                    <button type="button" className="pfl__link" disabled={fetching === h.id} aria-busy={fetching === h.id}
+                            onClick={() => downloadList(h)} aria-label={`Download ${h.fileName}, uploaded ${when(h.at)}`}>
+                      {fetching === h.id ? "Downloading…" : "Download"}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {(listNote?.words || listNote?.error) && (
+          <p className={`pfl__note${listNote.error ? " pfl__note--error" : ""}`} role="status">{listNote.error ?? listNote.words}</p>
+        )}
+      </div>
       {editor.overlay}
       {preview.state && <PdfPreview state={preview.state} title="Probe & sensor health" edited={editor.edited ? 1 : 0} onRetry={preview.retry} onClose={preview.close} />}
 

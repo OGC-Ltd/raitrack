@@ -32,7 +32,9 @@ import { buildSensorReport } from "./sensorReport";
  * cannot run.
  */
 export function csvField(value) {
-  const s = value == null ? "" : String(value);
+  // A styled cell ({ text, fill }, as the Excel file takes them) is its text here
+  const v = value != null && typeof value === "object" && "text" in value ? value.text : value;
+  const s = v == null ? "" : String(v);
   const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
@@ -108,8 +110,8 @@ export async function exportExcelVia(exportCsv) {
  * @param {(string|number)[][]} o.body   already filtered — the file IS the filtered set
  * @param {string} o.filenameSlug        names the filter, so two exports differ
  */
-export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc }) {
-  if (takenForExcel({ head, body, filenameSlug, title, meta, fills, doc })) return;
+export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc, headFills }) {
+  if (takenForExcel({ head, body, filenameSlug, title, meta, fills, doc, headFills })) return;
   // The BOM is what makes Excel read this as UTF-8 rather than the local
   // codepage, which mangles the plates.
   const blob = new Blob(["﻿", buildCsv(head, body)], {
