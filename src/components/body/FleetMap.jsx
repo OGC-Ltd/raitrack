@@ -60,6 +60,7 @@ import { useVehiclePlayback } from "../../hooks/useVehiclePlayback";
 import { useRoutePlayback } from "../../hooks/useRoutePlayback";
 import { travelledTo, gapsOf, sampleAt, syncReveal, minuteMarks, zonesAt } from "../../lib/playbackPath";
 import { useFloatingWindow, useSafeAreaVars } from "../../hooks/useFloatingWindow";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import VehicleCamera from "./VehicleCamera";
 import MapLayersMenu from "./MapLayersMenu";
 import FleetsMenu from "./FleetsMenu";
@@ -106,6 +107,9 @@ import { liveTrip } from "../../lib/tripProgress";
 import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor, fenceColor, fenceColorKey, isDummyFence } from "../../lib/zoneLegend";
 import GeofenceDrawer from "./GeofenceDrawer";
 import PlanOnMap from "./PlanOnMap";
+import WorkPlansOnMap from "./WorkPlansOnMap";
+import { useWorkPlans } from "../../hooks/useWorkPlans";
+import { WP_TONE, WP_LABEL, WP_ORDER } from "../../lib/workPlanMap";
 import { fenceExtent, clusterFences, fenceBadgeLabel, fenceNames } from "../../lib/fenceCluster";
 import { claimSidePanel, onSidePanelClaim, claimMapWindow, onMapWindowClaim } from "../../lib/sidePanels";
 const STATUS_COLORS = {
@@ -2276,6 +2280,12 @@ export default function FleetMap() {
   const [showWeather, setShowWeather]       = useState(
     () => readMapPrefs(activeCompanyId).layers.weather,
   );
+  /* FactorySuite work plans (operator, 2026-11-14): the day's planned machines
+   * and their work locations, judged against the live units. Kasulu only, the
+   * one factory that keeps work plans. */
+  const [showWorkPlans, setShowWorkPlans]   = useState(
+    () => readMapPrefs(activeCompanyId).layers.workplans,
+  );
   const [weatherNote, setWeatherNote]       = useState(null);
   const [weatherHere, setWeatherHere]       = useState(null); // the cell the readout shows
   const zonesRequestedRef = useRef(false);  // a toggle is a request; a default is not
@@ -2414,6 +2424,11 @@ export default function FleetMap() {
 
   const fittedCompanyRef = useRef(null);
   const pendingFitRef  = useRef(false);
+  // The halo a work plan row leaves on its unit (handleShowVehicle).
+  const showHaloTimerRef = useRef(null);
+  // Where the map was before a work plan row isolated a unit, so "Showing X
+  // only" can put it back: { id, center, zoom } (handleShowVehicle).
+  const focusReturnRef = useRef(null);
   const deepLinkedRef  = useRef(false);
 
 
@@ -2470,6 +2485,14 @@ export default function FleetMap() {
   const dashcamOn = canDo("vss:alarms");
   const dashcamBadge = useVssBadge(permOrgId, activeCompanyId, dashcamOn);
   const { publishLayers, registerFocus, registerFilter, registerPlayback, publishFilter, publishStranded, registerFocusBridge, registerReveal, unitsOpen, setUnitsOpen, strandedOpen, setStrandedOpen, fuelAlertsOpen, setFuelAlertsOpen } = useMapLayers();
+  // The work plans card is the right-hand side panel while no unit's panel
+  // is there (App's #wpm-dock column), on a screen wide enough for a column
+  // beside the map; otherwise it floats on the map (operator, 2026-11-14:
+  // "if we do not have the unit card as a sidepanel then the workplan card
+  // to be the sidepanel and when the unit card is rendered the workplan to
+  // give space for the unit card to take its position").
+  const wpWide = useMediaQuery("(min-width: 1024px)");
+  const wpDocked = wpWide && desktopActiveTab === "fleet" && !selectedVehicleId && !fuelAlertsOpen;
   const { isCompact, isMobile } = useBreakpoint();
   /* Where the side panel exists (desktop) a click selects the unit and the
      panel shows it; the map card is the HOVER preview only (operator,
@@ -2543,6 +2566,9 @@ export default function FleetMap() {
   zonesRef.current = zones;
   // The CAD planting plan belongs to one estate only.
   const planAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
+  // So do FactorySuite's work plans: only Mufindi (our Kasulu) keeps them.
+  const workPlansAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
+  const workPlans = useWorkPlans(orgId, workPlansAllowed && showWorkPlans);
   // What the rail's search can find: the fences this layer can draw.
   const searchableFences = useMemo(() => (zones?.features ?? []).filter((f) =>
     !ZONE_SKIP_CATEGORIES.has(f.properties?.category) && !ZONE_EXCLUDE.has(zoneKey(f.properties?.name)) && !isDummyFence(f.properties?.name)), [zones]);
@@ -3994,7 +4020,24 @@ export default function FleetMap() {
         });
       }
     };
-    if (!canDo("map:layers")) { pushZones(); return out; }
+    // Work plans: a rail switch of its own, like Geofences, for anyone on the
+    // map (the route asks map:read), not only roles that hold map:layers.
+    const pushWorkPlans = () => {
+      if (!workPlansAllowed) return;
+      out.push({
+        id: "workplans",
+        label: "Work plans",
+        on: showWorkPlans,
+        onToggle: () => setShowWorkPlans(v => {
+          writeMapPrefs(activeCompanyId, { layers: { workplans: !v } });
+          return !v;
+        }),
+        note: null,
+        legend: WP_ORDER.filter(key => key !== "unplaced").map(key => ({ key, color: WP_TONE[key], label: WP_LABEL[key] })),
+        hint: "FactorySuite's plans for today · each planned machine against its work location, live",
+      });
+    };
+    if (!canDo("map:layers")) { pushZones(); pushWorkPlans(); return out; }
     // The scales. Offered where the ORGANISATION has any: the server scopes the
     // feed to the yards this fleet weighs in, so the switch appears where
     // weighbridges exist without an org name being written down here.
@@ -4058,6 +4101,7 @@ export default function FleetMap() {
       });
     }
     pushZones();
+    pushWorkPlans();
     if (planAllowed) {
       out.push({
         id: "plan",
@@ -4105,7 +4149,7 @@ export default function FleetMap() {
     return out;
   }, [showTraffic, showWeather, weatherNote, showBridges, hasBridges, bridgesLoading, activeCompanyId,
       showZones, hasZones, zoneCategories, zonesOwnOnly, ownFenceCount, mayAllZones, mayOwnZones,
-      showPlan, planAllowed, planState,
+      showPlan, planAllowed, planState, showWorkPlans, workPlansAllowed,
       sitePlans, siteOn, siteStatus, siteCats, canDo, baseMap]);
 
   /**
@@ -6442,6 +6486,7 @@ export default function FleetMap() {
     setZonesWanted(false);
     setShowTraffic(LIVE_TRAFFIC_AVAILABLE && layers.traffic);
     setShowWeather(layers.weather);
+    setShowWorkPlans(layers.workplans);
     bridgeRequestedRef.current = false;
     zonesRequestedRef.current  = false;
     planRequestedRef.current   = false;
@@ -6735,6 +6780,53 @@ export default function FleetMap() {
     setTimeout(() => setSearchedId(null), 6000);
     return true;
   }, [activeCompanyId, setSelectedVehicleId, revealMap]);
+
+  /**
+   * Show one unit on the map and only it: zoom to it, hide every other unit,
+   * ring it with the search halo for a few seconds. No side panel (operator,
+   * 2026-11-14, work plan card: "it should zoom into the unit on the map, but
+   * not open the unit sidepanel card, only when I click on the zoomed unit on
+   * the map is when the sidepanel for the unit opens"; then "only render that
+   * unit on the map all other to disappear and we cancel out the zoom").
+   * A click on its marker then opens the panel as anywhere else. The view
+   * before is kept, and releaseFocus goes back to it.
+   * `inset` is what a card covers, so the unit lands beside it.
+   */
+  const handleShowVehicle = useCallback((vehicleId, inset) => {
+    const map = mapRef.current;
+    if (!map || !vehicleId) return false;
+    const v = vehiclesRef.current.find(x => x.vehicleId === vehicleId)
+           ?? vehiclesRef.current.find(x => x.id === vehicleId);
+    if (!v || !Number.isFinite(v.lat) || !Number.isFinite(v.lng)) return false;
+    fittedCompanyRef.current = activeCompanyId;
+    pendingFitRef.current = false;
+    // A second row while one is isolated keeps the first view to go back to.
+    if (!focusReturnRef.current) focusReturnRef.current = { center: map.getCenter(), zoom: map.getZoom() };
+    focusReturnRef.current.id = v.id;
+    setFocusedId(v.id);
+    if (inset && map.setViewInset) map.setViewInset({ lat: v.lat, lng: v.lng }, FOCUS_ZOOM, inset);
+    else map.setView({ lat: v.lat, lng: v.lng }, FOCUS_ZOOM);
+    setSearchedId(v.id);
+    clearTimeout(showHaloTimerRef.current);
+    showHaloTimerRef.current = setTimeout(() => setSearchedId(null), 6000);
+    return true;
+  }, [activeCompanyId]);
+
+  /** Bring the fleet back after an isolation, and the view from before a
+   *  work plan row's zoom where that is what isolated it. */
+  const releaseFocus = useCallback(() => {
+    const back = focusReturnRef.current;
+    focusReturnRef.current = null;
+    setFocusedId(null);
+    setSearchedId(null);
+    const map = mapRef.current;
+    if (back && map) map.setView(back.center, back.zoom);
+  }, []);
+  // Any other way out of an isolation (zooming out, an org switch, another
+  // pick) leaves nothing to go back to.
+  useEffect(() => {
+    if (focusReturnRef.current && focusReturnRef.current.id !== focusedId) focusReturnRef.current = null;
+  }, [focusedId]);
 
   /**
    * Put back the unit that was selected when the page was reloaded.
@@ -7400,10 +7492,11 @@ export default function FleetMap() {
             /* Live traffic and weather are rail buttons of their own, so the
                Maps panel lists every layer but those. (The phone's layers menu
                in the camera rail still carries them — there is no rail there.) */
-            layers={mapLayers.filter(l => l.id !== "traffic" && l.id !== "weather")}
+            layers={mapLayers.filter(l => l.id !== "traffic" && l.id !== "weather" && l.id !== "workplans")}
             traffic={mapLayers.find(l => l.id === "traffic") ?? null}
             weather={mapLayers.find(l => l.id === "weather") ?? null}
             zones={mapLayers.find(l => l.id === "zones") ?? null}
+            workPlans={mapLayers.find(l => l.id === "workplans") ?? null}
             drawFence={canDo("geofence:create") && orgId
               ? { on: Boolean(fenceDraw && !fenceDraw.editing), onToggle: toggleFenceDraw }
               : null}
@@ -7430,6 +7523,22 @@ export default function FleetMap() {
             dashcam={dashcamOn
               ? { count: dashcamBadge?.open ?? 0, critical: dashcamBadge?.critical ?? 0, onOpen: () => setDesktopActiveTab("dashcam") }
               : null}
+          />
+        )}
+        {/* FactorySuite work plans, while the rail's Work plans switch is on */}
+        {workPlansAllowed && showWorkPlans && mapReady && mapRef.current && (
+          <WorkPlansOnMap
+            map={mapRef.current} maps={mapsLibRef.current} DomMarker={DomMarkerRef.current}
+            data={workPlans.data} loading={workPlans.loading} error={workPlans.error}
+            vehicles={vehicles} zones={zones}
+            drawingUrl={activeCompanyId === ESTATE_PLAN_COMPANY ? ESTATE_PLAN_URL : null}
+            onPickVehicle={handleFocusVehicle}
+            onShowVehicle={handleShowVehicle}
+            onReleaseVehicle={releaseFocus}
+            isolatedVehicleId={focusedId ? (vehicles.find(v => v.id === focusedId)?.vehicleId ?? null) : null}
+            docked={wpDocked}
+            unitOpen={Boolean(selectedVehicleId)}
+            onClose={() => mapLayers.find(l => l.id === "workplans")?.onToggle()}
           />
         )}
         {/* A delivery plan the Planner put on the map (lib/planOverlay) */}
@@ -7595,7 +7704,7 @@ export default function FleetMap() {
               <button
                 type="button"
                 className="focus-pill"
-                onClick={() => setFocusedId(null)}
+                onClick={releaseFocus}
                 title="Show the rest of the fleet"
               >
                 <span className="focus-pill-dot" aria-hidden="true" />

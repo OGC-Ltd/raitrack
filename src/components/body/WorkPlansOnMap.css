@@ -1,0 +1,313 @@
+/* Hallmark · component: work plans side panel and floating card · shape: app screen · genre: modern-minimal · theme: the app's own (the unit panel's vdp-* palette, Roboto) · redesign: full · surface: absolute · states: 8 · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E5 S4 R4 V4 · weakest: S, the state key is a plain list of rows; it carries the filters, so rows that read and press easily beat a figure */
+/* Hallmark · waive 7b · VehicleDetailPanel .vdp is #fff and MapToolRail .mtr-pop is #ffffff · the card is the unit panel's twin by request (operator 2026-11-14: "uses the same styles as the unit card side panel"); a tinted card would be the one off-white surface beside it */
+/* Hallmark · waive 24b · VehicleDetailPanel.css .vdp-block padding: 16px 18px and .vh padding-left 18px · the 18px side inset is the unit panel's own, kept so the two panels' text lines up when one takes the other's place */
+/* Hallmark · dismissed 74: slate is the app palette (src/index.css :root, VehicleDetailPanel.css), kept as the brand */
+/* Hallmark · answered F24: docked, the column's hairline alone, as the unit panel; floating, a hairline and the soft shadow the unit panel wears where it lies over the map */
+
+/* FactorySuite work plans on the Live Map: location labels, machine tags, and
+   the panel. Docked it is the unit panel's twin, in its column (App
+   #wpm-dock); floating it is the same panel as a card on the map, moved by
+   its head. The tones mirror WP_TONE in lib/workPlanMap.js, which the map
+   key reads. */
+
+:root {
+  /* The unit panel's own (VehicleDetailPanel.css .vdp, VehicleHeader.css) */
+  --wpm-font: 'Roboto', 'Inter', system-ui, sans-serif;
+  --wpm-surface: #ffffff;
+  --wpm-hover: #f5f7fa;
+  --wpm-press: #eceff3;
+  --wpm-ink: #12181f;                /* 17:1 */
+  --wpm-ink-2: #4a545e;              /* 8.2:1 */
+  --wpm-ink-3: #66717d;              /* 4.9:1 */
+  --wpm-mut: #6b757f;                /* 4.8:1 */
+  --wpm-border: #dfe4ea;
+  --wpm-hair: #eceff3;
+  --wpm-navy: #0f2542;
+  --wpm-focus: #2563eb;
+  --wpm-shadow: rgba(15, 23, 42, 0.12);
+  --wpm-shadow-tag: rgba(15, 23, 42, 0.35);
+  --wpm-on-fill: #ffffff;
+  --wpm-ok-soft: #f0fdf4;
+  --wpm-ok-ink: #166534;             /* 7:1 on its tint */
+
+  --wpm-place: #7c3aed;              /* white on it 5.7:1 */
+  --wpm-place-ink: #6d28d9;          /* on white 7.1:1 */
+  --wpm-place-wash: #f3effe;
+  --wpm-place-count: rgba(255, 255, 255, 0.24);
+
+  --wpm-here: var(--accent-ok, #15803d);
+  --wpm-away: var(--accent-warn, #b45309);
+  --wpm-offshift: var(--accent-info, #0369a1);
+  --wpm-silent: var(--accent-off, #4b5563);
+  --wpm-unplaced: #64748b;
+
+  --wpm-draft-bg: #fef3c7;
+  --wpm-draft-ink: #92400e;
+  --wpm-error: var(--accent-crit, #b91c1c);
+
+  --wpm-dur: 160ms;
+
+  /* Where the floating card sits on the map, measured against the map's own
+     controls on 2026-11-14 at 375, 768, 1280 and 1920:
+     - the camera column (.map-cam-controls) is 34px wide, 12px in from the
+       right at every width: the card stops 12px short of it;
+     - the zoom row along the map's foot (phone and tablet) is 34px tall, 16px
+       up: the card stops 22px above it;
+     - the status bar (below 1024px) is 28px tall at the top, 36px on a phone:
+       the card starts 8px below it. */
+  --wpm-top: 48px;
+  --wpm-right: 58px;
+  --wpm-foot: 72px;
+  --wpm-width: 340px;
+}
+
+@media (max-width: 767px) { :root { --wpm-top: 56px; } }
+@media (min-width: 1600px) { :root { --wpm-width: 380px; } }
+
+/* ── On the map ─────────────────────────────────────────────────────────── */
+
+/* A work location: its name and here/planned on the location's purple. Below
+   NAME_ZOOM only the count shows, so neighbouring blocks do not pile up. */
+.wpm-place {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 8px; border-radius: 999px;
+  background: var(--wpm-place); color: var(--wpm-on-fill); font: 600 12px/1.2 var(--wpm-font); white-space: nowrap;
+  border: 2px solid var(--wpm-on-fill); box-shadow: 0 1px 4px var(--wpm-shadow-tag);
+  font-variant-numeric: tabular-nums;
+}
+.wpm-place b { padding: 0 4px; border-radius: 999px; background: var(--wpm-place-count); font-weight: 700; }
+.wpm-place--compact { padding: 4px; }
+.wpm-place--compact .wpm-place__name { display: none; }
+.wpm-place--hidden { display: none; }
+.wpm-place--on { box-shadow: 0 0 0 2px var(--wpm-place), 0 2px 8px var(--wpm-shadow-tag); }
+
+/* A machine: under its own marker (anchored at the marker's foot), so the
+   unit stays visible. White text on every tone clears 4.5:1. */
+.wpm-unit {
+  margin-top: 4px; padding: 0 4px; border-radius: 4px; background: var(--wpm-silent); color: var(--wpm-on-fill);
+  font: 700 11px/16px var(--wpm-font); white-space: nowrap; border: 1px solid var(--wpm-on-fill);
+  box-shadow: 0 1px 3px var(--wpm-shadow-tag);
+}
+.wpm-unit[data-tone="here"] { background: var(--wpm-here); }
+.wpm-unit[data-tone="away"] { background: var(--wpm-away); }
+.wpm-unit[data-tone="offshift"] { background: var(--wpm-offshift); }
+.wpm-unit[data-tone="silent"] { background: var(--wpm-silent); }
+/* No geofence to judge against: an outline, so it never reads as a verdict */
+.wpm-unit[data-tone="unplaced"] { background: var(--wpm-surface); color: var(--wpm-unplaced); border: 1px dashed var(--wpm-unplaced); }
+
+/* ── Where the panel sits ───────────────────────────────────────────────── */
+
+/* Docked: the unit panel's column (App.css --vdp-w: 360, 340 on a laptop),
+   pushing the map aside, so none of the map's controls is under it. Empty, the
+   column takes no room. */
+.wpm-dock { display: none; }
+@media (min-width: 1024px) {
+  .wpm-dock:not(:empty) {
+    display: flex; flex-direction: column; flex-shrink: 0; width: var(--vdp-w, 360px); height: 100%;
+    background: var(--wpm-surface); border-left: 1px solid var(--wpm-border); overflow: hidden;
+  }
+}
+
+.wpm-card {
+  display: flex; flex-direction: column; box-sizing: border-box; min-width: 0;
+  background: var(--wpm-surface); color: var(--wpm-ink);
+  font: 400 13px/1.45 var(--wpm-font); font-variant-numeric: tabular-nums;
+}
+.wpm-card[data-mode="docked"] { flex: 1; min-height: 0; width: 100%; }
+
+/* Floating: the same panel as a card, above the map's controls, beside the
+   camera column (see :root), moved by its head. */
+.wpm-card[data-mode="float"] {
+  position: absolute; top: var(--wpm-top); right: var(--wpm-right); z-index: 1100;
+  width: var(--wpm-width); max-width: calc(100% - var(--wpm-right) - 12px);
+  max-height: calc(100% - var(--wpm-top) - var(--wpm-foot));
+  border: 1px solid var(--wpm-border); border-radius: 10px; box-shadow: 0 8px 24px var(--wpm-shadow); overflow: hidden;
+}
+/* A laptop or tablet's unit panel lies over the map's right edge: start
+   beside it, not under it. */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .wpm-card[data-mode="float"][data-beside-unit]:not([data-moved]) { right: calc(var(--vdp-w, 340px) + 16px); }
+}
+.wpm-card[data-dragging] { user-select: none; will-change: transform; }
+
+.wpm-card button { font: inherit; color: inherit; }
+.wpm-card button:focus-visible { outline: 2px solid var(--wpm-focus); outline-offset: -2px; }
+.wpm-card .wpm-icon:focus-visible, .wpm-card .wpm-link:focus-visible { outline-offset: 1px; }
+
+/* ── Head: the unit panel's (VehicleHeader.css .vh) ─────────────────────── */
+.wpm-head { flex-shrink: 0; padding: 14px 12px 12px 18px; border-bottom: 1px solid var(--wpm-hair); }
+.wpm-card[data-mode="float"]:not([data-open]) .wpm-head { border-bottom: 0; }
+.wpm-head[data-drag] { cursor: grab; touch-action: none; }
+.wpm-card[data-dragging] .wpm-head { cursor: grabbing; }
+.wpm-head__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.wpm-name {
+  margin: 0; padding-top: 2px; min-width: 0; overflow-wrap: break-word;
+  font-size: 19px; font-weight: 700; line-height: 1.25; color: var(--wpm-ink);
+}
+.wpm-card[data-mode="float"] .wpm-name { font-size: 16px; }
+.wpm-tools { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.wpm-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 7px; background: transparent; color: var(--wpm-mut); font-size: 17px; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.wpm-card .wpm-icon { color: var(--wpm-mut); }
+.wpm-card .wpm-icon:hover { background: var(--wpm-hover); color: var(--wpm-ink); }
+.wpm-card .wpm-icon:active { background: var(--wpm-press); }
+.wpm-icon:disabled { opacity: 0.45; cursor: not-allowed; }
+.wpm-grip { cursor: grab; }
+.wpm-icon__chev { transition: transform var(--wpm-dur) ease; }
+.wpm-card[data-open] .wpm-icon__chev { transform: rotate(180deg); }
+
+.wpm-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 8px; }
+.wpm-fact { display: inline-flex; align-items: center; gap: 4px; color: var(--wpm-ink-2); font-size: 12px; white-space: nowrap; }
+.wpm-fact .ti { color: var(--wpm-mut); font-size: 14px; }
+.wpm-chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--wpm-ok-soft); color: var(--wpm-ok-ink); font-size: 12px; font-weight: 500; white-space: nowrap;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.wpm-chip b { font-weight: 700; }
+.wpm-chip--filter { background: var(--wpm-place-wash); color: var(--wpm-place-ink); }
+
+/* ── Body: the unit panel's blocks (.vdp-block) ─────────────────────────── */
+.wpm-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.wpm-body[hidden] { display: none; }
+.wpm-block { flex-shrink: 0; margin: 0; padding: 16px 18px; border-bottom: 1px solid var(--wpm-hair); }
+.wpm-block:last-child { border-bottom: 0; }
+.wpm-block__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.wpm-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--wpm-ink); }
+.wpm-block__meta { min-width: 0; color: var(--wpm-ink-3); font-size: 12px; text-align: right; }
+
+.wpm-plans { margin: 0; color: var(--wpm-ink-2); }
+
+/* Every machine, split by state, and the key that filters map and list */
+.wpm-bar { display: flex; gap: 2px; height: 6px; margin-top: 12px; border-radius: 3px; overflow: hidden; background: var(--wpm-hair); }
+.wpm-bar > span { flex-basis: 0; min-width: 4px; }
+.wpm-bar > [data-tone="here"] { background: var(--wpm-here); }
+.wpm-bar > [data-tone="away"] { background: var(--wpm-away); }
+.wpm-bar > [data-tone="offshift"] { background: var(--wpm-offshift); }
+.wpm-bar > [data-tone="silent"] { background: var(--wpm-silent); }
+.wpm-bar > [data-tone="unplaced"] { background: repeating-linear-gradient(135deg, var(--wpm-unplaced) 0 2px, var(--wpm-hair) 2px 4px); }
+
+.wpm-keys { display: flex; flex-direction: column; margin: 8px -18px 0; }
+.wpm-key {
+  --tone: var(--wpm-silent);
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 18px;
+  border: 0; border-radius: 0; background: transparent; cursor: pointer; text-align: left;
+}
+.wpm-key[data-tone="here"] { --tone: var(--wpm-here); }
+.wpm-key[data-tone="away"] { --tone: var(--wpm-away); }
+.wpm-key[data-tone="offshift"] { --tone: var(--wpm-offshift); }
+.wpm-key[data-tone="unplaced"] { --tone: var(--wpm-unplaced); }
+/* The bar's own colour, so the key reads the bar and the map's tags */
+.wpm-key__swatch { flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--tone); }
+.wpm-key[data-tone="unplaced"] .wpm-key__swatch { background: var(--wpm-surface); border: 1px dashed var(--tone); box-sizing: border-box; }
+.wpm-key__label { flex: 1; min-width: 0; color: var(--wpm-ink-2); }
+.wpm-key__n { color: var(--wpm-ink); font-weight: 600; }
+.wpm-key:hover:not(:disabled) { background: var(--wpm-hover); }
+.wpm-key:active:not(:disabled) { background: var(--wpm-press); }
+.wpm-key[aria-pressed="true"] { background: var(--wpm-hover); }
+.wpm-key[aria-pressed="true"] .wpm-key__label { color: var(--wpm-ink); font-weight: 600; }
+.wpm-key[aria-pressed="true"] .wpm-key__swatch { box-shadow: 0 0 0 2px var(--wpm-surface), 0 0 0 3px var(--tone); }
+.wpm-key:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.wpm-filter, .wpm-only { margin: 8px 0 0; color: var(--wpm-ink-2); font-size: 12px; }
+.wpm-only { padding: 8px 12px; border-radius: 6px; background: var(--wpm-hover); }
+.wpm-only b { color: var(--wpm-ink); }
+.wpm-card .wpm-link {
+  padding: 0; border: 0; border-radius: 3px; background: none; color: var(--wpm-navy);
+  font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.wpm-card .wpm-link:hover { color: var(--wpm-focus); }
+.wpm-card .wpm-link:active { color: var(--wpm-ink); }
+
+/* Work locations: here of planned, as words and a meter */
+.wpm-places { list-style: none; margin: 0 -18px; padding: 0; }
+.wpm-places li + li { border-top: 1px solid var(--wpm-hair); }
+.wpm-loc {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; width: 100%;
+  min-height: 44px; padding: 8px 18px; border: 0; border-radius: 0; background: transparent; cursor: pointer; text-align: left;
+}
+.wpm-loc__name { font-weight: 500; color: var(--wpm-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpm-loc__n { color: var(--wpm-ink-2); font-size: 12px; white-space: nowrap; }
+.wpm-loc__n b { color: var(--wpm-ink); font-weight: 600; }
+.wpm-loc__n--bare { color: var(--wpm-ink-3); }
+.wpm-loc:not([data-placed]) .wpm-loc__name { font-weight: 400; color: var(--wpm-ink-2); }
+.wpm-sub { margin: 12px 0 4px; color: var(--wpm-ink-3); font-size: 12px; }
+.wpm-meter { grid-column: 1 / -1; height: 3px; border-radius: 2px; background: var(--wpm-hair); overflow: hidden; }
+.wpm-meter > i { display: block; height: 100%; background: var(--wpm-place); transform-origin: left center; transition: transform 320ms ease; }
+.wpm-loc:hover { background: var(--wpm-hover); }
+.wpm-loc:active { background: var(--wpm-press); }
+.wpm-loc[aria-pressed="true"] { background: var(--wpm-place-wash); }
+.wpm-loc[aria-pressed="true"] .wpm-loc__name { color: var(--wpm-place-ink); }
+
+/* Machines: a fold, then the departments */
+.wpm-block--list { padding-bottom: 0; }
+.wpm-fold {
+  display: flex; align-items: baseline; gap: 8px; width: calc(100% + 36px); min-height: 40px; margin: -8px -18px 0; padding: 8px 18px;
+  border: 0; border-radius: 0; background: transparent; cursor: pointer; text-align: left;
+}
+.wpm-fold .wpm-block__meta { text-align: left; }
+.wpm-fold__chev { margin-left: auto; align-self: center; color: var(--wpm-mut); transition: transform var(--wpm-dur) ease; }
+.wpm-fold[aria-expanded="true"] .wpm-fold__chev { transform: rotate(180deg); }
+.wpm-fold:hover { background: var(--wpm-hover); }
+.wpm-fold:active { background: var(--wpm-press); }
+
+.wpm-list { margin: 8px -18px 0; }
+.wpm-list[hidden] { display: none; }
+.wpm-group__head {
+  position: sticky; top: 0; z-index: 1; padding: 8px 18px 4px; background: var(--wpm-surface);
+  border-top: 1px solid var(--wpm-hair); border-bottom: 1px solid var(--wpm-hair);
+  font-size: 12px; font-weight: 600; color: var(--wpm-mut);
+}
+.wpm-group__head span { margin-left: 4px; font-weight: 400; color: var(--wpm-ink-3); }
+
+.wpm-row {
+  --tone: var(--wpm-silent);
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 8px 18px;
+  border: 0; border-radius: 0; background: transparent; text-align: left; cursor: pointer;
+}
+.wpm-row[data-tone="here"] { --tone: var(--wpm-here); }
+.wpm-row[data-tone="away"] { --tone: var(--wpm-away); }
+.wpm-row[data-tone="offshift"] { --tone: var(--wpm-offshift); }
+.wpm-row[data-tone="unplaced"] { --tone: var(--wpm-unplaced); }
+.wpm-row + .wpm-row { border-top: 1px solid var(--wpm-hair); }
+.wpm-row:hover:not(:disabled) { background: var(--wpm-hover); }
+.wpm-row:active:not(:disabled) { background: var(--wpm-press); }
+.wpm-row[aria-pressed="true"] { background: var(--wpm-hover); }
+.wpm-row[aria-pressed="true"] .wpm-row__code { color: var(--wpm-navy); text-decoration: underline; text-underline-offset: 3px; }
+.wpm-row:disabled { opacity: 0.55; cursor: not-allowed; }
+.wpm-row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.wpm-row__name { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.wpm-row__code { flex: none; font-weight: 600; color: var(--wpm-ink); white-space: nowrap; }
+.wpm-row__name em { font-style: normal; font-size: 12px; color: var(--wpm-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpm-row__detail { color: var(--wpm-ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpm-row__when { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
+.wpm-row__shift { color: var(--wpm-ink-2); }
+.wpm-row__state { color: var(--tone); font-weight: 600; }
+.wpm-tag { flex: none; padding: 0 8px; border-radius: 999px; background: var(--wpm-draft-bg); color: var(--wpm-draft-ink); font-size: 11px; font-weight: 600; line-height: 18px; }
+
+.wpm-foot { color: var(--wpm-ink-3); font-size: 12px; }
+.wpm-msg { margin: 0; color: var(--wpm-ink-2); }
+.wpm-msg--error { color: var(--wpm-error); }
+
+/* Loading: the shape of what is coming */
+.wpm-skel { display: flex; flex-direction: column; gap: 8px; }
+.wpm-skel > span { display: block; border-radius: 4px; background: var(--wpm-hover); animation: wpm-pulse 1.2s ease-in-out infinite; }
+.wpm-skel__line { height: 12px; }
+.wpm-skel__line--short { width: 60%; }
+.wpm-skel__bar { height: 6px; }
+@keyframes wpm-pulse { 50% { opacity: 0.5; } }
+
+/* Phone: a card along the top of the map, beside the camera column; the foot
+   keeps the lower third clear for the fuel alerts card and the zoom row. */
+@media (max-width: 767px) {
+  .wpm-card[data-mode="float"] { left: 12px; width: auto; max-width: none; max-height: calc(100% - var(--wpm-top) - 140px); }
+  .wpm-row__detail, .wpm-row__when { font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wpm-icon, .wpm-icon__chev, .wpm-fold__chev, .wpm-meter > i { transition: none; }
+  .wpm-skel > span { animation: none; }
+}

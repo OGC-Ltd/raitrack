@@ -20,6 +20,7 @@ import { resolveOrgId } from '../api/org'
 import { mapSnapshotVehicle, applyLiveUpdate, applyDispatchUpdate, applyConnectionRefresh, applyFuelIncident } from '../lib/vehicleMap'
 import { readCache, writeCache } from '../services/cache'
 import { repairsChanged } from '../api/repairs'
+import { workPlansChanged } from '../api/workPlans'
 import { dismissIncident } from '../lib/fuelDismissals'
 import { followUpsChanged } from '../lib/fuelFollowUps'
 import { accessChanged } from '../lib/accessChanged'
@@ -357,6 +358,9 @@ export function useFleetLive(companyId, { keepFeed = false } = {}) {
     /* A repair job changed for anybody in this organisation: the Repairs tab
        and the Fuel Audit read it again. */
     es.addEventListener('repair_changed', () => { repairsChanged() })
+    /* A FactorySuite work plan changed (its webhook): the map's Work plans
+       layer reads the day's plans again (hooks/useWorkPlans). */
+    es.addEventListener('work_plans_changed', () => { workPlansChanged() })
     /* A toast the server made for this person: an unauthorised stop, or the
        words of a web push (fleet-server lib/toasts). Stacked first in, first
        out by components/shared/ToastStack. */
@@ -397,7 +401,15 @@ export function useFleetLive(companyId, { keepFeed = false } = {}) {
         }
       } catch { /* ignore malformed frame */ }
     })
-    // EventSource reconnects on its own; nothing to do on error.
+    // EventSource reconnects on its own; nothing to do on error. After a
+    // reconnect the map's work plans are re-read: they update only on the
+    // server's work_plans_changed, and one may have been sent while the
+    // stream was down.
+    let streamOpened = false
+    es.addEventListener('open', () => {
+      if (streamOpened) workPlansChanged()
+      streamOpened = true
+    })
 
     // Connection verdicts do NOT arrive on the stream for the units that
     // matter most: a position frame is sent only when a fix time advances, so a

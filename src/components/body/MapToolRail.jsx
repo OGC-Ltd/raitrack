@@ -357,6 +357,7 @@ export default function MapToolRail({
   traffic,          // the "traffic" map layer ({ on, onToggle }) or null
   weather,          // the "weather" map layer ({ on, onToggle, note }) or null
   zones,            // the "zones" map layer ({ on, onToggle }) or null
+  workPlans,        // the "workplans" map layer ({ on, onToggle }) or null where none are kept
   drawFence,        // { on, onToggle } or null without geofence:create
   halted,          // { count, open, onOpen } or null without map:filter
   fuelAlerts,       // { count, open, onOpen } or null without map:fuel_alerts
@@ -487,6 +488,17 @@ export default function MapToolRail({
               on={Boolean(zones?.on)} disabled={!zones} expanded={expanded} onClick={zones?.onToggle}
             />
           ))}
+          {/* Work plans (operator, 2026-11-14: "a toggle just like that for
+              geofence"): FactorySuite's plans for today, each planned machine
+              tagged live against its work location. Only where the
+              organisation keeps work plans (Kasulu). */}
+          {workPlans && (
+            <RailButton
+              icon="ti-clipboard-list" label={workPlans.on ? "Hide work plans" : "Work plans"}
+              title={`${workPlans.on ? "Hide" : "Show"} today's FactorySuite work plans on the map`}
+              on={Boolean(workPlans.on)} expanded={expanded} onClick={workPlans.onToggle}
+            />
+          )}
           {/* Halted (operator, 2026-10-07: "right below geofences"): units
               that stopped mid-journey — on the highway or outside their
               geofences. Opens the same window the sidebar row used to. */}

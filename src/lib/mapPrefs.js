@@ -51,6 +51,7 @@ export const LAYERS = [
   "zones:own",     // the geofences layer narrowed to the ones drawn here, not imported from Wialon
   "traffic",       // Google live traffic, any org
   "weather",       // Google current weather, any org; off until asked for
+  "workplans",     // FactorySuite work plans (Kasulu); off until asked for
   "site:nzoia",    // Nzoia's survey while it sat under West Kenya; kept so old blobs still read
   "site:naitiri",  // and the sugar factory the lorries load at
   "site:raiply",   // and where that sugar is taken

@@ -2,6 +2,8 @@
  * states: default · hover · focus · active · disabled · loading · zero · alert · selected
  * contrast: counts at status colour mixed 72% with black, labels #475569, zero #5f6e83 (all ≥ 4.5:1 on white and the selected tint)
  */
+/* Hallmark · dismissed 74: slate is the app palette (src/index.css :root), kept as the brand */
+/* Hallmark · polish 2026-11-14: centred on phones; colours lifted into :root tokens; spacing on the 4px scale; labels untracked */
 
 /* StatusRail — horizontal status filters for tablet and phone.
 
@@ -16,21 +18,30 @@
    over its word: narrower segments, so five or six fit where four pills did,
    and the number, the thing being read, is first. */
 
+/* Tokens. The --color-* names hold their light values on every ancestor,
+   where --text-primary is the dark theme's #f0f4f8 outside .app--light. The
+   bar is always white, so its ink must be too. */
+:root {
+  --rail-ink:     var(--color-text-primary, #0f172a);
+  --rail-label:   var(--color-text-sec, #475569);
+  --rail-muted:   var(--color-text-muted, #5f6e83);
+  --rail-edge:    var(--color-border, #e2e8f0);
+  --rail-surface: var(--color-surface, #ffffff);
+  --rail-hover:   var(--color-bg, #f8fafc);
+  --rail-focus:   var(--color-text-primary, #0f172a);
+  --rail-shadow:  rgba(0, 0, 0, 0.12);
+  /* What a status colour is mixed with: darkened for its number, lightened
+     for its tints. */
+  --rail-dark:    #000000;
+  --rail-light:   #ffffff;
+  /* Mask stops: only their alpha matters. */
+  --rail-mask:    #000000;
+}
+
 .status-rail { display: none; }
 
 @media (max-width: 1023px) {
   .status-rail {
-    /* The --color-* names: they hold their light values on every ancestor,
-       where --text-primary is the dark theme's #f0f4f8 outside .app--light.
-       The bar is always white, so its ink must be too. */
-    --rail-ink:     var(--color-text-primary, #0f172a);
-    --rail-label:   var(--color-text-sec, #475569);
-    --rail-muted:   var(--color-text-muted, #5f6e83);
-    --rail-edge:    var(--color-border, #e2e8f0);
-    --rail-surface: var(--color-surface, #ffffff);
-    --rail-hover:   var(--color-bg, #f8fafc);
-    --rail-focus:   var(--color-text-primary, #0f172a);
-
     display: flex;
     align-items: center;
     position: absolute;
@@ -62,7 +73,7 @@
     background: var(--rail-surface);
     border: 1px solid var(--rail-edge);
     border-radius: 7px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 1px 4px var(--rail-shadow);
     overflow: hidden;
     pointer-events: auto;
   }
@@ -80,33 +91,33 @@
   /* Segments hidden past an end: that end fades, so the cut reads as "more",
      not as a broken label. */
   .status-rail__scroller[data-more="right"] {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
-            mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+    -webkit-mask-image: linear-gradient(to right, var(--rail-mask) calc(100% - 22px), transparent);
+            mask-image: linear-gradient(to right, var(--rail-mask) calc(100% - 22px), transparent);
   }
   .status-rail__scroller[data-more="left"] {
-    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 22px), transparent);
-            mask-image: linear-gradient(to left, #000 calc(100% - 22px), transparent);
+    -webkit-mask-image: linear-gradient(to left, var(--rail-mask) calc(100% - 22px), transparent);
+            mask-image: linear-gradient(to left, var(--rail-mask) calc(100% - 22px), transparent);
   }
   .status-rail__scroller[data-more="left right"] {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 22px, #000 calc(100% - 22px), transparent);
-            mask-image: linear-gradient(to right, transparent, #000 22px, #000 calc(100% - 22px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, var(--rail-mask) 22px, var(--rail-mask) calc(100% - 22px), transparent);
+            mask-image: linear-gradient(to right, transparent, var(--rail-mask) 22px, var(--rail-mask) calc(100% - 22px), transparent);
   }
 
   /* ── One segment ─────────────────────────────────────────────────────── */
   /* Tablet: one line, word then number, at the toggle's 28px. */
   .status-rail__chip {
-    --chip-ink:  color-mix(in srgb, var(--chip-color) 72%, #000);
-    --chip-tint: color-mix(in srgb, var(--chip-color) 10%, #fff);
+    --chip-ink:  color-mix(in srgb, var(--chip-color) 72%, var(--rail-dark));
+    --chip-tint: color-mix(in srgb, var(--chip-color) 10%, var(--rail-light));
 
     position: relative;
     display: inline-flex;
     flex-direction: row-reverse;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     flex: 0 0 auto;
     height: 100%;
-    padding: 0 11px;
+    padding: 0 12px;
     margin: 0;
     border: 0;
     border-radius: 0;
@@ -143,7 +154,7 @@
   }
 
   /* Pressed. */
-  .status-rail__chip:active { background: color-mix(in srgb, var(--chip-color) 16%, #fff); }
+  .status-rail__chip:active { background: color-mix(in srgb, var(--chip-color) 16%, var(--rail-light)); }
 
   /* Selected: a tint of the status and a 2px status underline. The text stays
      dark on a light ground, where the old full fill needed white text and
@@ -175,7 +186,7 @@
     padding: 2px 4px;
     margin: -2px -4px;
     border-radius: 4px;
-    background: color-mix(in srgb, var(--chip-color) 13%, #fff);
+    background: color-mix(in srgb, var(--chip-color) 13%, var(--rail-light));
   }
 
   /* Loading: the dash, muted, until the first frame lands. */
@@ -193,19 +204,22 @@
   }
 }
 
-/* Phone: the number over the word, in the toggle's 36px. */
+/* Phone: the number over the word, in the toggle's 36px. The bar is centred
+   in its row (operator, 2026-11-14), so the six read as one strip across the
+   top of the map rather than a block hung off the left edge. Where it is
+   wider than the row it still fills it and scrolls, as before. */
 @media (max-width: 767px) {
+  .status-rail { justify-content: center; }
   .status-rail__chip {
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     min-width: 44px;
-    padding: 0 9px;
+    padding: 0 8px;
   }
   .status-rail__count { font-size: 13px; }
   .status-rail__label {
     font-size: 9.5px;
     font-weight: 600;
-    letter-spacing: 0.01em;
   }
   .status-rail__chip--active::after { left: 8px; right: 8px; }
 }

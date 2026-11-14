@@ -417,6 +417,17 @@ export class Map extends Evented {
    * the process") and only a second try, starting nearer, arrived.
    */
   setView(c, z) { this._l.setView(toLL(c), z); }
+  /**
+   * setView, but `c` lands in the middle of what `inset` leaves of the map
+   * (px off each side) instead of its middle: a card over part of the map
+   * must not cover the thing just framed. One move, as setView.
+   */
+  setViewInset(c, z, inset = {}) {
+    const { top = 0, right = 0, bottom = 0, left = 0 } = inset;
+    const l = this._l;
+    const shift = L.point((right - left) / 2, (bottom - top) / 2);
+    l.setView(l.unproject(l.project(toLL(c), z).add(shift), z), z);
+  }
   panBy(x, y) { this._l.panBy([x, y]); }
   getBounds() {
     const l = this._l;

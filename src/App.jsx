@@ -326,6 +326,10 @@ function AppShell() {
             />
           );
         })()}
+        {/* The map's Work plans panel docks here, in the unit panel's column,
+            while no unit is open (FleetMap wpDocked, WorkPlansOnMap's portal).
+            Empty, it takes no room. */}
+        <div id="wpm-dock" className="wpm-dock" />
       </div>
       {/* Mobile bottom tab bar */}
       <MobileTabBar />

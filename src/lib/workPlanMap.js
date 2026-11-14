@@ -1,0 +1,174 @@
+// FactorySuite work plans on the Live Map (operator, 2026-11-14: "a toggle
+// just like that for geofence that we can plot the plans and render them on
+// the map in realtime"). Pure: the server's plans, the live units and the
+// org's fences in; what to draw out.
+//
+// Each planned machine is judged against where it is NOW, frame by frame:
+//   here      inside the work location its plan names
+//   away      on shift and reporting, but somewhere else
+//   offshift  somewhere else outside its shift hours (before or after), which
+//             is not a problem: at 03:00 the whole plan is "elsewhere"
+//   silent    not reporting (offline, or never placed)
+//   unplaced  its work location has no shape, so nothing to judge against
+//
+// A location's shape is its geofence (matched by the server), else the area of
+// the same name in Kasulu's estate drawing (operator, 2026-11-14: "use the
+// drawing"), which holds ground no fence does, such as Commercial area (1600).
+// A machine with two shifts is one unit on the map; the shift on now (else the
+// next one, else the last) decides which location it is judged against.
+
+import { fenceContains } from "./zoneContainment";
+
+// The app's status tokens (index.css --accent-ok / -warn / -info / -off), so
+// white tag text clears 4.5:1 on every tone; WorkPlansOnMap.css mirrors them.
+export const WP_TONE = { here: "#15803d", away: "#b45309", offshift: "#0369a1", silent: "#4b5563", unplaced: "#64748b" };
+export const WP_LABEL = { here: "At its work location", away: "Elsewhere on shift", offshift: "Off shift", silent: "Not reporting", unplaced: "Location not on the map" };
+/** The order the card and the map's key list them in. */
+export const WP_ORDER = ["here", "away", "offshift", "silent", "unplaced"];
+export const WP_PLACE_COLOR = "#7c3aed";
+
+const ms = (iso) => (iso ? Date.parse(iso) : NaN);
+
+/** The drawing's classes that are places a machine works in; its roads,
+ *  rivers, mains and 507 planted blocks are not plan locations. */
+const DRAWING_AREAS = new Set(["zone", "headcontrol", "nursery", "factory", "reservoir", "rainfed"]);
+/** A zone stands before a head-control block of the same name, then the larger. */
+const DRAWING_RANK = { zone: 0 };
+
+/** Lower case, letters and digits only; the server's fold (work-plan-match.ts). */
+const fold = (s) => String(s ?? "").toLowerCase()
+  .replace(/centre/g, "center").replace(/resevoir/g, "reservoir").replace(/[^a-z0-9]/g, "");
+
+/** The estate drawing's area polygons, from its FeatureCollection. */
+export function drawingAreas(fc) {
+  return (fc?.features ?? []).filter((f) => DRAWING_AREAS.has(f.properties?.c) && f.geometry?.type === "Polygon");
+}
+
+/**
+ * The estate drawing's area for a plan's work location, or null.
+ *  - By name: "Commercial Area (1600)" is the drawing's "Commercial area (1600)",
+ *    its zone rather than the head-control block that shares the name.
+ *  - "Zone (424 ha)": most of the drawing's zones are an unnamed "Zone", so a
+ *    plan that names one by its size takes the one zone within 1 ha of it
+ *    (operator, 2026-11-14: the 423.9 ha zone is Zone (424 ha)). Two such
+ *    zones and it is left unmatched rather than guessed.
+ */
+export function drawingAreaFor(name, areas) {
+  const full = fold(name);
+  if (!full || !areas?.length) return null;
+  const named = areas.filter((f) => fold(f.properties.n) === full);
+  if (named.length) {
+    return named.sort((a, b) => (DRAWING_RANK[a.properties.c] ?? 1) - (DRAWING_RANK[b.properties.c] ?? 1)
+      || (b.properties.a ?? 0) - (a.properties.a ?? 0))[0];
+  }
+  const m = /^\s*zone\s*\(\s*(\d+(?:\.\d+)?)\s*ha\s*\)\s*$/i.exec(String(name));
+  if (m) {
+    const ha = Number(m[1]);
+    const hits = areas.filter((f) => f.properties.c === "zone" && fold(f.properties.n) === "zone"
+      && Math.abs((f.properties.a ?? NaN) - ha) <= 1);
+    if (hits.length === 1) return hits[0];
+  }
+  return null;
+}
+
+/** The line that decides where a machine should be at `now`. */
+export function lineNow(lines, now) {
+  const on = lines.find((l) => ms(l.shiftFrom) <= now && now < ms(l.shiftTo));
+  if (on) return { line: on, onShift: true };
+  const next = lines
+    .filter((l) => ms(l.shiftFrom) > now)
+    .sort((a, b) => ms(a.shiftFrom) - ms(b.shiftFrom))[0];
+  if (next) return { line: next, onShift: false };
+  const last = [...lines].sort((a, b) => (ms(b.shiftTo) || 0) - (ms(a.shiftTo) || 0))[0];
+  return { line: last ?? lines[0], onShift: false };
+}
+
+/** "06:00–16:00" in East Africa time, from the line's shift. */
+export function shiftText(line) {
+  const f = ms(line.shiftFrom);
+  const t = ms(line.shiftTo);
+  if (!Number.isFinite(f)) return line.shiftStart?.slice(0, 5) ?? "";
+  const hm = (x) => new Date(x + 3 * 3_600_000).toISOString().slice(11, 16);
+  return Number.isFinite(t) ? `${hm(f)}–${hm(t)}` : hm(f);
+}
+
+/**
+ * @param data      the server's work plans ({ plans, locations, unplacedMachines }) or null
+ * @param vehicles  the map's live vehicles (vehicleId, id, lat, lng, online)
+ * @param features  the org's geofence features (properties.id)
+ * @param now       ms
+ * @param drawing   the estate drawing's areas (drawingAreas), for locations
+ *                  with no geofence; empty where the org has no drawing
+ */
+export function workPlanView(data, vehicles, features, now = Date.now(), drawing = []) {
+  if (!data?.plans) return null;
+  const fenceById = new Map((features ?? []).map((f) => [f.properties?.id, f]));
+  // A location's shape: its geofence, else its area in the drawing
+  const drawnByName = new Map();
+  const shapeOf = (fenceId, location) => {
+    if (fenceId && fenceById.has(fenceId)) return { id: fenceId, feature: fenceById.get(fenceId), drawn: false };
+    if (!drawnByName.has(location)) {
+      const area = drawingAreaFor(location, drawing);
+      drawnByName.set(location, area ? { id: `drawing:${fold(location)}`, feature: area, drawn: true } : null);
+    }
+    return drawnByName.get(location);
+  };
+  const liveById = new Map((vehicles ?? []).filter((v) => v.vehicleId).map((v) => [v.vehicleId, v]));
+
+  // Every line, carrying its plan's department and status
+  const lines = data.plans.flatMap((p) => p.lines.map((l) => ({ ...l, department: p.department, planCode: p.planCode, planStatus: p.status })));
+
+  // One entry per machine
+  const byMachine = new Map();
+  for (const l of lines) {
+    const key = l.vehicleId ?? `m:${l.machine}`;
+    if (!byMachine.has(key)) byMachine.set(key, []);
+    byMachine.get(key).push(l);
+  }
+
+  const units = [...byMachine.entries()].map(([key, ls]) => {
+    const { line, onShift } = lineNow(ls, now);
+    const live = line.vehicleId ? liveById.get(line.vehicleId) : null;
+    const shape = shapeOf(line.fenceId, line.workLocation);
+    const fence = shape?.feature ?? null;
+    const pos = live && Number.isFinite(live.lat) && Number.isFinite(live.lng) ? { lat: live.lat, lng: live.lng } : null;
+    let tone;
+    if (!pos || !live.online) tone = "silent";
+    else if (!fence) tone = "unplaced";
+    else tone = fenceContains(pos, fence) ? "here" : onShift ? "away" : "offshift";
+    return {
+      key, machine: line.machine, machineName: line.machineName, vehicleId: line.vehicleId ?? null,
+      plate: line.plate ?? null, position: pos, online: Boolean(live?.online), tone, onShift,
+      line, lines: ls, fenceId: shape?.id ?? null,
+    };
+  }).sort((a, b) => a.line.department.localeCompare(b.line.department) || a.machine.localeCompare(b.machine, undefined, { numeric: true }));
+
+  // Each placed work location with how many of its machines are on it
+  const places = new Map();
+  for (const loc of data.locations ?? []) {
+    const shape = shapeOf(loc.fenceId, loc.name);
+    if (!shape || places.has(shape.id)) continue;
+    places.set(shape.id, { fenceId: shape.id, name: loc.name, feature: shape.feature, drawn: shape.drawn, planned: 0, here: 0 });
+  }
+  for (const u of units) {
+    const p = u.fenceId && places.get(u.fenceId);
+    if (!p) continue;
+    p.planned += 1;
+    if (u.tone === "here") p.here += 1;
+  }
+
+  const count = (t) => units.filter((u) => u.tone === t).length;
+  const statuses = {};
+  for (const p of data.plans) statuses[p.status] = (statuses[p.status] ?? 0) + 1;
+  return {
+    day: data.day,
+    units,
+    places: [...places.values()].filter((p) => p.planned > 0),
+    counts: { plans: data.plans.length, units: units.length, lines: lines.length,
+              here: count("here"), away: count("away"), offshift: count("offshift"), silent: count("silent"), unplaced: count("unplaced"),
+              onShift: units.filter((u) => u.onShift).length },
+    statuses,
+    unplacedLocations: (data.locations ?? []).filter((l) => !shapeOf(l.fenceId, l.name)).map((l) => l.name),
+    noGps: data.unplacedMachines ?? [],
+  };
+}
