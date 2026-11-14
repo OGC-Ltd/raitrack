@@ -249,7 +249,12 @@ function GroupPicker({ groups, hidden, onToggle, onSet }) {
 
 // The System Administrator's one permission stands for every right.
 const WILDCARD = "platform:admin";
-const byLabel = (a, b) => String(a.label).localeCompare(String(b.label), undefined, { sensitivity: "base" });
+// Full access (access:full) heads every list, then the groups A to Z: in the
+// middle of the alphabet it sat among the Fuel groups, and on the board it
+// fell past the first ten and started hidden.
+const byLabel = (a, b) =>
+  (b.resource === "access") - (a.resource === "access")
+  || String(a.label).localeCompare(String(b.label), undefined, { sensitivity: "base" });
 
 /**
  * Before anybody is chosen: every right on one board, a column per group,
