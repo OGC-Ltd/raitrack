@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { workPlanView, drawingAreas, drawingAreaFor, lineNow, shiftText } from "./workPlanMap";
+import { workPlanView, scopeView, planStage, fitDepartments, byDepartmentThenHere, drawingAreas, drawingAreaFor, lineNow, shiftText } from "./workPlanMap";
 
 // A 0.01° square around (-4, 30): Zone 4 for these tests
 const zone4 = {
@@ -17,7 +17,7 @@ const line = (over) => ({
 
 const data = (lines) => ({
   day: "2026-11-14",
-  plans: [{ id: "p", planCode: "WP-1", department: "IRRIGATION", status: "SUBMITTED", lines }],
+  plans: [{ id: "p", planCode: "WP-1", department: "IRRIGATION", status: "APPROVED", lines }],
   locations: [{ name: "Zone 4", fenceId: "z4", fenceName: "ZONE 4" }, { name: "Intake 3", fenceId: null, fenceName: null }],
   unplacedMachines: ["T896DSZ"],
 });
@@ -137,6 +137,53 @@ describe("the estate drawing for locations with no geofence", () => {
   });
 });
 
+describe("scopeView: one department", () => {
+  const twoDepts = () => {
+    const d = data([
+      line({ id: "a" }),
+      line({ id: "b", machine: "EX-02", vehicleId: "v2", workLocation: "Intake 3", fenceId: null }),
+    ]);
+    d.plans.push({ id: "q", planCode: "WP-2", department: "ROADS", status: "DRAFT", lines: [
+      line({ id: "r", machine: "GR-01", vehicleId: "v5", department: undefined }),
+      line({ id: "s", machine: "T896DSZ", vehicleId: null, fenceId: "z4" }),
+    ] });
+    d.unplacedMachines = ["T896DSZ"];
+    const vehicles = [
+      { vehicleId: "v1", lat: -3.995, lng: 30.005, online: true },
+      { vehicleId: "v2", lat: -3.9, lng: 30.2, online: true },
+      { vehicleId: "v5", lat: -3.9, lng: 30.2, online: true },
+    ];
+    return workPlanView(d, vehicles, [zone4], NOON_EAT);
+  };
+
+  it("lists each department with its machines", () => {
+    expect(twoDepts().departments).toEqual([{ name: "IRRIGATION", units: 2 }, { name: "ROADS", units: 2 }]);
+  });
+
+  it("keeps only the department's machines, plans and locations, recounted", () => {
+    const v = scopeView(twoDepts(), "ROADS");
+    expect(v.units.map((u) => u.machine)).toEqual(["GR-01", "T896DSZ"]);
+    expect(v.counts).toMatchObject({ plans: 1, units: 2, here: 0, away: 0, pending: 2, silent: 0 });
+    expect(v.statuses).toEqual({ PENDING: 1 });
+    expect(v.places).toEqual([expect.objectContaining({ fenceId: "z4", planned: 2, here: 0 })]);
+    expect(v.unplacedLocations).toEqual([]);
+    expect(v.noGps).toEqual(["T896DSZ"]);
+  });
+
+  it("keeps a location without a shape when the department plans it", () => {
+    const v = scopeView(twoDepts(), "IRRIGATION");
+    expect(v.unplacedLocations).toEqual(["Intake 3"]);
+    expect(v.places).toEqual([expect.objectContaining({ planned: 1, here: 1 })]);
+    expect(v.noGps).toEqual([]);
+  });
+
+  it("is the whole view with no department, or one the day does not plan", () => {
+    const all = twoDepts();
+    expect(scopeView(all, null)).toBe(all);
+    expect(scopeView(all, "WORKSHOP")).toBe(all);
+  });
+});
+
 describe("lineNow", () => {
   const a = line({ id: "a" });
   const b = line({ id: "b", shiftFrom: "2026-11-14T15:00:00.000Z", shiftTo: "2026-11-15T01:00:00.000Z" });
@@ -150,5 +197,82 @@ describe("lineNow", () => {
 describe("shiftText", () => {
   it("prints the shift in East Africa time", () => {
     expect(shiftText(line())).toBe("06:00–16:00");
+  });
+});
+
+describe("planStage: one word for waiting on approval", () => {
+  it("folds drafts and submitted plans into PENDING", () => {
+    expect(planStage("DRAFT")).toBe("PENDING");
+    expect(planStage("SUBMITTED")).toBe("PENDING");
+    expect(planStage("submitted")).toBe("PENDING");
+    expect(planStage(null)).toBe("PENDING");
+  });
+  it("keeps every other status", () => {
+    expect(planStage("APPROVED")).toBe("APPROVED");
+    expect(planStage("REJECTED")).toBe("REJECTED");
+  });
+  it("counts a draft and a submitted plan together", () => {
+    const d = data([line({ id: "a" })]);
+    d.plans[0].status = "SUBMITTED";
+    d.plans.push({ id: "q", planCode: "WP-2", department: "IRRIGATION", status: "DRAFT", lines: [line({ id: "b", machine: "EX-02" })] });
+    d.plans.push({ id: "r", planCode: "WP-3", department: "ROADS", status: "APPROVED", lines: [line({ id: "c", machine: "GR-01" })] });
+    expect(workPlanView(d, [], [zone4], NOON_EAT).statuses).toEqual({ PENDING: 2, APPROVED: 1 });
+  });
+});
+
+describe("machine order inside a department", () => {
+  const u = (department, machine, tone) => ({ machine, tone, line: { department } });
+  it("puts machines at their location first, each part A to Z", () => {
+    const list = [
+      u("ROADS", "GR-02", "here"), u("IRRIGATION", "EX-10", "away"), u("IRRIGATION", "EX-2", "silent"),
+      u("IRRIGATION", "EX-9", "here"), u("IRRIGATION", "EX-03", "here"), u("ROADS", "GR-01", "away"),
+    ].sort(byDepartmentThenHere);
+    expect(list.map((x) => `${x.line.department} ${x.machine}`)).toEqual([
+      "IRRIGATION EX-03", "IRRIGATION EX-9", "IRRIGATION EX-2", "IRRIGATION EX-10",
+      "ROADS GR-02", "ROADS GR-01",
+    ]);
+  });
+});
+
+describe("pending: a machine whose plan is not approved yet", () => {
+  const far = { vehicleId: "v1", lat: -3.9, lng: 30.2, online: true };
+  const near = { vehicleId: "v1", lat: -3.995, lng: 30.005, online: true };
+  const with_ = (status, vehicle) => {
+    const d = data([line({ id: "a" })]);
+    d.plans[0].status = status;
+    return workPlanView(d, [vehicle], [zone4], NOON_EAT);
+  };
+  it("takes a pending machine out of Elsewhere", () => {
+    const v = with_("DRAFT", far);
+    expect(v.units[0].tone).toBe("pending");
+    expect(v.counts).toMatchObject({ away: 0, pending: 1 });
+  });
+  it("leaves an approved machine Elsewhere", () => {
+    expect(with_("APPROVED", far).units[0].tone).toBe("away");
+  });
+  it("counts a pending machine at its location as pending too", () => {
+    const v = with_("SUBMITTED", near);
+    expect(v.units[0].tone).toBe("pending");
+    expect(v.counts).toMatchObject({ here: 0, pending: 1 });
+  });
+  it("counts a pending machine that is not reporting as pending", () => {
+    expect(with_("DRAFT", { ...far, online: false }).units[0].tone).toBe("pending");
+  });
+});
+
+describe("fitDepartments: tabs that fit, the rest under More", () => {
+  const base = { all: 40, more: 50, gap: 20 };
+  it("shows every tab when they all fit", () => {
+    expect(fitDepartments({ ...base, depts: [80, 80, 80], avail: 340 })).toEqual([0, 1, 2]);
+  });
+  it("keeps the first tabs that fit beside More", () => {
+    // 40 + 20 + 50 = 110 spent; 100 each leaves room for two in 340
+    expect(fitDepartments({ ...base, depts: [80, 80, 80, 80, 80, 80], avail: 340 })).toEqual([0, 1]);
+  });
+  it("always shows the picked department", () => {
+    expect(fitDepartments({ ...base, depts: [80, 80, 80, 80, 80, 80], avail: 340, current: 4 })).toEqual([0, 4]);
+  });
+  it("shows only the picked one when space is tight", () => {
+    expect(fitDepartments({ ...base, depts: [80, 80, 80, 80], avail: 220, current: 3 })).toEqual([3]);
   });
 });

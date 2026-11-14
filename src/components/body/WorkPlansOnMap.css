@@ -38,12 +38,16 @@
 
   --wpm-here: var(--accent-ok, #15803d);
   --wpm-away: var(--accent-warn, #b45309);
+  --wpm-pending: #be185d;
+  /* The plan hover card on the dark map card (light mode uses the tones above) */
+  --wpm-hover-pending: #f9a8d4;
+  --wpm-hover-pending-line: rgba(236, 72, 153, 0.45);
+  --wpm-hover-pending-fill: rgba(236, 72, 153, 0.12);
+  --wpm-hover-warn: #fbbf24;
   --wpm-offshift: var(--accent-info, #0369a1);
   --wpm-silent: var(--accent-off, #4b5563);
   --wpm-unplaced: #64748b;
 
-  --wpm-draft-bg: #fef3c7;
-  --wpm-draft-ink: #92400e;
   --wpm-error: var(--accent-crit, #b91c1c);
 
   --wpm-dur: 160ms;
@@ -90,6 +94,7 @@
 }
 .wpm-unit[data-tone="here"] { background: var(--wpm-here); }
 .wpm-unit[data-tone="away"] { background: var(--wpm-away); }
+.wpm-unit[data-tone="pending"] { background: var(--wpm-pending); }
 .wpm-unit[data-tone="offshift"] { background: var(--wpm-offshift); }
 .wpm-unit[data-tone="silent"] { background: var(--wpm-silent); }
 /* No geofence to judge against: an outline, so it never reads as a verdict */
@@ -170,6 +175,50 @@
 .wpm-chip b { font-weight: 700; }
 .wpm-chip--filter { background: var(--wpm-place-wash); color: var(--wpm-place-ink); }
 
+/* ── Department tabs: the unit panel's tab strip (.vdp-tabs). The tabs
+      that fit, then "More" holding the rest (DeptTabs measures them) ───── */
+.wpm-head:has(+ .wpm-depts-wrap) { border-bottom: 0; }
+.wpm-depts-wrap { position: relative; flex-shrink: 0; border-bottom: 1px solid var(--wpm-hair); }
+.wpm-depts {
+  display: flex; gap: 20px; padding: 0 18px;
+  overflow: hidden;
+}
+/* The unseen copy every tab is measured in, set at the pressed tab's weight */
+.wpm-depts--measure {
+  position: absolute; inset: 0 auto auto 0; width: max-content;
+  visibility: hidden; pointer-events: none;
+}
+.wpm-depts--measure .wpm-dept { font-weight: 500; }
+.wpm-dept {
+  flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: 4px;
+  padding: 11px 0 9px; border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: 13px; color: var(--wpm-mut); cursor: pointer; white-space: nowrap;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.wpm-dept:hover, .wpm-dept:active { color: var(--wpm-ink); }
+.wpm-dept[aria-pressed="true"] { color: var(--wpm-ink); font-weight: 500; border-bottom-color: var(--wpm-navy); }
+.wpm-dept__n { font-size: 12px; font-weight: 400; color: var(--wpm-ink-3); font-variant-numeric: tabular-nums; }
+.wpm-dept--more { margin-left: auto; }
+.wpm-dept__chev { align-self: center; font-size: 14px; color: var(--wpm-mut); transition: transform var(--wpm-dur) ease; }
+.wpm-dept--more[aria-expanded="true"] { color: var(--wpm-ink); }
+.wpm-dept--more[aria-expanded="true"] .wpm-dept__chev { transform: rotate(180deg); }
+
+/* The departments that did not fit: a list hung from the strip's right end */
+.wpm-more {
+  position: absolute; top: calc(100% + 4px); right: 12px; z-index: 2;
+  display: flex; flex-direction: column; min-width: 200px; max-width: calc(100% - 24px);
+  max-height: 288px; overflow-y: auto; padding: 4px; box-sizing: border-box;
+  background: var(--wpm-surface); border: 1px solid var(--wpm-border); border-radius: 8px;
+  box-shadow: 0 8px 24px var(--wpm-shadow);
+}
+.wpm-more__item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  min-height: 36px; padding: 8px 12px; border: 0; border-radius: 6px; background: none;
+  font: inherit; font-size: 13px; color: var(--wpm-ink); text-align: left; cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.wpm-more__item:hover, .wpm-more__item:active { background: var(--wpm-hover); }
+
 /* ── Body: the unit panel's blocks (.vdp-block) ─────────────────────────── */
 .wpm-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .wpm-body[hidden] { display: none; }
@@ -186,6 +235,7 @@
 .wpm-bar > span { flex-basis: 0; min-width: 4px; }
 .wpm-bar > [data-tone="here"] { background: var(--wpm-here); }
 .wpm-bar > [data-tone="away"] { background: var(--wpm-away); }
+.wpm-bar > [data-tone="pending"] { background: var(--wpm-pending); }
 .wpm-bar > [data-tone="offshift"] { background: var(--wpm-offshift); }
 .wpm-bar > [data-tone="silent"] { background: var(--wpm-silent); }
 .wpm-bar > [data-tone="unplaced"] { background: repeating-linear-gradient(135deg, var(--wpm-unplaced) 0 2px, var(--wpm-hair) 2px 4px); }
@@ -198,6 +248,7 @@
 }
 .wpm-key[data-tone="here"] { --tone: var(--wpm-here); }
 .wpm-key[data-tone="away"] { --tone: var(--wpm-away); }
+.wpm-key[data-tone="pending"] { --tone: var(--wpm-pending); }
 .wpm-key[data-tone="offshift"] { --tone: var(--wpm-offshift); }
 .wpm-key[data-tone="unplaced"] { --tone: var(--wpm-unplaced); }
 /* The bar's own colour, so the key reads the bar and the map's tags */
@@ -256,12 +307,21 @@
 
 .wpm-list { margin: 8px -18px 0; }
 .wpm-list[hidden] { display: none; }
+/* A department's heading stays in view while its machines scroll under it,
+   and opens its tab */
 .wpm-group__head {
-  position: sticky; top: 0; z-index: 1; padding: 8px 18px 4px; background: var(--wpm-surface);
-  border-top: 1px solid var(--wpm-hair); border-bottom: 1px solid var(--wpm-hair);
-  font-size: 12px; font-weight: 600; color: var(--wpm-mut);
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: baseline; gap: 4px; width: 100%; min-height: 36px; padding: 8px 18px;
+  border: 0; border-top: 1px solid var(--wpm-hair); border-bottom: 1px solid var(--wpm-hair); border-radius: 0;
+  background: var(--wpm-surface); text-align: left; cursor: pointer;
+  transition: background-color 120ms ease;
 }
-.wpm-group__head span { margin-left: 4px; font-weight: 400; color: var(--wpm-ink-3); }
+.wpm-group:first-child .wpm-group__head { border-top: 0; }
+.wpm-group__name { font-size: 13px; font-weight: 600; color: var(--wpm-ink); }
+.wpm-group__n { font-size: 12px; color: var(--wpm-ink-3); font-variant-numeric: tabular-nums; }
+.wpm-group__meta { margin-left: auto; font-size: 12px; color: var(--wpm-ink-3); white-space: nowrap; }
+.wpm-group__head:hover { background: var(--wpm-hover); }
+.wpm-group__head:active { background: var(--wpm-press); }
 
 .wpm-row {
   --tone: var(--wpm-silent);
@@ -270,6 +330,7 @@
 }
 .wpm-row[data-tone="here"] { --tone: var(--wpm-here); }
 .wpm-row[data-tone="away"] { --tone: var(--wpm-away); }
+.wpm-row[data-tone="pending"] { --tone: var(--wpm-pending); }
 .wpm-row[data-tone="offshift"] { --tone: var(--wpm-offshift); }
 .wpm-row[data-tone="unplaced"] { --tone: var(--wpm-unplaced); }
 .wpm-row + .wpm-row { border-top: 1px solid var(--wpm-hair); }
@@ -286,7 +347,6 @@
 .wpm-row__when { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
 .wpm-row__shift { color: var(--wpm-ink-2); }
 .wpm-row__state { color: var(--tone); font-weight: 600; }
-.wpm-tag { flex: none; padding: 0 8px; border-radius: 999px; background: var(--wpm-draft-bg); color: var(--wpm-draft-ink); font-size: 11px; font-weight: 600; line-height: 18px; }
 
 .wpm-foot { color: var(--wpm-ink-3); font-size: 12px; }
 .wpm-msg { margin: 0; color: var(--wpm-ink-2); }
@@ -308,6 +368,88 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wpm-icon, .wpm-icon__chev, .wpm-fold__chev, .wpm-meter > i { transition: none; }
+  .wpm-icon, .wpm-icon__chev, .wpm-fold__chev, .wpm-meter > i, .wpm-dept, .wpm-dept__chev, .wpm-more__item, .wpm-group__head { transition: none; }
   .wpm-skel > span { animation: none; }
 }
+
+/* ── The unit's work plan on hover (WorkPlanHoverCard): the weighbridge
+      card's .mapcard (FleetMap.css), hanging from the unit by a pointer at
+      its top centre. FleetMap's placeHangingCard sets the transform, the
+      pointer's x (--wpm-tail-x) and data-side; the pointer turns to the foot
+      only when there is no room under the cursor. ───────────────────────── */
+.wpm-hover {
+  position: fixed; left: 0; top: 0; z-index: 9999;
+  width: 300px; padding-top: 9px;
+  pointer-events: none; will-change: transform;
+}
+.wpm-hover[data-side="above"] { padding-top: 0; padding-bottom: 9px; }
+.mapcard--workplan {
+  --mc-pending: var(--wpm-hover-pending);
+  --mc-pending-line: var(--wpm-hover-pending-line);
+  --mc-pending-fill: var(--wpm-hover-pending-fill);
+  --mc-warn: var(--wpm-hover-warn);
+  position: relative;
+  width: 100%; max-width: none; gap: 8px;
+}
+.app--light .mapcard--workplan { --mc-pending: var(--wpm-pending); --mc-warn: var(--wpm-away); --mc-good: var(--wpm-here); }
+/* The pointer: a square turned on its point, half inside the card, drawn in
+   the card's own surface and hairline so it reads as the card's edge. */
+.mapcard--workplan::before {
+  content: ""; position: absolute; top: -6px;
+  left: calc(var(--wpm-tail-x, 50%) - 6px);
+  width: 12px; height: 12px;
+  background: inherit;
+  border-top: 1px solid var(--border); border-left: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.wpm-hover[data-side="above"] .mapcard--workplan::before {
+  top: auto; bottom: -6px;
+  border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+
+.mapcard--workplan .mapcard__head { align-items: center; }
+.mapcard--workplan .mapcard__title {
+  display: flex; align-items: baseline; gap: 6px; min-width: 0;
+  font-size: 14px; overflow-wrap: break-word;
+}
+.mapcard__titlesub { font-family: var(--font-ui); font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
+/* The plan's state, said in a word: sentence case, a tinted pill. */
+.mapcard__state {
+  flex: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 10px; font-weight: 600; white-space: nowrap;
+}
+.mapcard__state--approved { color: var(--mc-good); border-color: var(--mc-good-line); background: var(--mc-good-fill); }
+.mapcard__state--pending { color: var(--mc-pending); border-color: var(--mc-pending-line); background: var(--mc-pending-fill); }
+
+.mapcard__job { display: flex; flex-direction: column; gap: 1px; }
+.mapcard__job .mapcard__line--main { font-size: 12px; }
+
+/* Fuel, as three figures under one hairline frame: what goes in, what the
+   tank holds, what the job needs. */
+.mapcard__fuel {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0; border: 1px solid var(--border); border-radius: 6px;
+}
+.mapcard__fuelcell { min-width: 0; padding: 5px 9px; }
+.mapcard__fuelcell + .mapcard__fuelcell { border-left: 1px solid var(--border); }
+.mapcard__fuelk { font-size: 10px; color: var(--text-secondary); }
+.mapcard__fuelv {
+  margin: 1px 0 0; font-family: var(--font-display); font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* The rest as a two-column list: the part's name, then its lines. */
+.mapcard__parts { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.mapcard__part {
+  display: grid; grid-template-columns: 62px minmax(0, 1fr); column-gap: 10px;
+  padding-top: 6px; border-top: 1px solid var(--border);
+}
+.mapcard__partk { margin: 0; font-size: 10px; font-weight: 500; line-height: 1.6; color: var(--text-secondary); }
+.mapcard__partv { margin: 0; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mapcard__planhead { margin: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mapcard__plancode { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; }
+.mapcard__planabout { color: var(--text-secondary); white-space: nowrap; }
+.mapcard__line { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.mapcard__line--main { color: inherit; font-weight: 500; }
+.mapcard__line--mono { font-family: var(--font-mono); font-size: 10.5px; }
+.mapcard__line--warn { color: var(--mc-warn); font-weight: 600; }

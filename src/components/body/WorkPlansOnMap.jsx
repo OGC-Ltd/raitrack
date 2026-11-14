@@ -10,6 +10,9 @@
  * plans themselves are re-read when FactorySuite's work plan webhook says one
  * changed (hooks/useWorkPlans).
  *
+ * Tabs under the head pick a department (or all of them); the whole card and
+ * the map follow it: plans, counts, locations and machines.
+ *
  * The card reads top-down: the day's plans, one bar of every machine split by
  * state, the work locations (here of planned), and the machines by department.
  * Two filters narrow the map and the list together: a state, picked from the
@@ -21,14 +24,17 @@
  *
  * Where it sits (operator, 2026-11-14): the right-hand side panel, in the unit
  * panel's own column and styles, while no unit is open there (`docked`, a
- * portal into App's #wpm-dock). When a unit's panel takes that place, the card
- * floats on the map and can be dragged by its head (or moved with the arrow
- * keys on its grip). On a phone it is a card along the top of the map.
+ * portal into App's #wpm-dock). While a unit's panel is open the card is not
+ * shown at all, and it comes back, as it was left, when that panel closes
+ * (operator 2026-11-14); the plan's tags stay on the map meanwhile. Where it
+ * cannot dock (a narrow screen, the fuel alerts open) it floats on the map
+ * and can be dragged by its head (or moved with the arrow keys on its grip).
+ * On a phone it is a card along the top of the map.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { workPlanView, drawingAreas, WP_LABEL, WP_ORDER, WP_PLACE_COLOR, shiftText } from "../../lib/workPlanMap";
+import { workPlanView, scopeView, fitDepartments, drawingAreas, WP_LABEL, WP_ORDER, WP_PLACE_COLOR, shiftText } from "../../lib/workPlanMap";
 import { pathOf, middleOfPath } from "../../lib/planOverlay";
 import { useNowTick } from "../../hooks/useNowTick";
 import "./WorkPlansOnMap.css";
@@ -40,9 +46,9 @@ const NAME_ZOOM = 13;
 /** Below this the whole estate is a few pixels across: outlines only, no labels. */
 const LABEL_ZOOM = 11;
 /** The key's labels, cut to fit a machine row */
-const ROW_STATE = { here: "At location", away: "Elsewhere", offshift: "Off shift", silent: "Not reporting", unplaced: "No geofence" };
+const ROW_STATE = { here: "At location", away: "Elsewhere", pending: "Pending", offshift: "Off shift", silent: "Not reporting", unplaced: "No geofence" };
 /** Tags that need a look sit above the rest where they overlap. */
-const TAG_Z = { away: 949, silent: 948, unplaced: 947, here: 946, offshift: 945 };
+const TAG_Z = { away: 950, pending: 949, silent: 948, unplaced: 947, here: 946, offshift: 945 };
 
 const placeHtml = (p, { compact, on, hide }) => hide && !on ? "<div class=\"wpm-place--hidden\"></div>" :
   `<div class="wpm-place${compact && !on ? " wpm-place--compact" : ""}${on ? " wpm-place--on" : ""}" ` +
@@ -63,6 +69,138 @@ function dayLabel(day) {
 const titleCase = (s) => String(s ?? "").toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The department tabs. As many as fit the strip are tabs; the rest sit under
+ * a "More" button at its end (operator 2026-11-14, for days that plan more
+ * departments than fit). The picked department always keeps its tab. Widths
+ * come from a hidden copy of every tab, measured again when the strip resizes.
+ */
+function DeptTabs({ departments, total, current, onPick }) {
+  const wrapRef = useRef(null);
+  const stripRef = useRef(null);
+  const measureRef = useRef(null);
+  const moreRef = useRef(null);
+  const listRef = useRef(null);
+  const [width, setWidth] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [shownIdx, setShownIdx] = useState(null); // null until measured: every tab
+
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el) return undefined;
+    const read = () => setWidth(el.clientWidth);
+    read();
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(read);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+
+  const currentIdx = departments.findIndex((d) => d.name === current);
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    const m = measureRef.current;
+    if (!strip || !m || !width) return;
+    const cs = getComputedStyle(strip);
+    const avail = strip.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const w = [...m.children].map((c) => c.getBoundingClientRect().width);
+    setShownIdx(fitDepartments({
+      all: w[0], depts: w.slice(1, -1), more: w[w.length - 1],
+      gap: parseFloat(cs.columnGap) || 0, avail, current: currentIdx,
+    }));
+  }, [departments, width, currentIdx]);
+
+  const shown = shownIdx ? shownIdx.map((i) => departments[i]) : departments;
+  const hidden = shownIdx ? departments.filter((_, i) => !shownIdx.includes(i)) : [];
+  useEffect(() => { if (!hidden.length) setOpen(false); }, [hidden.length]);
+
+  // Open: focus the first department; a press outside closes it
+  useEffect(() => {
+    if (!open) return undefined;
+    listRef.current?.querySelector("button")?.focus();
+    const away = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
+
+  const pick = (name) => { setOpen(false); onPick(name); };
+  const close = () => { setOpen(false); moreRef.current?.focus(); };
+
+  const onStripKey = (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    const tabs = [...e.currentTarget.querySelectorAll("button")];
+    const at = tabs.indexOf(document.activeElement);
+    if (at < 0) return;
+    e.preventDefault();
+    tabs[(at + step + tabs.length) % tabs.length].focus();
+  };
+  const onListKey = (e) => {
+    if (e.key === "Escape" || e.key === "Tab") {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); }
+      close();
+      return;
+    }
+    const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    const items = [...e.currentTarget.querySelectorAll("button")];
+    const at = items.indexOf(document.activeElement);
+    e.preventDefault();
+    items[(at + step + items.length) % items.length].focus();
+  };
+
+  const title = (d) => `Only ${titleCase(d.name)}'s ${plural(d.units, "machine")}, here and on the map`;
+  const hiddenUnits = hidden.reduce((n, d) => n + d.units, 0);
+
+  return (
+    <div ref={wrapRef} className="wpm-depts-wrap">
+      <div ref={stripRef} className="wpm-depts" role="group" aria-label="Department" onKeyDown={onStripKey}>
+        <button type="button" className="wpm-dept" aria-pressed={!current} onClick={() => pick(null)}>
+          All <span className="wpm-dept__n">{total}</span>
+        </button>
+        {shown.map((d) => (
+          <button type="button" key={d.name} className="wpm-dept" aria-pressed={current === d.name} onClick={() => pick(d.name)} title={title(d)}>
+            {titleCase(d.name)} <span className="wpm-dept__n">{d.units}</span>
+          </button>
+        ))}
+        {hidden.length > 0 && (
+          <button
+            ref={moreRef} type="button" className="wpm-dept wpm-dept--more"
+            aria-expanded={open} aria-controls="wpm-more" onClick={() => setOpen((v) => !v)}
+            title={`${plural(hidden.length, "more department")}, ${plural(hiddenUnits, "machine")}`}
+          >
+            More <span className="wpm-dept__n">{hidden.length}</span>
+            <i className="ti ti-chevron-down wpm-dept__chev" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      {/* Every tab at its widest, unseen, so the strip knows what fits */}
+      <div ref={measureRef} className="wpm-depts wpm-depts--measure" aria-hidden="true">
+        <span className="wpm-dept">All <span className="wpm-dept__n">{total}</span></span>
+        {departments.map((d) => (
+          <span key={d.name} className="wpm-dept">{titleCase(d.name)} <span className="wpm-dept__n">{d.units}</span></span>
+        ))}
+        <span className="wpm-dept">More <span className="wpm-dept__n">{departments.length}</span><i className="ti ti-chevron-down wpm-dept__chev" /></span>
+      </div>
+
+      {open && (
+        <div ref={listRef} id="wpm-more" className="wpm-more" role="group" aria-label="More departments" onKeyDown={onListKey}>
+          {hidden.map((d) => (
+            <button type="button" key={d.name} className="wpm-more__item" onClick={() => pick(d.name)} title={title(d)}>
+              <span>{titleCase(d.name)}</span>
+              <span className="wpm-dept__n">{d.units}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** The estate drawing's areas, for work locations with no geofence. Read once
  *  per page (the file is ~470 KB) and only while the layer is on; a failed read
@@ -109,7 +247,11 @@ const unitPanelRect = () => {
 export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, error, vehicles, zones, drawingUrl, onPickVehicle, onShowVehicle, onReleaseVehicle, isolatedVehicleId, docked: dockWanted, unitOpen, onClose }) {
   const now = useNowTick(30_000);
   const drawing = useDrawingAreas(drawingUrl);
-  const view = useMemo(() => workPlanView(data, vehicles, zones?.features, now, drawing), [data, vehicles, zones, now, drawing]);
+  const allView = useMemo(() => workPlanView(data, vehicles, zones?.features, now, drawing), [data, vehicles, zones, now, drawing]);
+  // The department tab: the card and the map show only its machines
+  const [dept, setDept] = useState(null);
+  const view = useMemo(() => scopeView(allView, dept), [allView, dept]);
+  const deptOn = view && view !== allView ? dept : null;
 
   // Open on a desk, folded to its head on a phone, where it would cover the
   // top third of the map. The machine list starts closed either way: open, it
@@ -207,7 +349,7 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
     if (wide) setOpen(false);
     onShowVehicle?.(u.vehicleId, cardInset(48, wide));
   };
-  const isolated = isolatedVehicleId ? view?.units.find((u) => u.vehicleId === isolatedVehicleId) ?? null : null;
+  const isolated = isolatedVehicleId ? allView?.units.find((u) => u.vehicleId === isolatedVehicleId) ?? null : null;
 
   // ── Floating: dragged by its head, kept inside the map and off a unit
   //    panel lying over it ────────────────────────────────────────────────
@@ -288,6 +430,13 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
     if (next) setListOpen(true);
   };
   const clear = () => { setTone(null); setPlaceKey(null); };
+  // A location belongs to the department picked before; a unit shown alone
+  // from another department goes back with the fleet.
+  const pickDept = (d) => {
+    setDept(d);
+    setPlaceKey(null);
+    if (d && isolated && isolated.line.department !== d) onReleaseVehicle?.();
+  };
 
   // Labels are built once per set of places; their clicks read the latest handler
   const pickPlaceRef = useRef(pickPlace);
@@ -380,6 +529,7 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
 
   const c = view?.counts;
   const full = Boolean(view && c.units > 0);
+  const departments = allView?.departments ?? [];
   const statusText = view
     ? Object.entries(view.statuses).map(([s, n]) => `${n} ${s.toLowerCase()}`).join(", ")
     : "";
@@ -428,6 +578,10 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
             : <span className="wpm-chip"><b>{c.here}</b> of {c.units} at their location</span>)}
         </div>
       </header>
+
+      {bodyOpen && full && departments.length > 1 && (
+        <DeptTabs departments={departments} total={allView.counts.units} current={deptOn} onPick={pickDept} />
+      )}
 
       <div id="wpm-body" className="wpm-body" hidden={!bodyOpen}>
         {!view && loading && !error && (
@@ -526,7 +680,7 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
 
             <section className="wpm-block wpm-block--list" aria-labelledby="wpm-h-machines">
               <button type="button" className="wpm-fold" aria-expanded={listOpen} aria-controls="wpm-list" onClick={() => setListOpen((v) => !v)}>
-                <h3 id="wpm-h-machines" className="wpm-title">Machines</h3>
+                <h3 id="wpm-h-machines" className="wpm-title">{deptOn ? `${titleCase(deptOn)} machines` : "Machines"}</h3>
                 <span className="wpm-block__meta">{filtered ? `${shown.length} of ${c.units}` : c.units}</span>
                 <i className="ti ti-chevron-down wpm-fold__chev" aria-hidden="true" />
               </button>
@@ -538,9 +692,18 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
               )}
               <div id="wpm-list" className="wpm-list" hidden={!listOpen}>
                 {groups.length === 0 && <p className="wpm-msg">No machine matches. <button type="button" className="wpm-link" onClick={clear}>Show all</button></p>}
-                {groups.map(([dept, units]) => (
-                  <div key={dept} className="wpm-group" role="group" aria-label={titleCase(dept)}>
-                    <div className="wpm-group__head">{titleCase(dept)} <span>{units.length}</span></div>
+                {groups.map(([group, units]) => (
+                  <div key={group} className="wpm-group" role="group" aria-label={titleCase(group)}>
+                    {!deptOn && (
+                      <button
+                        type="button" className="wpm-group__head" onClick={() => pickDept(group)}
+                        title={`Only ${titleCase(group)}, here and on the map`}
+                      >
+                        <span className="wpm-group__name">{titleCase(group)}</span>
+                        <span className="wpm-group__n">{units.length}</span>
+                        <span className="wpm-group__meta">{units.filter((u) => u.tone === "here").length} at location</span>
+                      </button>
+                    )}
                     {units.map((u) => {
                       const on = isolatedVehicleId != null && u.vehicleId === isolatedVehicleId;
                       return (
@@ -554,7 +717,6 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
                             <span className="wpm-row__name">
                               <span className="wpm-row__code">{u.machine}</span>
                               {u.machineName ? <em>{u.machineName}</em> : null}
-                              {u.line.planStatus === "DRAFT" && <span className="wpm-tag">Draft</span>}
                             </span>
                             <span className="wpm-row__detail">
                               {u.line.activity} at {u.line.workLocation ?? "no location"}
@@ -583,5 +745,9 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
     </section>
   );
 
+  // A unit's panel is open: it has the side, and the card waits for it to
+  // close. Only the card goes; the hooks above keep the tags on the map and
+  // the card's tab, filters and list as they were.
+  if (unitOpen) return null;
   return docked ? createPortal(panel, dockEl) : panel;
 }

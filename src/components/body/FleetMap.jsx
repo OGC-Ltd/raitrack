@@ -108,6 +108,8 @@ import { ZONE_STYLE, ZONE_FALLBACK, legendFor, zoneColor, fenceColor, fenceColor
 import GeofenceDrawer from "./GeofenceDrawer";
 import PlanOnMap from "./PlanOnMap";
 import WorkPlansOnMap from "./WorkPlansOnMap";
+import WorkPlanHoverCard from "./WorkPlanHoverCard";
+import { planEntryFor } from "../../lib/workPlanCard";
 import { useWorkPlans } from "../../hooks/useWorkPlans";
 import { WP_TONE, WP_LABEL, WP_ORDER } from "../../lib/workPlanMap";
 import { fenceExtent, clusterFences, fenceBadgeLabel, fenceNames } from "../../lib/fenceCluster";
@@ -1580,6 +1582,36 @@ function tooltipOffset(mouseX, mouseY) {
   return { left, top };
 }
 
+/** The work plan card hangs from the cursor by a pointer at its top centre
+ *  (WorkPlanHoverCard). Centred under the pointer and slid along an edge when
+ *  it would leave the screen, with the pointer kept on the cursor by
+ *  --wpm-tail-x. With no room underneath it turns over above the cursor, the
+ *  pointer at its foot. Layout px, as tooltipOffset. */
+const HANG_GAP = 10;
+function placeHangingCard(node, mouseX, mouseY) {
+  const { width: vw, height: vh } = layoutViewport();
+  const w = node.offsetWidth || 300;
+  const h = node.offsetHeight || TOOLTIP_H;
+  const left = Math.max(TOOLTIP_PAD, Math.min(mouseX - w / 2, vw - w - TOOLTIP_PAD));
+  const tail = Math.max(18, Math.min(mouseX - left, w - 18));
+  const roomBelow = vh - mouseY - HANG_GAP - TOOLTIP_PAD;
+  const roomAbove = mouseY - HANG_GAP - TOOLTIP_PAD;
+  const above = h > roomBelow && roomAbove > roomBelow;
+  let top = above ? mouseY - HANG_GAP - h : mouseY + HANG_GAP;
+  top = Math.max(TOOLTIP_PAD, Math.min(top, vh - h - TOOLTIP_PAD));
+  node.dataset.side = above ? "above" : "below";
+  node.style.setProperty("--wpm-tail-x", `${Math.round(tail)}px`);
+  node.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+}
+
+/** Place whichever hover card is up: the plan card hangs, the unit card sits
+ *  beside the cursor. */
+function placeHoverCard(node, mouseX, mouseY) {
+  if (node.dataset.place === "hang") { placeHangingCard(node, mouseX, mouseY); return; }
+  const { left, top } = tooltipOffset(mouseX, mouseY);
+  node.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+}
+
 /**
  * Hover card.
  *
@@ -2321,6 +2353,10 @@ export default function FleetMap() {
   });
   const planDataRef  = useRef(null);   // google.maps.Data instance
   const planHoverRef = useRef(null);   // hover InfoWindow for block names
+  // While Work plans is on, hovering the map is for the units' plan cards:
+  // the area layers (estate blocks, site plans, fences) keep their outlines
+  // but open no hover box (operator 2026-11-14). A click still opens theirs.
+  const areaHoverQuietRef = useRef(false);
   const planLabelsRef = useRef(null);  // the drawing's macro name plates
   const markerMapRef   = useRef({});   // vehicle id → DomMarker
 
@@ -2569,6 +2605,7 @@ export default function FleetMap() {
   // So do FactorySuite's work plans: only Mufindi (our Kasulu) keeps them.
   const workPlansAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
   const workPlans = useWorkPlans(orgId, workPlansAllowed && showWorkPlans);
+  areaHoverQuietRef.current = workPlansAllowed && showWorkPlans;
   // What the rail's search can find: the fences this layer can draw.
   const searchableFences = useMemo(() => (zones?.features ?? []).filter((f) =>
     !ZONE_SKIP_CATEGORIES.has(f.properties?.category) && !ZONE_EXCLUDE.has(zoneKey(f.properties?.name)) && !isDummyFence(f.properties?.name)), [zones]);
@@ -2755,6 +2792,13 @@ export default function FleetMap() {
    */
   const pinnedVehicle = pinnedId
     ? vehicles.find(v => v.id === pinnedId) ?? null
+    : null;
+
+  /* With the Work plans switch on, hovering a unit on today's plan shows its
+     plan (operator 2026-11-14) in the weighbridge card's design, in place of
+     the unit card. A click still pins the unit card. */
+  const planHover = !pinnedVehicle && hoveredVehicle && workPlansAllowed && showWorkPlans
+    ? planEntryFor(workPlans.data, hoveredVehicle.vehicleId)
     : null;
 
   /* The pinned (else the selected) unit's road to the end of its current
@@ -4877,7 +4921,7 @@ export default function FleetMap() {
         info.open(map);
       });
       shape.addListener("mouseover", (e) => {
-        if (!fenceDrawRef.current) showHover({ lat: e.latLng.lat(), lng: e.latLng.lng() }, p.name, color);
+        if (!fenceDrawRef.current && !areaHoverQuietRef.current) showHover({ lat: e.latLng.lat(), lng: e.latLng.lng() }, p.name, color);
       });
       shape.addListener("mouseout", clearHover);
 
@@ -4951,7 +4995,7 @@ export default function FleetMap() {
           anchor: "center",
           zIndex: 1,
           onClick: () => zoomTo(g),
-          onOver: (e) => layer.showFenceList(e.currentTarget, key, { lat: g.lat, lng: g.lng }, fenceNames(g.members)),
+          onOver: (e) => areaHoverQuietRef.current || layer.showFenceList(e.currentTarget, key, { lat: g.lat, lng: g.lng }, fenceNames(g.members)),
           onOut: layer.closeListSoon,
         });
         icon.setMap(map);
@@ -5142,7 +5186,7 @@ export default function FleetMap() {
     const hoverWin = hoverWindow(maps, map);
     data.addListener("mouseover", (e) => {
       const name = e.feature.getProperty("n");
-      if (!name) return;
+      if (!name || areaHoverQuietRef.current) return;
       const cls = e.feature.getProperty("c");
       const ha  = e.feature.getProperty("a");
       hoverWin.open({
@@ -5412,7 +5456,7 @@ export default function FleetMap() {
         pin,
       });
     };
-    data.addListener("mouseover", (e) => openAt(e));
+    data.addListener("mouseover", (e) => { if (!areaHoverQuietRef.current) openAt(e); });
     data.addListener("mouseout", () => hoverWin.leave());
     // Click PINS it. The two polygons are big enough that reading their detail
     // should not depend on the pointer staying inside them.
@@ -6638,10 +6682,7 @@ export default function FleetMap() {
 
     // Place it once, wherever the pointer was when it opened.
     const el = tooltipRef.current;
-    if (el) {
-      const { left, top } = tooltipOffset(lastPointerRef.current.x, lastPointerRef.current.y);
-      el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-    }
+    if (el) placeHoverCard(el, lastPointerRef.current.x, lastPointerRef.current.y);
 
     // A PINNED card stops there. Following the cursor is what makes a hover
     // card readable and what makes a clickable one impossible — the button
@@ -6653,8 +6694,7 @@ export default function FleetMap() {
       const node = tooltipRef.current;
       if (!node) return;
       const p = pointerXY(e);
-      const { left, top } = tooltipOffset(p.x, p.y);
-      node.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      placeHoverCard(node, p.x, p.y);
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
@@ -7823,7 +7863,8 @@ export default function FleetMap() {
           />
         )}
 
-        {(pinnedVehicle || hoveredVehicle) && (
+        {planHover && <WorkPlanHoverCard entry={planHover} nodeRef={tooltipRef} />}
+        {!planHover && (pinnedVehicle || hoveredVehicle) && (
           <VehicleTooltip
             vehicle={pinnedVehicle ?? hoveredVehicle}
             nodeRef={pinnedVehicle ? pinnedCardRef : tooltipRef}

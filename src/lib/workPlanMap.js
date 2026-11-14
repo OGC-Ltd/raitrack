@@ -21,10 +21,10 @@ import { fenceContains } from "./zoneContainment";
 
 // The app's status tokens (index.css --accent-ok / -warn / -info / -off), so
 // white tag text clears 4.5:1 on every tone; WorkPlansOnMap.css mirrors them.
-export const WP_TONE = { here: "#15803d", away: "#b45309", offshift: "#0369a1", silent: "#4b5563", unplaced: "#64748b" };
-export const WP_LABEL = { here: "At its work location", away: "Elsewhere on shift", offshift: "Off shift", silent: "Not reporting", unplaced: "Location not on the map" };
+export const WP_TONE = { here: "#15803d", away: "#b45309", pending: "#be185d", offshift: "#0369a1", silent: "#4b5563", unplaced: "#64748b" };
+export const WP_LABEL = { here: "At its work location", away: "Elsewhere on shift", pending: "Pending approval", offshift: "Off shift", silent: "Not reporting", unplaced: "Location not on the map" };
 /** The order the card and the map's key list them in. */
-export const WP_ORDER = ["here", "away", "offshift", "silent", "unplaced"];
+export const WP_ORDER = ["here", "away", "pending", "offshift", "silent", "unplaced"];
 export const WP_PLACE_COLOR = "#7c3aed";
 
 const ms = (iso) => (iso ? Date.parse(iso) : NaN);
@@ -136,12 +136,16 @@ export function workPlanView(data, vehicles, features, now = Date.now(), drawing
     if (!pos || !live.online) tone = "silent";
     else if (!fence) tone = "unplaced";
     else tone = fenceContains(pos, fence) ? "here" : onShift ? "away" : "offshift";
+    // A machine on a plan nobody has approved yet is awaiting approval,
+    // wherever it is (operator 2026-11-14: "a draft is a unit awaiting
+    // approval"); where it stands is judged once its plan is approved.
+    if (planStage(line.planStatus) === "PENDING") tone = "pending";
     return {
       key, machine: line.machine, machineName: line.machineName, vehicleId: line.vehicleId ?? null,
       plate: line.plate ?? null, position: pos, online: Boolean(live?.online), tone, onShift,
       line, lines: ls, fenceId: shape?.id ?? null,
     };
-  }).sort((a, b) => a.line.department.localeCompare(b.line.department) || a.machine.localeCompare(b.machine, undefined, { numeric: true }));
+  }).sort(byDepartmentThenHere);
 
   // Each placed work location with how many of its machines are on it
   const places = new Map();
@@ -157,18 +161,97 @@ export function workPlanView(data, vehicles, features, now = Date.now(), drawing
     if (u.tone === "here") p.here += 1;
   }
 
-  const count = (t) => units.filter((u) => u.tone === t).length;
-  const statuses = {};
-  for (const p of data.plans) statuses[p.status] = (statuses[p.status] ?? 0) + 1;
+  const plans = data.plans.map((p) => ({ planCode: p.planCode, department: p.department, status: planStage(p.status) }));
+  const depts = new Map();
+  for (const u of units) depts.set(u.line.department, (depts.get(u.line.department) ?? 0) + 1);
   return {
     day: data.day,
     units,
     places: [...places.values()].filter((p) => p.planned > 0),
-    counts: { plans: data.plans.length, units: units.length, lines: lines.length,
-              here: count("here"), away: count("away"), offshift: count("offshift"), silent: count("silent"), unplaced: count("unplaced"),
-              onShift: units.filter((u) => u.onShift).length },
-    statuses,
+    ...tally(units, plans),
+    plans,
+    departments: [...depts.entries()].map(([name, n]) => ({ name, units: n })).sort((a, b) => a.name.localeCompare(b.name)),
     unplacedLocations: (data.locations ?? []).filter((l) => !shapeOf(l.fenceId, l.name)).map((l) => l.name),
     noGps: data.unplacedMachines ?? [],
+  };
+}
+
+/**
+ * A plan's stage in one word. A draft and a submitted plan both wait for
+ * approval, so both read "PENDING"; anything else keeps FactorySuite's word.
+ */
+const PENDING_STATUSES = new Set(["DRAFT", "SUBMITTED", "PENDING", "PENDING_APPROVAL", "AWAITING_APPROVAL"]);
+export function planStage(status) {
+  const s = String(status ?? "").toUpperCase();
+  return !s || PENDING_STATUSES.has(s) ? "PENDING" : s;
+}
+
+/**
+ * Machines by department A to Z; inside one, those at their work location
+ * first, then the rest, each part by machine code A to Z (numbers in order).
+ */
+export function byDepartmentThenHere(a, b) {
+  return a.line.department.localeCompare(b.line.department)
+    || (a.tone === "here" ? 0 : 1) - (b.tone === "here" ? 0 : 1)
+    || a.machine.localeCompare(b.machine, undefined, { numeric: true });
+}
+
+/**
+ * Which department tabs fit the strip; the rest go under "More". Widths are
+ * the measured tabs: `all` (the All tab), `depts` (one per department, in the
+ * strip's order) and `more` (the More button), with `gap` between tabs. The
+ * picked department (`current`, an index, or -1) always keeps its tab. The
+ * answer is the indices shown, in order; every index means no More button.
+ */
+export function fitDepartments({ all, depts, more, gap, avail, current = -1 }) {
+  const every = depts.map((_, i) => i);
+  if (all + depts.reduce((n, w) => n + gap + w, 0) <= avail) return every;
+  let budget = avail - all - gap - more;
+  const shown = new Set();
+  if (current >= 0 && current < depts.length) { shown.add(current); budget -= depts[current] + gap; }
+  for (const i of every) {
+    if (shown.has(i)) continue;
+    if (depts[i] + gap > budget) break;
+    shown.add(i);
+    budget -= depts[i] + gap;
+  }
+  return every.filter((i) => shown.has(i));
+}
+
+/** The counts and plan statuses for a set of machines and plans. */
+function tally(units, plans) {
+  const count = (t) => units.filter((u) => u.tone === t).length;
+  const statuses = {};
+  for (const p of plans) statuses[p.status] = (statuses[p.status] ?? 0) + 1;
+  return {
+    counts: { plans: plans.length, units: units.length, lines: units.reduce((n, u) => n + u.lines.length, 0),
+              here: count("here"), away: count("away"), pending: count("pending"), offshift: count("offshift"), silent: count("silent"), unplaced: count("unplaced"),
+              onShift: units.filter((u) => u.onShift).length },
+    statuses,
+  };
+}
+
+/**
+ * The view narrowed to one department (the side panel's tabs): its machines,
+ * its plans, and only the locations its machines are planned at, recounted
+ * for them. No department, or one the day does not plan, is the whole view.
+ */
+export function scopeView(view, department) {
+  if (!view || !department || !view.departments.some((d) => d.name === department)) return view;
+  const units = view.units.filter((u) => u.line.department === department);
+  const plans = view.plans.filter((p) => p.department === department);
+  const places = view.places.map((p) => {
+    const mine = units.filter((u) => u.fenceId === p.fenceId);
+    return { ...p, planned: mine.length, here: mine.filter((u) => u.tone === "here").length };
+  }).filter((p) => p.planned > 0);
+  const machines = new Set(units.map((u) => u.machine));
+  return {
+    ...view,
+    units,
+    places,
+    ...tally(units, plans),
+    plans,
+    unplacedLocations: view.unplacedLocations.filter((name) => units.some((u) => !u.fenceId && u.line.workLocation === name)),
+    noGps: view.noGps.filter((m) => machines.has(m)),
   };
 }

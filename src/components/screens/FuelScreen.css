@@ -1,0 +1,28 @@
+/* Fuel page (FuelScreen): the Drivers page's stylesheet does the work; these
+   are the few things a machine row has that a driver row does not. Colours
+   come from the Drivers page's own tokens. */
+
+/* A machine code is three characters in the avatar, not two initials. */
+.fuel-avatar { font-size: 9.5px; letter-spacing: 0; }
+.dr-profile__avatar.fuel-avatar { font-size: 15px; --tier: var(--dg-label); }
+
+.fuel-dept { display: block; font-weight: 600; }
+.fuel-job { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fuel-full { margin-left: 4px; font-size: 11px; font-weight: 500; color: var(--dg-label); }
+
+.fuel-down { color: var(--dg-speed-ink); font-weight: 600; }
+.fuel-case__plan { color: var(--dg-label); }
+.fuel-case__flag { color: var(--dg-speed-ink); font-weight: 600; }
+
+/* The machine panel's rows. A job name runs long ("Irrigation - Pvc Submains
+   Installation · Back Filling"), and the Drivers row keeps its middle word on
+   one line, which pushed the panel sideways. Here the litres and the shift
+   share the first line, the job takes a line of its own and wraps, and the
+   detail lines wrap rather than cut a name off. */
+.fuel-panel .dr-case__line { flex-wrap: wrap; row-gap: 1px; }
+.fuel-panel .dr-case__plate {
+  order: 3; flex-basis: 100%; min-width: 0;
+  white-space: normal; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.35;
+}
+.fuel-panel .dr-case__sub { white-space: normal; overflow-wrap: anywhere; }
+.fuel-panel .dr-panel__body { overflow-x: hidden; }

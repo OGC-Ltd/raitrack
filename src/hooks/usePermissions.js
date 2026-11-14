@@ -57,6 +57,15 @@ export const PLANNER_ORGS = ["MENENGAI"];
 const PLANNER_SLUGS = ["planner:read", "planner:write"];
 
 /**
+ * The Fuel page (FactorySuite's fuel module): only where FactorySuite keeps
+ * work plans and fuels by them, KASULU (MUFINDI PAPER MILLS) today, and on the
+ * fuel fillings' right. Not a role's slug: the grant is the org plus that
+ * right (operator, 2026-11-14).
+ */
+export const FACTORY_FUEL = "factory_fuel:read";
+export const FACTORY_FUEL_ORGS = ["KASULU"];
+
+/**
  * The grader for one organisation BY ID, with no active company involved.
  *
  * `accessIn` above answers "what may they do at the company on screen", which
@@ -110,8 +119,10 @@ export function usePermissions() {
   const can = useMemo(() => (slug) => {
     const list = anyOf(slug);
     if (vssOn && list.includes(VSS_ALARMS)) return true;
-    const plannerOn = PLANNER_ORGS.includes(String(org?.code ?? "").toUpperCase());
-    const rest = list.filter((s) => s !== VSS_ALARMS && (plannerOn || !PLANNER_SLUGS.includes(s)));
+    const code = String(org?.code ?? "").toUpperCase();
+    if (list.includes(FACTORY_FUEL) && FACTORY_FUEL_ORGS.includes(code) && canHere(["fuel_filling:read"])) return true;
+    const plannerOn = PLANNER_ORGS.includes(code);
+    const rest = list.filter((s) => s !== VSS_ALARMS && s !== FACTORY_FUEL && (plannerOn || !PLANNER_SLUGS.includes(s)));
     return rest.length > 0 && canHere(rest);
   }, [canHere, vssOn, org?.code]);
 
