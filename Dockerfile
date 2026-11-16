@@ -54,6 +54,7 @@ RUN echo "apk refresh: ${APK_REFRESH}" \
 # (The base image's own pages go too: the site below is the whole web root.)
 USER 101
 COPY --chmod=644 deploy/web.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=644 deploy/web-headers.conf /etc/nginx/web-headers.conf
 # Files owned by root and read-only to nginx (uid 101): the server cannot alter the site.
 COPY --from=build /app/build /usr/share/nginx/html
 EXPOSE 8080
