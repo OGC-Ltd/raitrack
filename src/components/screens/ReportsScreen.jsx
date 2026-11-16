@@ -1867,7 +1867,7 @@ export default function ReportsScreen() {
                                   );
                                 }
                                 const cls = [isFigure(def, columns, i) && 'rpt-num',
-                                  conduct && columns[i] === 'Driver' && (noDriver ? 'rpt-driver rpt-driver--none' : 'rpt-driver'),
+                                  conduct && columns[i] === 'Driver' && 'rpt-driver',
                                   conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero'].filter(Boolean).join(' ');
                                 return <td key={i} className={cls || undefined}>{c}</td>;
                               })}

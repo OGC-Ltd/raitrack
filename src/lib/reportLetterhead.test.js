@@ -3,7 +3,7 @@ import { reportHtml, reportNumber, fitColumns, NO_DISPATCH_GREY } from './report
 import { textMm } from './shiftDoc';
 import { shownColumns } from './reportTables';
 import { NOTE_LINES } from './letterhead';
-import { REPORTS, overspeedEventTable, NO_DISPATCH, NO_DISPATCH_KEY } from './reportTables';
+import { REPORTS, overspeedEventTable, NO_DISPATCH_KEY } from './reportTables';
 import { sections, overspeedRows, overspeedEvents } from './fleetReports';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -80,11 +80,11 @@ describe('report on the letterhead', () => {
     const { html } = reportHtml(REPORTS.behaviour, done, opts);
     const trOf = (plate) => html.match(new RegExp(`<tr>(?:(?!</tr>).)*${plate}(?:(?!</tr>).)*</tr>`))[0];
     const grey = trOf('KDX 131Y');
-    // Every cell of the row is shaded, and the Driver cell wraps its words
+    // Every cell of the row is shaded; the reason is said once, in the key, not on the row
     expect(grey.match(/<td/g).length).toBe(grey.match(new RegExp(`background:${NO_DISPATCH_GREY}`, 'g')).length);
-    expect(grey).toContain(NO_DISPATCH);
-    expect(grey).toMatch(/class="[^"]*wrap[^"]*"[^>]*>Driven within the premises/);
+    expect(grey).not.toContain('Driven within the premises');
     expect(trOf('KCS 082M')).not.toContain(NO_DISPATCH_GREY);
+    expect(html.match(/Driven within the premises/gi)).toHaveLength(1);
     expect(html).toContain(NO_DISPATCH_KEY);
   });
 

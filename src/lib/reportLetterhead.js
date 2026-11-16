@@ -203,7 +203,6 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   const heads = def.columns(ctx);
   const cellsOf = (r) => def.cells(r, ctx).map((c, i) => {
     if (i === 0) return vehicleCell(r);
-    if (def.key === 'behaviour' && heads[i] === 'Driver' && noDispatchDriver(r)) return { html: esc(c), cls: 'wrap m' };
     if (r.noData && i >= def.num) return { html: esc(c), cls: 'm' };
     if (c === '–') return { html: c, cls: 'm' };
     if (def.key === 'behaviour' && heads[i] === 'Total') return { html: esc(c), cls: 'b' };

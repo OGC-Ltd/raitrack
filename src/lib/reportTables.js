@@ -111,11 +111,10 @@ export const SHOW_FOLLOW_UP_COLUMN = true;
 
 /**
  * Driver conduct: a vehicle with incidents and no driver on record (operator,
- * 16 Nov 2026). Its Driver cell says why there is no name, its row is shaded
- * grey, and NO_DISPATCH_KEY under the table says what the grey means.
+ * 16 Nov 2026). Its Driver cell is left blank and its row shaded grey; the
+ * reason is said once, in NO_DISPATCH_KEY under the table, not on every row.
  */
-export const NO_DISPATCH = 'Driven within the premises - No dispatch details to get the driver details';
-export const NO_DISPATCH_KEY = 'Rows shaded grey: the vehicle recorded incidents, but no dispatch details were found to get the driver details, so it is shown as driven within the premises.';
+export const NO_DISPATCH_KEY = 'Rows shaded grey: driven within the premises - no dispatch details to get the driver details.';
 export const noDispatchDriver = (r) => (r?.total ?? 0) > 0 && isBlank(r.driver);
 
 export const REPORTS = {
@@ -137,7 +136,7 @@ export const REPORTS = {
       // A unit without a dashcam cannot report these itself: a dash, not a
       // zero, unless an operator logged one.
       const cam = (k) => (r.dashcam || r.manual?.[k] ? String(r[k]) : '–');
-      return [vehicleCell(r) + (r.suspect ? ' (check sensor)' : ''), typeOf(r), noDispatchDriver(r) ? NO_DISPATCH : clean(r.driver),
+      return [vehicleCell(r) + (r.suspect ? ' (check sensor)' : ''), typeOf(r), clean(r.driver),
         String(r.accel), String(r.brake), String(r.corner ?? 0), cam('seatbelt'), cam('phone'), cam('covered'), String(r.total),
         ...(SHOW_FOLLOW_UP_COLUMN ? [statusWord(ctx?.followUp?.get(r.unit.key), ctx?.now)] : [])];
     },
@@ -270,11 +269,15 @@ const OPTIONAL = ['Type', 'Driver', 'Location'];
 /**
  * The indexes of the columns to show for these rows: every column, less a
  * Type or Driver column that is blank (or "UNSPECIFIED") for every vehicle.
+ * Driver conduct keeps Driver when a row is shaded for having no driver, so
+ * the blank the key under the table speaks of is there to see.
  */
 export function shownColumns(def, rows, ctx) {
   const heads = def.columns(ctx);
   const all = rows.map((r) => def.cells(r, ctx));
-  return heads.map((h, i) => i).filter((i) => !OPTIONAL.includes(heads[i]) || all.some((c) => !isBlank(c[i])));
+  const greyRows = def.key === 'behaviour' && rows.some(noDispatchDriver);
+  return heads.map((h, i) => i).filter((i) => !OPTIONAL.includes(heads[i]) || all.some((c) => !isBlank(c[i]))
+    || (greyRows && heads[i] === 'Driver'));
 }
 
 /** Is column i a figure (right-aligned)? */

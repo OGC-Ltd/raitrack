@@ -131,7 +131,7 @@ describe('the PDF', () => {
 
 describe('columns with nothing in them', () => {
   it('leave out Type when every vehicle has none, in the screen, CSV and PDF; keep Driver to say there was no dispatch', async () => {
-    const { shownColumns, csvTable, NO_DISPATCH } = await import('./reportTables');
+    const { shownColumns, csvTable, NO_DISPATCH_KEY } = await import('./reportTables');
     const bare = [{ id: 'X - KDU 474H', vehicleId: 'n1', vehicleType: 'UNSPECIFIED' }];
     const { units: u } = scopeUnits(bare, null);
     const rows = Object.assign([{ unit: { ...u[0], type: 'UNSPECIFIED' }, dashcam: true, accel: 1, brake: 0, seatbelt: 0, phone: 0, covered: 0, total: 1, driver: '' }], { logged: [] });
@@ -149,7 +149,7 @@ describe('columns with nothing in them', () => {
       { companyName: 'Nzoia', orgCode: 'NZOIA', groupWords: 'All vehicles', periodWords: 'p', logos: { rai: '', ogc: '' }, now: twoDays.to });
     expect(html).not.toContain('UNSPECIFIED');
     expect(html).toContain('>Driver<');
-    expect(html).toContain(NO_DISPATCH);
+    expect(html).toContain(NO_DISPATCH_KEY);
     expect(html).not.toContain('Logged by operators');
   });
 });
