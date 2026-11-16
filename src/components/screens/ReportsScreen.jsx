@@ -20,7 +20,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns } from '../../api/fleetReports';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
@@ -1489,11 +1489,13 @@ export default function ReportsScreen() {
       let rows;
       let failed = 0;
       if (key === 'behaviour') {
-        const [h, cam, turns] = await Promise.all([
+        const [h, cam, turns, runs] = await Promise.all([
           loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
           loadDashcamAlarms({ orgId, from: ctx.from }),
           // Harsh cornering is not on the feed: read as the Movements report reads it
           loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
+          // The dispatch runs over the period, to name the driver at the time of each incident
+          loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
         ]);
         ctx.cornerFailed = turns == null;
         ctx.dashcams = cam.cameras > 0;
@@ -1501,7 +1503,7 @@ export default function ReportsScreen() {
         if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
-        setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed },
+        setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed, runs },
                  unitList: units, ctx, missing, failed: h.failed, units: units.length });
         return;
       } else if (key === 'overspeed') {
@@ -1568,7 +1570,7 @@ export default function ReportsScreen() {
   const sentFound = useRef('');
   useEffect(() => {
     if (run.status !== 'done' || !run.raw || !orgId) return;
-    const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries });
+    const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
     const sig = `${orgId}:${JSON.stringify(found)}`;
     if (sig === sentFound.current || !found.length) return;
     sentFound.current = sig;
@@ -1579,7 +1581,7 @@ export default function ReportsScreen() {
   const done = useMemo(() => {
     if (run.status !== 'done') return null;
     if (!run.raw) return run;
-    const rows = behaviourRows(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries });
+    const rows = behaviourRows(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
     const inScope = new Set(run.unitList.map((u) => u.key));
     const period = periodCases(cases, run.ctx).filter((c) => inScope.has(c.unitKey));
     const followUp = new Map();

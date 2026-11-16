@@ -70,13 +70,13 @@ export function opensCase(r) {
  * The cases a report run finds: one per vehicle per fleet day in the period
  * that opens one, worked out a day at a time from the same records.
  */
-export function casesFromRun(units, harsh, alarms, { from, to, dashcams, logged }) {
+export function casesFromRun(units, harsh, alarms, { from, to, dashcams, logged, runs }) {
   const out = [];
   for (const day of daysCovering(from, to)) {
     const a = Math.max(from, dayStart(day));
     const b = Math.min(to, dayStart(day) + DAY);
     if (b <= a) continue;
-    for (const r of behaviourRows(units, harsh, alarms, { from: a, to: b, dashcams, logged })) {
+    for (const r of behaviourRows(units, harsh, alarms, { from: a, to: b, dashcams, logged, runs })) {
       if (!opensCase(r)) continue;
       out.push({
         id: caseId(r.unit.key, day),

@@ -11,6 +11,7 @@
 // Times are fleet time, Africa/Nairobi (UTC+3 all year, no daylight saving).
 
 import { summariseDay, MOVING_KMH } from './vehicleDay';
+import { unitKey } from './fleetGroups';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -228,12 +229,72 @@ const alarmKind = (code) => (PHONE_CODES.has(code) ? 'phone' : SEATBELT_CODES.ha
 export const cornerAsHarsh = (events) => (events ?? []).filter((e) => e?.kind === 'cornering' && Number.isFinite(e.at))
   .map((e) => ({ id: `turn-${e.vehicleId}-${e.at}`, vehicleId: e.vehicleId, plate: e.plate, ts: new Date(e.at).toISOString(), alertType: 'HARSH_CORNERING' }));
 
-export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true, logged = [] }) {
+/**
+ * The dispatch run that had a unit out at `t`, from the runs over the period
+ * (api/fleetReports loadDispatchRuns): signed out at or before `t`, and not
+ * signed back in by it. A run never signed back in lasts until the unit's next
+ * run starts. Where two cover `t`, the later sign-out wins. Null when none
+ * did: the unit was not out on a run.
+ */
+export function runAt(runs, t) {
+  let hit = null;
+  for (let i = 0; i < runs.length; i++) {
+    const r = runs[i];
+    const out = Date.parse(r.dispatchedAt);
+    if (!(out <= t)) continue;
+    const back = r.actualReturnAt ? Date.parse(r.actualReturnAt) : (runs.slice(i + 1).map((x) => Date.parse(x.dispatchedAt)).find((x) => x > out) ?? Infinity);
+    if (t < back && (!hit || out > Date.parse(hit.dispatchedAt))) hit = r;
+  }
+  return hit;
+}
+
+/** A unit's runs, by vehicle id or by plate, in sign-out order. */
+function runsOfUnit(u, runs) {
+  const ids = new Set(u.vehicles.map((v) => v.vehicleId));
+  return runs.filter((r) => (r.vehicleId && ids.has(r.vehicleId)) || (r.plate && unitKey(r.plate) === u.key))
+    .sort((a, b) => Date.parse(a.dispatchedAt) - Date.parse(b.dispatchedAt));
+}
+
+/**
+ * Who was driving a unit at each of its incidents, named once each, the one
+ * with the most incidents first (operator, 16 Nov 2026: the report named
+ * whoever had the vehicle when it was RUN, so last Tuesday's braking went to
+ * today's driver).
+ *
+ * `runs`: every dispatch run over the period (loadDispatchRuns). `null`: the
+ * server could not give them, so only the run open now is known, from the
+ * fleet list (`vehicle.trip`), and it names the driver only for incidents
+ * after it set off; earlier ones have no driver. `undefined`: the caller asked
+ * for neither, and the driver is the one the fleet list holds now, as before.
+ */
+export function driversAt(u, times, runs) {
+  if (runs === undefined) return u.vehicles.map((v) => (v.driver && v.driver !== 'Unassigned' ? v.driver : null)).find(Boolean) ?? null;
+  const mine = runs ? runsOfUnit(u, runs) : null;
+  const count = new Map();
+  for (const t of times) {
+    let name = null;
+    if (mine) name = runAt(mine, t)?.driverName ?? null;
+    else {
+      const trip = u.vehicles.map((v) => v.trip).find((x) => x?.driverName && Date.parse(x.departedAt) <= t);
+      name = trip?.driverName ?? null;
+    }
+    name = String(name ?? '').trim();
+    if (name) count.set(name, (count.get(name) ?? 0) + 1);
+  }
+  const names = [...count].sort((a, b) => b[1] - a[1]).map(([n]) => n);
+  return names.length ? names.join(', ') : null;
+}
+
+export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true, logged = [], runs }) {
   const find = unitFinder(units);
   const perVehicle = new Map();
   const alarmTimes = new Map();   // unit key → kind → [ms]
   const firstAt = new Map();   // unit key → earliest incident in the period
-  const seenAt = (k, t) => { if (Number.isFinite(t) && !(firstAt.get(k) <= t)) firstAt.set(k, t); };
+  const times = new Map();   // unit key → when each incident happened, for the driver at the time
+  const seenAt = (k, t) => {
+    if (Number.isFinite(t) && !(firstAt.get(k) <= t)) firstAt.set(k, t);
+    if (Number.isFinite(t)) times.set(k, [...(times.get(k) ?? []), t]);
+  };
   const bump = (it, kind, t, alarm = false) => {
     const hit = find(it);
     if (!hit) return;
@@ -302,7 +363,8 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     }
     r.total = r.accel + r.brake + r.corner + r.seatbelt + r.phone + r.covered;
     r.suspect = r.accel / days > HARSH_SUSPECT_PER_DAY || r.brake / days > HARSH_SUSPECT_PER_DAY;
-    r.driver = u.vehicles.map((v) => (v.driver && v.driver !== 'Unassigned' ? v.driver : null)).find(Boolean) ?? null;
+    // The driver AT THE TIME of its incidents, not the one on the unit now
+    r.driver = driversAt(u, times.get(u.key) ?? [], runs);
     r.firstAt = firstAt.get(u.key) ?? null;
     if (r.total > 0 || inScope.some((e) => e.unit.key === u.key)) rows.push(r);
   }
