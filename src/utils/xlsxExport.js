@@ -52,6 +52,22 @@ export function cellValue(v) {
 }
 
 const text = (c) => String(c?.text ?? c ?? '');
+
+/**
+ * Is column i a column of numbers: every cell that holds something a number, and
+ * at least one does? Blanks and dashes ("-", "–") do not count against it, so a
+ * count column with a missing value still lines up with its heading.
+ */
+export function numericColumn(rows, i) {
+  let seen = false;
+  for (const row of rows ?? []) {
+    const raw = text(row?.[i]).trim();
+    if (raw === '' || raw === '-' || raw === '–') continue;
+    if (typeof cellValue(raw) !== 'number') return false;
+    seen = true;
+  }
+  return seen;
+}
 /** "#FFFF00" → "FFFFFF00", "#fff" → "FFFFFFFF"; null for anything else, which Excel would call a broken file. */
 export function argb(hex) {
   let h = String(hex ?? '').trim().replace(/^#/, '');
@@ -146,6 +162,10 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
   const tableAt = (t, { filter = false, rowFills = null } = {}) => {
     const headRow = r;
     const rows = t.rows ?? [];
+    // A column of numbers is right-aligned below, so its heading is too: left over
+    // right-aligned figures, each number sat under the next column's heading
+    // (operator, 16 Nov 2026: AI Alarm Distribution's headings not over their data).
+    const right = t.head.map((_, i) => t.cols?.[i]?.align === 'right' || numericColumn(rows, i));
     t.head.forEach((h, i) => {
       const cell = ws.getCell(r, i + 1);
       cell.value = String(h);
@@ -154,7 +174,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
       cell.font = { bold: true, color: { argb: own ? 'FF000000' : WHITE }, size: 10 };
       cell.fill = solid(own ?? HEAD);
       if (own) cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-      cell.alignment = { vertical: 'middle', wrapText: true, horizontal: t.cols?.[i]?.align === 'right' ? 'right' : 'left' };
+      cell.alignment = { vertical: 'middle', wrapText: true, horizontal: right[i] ? 'right' : 'left' };
     });
     for (let c = t.head.length + 1; c <= cols; c++) ws.getCell(r, c).fill = solid(HEAD);
     ws.getRow(r).height = 28;
@@ -165,7 +185,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
         const cell = ws.getCell(r, j + 1);
         cell.value = cellValue(text(v));
         cell.font = { size: 10, bold: Boolean(v?.bold) };
-        cell.alignment = { vertical: 'top', wrapText: true, horizontal: typeof cell.value === 'number' || t.cols?.[j]?.align === 'right' ? 'right' : 'left' };
+        cell.alignment = { vertical: 'top', wrapText: true, horizontal: typeof cell.value === 'number' || right[j] ? 'right' : 'left' };
         cell.border = t.headFills ? { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } } : { bottom: { style: 'thin', color: { argb: LINE } } };
         const fill = (v?.fill && argb(v.fill)) || rowFill || (!t.headFills && i % 2 ? ZEBRA : null);
         if (fill) cell.fill = solid(fill);

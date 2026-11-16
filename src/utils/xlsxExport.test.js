@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import ExcelJS from 'exceljs';
-import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH } from './xlsxExport';
+import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH, numericColumn } from './xlsxExport';
 import { exportExcelVia, downloadTableCsv } from './tableExport';
 import { downloadProbeCsv } from './probeReport';
 
@@ -52,6 +52,25 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
     expect(saved.filter(Boolean)).toHaveLength(1);
     expect(saved.filter(Boolean)[0]).toMatch(/^unit-trips-\d{4}-\d{2}-\d{2}\.xlsx$/);
   });
+  it('puts each heading over its data: right over a column of numbers, left over words (16 Nov 2026)', () => {
+    // AI Alarm Distribution, as its CSV handler hands it over: numbers come as numbers
+    const head = ['Device Name', 'Total', 'Fatigue Driving', 'Phone Call', 'No Seat Belt'];
+    const body = [['KDK 821G', 21, 1, 0, 20], ['KDK 823Z', 11, 8, 3, 0], ['KDW 813Z', 6, 1, 0, 5]];
+    const ws = buildWorkbook(ExcelJS, { head, body, title: 'Alarm Distribution', now: Date.parse('2026-11-16T10:15:00+03:00') }).worksheets[0];
+    const headRow = ws.views[0].ySplit;
+    const align = (r, c) => ws.getCell(r, c).alignment.horizontal;
+    for (let c = 1; c <= head.length; c++) expect(align(headRow, c)).toBe(align(headRow + 1, c));
+    expect(align(headRow, 1)).toBe('left');
+    expect(align(headRow, 2)).toBe('right');
+  });
+
+  it('counts a column as numbers despite blanks and dashes, but not with words in it', () => {
+    expect(numericColumn([['a', 3], ['b', '–'], ['c', ''], ['d', '12.5']], 1)).toBe(true);
+    expect(numericColumn([['a', 3], ['b', 'No data']], 1)).toBe(false);
+    expect(numericColumn([['a', '-'], ['b', '']], 1)).toBe(false);
+    expect(numericColumn([['KDE 268P'], ['KDM 138L']], 0)).toBe(false);
+  });
+
   it('reads short and long colours, and drops what Excel would call broken', () => {
     expect(argb('#fff')).toBe('FFFFFFFF');
     expect(argb('#ff0000')).toBe('FFFF0000');
