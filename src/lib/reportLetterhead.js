@@ -9,6 +9,7 @@ import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './lett
 import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
+import { textMm } from './shiftDoc';
 
 const fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtGenerated = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -26,12 +27,75 @@ export const CONTACT_LINE = 'This is a system-generated report. For any queries 
 const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU' };
 
 /**
- * Column widths in mm, by report, for the page's inner width. Only the columns
- * shown (keep) are returned, widened in proportion to fill the page.
+ * Overspeeding (operator, 16 Nov 2026: "columns are not evenly distributed,
+ * words are truncated"): widths from what the columns hold, not fixed shares.
+ * Each column is given room for its heading (one line, bold, as the PDF prints
+ * it) and its longest value; Location takes what is left and wraps. Too little
+ * left for Location, and it gives way first, down to FLEX_MIN_MM; past that the
+ * word columns that can wrap (Driver, Top speed at, Type) give way too.
+ * Measured in the PDF's own font (shiftDoc textMm), which the letterhead's
+ * Calibri is narrower than, so what fits one fits both.
  */
-function columnsFor(def, ctx, keep, inner) {
+const FIT = {
+  overspeed: { flex: 'Location', wrap: ['Driver', 'Top speed at', 'Type'] },
+};
+const HEAD_PT = 7.2;
+const CELL_PT = 7.8;
+const PAD_MM = 3.8;
+/** Location's least before others wrap: a place wraps at its commas, a date and time read badly split. */
+const FLEX_MIN_MM = 24;
+/** Narrowest a wrapping column is squeezed to: a short word a line. */
+const WRAP_MIN_MM = 16;
+
+/** Widths (mm) of the shown columns, fitted to their contents; `wrap` names the columns now wrapping. */
+export function fitColumns(heads, cellRows, keep, inner, { flex, wrap = [], bold = [0] }) {
+  const need = keep.map((i) => {
+    const head = textMm(heads[i], HEAD_PT, true);
+    const cells = cellRows.reduce((m, row) => Math.max(m, textMm(row[i], CELL_PT, bold.includes(i))), 0);
+    return Math.max(head, cells) + PAD_MM;
+  });
+  const at = keep.findIndex((i) => heads[i] === flex);
+  const widths = [...need];
+  const wraps = new Set(at >= 0 ? [flex] : []);
+  const fixed = widths.reduce((s, w, k) => s + (k === at ? 0 : w), 0);
+  // Location's least: FLEX_MIN_MM, or less when its longest place needs less
+  if (at >= 0) widths[at] = Math.max(Math.min(FLEX_MIN_MM, need[at]), inner - fixed);
+  let over = widths.reduce((s, w) => s + w, 0) - inner;
+  // Too wide even with Location at its least: the word columns wrap, widest first
+  if (over > 0) {
+    const givers = keep.map((i, k) => ({ k, h: heads[i] })).filter((g) => wrap.includes(g.h))
+      .sort((a, b) => widths[b.k] - widths[a.k]);
+    for (const g of givers) {
+      if (over <= 0) break;
+      const floor = Math.max(WRAP_MIN_MM, textMm(heads[keep[g.k]], HEAD_PT, true) + PAD_MM);
+      const give = Math.min(over, Math.max(0, widths[g.k] - floor));
+      if (give > 0) { widths[g.k] -= give; over -= give; wraps.add(g.h); }
+    }
+  }
+  // Still over (a fleet with very long names): everything in proportion, as before
+  const sum = widths.reduce((s, w) => s + w, 0);
+  const k = sum > inner ? inner / sum : 1;
+  return { widths: widths.map((w) => Math.round(w * k * 10) / 10), wraps };
+}
+
+/**
+ * Column widths in mm, by report, for the page's inner width. Only the columns
+ * shown (keep) are returned, widened in proportion to fill the page; a report
+ * in FIT is fitted to its contents instead (`cellRows`: its rows' cells).
+ */
+function columnsFor(def, ctx, keep, inner, cellRows = []) {
   const heads = def.columns(ctx);
   const right = (i) => isFigure(def, heads, i);
+  const fit = FIT[def.key];
+  if (fit) {
+    const { widths, wraps } = fitColumns(heads, cellRows, keep, inner, fit);
+    return keep.map((i, k) => ({
+      h: heads[i],
+      ...(right(i) ? { r: true } : {}),
+      w: `${widths[k]}mm`,
+      ...(wraps.has(heads[i]) ? { wrap: true } : {}),
+    }));
+  }
   const widths = {
     // Vehicle/Type/Driver widened (operator, 9 Nov 2026: columns were truncating).
     // Type widened further (9 Nov 2026: "COMPANY_VEHICLE" still truncated).
@@ -121,7 +185,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   // The page's inner width in mm: A4 less 13 mm a side, upright or on its side
   const inner = landscape ? 271 : 184;
   const keep = shownColumns(def, done.rows, ctx);
-  const cols = columnsFor(def, ctx, keep, inner);
+  const cols = columnsFor(def, ctx, keep, inner, done.rows.map((r) => def.cells(r, ctx)));
+  const wrapAt = new Set(cols.map((c, k) => (c.wrap ? keep[k] : -1)));
   const reportNo = reportNumber(PREFIX[def.key] ?? 'RP', orgCode, now);
   const date = fmtDate.format(ctx.from);
 
@@ -135,6 +200,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       if (c === 'Pending') return { html: tag(c, false).replace('class="tag', 'style="margin-left:0" class="tag') };
       return { html: esc(c), cls: c === 'No case' ? 'm' : '' };
     }
+    // A fitted column given too little room for its words wraps them rather than cut them short
+    if (wrapAt.has(i)) return { html: esc(c), cls: 'wrap' };
     return esc(c);
   }).filter((_, i) => keep.includes(i));
 
