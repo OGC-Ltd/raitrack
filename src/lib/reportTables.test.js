@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { REPORTS, isFigure, movingRange } from './reportTables';
+import { REPORTS, isFigure, movingRange, noDispatchDriver, NO_DISPATCH, csvTable } from './reportTables';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 
@@ -27,5 +27,33 @@ describe('night report: Moving between', () => {
     const def = REPORTS.night;
     const heads = def.columns();
     expect(heads.map((h, i) => isFigure(def, heads, i))).toEqual([false, false, true, true, false]);
+  });
+});
+
+describe('driver conduct: incidents with no driver on record', () => {
+  const def = REPORTS.behaviour;
+  const driverAt = def.columns().indexOf('Driver');
+  const row = (driver, total = 3) => ({ unit: { key: 'KDX 131Y', plate: 'KDX 131Y', type: 'Truck' }, driver,
+    accel: total, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0, total, dashcam: true });
+
+  it('says why there is no name, in the Driver cell', () => {
+    expect(def.cells(row(null))[driverAt]).toBe(NO_DISPATCH);
+    expect(def.cells(row(''))[driverAt]).toBe(NO_DISPATCH);
+    expect(def.cells(row('Osero'))[driverAt]).toBe('Osero');
+  });
+
+  it('marks only rows that have incidents and no driver', () => {
+    expect(noDispatchDriver(row(null))).toBe(true);
+    expect(noDispatchDriver(row('Unknown'))).toBe(true);
+    expect(noDispatchDriver(row('Osero'))).toBe(false);
+    // An operator entry that is not counted leaves a row with no incidents: not marked
+    expect(noDispatchDriver(row(null, 0))).toBe(false);
+  });
+
+  it('carries the words into the CSV, keeping the Driver column', () => {
+    const t = csvTable(def, [{ name: null, rows: [row(null), row('Osero')] }], {});
+    const at = t.head.indexOf('Driver');
+    expect(at).toBeGreaterThan(-1);
+    expect(t.body.map((b) => b[at])).toEqual([NO_DISPATCH, 'Osero']);
   });
 });

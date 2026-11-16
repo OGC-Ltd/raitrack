@@ -118,6 +118,31 @@
 
 .rpt-row--nodata td { color: var(--sp4-text-4); }
 
+/* Driver conduct: incidents with no driver on record, shaded grey and keyed under the table.
+   Its own grey per theme: --sp4-raised is near-white in light mode and does not read as shaded. */
+.rpt-root { --rpt-nodriver: #2b303b; }
+.app--light .rpt-root { --rpt-nodriver: #e2e5ea; }
+.rpt-row--nodriver > td { background: var(--rpt-nodriver); }
+.rpt-table td.rpt-driver--none { white-space: normal; min-width: 220px; color: var(--sp4-text-3); font-style: italic; }
+.rpt-key {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px var(--sp4-gutter) 0;
+  color: var(--sp4-text-3);
+  font-size: var(--sp4-body);
+  line-height: 1.5;
+}
+.rpt-key__swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 3px;
+  background: var(--rpt-nodriver);
+  border: 1px solid var(--sp4-line-hi);
+}
+
 .rpt-tag {
   display: inline-block;
   margin-left: 8px;

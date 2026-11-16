@@ -27,7 +27,7 @@ import {
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, NO_DISPATCH_KEY } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -1841,8 +1841,9 @@ export default function ReportsScreen() {
                         )}
                         {s.rows.map((r) => {
                           const cells = def.cells(r, done.ctx);
+                          const noDriver = conduct && noDispatchDriver(r);
                           return (
-                            <tr key={r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}`}>
+                            <tr key={r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}`}>
                               {shown.map((i) => {
                                 const c = cells[i];
                                 if (i === 0) {
@@ -1866,7 +1867,7 @@ export default function ReportsScreen() {
                                   );
                                 }
                                 const cls = [isFigure(def, columns, i) && 'rpt-num',
-                                  conduct && columns[i] === 'Driver' && 'rpt-driver',
+                                  conduct && columns[i] === 'Driver' && (noDriver ? 'rpt-driver rpt-driver--none' : 'rpt-driver'),
                                   conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero'].filter(Boolean).join(' ');
                                 return <td key={i} className={cls || undefined}>{c}</td>;
                               })}
@@ -1877,6 +1878,9 @@ export default function ReportsScreen() {
                     ))}
                   </tbody>
                 </table>
+                {conduct && done.rows.some(noDispatchDriver) && (
+                  <p className="rpt-key"><span className="rpt-key__swatch" aria-hidden="true" />{NO_DISPATCH_KEY}</p>
+                )}
                 {done.ctx.events?.length > 0 && <OverspeedEvents events={done.ctx.events} unit={done.ctx.unit} />}
                 {done.missing.length > 0 && (
                   <details className="rpt-missing">
