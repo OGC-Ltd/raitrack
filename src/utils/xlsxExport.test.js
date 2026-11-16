@@ -52,7 +52,7 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
     expect(saved.filter(Boolean)).toHaveLength(1);
     expect(saved.filter(Boolean)[0]).toMatch(/^unit-trips-\d{4}-\d{2}-\d{2}\.xlsx$/);
   });
-  it('puts each heading over its data: right over a column of numbers, left over words (16 Nov 2026)', () => {
+  it('puts each heading over its data: centred over a column of numbers, left over words (16 Nov 2026)', () => {
     // AI Alarm Distribution, as its CSV handler hands it over: numbers come as numbers
     const head = ['Device Name', 'Total', 'Fatigue Driving', 'Phone Call', 'No Seat Belt'];
     const body = [['KDK 821G', 21, 1, 0, 20], ['KDK 823Z', 11, 8, 3, 0], ['KDW 813Z', 6, 1, 0, 5]];
@@ -61,7 +61,7 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
     const align = (r, c) => ws.getCell(r, c).alignment.horizontal;
     for (let c = 1; c <= head.length; c++) expect(align(headRow, c)).toBe(align(headRow + 1, c));
     expect(align(headRow, 1)).toBe('left');
-    expect(align(headRow, 2)).toBe('right');
+    for (let c = 2; c <= head.length; c++) expect(align(headRow, c)).toBe('center');
   });
 
   it('counts a column as numbers despite blanks and dashes, but not with words in it', () => {
