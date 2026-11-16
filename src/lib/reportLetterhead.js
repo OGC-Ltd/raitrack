@@ -30,8 +30,9 @@ const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU
  * Overspeeding (operator, 16 Nov 2026: "columns are not evenly distributed,
  * words are truncated"): widths from what the columns hold, not fixed shares.
  * Each column is given room for its heading (one line, bold, as the PDF prints
- * it) and its longest value; Location takes what is left and wraps. Too little
- * left for Location, and it gives way first, down to FLEX_MIN_MM; past that the
+ * it) and its longest value, and what room is left is shared out evenly (then:
+ * "the location still takes much space"). Too little room, and Location wraps
+ * and gives way first, down to FLEX_MIN_MM; past that the
  * word columns that can wrap (Driver, Top speed at, Type) give way too.
  * Measured in the PDF's own font (shiftDoc textMm), which the letterhead's
  * Calibri is narrower than, so what fits one fits both.
@@ -57,8 +58,14 @@ export function fitColumns(heads, cellRows, keep, inner, { flex, wrap = [], bold
   const at = keep.findIndex((i) => heads[i] === flex);
   const widths = [...need];
   const wraps = new Set(at >= 0 ? [flex] : []);
+  const total = need.reduce((s, w) => s + w, 0);
+  if (total <= inner) {
+    // Room to spare: shared out evenly, so no one column (Location, operator 16 Nov) sits half empty
+    const each = (inner - total) / widths.length;
+    return { widths: widths.map((w) => Math.round((w + each) * 10) / 10), wraps };
+  }
+  // Too little: Location gives way first, to FLEX_MIN_MM (or less when its longest place needs less)
   const fixed = widths.reduce((s, w, k) => s + (k === at ? 0 : w), 0);
-  // Location's least: FLEX_MIN_MM, or less when its longest place needs less
   if (at >= 0) widths[at] = Math.max(Math.min(FLEX_MIN_MM, need[at]), inner - fixed);
   let over = widths.reduce((s, w) => s + w, 0) - inner;
   // Too wide even with Location at its least: the word columns wrap, widest first

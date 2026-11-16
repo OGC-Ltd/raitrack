@@ -53,6 +53,17 @@ describe('report on the letterhead', () => {
       }
     });
 
+    it('shares spare room evenly, Location no more than the others', () => {
+      // Short places: everything fits, with room over
+      const short = cells.map((c) => c.map((v, i) => (heads[i] === 'Location' ? 'T9, Mtabili' : v)));
+      const { widths } = fitColumns(heads, short, keep, 184, { flex: 'Location', wrap: ['Driver', 'Top speed at', 'Type'] });
+      const extra = keep.map((i, k) => widths[k] - (Math.max(textMm(heads[i], 7.2, true), ...short.map((c) => textMm(c[i], 7.8, i === 0))) + 3.8));
+      // Every column got the same extra, within rounding
+      expect(Math.max(...extra) - Math.min(...extra)).toBeLessThan(0.2);
+      expect(extra[0]).toBeGreaterThan(0);
+      expect(widths.reduce((s, w) => s + w, 0)).toBeCloseTo(184, 0);
+    });
+
     it('marks Location cells to wrap in the PDF, so no place name is cut', () => {
       const done = { rows, secs: sections(rows, ['Mufindi'], (r) => r.count), ctx: week, missing: [], units: rows.length, failed: 0 };
       const { html } = reportHtml(def, done, opts);
