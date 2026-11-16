@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { machineKind, machineryRows, dayWindows, hourWindows, machineWindows, engineHoursOf, meterAdvance } from './fleetReports';
 import { REPORTS, csvTable, shownColumns } from './reportTables';
-import { reportKeysFor } from './reportNav';
+import { reportKeysFor, hasMachineryTab, REPORT_NODES } from './reportNav';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 const unit = (plate, vehicleId) => ({ key: plate.replace(/\W/g, ''), plate, type: '', group: null, vehicles: [{ vehicleId, id: plate }] });
@@ -290,11 +290,16 @@ describe('a tie as printed', () => {
   });
 });
 
-describe('Machinery in the report list', () => {
+describe('Machinery as a tab under Movements', () => {
   const can = () => true;
-  it('is offered to Mufindi alone', () => {
-    expect(reportKeysFor(can, 'KASULU')).toContain('machinery');
-    expect(reportKeysFor(can, 'SUKARI')).not.toContain('machinery');
-    expect(reportKeysFor((p) => p !== 'analytics:read', 'KASULU')).not.toContain('machinery');
+  it('is a Movements tab for Mufindi alone', () => {
+    expect(hasMachineryTab(can, 'KASULU')).toBe(true);
+    expect(hasMachineryTab(can, 'SUKARI')).toBe(false);
+    expect(hasMachineryTab((p) => p !== 'telemetry:read', 'KASULU')).toBe(false);
+  });
+
+  it('is not a report in the sidebar', () => {
+    expect(REPORT_NODES.map((n) => n.key)).not.toContain('machinery');
+    expect(reportKeysFor(can, 'KASULU')).not.toContain('machinery');
   });
 });

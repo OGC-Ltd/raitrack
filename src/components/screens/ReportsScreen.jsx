@@ -79,7 +79,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab } from '../../lib/reportNav';
 import { placeNameAt } from '../../hooks/usePlaceName';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes, bySiteKind } from '../../lib/movementReport';
 import { SITE_KINDS, siteKind } from '../../lib/siteLists';
@@ -703,9 +703,9 @@ function TypePicker({ types, picked, counts, onChange }) {
  * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
  * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, whoAmI }) {
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, whoAmI }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -722,6 +722,8 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
     fuelConsumption && { key: 'fuelConsumption', label: 'Fuel Consumption Rate' },
     // Each unit's fuel graph on a page, its figures under it (operator, 13 Nov 2026)
     fuelConsumption && { key: 'fuelGraphs', label: 'Fuel Graphs' },
+    // Excavators and dozers against the burn rate, after Fuel Graphs (operator, 16 Nov 2026)
+    machinery && { key: 'machinery', label: 'Machinery' },
   ].filter(Boolean);
   return (
     <>
@@ -792,6 +794,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
       {fuelConsumption && (
       <div className="mvt-panel" role="tabpanel" id="mvt-fuelGraphs-panel" aria-labelledby="mvt-fuelGraphs" hidden={tab !== 'fuelGraphs'}>
         <FuelGraphReport orgId={orgId} orgCode={orgCode} companyName={companyName} />
+      </div>
+      )}
+      {machinery && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-machinery-panel" aria-labelledby="mvt-machinery" hidden={tab !== 'machinery'}>
+        <ReportsScreen only="machinery" active={tab === 'machinery'} />
       </div>
       )}
     </>
@@ -1336,7 +1343,13 @@ function Kpi({ value, label, tone }) {
   );
 }
 
-export default function ReportsScreen() {
+/**
+ * The Reports page, or, with `only`, one report of REPORTS on its own: the
+ * Machinery tab under Movements is this, fixed to Machinery. `active`: the
+ * tab is in view; a report on a tab not yet opened is not made, so opening
+ * Movements does not read every machine's day behind it.
+ */
+export default function ReportsScreen({ only = null, active = true } = {}) {
   const { vehicles = [], orgId } = useFleetLiveShared();
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
@@ -1351,7 +1364,7 @@ export default function ReportsScreen() {
   const tabs = reportKeysFor(can, orgCode);
   // End of shift first, where the grants allow it.
   const chosen = useCurrentReport() ?? firstReport(tabs);
-  const key = tabs.includes(chosen) ? chosen : firstReport(tabs);
+  const key = only ?? (tabs.includes(chosen) ? chosen : firstReport(tabs));
   const isServer = Boolean(SERVER_TABS[key]);
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key, NIGHT, orgCode));
@@ -1576,11 +1589,11 @@ export default function ReportsScreen() {
   // from another report the state still holds that one's.
   const opened = useRef(null);
   useEffect(() => {
-    if (isServer || !orgId || !vehicles.length || run.status !== 'idle') return;
+    if (isServer || !active || !orgId || !vehicles.length || run.status !== 'idle') return;
     const fresh = opened.current !== key;
     opened.current = key;
     execute(fresh ? { span: spanFor(key, night, orgCode), night } : {});
-  }, [isServer, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isServer, active, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A behaviour run (and any new operator entry) opens the cases it finds;
   // what operators recorded on cases already there stays.
@@ -1710,7 +1723,7 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} whoAmI={by} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>

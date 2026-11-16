@@ -342,7 +342,8 @@ export function shownColumns(def, rows, ctx) {
 /** Is column i a figure (right-aligned)? */
 export const isFigure = (def, heads, i) => i >= def.num && !def.text?.includes(heads[i]);
 
-export const REPORT_ORDER = ['behaviour', 'night', 'overspeed', 'utilisation', 'machinery'];
+// Machinery is not here: it is a tab under Movements (operator, 16 Nov 2026), not a node of its own
+export const REPORT_ORDER = ['behaviour', 'night', 'overspeed', 'utilisation'];
 
 /** The CSV: one flat table, the group as its first column. */
 export function csvTable(def, secs, ctx) {
