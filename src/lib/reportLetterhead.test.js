@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { reportHtml, reportNumber } from './reportLetterhead';
+import { reportHtml, reportNumber, fitColumns } from './reportLetterhead';
+import { textMm } from './shiftDoc';
+import { shownColumns } from './reportTables';
 import { NOTE_LINES } from './letterhead';
 import { REPORTS, overspeedEventTable } from './reportTables';
 import { sections, overspeedRows, overspeedEvents } from './fleetReports';
@@ -10,6 +12,66 @@ const opts = { companyName: 'Menengai <Oil>', orgCode: 'MENENGAI', groupWords: '
   logos: { rai: 'r.png', ogc: 'o.png' }, now: at('2026-11-01T13:20:00') };
 
 describe('report on the letterhead', () => {
+  describe('overspeeding columns fitted to what they hold (16 Nov 2026)', () => {
+    // Mufindi's week, as the operator's PDF had it: Driver blank (so left out), long top-speed times
+    const week = { from: at('2026-11-09T00:00:00'), to: at('2026-11-16T00:00:00') };
+    const units = [['MUFINDI - LMV 15', 115, 'T9, Mtabili, Kigoma', '2026-11-09T14:32:15'], ['MUFINDI: LMV 05', 114, 'T9, Nyankwi, Kigoma', '2026-11-14T08:01:44'],
+      ['MUFINDI: LMV 06', 105, 'T18, Kazuramimba, Kigoma', '2026-11-15T17:20:09'], ['MUFINDI: LMV 19', 117, 'T9, Mtabili, Kigoma', '2026-11-12T11:47:30']];
+    const rows = units.map(([plate, peak, place, when]) => ({
+      ...overspeedRows([{ key: plate, plate, type: 'SALOON', group: 'Mufindi', vehicles: [{}] }],
+        new Map([[undefined, [{ durationSec: 240, distanceM: 5_980, peakKmh: peak, limitKmh: 100 }]]]))[0],
+      peakAt: at(when), peakPlace: place,
+    }));
+    const def = REPORTS.overspeed;
+    const heads = def.columns(week);
+    const cells = rows.map((r) => def.cells(r, week));
+    const keep = shownColumns(def, rows, week);
+    const need = (i) => Math.max(textMm(heads[i], 7.2, true), ...cells.map((c) => textMm(c[i], 7.8, i === 0)));
+
+    it('gives every column room for its heading and its longest value, and Location the rest', () => {
+      expect(keep.map((i) => heads[i])).not.toContain('Driver');
+      const { widths, wraps } = fitColumns(heads, cells, keep, 184, { flex: 'Location', wrap: ['Driver', 'Top speed at', 'Type'] });
+      keep.forEach((i, k) => { if (heads[i] !== 'Location') expect(widths[k]).toBeGreaterThanOrEqual(need(i)); });
+      expect(widths.reduce((s, w) => s + w, 0)).toBeCloseTo(184, 0);
+      expect([...wraps]).toEqual(['Location']);
+      // Location is no longer the giant: it holds only what the others leave
+      expect(widths[keep.indexOf(heads.indexOf('Location'))]).toBeLessThan(60);
+    });
+
+    it('lets Driver and Top speed at wrap, not cut, when a Driver column leaves too little room', () => {
+      const named = rows.map((r) => ({ ...r, driver: 'Abdallah Rashidi Mwakyusa Kitwana' }));
+      const namedCells = named.map((r) => def.cells(r, week));
+      const all = shownColumns(def, named, week);
+      const { widths, wraps } = fitColumns(heads, namedCells, all, 184, { flex: 'Location', wrap: ['Driver', 'Top speed at', 'Type'] });
+      expect(widths.reduce((s, w) => s + w, 0)).toBeLessThanOrEqual(184.5);
+      expect(wraps.has('Location')).toBe(true);
+      expect(wraps.has('Driver')).toBe(true);
+      // The figures still fit whole
+      for (const h of ['Overspeeds', 'Time over', 'Distance, km', 'Top / limit']) {
+        const i = heads.indexOf(h);
+        expect(widths[all.indexOf(i)]).toBeGreaterThanOrEqual(need(i) - 0.5);
+      }
+    });
+
+    it('shares spare room evenly, Location no more than the others', () => {
+      // Short places: everything fits, with room over
+      const short = cells.map((c) => c.map((v, i) => (heads[i] === 'Location' ? 'T9, Mtabili' : v)));
+      const { widths } = fitColumns(heads, short, keep, 184, { flex: 'Location', wrap: ['Driver', 'Top speed at', 'Type'] });
+      const extra = keep.map((i, k) => widths[k] - (Math.max(textMm(heads[i], 7.2, true), ...short.map((c) => textMm(c[i], 7.8, i === 0))) + 3.8));
+      // Every column got the same extra, within rounding
+      expect(Math.max(...extra) - Math.min(...extra)).toBeLessThan(0.2);
+      expect(extra[0]).toBeGreaterThan(0);
+      expect(widths.reduce((s, w) => s + w, 0)).toBeCloseTo(184, 0);
+    });
+
+    it('marks Location cells to wrap in the PDF, so no place name is cut', () => {
+      const done = { rows, secs: sections(rows, ['Mufindi'], (r) => r.count), ctx: week, missing: [], units: rows.length, failed: 0 };
+      const { html } = reportHtml(def, done, opts);
+      expect(html).toMatch(/class="[^"]*wrap[^"]*"[^>]*>T18, Kazuramimba, Kigoma/);
+      expect(html).not.toMatch(/NaN/);
+    });
+  });
+
   it('numbers the report by kind, organisation and time', () => {
     expect(reportNumber('HA', 'MENENGAI', at('2026-11-01T13:20:00'))).toBe('HA-MENENGAI-20261101-1320');
   });
