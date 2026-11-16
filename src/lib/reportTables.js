@@ -253,10 +253,81 @@ export const REPORTS = {
     },
     empty: 'No vehicles to report.',
   },
+
+  // Excavators and dozers, a row per machine per hour, or per day (Mufindi,
+  // operator 16 Nov 2026: "an hourly report"): engine hours and fuel, current
+  // to the hour. Area worked was taken out the same day: it is measured
+  // overnight, and held the report to yesterday.
+  machinery: {
+    key: 'machinery',
+    /** Columns from this index on are figures: right-aligned. */
+    num: 3,
+    label: 'Machinery',
+    title: 'Machinery Report',
+    preset: 'today',
+    maxDays: 7,
+    columns: (ctx) => ['Machine', 'Type', ctx?.byDay ? 'Day' : 'Hour', 'Engine hours', 'Fuel used, L', 'Burn rate, L/h', 'Actual, L/h'],
+    cells: (r, ctx) => [
+      vehicleCell(r), typeOf(r), machineWhen(r, ctx),
+      fixed(r.hours, 1) + (r.hoursFrom === 'ignition' ? '*' : ''),
+      r.fuelSeen ? km1(r.usedL) : r.fuelSensor ? '-' : 'No sensor',
+      r.std != null ? fixed(r.std, 1) : '-',
+      r.actual != null ? fixed(r.actual, 1) : '-',
+    ],
+    /** The row, against the burn rate: green at or below it, red above (operator, 16 Nov 2026: "the whole row"). */
+    rowTone: (r) => (r.vsStd === 'within' ? 'good' : r.vsStd === 'above' ? 'bad' : null),
+    /**
+     * How deep the row's colour: the further under the burn rate, the darker the
+     * green; the further over, the darker the red (operator, 16 Nov 2026). 0 is on
+     * the rate, 1 is no fuel at all, or double the rate and more.
+     */
+    rowDepth: (r) => (!r.vsStd || !(r.std > 0) ? 0
+      : Math.min(1, Math.max(0, r.vsStd === 'within' ? 1 - r.actual / r.std : r.actual / r.std - 1))),
+    sum: (r) => r.hours,
+    sumWords: (t) => `${fixed(t, 1)} engine hours`,
+    // The machines that ran, not the rows: a period across an hour mark gives a machine
+    // two rows, and "42 machine-hours" read as hours worked (operator, 16 Nov 2026)
+    countWords: (rows) => {
+      const m = new Set(rows.map((r) => r.unit.key)).size;
+      return `${n(m)} machine${m === 1 ? '' : 's'}`;
+    },
+    kpis: (rows) => {
+      const hours = rows.reduce((s, r) => s + r.hours, 0);
+      // Litres over the hours of the rows with a fuel reading, as they are
+      const fuelled = rows.filter((r) => r.fuelSeen);
+      const fH = fuelled.reduce((s, r) => s + r.hours, 0);
+      const fL = fuelled.reduce((s, r) => s + r.usedL, 0);
+      return [
+        { label: 'Machines', value: n(new Set(rows.map((r) => r.unit.key)).size) },
+        { label: 'Engine hours', value: `${fixed(hours, 1)} h` },
+        { label: 'Fuel used', value: `${km1(fL)} L` },
+        { label: 'Average burn', value: fH > 0 ? `${fixed(fL / fH, 1)} L/h` : '-' },
+        { label: 'Within burn rate', value: n(rows.filter((r) => r.vsStd === 'within').length) },
+        { label: 'Above burn rate', value: n(rows.filter((r) => r.vsStd === 'above').length), tone: rows.some((r) => r.vsStd === 'above') ? 'speed' : undefined },
+      ];
+    },
+    empty: 'No excavator or dozer ran in this period.',
+  },
 };
 
+const machineDayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short' });
+/** "Sun 15 Nov", from a fleet day key. */
+const machineDay = (key) => machineDayFmt.format(Date.parse(`${key}T12:00:00Z`)).replace(/,/g, '');
+/**
+ * The Hour (or Day) cell, saying no more than the period at the top does not
+ * (operator, 16 Nov 2026): blank over a single hour or day, so the column is
+ * left out; the hour alone within one day; the day and hour across several.
+ */
+function machineWhen(r, ctx) {
+  if (ctx?.oneWindow) return '';
+  if (r.hour == null) return machineDay(r.day);
+  return ctx?.oneDay ? machineHour(r) : `${machineDay(r.day)} ${machineHour(r)}`;
+}
+/** "14:00–15:00", Nairobi; an hour cut short by the period ends where it does ("14:00–14:37"). */
+const machineHour = (r) => `${clockOnly.format(r.from)}–${r.to % 3_600_000 === 0 ? clockOnly.format(r.to).replace(/^00:/, '24:') : clockOnly.format(r.to)}`;
+
 /** Columns left out when no vehicle in the report has a value in them (operator, 1 Nov 2026). */
-const OPTIONAL = ['Type', 'Driver', 'Location'];
+const OPTIONAL = ['Type', 'Driver', 'Location', 'Hour', 'Day'];
 
 /**
  * The indexes of the columns to show for these rows: every column, less a
@@ -271,7 +342,7 @@ export function shownColumns(def, rows, ctx) {
 /** Is column i a figure (right-aligned)? */
 export const isFigure = (def, heads, i) => i >= def.num && !def.text?.includes(heads[i]);
 
-export const REPORT_ORDER = ['behaviour', 'night', 'overspeed', 'utilisation'];
+export const REPORT_ORDER = ['behaviour', 'night', 'overspeed', 'utilisation', 'machinery'];
 
 /** The CSV: one flat table, the group as its first column. */
 export function csvTable(def, secs, ctx) {

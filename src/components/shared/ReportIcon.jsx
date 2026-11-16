@@ -127,6 +127,15 @@ const MARKS = {
       <path d="M12 3.5V12H3.5" />
     </>
   ),
+  // Machinery: an excavator, boom and bucket over its tracks.
+  machinery: (
+    <>
+      <rect x="3" y="16" width="11" height="4" rx="2" />
+      <path d="M5 16v-4h6l1.5 4" />
+      <path d="M11 12l4.5-6 4 4" />
+      <path d="M19.5 10v3.5l-2.5 1" />
+    </>
+  ),
 };
 
 export default function ReportIcon({ name, className = '' }) {

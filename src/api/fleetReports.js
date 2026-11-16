@@ -9,8 +9,8 @@
 //                       GET /incidents/speeding?vehicleId=… (their episodes,
 //                       each with its length and distance)
 //   Night driving,      GET /vehicles/:id/telemetry/day (lib/vehicleDay), a
-//   Utilisation         unit-day at a time, kept for the session: a finished
-//                       day is read once however many reports use it
+//   Utilisation,        unit-day at a time, kept for the session: a finished
+//   Machinery           day is read once however many reports use it
 //
 // Every loader reports progress as { done, total } and survives a failed
 // request: a unit or day that cannot be read is counted in `failed`, not fatal.
