@@ -1,6 +1,7 @@
 // Menengai's idle units, as the server's idle watch reports them (fleet-server
-// modules/idle-watch): a listed unit that has not moved for 2 hours of working
-// time (07:30–19:30), away from the yard and depots, critical at 6 hours.
+// modules/idle-watch): a listed unit that has not moved for 1 h 30 min of
+// working time (07:30–19:30), wherever it stands, the yard and depots included,
+// critical at 6 hours.
 // The server decides once for everybody; this file only words and filters
 // what it sends. Pure: no React.
 
