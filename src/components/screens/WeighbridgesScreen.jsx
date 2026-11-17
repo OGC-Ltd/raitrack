@@ -50,6 +50,7 @@ import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSec
 import { useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { downloadTableCsv } from "../../utils/tableExport";
+import { ticketsByBridge } from "../../lib/weighbridgeSheets";
 // The PDF on the report letterhead, named for the organisation (operator, 17 Nov 2026)
 import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
 import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
@@ -450,6 +451,22 @@ export default function WeighbridgesScreen() {
   // Weighed in the rows ON SCREEN — not the day's total, which the strip above
   // already states. The bar describes what it would export.
   const shownNetKg = rows.reduce((sum, r) => sum + (r.netWeightKg ?? 0), 0);
+  // All weighbridges: the Excel file's sheet 1 holds every ticket, then a sheet
+  // for each weighbridge (operator, 17 Nov 2026). The CSV stays one table.
+  const exportCsv = () => downloadTableCsv({
+    head: EXPORT_HEAD, body: exportBody(rows), filenameSlug,
+    ...(centre == null && {
+      title: "Weighbridge Tickets",
+      sheetName: "All weighbridges",
+      meta: [["Weighbridges", "All"]],
+      sheets: ticketsByBridge(rows, centres).map(g => ({
+        name: g.name,
+        title: `Weighbridge Tickets: ${g.name}`,
+        body: exportBody(g.rows),
+        meta: [["Weighbridge", g.name]],
+      })),
+    }),
+  });
 
   return (
     <div className="sp4-root sp4-root--framed wb-root">
@@ -685,7 +702,7 @@ export default function WeighbridgesScreen() {
                   note={exportNote}
                   loading={loading}
                   onReload={reload}
-                  onCsv={() => downloadTableCsv({ head: EXPORT_HEAD, body: exportBody(rows), filenameSlug })}
+                  onCsv={exportCsv}
                   onPdf={() => downloadLetterheadTablePdf({
                     ...fleet,
                     prefix:       "WB",
