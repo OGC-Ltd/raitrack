@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, withFuelNow } from "./factoryFuel";
+import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -109,5 +109,132 @@ describe("withFuelNow", () => {
 
   it("copes with no live fleet yet", () => {
     expect(withFuelNow([{ reference: "EX-16", vehicleId: "veh_ex16" }], undefined)[0].fuelNow).toBeNull();
+  });
+});
+
+describe("pumpTimeMs", () => {
+  it("reads FactorySuite's offsetless clock as Nairobi time", () => {
+    expect(pumpTimeMs("2026-11-15T06:12:00")).toBe(Date.parse("2026-11-15T03:12:00Z"));
+  });
+  it("takes a time with a zone as it is, and nothing as null", () => {
+    expect(pumpTimeMs("2026-11-15T06:12:00Z")).toBe(Date.parse("2026-11-15T06:12:00Z"));
+    expect(pumpTimeMs(null)).toBeNull();
+  });
+});
+
+describe("varianceFlagged", () => {
+  it("flags past the larger of 20 L and 5% of what was issued", () => {
+    expect(varianceFlagged(100, 19)).toBe(false);   // under 20 L
+    expect(varianceFlagged(100, 21)).toBe(true);
+    expect(varianceFlagged(1000, 45)).toBe(false);  // under 5% (50 L)
+    expect(varianceFlagged(1000, -51)).toBe(true);
+    expect(varianceFlagged(1000, null)).toBe(false);
+    expect(varianceFlagged(180, 20.3)).toBe(false);  // shown as 20 L: not past 20 L
+    expect(varianceFlagged(180, 20.6)).toBe(true);   // shown as 21 L
+  });
+});
+
+describe("reconcileFills", () => {
+  const fill = (id, at, litres, extra = {}) => ({
+    id, vehicleId: "veh_ctr06", filledAt: at, filledMl: litres * 1000,
+    initialFuelLevelMl: 537_000, finalFuelLevelMl: 537_000 + litres * 1000, verdict: "CONFIRMED", ...extra,
+  });
+  const machine = (issues, lines = []) => {
+    const pumpIssues = issues.map((i, k) => ({ id: `i${k}`, done: true, day: "2026-11-15", requestId: null, ...i }));
+    return {
+      reference: "CTR-06", vehicleId: "veh_ctr06", plate: "MUFINDI - CTR 06", tankLitres: 1650, lines, pumpIssues,
+      issues: pumpIssues.length, issued: pumpIssues.reduce((s, i) => s + (i.litres ?? 0), 0),
+    };
+  };
+
+  it("pairs a fuelling with the probe fill just after it, and works out the variance", () => {
+    const [r] = reconcileFills(
+      [machine([{ at: "2026-11-15T06:12:00", litres: 1100, requestId: "req1" }], [{ requestId: "req1", fullTank: true }])],
+      [fill("f1", "2026-11-15T03:40:00Z", 1060)],      // 06:40 Nairobi, 28 min after
+    );
+    const [f] = r.fills;
+    expect(f).toMatchObject({ actual: 1100, probe: 1060, variance: 40, before: 537, state: "ok", request: { full: true } });
+    expect(f.expected).toBe(1113);                      // 1,650 L tank less 537 L in it
+    expect(r).toMatchObject({ probeFilled: 1060, variance: 40, varianceFlags: 0 });
+  });
+
+  it("flags a variance past tolerance", () => {
+    const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: 300 }])],
+      [fill("f1", "2026-11-15T03:30:00Z", 250)]);
+    expect(r.fills[0]).toMatchObject({ variance: 50, state: "over" });
+    expect(r.varianceFlags).toBe(1);
+  });
+
+  it("leaves a fill outside the window unpaired, and does not list it", () => {
+    const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: 300 }])],
+      [fill("f1", "2026-11-15T09:00:00Z", 300)]);      // 12:00 Nairobi, nearly 6 h later
+    expect(r.fills.map((f) => f.state)).toEqual(["no-probe"]);
+    expect(r.varianceFlags).toBe(1);
+    expect(r).toMatchObject({ pumpMatched: null, probeFilled: null, variance: null });
+  });
+
+  it("uses each probe fill once, nearest first", () => {
+    const [r] = reconcileFills(
+      [machine([{ at: "2026-11-15T06:00:00", litres: 200 }, { at: "2026-11-15T06:30:00", litres: 150 }])],
+      [fill("a", "2026-11-15T03:05:00Z", 200), fill("b", "2026-11-15T03:35:00Z", 150)],
+    );
+    const pairs = r.fills.map((f) => [f.actual, f.probeFill?.id]).sort();
+    expect(pairs).toEqual([[150, "b"], [200, "a"]]);
+  });
+
+  it("never matches a reading that was no real fill", () => {
+    const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: 300 }])],
+      [fill("f1", "2026-11-15T03:30:00Z", 300, { verdict: "REDISTRIBUTION" })]);
+    expect(r.fills[0]).toMatchObject({ state: "no-probe", probe: null, variance: null });
+  });
+
+  it("matches the real fill past a nearer reading that was no real fill", () => {
+    const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: 300 }])], [
+      fill("noise", "2026-11-15T03:13:00Z", 20, { verdict: "REDISTRIBUTION" }),
+      fill("real", "2026-11-15T03:50:00Z", 290),
+    ]);
+    expect(r.fills[0]).toMatchObject({ state: "ok", probe: 290, variance: 10 });
+    expect(r.fills[0].probeFill.id).toBe("real");
+  });
+
+  it("matches on the plate when the register has no vehicleId", () => {
+    const m = { ...machine([{ at: "2026-11-15T06:12:00", litres: 300 }]), vehicleId: null };
+    const [r] = reconcileFills([m], [{ ...fill("f1", "2026-11-15T03:30:00Z", 300), vehicleId: "other", vehicle: { registrationPlate: "Mufindi-CTR06" } }]);
+    expect(r.fills[0].state).toBe("ok");
+  });
+
+  it("compares fuellings only: a probe fill with no fuelling is neither listed nor counted", () => {
+    const [r] = reconcileFills(
+      [machine([{ at: "2026-11-16T10:01:00", litres: 71 }])],
+      [fill("pumped", "2026-11-16T07:20:00Z", 58),      // 10:20 Nairobi, after the fuelling
+       fill("a", "2026-11-16T17:29:00Z", 28),           // 20:29, no fuelling near it
+       fill("b", "2026-11-12T06:49:00Z", 15)],
+    );
+    expect(r.fills).toHaveLength(1);
+    expect(r).toMatchObject({ pumpMatched: 71, probeFilled: 58, variance: 13, varianceFlags: 0 });
+  });
+
+  it("totals pump and probe over the fuellings both recorded", () => {
+    const [r] = reconcileFills(
+      [machine([{ at: "2026-11-15T06:00:00", litres: 200 }, { at: "2026-11-16T06:00:00", litres: 100 }])],
+      [fill("a", "2026-11-15T03:20:00Z", 190)],          // only the first fuelling has a probe fill
+    );
+    expect(r).toMatchObject({ pumpMatched: 200, probeFilled: 190, variance: 10, varianceFlags: 1 });
+  });
+
+  it("leaves both totals blank with nothing issued and no probe fill", () => {
+    const [r] = reconcileFills([machine([])], []);
+    expect(r).toMatchObject({ probeFilled: null, variance: null, varianceOver: false });
+  });
+
+  it("says unknown, not missing, when the fillings could not be read", () => {
+    const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: 300 }])], null);
+    expect(r.fills[0].state).toBe("unknown");
+    expect(r.varianceFlags).toBe(0);
+  });
+
+  it("ignores a fuelling still in progress", () => {
+    const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: null, done: false }])], []);
+    expect(r.fills).toEqual([]);
   });
 });

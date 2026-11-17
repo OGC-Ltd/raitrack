@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
-import { getFactoryFuel } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged, withFuelNow } from "../../lib/factoryFuel";
+import { getFactoryFuel, getProbeFillings } from "../../api/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged, withFuelNow, reconcileFills } from "../../lib/factoryFuel";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
@@ -28,6 +28,18 @@ import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 const fmt = (n, d = 0) =>
   Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const litres = (n) => (n == null ? "-" : `${fmt(n)} L`);
+/**
+ * A variance (actual fill less probe refill) in words (operator 2026-11-17:
+ * "either it tells us probe recorded more than actual fill or less, then in
+ * brackets the amount"): "Probe less (20 L)", "Probe more (15 L)", "Same".
+ * Judged on the whole litres shown, so a figure never reads as one thing and
+ * is coloured as another.
+ */
+const probeWords = (n) => {
+  if (n == null) return "-";
+  const l = Math.round(n);
+  return l > 0 ? `Probe less (${fmt(l)} L)` : l < 0 ? `Probe more (${fmt(-l)} L)` : "Same";
+};
 const fmtDay = (day) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const sentence = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ") : "");
@@ -71,10 +83,20 @@ export default function FuelScreen() {
   const totals = useMemo(() => fuelTotals(rows), [rows]);
   // The tank right now, as Maintenance's "Fuel now" (lib/factoryFuel withFuelNow).
   const { vehicles } = useFleetLiveShared();
-  const tableRows = useMemo(() => withFuelNow(rows, vehicles), [rows, vehicles]);
+  // What the fuel probes recorded going in over the same days, for pump against
+  // probe (lib/factoryFuel reconcileFills). Read apart from FactorySuite's data:
+  // when it fails the page still stands, and says the probe side is unknown.
+  const probe = useApiData(
+    () => getProbeFillings({ companyId: activeCompanyId, from, to }),
+    [activeCompanyId, from, to],
+    { cacheKey: `ft-factory-fuel-probe:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
+  );
+  const fillings = probe.error ? null : probe.data ?? null;
+  const checked = useMemo(() => reconcileFills(withFuelNow(roster, vehicles), fillings), [roster, vehicles, fillings]);
+  const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
 
   const [selected, setSelected] = useState(null);
-  const machine = selected ? roster.find((r) => r.reference === selected) ?? null : null;
+  const machine = selected ? checked.find((r) => r.reference === selected) ?? null : null;
   const closeMachine = useCallback(() => setSelected(null), []);
 
   const deptName = dept === ALL ? null : deptOptions.find((o) => o.key === dept)?.label;
@@ -312,6 +334,8 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                 {th("Fuel now", "fuelNow", true)}
                 {th("Need", "need", true)}
                 {th("Issued", "issued", true)}
+                {th("Probe filled", "probeFilled", true)}
+                {th("Variance", "variance", true)}
                 {th("Pump flags", "flagged", true)}
               </tr>
             </thead>
@@ -361,13 +385,20 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                     </td>
                     <MetricCell label="Need" k="need" value={r.need} sortKey={sortKey} max={barMax} />
                     <MetricCell label="Issued" k="issued" value={r.issues ? r.issued : null} sortKey={sortKey} max={barMax} />
+                    {/* Pump against probe (lib/factoryFuel reconcileFills): totals over the
+                        fuellings that have both figures; the machine panel lists each one. */}
+                    <td className={r.probeFilled != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Probe filled"
+                        title="What the fuel probe recorded going in, for the fuellings the pump recorded">
+                      {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
+                    </td>
+                    <VarianceCell r={r} />
                     {r.flagged
                       ? <td className="dr-num dr-incident dr-incident--speed" data-label="Pump flags"><span className="dr-incident__dot" aria-hidden="true" />{fmt(r.flagged)}</td>
                       : <td className="dr-num dr-num--zero" data-label="Pump flags">0</td>}
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={10} className="dr-grid__empty">No machines match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={12} className="dr-grid__empty">No machines match.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -383,6 +414,28 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The pump less the probe, over the fuellings both recorded (operator
+ * 2026-11-17: fuellings only). "+13 L": the pump says 13 L more went in than
+ * the probe saw. Red past tolerance (lib/factoryFuel varianceFlagged); the
+ * fuellings behind it are in the machine panel.
+ */
+function VarianceCell({ r }) {
+  if (r.variance == null) {
+    const why = !r.probeKnown ? "The probe fills could not be read"
+      : r.issues ? "The probe recorded no fill for these fuellings" : "No fuelling at the pump in this range";
+    return <td className="dr-num dr-num--zero" data-label="Variance" title={why}>-</td>;
+  }
+  const check = r.varianceFlags ? `. ${r.varianceFlags} fuelling${r.varianceFlags === 1 ? "" : "s"} to check: open the machine` : "";
+  return (
+    <td className={"dr-num" + (r.varianceOver ? " dr-incident dr-incident--speed" : "")} data-label="Variance"
+        title={`Pump ${fmt(r.pumpMatched ?? 0)} L less probe ${fmt(r.probeFilled ?? 0)} L, over the fuellings both recorded${check}`}>
+      {r.varianceOver && <span className="dr-incident__dot" aria-hidden="true" />}
+      {probeWords(r.variance)}
+    </td>
   );
 }
 
@@ -429,6 +482,71 @@ function DayBlock({ day }) {
 }
 
 /** One machine, down the right of the page: its plans' shifts and its fuellings. */
+const fmtFillWhen = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/**
+ * Fuel data comparison (operator 2026-11-17: "comparison, not reconciliation"): each fuelling the pump recorded against the refill the
+ * machine's fuel probe recorded for it, as one plain table (operator
+ * 2026-11-17: "a simple table showing the Actual fuel filled, Probe refill data
+ * and the variance"; "too much explanation"). A row is red when its variance
+ * is past tolerance or the probe has no refill for it; the foot totals the
+ * fuellings both recorded. lib/factoryFuel reconcileFills.
+ */
+function FillCheck({ m }) {
+  const rows = m.fills ?? [];
+
+  return (
+    <section className="dr-panel__sec fuel-fills">
+      {/* No count beside the title (operator 2026-11-17): the red rows say it. */}
+      <h3 className="dr-panel__h">Fuel data comparison</h3>
+
+      {!m.vehicleId && !m.plate ? (
+        <p className="dr-panel__note">Not linked to a tracked unit: no probe data.</p>
+      ) : rows.length === 0 ? (
+        <p className="dr-panel__note">No fuelling recorded at the pump in this period.</p>
+      ) : (
+        <>
+          <table className="fuel-rec">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th className="r">Actual fill</th>
+                <th className="r">Probe refill</th>
+                <th className="r">Variance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((f) => {
+                const bad = f.state === "over" || f.state === "no-probe";
+                return (
+                  <tr key={f.key} className={bad ? "is-bad" : undefined}>
+                    <td>{f.at != null ? fmtFillWhen.format(f.at) : f.day ? fmtDay(f.day) : "-"}</td>
+                    <td className="r">{f.actual != null ? `${fmt(f.actual)} L` : "-"}</td>
+                    <td className="r">
+                      {f.probe != null ? `${fmt(f.probe)} L` : f.state === "unknown" ? "-" : <span className="fuel-rec__none">No record</span>}
+                    </td>
+                    <td className="r fuel-rec__var">{probeWords(f.variance)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            {m.variance != null && (
+              <tfoot>
+                <tr className={m.varianceOver ? "is-bad" : undefined}>
+                  <th scope="row">Total</th>
+                  <td className="r">{fmt(m.pumpMatched)} L</td>
+                  <td className="r">{fmt(m.probeFilled)} L</td>
+                  <td className="r fuel-rec__var">{probeWords(m.variance)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </>
+      )}
+    </section>
+  );
+}
+
 function MachinePanel({ m, from, to, onClose }) {
   const ref = useRef(null);
   const st = machineState(m);
@@ -489,6 +607,8 @@ function MachinePanel({ m, from, to, onClose }) {
             ))}
           </dl>
         </section>
+
+        <FillCheck m={m} />
 
         {m.shifts > 0 && (
           <section className="dr-panel__sec dr-panel__charts">
