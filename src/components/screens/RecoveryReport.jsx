@@ -195,17 +195,20 @@ export default function RecoveryReport({ orgId, orgCode, companyName, active = t
                 </tbody>
               </table>
             </div>
-            <p className="rpt-sub recovery-note">Stops are GPS stands of at least five minutes. Fuel is shown only when the day’s readings support a measurement. The route trace joins GPS fixes and is not a road map.</p>
+            <p className="rpt-sub recovery-note" title="Stops are GPS stands of at least five minutes. Fuel is shown only when the day’s readings support a measurement. The route trace joins GPS fixes and is not a road map.">Stops are GPS stands of at least five minutes. Fuel is shown only when the day’s readings support a measurement. The route trace joins GPS fixes and is not a road map.</p>
             {vehicles.map((vehicle) => (
               <details key={`${vehicle.plate}-detail`} className="recovery-detail">
-                <summary>{vehicle.plate} · {vehicle.recoveryType === 'puncture' ? 'Puncture' : 'Mechanical'} recovery · Route and stops</summary>
+                <summary>
+                  <span className="rpt-group__name">{vehicle.plate}</span>
+                  <span className="rpt-group__meta">{vehicle.recoveryType === 'puncture' ? 'Puncture' : 'Mechanical'} recovery · Route and stops</span>
+                </summary>
                 {!vehicle.available
                   ? <p className="rpt-sub">This vehicle is not registered in this organisation or is outside your vehicle access scope.</p>
                   : !vehicle.hasTelemetry
                     ? <p className="rpt-sub">No GPS telemetry was recorded on {dayWords(report.day)}.</p>
                     : <>
                       <RouteTrace vehicle={vehicle} />
-                      <h3 className="recovery-detail__heading">Stops over 5 minutes <span className="rpt-sub">· {fmt(vehicle.stopsTotal)}</span></h3>
+                      <h3 className="recovery-detail__heading">Stops over 5 minutes <span className="recovery-detail__count">{fmt(vehicle.stopsTotal)}</span></h3>
                       {vehicle.stops.length ? (
                         <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
                           <table className="sp4-table rpt-table">
