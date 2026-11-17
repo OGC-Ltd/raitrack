@@ -1,6 +1,6 @@
 {
   "name": "sukari-fleet-command",
-  "version": "2.2.1",
+  "version": "2.2.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,11 +14,11 @@
     "release": "node scripts/release.mjs"
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^2.13.0",
-    "@tanstack/react-query": "^5.104.0",
-    "@turf/turf": "^7.2.0",
+    "@reduxjs/toolkit": "^2.14.0",
+    "@tanstack/react-query": "^5.107.1",
+    "@turf/turf": "^7.4.0",
     "clsx": "^2.1.1",
-    "driver.js": "1.8.0",
+    "driver.js": "1.14.0",
     "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
@@ -28,17 +28,17 @@
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-redux": "^9.3.0",
+    "react-redux": "^9.3.1",
     "recharts": "^3.10.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.5.4",
+    "autoprefixer": "^10.6.2",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "postcss": "^8.5.25",
+    "postcss": "^8.5.33",
     "tailwindcss": "^3.4.19",
     "vite": "^5.4.0",
     "vitest": "^2.1.9"
