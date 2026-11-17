@@ -14,3 +14,31 @@ export async function getFactoryFuel({ companyId, from, to }) {
   const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/factory-fuel?${q}`)
   return res.data ?? { factory: null, from, to }
 }
+
+/** Pages of fillings read at most: 200 a page, so up to 6,000 in a period. */
+const MAX_FILL_PAGES = 30
+
+/**
+ * The fillings the fuel probes recorded over the same days (fleet-server
+ * fuel/fillings, the ledger the Fuel Metrics page reads), for the pump against
+ * probe check (lib/factoryFuel reconcileFills). `from`/`to` are fleet days;
+ * the window is those days in full, first to last, in
+ * Nairobi time, so the probe totals cover the same days as the pump.
+ */
+export async function getProbeFillings({ companyId, from, to }) {
+  const orgId = await resolveOrgId(companyId)
+  if (!orgId) return []
+  const start = new Date(`${from}T00:00:00+03:00`).toISOString()
+  const end = new Date(Date.parse(`${to}T00:00:00+03:00`) + 86_400_000).toISOString()
+  const out = []
+  let cursor = null
+  for (let page = 0; page < MAX_FILL_PAGES; page++) {
+    const q = new URLSearchParams({ from: start, to: end, limit: '200', ...(cursor ? { cursor } : {}) })
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/fillings?${q}`)
+    out.push(...(res.data ?? []))
+    cursor = res.meta?.cursor ?? null
+    const more = Boolean(res.meta?.hasNextPage)
+    if (!more || !cursor) break
+  }
+  return out
+}

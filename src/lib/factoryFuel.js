@@ -183,3 +183,141 @@ export function fuelRange(days, now = Date.now()) {
   const from = new Date(Date.parse(`${to}T00:00:00Z`) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
   return { from, to };
 }
+
+/**
+ * Pump against probe (operator 2026-11-17): each fuelling the pump recorded,
+ * beside the fill the machine's fuel probe recorded, and the difference.
+ * "We should have requested amount (Request), what is in the tank (Tank
+ * Value), Filling Actual, Filling Probe, Variance."
+ *
+ * - Request: the plan line's fuel request the issue was made against
+ *   (`requestId`): litres, or a full tank. A full tank expects the tank's
+ *   size less what was in it before.
+ * - Tank before: the probe's level just before its fill.
+ * - Actual: litres the pump issued (FactorySuite).
+ * - Probe: litres the probe's fill recorded (fuel/fillings `filledMl`).
+ * - Variance: actual less probe. Positive: the pump says more went in than
+ *   the probe saw.
+ *
+ * Matching: same machine (the register's vehicleId, else the plate), the probe
+ * fill nearest in time from FILL_BEFORE_MS before the pump's time to
+ * FILL_AFTER_MS after it (a probe settles after the nozzle is out), each fill
+ * used once. Fuellings only: a probe fill no fuelling claims, and a reading
+ * our check found was no real fill, are left out (operator 2026-11-17).
+ */
+export const FILL_BEFORE_MS = 30 * 60_000;
+export const FILL_AFTER_MS = 2 * 3_600_000;
+/** A variance is flagged past the larger of these: probes read to a few percent. */
+export const VARIANCE_LITRES = 20;
+export const VARIANCE_SHARE = 0.05;
+
+/** FactorySuite's offsetless wall clock is Nairobi time; an ISO with a zone is taken as it is. */
+export function pumpTimeMs(at) {
+  if (!at) return null;
+  const s = String(at);
+  const t = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s.replace(" ", "T")}+03:00`);
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Over tolerance: more than VARIANCE_LITRES and more than VARIANCE_SHARE of what the pump issued. */
+export const varianceFlagged = (actual, variance) =>
+  // On the whole litres the page shows: 20.3 L reads "20 L" and is not past 20 L.
+  variance != null && Math.round(Math.abs(variance)) > Math.max(VARIANCE_LITRES, VARIANCE_SHARE * Math.abs(actual ?? 0));
+
+const ml = (v) => (Number.isFinite(v) ? v / 1000 : null);
+
+/** A probe fill, in litres and milliseconds. Our verdict that it was no real fill marks it doubtful. */
+function probeFill(f) {
+  return {
+    id: f.id,
+    at: Date.parse(f.filledAt),
+    litres: ml(f.filledMl),
+    before: ml(f.initialFuelLevelMl),
+    after: ml(f.finalFuelLevelMl),
+    observed: ml(f.observedRiseMl),
+    doubtful: f.verdict === "REDISTRIBUTION",
+    verdict: f.verdict ?? null,
+  };
+}
+
+/**
+ * @param {object[]} rows      fuelRoster rows (with vehicleId, plate, pumpIssues, lines, tankLitres)
+ * @param {object[]} fillings  fuel/fillings rows for the period, or null when they could not be read
+ * @returns rows with `fills` (one per fuelling or unclaimed probe fill, newest first) and
+ *   `probeFilled`, `variance`, `varianceFlags`, `probeKnown`
+ */
+export function reconcileFills(rows, fillings) {
+  const known = Array.isArray(fillings);
+  const byId = new Map();
+  const byPlate = new Map();
+  for (const f of fillings ?? []) {
+    const p = probeFill(f);
+    // Fuellings only (operator 2026-11-17: "just make the comparisons of fuel
+    // fillings only"): a reading our check found was no real fill, fuel moving
+    // in the tank, is never a fuelling's match.
+    if (!Number.isFinite(p.at) || p.doubtful) continue;
+    const push = (m, k) => { if (k) m.set(k, [...(m.get(k) ?? []), p]); };
+    push(byId, f.vehicleId && String(f.vehicleId));
+    push(byPlate, plateKey(f.vehicle?.registrationPlate));
+  }
+
+  return (rows ?? []).map((row) => {
+    const probes = (row.vehicleId && byId.get(String(row.vehicleId)))
+      || (row.plate && byPlate.get(plateKey(row.plate)))
+      || [];
+    const requestOf = new Map((row.lines ?? []).filter((l) => l.requestId).map((l) => [l.requestId, l]));
+    const used = new Set();
+
+    const issues = [...(row.pumpIssues ?? [])]
+      .filter((i) => i.done)
+      .map((i) => ({ i, t: pumpTimeMs(i.at) ?? pumpTimeMs(`${i.day}T12:00:00`) }))
+      .sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+
+    // One row a fuelling the pump recorded; a probe fill no fuelling claims is
+    // not listed and not counted.
+    const fills = issues.map(({ i, t }) => {
+      let best = null;
+      for (const p of probes) {
+        if (used.has(p.id) || t == null) continue;
+        const d = p.at - t;
+        if (d < -FILL_BEFORE_MS || d > FILL_AFTER_MS) continue;
+        if (!best || Math.abs(d) < Math.abs(best.at - t)) best = p;
+      }
+      if (best) used.add(best.id);
+      const line = i.requestId ? requestOf.get(i.requestId) : null;
+      const before = best?.before ?? null;
+      const actual = i.litres ?? null;
+      const probe = best ? best.litres : null;
+      const variance = actual != null && probe != null ? actual - probe : null;
+      return {
+        key: `pump-${i.id}`,
+        at: t, day: i.day,
+        request: line ? (line.fullTank ? { full: true } : { litres: line.litresRequested ?? null }) : null,
+        expected: line?.fullTank && row.tankLitres != null && before != null ? Math.max(0, row.tankLitres - before) : null,
+        before, actual, probe, variance,
+        probeFill: best,
+        state: !known ? "unknown"
+          : !best ? "no-probe"
+          : varianceFlagged(actual, variance) ? "over" : "ok",
+      };
+    }).sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+
+    // The period's figures, over the fuellings the probe saw too, so pump and
+    // probe compare like for like: Pump is what the pump issued in those,
+    // Probe what the probe recorded for them, Variance the one less the other.
+    const paired = fills.filter((f) => f.variance != null);
+    const pumpMatched = paired.length ? paired.reduce((s, f) => s + f.actual, 0) : null;
+    const probeFilled = paired.length ? paired.reduce((s, f) => s + f.probe, 0) : null;
+    const variance = paired.length ? pumpMatched - probeFilled : null;
+    return {
+      ...row,
+      fills,
+      probeKnown: known,
+      pumpMatched,
+      probeFilled,
+      variance,
+      varianceOver: varianceFlagged(pumpMatched ?? 0, variance),
+      varianceFlags: fills.filter((f) => f.state === "over" || f.state === "no-probe").length,
+    };
+  });
+}

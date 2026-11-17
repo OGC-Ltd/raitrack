@@ -26,3 +26,15 @@
 }
 .fuel-panel .dr-case__sub { white-space: normal; overflow-wrap: anywhere; }
 .fuel-panel .dr-panel__body { overflow-x: hidden; }
+
+/* Fuel comparison (FillCheck): one plain table, four columns that fit
+   the panel (operator 2026-11-17: "a simple table"). A row past tolerance or
+   with no probe record is red; the foot totals the matched fuellings. */
+.fuel-rec { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.fuel-rec th, .fuel-rec td { padding: 7px 6px; border-bottom: 1px solid var(--dg-line); text-align: left; white-space: nowrap; }
+.fuel-rec thead th { font-size: 11px; font-weight: 600; color: var(--dg-label); }
+.fuel-rec td { color: var(--ink); }
+.fuel-rec .r { text-align: right; }
+.fuel-rec tfoot th, .fuel-rec tfoot td { font-weight: 700; border-bottom: 0; border-top: 1.5px solid var(--ink); }
+.fuel-rec tr.is-bad .fuel-rec__var, .fuel-rec tr.is-bad .fuel-rec__none { color: var(--tone-down); font-weight: 700; }
+.fuel-rec__none { color: var(--dg-label); }
