@@ -750,12 +750,14 @@
 }
 
 /* From / To and the weighbridge (operator, 17 Nov 2026): plain fields in the
-   filter row, a small label above each, the chips' own size and line. */
-.wb-date { display: inline-flex; flex-direction: column; gap: 2px; font-size: 10.5px; font-weight: 600; color: var(--sp4-text-3); }
-.wb-date span { text-transform: uppercase; letter-spacing: .04em; }
+   filter row, each label BESIDE its field ("lets align these things, some are
+   up some are down"), every control one height, so the search, the fields
+   and the chips sit on one line. */
+.wb-date { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--sp4-text-3); }
+.wb-date > span:first-child { text-transform: uppercase; letter-spacing: .04em; }
 .wb-date input,
 .wb-date select {
-  height: 30px; padding: 0 8px; border-radius: 6px;
+  height: 32px; padding: 0 8px; border-radius: 6px;
   border: 1px solid var(--sp4-field-line, var(--sp4-line));
   background: var(--sp4-surface); color: var(--sp4-text-1);
   font: inherit; font-size: var(--sp4-body); font-weight: 500;
@@ -764,7 +766,23 @@
 .wb-date input:focus-visible,
 .wb-date select:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
 .wb-bridge select { min-width: 160px; }
+
+/* The date and its own calendar button, inside one box. The browser's own
+   calendar mark is hidden where it draws one, so there is never two. */
+.wb-date__field { position: relative; display: inline-flex; align-items: center; }
+.wb-date__field input { padding-right: 32px; cursor: pointer; }
+.wb-date__field input::-webkit-calendar-picker-indicator { display: none; }
+.wb-date__pick {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border: 0; border-radius: 5px; background: transparent; color: var(--sp4-text-3); cursor: pointer;
+}
+.wb-date__pick:hover { color: var(--sp4-text-1); background: color-mix(in srgb, var(--sp4-text-1) 7%, transparent); }
+.wb-date__pick .ti { font-size: 16px; }
+
+/* The chips at the fields' height, on the same centre line. */
+.wb-root .sp4-filter-group > .sp4-filter-chip { height: 32px; display: inline-flex; align-items: center; }
 /* The labelled fields stand taller than the chips: the row sits on its foot, and wraps when narrow. */
-.wb-root .sp4-filter-group { align-items: flex-end; flex-wrap: wrap; row-gap: 8px; }
+.wb-root .sp4-filter-group { align-items: center; flex-wrap: wrap; row-gap: 8px; }
 /* With From, To, five spans and the weighbridge, the bar can outgrow a laptop: it wraps rather than crop. */
-.wb-root .sp4-filterbar { flex-wrap: wrap; row-gap: 8px; }
+.wb-root .sp4-filterbar { flex-wrap: wrap; row-gap: 8px; align-items: center; }
