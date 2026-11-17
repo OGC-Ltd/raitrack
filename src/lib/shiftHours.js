@@ -96,10 +96,15 @@ export function shiftHoursRows(units, pings, shifts, failed = new Set()) {
     const unread = unit ? unit.vehicles.every((v) => failed.has(v.vehicleId)) : false;
     let hours = null;
     let hoursFrom = null;
+    // Fuel used in the shift so far (operator, 17 Nov 2026), the Machinery report's own reading
+    let usedL = null;
+    let fuelSensor = false;
     if (unit && started && !unread) {
       const [row] = machineryRows([unit], pings, [{ from: s.start, to: s.upTo, day: s.day, hour: null }]).rows;
       hours = row?.hours ?? 0;
       hoursFrom = row?.hoursFrom ?? null;
+      usedL = row?.fuelSeen ? row.usedL : null;
+      fuelSensor = Boolean(row?.fuelSensor);
     }
     const share = hours != null && elapsed > 0 ? Math.min(1, hours / elapsed) : null;
     return {
@@ -114,6 +119,8 @@ export function shiftHoursRows(units, pings, shifts, failed = new Set()) {
       elapsed,
       hours,
       hoursFrom,
+      usedL,
+      fuelSensor,
       share,
       tone: shiftTone(share),
     };

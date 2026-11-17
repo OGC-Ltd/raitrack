@@ -335,14 +335,16 @@ export const REPORTS = {
     title: 'Work Plans Updates Report',
     preset: 'today',
     maxDays: 1,
-    columns: () => ['Machine', 'Type', 'Shift', 'Shift hours', 'Elapsed', 'Engine hours', 'Utilisation'],
+    // Fuel used in place of the share (operator, 17 Nov 2026); the row's colour still reads the share
+    columns: () => ['Machine', 'Type', 'Shift', 'Shift hours', 'Elapsed', 'Engine hours', 'Fuel used, L'],
     cells: (r) => [
       vehicleCell(r), typeOf(r), shiftWhen(r.shift),
       fixed(r.plannedHours, 1),
       r.state === 'upcoming' ? 'Not started' : fixed(r.elapsed, 1),
       r.state === 'untracked' ? 'Not tracked' : r.state === 'unread' ? 'Not read'
         : r.hours == null ? '-' : fixed(r.hours, 1) + (r.hoursFrom === 'ignition' ? '*' : ''),
-      r.share == null ? '-' : `${Math.round(r.share * 100)}%`,
+      // Litres used in the shift so far; "No sensor" where the machine reports no fuel
+      r.usedL != null ? km1(r.usedL) : r.state === 'running' || r.state === 'ended' ? (r.fuelSensor ? '-' : 'No sensor') : '-',
     ],
     /** Green, amber or red on the share of the shift so far (lib/shiftHours shiftTone). */
     rowTone: (r) => r.tone,
@@ -357,6 +359,7 @@ export const REPORTS = {
         { label: 'Amber, 50 to 69%', value: n(of('warn')) },
         { label: 'Red, under 50%', value: n(of('bad')), tone: of('bad') ? 'speed' : undefined },
         { label: 'Engine hours', value: `${fixed(rows.reduce((s, r) => s + (r.hours ?? 0), 0), 1)} h` },
+        { label: 'Fuel used', value: `${km1(rows.reduce((s, r) => s + (r.usedL ?? 0), 0))} L` },
       ];
     },
     empty: 'No machine on an approved work plan for this day.',
@@ -367,7 +370,7 @@ export const REPORTS = {
      */
     legend: {
       tones: [
-        ['good', 'Green', '70% and over of the shift so far'],
+        ['good', 'Green', 'Engine hours 70% and over of the elapsed hours'],
         ['warn', 'Amber', '50 to 69%'],
         ['bad', 'Red', 'Under 50%'],
         [null, 'No colour', 'Shift not started, machine not tracked, or readings not read'],
@@ -379,7 +382,7 @@ export const REPORTS = {
         ['Shift hours', 'Hours planned for the shift'],
         ['Elapsed', 'Hours of the shift passed so far; the whole shift once it has ended'],
         ['Engine hours', 'Hours the engine ran since the shift began, from the hour meter (* from the ignition signal)'],
-        ['Utilisation', 'Engine hours as a share of the elapsed hours'],
+        ['Fuel used, L', 'Litres the machine used since the shift began, from its fuel sensor; No sensor where it has none'],
       ],
     },
   },

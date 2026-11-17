@@ -119,7 +119,7 @@ function columnsFor(def, ctx, keep, inner, cellRows = []) {
     utilisationRated: [42, 21, 18, 18, 19, 22, 22, 22],
     // Machine, Type, Hour (or Day), Engine hours, Fuel used, Burn rate, Actual
     machinery: [38, 20, 40, 22, 24, 24, 24],
-    // Machine, Type, Shift, Shift hours, Elapsed, Engine hours, Utilisation
+    // Machine, Type, Shift, Shift hours, Elapsed, Engine hours, Fuel used
     shiftHours: [30, 30, 32, 22, 22, 26, 22],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
   const used = keep.reduce((s, i) => s + widths[i], 0);

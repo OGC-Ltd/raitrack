@@ -156,3 +156,31 @@ describe('the Shift hours report, as printed', async () => {
     expect(html).toContain('WORK PLANS UPDATES REPORT');
   });
 });
+
+describe('shiftHoursRows, fuel used in the shift', () => {
+  const at = (s) => Date.parse(`${s}+03:00`);
+  /** Engine on, hour meter and fuel counter ticking: 10 L an hour. */
+  function burning(from, to, { fuel = true } = {}) {
+    const out = [];
+    for (let t = at(from); t <= at(to); t += 600_000) {
+      const h = (t - at(from)) / H;
+      out.push({ t, engineOn: true, speedKmh: 0, lat: -8.6, lng: 35.3, engineHoursMeter: 1000 + h, ...(fuel ? { fuelUsedMl: 500_000 + h * 10_000 } : {}) });
+    }
+    return out;
+  }
+
+  it('counts the litres used inside the shift so far', () => {
+    const pings = new Map([['veh_ex16', burning('2026-11-17T06:30:00', '2026-11-17T09:30:00')]]);
+    const [r] = shiftHoursRows(UNITS, pings, dayShifts(DATA, NOW));
+    expect(r.usedL).toBeGreaterThan(25);
+    expect(r.usedL).toBeLessThan(35);
+  });
+
+  it('says No sensor for a machine that reports no fuel, not 0', async () => {
+    const { REPORTS } = await import('./reportTables');
+    const pings = new Map([['veh_ex16', burning('2026-11-17T06:30:00', '2026-11-17T09:30:00', { fuel: false })]]);
+    const [r] = shiftHoursRows(UNITS, pings, dayShifts(DATA, NOW));
+    expect(r.usedL).toBeNull();
+    expect(REPORTS.shiftHours.cells(r).at(-1)).toBe('No sensor');
+  });
+});
