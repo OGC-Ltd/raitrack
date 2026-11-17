@@ -35,10 +35,12 @@ const litres = (n) => (n == null ? "-" : `${fmt(n)} L`);
  * Judged on the whole litres shown, so a figure never reads as one thing and
  * is coloured as another.
  */
+const NBSP = "\u00a0";
 const probeWords = (n) => {
   if (n == null) return "-";
   const l = Math.round(n);
-  return l > 0 ? `Probe less (${fmt(l)} L)` : l < 0 ? `Probe more (${fmt(-l)} L)` : "Same";
+  // Non-breaking inside each half, so a narrow column wraps only between "Probe less" and "(20 L)".
+  return l > 0 ? `Probe${NBSP}less (${fmt(l)}${NBSP}L)` : l < 0 ? `Probe${NBSP}more (${fmt(-l)}${NBSP}L)` : "Same";
 };
 const fmtDay = (day) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -427,11 +429,11 @@ function VarianceCell({ r }) {
   if (r.variance == null) {
     const why = !r.probeKnown ? "The probe fills could not be read"
       : r.issues ? "The probe recorded no fill for these fuellings" : "No fuelling at the pump in this range";
-    return <td className="dr-num dr-num--zero" data-label="Variance" title={why}>-</td>;
+    return <td className="dr-num dr-num--zero fuel-var" data-label="Variance" title={why}>-</td>;
   }
   const check = r.varianceFlags ? `. ${r.varianceFlags} fuelling${r.varianceFlags === 1 ? "" : "s"} to check: open the machine` : "";
   return (
-    <td className={"dr-num" + (r.varianceOver ? " dr-incident dr-incident--speed" : "")} data-label="Variance"
+    <td className={"dr-num fuel-var" + (r.varianceOver ? " dr-incident dr-incident--speed" : "")} data-label="Variance"
         title={`Pump ${fmt(r.pumpMatched ?? 0)} L less probe ${fmt(r.probeFilled ?? 0)} L, over the fuellings both recorded${check}`}>
       {r.varianceOver && <span className="dr-incident__dot" aria-hidden="true" />}
       {probeWords(r.variance)}
