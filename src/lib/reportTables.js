@@ -323,7 +323,71 @@ export const REPORTS = {
     },
     empty: 'No excavator or dozer ran in this period.',
   },
+
+  // Each machine on an approved work plan: engine hours since its shift began,
+  // against the hours of the shift so far (Mufindi, operator 17 Nov 2026).
+  // Green at 70% and over, amber at 50% and over, red under. lib/shiftHours.
+  shiftHours: {
+    key: 'shiftHours',
+    /** Columns from this index on are figures: right-aligned. */
+    num: 3,
+    label: 'Work plans updates',
+    title: 'Work Plans Updates Report',
+    preset: 'today',
+    maxDays: 1,
+    columns: () => ['Machine', 'Type', 'Shift', 'Shift hours', 'Elapsed', 'Engine hours', 'Utilisation'],
+    cells: (r) => [
+      vehicleCell(r), typeOf(r), shiftWhen(r.shift),
+      fixed(r.plannedHours, 1),
+      r.state === 'upcoming' ? 'Not started' : fixed(r.elapsed, 1),
+      r.state === 'untracked' ? 'Not tracked' : r.state === 'unread' ? 'Not read'
+        : r.hours == null ? '-' : fixed(r.hours, 1) + (r.hoursFrom === 'ignition' ? '*' : ''),
+      r.share == null ? '-' : `${Math.round(r.share * 100)}%`,
+    ],
+    /** Green, amber or red on the share of the shift so far (lib/shiftHours shiftTone). */
+    rowTone: (r) => r.tone,
+    sum: (r) => r.hours ?? 0,
+    sumWords: (t) => `${fixed(t, 1)} engine hours`,
+    countWords: (rows) => `${n(rows.length)} shift${rows.length === 1 ? '' : 's'}`,
+    kpis: (rows) => {
+      const of = (t) => rows.filter((r) => r.tone === t).length;
+      return [
+        { label: 'Shifts', value: n(rows.length) },
+        { label: 'Green, 70% and over', value: n(of('good')) },
+        { label: 'Amber, 50 to 69%', value: n(of('warn')) },
+        { label: 'Red, under 50%', value: n(of('bad')), tone: of('bad') ? 'speed' : undefined },
+        { label: 'Engine hours', value: `${fixed(rows.reduce((s, r) => s + (r.hours ?? 0), 0), 1)} h` },
+      ];
+    },
+    empty: 'No machine on an approved work plan for this day.',
+    /**
+     * The key under the report, on screen and in the PDF alike (operator,
+     * 17 Nov 2026: "key notes of each column, and the colours and what they
+     * mean"). `tones`: a swatch each, the row tone it stands for.
+     */
+    legend: {
+      tones: [
+        ['good', 'Green', '70% and over of the shift so far'],
+        ['warn', 'Amber', '50 to 69%'],
+        ['bad', 'Red', 'Under 50%'],
+        [null, 'No colour', 'Shift not started, machine not tracked, or readings not read'],
+      ],
+      columns: [
+        ['Machine', 'The machine’s code in FactorySuite'],
+        ['Type', 'The machine type on the register'],
+        ['Shift', 'Start and end of the shift on the approved work plan'],
+        ['Shift hours', 'Hours planned for the shift'],
+        ['Elapsed', 'Hours of the shift passed so far; the whole shift once it has ended'],
+        ['Engine hours', 'Hours the engine ran since the shift began, from the hour meter (* from the ignition signal)'],
+        ['Utilisation', 'Engine hours as a share of the elapsed hours'],
+      ],
+    },
+  },
 };
+
+const shiftClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** "06:00 – 16:00". */
+const shiftWhen = (s) => (s ? `${shiftClock.format(s.start)} – ${shiftClock.format(s.end)}` : '');
 
 const machineDayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short' });
 /** "Sun 15 Nov", from a fleet day key. */
