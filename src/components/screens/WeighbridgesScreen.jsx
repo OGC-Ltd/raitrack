@@ -87,6 +87,30 @@ function monthBefore(day) {
   return [first.toISOString().slice(0, 10), last.toISOString().slice(0, 10)];
 }
 
+/**
+ * A date with its calendar (operator, 17 Nov 2026: "on the date part it has
+ * no date picker"). Some browsers draw no calendar in a narrow date field, so
+ * the field carries its own button, and a click anywhere on the field opens
+ * the calendar too; typing a date still works.
+ */
+function DateField({ label, value, min, max, onChange }) {
+  const input = useRef(null);
+  const open = () => { try { input.current?.showPicker?.(); } catch { /* not from this gesture: typing still works */ } };
+  return (
+    <label className="wb-date">
+      <span>{label}</span>
+      <span className="wb-date__field">
+        <input ref={input} type="date" value={value} min={min} max={max}
+               onClick={open}
+               onChange={(e) => { if (e.target.value) onChange(e.target.value); }} />
+        <button type="button" className="wb-date__pick" onClick={open} aria-label={`Pick the ${label.toLowerCase()} date`} tabIndex={-1}>
+          <i className="ti ti-calendar" aria-hidden="true" />
+        </button>
+      </span>
+    </label>
+  );
+}
+
 /** The fleet day N days before today. */
 function backDays(n) {
   return fleetDayKey(new Date(Date.now() - n * 86_400_000));
@@ -525,16 +549,10 @@ export default function WeighbridgesScreen() {
               longer"), up to MAX_DAYS. Not before the first day we hold
               tickets for, not after today. A To before the From moves the
               From with it, and the other way round. */}
-          <label className="wb-date">
-            <span>From</span>
-            <input type="date" value={from} min={bounds.min ?? undefined} max={fleetDayKey()}
-                   onChange={(e) => { const f = e.target.value; if (!f) return; setFrom(f); if (f > to) setTo(f); }} />
-          </label>
-          <label className="wb-date">
-            <span>To</span>
-            <input type="date" value={to} min={bounds.min ?? undefined} max={fleetDayKey()}
-                   onChange={(e) => { const t = e.target.value; if (!t) return; setTo(t); if (t < from) setFrom(t); }} />
-          </label>
+          <DateField label="From" value={from} min={bounds.min ?? undefined} max={fleetDayKey()}
+                     onChange={(f) => { setFrom(f); if (f > to) setTo(f); }} />
+          <DateField label="To" value={to} min={bounds.min ?? undefined} max={fleetDayKey()}
+                     onChange={(t) => { setTo(t); if (t < from) setFrom(t); }} />
           {/* One weighbridge, or all of them (operator, 17 Nov 2026: "download
               the report as per specific weighbridge"). The same choice as the
               bridge cards above; the table and every download follow it. */}
