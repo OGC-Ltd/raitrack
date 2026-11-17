@@ -20,6 +20,8 @@ import { fuelEpisodes, levelsFromPings } from '../../lib/fuelEpisodes';
 import { reportNumber } from '../../lib/reportLetterhead';
 import DateRangePicker from '../layout/DateRangePicker';
 import EmptyNote from '../shared/EmptyNote';
+import ReportIcon from '../shared/ReportIcon';
+import TableToolbar from '../body/TableToolbar';
 import raiLogo from '../../assets/rai-group-logo.jpeg';
 import ogcLogo from '../../assets/ogc-monitoring-logo.png';
 
@@ -29,6 +31,17 @@ const daysOf = (from, to) => { const out = []; for (let t = Date.parse(`${from}T
 const fleetDay = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
 const rate = (n) => (n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toFixed(2));
 const litres = (n) => (n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toFixed(1));
+/** The figures over the report, in the reports' own wording (Speed, Probe). */
+const KPI_LABELS = ['Units', 'Below target', 'No rate read', 'Ticked'];
+
+function Kpi({ value, label }) {
+  return (
+    <div className="sp4-kpi">
+      <span className="sp4-kpi-n">{value}</span>
+      <span className="sp4-kpi-l">{label}</span>
+    </div>
+  );
+}
 
 /** An image the site serves, as a data URL for the PDF; null when it cannot be read. */
 async function dataUrl(src) {
@@ -112,9 +125,20 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
   };
 
   const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a date range' : null;
+  // Over the report, as on Speed and Probe: dashes until there are rows to count
+  const values = done && rows.length
+    ? [rows.length, rows.filter((r) => r.belowTarget === true).length, rows.filter((r) => r.kmPerL == null).length, ticked.size]
+    : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
+  const period = done ? (done.from === done.to ? done.from : `${done.from} to ${done.to}`) : '';
 
   return (
-    <div className="frp-page">
+    <>
+      <div className="sp4-header rpt-header">
+        <div className="sp4-header-kpis">
+          {KPI_LABELS.map((label, i) => <Kpi key={label} label={label} value={values[i]} />)}
+        </div>
+      </div>
+
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_DAYS} spans={[7]} label="Date range"
           onChange={(from, to) => setDays({ from, to: to ?? from })} />
@@ -126,23 +150,31 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
         )}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={execute}
                 disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'List the units with their consumption for these days'}>
-          {run.status === 'loading' ? 'Loading…' : 'Run report'}
+          {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
+        {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
 
+      <div className="sp4-body rpt-body">
       {run.status === 'idle' && (
-        <EmptyNote icon="ti-chart-line" title="Fuel Graph Report">
+        <EmptyNote icon={<ReportIcon name="fuelGraphs" />} title="Fuel Graph Report">
           Pick the days and run the report, tick the units (or tick them by their rate), then make the PDF: a page per unit, its fuel graph with the day&apos;s figures under it.
         </EmptyNote>
       )}
-      {run.status === 'loading' && <EmptyNote icon="ti-loader-2" tone="busy" title="Working out the fuel">Balancing each unit&apos;s fuel over the days.</EmptyNote>}
-      {run.status === 'error' && <EmptyNote icon="ti-alert-circle" tone="warn" title="Could not load fuel data">{run.message}</EmptyNote>}
-      {done && !rows.length && <EmptyNote icon="ti-mood-happy" title="No Data">{group ? `No ${group} units to report in this period.` : 'No units to report in this period.'}</EmptyNote>}
+      {run.status === 'loading' && <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">Balancing each unit&apos;s fuel over the days.</EmptyNote>}
+      {run.status === 'error' && <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made" action={{ label: 'Try again', onClick: execute }}>{run.message}</EmptyNote>}
+      {done && !rows.length && <EmptyNote icon={<ReportIcon name="fuelGraphs" />} title="No Units to Report">{group ? `No ${group} units to report in this period.` : 'No units to report in this period.'}</EmptyNote>}
 
       {done && rows.length > 0 && (
         <>
-          <div className="sp4-table-sub fgr-bar">
-            <span><strong>{ticked.size}</strong> of {rows.length} units ticked</span>
+          <TableToolbar
+            summary={<>
+              Fuel Graphs · <strong>{ticked.size}</strong> of {rows.length} units ticked
+              <span className="rpt-sub"> · {group ? `${fleet} · ${group}` : fleet} · {period}</span>
+              {make.busy || make.words ? <span className="rpt-sub"> · {make.words}</span> : null}
+              {make.error && <span className="rpt-warn"> · {make.error}</span>}
+            </>}
+            actions={<span className="fgr-bar">
             <button type="button" className="sp4-ghost-btn" onClick={() => tickWhere((r) => r.belowTarget === true)}>Tick below target</button>
             <span className="fgr-below">
               <label htmlFor="fgr-below-input">Tick below</label>
@@ -153,14 +185,13 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
             <button type="button" className="sp4-ghost-btn" onClick={() => tickWhere(() => true)}>Tick all</button>
             <button type="button" className="sp4-ghost-btn" disabled={!ticked.size} onClick={() => setTicked(new Set())}>Clear</button>
             <span className="fgr-make">
-              {make.busy || make.words ? <span className="rpt-sub">{make.words}</span> : null}
-              {make.error && <span className="rpt-warn">{make.error}</span>}
               <button type="button" className="sp4-submit-btn" disabled={!picked.length || make.busy} onClick={makePdf}
                       title="A page per ticked unit: its fuel graph, and its figures in the bottom quarter">
                 <i className="ti ti-file-type-pdf" aria-hidden="true" /> Fuel graphs PDF{picked.length ? ` (${picked.length})` : ''}
               </button>
             </span>
-          </div>
+            </span>}
+          />
           <div className="sp4-table-scroll rpt-scroll">
             <table className="sp4-table rpt-table fcr-table fgr-table">
               <thead>
@@ -197,6 +228,7 @@ export default function FuelGraphReport({ orgId, orgCode, companyName }) {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

@@ -1,5 +1,18 @@
 [
   {
+    "mode": "redesign",
+    "depth": "restyle",
+    "scope": "app",
+    "theme": "brand",
+    "shape": "app screen",
+    "prompt": "Movements › Fuel tabs (Fuel Consumption Rate, Fuel Graphs) brought into the reports layout: figures row over the filter bar, house states, shared toolbar",
+    "signature": "the figures row every Movements report leads with",
+    "waived": [
+      "26b"
+    ],
+    "date": "2026-11-17"
+  },
+  {
     "date": "2026-11-11",
     "mode": "redesign",
     "depth": "full",

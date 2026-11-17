@@ -25,6 +25,7 @@ import { fcrDoc } from '../../lib/reportDocs';
 import { useReportEditor } from './ReportEditor';
 import DateRangePicker from '../layout/DateRangePicker';
 import EmptyNote from '../shared/EmptyNote';
+import ReportIcon from '../shared/ReportIcon';
 import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
@@ -37,6 +38,17 @@ const MAX_DAYS = 31;
 const bandOf = (fill) => ({ '#ffc000': 'with', '#00b050': 'minus' }[String(fill).toLowerCase()] ?? 'base');
 /** One empty list, so the editor (which resets when its rows change) sees the same one each render. */
 const NONE = [];
+/** The figures over the report, in the reports' own wording (Speed, Probe): sentence case, the unit after a comma. */
+const KPI_LABELS = ['Vehicles', 'Distance measured, km', 'Filled, L', 'Consumed, L', 'Fleet rate, km/L'];
+
+function Kpi({ value, label }) {
+  return (
+    <div className="sp4-kpi">
+      <span className="sp4-kpi-n">{value}</span>
+      <span className="sp4-kpi-l">{label}</span>
+    </div>
+  );
+}
 
 /** A fleet day, YYYY-MM-DD in Nairobi, whatever the browser's own zone. */
 const fleetDay = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
@@ -143,9 +155,20 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
 
   const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a date range' : null;
   const totalFilled = rows.reduce((s, r) => s + (r.filledL || 0), 0);
+  const whole = (n) => Math.round(n ?? 0).toLocaleString('en-GB');
+  // Over the report, as on Speed and Probe: dashes until there are rows to count
+  const values = done && rows.length
+    ? [rows.length, whole(totals?.distanceKm), whole(totalFilled), whole(totals?.consumedL), rate(totals?.kmPerL)]
+    : KPI_LABELS.map((label) => <span key={label} className="frp-kpi-none">-</span>);
 
   return (
-    <div className="frp-page">
+    <>
+      <div className="sp4-header rpt-header">
+        <div className="sp4-header-kpis">
+          {KPI_LABELS.map((label, i) => <Kpi key={label} label={label} value={values[i]} />)}
+        </div>
+      </div>
+
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <DateRangePicker
           from={days.from} to={days.to} today={today}
@@ -164,61 +187,38 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
           disabled={Boolean(problem) || run.status === 'loading'}
           title={problem ?? 'Make the report for this date range'}
         >
-          {run.status === 'loading' ? 'Loading…' : 'Run report'}
+          {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
+        {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
 
+      {editor.overlay}
+
+      <div className="sp4-body rpt-body">
       {run.status === 'idle' && (
-        <EmptyNote icon="ti-gas-station" title="Fuel Consumption Rate">
+        <EmptyNote icon={<ReportIcon name="fuelRate" />} title="Fuel Consumption Rate">
           Pick a date range and run the report to see per-vehicle fuel consumption rates.
         </EmptyNote>
       )}
       {run.status === 'loading' && (
-        <EmptyNote icon="ti-loader-2" tone="busy" title="Working out the fuel">
+        <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">
           The server is balancing each unit&apos;s fuel over the range. A long range takes longer the first time.
         </EmptyNote>
       )}
       {run.status === 'error' && (
-        <EmptyNote icon="ti-alert-circle" tone="warn" title="Could not load fuel data">
+        <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made" action={{ label: 'Try again', onClick: execute }}>
           {run.message}
         </EmptyNote>
       )}
 
       {done && rows.length === 0 && (
-        <EmptyNote icon="ti-mood-happy" title="No Data">
+        <EmptyNote icon={<ReportIcon name="fuelRate" />} title="No Units to Report">
           {group ? `No ${group} units to report in this period.` : 'No units to report in this period.'}
         </EmptyNote>
       )}
 
       {done && rows.length > 0 && (
         <>
-          <div className="sp4-header rpt-header">
-            <div className="sp4-header-kpis">
-              <div className="sp4-kpi">
-                <span className="sp4-kpi-n">{rows.length}</span>
-                <span className="sp4-kpi-l">Vehicles</span>
-              </div>
-              <div className="sp4-kpi">
-                <span className="sp4-kpi-n">{Math.round(totals?.distanceKm ?? 0).toLocaleString('en-GB')}</span>
-                <span className="sp4-kpi-l">Km, measured units</span>
-              </div>
-              <div className="sp4-kpi">
-                <span className="sp4-kpi-n">{Math.round(totalFilled).toLocaleString('en-GB')}</span>
-                <span className="sp4-kpi-l">Fuel Filled (L)</span>
-              </div>
-              <div className="sp4-kpi">
-                <span className="sp4-kpi-n">{Math.round(totals?.consumedL ?? 0).toLocaleString('en-GB')}</span>
-                <span className="sp4-kpi-l">Fuel Consumed (L)</span>
-              </div>
-              <div className="sp4-kpi">
-                <span className="sp4-kpi-n">{rate(totals?.kmPerL)}</span>
-                <span className="sp4-kpi-l">Fleet Rate (km/L)</span>
-              </div>
-            </div>
-          </div>
-
-          {editor.overlay}
-
           <TableToolbar
             summary={<>
               Fuel Consumption Rate · <strong>{rows.length}</strong> vehicle{rows.length === 1 ? '' : 's'}
@@ -297,12 +297,12 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
               <tfoot>
                 <tr className="fcr-total-row">
                   <td className="fcr-reg">Total / Fleet</td>
-                  <td className="fcr-num">—</td>
+                  <td className="fcr-num" />
                   <td className="fcr-num">{kms(totals?.distanceKm)}</td>
-                  <td className="fcr-num">—</td>
+                  <td className="fcr-num" />
                   <td className="fcr-num">{litres(totalFilled)}</td>
-                  <td className="fcr-num">—</td>
-                  <td className="fcr-num">—</td>
+                  <td className="fcr-num" />
+                  <td className="fcr-num" />
                   <td className="fcr-num fcr-consumed">{litres(totals?.consumedL)}</td>
                   <td className="fcr-num fcr-rate">{rate(totals?.kmPerL)}</td>
                   <td className="fcr-comment" />
@@ -313,6 +313,7 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
           )}
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

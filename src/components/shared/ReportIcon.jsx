@@ -35,6 +35,22 @@ const MARKS = {
       <path d="M16.500 14v2.500l1.700 1" />
     </>
   ),
+  // Fuel Consumption Rate: a fuel drop, and a dial for the km/L against the target.
+  fuelRate: (
+    <>
+      <path d="M8 3.5s-4.5 5-4.5 8.2a4.5 4.5 0 0 0 9 0C12.500 8.500 8 3.500 8 3.500z" />
+      <path d="M12.500 19a4.500 4.500 0 0 1 9 0" />
+      <path d="m17 19 2-2.200" />
+    </>
+  ),
+  // Fuel Graphs: a fuel drop, and a level line that falls and is filled again.
+  fuelGraphs: (
+    <>
+      <path d="M8 3.5s-4.5 5-4.5 8.2a4.5 4.5 0 0 0 9 0C12.500 8.500 8 3.500 8 3.500z" />
+      <path d="M12.500 20.500h9" />
+      <path d="M12.500 13.500l2.500 1.500 2 1v-4l2.500 1.500 2 1" />
+    </>
+  ),
   // Recovery: a road line leading to a location pin.
   recovery: (
     <>

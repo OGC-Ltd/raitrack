@@ -1,5 +1,6 @@
-/* Hallmark · redesign: polish · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: Menengai's sheet, their head colours as bands over the app's table, the rate shaded best to worst · states: idle, loading, error, empty, full, ticked, making, made · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 · weakest: V, on purpose: both tabs must read as the reports around them */
+/* Hallmark · redesign: restyle · scope: app · genre: modern-minimal · theme: brand (the app's sp4 tokens, kept) · shape: app screen · signature: Menengai's sheet, their head colours as bands over the app's table, the rate shaded best to worst · states: idle, loading, error (with try again), empty, full, ticked, making, made · layout: kept, figures row over the filter bar as Speed and Probe · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: H, on purpose: the two tabs lead with the same figures row as every Movements report */
+/* Hallmark · waive 26b · guard: sp4-ghost-btn and sp4-submit-btn are styled :disabled in SensorPanel.css · these tabs use the shared buttons only */
 
 /* Menengai's head colours (their Excel sheet, lib/fuelRateMorl): the same in both modes, they name the column groups */
 :root {
@@ -13,40 +14,26 @@
  * KPI strip uses existing sp4-kpi / sp4-kpi-n / sp4-kpi-l tokens.
  */
 
-/* ── KPI strip: five tiles, wrap gracefully on narrow screens ───────────── */
-.frp-page .sp4-header-kpis { flex-wrap: wrap; }
-.frp-page .sp4-kpi { flex: 1 0 calc(20% - 1px); }
-
-@media (max-width: 700px) {
-  .frp-page .sp4-kpi { flex: 1 0 calc(33.333% - 1px); }
-}
+/* ── Figures row: the reports' own .rpt-header (ReportsScreen.css), as on Speed and Probe ── */
 
 /* ── Table layout ───────────────────────────────────────────────────────── */
-.fcr-table { table-layout: fixed; width: 100%; min-width: 860px; }
+/* Sized by what is in it (operator, 18 Nov 2026): fixed widths left the plate ~50px once the gutter
+   padding came off its 110px ("KB…") and cut every head ("TARGET (K"). The table scrolls sideways
+   under its min-width rather than squeezing. */
+.fcr-table { table-layout: auto; width: 100%; min-width: 960px; }
 
-/* Registration – wider, left-aligned */
-.fcr-reg {
-  text-align: left;
-  width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* Heads wrap onto two lines rather than clip, sat on the line above the rows */
+.sp4-table.fcr-table thead th { white-space: normal; vertical-align: bottom; line-height: 1.3; }
 
-/* Numeric columns – right-aligned */
-.fcr-num {
-  text-align: right;
-  width: 80px;
-  font-variant-numeric: tabular-nums;
-}
+/* Registration: the whole plate, never cut */
+.fcr-reg { text-align: left; white-space: nowrap; }
 
-/* Comment – flexible width, left-aligned, wraps */
-.fcr-comment {
-  text-align: left;
-  width: auto; /* takes the rest (0 under table-layout: fixed left it no room at all) */
-  min-width: 80px;
-  word-break: break-word;
-}
+/* Numeric columns: right-aligned, heads too, as narrow as their longest figure or head word */
+.fcr-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp4-table.fcr-table thead th.fcr-num { text-align: right; min-width: 72px; }
+
+/* Comment: what is left, wrapping */
+.fcr-comment { text-align: left; min-width: 200px; overflow-wrap: anywhere; }
 
 /* ── Vehicle name in body rows ──────────────────────────────────────────── */
 .fcr-plate {
@@ -78,11 +65,6 @@
   padding-top: 8px;
 }
 
-/* ── Narrow screen ──────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
-  .fcr-num  { width: 64px; }
-  .fcr-reg  { width: 90px; }
-}
 
 /* ── Menengai's own sheet (13 Nov 2026) ───────────────────────────────
    Their fifteen columns in the app's table: their head colours (light blue,
@@ -108,7 +90,9 @@
 .fcr-morl__words { min-width: 120px; white-space: nowrap; color: var(--sp4-text-2); }
 
 /* ── Fuel Graphs (13 Nov 2026): tick units, a page of graph each ──────── */
-.fgr-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.fgr-bar { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
+/* The tick controls are the toolbar's whole right side: no divider after them when no export follows */
+.sp4-gridbar-tools > .fgr-bar + .sp4-gridbar-sep:last-child { display: none; }
 .fgr-below { display: inline-flex; align-items: center; gap: 8px; }
 .fgr-below input {
   width: 72px;
@@ -124,7 +108,7 @@
 .fgr-below input:hover { border-color: var(--sp4-line-hi); }
 .fgr-below input:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
 .fgr-unit { color: var(--sp4-text-3); }
-.fgr-make { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
+.fgr-make { display: inline-flex; align-items: center; gap: 12px; }
 .fgr-make .sp4-submit-btn { display: inline-flex; align-items: center; gap: 4px; }
 .fgr-tick { width: 40px; text-align: center; }
 .fgr-tick input { width: 16px; height: 16px; accent-color: var(--sp4-accent); cursor: pointer; }
@@ -134,4 +118,9 @@
 .fgr-table tbody tr { cursor: pointer; }
 .fgr-table tbody tr:active td { background: color-mix(in srgb, var(--sp4-accent) 14%, var(--sp4-surface)); }
 .fgr-table tbody tr.fgr-on td { background: color-mix(in srgb, var(--sp4-accent) 8%, var(--sp4-surface)); }
-@media (max-width: 60rem) { .fgr-make { margin-left: 0; } }
+/* Under 60rem the tick controls take a row of their own and wrap: the shared toolbar keeps its
+   tools on one line, sized for three export buttons, and seven controls ran off a phone. */
+@media (max-width: 60rem) {
+  .sp4-gridbar-tools:has(> .fgr-bar) { flex: 1 1 100%; min-width: 0; margin-left: 0; }
+  .fgr-bar { width: 100%; justify-content: flex-start; }
+}
