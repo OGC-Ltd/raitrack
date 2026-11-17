@@ -130,8 +130,8 @@ describe('the PDF', () => {
 });
 
 describe('columns with nothing in them', () => {
-  it('leave out Type and Driver when every vehicle has none, in the screen, CSV and PDF', async () => {
-    const { shownColumns, csvTable } = await import('./reportTables');
+  it('leave out Type when every vehicle has none, in the screen, CSV and PDF; keep Driver to say there was no dispatch', async () => {
+    const { shownColumns, csvTable, NO_DISPATCH_KEY } = await import('./reportTables');
     const bare = [{ id: 'X - KDU 474H', vehicleId: 'n1', vehicleType: 'UNSPECIFIED' }];
     const { units: u } = scopeUnits(bare, null);
     const rows = Object.assign([{ unit: { ...u[0], type: 'UNSPECIFIED' }, dashcam: true, accel: 1, brake: 0, seatbelt: 0, phone: 0, covered: 0, total: 1, driver: '' }], { logged: [] });
@@ -139,12 +139,24 @@ describe('columns with nothing in them', () => {
     const keep = shownColumns(REPORTS.behaviour, rows, ctx);
     const heads = REPORTS.behaviour.columns(ctx);
     expect(keep.map((i) => heads[i])).not.toContain('Type');
-    expect(keep.map((i) => heads[i])).not.toContain('Driver');
+    // Incidents and no driver (operator, 16 Nov 2026): the Driver column stays, to say so
+    expect(keep.map((i) => heads[i])).toContain('Driver');
     expect(csvTable(REPORTS.behaviour, [{ name: null, rows }], ctx).head).not.toContain('Type');
+    // A vehicle with no incidents and no driver still leaves Driver out
+    const quiet = [{ ...rows[0], accel: 0, total: 0 }];
+    expect(shownColumns(REPORTS.behaviour, quiet, ctx).map((i) => heads[i])).not.toContain('Driver');
     const { html } = reportHtml(REPORTS.behaviour, { rows, secs: [{ name: null, rows, total: 1 }], missing: [], units: 1, failed: 0, ctx },
       { companyName: 'Nzoia', orgCode: 'NZOIA', groupWords: 'All vehicles', periodWords: 'p', logos: { rai: '', ogc: '' }, now: twoDays.to });
     expect(html).not.toContain('UNSPECIFIED');
-    expect(html).not.toContain('>Driver<');
+    expect(html).toContain('>Driver<');
+    expect(html).toContain(NO_DISPATCH_KEY);
     expect(html).not.toContain('Logged by operators');
+    // The dispatch runs could not be read: the key does not claim the vehicle stayed in the premises
+    const { NO_RUNS_KEY } = await import('./reportTables');
+    const failed = reportHtml(REPORTS.behaviour, { rows, secs: [{ name: null, rows, total: 1 }], missing: [], units: 1, failed: 0, ctx: { ...ctx, runsFailed: true } },
+      { companyName: 'Nzoia', orgCode: 'NZOIA', groupWords: 'All vehicles', periodWords: 'p', logos: { rai: '', ogc: '' }, now: twoDays.to }).html;
+    expect(failed).toContain(NO_RUNS_KEY);
+    expect(failed).not.toContain(NO_DISPATCH_KEY);
+    expect(failed).toContain('The dispatch runs could not be read');
   });
 });

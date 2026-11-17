@@ -109,6 +109,21 @@ export const SHOW_FOLLOW_UP = true;
  */
 export const SHOW_FOLLOW_UP_COLUMN = true;
 
+/**
+ * Driver conduct: a vehicle with incidents and no driver on record (operator,
+ * 16 Nov 2026). Its Driver cell is left blank and its row shaded grey; the
+ * reason is said once, in NO_DISPATCH_KEY under the table, not on every row.
+ */
+export const NO_DISPATCH_KEY = 'Rows shaded grey: driven within the premises - no dispatch details to get the driver details.';
+/**
+ * The key when the dispatch runs could not be read (ctx.runsFailed): a blank
+ * driver then says nothing about where the vehicle was, so the key does not
+ * claim it stayed within the premises.
+ */
+export const NO_RUNS_KEY = 'Rows shaded grey: no driver on record for these incidents - the dispatch runs could not be read.';
+export const noDispatchKey = (ctx) => (ctx?.runsFailed ? NO_RUNS_KEY : NO_DISPATCH_KEY);
+export const noDispatchDriver = (r) => (r?.total ?? 0) > 0 && isBlank(r.driver);
+
 export const REPORTS = {
   behaviour: {
     key: 'behaviour',
@@ -332,11 +347,15 @@ const OPTIONAL = ['Type', 'Driver', 'Location', 'Hour', 'Day'];
 /**
  * The indexes of the columns to show for these rows: every column, less a
  * Type or Driver column that is blank (or "UNSPECIFIED") for every vehicle.
+ * Driver conduct keeps Driver when a row is shaded for having no driver, so
+ * the blank the key under the table speaks of is there to see.
  */
 export function shownColumns(def, rows, ctx) {
   const heads = def.columns(ctx);
   const all = rows.map((r) => def.cells(r, ctx));
-  return heads.map((h, i) => i).filter((i) => !OPTIONAL.includes(heads[i]) || all.some((c) => !isBlank(c[i])));
+  const greyRows = def.key === 'behaviour' && rows.some(noDispatchDriver);
+  return heads.map((h, i) => i).filter((i) => !OPTIONAL.includes(heads[i]) || all.some((c) => !isBlank(c[i]))
+    || (greyRows && heads[i] === 'Driver'));
 }
 
 /** Is column i a figure (right-aligned)? */

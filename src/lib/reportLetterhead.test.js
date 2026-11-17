@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { reportHtml, reportNumber, fitColumns } from './reportLetterhead';
+import { reportHtml, reportNumber, fitColumns, NO_DISPATCH_GREY } from './reportLetterhead';
 import { textMm } from './shiftDoc';
 import { shownColumns } from './reportTables';
 import { NOTE_LINES } from './letterhead';
-import { REPORTS, overspeedEventTable } from './reportTables';
+import { REPORTS, overspeedEventTable, NO_DISPATCH_KEY } from './reportTables';
 import { sections, overspeedRows, overspeedEvents } from './fleetReports';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -70,6 +70,31 @@ describe('report on the letterhead', () => {
       expect(html).toMatch(/class="[^"]*wrap[^"]*"[^>]*>T18, Kazuramimba, Kigoma/);
       expect(html).not.toMatch(/NaN/);
     });
+  });
+
+  it('shades a conduct row with no driver grey, and says why under the table', () => {
+    const rows = [{ unit: unit('KDX 131Y', 'Van Sales'), accel: 2, brake: 1, corner: 0, seatbelt: 0, phone: 0, covered: 0, total: 3, dashcam: true, driver: null },
+                  { unit: unit('KCS 082M', 'Van Sales'), accel: 1, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0, total: 1, dashcam: true, driver: 'Osero' }];
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.total), ctx: { from: at('2026-11-01T00:00:00'), to: at('2026-11-01T13:20:00'), dashcams: true },
+                   missing: [], units: 2, failed: 0 };
+    const { html } = reportHtml(REPORTS.behaviour, done, opts);
+    const trOf = (plate) => html.match(new RegExp(`<tr>(?:(?!</tr>).)*${plate}(?:(?!</tr>).)*</tr>`))[0];
+    const grey = trOf('KDX 131Y');
+    // Every cell of the row is shaded; the reason is said once, in the key, not on the row
+    expect(grey.match(/<td/g).length).toBe(grey.match(new RegExp(`background:${NO_DISPATCH_GREY}`, 'g')).length);
+    expect(grey).not.toContain('Driven within the premises');
+    expect(trOf('KCS 082M')).not.toContain(NO_DISPATCH_GREY);
+    expect(html.match(/Driven within the premises/gi)).toHaveLength(1);
+    expect(html).toContain(NO_DISPATCH_KEY);
+  });
+
+  it('leaves the key out when every conduct row has a driver', () => {
+    const rows = [{ unit: unit('KCS 082M', 'Van Sales'), accel: 1, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0, total: 1, dashcam: true, driver: 'Osero' }];
+    const done = { rows, secs: sections(rows, ['Van Sales'], (r) => r.total), ctx: { from: at('2026-11-01T00:00:00'), to: at('2026-11-01T13:20:00'), dashcams: true },
+                   missing: [], units: 1, failed: 0 };
+    const { html } = reportHtml(REPORTS.behaviour, done, opts);
+    expect(html).not.toContain(NO_DISPATCH_KEY);
+    expect(html).not.toContain(NO_DISPATCH_GREY);
   });
 
   it('numbers the report by kind, organisation and time', () => {

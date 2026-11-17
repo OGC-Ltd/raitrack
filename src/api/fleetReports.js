@@ -18,6 +18,7 @@
 import { getNotifications } from './notifications';
 import { fetchVssIncidents, fetchVssCameraCount } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
+import { apiFetch } from '../services/api';
 import { loadDay } from '../lib/vehicleDay';
 import { settleLimited } from '../lib/settleLimited';
 import { daysCovering, summariseWindows, peakFix } from '../lib/fleetReports';
@@ -206,4 +207,22 @@ export async function loadPeakTimes({ orgId, items, onProgress = () => {} }) {
     onProgress({ done, total: byVehicle.size });
   });
   return { peaks: out, failed };
+}
+
+/**
+ * Every dispatch run over [from, to), with the driver the gate wrote, for the
+ * Driver Conduct Report to name the driver at the time of each incident
+ * (fleet-server GET /dispatches/runs). Null when the server cannot give them:
+ * a server without the endpoint yet, no grant to read it, or a failed
+ * request. The report then names only the driver of the run open now, and
+ * only for incidents after it set off (lib/fleetReports driversAt).
+ */
+export async function loadDispatchRuns({ orgId, from, to }) {
+  try {
+    const qs = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(to).toISOString() });
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/dispatches/runs?${qs}`);
+    return Array.isArray(res?.data) ? res.data : null;
+  } catch {
+    return null;
+  }
 }

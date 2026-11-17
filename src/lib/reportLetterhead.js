@@ -6,7 +6,7 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN } from './reportTables';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, noDispatchKey } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 import { textMm } from './shiftDoc';
@@ -25,6 +25,9 @@ export function reportNumber(prefix, orgCode, now) {
 export const CONTACT_LINE = 'This is a system-generated report. For any queries about its contents, please contact OGC Monitoring at operations@offgridconsultingltd.com.';
 
 const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU', machinery: 'MR' };
+
+/** Driver conduct: the grey of a row with incidents and no driver on record. Dark enough to survive printing. */
+export const NO_DISPATCH_GREY = '#dcdcdc';
 
 /**
  * Overspeeding (operator, 16 Nov 2026: "columns are not evenly distributed,
@@ -211,12 +214,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     const c = lo.map((x, k) => Math.round(x + (hi[k] - x) * d));
     return `background:rgb(${c.join(',')});color:${ink}`;
   };
-  const rowCells = (r) => {
-    const tone = rowShade(r);
-    const list = baseCells(r);
-    return tone ? list.map((v) => (typeof v === 'object' && v ? { ...v, style: v.style ? `${v.style};${tone}` : tone } : { html: v, style: tone })) : list;
-  };
-  const baseCells = (r) => def.cells(r, ctx).map((c, i) => {
+  const cellsOf = (r) => def.cells(r, ctx).map((c, i) => {
     if (i === 0) return vehicleCell(r);
     if (r.noData && i >= def.num) return { html: esc(c), cls: 'm' };
     if (c === '–') return { html: c, cls: 'm' };
@@ -229,6 +227,17 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     if (wrapAt.has(i)) return { html: esc(c), cls: 'wrap' };
     return esc(c);
   }).filter((_, i) => keep.includes(i));
+  // Driver conduct: a row with incidents and no driver on record is shaded grey, every cell of it.
+  // Machinery: the row's tone against the burn rate. Either is added to a cell's own style.
+  const GREY = `background:${NO_DISPATCH_GREY}`;
+  const rowCells = (r) => {
+    const shade = def.key === 'behaviour' && noDispatchDriver(r) ? GREY : rowShade(r);
+    if (!shade) return cellsOf(r);
+    return cellsOf(r).map((v) => {
+      const cell = typeof v === 'object' && v ? v : { html: v };
+      return { ...cell, style: cell.style ? `${cell.style};${shade}` : shade };
+    });
+  };
 
   const kpis = def.kpis(done.rows);
   const flow = [
@@ -260,6 +269,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     if (ctx.peaksFailed) notes.push(`The readings of ${ctx.peaksFailed} vehicle${ctx.peaksFailed === 1 ? '' : 's'} could not be read: their top speed time shows as -.`);
   }
   if (def.key === 'behaviour') {
+    if (done.rows.some(noDispatchDriver)) notes.push(noDispatchKey(ctx));
+    if (ctx.runsFailed) notes.push('The dispatch runs could not be read: a driver is named only for incidents on the run out now.');
     if (done.rows.some((r) => r.suspect)) notes.push('Check sensor: more than 100 harsh accelerations or brakes a day, far more than a driver makes. Most likely a faulty sensor.');
     if (ctx.dashcamFailed) notes.push('The dashcam alarms could not be read: no seatbelt, on phone and camera covered count only what operators logged.');
     else if (!ctx.dashcams) notes.push('This fleet has no dashcams: no seatbelt, on phone and camera covered count only what operators logged.');
