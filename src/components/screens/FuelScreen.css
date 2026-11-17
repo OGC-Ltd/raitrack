@@ -38,3 +38,25 @@
 .fuel-rec tfoot th, .fuel-rec tfoot td { font-weight: 700; border-bottom: 0; border-top: 1.5px solid var(--ink); }
 .fuel-rec tr.is-bad .fuel-rec__var, .fuel-rec tr.is-bad .fuel-rec__none { color: var(--tone-down); font-weight: 700; }
 .fuel-rec__none { color: var(--dg-label); }
+
+/* The machine table fits a desktop (operator 2026-11-17: "doesn't look
+   responsive, some wordings are cut out"). It carries twelve columns where
+   the Drivers grid it borrows was tuned for eight, so at desk widths the last
+   column, Variance, ran off the card. Three concessions, desktop only — the
+   tablet band (DriversScreen.css, 701-1140px) and the phone cards keep their
+   own rules:
+   - Variance wraps between "Probe less" and "(20 L)" (non-breaking within
+     each half, FuelScreen probeWords), its widest value on two short lines;
+   - 10px cell sides instead of 14px, the page's edge gutters kept;
+   - the job under Department cut a little sooner (it ends in "…", the full
+     name is its title). */
+@media (min-width: 1141px) {
+  .fuel-grid tbody td,
+  .fuel-grid .dr-grid__sort { padding-inline: 10px; }
+  .fuel-grid tbody td:first-child,
+  .fuel-grid thead th:first-child .dr-grid__sort { padding-left: var(--dg-gutter, 16px); }
+  .fuel-grid tbody td:last-child,
+  .fuel-grid thead th:last-child .dr-grid__sort { padding-right: var(--dg-gutter, 16px); }
+  .fuel-grid .fuel-job { max-width: 170px; }
+}
+.fuel-grid td.fuel-var { white-space: normal; min-width: 5.5em; line-height: 1.3; }
