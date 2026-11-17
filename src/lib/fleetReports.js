@@ -585,3 +585,188 @@ export function sections(rows, groupOrder, sum = () => 0) {
   const names = groupOrder?.length ? groupOrder.filter((n) => by.has(n)) : [...by.keys()];
   return names.map((name) => ({ name, rows: by.get(name), total: by.get(name).reduce((s, r) => s + (sum(r) || 0), 0) }));
 }
+
+// ── Machinery (Mufindi, operator 16 Nov 2026) ───────────────────────────────
+//
+// Excavators and dozers, one row per machine per day: engine hours and fuel
+// used, read live from the day's readings so the report is current to the
+// hour. Area worked was taken out (operator, 16 Nov 2026): the server draws it
+// overnight, so it held the report to whole days that had ended.
+
+/** Excavator or dozer: the plate contains "EX " or "DZ ", the server's own test for the two. */
+export function machineKind(unit) {
+  const names = [unit?.plate, ...(unit?.vehicles ?? []).flatMap((v) => [v.regPlate, v.id, v.name])];
+  for (const s of names) {
+    const t = String(s ?? '').toUpperCase();
+    if (t.includes('EX ')) return 'Excavators';
+    if (t.includes('DZ ')) return 'Dozers';
+  }
+  return null;
+}
+/** The sections of the Machinery report, in order. */
+export const MACHINE_SECTIONS = ['Excavators', 'Dozers'];
+
+/** The hour meter may run a little past the window's own length (readings either side of an edge); past this it is a reset or a bad reading. */
+const METER_SLACK_H = 0.25;
+/** A reading further back than this before the window does not speak for its start. */
+const EDGE_GAP_MS = 15 * 60_000;
+
+/**
+ * Engine hours over a window: the machine's own hour meter where it ticked
+ * (the most trusted source: 0 s error against the ignition sums, fleet-server
+ * schema), else the time the readings say the engine was on.
+ *
+ * `s` is summariseDay of the window's readings; `meterH` the meter's own
+ * advance over the window (meterAdvance), and `maxH` the window's length.
+ */
+export function engineHoursOf(s, meterH = s?.engineHoursToday, maxH = 24) {
+  if (Number.isFinite(meterH) && meterH > 0 && meterH <= maxH + METER_SLACK_H) return { hours: Math.min(meterH, maxH), from: 'meter' };
+  if (Number.isFinite(s?.engineOnMin)) return { hours: s.engineOnMin / 60, from: 'ignition' };
+  return { hours: 0, from: null };
+}
+
+/**
+ * How far the hour meter moved over a window, counted from the last reading
+ * before it where there is one close by. An hour's readings alone would lose
+ * the minutes between the hour's edge and its first reading; measured from the
+ * reading before, the hours of a day add up to the day.
+ */
+export function meterAdvance(before, sub) {
+  const pts = [...(before ? [before] : []), ...sub].filter((p) => Number.isFinite(p.engineHoursMeter));
+  if (pts.length < 2) return null;
+  const d = pts[pts.length - 1].engineHoursMeter - pts[0].engineHoursMeter;
+  return d >= 0 ? d : null;
+}
+
+/** The fleet days of [from, to), each cut to the period. */
+export function dayWindows(from, to) {
+  return daysCovering(from, to).map((day) => {
+    const a = dayStart(day);
+    return { day, from: Math.max(from, a), to: Math.min(to, a + DAY) };
+  });
+}
+
+/** The clock hours of [from, to), each cut to the period (operator, 16 Nov 2026: "an hourly report"). */
+export function hourWindows(from, to) {
+  const out = [];
+  // Nairobi is a whole number of hours from UTC, so its hours start on UTC's
+  for (let h = Math.floor(from / HOUR) * HOUR; h < to; h += HOUR) {
+    out.push({ day: fleetDay(h), hour: hourOf(h), from: Math.max(from, h), to: Math.min(to, h + HOUR) });
+  }
+  return out;
+}
+
+/**
+ * The rows' windows for a period and the hours picked on each day of it
+ * (operator, 16 Nov 2026: "from which hour to which hour", then "custom
+ * hours"), to the minute: 06:30 to 14:15 over three days is that stretch on
+ * each of the three, not one run from the first morning to the last
+ * afternoon. `end` past `start` is a day shift; at or before it, the hours run
+ * overnight (19:30 to 07:30), and a night counts on the day it starts. 0 to
+ * 24 is the whole day.
+ *
+ * By day: a window per day, cut to its hours. By hour: those windows cut at
+ * each clock hour, so 06:30 to 08:00 is 06:30–07:00 and 07:00–08:00.
+ */
+export function machineWindows(from, to, { start = 0, end = 24, byDay = false } = {}) {
+  const len = (end > start ? end : end + 24) - start;
+  const shifts = [];
+  // From the day before: last night's hours may reach into the period's morning
+  for (const day of daysCovering(from - DAY, to)) {
+    const a = dayStart(day) + start * HOUR;
+    const x = Math.max(from, a);
+    const y = Math.min(to, a + len * HOUR);
+    if (y > x) shifts.push({ day, from: x, to: y });
+  }
+  return byDay ? shifts : shifts.flatMap((w) => hourWindows(w.from, w.to));
+}
+
+const round1 = (x) => Math.round(x * 10) / 10;
+
+/** The index of the first reading at or after `t` in a list sorted by time. */
+function firstFrom(list, t) {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (list[m].t < t) lo = m + 1; else hi = m;
+  }
+  return lo;
+}
+
+/**
+ * One row per machine per window (an hour, or a day) it ran. Windows a
+ * machine did not run are left out; `idle` lists the machines that did not
+ * run in any.
+ *
+ * @param units    scopeUnits().units, already narrowed to machines
+ * @param pings    Map vehicleId → that tracker's readings over the period, sorted
+ * @param windows  hourWindows(from, to) or dayWindows(from, to)
+ */
+export function machineryRows(units, pings, windows) {
+  const rows = [];
+  const idle = [];
+  for (const u of units) {
+    const kind = machineKind(u);
+    // The register's burn rate, where it rates the machine by the hour
+    const rated = ratedOf(u);
+    const std = rated?.basis === 'HOURS' ? rated.value : null;
+    let any = false;
+    for (const w of windows) {
+      const maxH = (w.to - w.from) / HOUR;
+      // The tracker with the most engine time stands for the unit in the window
+      let best = null;
+      for (const v of u.vehicles) {
+        const list = pings.get(v.vehicleId) ?? [];
+        // Found by halving, not by scanning: a week by the hour is 168 windows over a week of readings
+        const i = firstFrom(list, w.from);
+        const sub = list.slice(i, firstFrom(list, w.to));
+        const prior = i > 0 ? list[i - 1] : null;
+        const before = prior && w.from - prior.t <= EDGE_GAP_MS ? prior : null;
+        const s = summariseDay(sub, null);
+        const eh = engineHoursOf(s, meterAdvance(before, sub), maxH);
+        const cand = { readings: sub.length, s, eh, fuelSensor: sub.some((p) => Number.isFinite(p.fuelLevelMl) || Number.isFinite(p.fuelUsedMl)) };
+        if (!best || cand.eh.hours > best.eh.hours || (cand.eh.hours === best.eh.hours && cand.readings > best.readings)) best = cand;
+      }
+      const hours = best?.eh.hours ?? 0;
+      if (hours < 1 / 60) continue;
+      any = true;
+      const usedL = best.s.usedL != null ? Math.max(0, best.s.usedL) : 0;
+      const fuelSeen = best.s.usedL != null;
+      // Fuel used over engine hours, as it is (operator, 16 Nov 2026: "everything should be calculated
+      // as it is"): no least running time, and no reading set aside as a faulty sensor
+      const actual = fuelSeen && hours > 0 ? usedL / hours : null;
+      rows.push({
+        unit: u,
+        key: `${u.key}|${w.from}`,
+        day: w.day,
+        hour: w.hour ?? null,
+        from: w.from,
+        to: w.to,
+        hours,
+        hoursFrom: best.eh.from,
+        usedL,
+        fuelSeen,
+        fuelSensor: best.fuelSensor,
+        readings: best.readings,
+        basis: 'HOURS',
+        over: null,
+        fuelSuspectRated: false,
+        // Against the burn rate (operator, 16 Nov 2026): at or below is within, above is over
+        std,
+        actual,
+        // Judged on the figures as printed, to one decimal: 12.04 L/h reads 12.0, and is
+        // on a 12.0 burn rate, not above it (operator, 16 Nov 2026: MUFINDI - EX 02)
+        vsStd: std != null && actual != null ? (round1(actual) <= round1(std) ? 'within' : 'above') : null,
+        section: kind,
+      });
+    }
+    if (!any) idle.push(u);
+  }
+  // Greens first, the best of them at the top; then reds, the least over first and the
+  // worst at the foot; then the rows with nothing to judge (operator, 16 Nov 2026)
+  const rank = (r) => (r.vsStd === 'within' ? 0 : r.vsStd === 'above' ? 1 : 2);
+  const ratio = (r) => (r.vsStd ? r.actual / r.std : 0);
+  rows.sort((a, b) => rank(a) - rank(b) || ratio(a) - ratio(b) || unitOrder(a, b) || a.from - b.from);
+  return { rows, idle };
+}

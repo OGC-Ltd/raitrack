@@ -78,6 +78,17 @@ export const hasUnauthorizedPassengersTab = (can) => can('telemetry:read');
 // elsewhere none is judged against one. Menengai keeps its own sheet (lib/fuelRateMorl)
 export const hasFuelConsumptionTab = (can) => can('telemetry:read');
 
+/** The organisations with a Machinery report. */
+export const MACHINERY_ORGS = new Set(['KASULU']);
+
+/**
+ * Does Movements carry a Machinery tab (the excavators' and dozers' engine
+ * hours and fuel against the machine register)? Mufindi (KASULU) alone has
+ * the register. A tab under Movements, after Fuel Graphs, not a sidebar node
+ * (operator, 16 Nov 2026).
+ */
+export const hasMachineryTab = (can, orgCode) => can('telemetry:read') && MACHINERY_ORGS.has(String(orgCode ?? '').toUpperCase());
+
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));

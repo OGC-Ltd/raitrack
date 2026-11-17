@@ -20,10 +20,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
+  machineKind, machineryRows, machineWindows, MACHINE_SECTIONS,
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
@@ -78,7 +79,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab } from '../../lib/reportNav';
 import { placeNameAt } from '../../hooks/usePlaceName';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes, bySiteKind } from '../../lib/movementReport';
 import { SITE_KINDS, siteKind } from '../../lib/siteLists';
@@ -702,9 +703,9 @@ function TypePicker({ types, picked, counts, onChange }) {
  * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
  * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, whoAmI }) {
+function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, whoAmI }) {
   const [tab, setTab] = useState('hourly');
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -721,6 +722,8 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
     fuelConsumption && { key: 'fuelConsumption', label: 'Fuel Consumption Rate' },
     // Each unit's fuel graph on a page, its figures under it (operator, 13 Nov 2026)
     fuelConsumption && { key: 'fuelGraphs', label: 'Fuel Graphs' },
+    // Excavators and dozers against the burn rate, after Fuel Graphs (operator, 16 Nov 2026)
+    machinery && { key: 'machinery', label: 'Machinery' },
   ].filter(Boolean);
   return (
     <>
@@ -791,6 +794,11 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
       {fuelConsumption && (
       <div className="mvt-panel" role="tabpanel" id="mvt-fuelGraphs-panel" aria-labelledby="mvt-fuelGraphs" hidden={tab !== 'fuelGraphs'}>
         <FuelGraphReport orgId={orgId} orgCode={orgCode} companyName={companyName} />
+      </div>
+      )}
+      {machinery && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-machinery-panel" aria-labelledby="mvt-machinery" hidden={tab !== 'machinery'}>
+        <ReportsScreen only="machinery" active={tab === 'machinery'} />
       </div>
       )}
     </>
@@ -1335,7 +1343,13 @@ function Kpi({ value, label, tone }) {
   );
 }
 
-export default function ReportsScreen() {
+/**
+ * The Reports page, or, with `only`, one report of REPORTS on its own: the
+ * Machinery tab under Movements is this, fixed to Machinery. `active`: the
+ * tab is in view; a report on a tab not yet opened is not made, so opening
+ * Movements does not read every machine's day behind it.
+ */
+export default function ReportsScreen({ only = null, active = true } = {}) {
   const { vehicles = [], orgId } = useFleetLiveShared();
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
@@ -1350,7 +1364,7 @@ export default function ReportsScreen() {
   const tabs = reportKeysFor(can, orgCode);
   // End of shift first, where the grants allow it.
   const chosen = useCurrentReport() ?? firstReport(tabs);
-  const key = tabs.includes(chosen) ? chosen : firstReport(tabs);
+  const key = only ?? (tabs.includes(chosen) ? chosen : firstReport(tabs));
   const isServer = Boolean(SERVER_TABS[key]);
   const def = REPORTS[isServer ? 'behaviour' : key];
   const [span, setSpan] = useState(() => spanFor(key, NIGHT, orgCode));
@@ -1362,6 +1376,8 @@ export default function ReportsScreen() {
   const [unit, setUnit] = useState(null);
   const [night, setNight] = useState(NIGHT);
   const [rate, setRate] = useState(DEFAULT_RATE);
+  // Machinery: a row per hour (the default: operator, 16 Nov 2026, "an hourly report") or per day
+  const [per, setPer] = useState('hour');
   const [run, setRun] = useState({ status: 'idle' });
   const runId = useRef(0);
 
@@ -1455,7 +1471,7 @@ export default function ReportsScreen() {
     const sp = { id: null, ...periodOf(d) };
     const nt = isNight ? { ...night, start: d.start, end: d.end % 24 } : night;
     setDays(d); setPicking(null); setSpan(sp); setNight(nt);
-    execute({ span: sp, night: nt });
+    execute({ span: sp, night: nt, days: d });
   };
 
   const problemFor = (sp) => (!orgId ? 'Waiting for the organisation to load'
@@ -1470,15 +1486,20 @@ export default function ReportsScreen() {
   // `over` carries a period (and night) just picked, before the state has it
   const execute = async (over = {}) => {
     const sp = over.span ?? span;
+    const hrs = over.days ?? days;
     const nt = over.night ?? night;
     if (problemFor(sp)) return;
     const id = ++runId.current;
     const live = () => id === runId.current;
-    const scoped = scopeUnits(siteVehicles, groups, group);
+    const scoped0 = scopeUnits(siteVehicles, groups, group);
+    // Machinery: the excavators and dozers alone
+    const scoped = key === 'machinery' ? { ...scoped0, units: scoped0.units.filter(machineKind) } : scoped0;
     const one = byUnit && unit ? scoped.units.find((u) => u.key === unit) : null;
     const units = one ? [one] : scoped.units;
     const missing = one ? [] : scoped.missing;
-    const ctx = { from: sp.from, to: sp.to, group, unit: one?.plate ?? null, night: { ...nt }, rate, rated: rated && key === 'utilisation' };
+    const ctx = { from: sp.from, to: sp.to, group, unit: one?.plate ?? null, night: { ...nt }, rate, rated: rated && key === 'utilisation', byDay: key === 'machinery' && per === 'day',
+      // A custom range is one stretch, start to end; otherwise the hours picked, on each day
+      hours: hrs.custom ? { start: 0, end: 24 } : { start: hrs.start, end: hrs.end } };
     if (!units.length) {
       setRun({ status: 'done', rows: [], secs: [], ctx, missing, failed: 0, units: 0 });
       return;
@@ -1535,6 +1556,20 @@ export default function ReportsScreen() {
           .finally(() => onPlace({ done: ++placed, total: fixed.length }))));
         const placeOf = new Map(fixed.map((row, i) => [row, names[i]]));
         rows = rows.map((row) => (placeOf.get(row) ? { ...row, peakPlace: placeOf.get(row) } : row));
+      } else if (key === 'machinery') {
+        // The hours picked, on each day of the period, to the minute
+        const windows = machineWindows(ctx.from, ctx.to, { ...ctx.hours, byDay: ctx.byDay });
+        const vs = units.flatMap((u) => u.vehicles);
+        // From 15 minutes early, so the first hour's hour meter has a reading to count from
+        const p = await loadPings({ orgId, vehicles: vs, from: ctx.from - 15 * 60_000, to: ctx.to, onProgress: step('Reading each machine’s day') });
+        const made = machineryRows(units, p.pings, windows);
+        // What the period at the top already says need not be said on every row
+        ctx.oneWindow = windows.length <= 1;
+        ctx.oneDay = new Set(windows.map((w) => w.day)).size <= 1;
+        rows = made.rows;
+        failed = p.failed.size;
+        // A machine whose day could not be read is counted in `failed`, not said to have stood idle
+        ctx.idle = made.idle.filter((u) => !u.vehicles.some((v) => p.failed.has(v.vehicleId))).map((u) => u.plate).sort((x, y) => x.localeCompare(y, 'en', { numeric: true }));
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
@@ -1543,7 +1578,7 @@ export default function ReportsScreen() {
         failed = r.failed;
       }
       if (!live()) return;
-      const secs = sections(rows, ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum);
+      const secs = sections(rows, key === 'machinery' ? MACHINE_SECTIONS : ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum);
       setRun({ status: 'done', rows, secs, ctx, missing, failed, units: units.length });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
@@ -1558,11 +1593,11 @@ export default function ReportsScreen() {
   // from another report the state still holds that one's.
   const opened = useRef(null);
   useEffect(() => {
-    if (isServer || !orgId || !vehicles.length || run.status !== 'idle') return;
+    if (isServer || !active || !orgId || !vehicles.length || run.status !== 'idle') return;
     const fresh = opened.current !== key;
     opened.current = key;
     execute(fresh ? { span: spanFor(key, night, orgCode), night } : {});
-  }, [isServer, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isServer, active, key, orgId, vehicles.length, run.status, group, unit, rate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A behaviour run (and any new operator entry) opens the cases it finds;
   // what operators recorded on cases already there stays.
@@ -1607,7 +1642,8 @@ export default function ReportsScreen() {
   const columns = def.columns(ctx);
   // Type or Driver blank for every vehicle (e.g. all "UNSPECIFIED"): left out.
   const shown = done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i);
-  const groupWords = done?.ctx.group ?? (groups ? 'All groups' : 'All vehicles');
+  // Machinery covers the excavators and dozers alone, so it says so (operator, 16 Nov 2026: "All vehicles" read as every unit)
+  const groupWords = done?.ctx.group ?? (key === 'machinery' ? 'Excavators and dozers' : groups ? 'All groups' : 'All vehicles');
   const periodWords = periodText(ctx.from, ctx.to);
   const nightWords = key === 'night' ? `Night hours ${hh((done?.ctx.night ?? night).start)}hrs – ${hh((done?.ctx.night ?? night).end || 24)}hrs` : null;
   const slugOf = (w) => `-${w.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -1691,7 +1727,7 @@ export default function ReportsScreen() {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} whoAmI={by} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
@@ -1711,12 +1747,22 @@ export default function ReportsScreen() {
           label="Period" on
           text={isNight
             ? `${pickedText(days.fromDay, days.toDay, today)} · nights ${hoursText(night.start, night.end || 24)}`
+            : days.custom ? customText(span)
             : `${pickedText(days.fromDay, days.toDay, today)} · ${span.to >= Date.now() - 60_000 && days.toDay === today ? `${hh(days.start)}/now` : hoursText(days.start, days.end)}`}
-          onChange={(f, t) => setPicking({ ...shownDays, fromDay: f, toDay: t })}
+          onChange={(f, t) => setPicking({ ...shownDays, fromDay: f, toDay: t, custom: undefined })}
         >
           {({ close }) => (
             <>
-              {isNight ? (
+              {key === 'machinery' ? (
+                // Machinery takes the Shift's pickers (operator, 16 Nov 2026: "custom hours"): Day,
+                // Night or Whole day, start and end to the minute on each day, or one custom range
+                <>
+                  <ShiftTime title="Hours each day" start={shownDays.start} end={shownDays.end} custom={Boolean(shownDays.custom)}
+                             onChange={(a, b) => setPicking({ ...shownDays, start: a, end: b, custom: undefined })} />
+                  <CustomRange period={shiftPeriod(shownDays)} on={Boolean(shownDays.custom)}
+                               onChange={(a, b) => setPicking({ ...shownDays, fromDay: fleetDay(a), toDay: fleetDay(Math.max(a, (b ?? Date.now()) - 1)), custom: { from: a, to: b } })} />
+                </>
+              ) : isNight ? (
                 // Night driving takes the Shift's picker: presets, and the night to the minute (operator, 2 Nov 2026)
                 <ShiftTime title="Night hours" presets={NIGHT_PRESETS} start={shownDays.start} end={shownDays.end}
                            onChange={(a, b) => setPicking({ ...shownDays, start: a, end: b })} />
@@ -1762,6 +1808,12 @@ export default function ReportsScreen() {
                         onChange={(v) => { setRate(v); reset(); }} />
         )}
 
+        {key === 'machinery' && (
+          <ChoicePicker icon="ti-clock-hour-4" label="Rows" value={per}
+                        options={[{ value: 'hour', label: 'By hour' }, { value: 'day', label: 'By day' }]}
+                        onChange={(v) => { setPer(v); reset(); }} />
+        )}
+
         {key === 'behaviour' && (
           <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog({})}>Log incident</button>
         )}
@@ -1795,8 +1847,10 @@ export default function ReportsScreen() {
           <>
             <TableToolbar
               summary={<>
-                <strong>{done.rows.length.toLocaleString('en-GB')}</strong> vehicle{done.rows.length === 1 ? '' : 's'}
-                {key === 'utilisation' || key === 'night' ? ` of ${done.units.toLocaleString('en-GB')}` : ''}
+                {def.countWords ? <strong>{def.countWords(done.rows)}</strong> : (
+                  <><strong>{done.rows.length.toLocaleString('en-GB')}</strong> vehicle{done.rows.length === 1 ? '' : 's'}</>
+                )}
+                {key === 'utilisation' || key === 'night' ? ` of ${done.units.toLocaleString('en-GB')}` : key === 'machinery' ? ` ran, of ${done.units.toLocaleString('en-GB')}` : ''}
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
@@ -1839,7 +1893,7 @@ export default function ReportsScreen() {
                           <tr className="rpt-group">
                             <th colSpan={shown.length} scope="rowgroup">
                               <span className="rpt-group__name">{s.name}</span>
-                              <span className="rpt-group__meta">{s.rows.length} vehicle{s.rows.length === 1 ? '' : 's'} · {def.sumWords(s.total)}</span>
+                              <span className="rpt-group__meta">{def.countWords ? def.countWords(s.rows) : `${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'}`} · {def.sumWords(s.total)}</span>
                             </th>
                           </tr>
                         )}
@@ -1847,7 +1901,8 @@ export default function ReportsScreen() {
                           const cells = def.cells(r, done.ctx);
                           const noDriver = conduct && noDispatchDriver(r);
                           return (
-                            <tr key={r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}`}>
+                            <tr key={r.key ?? r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}${def.rowTone?.(r) ? ` rpt-row--${def.rowTone(r)}` : ''}`}
+                                style={def.rowDepth ? { '--rpt-depth': def.rowDepth(r) } : undefined}>
                               {shown.map((i) => {
                                 const c = cells[i];
                                 if (i === 0) {
@@ -1882,6 +1937,16 @@ export default function ReportsScreen() {
                     ))}
                   </tbody>
                 </table>
+                {key === 'machinery' && (
+                  <div className="rpt-missing">
+                    <p>
+                      Burn rate is the machine’s rated L/h from the register. A row is <span className="rpt-tone rpt-tone--good">green</span> when
+                      its actual is at or below it and <span className="rpt-tone rpt-tone--bad">red</span> when above it.
+                      Engine hours are from the hour meter; * marks a day read from the ignition signal instead.
+                    </p>
+                    {done.ctx.idle?.length > 0 && <p>Did not run in the period: {done.ctx.idle.join(', ')}.</p>}
+                  </div>
+                )}
                 {conduct && done.rows.some(noDispatchDriver) && (
                   <p className="rpt-key"><span className="rpt-key__swatch" aria-hidden="true" />{noDispatchKey(done.ctx)}</p>
                 )}

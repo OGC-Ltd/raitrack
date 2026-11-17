@@ -592,3 +592,16 @@ select.mvr-edit { min-width: 110px; }
 }
 .dlv-fg__x button:hover { background: #fff; }
 .dlv-fg__x button:focus-visible { outline: 2px solid #000; outline-offset: 1px; }
+
+/* Machinery: each row against the register's burn rate, green at or below, red above */
+/* --rpt-depth: 0 on the rate to 1 far from it; the further, the deeper the colour */
+.rpt-row--good td { background: rgba(22, 163, 74, calc(0.10 + 0.40 * var(--rpt-depth, 0))); color: #14532d; }
+.rpt-row--bad td { background: rgba(220, 38, 38, calc(0.10 + 0.40 * var(--rpt-depth, 0))); color: #7f1d1d; }
+:root[data-theme="dark"] .rpt-row--good td { color: #bbf7d0; }
+:root[data-theme="dark"] .rpt-row--bad td { color: #fecaca; }
+/* The key in the note under the table */
+.rpt-tone { font-weight: 700; border-radius: 4px; padding: 1px 6px; }
+.rpt-tone--good { background: rgba(22, 163, 74, 0.16); color: #15803d; }
+.rpt-tone--bad { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
+:root[data-theme="dark"] .rpt-tone--good { color: #4ade80; }
+:root[data-theme="dark"] .rpt-tone--bad { color: #f87171; }
