@@ -31,7 +31,10 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { whenLabel } from "../../api/incidents";
 import TableToolbar from "./TableToolbar";
 import TablePager, { usePager, withMore } from "./TablePager";
-import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
+import { downloadTableCsv } from "../../utils/tableExport";
+// PDFs on the report letterhead, named for the organisation on screen (operator, 17 Nov 2026).
+import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
+import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
 import DetailSidebar, { DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import "./IncidentReport.css";
 
@@ -111,6 +114,7 @@ const tableFor = (columns, rows) => {
  * page behind it.
  */
 function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, caption, timeline = false }) {
+  const fleet = useLetterheadFleet();
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [more, setMore] = useState(false);
@@ -167,7 +171,8 @@ function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, capt
           ...tableFor(columns, rows),
           filenameSlug: `${exportSlug}-${plate}`.replace(/\s+/g, "-").toLowerCase(),
         })}
-        onPdf={() => downloadTablePdf({
+        onPdf={() => downloadLetterheadTablePdf({
+          ...fleet,
           reportTitle: `${reportTitle} - ${plate}`,
           sectionTitle: `${plate}, every case loaded`,
           filterNote: `${caption}. ${rows.length} case${rows.length === 1 ? "" : "s"} loaded${more ? ", more available, load them before exporting for a complete file" : ""}.`,
@@ -232,6 +237,7 @@ export default function IncidentReport({
   timeline = false,   // the unit's cases as a -O-O- rail, newest first (Malfunction)
   search = "",        // plate or name, from the panel's search box
 }) {
+  const fleet = useLetterheadFleet();
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [more, setMore] = useState(false);
@@ -347,7 +353,8 @@ export default function IncidentReport({
           ...tableFor(summaryColumns, shown),
           filenameSlug: exportSlug,
         })}
-        onPdf={() => downloadTablePdf({
+        onPdf={() => downloadLetterheadTablePdf({
+          ...fleet,
           reportTitle,
           sectionTitle: `${shown.length} unit${shown.length === 1 ? "" : "s"}`,
           filterNote: `${caption}${needle ? `, matching "${search.trim()}"` : ""}. ${more ? "More units are available, load them before exporting for a complete file." : "Every unit in the window."}`,

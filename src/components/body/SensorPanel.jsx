@@ -23,7 +23,10 @@ import { useFuelEvents, fleetDayKey } from "../../hooks/useFuelEvents";
 import { useVehicleTelemetry } from "../../hooks/useVehicleTelemetry";
 import { useWindowTelemetry } from "../../hooks/useWindowTelemetry";
 import { readingCoverage } from "../../lib/vehicleReadings";
-import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
+import { downloadTableCsv } from "../../utils/tableExport";
+// PDFs on the report letterhead, named for the organisation on screen (operator, 17 Nov 2026).
+import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
+import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
 import TableToolbar from "./TableToolbar";
 import TablePager, { usePager, PAGE_STEP } from "./TablePager";
 import FilterBar from "./FilterBar";
@@ -267,6 +270,7 @@ function splitTitle(s) {
 // hook has no cache — calling it in both places would fire the fillings and
 // thefts requests twice over, against a 100 req/60s limit.
 function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, vehicles, search, timeFilter, engineFilter, fuelFilter, onSelect, selectedId }) {
+  const fleet = useLetterheadFleet();
   const dayLabel = !day || day === fleetDayKey() ? "today" : day;
   const pad = n => String(n).padStart(2, "0");
   const fmtTime = iso => { if (!iso) return "-"; const d = new Date(iso); return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -435,7 +439,8 @@ function FuelTable({ flagged, tankState = {}, day, loading, error, onReload, veh
         loading={loading}
         onReload={onReload}
         onCsv={() => downloadTableCsv({ head: EXPORT_HEAD, body: exportBody(), filenameSlug: exportSlug })}
-        onPdf={() => downloadTablePdf({
+        onPdf={() => downloadLetterheadTablePdf({
+          ...fleet,
           reportTitle: "Sensor Monitor: Fuel FSL",
           sectionTitle: `${filtered.length} unit${filtered.length === 1 ? "" : "s"} with fuel events`,
           filterNote,
