@@ -149,6 +149,9 @@ jobs:
     # Long enough for fleet-web to wait for the image CI is still pushing.
     timeout-minutes: 40
     environment: production
+    permissions:
+      contents: read
+      id-token: write          # GitHub OIDC token, exchanged for the github-deploy role
     env:
       # How many bundle backups the box keeps, including the one this run makes.
       #
@@ -240,6 +243,59 @@ jobs:
           echo "pinned $(grep -c . ~/.ssh/known_hosts) host key(s):"
           sed 's/^/  /' /tmp/host-fingerprints
 
+      # Port 22 on the box is being limited to the operators' own address, and
+      # GitHub's runners arrive from a new address every run. So ssh travels
+      # inside an AWS Session Manager session instead. The OIDC role
+      # github-deploy may open an SSH tunnel (AWS-StartSSHSession) to this one
+      # box and nothing else, and ssh inside the tunnel still checks the pinned
+      # host key and the deploy key. Every ssh and rsync below picks the tunnel
+      # up from ~/.ssh/config, unchanged.
+      #
+      # While port 22 still admits the runners, a tunnel that cannot be opened
+      # falls back to plain ssh with a warning, so a missing role never stops a
+      # deploy. Once 22 is limited, that fallback fails at the next check.
+      - name: AWS credentials for the Session Manager tunnel
+        id: deploy_aws
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::522505217087:role/github-deploy
+          role-session-name: raitrack-deploy-${{ github.run_id }}
+          aws-region: af-south-1
+
+      - name: route ssh through Session Manager
+        env:
+          HOST:     ${{ secrets.EC2_HOST }}
+          INSTANCE: i-0a4d8f7f5a97d8098
+          AWS_OK:   ${{ steps.deploy_aws.outcome }}
+        run: |
+          set -euo pipefail
+          fallback() {
+            rm -f ~/.ssh/config
+            echo "::warning::$1. This run uses plain ssh on port 22, which stops working once port 22 is limited to the operators' address."
+            exit 0
+          }
+          [ "$AWS_OK" = success ] || fallback "could not assume the github-deploy role"
+          if ! command -v session-manager-plugin >/dev/null; then
+            curl -fsSL --retry 3 -o /tmp/session-manager-plugin.deb \
+              https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+            sudo dpkg -i /tmp/session-manager-plugin.deb >/dev/null
+          fi
+          echo "session-manager-plugin $(session-manager-plugin --version)"
+          # ServerAliveInterval keeps data moving through the tunnel, so a long
+          # `fleet-web up` is not cut by Session Manager's idle timeout.
+          {
+            echo "Host ${HOST}"
+            echo "  ProxyCommand aws ssm start-session --region af-south-1 --target ${INSTANCE} --document-name AWS-StartSSHSession --parameters portNumber=%p"
+            echo "  ServerAliveInterval 30"
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          if ! timeout 90 ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "ubuntu@${HOST}" true 2>/tmp/ssm-err; then
+            sed 's/^/  /' /tmp/ssm-err
+            fallback "ssh through Session Manager failed"
+          fi
+          echo "ssh reaches the box through Session Manager"
+
       # Three distinct failures all reach git as the same "exit code 128", with
       # a message about access rights and the repository existing that is true
       # of none of them:
@@ -264,32 +320,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! timeout 20 bash -c "</dev/tcp/${HOST}/22" 2>/dev/null; then
-            echo "::error::${HOST} is not answering on port 22."
-            echo "Either EC2_HOST is stale — an instance stop/start rerolls the public IP unless an Elastic IP is attached — or the security group no longer admits GitHub's runners."
-            echo "Fix: confirm the current address with 'aws ec2 describe-instances', update the EC2_HOST secret, and update EC2_HOST_KEY with 'ssh-keyscan <new-host>' at the same time (see the next check)."
-            exit 1
-          fi
-          echo "${HOST} answers on port 22"
+          # Through Session Manager there is no direct port 22 to probe and
+          # ssh-keyscan cannot use the tunnel. The tunnel step's own ssh call
+          # already reached the box and checked the pinned host key, so only
+          # the deploy-key check below applies.
+          if [ -f ~/.ssh/config ]; then
+            echo "reaching ${HOST} through Session Manager; its host key was checked by the tunnel step"
+          else
+            if ! timeout 20 bash -c "</dev/tcp/${HOST}/22" 2>/dev/null; then
+              echo "::error::${HOST} is not answering on port 22."
+              echo "Either EC2_HOST is stale — an instance stop/start rerolls the public IP unless an Elastic IP is attached — or the security group no longer admits GitHub's runners (port 22 is limited to the operators' address; deploys go through Session Manager, see the step above)."
+              echo "Fix: confirm the current address with 'aws ec2 describe-instances', update the EC2_HOST secret, and update EC2_HOST_KEY with 'ssh-keyscan <new-host>' at the same time (see the next check)."
+              exit 1
+            fi
+            echo "${HOST} answers on port 22"
 
-          # Compared as SORTED FINGERPRINTS, never key material, so a mismatch
-          # is legible in a public log without publishing anything.
-          ssh-keyscan -T 20 "${HOST}" 2>/dev/null > /tmp/live-hostkeys || true
-          if ! ssh-keygen -lf /tmp/live-hostkeys 2>/dev/null | awk '{print $2}' | sort > /tmp/live-fp; then
-            echo "::warning::could not read host keys from ${HOST}; leaving the verdict to ssh"
-            exit 0
-          fi
-          awk '{print $2}' /tmp/host-fingerprints | sort > /tmp/pinned-fp
+            # Compared as SORTED FINGERPRINTS, never key material, so a mismatch
+            # is legible in a public log without publishing anything.
+            ssh-keyscan -T 20 "${HOST}" 2>/dev/null > /tmp/live-hostkeys || true
+            if ! ssh-keygen -lf /tmp/live-hostkeys 2>/dev/null | awk '{print $2}' | sort > /tmp/live-fp; then
+              echo "::warning::could not read host keys from ${HOST}; leaving the verdict to ssh"
+              exit 0
+            fi
+            awk '{print $2}' /tmp/host-fingerprints | sort > /tmp/pinned-fp
 
-          if ! comm -12 /tmp/live-fp /tmp/pinned-fp | grep -q .; then
-            echo "::error::${HOST} is reachable, but NONE of its host keys match EC2_HOST_KEY."
-            echo "The address now belongs to a different machine — a rebuilt or migrated box reuses the address, not the keys."
-            echo "Fix: EC2_HOST_KEY must be refreshed alongside EC2_HOST. Paste the full output of: ssh-keyscan ${HOST}"
-            echo "  pinned : $(paste -sd' ' /tmp/pinned-fp)"
-            echo "  live   : $(paste -sd' ' /tmp/live-fp)"
-            exit 1
+            if ! comm -12 /tmp/live-fp /tmp/pinned-fp | grep -q .; then
+              echo "::error::${HOST} is reachable, but NONE of its host keys match EC2_HOST_KEY."
+              echo "The address now belongs to a different machine — a rebuilt or migrated box reuses the address, not the keys."
+              echo "Fix: EC2_HOST_KEY must be refreshed alongside EC2_HOST. Paste the full output of: ssh-keyscan ${HOST}"
+              echo "  pinned : $(paste -sd' ' /tmp/pinned-fp)"
+              echo "  live   : $(paste -sd' ' /tmp/live-fp)"
+              exit 1
+            fi
+            echo "host key matches what is pinned"
           fi
-          echo "host key matches what is pinned"
 
           if ! timeout 30 ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 "ubuntu@${HOST}" true 2>/tmp/ssh-err; then
             echo "::error::${HOST} is the right box, but EC2_SSH_KEY was refused."
