@@ -20,14 +20,14 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns } from '../../api/fleetReports';
 import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -1489,19 +1489,22 @@ export default function ReportsScreen() {
       let rows;
       let failed = 0;
       if (key === 'behaviour') {
-        const [h, cam, turns] = await Promise.all([
+        const [h, cam, turns, runs] = await Promise.all([
           loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
           loadDashcamAlarms({ orgId, from: ctx.from }),
           // Harsh cornering is not on the feed: read as the Movements report reads it
           loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
+          // The dispatch runs over the period, to name the driver at the time of each incident
+          loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
         ]);
         ctx.cornerFailed = turns == null;
+        ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
         if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
-        setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed },
+        setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed, runs },
                  unitList: units, ctx, missing, failed: h.failed, units: units.length });
         return;
       } else if (key === 'overspeed') {
@@ -1568,7 +1571,7 @@ export default function ReportsScreen() {
   const sentFound = useRef('');
   useEffect(() => {
     if (run.status !== 'done' || !run.raw || !orgId) return;
-    const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries });
+    const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
     const sig = `${orgId}:${JSON.stringify(found)}`;
     if (sig === sentFound.current || !found.length) return;
     sentFound.current = sig;
@@ -1579,7 +1582,7 @@ export default function ReportsScreen() {
   const done = useMemo(() => {
     if (run.status !== 'done') return null;
     if (!run.raw) return run;
-    const rows = behaviourRows(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries });
+    const rows = behaviourRows(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
     const inScope = new Set(run.unitList.map((u) => u.key));
     const period = periodCases(cases, run.ctx).filter((c) => inScope.has(c.unitKey));
     const followUp = new Map();
@@ -1797,6 +1800,7 @@ export default function ReportsScreen() {
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
+                {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
               </>}
@@ -1841,8 +1845,9 @@ export default function ReportsScreen() {
                         )}
                         {s.rows.map((r) => {
                           const cells = def.cells(r, done.ctx);
+                          const noDriver = conduct && noDispatchDriver(r);
                           return (
-                            <tr key={r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}`}>
+                            <tr key={r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}`}>
                               {shown.map((i) => {
                                 const c = cells[i];
                                 if (i === 0) {
@@ -1877,6 +1882,9 @@ export default function ReportsScreen() {
                     ))}
                   </tbody>
                 </table>
+                {conduct && done.rows.some(noDispatchDriver) && (
+                  <p className="rpt-key"><span className="rpt-key__swatch" aria-hidden="true" />{noDispatchKey(done.ctx)}</p>
+                )}
                 {done.ctx.events?.length > 0 && <OverspeedEvents events={done.ctx.events} unit={done.ctx.unit} />}
                 {done.missing.length > 0 && (
                   <details className="rpt-missing">
