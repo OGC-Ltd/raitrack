@@ -79,7 +79,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
 // Shift hours: the day's approved shifts (FactorySuite) against the engine hours run in them
 import { dayShifts, shiftHoursRows } from '../../lib/shiftHours';
 import { getFactoryFuel } from '../../api/factoryFuel';
@@ -755,13 +755,14 @@ function MovementsPage(props) {
   return (
     <>
       <div className="sp4-tabs mvt-groups" role="tablist" aria-label="Movements">
-        {groups.map((g) => (
+        {/* A heading that is its one report (Deliveries) is that report's own tab: its id and panel */}
+        {groups.map((g) => (isSoloGroup(g) ? tabButton(g.tabs[0], false) : (
           <button key={g.key} type="button" role="tab" id={`mvt-grp-${g.key}`} aria-selected={group === g.key} aria-controls={`mvt-grp-${g.key}-panel`}
                   className={`sp4-tab${group === g.key ? ' sp4-tab--on' : ''}`} onClick={() => pickGroup(g)}>{g.label}</button>
-        ))}
+        )))}
       </div>
       {/* Heading › its reports as chips, as Deliveries › Van Sales | Finished Goods (operator, 18 Nov 2026) */}
-      {groups.map((g) => (
+      {groups.filter((g) => !isSoloGroup(g)).map((g) => (
         <nav key={g.key} className="mvt-crumbs" role="tabpanel" id={`mvt-grp-${g.key}-panel`} aria-labelledby={`mvt-grp-${g.key}`} hidden={group !== g.key}>
           <span className="mvt-crumbs__root">{g.label}</span>
           <i className="ti ti-chevron-right mvt-crumbs__sep" aria-hidden="true" />

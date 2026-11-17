@@ -99,7 +99,9 @@ export const hasShiftHoursTab = hasMachineryTab;
  * order on the page.
  */
 export const MOVEMENTS_TAB_GROUPS = [
-  { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'deliveries', 'tatFuel', 'recovery'] },
+  { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'tatFuel', 'recovery'] },
+  // Deliveries by itself (operator, 18 Nov 2026): it has its own Van Sales | Finished Goods trail inside
+  { key: 'deliveries', label: 'Deliveries', tabs: ['deliveries'] },
   { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'probes'] },
   { key: 'safety', label: 'Safety and conduct', tabs: ['speed', 'alarmDist', 'unauthorizedPassengers'] },
   { key: 'sites', label: 'Sites and machinery', tabs: ['geofences', 'dormant', 'machinery', 'shiftHours'] },
@@ -120,6 +122,12 @@ export function groupMovementsTabs(tabs) {
     tabs: [...g.tabs.map((k) => byKey.get(k)).filter(Boolean), ...(i === 0 ? loose : [])],
   })).filter((g) => g.tabs.length > 0);
 }
+
+/**
+ * A heading that is its one report (Deliveries): the heading is the tab, with no trail under it. A heading
+ * left with one report of a different name keeps its trail, so the report's name still shows.
+ */
+export const isSoloGroup = (g) => g.tabs.length === 1 && g.tabs[0].label === g.label;
 
 /** The heading a tab sits under. */
 export const groupOfTab = (groups, tabKey) => groups.find((g) => g.tabs.some((t) => t.key === tabKey))?.key ?? groups[0]?.key;

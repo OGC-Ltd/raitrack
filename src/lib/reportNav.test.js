@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { REPORT_NODES, reportKeysFor, firstReport, hasRecoveryTab, MOVEMENTS_TAB_GROUPS, groupMovementsTabs, groupOfTab } from './reportNav';
+import { REPORT_NODES, reportKeysFor, firstReport, hasRecoveryTab, MOVEMENTS_TAB_GROUPS, groupMovementsTabs, groupOfTab, isSoloGroup } from './reportNav';
 
 describe('the reports menu', () => {
   it('lists the reports A–Z by name', () => {
@@ -44,6 +44,15 @@ describe('Movements tab headings', () => {
     const groups = groupMovementsTabs(tabsOf(['hourly', 'fuelConsumption', 'fuelGraphs', 'unauthorizedPassengers', 'newOne']));
     expect(groups.map((g) => g.key)).toEqual(['trips', 'fuel', 'safety']);
     expect(groups[0].tabs.map((t) => t.key)).toEqual(['hourly', 'newOne']);
+  });
+
+  it('gives Deliveries a heading of its own, and only that heading acts as its tab', () => {
+    const menengai = [{ key: 'hourly', label: 'Movements' }, { key: 'tankers', label: 'Tankers' }, { key: 'deliveries', label: 'Deliveries' },
+      { key: 'dormant', label: 'Dormant Assets' }, { key: 'fuelConsumption', label: 'Fuel Consumption Rate' }];
+    const groups = groupMovementsTabs(menengai);
+    expect(groups.map((g) => g.key)).toEqual(['trips', 'deliveries', 'fuel', 'sites']);
+    expect(groups.find((g) => g.key === 'trips').tabs.map((t) => t.key)).toEqual(['hourly', 'tankers']);
+    expect(groups.filter(isSoloGroup).map((g) => g.key)).toEqual(['deliveries']);
   });
 
   it('finds the heading a tab sits under', () => {
