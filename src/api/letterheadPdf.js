@@ -17,6 +17,12 @@ export const letterheadLogos = () => ({
 const PDF_SCALE = 2.2;
 // The JPEG is looked at zoomed in, on a phone: an A4 page 2382 px wide (~290 dpi)
 const JPEG_SCALE = 3;
+/** A report longer than this many pages is drawn at LONG_SCALE: readable, and a fraction of the work. */
+const LONG_PAGES = 25;
+const LONG_SCALE = 1.6;
+/** Lets the browser paint between pages, so it stays responsive and the progress shows. */
+const breathe = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 /** The tallest image a browser will draw, with room to spare. */
 const MAX_LONG_PX = 15_800;
 
@@ -42,11 +48,15 @@ async function drawPages(html, { landscape, scale, onProgress, continuous = fals
     const pages = [...doc.querySelectorAll('.page')];
     const { default: html2canvas } = await import('html2canvas');
     const out = [];
+    // A long report a little lighter (operator, 17 Nov 2026: 70 pages froze the page)
+    const base = !continuous && pages.length > LONG_PAGES ? Math.min(scale, LONG_SCALE) : scale;
     for (let i = 0; i < pages.length; i++) {
-      onProgress?.(`Drawing page ${i + 1} of ${pages.length}`);
+      // `{ done, total }` for a bar; the words for anything that only shows text
+      onProgress?.(`Drawing page ${i + 1} of ${pages.length}`, { done: i, total: pages.length });
+      await breathe();
       // One long page stays one image: drawn smaller when it would pass what a
       // browser will draw (api/pdfJpeg MAX_HEIGHT), never cut
-      const s = continuous ? Math.min(scale, MAX_LONG_PX / Math.max(1, pages[i].scrollHeight)) : scale;
+      const s = continuous ? Math.min(scale, MAX_LONG_PX / Math.max(1, pages[i].scrollHeight)) : base;
       out.push(await html2canvas(pages[i], { scale: s, backgroundColor: '#ffffff', useCORS: true, logging: false,
         ...(continuous ? { windowHeight: pages[i].scrollHeight + 50, height: pages[i].scrollHeight } : {}) }));
     }
@@ -67,10 +77,14 @@ export async function saveLetterheadPdf(html, { filename, landscape = false, onP
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait', compress: true });
   const [w, h] = landscape ? [297, 210] : [210, 297];
-  pages.forEach((canvas, i) => {
+  onProgress?.('Saving the PDF', { done: pages.length, total: pages.length });
+  for (let i = 0; i < pages.length; i++) {
     if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h);
-  });
+    pdf.addImage(pages[i].toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h);
+    // Free each page once it is in the PDF, and let the screen update now and then
+    pages[i].width = 0;
+    if (i % 10 === 9) await breathe();
+  }
   if (keep) return { blob: pdf.output('blob'), filename };
   pdf.save(filename);
   return null;
