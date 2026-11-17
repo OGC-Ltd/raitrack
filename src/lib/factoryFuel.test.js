@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange } from "./factoryFuel";
+import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, withFuelNow } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -72,5 +72,42 @@ describe("factoryFuel", () => {
 
   it("ends the range on tomorrow, the day being planned today", () => {
     expect(fuelRange(7, Date.parse("2026-11-14T10:00:00Z"))).toEqual({ from: "2026-11-09", to: "2026-11-15" });
+  });
+});
+
+describe("withFuelNow", () => {
+  const vehicles = [
+    { id: "MUFINDI - EX 16", vehicleId: "veh_ex16", fuelLitres: 320.4, tankCapacityL: 640 },
+    { id: "MUFINDI - CTR 06", vehicleId: "veh_ctr06", fuelLitres: 7184, tankCapacityL: 540 },
+    { id: "MUFINDI - WL 06", vehicleId: "veh_wl06", fuelLitres: null, tankCapacityL: 300 },
+  ];
+
+  it("matches on the register's vehicleId", () => {
+    const [r] = withFuelNow([{ reference: "EX-16", vehicleId: "veh_ex16", plate: "something else" }], vehicles);
+    expect(r.fuelNow).toBeCloseTo(320.4);
+    expect(r.fuelNowPct).toBeCloseTo(50, 0);
+  });
+
+  it("falls back to the plate, ignoring spaces, dashes and case", () => {
+    const [r] = withFuelNow([{ reference: "EX-16", vehicleId: null, plate: "mufindi-ex16" }], vehicles);
+    expect(r.fuelNow).toBeCloseTo(320.4);
+  });
+
+  it("keeps the litres but drops an impossible percentage, as Maintenance does", () => {
+    const [r] = withFuelNow([{ reference: "CTR-06", vehicleId: "veh_ctr06" }], vehicles);
+    expect(r.fuelNow).toBe(7184);
+    expect(r.fuelNowPct).toBeNull();
+  });
+
+  it("gives null, not 0, with no probe reading or no unit", () => {
+    const rows = withFuelNow([
+      { reference: "WL-06", vehicleId: "veh_wl06" },
+      { reference: "EX-99", vehicleId: null, plate: null },
+    ], vehicles);
+    expect(rows.map((r) => [r.fuelNow, r.fuelNowPct])).toEqual([[null, null], [null, null]]);
+  });
+
+  it("copes with no live fleet yet", () => {
+    expect(withFuelNow([{ reference: "EX-16", vehicleId: "veh_ex16" }], undefined)[0].fuelNow).toBeNull();
   });
 });
