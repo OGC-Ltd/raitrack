@@ -238,14 +238,26 @@ export const cornerAsHarsh = (events) => (events ?? []).filter((e) => e?.kind ==
  */
 export function runAt(runs, t) {
   let hit = null;
-  for (let i = 0; i < runs.length; i++) {
-    const r = runs[i];
-    const out = Date.parse(r.dispatchedAt);
-    if (!(out <= t)) continue;
-    const back = r.actualReturnAt ? Date.parse(r.actualReturnAt) : (runs.slice(i + 1).map((x) => Date.parse(x.dispatchedAt)).find((x) => x > out) ?? Infinity);
-    if (t < back && (!hit || out > Date.parse(hit.dispatchedAt))) hit = r;
-  }
-  return hit;
+  for (const s of spansOf(runs)) if (s.out <= t && t < s.back && (!hit || s.out > hit.out)) hit = s;
+  return hit?.run ?? null;
+}
+
+/**
+ * Each run's sign-out and end, worked out once per list: runAt is asked once
+ * per incident, and a unit with a faulty sensor has thousands in a month.
+ */
+const spans = new WeakMap();
+function spansOf(runs) {
+  let out = spans.get(runs);
+  if (out) return out;
+  const outs = runs.map((r) => Date.parse(r.dispatchedAt));
+  out = runs.map((run, i) => {
+    let back = run.actualReturnAt ? Date.parse(run.actualReturnAt) : Infinity;
+    if (!run.actualReturnAt) for (let j = i + 1; j < runs.length; j++) if (outs[j] > outs[i]) { back = outs[j]; break; }
+    return { run, out: outs[i], back };
+  });
+  spans.set(runs, out);
+  return out;
 }
 
 /** A unit's runs, by vehicle id or by plate, in sign-out order. */
@@ -293,7 +305,9 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
   const times = new Map();   // unit key → when each incident happened, for the driver at the time
   const seenAt = (k, t) => {
     if (Number.isFinite(t) && !(firstAt.get(k) <= t)) firstAt.set(k, t);
-    if (Number.isFinite(t)) times.set(k, [...(times.get(k) ?? []), t]);
+    if (!Number.isFinite(t)) return;
+    const list = times.get(k);
+    if (list) list.push(t); else times.set(k, [t]);
   };
   const bump = (it, kind, t, alarm = false) => {
     const hit = find(it);

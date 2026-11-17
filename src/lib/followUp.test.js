@@ -151,5 +151,12 @@ describe('columns with nothing in them', () => {
     expect(html).toContain('>Driver<');
     expect(html).toContain(NO_DISPATCH_KEY);
     expect(html).not.toContain('Logged by operators');
+    // The dispatch runs could not be read: the key does not claim the vehicle stayed in the premises
+    const { NO_RUNS_KEY } = await import('./reportTables');
+    const failed = reportHtml(REPORTS.behaviour, { rows, secs: [{ name: null, rows, total: 1 }], missing: [], units: 1, failed: 0, ctx: { ...ctx, runsFailed: true } },
+      { companyName: 'Nzoia', orgCode: 'NZOIA', groupWords: 'All vehicles', periodWords: 'p', logos: { rai: '', ogc: '' }, now: twoDays.to }).html;
+    expect(failed).toContain(NO_RUNS_KEY);
+    expect(failed).not.toContain(NO_DISPATCH_KEY);
+    expect(failed).toContain('The dispatch runs could not be read');
   });
 });

@@ -81,3 +81,18 @@ describe('the conduct report, by the driver at the time', () => {
     expect(cases.map((c) => [c.day, c.driver])).toEqual([['2026-11-10', 'Tuesday Driver']]);
   });
 });
+
+describe('runAt over many incidents', () => {
+  it('answers the same for every incident of a long run list, and quickly', () => {
+    const runs = Array.from({ length: 60 }, (_, i) => run(`Driver ${i}`, `2026-11-${String(1 + (i >> 1)).padStart(2, '0')}T${i % 2 ? '13' : '06'}:00:00`, null));
+    const u = unit();
+    const times = Array.from({ length: 5000 }, (_, i) => at('2026-11-01T06:00:00') + i * 9 * 60_000);
+    const t0 = performance.now();
+    const names = driversAt(u, times, runs);
+    expect(performance.now() - t0).toBeLessThan(500);
+    // An unclosed run lasts until the next sign-out: the incident at 07:00 on the 3rd is Driver 4's
+    expect(runAt(runs, at('2026-11-03T07:00:00')).driverName).toBe('Driver 4');
+    expect(runAt(runs, at('2026-11-03T14:00:00')).driverName).toBe('Driver 5');
+    expect(names.split(', ')).toContain('Driver 0');
+  });
+});

@@ -6,7 +6,7 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, NO_DISPATCH_KEY } from './reportTables';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, noDispatchKey } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 import { textMm } from './shiftDoc';
@@ -252,7 +252,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     if (ctx.peaksFailed) notes.push(`The readings of ${ctx.peaksFailed} vehicle${ctx.peaksFailed === 1 ? '' : 's'} could not be read: their top speed time shows as -.`);
   }
   if (def.key === 'behaviour') {
-    if (done.rows.some(noDispatchDriver)) notes.push(NO_DISPATCH_KEY);
+    if (done.rows.some(noDispatchDriver)) notes.push(noDispatchKey(ctx));
+    if (ctx.runsFailed) notes.push('The dispatch runs could not be read: a driver is named only for incidents on the run out now.');
     if (done.rows.some((r) => r.suspect)) notes.push('Check sensor: more than 100 harsh accelerations or brakes a day, far more than a driver makes. Most likely a faulty sensor.');
     if (ctx.dashcamFailed) notes.push('The dashcam alarms could not be read: no seatbelt, on phone and camera covered count only what operators logged.');
     else if (!ctx.dashcams) notes.push('This fleet has no dashcams: no seatbelt, on phone and camera covered count only what operators logged.');

@@ -27,7 +27,7 @@ import {
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, NO_DISPATCH_KEY } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -1498,6 +1498,7 @@ export default function ReportsScreen() {
           loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
         ]);
         ctx.cornerFailed = turns == null;
+        ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
         if (!live()) return;
@@ -1799,6 +1800,7 @@ export default function ReportsScreen() {
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
+                {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
               </>}
@@ -1881,7 +1883,7 @@ export default function ReportsScreen() {
                   </tbody>
                 </table>
                 {conduct && done.rows.some(noDispatchDriver) && (
-                  <p className="rpt-key"><span className="rpt-key__swatch" aria-hidden="true" />{NO_DISPATCH_KEY}</p>
+                  <p className="rpt-key"><span className="rpt-key__swatch" aria-hidden="true" />{noDispatchKey(done.ctx)}</p>
                 )}
                 {done.ctx.events?.length > 0 && <OverspeedEvents events={done.ctx.events} unit={done.ctx.unit} />}
                 {done.missing.length > 0 && (

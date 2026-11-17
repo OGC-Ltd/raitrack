@@ -115,6 +115,13 @@ export const SHOW_FOLLOW_UP_COLUMN = true;
  * reason is said once, in NO_DISPATCH_KEY under the table, not on every row.
  */
 export const NO_DISPATCH_KEY = 'Rows shaded grey: driven within the premises - no dispatch details to get the driver details.';
+/**
+ * The key when the dispatch runs could not be read (ctx.runsFailed): a blank
+ * driver then says nothing about where the vehicle was, so the key does not
+ * claim it stayed within the premises.
+ */
+export const NO_RUNS_KEY = 'Rows shaded grey: no driver on record for these incidents - the dispatch runs could not be read.';
+export const noDispatchKey = (ctx) => (ctx?.runsFailed ? NO_RUNS_KEY : NO_DISPATCH_KEY);
 export const noDispatchDriver = (r) => (r?.total ?? 0) > 0 && isBlank(r.driver);
 
 export const REPORTS = {
