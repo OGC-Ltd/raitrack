@@ -49,8 +49,10 @@ import EmptyNote from "../shared/EmptyNote";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
-import DateRangePicker from "../layout/DateRangePicker";
-import { downloadTableCsv, downloadTablePdf } from "../../utils/tableExport";
+import { downloadTableCsv } from "../../utils/tableExport";
+// The PDF on the report letterhead, named for the organisation (operator, 17 Nov 2026)
+import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
+import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
 import "../body/SensorPanel.css";
 /* For its TOKENS, not for its layout: the `an-*` chart palette the board draws
    in is declared on `.analytics-page` rather than on :root. Importing the
@@ -72,7 +74,18 @@ const SPANS = [
   { label: "Today",       range: () => [fleetDayKey(), fleetDayKey()] },
   { label: "Yesterday",   range: () => { const d = backDays(1); return [d, d]; } },
   { label: "Last 7 days", range: () => [backDays(6), fleetDayKey()] },
+  // A month at a time (operator, 17 Nov 2026: "the whole month or even longer")
+  { label: "This month",  range: () => { const t = fleetDayKey(); return [`${t.slice(0, 8)}01`, t]; } },
+  { label: "Last month",  range: () => monthBefore(fleetDayKey()) },
 ];
+
+/** The calendar month before the one `day` is in: its first and last day. */
+function monthBefore(day) {
+  const [y, m] = day.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 2, 1));
+  const last = new Date(Date.UTC(y, m - 1, 0));
+  return [first.toISOString().slice(0, 10), last.toISOString().slice(0, 10)];
+}
 
 /** The fleet day N days before today. */
 function backDays(n) {
@@ -280,12 +293,14 @@ function WeighmentPanel({ row, day, onClose, onShowOnMap }) {
  * could reconcile with the screen it came from.
  */
 const EXPORT_HEAD = [
-  "Time", "Vehicle", "Driver", "Type", "Token", "Centre",
+  "Date", "Time", "Vehicle", "Driver", "Type", "Token", "Centre",
   "Tare (kg)", "Tare at", "Gross (kg)", "Gross at", "Net (kg)", "Payload (t)",
   "Load time", "Ticket no. today", "Tickets today", "Since previous",
 ];
 
+const exportDay = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "2-digit", month: "2-digit", year: "numeric" });
 const exportBody = (rows) => rows.map(r => [
+  r.tokenAt ? exportDay.format(new Date(r.tokenAt)) : "",
   clockLabel(r.tokenAt),
   r.vehicleNo,
   r.driverName,
@@ -333,7 +348,8 @@ export default function WeighbridgesScreen() {
    *
    * It is one request either way (787 tickets on the busiest day measured), so
    * this is a re-read on a view change rather than a second live feed. */
-  const { data, loading, error, reload, clamped } = useWeighments({
+  const fleet = useLetterheadFleet();
+  const { data, loading, error, reload, clamped, progress } = useWeighments({
     orgId,
     from,
     to,
@@ -504,16 +520,33 @@ export default function WeighbridgesScreen() {
               hook will fetch. Today, Yesterday and Last 7 days are buttons
               beside it rather than inside the calendar, so the common spans
               stay one click away. */}
-          <DateRangePicker
-            from={from}
-            to={to}
-            today={fleetDayKey()}
-            minDay={bounds.min ?? null}
-            maxDays={MAX_DAYS}
-            quickPicks={false}
-            label="Ticket dates"
-            onChange={(f, t) => { setFrom(f); setTo(t); }}
-          />
+          {/* From and To as two plain dates (operator, 17 Nov 2026: "a custom
+              picker that can take to and from ... the whole month or even
+              longer"), up to MAX_DAYS. Not before the first day we hold
+              tickets for, not after today. A To before the From moves the
+              From with it, and the other way round. */}
+          <label className="wb-date">
+            <span>From</span>
+            <input type="date" value={from} min={bounds.min ?? undefined} max={fleetDayKey()}
+                   onChange={(e) => { const f = e.target.value; if (!f) return; setFrom(f); if (f > to) setTo(f); }} />
+          </label>
+          <label className="wb-date">
+            <span>To</span>
+            <input type="date" value={to} min={bounds.min ?? undefined} max={fleetDayKey()}
+                   onChange={(e) => { const t = e.target.value; if (!t) return; setTo(t); if (t < from) setFrom(t); }} />
+          </label>
+          {/* One weighbridge, or all of them (operator, 17 Nov 2026: "download
+              the report as per specific weighbridge"). The same choice as the
+              bridge cards above; the table and every download follow it. */}
+          {view !== "analytics" && centres.length > 0 && (
+            <label className="wb-date wb-bridge">
+              <span>Weighbridge</span>
+              <select value={centre ?? ""} onChange={(e) => setCentre(e.target.value === "" ? null : Number(e.target.value))}>
+                <option value="">All weighbridges</option>
+                {centres.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+            </label>
+          )}
           {SPANS.map(sp => {
             const [a, b] = sp.range();
             const on = from === a && to === b;
@@ -534,7 +567,7 @@ export default function WeighbridgesScreen() {
               to be wrong. */}
           {clamped && (
             <span className="wb-clamp" role="status">
-              Showing the last {clamped.shown} of {clamped.asked} days
+              Showing the last {clamped.shown} of {clamped.asked} days: {MAX_DAYS} days at most
             </span>
           )}
         </div>
@@ -586,7 +619,9 @@ export default function WeighbridgesScreen() {
               </EmptyNote>
             ) : loading && !data ? (
               <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Tickets">
-                Fetching the weighbridge tickets for this span…
+                {progress && progress.total > 1
+                  ? `Reading day ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`
+                  : "Fetching the weighbridge tickets for this span…"}
               </EmptyNote>
             ) : rows.length === 0 ? (
               /* Three different silences, and they are not the same news:
@@ -633,11 +668,17 @@ export default function WeighbridgesScreen() {
                   loading={loading}
                   onReload={reload}
                   onCsv={() => downloadTableCsv({ head: [EXPORT_HEAD], body: exportBody(rows), filenameSlug })}
-                  onPdf={() => downloadTablePdf({
-                    reportTitle:  "Weighbridges",
-                    sectionTitle: `${centreName || "All bridges"} - ${spanLabel(from, to)}`,
+                  onPdf={() => downloadLetterheadTablePdf({
+                    ...fleet,
+                    prefix:       "WB",
+                    reportTitle:  `Weighbridge Tickets${centreName ? `: ${centreName}` : ""}`,
+                    sectionTitle: `${centreName || "All weighbridges"}, ${spanLabel(from, to)}`,
                     filterNote:   exportNote,
-                    head: [EXPORT_HEAD], body: exportBody(rows), filenameSlug,
+                    cards: [
+                      { label: "Tickets", value: String(rows.length) },
+                      { label: "Net weighed", value: tonnes(shownNetKg) },
+                    ],
+                    head: EXPORT_HEAD, body: exportBody(rows),
                   })}
                   disabled={!rows.length}
                 />

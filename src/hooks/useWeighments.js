@@ -45,7 +45,12 @@ import { fleetDaysBetween } from "../lib/weighbridgeBoard";
  *  fetching a different range from the one on screen. The provider serves
  *  about two days of tickets anyway, so most of a long range is empty — the
  *  cap is about requests, not about data. */
-export const MAX_DAYS = 31;
+export const MAX_DAYS = 92;
+
+/** Days read at once. A long range is read a few days at a time rather than
+ *  all together (operator, 17 Nov 2026: "the whole month or even longer"):
+ *  ninety requests at once would trip the server's per-client limit. */
+const DAYS_AT_ONCE = 4;
 
 /** Distinct lorries across the merged rows, matched on the normalised plate so
  *  "KTCC 849B" and "KTCC849B" are one machine rather than two. */
@@ -154,6 +159,8 @@ export function useWeighments({
    *  screen is the tail of it. The screen has to say so: figures under a
    *  heading naming a span they do not cover is the worst way to be wrong. */
   const [clamped, setClamped] = useState(null);
+  /** Days read so far of the range being read: { done, total }, or null. */
+  const [progress, setProgress] = useState(null);
 
   // The last request wins. Typing in the search box fires one of these per
   // keystroke-ish, and without this a slow early response can land after a
@@ -173,9 +180,21 @@ export function useWeighments({
     const days = all.length > MAX_DAYS ? all.slice(-MAX_DAYS) : all;
 
     try {
-      const parts = await Promise.all(
-        days.map(d => getWeighmentDay({ orgId, day: d, centre, q: search || undefined })),
-      );
+      // A few days at a time, in order, so a three-month range stays under the
+      // server's per-client limit; each day lands in its own slot.
+      const parts = new Array(days.length);
+      let next = 0;
+      let done = 0;
+      setProgress({ done: 0, total: days.length });
+      const worker = async () => {
+        while (next < days.length) {
+          const i = next++;
+          parts[i] = await getWeighmentDay({ orgId, day: days[i], centre, q: search || undefined });
+          done += 1;
+          if (run === runRef.current) setProgress({ done, total: days.length });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DAYS_AT_ONCE, days.length) }, worker));
       if (run !== runRef.current) return;
       setData(merge(parts, days));
       setClamped(all.length > MAX_DAYS ? { asked: all.length, shown: days.length } : null);
@@ -183,11 +202,11 @@ export function useWeighments({
       if (run !== runRef.current) return;
       setError(e?.message ?? "Could not load weighbridge tickets");
     } finally {
-      if (run === runRef.current) setLoading(false);
+      if (run === runRef.current) { setLoading(false); setProgress(null); }
     }
   }, [orgId, from, to, centre, search]);
 
   useEffect(() => { reload(); }, [reload]);
 
-  return { data, loading, error, reload, clamped };
+  return { data, loading, error, reload, clamped, progress };
 }
