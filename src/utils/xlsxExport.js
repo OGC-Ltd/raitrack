@@ -104,14 +104,47 @@ const docCols = (doc) => Math.max(1, ...docLines(doc).map((r) => r.length));
 
 /**
  * The workbook. `ExcelJS`: the library; `logos`: { rai, ogc } as { buffer, extension }, either may be missing.
- * @param {object} o  { head, body, doc, title, fleet, meta: [label, value][], fills: (hex|null)[], headFills: (hex|null)[], now }
+ * @param {object} o  { head, body, doc, title, fleet, meta: [label, value][], fills: (hex|null)[], headFills: (hex|null)[], now,
+ *   sheetName, sheets: { name, title?, body, meta?, fills? }[] }
+ *
+ * `sheets` (a plain table only): more sheets after the first, each on the same
+ * letterhead with the same columns (operator, 17 Nov 2026: all weighbridges in
+ * one file, sheet 1 with all of them and a sheet for each weighbridge).
+ * `sheetName` names the first sheet's tab; it is the title otherwise.
  */
-export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, now = Date.now() }, logos = {}) {
-  const name = String(doc?.title ?? title ?? 'Report');
+export function buildWorkbook(ExcelJS, o, logos = {}) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAI Operations';
-  wb.created = new Date(now);
-  const ws = wb.addWorksheet(titleCase(name).slice(0, 31).replace(/[\\/?*[\]:]/g, ' '), {
+  wb.created = new Date(o.now ?? Date.now());
+  const tab = tabNamer();
+  addSheet(wb, o, logos, tab(o.sheetName ?? titleCase(String(o.doc?.title ?? o.title ?? 'Report'))));
+  if (!o.doc) {
+    for (const s of o.sheets ?? []) {
+      addSheet(wb, { ...o, title: s.title ?? o.title, body: s.body ?? [], meta: s.meta ?? o.meta ?? [], fills: s.fills ?? null }, logos, tab(s.name));
+    }
+  }
+  return wb;
+}
+
+/** Tab names Excel accepts: 31 characters at most, none of \ / ? * [ ] :, and no two alike (Excel ignores case). */
+export function tabNamer() {
+  const used = new Set();
+  return (want) => {
+    const base = String(want ?? '').replace(/[\\/?*[\]:]/g, ' ').replace(/^'+|'+$/g, '').trim().slice(0, 31) || 'Sheet';
+    let name = base;
+    for (let i = 2; used.has(name.toLowerCase()); i++) {
+      const tail = ` (${i})`;
+      name = base.slice(0, 31 - tail.length).trimEnd() + tail;
+    }
+    used.add(name.toLowerCase());
+    return name;
+  };
+}
+
+/** One sheet of the workbook: the letterhead, the details, the table or document, the footer. */
+function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, now = Date.now() }, logos, tabName) {
+  const name = String(doc?.title ?? title ?? 'Report');
+  const ws = wb.addWorksheet(tabName, {
     pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
     // "&" starts a code in Excel's footers, so a name's own is doubled
     headerFooter: { oddFooter: `&L${`${fleet ? `${fleet} · ` : ''}${titleCase(name)}`.replace(/&/g, '&&')}&RPage &P of &N` },
@@ -275,7 +308,7 @@ export function buildWorkbook(ExcelJS, { head = [], body = [], doc = null, title
   ws.getCell(r + 1, 1).value = 'RAI Operations · OGC Monitoring';
   ws.getCell(r + 1, 1).font = { size: 8, color: { argb: MUTED } };
   ws.pageSetup.printArea = `A1:${colName(cols)}${r + 1}`;
-  return wb;
+  return ws;
 }
 
 const titleCase = (s) => String(s).toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
@@ -299,12 +332,12 @@ async function logoBuffer(url, extension) {
   } catch { return null; }
 }
 
-/** Make the .xlsx and download it. Same arguments as downloadTableCsv, plus optional doc, title, meta and fills. */
-export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null, headFills = null }) {
+/** Make the .xlsx and download it. Same arguments as downloadTableCsv, plus optional doc, title, meta, fills, sheetName and sheets. */
+export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null, headFills = null, sheetName, sheets }) {
   const { default: ExcelJS } = await import('exceljs');
   const [rai, ogc] = await Promise.all([logoBuffer(raiLogo, 'jpeg'), logoBuffer(ogcLogo, 'png')]);
   const wb = buildWorkbook(ExcelJS, {
-    head, body, doc, fills, headFills, meta,
+    head, body, doc, fills, headFills, meta, sheetName, sheets,
     title: title ?? titleFromSlug(filenameSlug),
     fleet: fleetFromTitle(typeof document !== 'undefined' ? document.title : ''),
   }, { rai, ogc });
