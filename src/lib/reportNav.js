@@ -89,6 +89,9 @@ export const MACHINERY_ORGS = new Set(['KASULU']);
  */
 export const hasMachineryTab = (can, orgCode) => can('telemetry:read') && MACHINERY_ORGS.has(String(orgCode ?? '').toUpperCase());
 
+/** Shift hours, beside Machinery: where FactorySuite plans the machines' shifts (Mufindi, operator 17 Nov 2026). */
+export const hasShiftHoursTab = hasMachineryTab;
+
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));

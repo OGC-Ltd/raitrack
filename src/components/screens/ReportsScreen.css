@@ -597,11 +597,32 @@ select.mvr-edit { min-width: 110px; }
 /* --rpt-depth: 0 on the rate to 1 far from it; the further, the deeper the colour */
 .rpt-row--good td { background: rgba(22, 163, 74, calc(0.10 + 0.40 * var(--rpt-depth, 0))); color: #14532d; }
 .rpt-row--bad td { background: rgba(220, 38, 38, calc(0.10 + 0.40 * var(--rpt-depth, 0))); color: #7f1d1d; }
+/* Amber: Shift hours, 50-69% of the shift so far (operator, 17 Nov 2026). */
+.rpt-row--warn td { background: rgba(245, 158, 11, calc(0.14 + 0.40 * var(--rpt-depth, 0))); color: #78350f; }
 :root[data-theme="dark"] .rpt-row--good td { color: #bbf7d0; }
 :root[data-theme="dark"] .rpt-row--bad td { color: #fecaca; }
+:root[data-theme="dark"] .rpt-row--warn td { color: #fde68a; }
 /* The key in the note under the table */
 .rpt-tone { font-weight: 700; border-radius: 4px; padding: 1px 6px; }
 .rpt-tone--good { background: rgba(22, 163, 74, 0.16); color: #15803d; }
 .rpt-tone--bad { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
+.rpt-tone--warn { background: rgba(245, 158, 11, 0.18); color: #92400e; }
+
+/* A report's key (ReportLegend): colour swatches, then the columns. The
+   swatches are the rows' own colours at their lightest. */
+.rpt-legend { margin: 14px 2px 4px; font-size: 12px; color: var(--sp4-text-2); }
+.rpt-legend__h { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sp4-text-3); }
+.rpt-legend__tones { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.rpt-legend__tones li { display: inline-flex; align-items: center; gap: 6px; }
+.rpt-legend__tones b { color: var(--sp4-text-1); }
+.rpt-legend__swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--sp4-line); background: transparent; flex-shrink: 0; }
+.rpt-legend__swatch--good { background: rgba(22, 163, 74, 0.28); border-color: rgba(22, 163, 74, 0.6); }
+.rpt-legend__swatch--warn { background: rgba(245, 158, 11, 0.32); border-color: rgba(245, 158, 11, 0.7); }
+.rpt-legend__swatch--bad { background: rgba(220, 38, 38, 0.26); border-color: rgba(220, 38, 38, 0.6); }
+.rpt-legend__cols { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; }
+.rpt-legend__cols div { display: contents; }
+.rpt-legend__cols dt { font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
+.rpt-legend__cols dd { margin: 0; }
 :root[data-theme="dark"] .rpt-tone--good { color: #4ade80; }
 :root[data-theme="dark"] .rpt-tone--bad { color: #f87171; }
+:root[data-theme="dark"] .rpt-tone--warn { color: #fbbf24; }

@@ -24,7 +24,7 @@ export function reportNumber(prefix, orgCode, now) {
 /** The closing line of every report. */
 export const CONTACT_LINE = 'This is a system-generated report. For any queries about its contents, please contact OGC Monitoring at operations@offgridconsultingltd.com.';
 
-const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU', machinery: 'MR' };
+const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU', machinery: 'MR', shiftHours: 'WP' };
 
 /** Driver conduct: the grey of a row with incidents and no driver on record. Dark enough to survive printing. */
 export const NO_DISPATCH_GREY = '#dcdcdc';
@@ -119,6 +119,8 @@ function columnsFor(def, ctx, keep, inner, cellRows = []) {
     utilisationRated: [42, 21, 18, 18, 19, 22, 22, 22],
     // Machine, Type, Hour (or Day), Engine hours, Fuel used, Burn rate, Actual
     machinery: [38, 20, 40, 22, 24, 24, 24],
+    // Machine, Type, Shift, Shift hours, Elapsed, Engine hours, Fuel used
+    shiftHours: [30, 30, 32, 22, 22, 26, 22],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
   const used = keep.reduce((s, i) => s + widths[i], 0);
   // Behaviour report: incident/total columns are centred, not right-aligned.
@@ -205,7 +207,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   const heads = def.columns(ctx);
   // The whole row against the burn rate: green at or below, red above (Machinery, operator 16 Nov 2026)
   // Deeper the further from the rate, mixed with white as solid colours: the PDF prints them as set
-  const ROW_TONE = { good: [[220, 252, 231], [74, 222, 128], '#14532d'], bad: [[254, 226, 226], [248, 113, 113], '#7f1d1d'] };
+  // warn: amber, Shift hours' 50-69% (operator, 17 Nov 2026)
+  const ROW_TONE = { good: [[220, 252, 231], [74, 222, 128], '#14532d'], warn: [[254, 243, 199], [251, 191, 36], '#78350f'], bad: [[254, 226, 226], [248, 113, 113], '#7f1d1d'] };
   const rowShade = (r) => {
     const t = ROW_TONE[def.rowTone?.(r)];
     if (!t) return null;
@@ -290,6 +293,9 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     notes.push('Engine hours are from the machine’s hour meter; a figure marked * is from the ignition signal, where the meter sent nothing in that row.');
     if (ctx.idle?.length) notes.push(`Did not run in the period: ${ctx.idle.join(', ')}.`);
   }
+  if (def.key === 'shiftHours') {
+    if (done.rows.some((r) => r.hoursFrom === 'ignition')) notes.push('* From the ignition signal, where the hour meter sent nothing.');
+  }
   if (def.key === 'overspeed') notes.push(`Only overspeeding that lasted more than ${OVERSPEED_MIN_SEC} seconds without a break is counted.`);
   if (done.failed) notes.push(`${done.failed} could not be read and ${done.failed === 1 ? 'is' : 'are'} left out.`);
   if (notes.length) flow.push(...notes.map((t) => `<div class="note">${esc(t)}</div>`));
@@ -306,6 +312,24 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       [...byGroup].map(([g, plates]) => [{ html: `${esc(g)} (${plates.length})`, cls: 'b' }, { html: esc(plates.join(', ')), cls: 'wrap' }])));
   }
 
+  // The report's key: a swatch for each row colour, then a line for each column (operator, 17 Nov 2026)
+  if (def.legend) {
+    flow.push(`<h2>${next++}. Key</h2>`);
+    if (def.legend.tones?.length) {
+      const swatch = (tone) => {
+        const t = ROW_TONE[tone];
+        const bg = t ? `rgb(${t[0].join(',')})` : '#ffffff';
+        return `<span style="display:inline-block;width:3.4mm;height:3.4mm;border:0.25mm solid #9ca3af;border-radius:0.6mm;background:${bg};vertical-align:-0.7mm;margin-right:1.6mm"></span>`;
+      };
+      flow.push(table([{ h: 'Colour', w: '34mm' }, { h: 'Meaning', w: `${inner - 34}mm` }],
+        def.legend.tones.map(([tone, name, words]) => [{ html: swatch(tone) + esc(name), cls: 'b' }, { html: esc(words), cls: 'wrap' }])));
+    }
+    if (def.legend.columns?.length) {
+      flow.push(table([{ h: 'Column', w: '34mm' }, { h: 'What it shows', w: `${inner - 34}mm` }],
+        def.legend.columns.map(([col, words]) => [{ html: esc(col), cls: 'b' }, { html: esc(words), cls: 'wrap' }])));
+    }
+  }
+
   // Room to write by hand on the printed copy
   if (def.key === 'behaviour') flow.push(`<h2>${next++}. Notes</h2>`, ruledLines());
 
@@ -319,7 +343,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     ...(ctx.unit ? [['Unit', esc(ctx.unit)]] : []),
     ...(def.key === 'utilisation' && ctx.rated ? [['Consumption', 'As rated on the register: L/h for machines, L/km for vehicles']] : []),
     ...(def.key === 'utilisation' && !ctx.rated ? [['Consumption', esc(`${(RATES[ctx.rate] ?? RATES[DEFAULT_RATE]).label} (${(RATES[ctx.rate] ?? RATES[DEFAULT_RATE]).unit})`)]] : []),
-    def.countWords ? ['Machines', esc(`${new Set(done.rows.map((r) => r.unit.key)).size} of ${done.units} ran`)]
+    def.key === 'shiftHours' ? ['Shifts', esc(`${done.rows.length} on approved plans`)]
+    : def.countWords ? ['Machines', esc(`${new Set(done.rows.map((r) => r.unit.key)).size} of ${done.units} ran`)]
       : ['Vehicles', `${done.rows.length} reported${def.key === 'utilisation' || def.key === 'night' ? ` of ${done.units}` : ''}`],
     ...(nightWords ? [['Night', esc(nightWords.replace(/^Night hours /, ''))]] : []),
     ['Generated', esc(fmtGenerated.format(now))],
