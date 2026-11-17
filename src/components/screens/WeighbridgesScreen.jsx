@@ -685,7 +685,7 @@ export default function WeighbridgesScreen() {
                   note={exportNote}
                   loading={loading}
                   onReload={reload}
-                  onCsv={() => downloadTableCsv({ head: [EXPORT_HEAD], body: exportBody(rows), filenameSlug })}
+                  onCsv={() => downloadTableCsv({ head: EXPORT_HEAD, body: exportBody(rows), filenameSlug })}
                   onPdf={() => downloadLetterheadTablePdf({
                     ...fleet,
                     prefix:       "WB",

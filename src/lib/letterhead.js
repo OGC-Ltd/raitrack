@@ -93,6 +93,16 @@ const PAGER = `
   var pages = [document.querySelector('.page')];
   var body = pages[0].querySelector('.body');
   function room() { return body.scrollHeight <= body.clientHeight + 1; }
+  // An empty copy of a list table: its columns and header, no rows. Copying
+  // the whole table for each page made a long one cost rows x pages
+  // (operator, 17 Nov 2026: 2,511 weighbridge tickets froze the page).
+  function shell(tbl) {
+    var t = tbl.cloneNode(false);
+    for (var c = tbl.firstElementChild; c; c = c.nextElementSibling) {
+      t.appendChild(c.tagName === 'TBODY' ? document.createElement('tbody') : c.cloneNode(true));
+    }
+    return t;
+  }
   function newPage() {
     var p = document.createElement('div'); p.className = 'page'; p.innerHTML = tpl;
     document.body.insertBefore(p, flow); pages.push(p); body = p.querySelector('.body');
@@ -104,12 +114,12 @@ const PAGER = `
     var tbl = el.tagName === 'TABLE' && el.classList.contains('lst') ? el : null;
     var rows = tbl ? Array.prototype.slice.call(tbl.tBodies[0].rows) : null;
     if (tbl && rows.length > 1) {
-      var part = tbl.cloneNode(true); var pb = part.tBodies[0]; pb.innerHTML = '';
+      var part = shell(tbl); var pb = part.tBodies[0];
       body.appendChild(part);
       var i = 0;
       for (; i < rows.length; i++) { pb.appendChild(rows[i].cloneNode(true)); if (!room()) { pb.removeChild(pb.lastChild); break; } }
       if (i === 0) { body.removeChild(part); } else if (i === rows.length) { return; }
-      var restT = tbl.cloneNode(true); var rb = restT.tBodies[0]; rb.innerHTML = '';
+      var restT = shell(tbl); var rb = restT.tBodies[0];
       for (var j = i; j < rows.length; j++) rb.appendChild(rows[j]);
       var head = i === 0 && body.lastElementChild && /^H[23]$/.test(body.lastElementChild.tagName) ? body.lastElementChild : null;
       newPage(); if (head) body.appendChild(head); place(restT); return;

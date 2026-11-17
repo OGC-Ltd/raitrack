@@ -14,6 +14,7 @@
 
 import { renderLetterheadHtml, table, cells, esc } from './letterhead';
 import { reportNumber, fitColumns } from './reportLetterhead';
+import { textMm } from './shiftDoc';
 
 const fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtGenerated = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -105,4 +106,86 @@ export function tableLetterheadHtml({
   // No ":" in a file name: Windows refuses it ("Sensor Monitor: Malfunction").
   const name = `${reportTitle} ${companyName} ${stamp}`.replace(/\s*[:/\\]\s*/g, ' - ').replace(/[<>"|?*]/g, '');
   return { html, landscape, filename: `${name}.pdf` };
+}
+
+/**
+ * The same report as plain data, for drawing straight into a PDF
+ * (lib/letterheadTablePdf, in a worker): no HTML, no page laid out in the
+ * browser. A long table laid out as a page and pictured froze the page
+ * (operator, 17 Nov 2026: 7,049 weighbridge tickets).
+ *
+ * Takes what tableLetterheadHtml takes, less `logos`.
+ * @returns {{ title, reportNo, date, info: [string, string][], cards, sectionTitle, rowsWord,
+ *   head: string[], body: string[][], cols: { w: number, right: boolean, wrap: boolean, bold: boolean }[],
+ *   landscape: boolean, footNote: string, companyName: string, filename: string }}
+ */
+export function tableLetterheadSpec({
+  reportTitle, sectionTitle, filterNote, cards = [], head, body,
+  companyName, orgCode, prefix = 'SM', now = Date.now(),
+}) {
+  const rows = (body ?? []).map((r) => r.map((c) => String(c ?? '').trim()));
+  const landscape = head.length > UPRIGHT_MAX_COLS;
+  const inner = landscape ? INNER_MM.landscape : INNER_MM.upright;
+  const figure = head.map((_, i) => i > 0 && isFigureCol(rows, i));
+  const { widths, wraps } = pdfWidths(head, rows, figure, inner);
+  const stamp = new Date(now + 3 * 3600_000).toISOString().slice(0, 10);
+  const name = `${reportTitle} ${companyName} ${stamp}`.replace(/\s*[:/\\]\s*/g, ' - ').replace(/[<>"|?*]/g, '');
+  return {
+    title: String(reportTitle).toUpperCase(),
+    reportNo: reportNumber(prefix, orgCode, now),
+    date: fmtDate.format(now),
+    companyName,
+    info: [['Fleet', companyName], ['Generated', fmtGenerated.format(now)], ['Covers', filterNote ?? '']],
+    cards: cards.map((c) => ({ label: c.label, value: String(c.value) })),
+    sectionTitle,
+    rowsWord: `${rows.length.toLocaleString('en-GB')} row${rows.length === 1 ? '' : 's'}`,
+    head,
+    body: rows.map((r) => r.map((v) => (blank(v) ? '-' : v))),
+    cols: head.map((h, i) => ({ w: widths[i], right: Boolean(figure[i]), wrap: wraps.has(i), bold: i === 0 })),
+    landscape,
+    footNote: `${companyName} · ${reportTitle}`,
+    filename: `${name}.pdf`,
+  };
+}
+
+/** Points the PDF table is set in (lib/letterheadTablePdf): cells and headings. */
+const PDF_CELL_PT = 7.8;
+const PDF_HEAD_PT = 7.2;
+const PDF_PAD_MM = 3.2;
+/** A word column is not squeezed below this before every column gives way. */
+const PDF_WORDS_MIN_MM = 18;
+
+/**
+ * Widths for the drawn PDF's table, in mm (operator, 17 Nov 2026: the
+ * weighbridge tickets came out 12 rows a page). A heading wraps onto two
+ * lines, so only its longest word counts; a column is as wide as its widest
+ * cell. Room to spare is shared out evenly. Too little: the word columns give
+ * way, widest first, down to PDF_WORDS_MIN_MM, and wrap; then every column in
+ * proportion.
+ * @returns {{ widths: number[], wraps: Set<number> }} wraps: the column indexes now wrapping
+ */
+function pdfWidths(head, rows, figure, inner) {
+  const word = (h) => String(h).split(/\s+/).reduce((a, b) => (b.length > a.length ? b : a), '');
+  const need = head.map((h, i) => {
+    let cell = 0;
+    for (const r of rows) cell = Math.max(cell, textMm(r[i], PDF_CELL_PT, i === 0));
+    return Math.max(textMm(word(h), PDF_HEAD_PT, true), cell) + PDF_PAD_MM;
+  });
+  const widths = [...need];
+  const wraps = new Set();
+  const total = need.reduce((t, w) => t + w, 0);
+  if (total <= inner) {
+    const each = (inner - total) / widths.length;
+    return { widths: widths.map((w) => Math.round((w + each) * 10) / 10), wraps };
+  }
+  let over = total - inner;
+  const givers = head.map((_, i) => i).filter((i) => i > 0 && !figure[i]).sort((a, b) => widths[b] - widths[a]);
+  for (const i of givers) {
+    if (over <= 0) break;
+    const give = Math.min(over, Math.max(0, widths[i] - PDF_WORDS_MIN_MM));
+    if (give > 0) { widths[i] -= give; over -= give; wraps.add(i); }
+  }
+  const sum = widths.reduce((t, w) => t + w, 0);
+  const k = sum > inner ? inner / sum : 1;
+  return { widths: widths.map((w) => Math.round(w * k * 10) / 10), wraps };
 }
