@@ -13,7 +13,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged, withFuelNow } from "../../lib/factoryFuel";
+import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
@@ -68,6 +69,9 @@ export default function FuelScreen() {
   const rows = useMemo(() => (dept === ALL ? roster : roster.filter((r) => (r.department ?? "") === dept)), [roster, dept]);
   const byDay = useMemo(() => fuelByDay(data, dept === ALL ? null : rows), [data, rows, dept]);
   const totals = useMemo(() => fuelTotals(rows), [rows]);
+  // The tank right now, as Maintenance's "Fuel now" (lib/factoryFuel withFuelNow).
+  const { vehicles } = useFleetLiveShared();
+  const tableRows = useMemo(() => withFuelNow(rows, vehicles), [rows, vehicles]);
 
   const [selected, setSelected] = useState(null);
   const machine = selected ? roster.find((r) => r.reference === selected) ?? null : null;
@@ -126,7 +130,7 @@ export default function FuelScreen() {
             </div>
 
             <MachinesSection
-              rows={rows}
+              rows={tableRows}
               selected={selected}
               onSelect={setSelected}
               deptPicker={<DeptPicker value={dept} options={deptOptions} total={roster.length} onChange={setDeptPick} />}
@@ -305,6 +309,7 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                 {th("Period", "period")}
                 {th("Shifts", "shifts", true)}
                 {th("Requested", "requested", true)}
+                {th("Fuel now", "fuelNow", true)}
                 {th("Need", "need", true)}
                 {th("Issued", "issued", true)}
                 {th("Pump flags", "flagged", true)}
@@ -348,6 +353,12 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                     <MetricCell label="Shifts" k="shifts" value={r.shifts} sortKey={sortKey} max={barMax} />
                     <MetricCell label="Requested" k="requested" value={r.requested} sortKey={sortKey} max={barMax}
                       suffix={r.fullTanks ? ` + ${r.fullTanks} full` : ""} />
+                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%". Before
+                        Need (operator 2026-11-17): what is in the tank, then what the plan needs. */}
+                    <td className={r.fuelNow != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel now"
+                        title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
+                      {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
+                    </td>
                     <MetricCell label="Need" k="need" value={r.need} sortKey={sortKey} max={barMax} />
                     <MetricCell label="Issued" k="issued" value={r.issues ? r.issued : null} sortKey={sortKey} max={barMax} />
                     {r.flagged
@@ -356,7 +367,7 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={9} className="dr-grid__empty">No machines match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={10} className="dr-grid__empty">No machines match.</td></tr>}
             </tbody>
           </table>
         </div>

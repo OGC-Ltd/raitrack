@@ -10,6 +10,41 @@
  */
 
 import { planStage } from "./workPlanMap";
+import { vehicleReadings } from "./vehicleReadings";
+
+/** A plate for matching: capitals, letters and digits only ("MUFINDI - EX 16" → "MUFINDIEX16"). */
+const plateKey = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * Each machine's tank right now, from its fuel probe (operator 2026-11-17:
+ * the Maintenance page's "Fuel now" column, on the Fuel page too). From the
+ * live fleet snapshot, read through vehicleReadings exactly as Maintenance
+ * reads it, so the two pages never disagree on a figure.
+ *
+ * Matched on the register's `vehicleId` (the server's own link from machine to
+ * tracked unit), else on the plate. A machine with no unit, no probe, or a
+ * reading vehicleReadings rejects gets null: "-" on the page, never 0.
+ */
+export function withFuelNow(rows, vehicles) {
+  const byId = new Map();
+  const byPlate = new Map();
+  for (const v of vehicles ?? []) {
+    const r = vehicleReadings(v);
+    if (v?.vehicleId) byId.set(String(v.vehicleId), r);
+    const plate = plateKey(v?.id ?? v?.plate ?? v?.registrationPlate);
+    if (plate) byPlate.set(plate, r);
+  }
+  return (rows ?? []).map((row) => {
+    const live = (row.vehicleId && byId.get(String(row.vehicleId)))
+      || (row.plate && byPlate.get(plateKey(row.plate)))
+      || null;
+    return {
+      ...row,
+      fuelNow: live?.fuelLitres ?? null,
+      fuelNowPct: live?.fuelLitres != null ? live.fuelPct ?? null : null,
+    };
+  });
+}
 
 /** Every day from `from` to `to`, both inclusive. */
 export function daysBetween(from, to) {
