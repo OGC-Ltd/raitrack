@@ -79,7 +79,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab } from '../../lib/reportNav';
+import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab } from '../../lib/reportNav';
 // Shift hours: the day's approved shifts (FactorySuite) against the engine hours run in them
 import { dayShifts, shiftHoursRows } from '../../lib/shiftHours';
 import { getFactoryFuel } from '../../api/factoryFuel';
@@ -706,8 +706,10 @@ function TypePicker({ types, picked, counts, onChange }) {
  * 4 Nov 2026, Geofences and TAT and Fuel). Every tab stays mounted so a run on
  * one survives a look at another.
  */
-function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, whoAmI }) {
+function MovementsPage(props) {
+  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours } = props;
   const [tab, setTab] = useState('hourly');
+  const [lastTab, setLastTab] = useState({});
   if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery && !shiftHours) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
@@ -730,14 +732,53 @@ function MovementsPage({ orgId, vehicles, orgCode, companyName, tankers, deliver
     // Each machine's engine hours against its shift so far, after Machinery (operator, 17 Nov 2026)
     shiftHours && { key: 'shiftHours', label: 'Work Plans Updates' },
   ].filter(Boolean);
+  // A row of headings over a row of the picked heading's tabs (operator, 18 Nov 2026). Going back to
+  // a heading opens the tab last looked at under it.
+  const groups = groupMovementsTabs(TABS);
+  const group = groupOfTab(groups, tab);
+  const pickGroup = (g) => setTab(lastTab[g.key] && g.tabs.some((t) => t.key === lastTab[g.key]) ? lastTab[g.key] : g.tabs[0].key);
+  const pickTab = (key) => { setTab(key); setLastTab((m) => ({ ...m, [groupOfTab(groups, key)]: key })); };
+  const panels = <MovementsPanels {...props} tab={tab} />;
+  const tabButton = (t, chip) => (
+    <button key={t.key} type="button" role="tab" id={`mvt-${t.key}`} aria-selected={tab === t.key} aria-controls={`mvt-${t.key}-panel`}
+            className={chip ? `sp4-filter-chip${tab === t.key ? ' sp4-filter-chip--on' : ''}` : `sp4-tab${tab === t.key ? ' sp4-tab--on' : ''}`}
+            onClick={() => pickTab(t.key)}>{t.label}</button>
+  );
+  if (groups.length < 2) {
+    return (
+      <>
+        <div className="sp4-tabs" role="tablist" aria-label="Movements">{TABS.map((t) => tabButton(t, false))}</div>
+        {panels}
+      </>
+    );
+  }
   return (
     <>
-      <div className="sp4-tabs" role="tablist" aria-label="Movements">
-        {TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" id={`mvt-${t.key}`} aria-selected={tab === t.key} aria-controls={`mvt-${t.key}-panel`}
-                  className={`sp4-tab${tab === t.key ? ' sp4-tab--on' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
+      <div className="sp4-tabs mvt-groups" role="tablist" aria-label="Movements">
+        {groups.map((g) => (
+          <button key={g.key} type="button" role="tab" id={`mvt-grp-${g.key}`} aria-selected={group === g.key} aria-controls={`mvt-grp-${g.key}-panel`}
+                  className={`sp4-tab${group === g.key ? ' sp4-tab--on' : ''}`} onClick={() => pickGroup(g)}>{g.label}</button>
         ))}
       </div>
+      {/* Heading › its reports as chips, as Deliveries › Van Sales | Finished Goods (operator, 18 Nov 2026) */}
+      {groups.map((g) => (
+        <nav key={g.key} className="mvt-crumbs" role="tabpanel" id={`mvt-grp-${g.key}-panel`} aria-labelledby={`mvt-grp-${g.key}`} hidden={group !== g.key}>
+          <span className="mvt-crumbs__root">{g.label}</span>
+          <i className="ti ti-chevron-right mvt-crumbs__sep" aria-hidden="true" />
+          <span className="sp4-filter-group mvt-crumbs__tabs" role="tablist" aria-label={`${g.label} reports`}>
+            {g.tabs.map((t) => tabButton(t, true))}
+          </span>
+        </nav>
+      ))}
+      {panels}
+    </>
+  );
+}
+
+/** Movements' panels, one a tab, every one mounted; MovementsPage shows the picked one. */
+function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, whoAmI }) {
+  return (
+    <>
       <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
         <MovementsReport orgId={orgId} orgCode={orgCode} />
       </div>

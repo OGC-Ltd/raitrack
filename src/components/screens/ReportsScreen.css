@@ -494,6 +494,20 @@ select.mvr-edit { min-width: 110px; }
 /* Movements' tabs (Movements · Tankers): each panel lays out as the page did */
 .mvt-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .mvt-panel[hidden] { display: none; }
+/* Movements' headings over a trail of the picked heading's reports (operator, 18 Nov 2026), drawn as
+   Deliveries' trail: the heading in grey, a chevron, the reports as the shell's filter chips. */
+.mvt-crumbs {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+  padding: 10px var(--sp4-gutter);
+  border-bottom: 1px solid var(--sp4-line);
+  font-size: var(--sp4-body);
+  flex-shrink: 0;
+}
+.mvt-crumbs[hidden] { display: none; }
+@media (max-width: 760px) { .mvt-crumbs { justify-content: flex-start; } }
+.mvt-crumbs__root { font-weight: 600; color: var(--sp4-text-3); white-space: nowrap; }
+.mvt-crumbs__sep { font-size: 14px; color: var(--sp4-text-3); }
+.mvt-crumbs__tabs { display: inline-flex; gap: 4px; }
 
 /* TAT and Fuel: the day and the units, and the sheet's fourteen columns on one line a row. */
 .tat-field { display: inline-flex; align-items: center; gap: 6px; }

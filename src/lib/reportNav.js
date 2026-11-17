@@ -92,6 +92,38 @@ export const hasMachineryTab = (can, orgCode) => can('telemetry:read') && MACHIN
 /** Shift hours, beside Machinery: where FactorySuite plans the machines' shifts (Mufindi, operator 17 Nov 2026). */
 export const hasShiftHoursTab = hasMachineryTab;
 
+/**
+ * Movements' tabs under a few headings, a row of headings over a row of the
+ * picked heading's tabs: Sukari's eleven no longer fit one row (operator,
+ * 18 Nov 2026). Keys are MovementsPage's tab keys; the order here is the
+ * order on the page.
+ */
+export const MOVEMENTS_TAB_GROUPS = [
+  { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'deliveries', 'tatFuel', 'recovery'] },
+  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'probes'] },
+  { key: 'safety', label: 'Safety and conduct', tabs: ['speed', 'alarmDist', 'unauthorizedPassengers'] },
+  { key: 'sites', label: 'Sites and machinery', tabs: ['geofences', 'dormant', 'machinery', 'shiftHours'] },
+];
+
+/**
+ * The headings an organisation sees, each with the tabs it has (in `tabs`, a
+ * list of { key, label }), headings with none left out. A tab no heading names
+ * goes under the first, so it is never lost.
+ */
+export function groupMovementsTabs(tabs) {
+  const byKey = new Map(tabs.map((t) => [t.key, t]));
+  const named = new Set(MOVEMENTS_TAB_GROUPS.flatMap((g) => g.tabs));
+  const loose = tabs.filter((t) => !named.has(t.key));
+  return MOVEMENTS_TAB_GROUPS.map((g, i) => ({
+    key: g.key,
+    label: g.label,
+    tabs: [...g.tabs.map((k) => byKey.get(k)).filter(Boolean), ...(i === 0 ? loose : [])],
+  })).filter((g) => g.tabs.length > 0);
+}
+
+/** The heading a tab sits under. */
+export const groupOfTab = (groups, tabKey) => groups.find((g) => g.tabs.some((t) => t.key === tabKey))?.key ?? groups[0]?.key;
+
 /** The report a load opens on: Shift, where the grants allow it, though it is no longer first. */
 export const firstReport = (keys) => (keys.includes('shift') ? 'shift' : keys[0]);
 const KEYS = new Set(REPORT_NODES.map((n) => n.key));
