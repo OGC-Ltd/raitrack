@@ -1,6 +1,7 @@
 /**
  * The Alerts page's Idle units: Menengai's listed units that have not moved
- * for 2 hours of working time (07:30–19:30), away from the yard and depots.
+ * for 1 h 30 min of working time (07:30–19:30), wherever they stand, the yard
+ * and depots included (operator, 16 Nov 2026).
  * Now is the server's idle watch as it stands (hooks/useIdleWatch); History is
  * the idle stops it kept (IdleHistory). Which one, and History's days, are
  * picked in the page's filter bar (AlertsScreen), as Overspeeding's are, and
@@ -65,9 +66,11 @@ function IdleNow({ watch, q }) {
   const shown = useMemo(() => searchAlerts(active, q), [active, q]);
   const dismissed = useMemo(() => watch.alerts.filter((a) => watch.dismissed.has(a.key)), [watch.alerts, watch.dismissed]);
   const pager = usePager(shown, q);
+  // The server sends the places it leaves out; none since 16 Nov 2026, when the yard and depots began to count
+  const away = watch.rule?.excluded?.length ? `, away from ${watch.rule.excluded.join(" and ")}` : ", wherever they stand";
   const rule = watch.rule
-    ? `${idleWords(watch.rule.idleMs)} still in working hours (${watch.rule.hours}), away from ${watch.rule.excluded.join(" and ")}`
-    : "2 h still in working hours, away from the yard and depots";
+    ? `${idleWords(watch.rule.idleMs)} still in working hours (${watch.rule.hours})${away}`
+    : "1 h 30 min still in working hours, wherever they stand";
 
   if (watch.status === "loading" || watch.status === "idle") {
     return <EmptyNote icon="ti-loader-2" tone="busy" title="Reading Idle Units">Asking the server which Menengai units are idle.</EmptyNote>;

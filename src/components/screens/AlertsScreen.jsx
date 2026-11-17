@@ -1020,7 +1020,7 @@ export default function AlertsScreen() {
               )}
               {idleWatch.status !== "off" && idleWatch.status !== "idle" && (
                 <Chip on={idle} onClick={() => setView("idle")} n={idleWatch.status === "done" ? idleCount : undefined}
-                      title="Listed Menengai units that have not moved for 2 hours of working time (07:30–19:30), away from the yard and depots">Idle units</Chip>
+                      title="Listed Menengai units that have not moved for 1 h 30 min of working time (07:30–19:30), wherever they stand, the yard and depots included">Idle units</Chip>
               )}
             </div>
           )}

@@ -79,9 +79,9 @@ jobs:
       # checked. Still passed, so turning TomTom back on needs no workflow edit.
       VITE_MYTOMTOM_API_KEY: ${{ secrets.VITE_MYTOMTOM_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -135,7 +135,7 @@ jobs:
           [ "$missing" -eq 0 ] || exit 1
           echo "bundle carries every file in public/"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: new-ui-build
           path: build/
@@ -149,6 +149,9 @@ jobs:
     # Long enough for fleet-web to wait for the image CI is still pushing.
     timeout-minutes: 40
     environment: production
+    permissions:
+      contents: read
+      id-token: write          # GitHub OIDC token, exchanged for the github-deploy role
     env:
       # How many bundle backups the box keeps, including the one this run makes.
       #
@@ -162,11 +165,11 @@ jobs:
       # them, because the deploy only ever added one.
       BUNDLE_BACKUPS_KEEP: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: new-ui-build
           path: build
@@ -240,6 +243,59 @@ jobs:
           echo "pinned $(grep -c . ~/.ssh/known_hosts) host key(s):"
           sed 's/^/  /' /tmp/host-fingerprints
 
+      # Port 22 on the box is being limited to the operators' own address, and
+      # GitHub's runners arrive from a new address every run. So ssh travels
+      # inside an AWS Session Manager session instead. The OIDC role
+      # github-deploy may open an SSH tunnel (AWS-StartSSHSession) to this one
+      # box and nothing else, and ssh inside the tunnel still checks the pinned
+      # host key and the deploy key. Every ssh and rsync below picks the tunnel
+      # up from ~/.ssh/config, unchanged.
+      #
+      # While port 22 still admits the runners, a tunnel that cannot be opened
+      # falls back to plain ssh with a warning, so a missing role never stops a
+      # deploy. Once 22 is limited, that fallback fails at the next check.
+      - name: AWS credentials for the Session Manager tunnel
+        id: deploy_aws
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::522505217087:role/github-deploy
+          role-session-name: raitrack-deploy-${{ github.run_id }}
+          aws-region: af-south-1
+
+      - name: route ssh through Session Manager
+        env:
+          HOST:     ${{ secrets.EC2_HOST }}
+          INSTANCE: i-0a4d8f7f5a97d8098
+          AWS_OK:   ${{ steps.deploy_aws.outcome }}
+        run: |
+          set -euo pipefail
+          fallback() {
+            rm -f ~/.ssh/config
+            echo "::warning::$1. This run uses plain ssh on port 22, which stops working once port 22 is limited to the operators' address."
+            exit 0
+          }
+          [ "$AWS_OK" = success ] || fallback "could not assume the github-deploy role"
+          if ! command -v session-manager-plugin >/dev/null; then
+            curl -fsSL --retry 3 -o /tmp/session-manager-plugin.deb \
+              https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+            sudo dpkg -i /tmp/session-manager-plugin.deb >/dev/null
+          fi
+          echo "session-manager-plugin $(session-manager-plugin --version)"
+          # ServerAliveInterval keeps data moving through the tunnel, so a long
+          # `fleet-web up` is not cut by Session Manager's idle timeout.
+          {
+            echo "Host ${HOST}"
+            echo "  ProxyCommand aws ssm start-session --region af-south-1 --target ${INSTANCE} --document-name AWS-StartSSHSession --parameters portNumber=%p"
+            echo "  ServerAliveInterval 30"
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          if ! timeout 90 ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "ubuntu@${HOST}" true 2>/tmp/ssm-err; then
+            sed 's/^/  /' /tmp/ssm-err
+            fallback "ssh through Session Manager failed"
+          fi
+          echo "ssh reaches the box through Session Manager"
+
       # Three distinct failures all reach git as the same "exit code 128", with
       # a message about access rights and the repository existing that is true
       # of none of them:
@@ -264,32 +320,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! timeout 20 bash -c "</dev/tcp/${HOST}/22" 2>/dev/null; then
-            echo "::error::${HOST} is not answering on port 22."
-            echo "Either EC2_HOST is stale — an instance stop/start rerolls the public IP unless an Elastic IP is attached — or the security group no longer admits GitHub's runners."
-            echo "Fix: confirm the current address with 'aws ec2 describe-instances', update the EC2_HOST secret, and update EC2_HOST_KEY with 'ssh-keyscan <new-host>' at the same time (see the next check)."
-            exit 1
-          fi
-          echo "${HOST} answers on port 22"
+          # Through Session Manager there is no direct port 22 to probe and
+          # ssh-keyscan cannot use the tunnel. The tunnel step's own ssh call
+          # already reached the box and checked the pinned host key, so only
+          # the deploy-key check below applies.
+          if [ -f ~/.ssh/config ]; then
+            echo "reaching ${HOST} through Session Manager; its host key was checked by the tunnel step"
+          else
+            if ! timeout 20 bash -c "</dev/tcp/${HOST}/22" 2>/dev/null; then
+              echo "::error::${HOST} is not answering on port 22."
+              echo "Either EC2_HOST is stale — an instance stop/start rerolls the public IP unless an Elastic IP is attached — or the security group no longer admits GitHub's runners (port 22 is limited to the operators' address; deploys go through Session Manager, see the step above)."
+              echo "Fix: confirm the current address with 'aws ec2 describe-instances', update the EC2_HOST secret, and update EC2_HOST_KEY with 'ssh-keyscan <new-host>' at the same time (see the next check)."
+              exit 1
+            fi
+            echo "${HOST} answers on port 22"
 
-          # Compared as SORTED FINGERPRINTS, never key material, so a mismatch
-          # is legible in a public log without publishing anything.
-          ssh-keyscan -T 20 "${HOST}" 2>/dev/null > /tmp/live-hostkeys || true
-          if ! ssh-keygen -lf /tmp/live-hostkeys 2>/dev/null | awk '{print $2}' | sort > /tmp/live-fp; then
-            echo "::warning::could not read host keys from ${HOST}; leaving the verdict to ssh"
-            exit 0
-          fi
-          awk '{print $2}' /tmp/host-fingerprints | sort > /tmp/pinned-fp
+            # Compared as SORTED FINGERPRINTS, never key material, so a mismatch
+            # is legible in a public log without publishing anything.
+            ssh-keyscan -T 20 "${HOST}" 2>/dev/null > /tmp/live-hostkeys || true
+            if ! ssh-keygen -lf /tmp/live-hostkeys 2>/dev/null | awk '{print $2}' | sort > /tmp/live-fp; then
+              echo "::warning::could not read host keys from ${HOST}; leaving the verdict to ssh"
+              exit 0
+            fi
+            awk '{print $2}' /tmp/host-fingerprints | sort > /tmp/pinned-fp
 
-          if ! comm -12 /tmp/live-fp /tmp/pinned-fp | grep -q .; then
-            echo "::error::${HOST} is reachable, but NONE of its host keys match EC2_HOST_KEY."
-            echo "The address now belongs to a different machine — a rebuilt or migrated box reuses the address, not the keys."
-            echo "Fix: EC2_HOST_KEY must be refreshed alongside EC2_HOST. Paste the full output of: ssh-keyscan ${HOST}"
-            echo "  pinned : $(paste -sd' ' /tmp/pinned-fp)"
-            echo "  live   : $(paste -sd' ' /tmp/live-fp)"
-            exit 1
+            if ! comm -12 /tmp/live-fp /tmp/pinned-fp | grep -q .; then
+              echo "::error::${HOST} is reachable, but NONE of its host keys match EC2_HOST_KEY."
+              echo "The address now belongs to a different machine — a rebuilt or migrated box reuses the address, not the keys."
+              echo "Fix: EC2_HOST_KEY must be refreshed alongside EC2_HOST. Paste the full output of: ssh-keyscan ${HOST}"
+              echo "  pinned : $(paste -sd' ' /tmp/pinned-fp)"
+              echo "  live   : $(paste -sd' ' /tmp/live-fp)"
+              exit 1
+            fi
+            echo "host key matches what is pinned"
           fi
-          echo "host key matches what is pinned"
 
           if ! timeout 30 ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 "ubuntu@${HOST}" true 2>/tmp/ssh-err; then
             echo "::error::${HOST} is the right box, but EC2_SSH_KEY was refused."
@@ -361,12 +425,14 @@ jobs:
       # as the way back (fleet-web back). images.yml pushes the image, and the
       # box waits for it.
       - name: update the web container, if the site is served from it
+        id: site
         env:
           HOST: ${{ secrets.EC2_HOST }}
         run: |
           set -euo pipefail
           mode=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "ubuntu@${HOST}" 'sudo -n /usr/local/sbin/fleet-web mode 2>/dev/null || echo static')
           echo "site mode: ${mode}"
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
           [ "${mode}" = container ] || { echo "the published files are what is served"; exit 0; }
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "ubuntu@${HOST}" \
             "sudo -n PULL_WAIT_S=1200 /usr/local/sbin/fleet-web up ${GITHUB_SHA}"
@@ -374,17 +440,32 @@ jobs:
       - name: confirm the site serves the new bundle
         env:
           HOST: ${{ secrets.EC2_HOST }}
+          MODE: ${{ steps.site.outputs.mode }}
         run: |
           set -euo pipefail
-          # The entry script's hashed name changes with its contents, so finding
-          # it in what nginx returns proves the new bundle is the one being
-          # served — not merely that the site is up.
-          entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' build/index.html | head -1)
-          echo "expecting ${entry}"
           served=$(curl -fsS --max-time 20 "http://${HOST}/")
-          if ! printf '%s' "$served" | grep -q "$entry"; then
-            echo "::error::the served index.html does not reference ${entry} — restore with: cp -r ${DASH_BACKUP}/. build/"
-            exit 1
+          if [ "${MODE}" = container ]; then
+            # The image builds the site itself, and the build stamps its time
+            # into the bundle, so its hashed file names never match this run's
+            # build/. Both are stamped with the commit, so that is compared.
+            commit=$(curl -fsS --max-time 20 "http://${HOST}/DEPLOYED_COMMIT" | cut -d' ' -f1 || true)
+            echo "expecting commit ${GITHUB_SHA}, served ${commit}"
+            if [ "${commit}" != "${GITHUB_SHA}" ]; then
+              echo "::error::the web container serves ${commit:-nothing}, not ${GITHUB_SHA} — serve the files just published with: sudo fleet-web back"
+              exit 1
+            fi
+            entry=$(printf '%s' "$served" | grep -o 'assets/index-[A-Za-z0-9_-]*\.js' | head -1 || true)
+            [ -n "${entry}" ] || { echo "::error::the served index.html names no entry script"; exit 1; }
+          else
+            # The entry script's hashed name changes with its contents, so finding
+            # it in what nginx returns proves the new bundle is the one being
+            # served — not merely that the site is up.
+            entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' build/index.html | head -1)
+            echo "expecting ${entry}"
+            if ! printf '%s' "$served" | grep -q "$entry"; then
+              echo "::error::the served index.html does not reference ${entry} — restore with: cp -r ${DASH_BACKUP}/. build/"
+              exit 1
+            fi
           fi
           curl -fsS --max-time 20 -o /dev/null "http://${HOST}/${entry}"
           echo "the box is serving this bundle"

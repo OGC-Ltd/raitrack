@@ -36,7 +36,7 @@ function state(a, history) {
     return { label: "Moved", tone: "con", sub: `moved ${eatWords(a.endedAt)}` };
   }
   if (a.severity === "critical") return { label: "Critical", tone: "inc", sub: "idle 6 h or more" };
-  return { label: history ? "Still idle" : "Idle", tone: "warn", sub: "idle 2 h or more" };
+  return { label: history ? "Still idle" : "Idle", tone: "warn", sub: "idle 1 h 30 min or more" };
 }
 
 /**
