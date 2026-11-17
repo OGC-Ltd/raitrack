@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alertText, eatWords, idleWords, liveDismissals, searchAlerts, whereWords } from './idleAlerts';
+import { alertText, eatWords, idleWords, liveDismissals, ruleWords, searchAlerts, whereWords } from './idleAlerts';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 const alert = {
@@ -43,5 +43,21 @@ describe('idle alert words', () => {
 
   it('forgets dismissals of stops that have ended', () => {
     expect([...liveDismissals(new Set(['v1|idle|1', 'v9|idle|5']), [alert])]).toEqual(['v1|idle|1']);
+  });
+});
+
+describe('ruleWords', () => {
+  const rule = { idleMs: 1.5 * 3_600_000, criticalMs: 6 * 3_600_000, hours: '07:30–19:30' };
+  it('says the rule with nowhere left out (fleet-server from 17 Nov 2026)', () => {
+    expect(ruleWords({ ...rule, excluded: [] })).toBe(`${idleWords(1.5 * 3_600_000)} still in working hours (07:30–19:30)`);
+    expect(ruleWords({ ...rule, excluded: [] })).not.toMatch(/away from/);
+  });
+  it('still names the places an older server leaves out', () => {
+    expect(ruleWords({ ...rule, idleMs: 2 * 3_600_000, excluded: ['MORL', 'Nairobi depot'] }))
+      .toBe(`${idleWords(2 * 3_600_000)} still in working hours (07:30–19:30), away from MORL and Nairobi depot`);
+  });
+  it('words a missing rule without numbers it does not know', () => {
+    expect(ruleWords(null)).toBe('still in working hours');
+    expect(ruleWords({ ...rule, excluded: undefined })).not.toMatch(/away from/);
   });
 });

@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import EmptyNote from "../shared/EmptyNote";
 import { usePager } from "../body/TablePager";
 import { dismissIdle, undismissIdle } from "../../hooks/useIdleWatch";
-import { eatWords, idleWords, searchAlerts } from "../../lib/idleAlerts";
+import { eatWords, idleWords, ruleWords, searchAlerts } from "../../lib/idleAlerts";
 import IdleHistory from "./IdleHistory";
 import IdleTable from "./IdleTable";
 import "./IdleAlertsTab.css";
@@ -65,9 +65,7 @@ function IdleNow({ watch, q }) {
   const shown = useMemo(() => searchAlerts(active, q), [active, q]);
   const dismissed = useMemo(() => watch.alerts.filter((a) => watch.dismissed.has(a.key)), [watch.alerts, watch.dismissed]);
   const pager = usePager(shown, q);
-  const rule = watch.rule
-    ? `${idleWords(watch.rule.idleMs)} still in working hours (${watch.rule.hours}), away from ${watch.rule.excluded.join(" and ")}`
-    : "2 h still in working hours, away from the yard and depots";
+  const rule = ruleWords(watch.rule);
 
   if (watch.status === "loading" || watch.status === "idle") {
     return <EmptyNote icon="ti-loader-2" tone="busy" title="Reading Idle Units">Asking the server which Menengai units are idle.</EmptyNote>;

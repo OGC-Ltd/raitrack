@@ -20,6 +20,18 @@ export function idleWords(ms) {
 }
 
 /** Where it stands: "at Naivas HQ", "1.2 km from Naivas HQ", else its coordinates. */
+/**
+ * The rule as the empty state says it: "1 h 30 min still in working hours
+ * (07:30–19:30)", plus "away from …" only while the server leaves places out
+ * (none since 16 Nov 2026: the yard and depots count too).
+ */
+export function ruleWords(rule) {
+  if (!rule) return 'still in working hours';
+  const away = Array.isArray(rule.excluded) && rule.excluded.length ? `, away from ${rule.excluded.join(' and ')}` : '';
+  const hours = rule.hours ? ` (${rule.hours})` : '';
+  return `${idleWords(rule.idleMs)} still in working hours${hours}${away}`;
+}
+
 export function whereWords(a) {
   const n = a?.nearest;
   if (n?.name) {
