@@ -607,6 +607,17 @@ export function machineWindows(from, to, { start = 0, end = 24, byDay = false } 
 
 const round1 = (x) => Math.round(x * 10) / 10;
 
+/** The index of the first reading at or after `t` in a list sorted by time. */
+function firstFrom(list, t) {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (list[m].t < t) lo = m + 1; else hi = m;
+  }
+  return lo;
+}
+
 /**
  * One row per machine per window (an hour, or a day) it ran. Windows a
  * machine did not run are left out; `idle` lists the machines that did not
@@ -631,8 +642,10 @@ export function machineryRows(units, pings, windows) {
       let best = null;
       for (const v of u.vehicles) {
         const list = pings.get(v.vehicleId) ?? [];
-        const sub = list.filter((p) => p.t >= w.from && p.t < w.to);
-        const prior = list.filter((p) => p.t < w.from).pop();
+        // Found by halving, not by scanning: a week by the hour is 168 windows over a week of readings
+        const i = firstFrom(list, w.from);
+        const sub = list.slice(i, firstFrom(list, w.to));
+        const prior = i > 0 ? list[i - 1] : null;
         const before = prior && w.from - prior.t <= EDGE_GAP_MS ? prior : null;
         const s = summariseDay(sub, null);
         const eh = engineHoursOf(s, meterAdvance(before, sub), maxH);

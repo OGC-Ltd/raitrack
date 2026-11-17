@@ -214,7 +214,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   const rowCells = (r) => {
     const tone = rowShade(r);
     const list = baseCells(r);
-    return tone ? list.map((v) => (typeof v === 'object' && v ? { ...v, style: tone } : { html: v, style: tone })) : list;
+    return tone ? list.map((v) => (typeof v === 'object' && v ? { ...v, style: v.style ? `${v.style};${tone}` : tone } : { html: v, style: tone })) : list;
   };
   const baseCells = (r) => def.cells(r, ctx).map((c, i) => {
     if (i === 0) return vehicleCell(r);

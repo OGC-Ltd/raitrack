@@ -303,3 +303,21 @@ describe('Machinery as a tab under Movements', () => {
     expect(reportKeysFor(can, 'KASULU')).not.toContain('machinery');
   });
 });
+
+describe('a week by the hour', () => {
+  it('reads each hour from its own readings, and quickly', () => {
+    // 30 machines, a reading every 30 s for 7 days: 168 hours over 20,160 readings each
+    const machines = Array.from({ length: 30 }, (_, i) => unit(`MUFINDI - EX ${String(i).padStart(2, '0')}`, `m${i}`));
+    const from = at('2026-11-09T00:00:00');
+    const to = at('2026-11-16T00:00:00');
+    const list = [];
+    // From 15 minutes early, as the screen reads them, so the first hour has a reading before it
+    for (let t = from - 15 * 60_000; t < to; t += 30_000) list.push({ t, engineOn: true, speedKmh: 0, lat: -8.6, lng: 35.3, engineHoursMeter: 1000 + (t - from) / 3_600_000 });
+    const pings = new Map(machines.map((m) => [m.vehicles[0].vehicleId, list]));
+    const t0 = performance.now();
+    const { rows } = machineryRows(machines, pings, machineWindows(from, to, {}));
+    expect(performance.now() - t0).toBeLessThan(15_000);
+    expect(rows).toHaveLength(30 * 168);
+    expect(rows.every((r) => Math.abs(r.hours - 1) < 1e-6)).toBe(true);
+  });
+});

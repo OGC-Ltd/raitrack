@@ -1565,7 +1565,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         ctx.oneDay = new Set(windows.map((w) => w.day)).size <= 1;
         rows = made.rows;
         failed = p.failed.size;
-        ctx.idle = made.idle.map((u) => u.plate).sort((x, y) => x.localeCompare(y, 'en', { numeric: true }));
+        // A machine whose day could not be read is counted in `failed`, not said to have stood idle
+        ctx.idle = made.idle.filter((u) => !u.vehicles.some((v) => p.failed.has(v.vehicleId))).map((u) => u.plate).sort((x, y) => x.localeCompare(y, 'en', { numeric: true }));
       } else {
         const windows = key === 'night' ? nightWindows(ctx.from, ctx.to, ctx.night) : [[ctx.from, ctx.to]];
         ctx.windows = windows;
