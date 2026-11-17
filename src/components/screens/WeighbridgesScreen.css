@@ -786,3 +786,6 @@
 .wb-root .sp4-filter-group { align-items: center; flex-wrap: wrap; row-gap: 8px; }
 /* With From, To, five spans and the weighbridge, the bar can outgrow a laptop: it wraps rather than crop. */
 .wb-root .sp4-filterbar { flex-wrap: wrap; row-gap: 8px; align-items: center; }
+
+/* Metrics (operator, 18 Nov 2026): the totals row under each unit's trips and kilometres */
+.wbm-table tfoot td { font-weight: 700; border-top: 1px solid var(--sp4-line); }

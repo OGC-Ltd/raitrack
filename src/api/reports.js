@@ -75,6 +75,19 @@ async function rangeReport(path, { orgId, from, to }) {
 }
 /** Per unit: distance, start and end tank, refills, theft, consumed, km/L and the target. */
 export const loadFuelConsumptionRate = (o) => rangeReport('fuel-consumption-rate', o);
+/**
+ * Each unit's distance over one fleet day by its tracker's odometer (fleet-server
+ * reports/unit-distance): read from the stored readings, pulled from Wialon and stored
+ * where there are none. `pending` units are still being pulled: ask again.
+ * @returns {Promise<{ day, rows: { vehicleId, distanceKm, source, pending }[], pending: number }>}
+ */
+export async function loadUnitDistance({ orgId, day, vehicleIds }) {
+  if (!orgId) throw new Error('No organisation selected');
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/unit-distance`, {
+    method: 'POST', body: JSON.stringify({ day, vehicleIds }),
+  });
+  return res.data;
+}
 /** Dashcam alarms per unit by kind; `partial` when the dashcam server gave only part. */
 export const loadAlarmDistribution = (o) => rangeReport('alarm-distribution', o);
 /** The Unauthorized Passengers incidents, with when each was shared. */

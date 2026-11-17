@@ -45,6 +45,7 @@ import { tonnes, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weigh
 import { WeighbridgeIcon } from "../footer/NavIcons";
 import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
+import WeighbridgeCoverage from "../body/WeighbridgeCoverage";
 import EmptyNote from "../shared/EmptyNote";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { useAppActions } from "../../context/AppContext";
@@ -359,6 +360,10 @@ export default function WeighbridgesScreen() {
   const [to,       setTo]       = useState(fleetDayKey());
   const [centre,   setCentre]   = useState(DEFAULT_CENTRE);
   const [search,   setSearch]   = useState("");
+  /* Coverage: the Tickets view's tickets as each unit's trips and kilometres a day, by the
+     Coverage button in its filter bar (operator, 18 Nov 2026: "a button for coverage that will
+     replace the metrics"). It follows the weighbridge picked, and searches units on the page. */
+  const [coverage, setCoverage] = useState(false);
   const [selected, setSelected] = useState(null);
   const { can } = usePermissions();
   const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
@@ -378,8 +383,8 @@ export default function WeighbridgesScreen() {
     orgId,
     from,
     to,
-    centre: view === "analytics" ? null : centre,
-    search: view === "analytics" ? "" : search,
+    centre: view === "tickets" ? centre : null,
+    search: view === "tickets" && !coverage ? search : "",
   });
 
   // Memoised because the breakdown's re-lookup below depends on it, and a
@@ -406,7 +411,7 @@ export default function WeighbridgesScreen() {
   // Close the breakdown when the set behind it changes. Leaving it open across
   // a day or centre change left a ticket on screen that the grid behind it no
   // longer contained.
-  useEffect(() => { setSelected(null); }, [from, to, centre, search, view]);
+  useEffect(() => { setSelected(null); }, [from, to, centre, search, view, coverage]);
 
   // Pages of fifteen, Prev / Next — the Drivers roster's pager and step, so
   // the two grids page alike (operator, 2026-10-03). Back to the first page
@@ -422,12 +427,12 @@ export default function WeighbridgesScreen() {
   const pendingTicket = useRef(null);
   const showTicket = useCallback((row) => {
     if (!row) return;
-    if (view === "analytics") { pendingTicket.current = row; setView("tickets"); }
+    if (view !== "tickets" || coverage) { pendingTicket.current = row; setCoverage(false); setView("tickets"); }
     else setSelected(row);
   }, [view]);
   useEffect(() => {
-    if (view !== "analytics" && pendingTicket.current) { setSelected(pendingTicket.current); pendingTicket.current = null; }
-  }, [view]);
+    if (view === "tickets" && !coverage && pendingTicket.current) { setSelected(pendingTicket.current); pendingTicket.current = null; }
+  }, [view, coverage]);
   const closeRow = useCallback(() => setSelected(null), []);
   const selectedRow = useMemo(
     () => (selected ? rows.find(r => r.id === selected.id) ?? selected : null),
@@ -533,7 +538,7 @@ export default function WeighbridgesScreen() {
 
       {/* ── Filter bar ─────────────────────────────────────── */}
       <div data-tour="wb-filters" className="sp4-filterbar">
-        {view === "tickets" && (
+        {view !== "analytics" && (
         <div className="sp4-search-wrap">
           <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -541,14 +546,14 @@ export default function WeighbridgesScreen() {
           <input
             className="sp4-search"
             type="text"
-            placeholder="Search token, vehicle or driver…"
+            placeholder={coverage ? "Search unit…" : "Search token, vehicle or driver…"}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
           {search && <button className="sp4-search-clear" onClick={() => setSearch("")}>✕</button>}
         </div>
         )}
-        {view === "tickets" && <div className="sp4-filter-divider" />}
+        {view !== "analytics" && <div className="sp4-filter-divider" />}
 
         <div className="sp4-filter-group">
           {/* One field, one calendar (operator, 2026-10-08: "one date picker
@@ -573,7 +578,7 @@ export default function WeighbridgesScreen() {
           {/* One weighbridge, or all of them (operator, 17 Nov 2026: "download
               the report as per specific weighbridge"). The same choice as the
               bridge cards above; the table and every download follow it. */}
-          {view !== "analytics" && centres.length > 0 && (
+          {view === "tickets" && centres.length > 0 && (
             <label className="wb-date wb-bridge">
               <span>Weighbridge</span>
               <select value={centre ?? ""} onChange={(e) => setCentre(e.target.value === "" ? null : Number(e.target.value))}>
@@ -581,6 +586,15 @@ export default function WeighbridgesScreen() {
                 {centres.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
               </select>
             </label>
+          )}
+          {view === "tickets" && (
+            <button
+              type="button"
+              className={"sp4-filter-chip" + (coverage ? " sp4-filter-chip--on" : "")}
+              aria-pressed={coverage}
+              title="Each unit's trips and the kilometres its odometer counted, a day at a time"
+              onClick={() => setCoverage((c) => !c)}
+            >Coverage</button>
           )}
           {SPANS.map(sp => {
             const [a, b] = sp.range();
@@ -610,7 +624,7 @@ export default function WeighbridgesScreen() {
 
       {/* ── Body ───────────────────────────────────────────── */}
       <div className="sp4-body">
-        {view !== "analytics" && selectedRow && (
+        {view === "tickets" && !coverage && selectedRow && (
           <WeighmentPanel
             row={selectedRow}
             day={from === to ? from : null}
@@ -644,6 +658,41 @@ export default function WeighbridgesScreen() {
               </>
             )}
           </div>
+        ) : coverage ? (
+          noBridges ? (
+            <EmptyNote icon="ti-scale" title="No Weighbridges on This Fleet">
+              This company has no weighbridge records. Weighbridges report from one fleet
+              only, so switch company to see them.
+            </EmptyNote>
+          ) : error ? (
+            <EmptyNote icon="ti-cloud-off" tone="error" title="Weighbridge Tickets Unavailable"
+                       action={{ label: "Try again", onClick: reload }}>
+              {error}
+            </EmptyNote>
+          ) : loading && !data ? (
+            <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Tickets">
+              {progress && progress.total > 1
+                ? `Reading day ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`
+                : "Fetching the weighbridge tickets for this span…"}
+            </EmptyNote>
+          ) : rows.length === 0 ? (
+            <EmptyNote icon="ti-receipt-off" tone="ok" title="No Trips in This Span">
+              No unit crossed a weighbridge on these days.
+            </EmptyNote>
+          ) : (
+            <WeighbridgeCoverage
+              orgId={orgId}
+              tickets={rows}
+              from={from}
+              to={to}
+              search={search}
+              canKm={can("telemetry:read")}
+              fleet={fleet}
+              periodLabel={[spanLabel(from, to), centreName].filter(Boolean).join(", ")}
+              loading={loading}
+              onReload={reload}
+            />
+          )
         ) : (
           <>
 
