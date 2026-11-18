@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAppActions } from '../../context/AppContext';
 import { LIFE_MS, dismissToast, pauseToasts, subscribeToasts, toastsSnapshot } from '../../lib/toasts';
-import { distanceWords, placeLabel, stopCopyText, stopKind } from '../../lib/stopWatch';
+import { stopCopyText, stopKind } from '../../lib/stopWatch';
 import { copyText } from '../../lib/copyText';
 import { cachedPlaceName } from '../../hooks/usePlaceName';
 import { requestStopsView } from '../../hooks/useStopWatch';
@@ -41,7 +41,6 @@ function CopyStop({ text, plate }) {
   );
 }
 
-const nearestWords = (n) => (n?.name ? `${n.name} (${placeLabel(n.category)}), ${distanceWords(n.metres)}` : null);
 
 function icon(t) {
   if (t.level === 'success') return 'ti-circle-check';
@@ -54,7 +53,7 @@ function Toast({ t }) {
   const stop = t.kind === 'stop' ? t.data : null;
   const orgCode = typeof t.data?.orgCode === 'string' ? t.data.orgCode : null;
   const logo = orgCode ? companyMark({ code: orgCode }) : null;
-  const copyOf = () => stopCopyText(stop, { now: Date.now(), area: cachedPlaceName(stop.lat, stop.lng), place: nearestWords(stop.nearest) });
+  const copyOf = () => stopCopyText(stop, { now: Date.now(), area: cachedPlaceName(stop.lat, stop.lng) });
   return (
     <div className={`tst tst--${t.level}`} role={t.level === 'info' || t.level === 'success' ? 'status' : 'alert'}>
       {/* Laid out as the desktop's own notification card (operator, 11 Nov
