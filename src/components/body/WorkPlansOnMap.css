@@ -360,10 +360,14 @@
 .wpm-skel__bar { height: 6px; }
 @keyframes wpm-pulse { 50% { opacity: 0.5; } }
 
-/* Phone: a card along the top of the map, beside the camera column; the foot
-   keeps the lower third clear for the fuel alerts card and the zoom row. */
+/* Phone (operator, 18 Nov 2026): the card is as wide as the row above it
+   (base map toggle and status bar, 12px in from each side), and while open
+   runs down to 8px above the map's foot, the same gap it keeps below that row
+   (--wpm-top is that row's 12 + 36 + 8). Folded, it is only its head. Moved by
+   hand, it keeps the size it was dragged with. */
 @media (max-width: 767px) {
-  .wpm-card[data-mode="float"] { left: 12px; width: auto; max-width: none; max-height: calc(100% - var(--wpm-top) - 140px); }
+  .wpm-card[data-mode="float"] { left: 12px; right: 12px; width: auto; max-width: none; max-height: calc(100% - var(--wpm-top) - 8px); }
+  .wpm-card[data-mode="float"][data-open]:not([data-moved]) { bottom: 8px; }
   .wpm-row__detail, .wpm-row__when { font-size: 13px; }
 }
 

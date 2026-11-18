@@ -208,9 +208,14 @@
    in its row (operator, 2026-11-14), so the six read as one strip across the
    top of the map rather than a block hung off the left edge. Where it is
    wider than the row it still fills it and scrolls, as before. */
+/* The bar fills its row (operator, 18 Nov 2026: as wide as the work-plans
+   card under it), the six sharing the spare width evenly; still scrolls where
+   the row is narrower than they are. */
 @media (max-width: 767px) {
   .status-rail { justify-content: center; }
+  .status-rail__bar, .status-rail__scroller { flex: 1 1 auto; }
   .status-rail__chip {
+    flex: 1 0 auto;
     flex-direction: column;
     gap: 4px;
     min-width: 44px;

@@ -30,6 +30,10 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   const alertSummary = useAlertSummary(canAlerts);
   const openAlerts = alertSummary?.open ?? 0;
   const fuelAlarm = useFuelAlarm(alertSummary);
+  // Alerts, its count and the avatar's dot live in the map's ☰ for those who
+  // can open the map (operator, 18 Nov 2026: "in the new hamburger, not in
+  // both"); here only for those who cannot.
+  const alertsHere = canAlerts && !can('map:read');
   const { vehicles = [] } = useFleetLiveShared();
   const { focusVehicle } = useMapLayers();
 
@@ -145,8 +149,8 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
             onClick={() => setUserOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={userOpen}
-            aria-label={fuelAlarm ? 'Account menu, new fuel theft alert'
-              : openAlerts > 0 ? `Account menu, ${openAlerts} open alert${openAlerts === 1 ? '' : 's'}` : 'Account menu'}
+            aria-label={alertsHere && fuelAlarm ? 'Account menu, new fuel theft alert'
+              : alertsHere && openAlerts > 0 ? `Account menu, ${openAlerts} open alert${openAlerts === 1 ? '' : 's'}` : 'Account menu'}
           >
             {user ? (
               <span className="mobile-header__avatar-initials" style={{ '--ua': avatarHue(displayName || user.email) }}>
@@ -160,7 +164,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               </svg>
             )}
           </button>
-          {(openAlerts > 0 || fuelAlarm) && (
+          {alertsHere && (openAlerts > 0 || fuelAlarm) && (
             <span className={`mobile-header__avatar-dot${fuelAlarm ? ' nav-alarm' : ''}`} aria-hidden="true" />
           )}
 
@@ -178,7 +182,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
               <button className="mobile-header__user-item" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
                 <i className="ti ti-user-circle" aria-hidden="true" /> Owner
               </button>
-              {canAlerts && (
+              {alertsHere && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('alerts'); setUserOpen(false); }}>
                   <i className="ti ti-bell-ringing" aria-hidden="true" /> Alerts
                   {openAlerts > 0 && (
@@ -189,23 +193,26 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   )}
                 </button>
               )}
-              {canTriage && (
+              {/* Fuel audit, Fuel and Fuel metrics live in the map's ☰ (body/MapMoreMenu,
+                  operator 18 Nov 2026). Here only for those who cannot open the map,
+                  or they would have no way to these pages at all. */}
+              {!can('map:read') && canTriage && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('audit'); setUserOpen(false); }}>
                   <i className="ti ti-clipboard-check" aria-hidden="true" /> Fuel audit
                 </button>
               )}
-              {/* The Fuel page (FactorySuite plans, pump issues, probes): on phones too (operator, 18 Nov 2026) */}
-              {can('factory_fuel:read') && (
+              {!can('map:read') && can('factory_fuel:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuel'); setUserOpen(false); }}>
                   <i className="ti ti-gas-station" aria-hidden="true" /> Fuel
                 </button>
               )}
-              {can('fuel_filling:read') && (
+              {!can('map:read') && can('fuel_filling:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuelReport'); setUserOpen(false); }}>
                   <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel metrics
                 </button>
               )}
-              {can('logbook:read') && (
+              {/* In the map's ☰ too; here only for those who cannot open the map */}
+              {!can('map:read') && can('logbook:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('usageReview'); setUserOpen(false); }}>
                   <i className="ti ti-car" aria-hidden="true" /> Logbook
                 </button>

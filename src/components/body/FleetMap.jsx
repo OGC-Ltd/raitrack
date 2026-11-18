@@ -86,6 +86,7 @@ import {
 } from "../../lib/tomtomTraffic";
 import RouteCoveredCard from "./RouteCoveredCard";
 import MapToolRail from "./MapToolRail";
+import MapMoreMenu from "./MapMoreMenu";
 import {
   installGoogleBase, isGoogleBase, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION,
   LIVE_TRAFFIC_AVAILABLE, GOOGLE_TRAFFIC_LEGEND, TRAFFIC_REDRAW_MS, addGoogleTraffic,
@@ -7505,6 +7506,10 @@ export default function FleetMap() {
             ))}
           </div>
         )}
+
+        {/* Phones: the ☰ under the base map toggle, for the pages the bottom bar
+            has no room for and the work plans the desktop rail switches on (MapMoreMenu). */}
+        {isMobile && <MapMoreMenu workPlans={mapLayers.find((l) => l.id === "workplans") ?? null} />}
 
         {/* The status filters, for screens with no room for the sidebar's
             stat grid. This was two chips — CRITICAL and WARNING — which left
