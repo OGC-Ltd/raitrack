@@ -1,3 +1,5 @@
+/* Hallmark · app screen: Fuel (phones) · genre: modern-minimal · theme: the Drivers page tokens · states: 8 · contrast: pass · redesign: polish (responsiveness, 19 Nov 2026) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: E, the machine type under the plate still ends in an ellipsis on a 375px card */
 /* Fuel page (FuelScreen): the Drivers page's stylesheet does the work; these
    are the few things a machine row has that a driver row does not. Colours
    come from the Drivers page's own tokens. */
@@ -99,4 +101,18 @@
   .fuel-rec { font-size: 12px; }
   .fuel-rec th, .fuel-rec td { padding: 6px 4px; }
   .fuel-rec thead th { white-space: normal; }
+}
+
+/* ── Phones: whole labels ───────────────────────────────────────────────────
+ * Hallmark · component: machine cards + fleet facts (Fuel on a phone) · genre: modern-minimal · theme: the Drivers page tokens · states: 8
+ * The fleet facts kept their desk rule of one line and an ellipsis, so the
+ * third ("Broken down or available") read "Broken down or av…"; on a phone a
+ * label wraps instead. The card labels were 9px tracked capitals: they take the
+ * page's label size in sentence case, and the period wraps rather than cutting
+ * its end date. */
+@media (max-width: 700px) {
+  .fuel-page .dr-fleet__fact dt { white-space: normal; align-items: flex-start; line-height: 1.25; }
+  .fuel-page .dr-fleet__facts { align-items: end; }
+  .dr-grid.fuel-grid tbody td::before { font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+  .dr-grid.fuel-grid .dr-when { white-space: normal; }
 }

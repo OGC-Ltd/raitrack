@@ -1,3 +1,68 @@
+/* Hallmark · app screen: Reports (phones) · genre: modern-minimal · theme: sp4 (project tokens) · states: 8 · contrast: pass · redesign: polish (responsiveness, 19 Nov 2026) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: E, the shift sheet on a phone is the A4 page at 43%, readable only opened; the table reports still scroll sideways in their own box */
+/* The page's own palette: every colour it uses, named once (lifted from
+   the rules below, values unchanged). */
+:root {
+  --rpt-amber-56: #fbbf24;
+  --rpt-amber-77: #fde68a;
+  --rpt-amber-96: #fffbeb;
+  --rpt-black: #000000;
+  --rpt-blue-10: #0b1f2a;
+  --rpt-blue-11: #10192c;
+  --rpt-blue-16: #0f2542;
+  --rpt-blue-47: #00b0f0;
+  --rpt-blue-53: #2563eb;
+  --rpt-blue-60: #3c83f2;
+  --rpt-blue-65: #6fa8dc;
+  --rpt-blue-78: #93c5fd;
+  --rpt-blue-79: #9cc7f5;
+  --rpt-blue-93: #e6ecf5;
+  --rpt-blue-97: #eff6ff;
+  --rpt-green-20: #14532d;
+  --rpt-green-29: #15803d;
+  --rpt-green-34: #2e7d32;
+  --rpt-green-36: #16a34a;
+  --rpt-green-58: #4ade80;
+  --rpt-green-76: #b5dfa6;
+  --rpt-green-85: #bbf7d0;
+  --rpt-grey-10: #12181f;
+  --rpt-grey-11: #1c1c1c;
+  --rpt-grey-45: #66717d;
+  --rpt-grey-46: #6b757f;
+  --rpt-grey-50: #7f7f7f;
+  --rpt-grey-6: #0b0f14;
+  --rpt-grey-7: #111111;
+  --rpt-grey-90: #e2e5ea;
+  --rpt-grey-90-2: #dfe4ea;
+  --rpt-grey-91: #e2e7ed;
+  --rpt-grey-94: #eceff3;
+  --rpt-grey-95: #eef1f5;
+  --rpt-grey-95-2: #eef2f7;
+  --rpt-orange-26: #78350f;
+  --rpt-orange-31: #92400e;
+  --rpt-orange-35: #b26a00;
+  --rpt-orange-37: #b45309;
+  --rpt-orange-50: #f59e0b;
+  --rpt-orange-76: #f8c08a;
+  --rpt-orange-83: #fed7aa;
+  --rpt-red-31: #7f1d1d;
+  --rpt-red-42: #b91c1c;
+  --rpt-red-47: #c62828;
+  --rpt-red-51: #dc2626;
+  --rpt-red-71: #f87171;
+  --rpt-red-89: #fecaca;
+  --rpt-slate-20: #2b303b;
+  --rpt-slate-47: #65758a;
+  --rpt-slate-65: #9aa5b1;
+  --rpt-slate-74: #b3bcc6;
+  --rpt-slate-76: #b8c1cb;
+  --rpt-slate-82: #c9d1db;
+  --rpt-slate-84: #cbd5e1;
+  --rpt-slate-87: #d8dee6;
+  --rpt-slate-91: #e2e8f0;
+  --rpt-white: #ffffff;
+  --rpt-yellow-70: #fbe36b;
+}
 /* Reports page. The page is the shared sp4 frame (tabs, KPI header, filter bar,
  * table) that Fuel Report and Maintenance use, so it takes the same theme and
  * phone layouts; only what that frame has no part for lives here: the group and
@@ -5,7 +70,7 @@
 
 .rpt-root { min-width: 0; }
 /* End of shift: the sheet on a grey desk, as a page. */
-.rpt-body.sdoc-desk { background: #eef1f5; padding: 20px 16px 32px; overflow: auto; }
+.rpt-body.sdoc-desk { background: var(--rpt-grey-95); padding: 20px 16px 32px; overflow: auto; }
 /* The shift sheet on the page: scaled so a whole page is in view, opened to edit
    on the dimmed page (ShiftSheet). The desk keeps its height; the sheet scrolls in it. */
 .rpt-body.sdoc-desk:has(> .sdoc-fit) { padding: 0; overflow: hidden; }
@@ -18,30 +83,30 @@
 .sdoc-thumb--cut .sdoc-tear::before {
   /* Ends above the perforation (the tear's border sits outside its padding box), not over it */
   content: ""; position: absolute; left: 0; right: 0; bottom: calc(100% + 3px); height: 160px; pointer-events: none;
-  background: linear-gradient(to bottom, rgb(255 255 255 / 0), #fff);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--rpt-white) 0%, transparent), var(--rpt-white));
 }
 .sdoc-tear {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
   display: flex; align-items: center; justify-content: flex-end; padding: 24px 13mm 28px;
-  background: #fff; border-top: 3px dashed #9aa5b1;
+  background: var(--rpt-white); border-top: 3px dashed var(--rpt-slate-65);
 }
 .sdoc-tear__go {
   flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 700;
-  color: var(--vdp-navy, #0f2542); white-space: nowrap; border-bottom: 2px solid transparent; padding-bottom: 2px;
+  color: var(--vdp-navy, var(--rpt-blue-16)); white-space: nowrap; border-bottom: 2px solid transparent; padding-bottom: 2px;
 }
 .sdoc-tear__go .ti { font-size: 22px; transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
 .sdoc-thumb:hover .sdoc-tear__go, .sdoc-thumb:focus-visible .sdoc-tear__go { border-bottom-color: currentColor; }
 .sdoc-thumb:hover .sdoc-tear__go .ti { transform: translate(2px, -2px); }
 @media (prefers-reduced-motion: reduce) { .sdoc-tear__go .ti { transition: none; } }
 .sdoc-thumb .sdoc { width: 210mm; }
-.sdoc-thumb:hover .sdoc { box-shadow: 0 0 0 2px #93c5fd, 0 8px 24px rgb(15 23 42 / .10); }
-.sdoc-thumb:focus-visible { outline: 3px solid #3b82f6; outline-offset: 4px; }
+.sdoc-thumb:hover .sdoc { box-shadow: 0 0 0 2px var(--rpt-blue-78), 0 8px 24px color-mix(in srgb, var(--rpt-blue-11) 10%, transparent); }
+.sdoc-thumb:focus-visible { outline: 3px solid var(--rpt-blue-60); outline-offset: 4px; }
 .sdoc-thumb:active { transform: translateY(1px); }
 .sdoc-open { align-items: stretch; padding: 16px 24px 0; }
 .sdoc-open__frame { display: flex; flex-direction: column; width: min(860px, 100%); height: 100%; margin: 0 auto; }
 .sdoc-open__head { flex: none; }
 .sdoc-open__scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 24px; }
-.sdoc-open__scroll .sdoc { box-shadow: 0 10px 34px rgb(0 0 0 / .4); }
+.sdoc-open__scroll .sdoc { box-shadow: 0 10px 34px color-mix(in srgb, var(--rpt-black) 40%, transparent); }
 .sdoc-open__sheet { width: 210mm; margin: 0 auto; }
 .sdoc-open__sheet .sdoc { width: 210mm; }
 .sdoc-open__frame--land { width: min(1180px, 100%); }
@@ -111,7 +176,7 @@
 .rpt-table--grid th.rpt-num, .rpt-table--grid td.rpt-num { width: 46px; min-width: 46px; }
 .rpt-table--grid td.rpt-unit { min-width: 150px; }
 .rpt-heat {
-  background: rgba(220, 38, 38, var(--rpt-heat, 0.15));
+  background: color-mix(in srgb, var(--rpt-red-51) calc((var(--rpt-heat, 0.15)) * 100%), transparent);
   color: var(--sp4-text-1);
   font-weight: 700;
 }
@@ -120,8 +185,8 @@
 
 /* Driver conduct: incidents with no driver on record, shaded grey and keyed under the table.
    Its own grey per theme: --sp4-raised is near-white in light mode and does not read as shaded. */
-.rpt-root { --rpt-nodriver: #2b303b; }
-.app--light .rpt-root { --rpt-nodriver: #e2e5ea; }
+.rpt-root { --rpt-nodriver: var(--rpt-slate-20); }
+.app--light .rpt-root { --rpt-nodriver: var(--rpt-grey-90); }
 .rpt-row--nodriver > td { background: var(--rpt-nodriver); }
 .rpt-key {
   display: flex;
@@ -153,8 +218,8 @@
   font-weight: 700;
   vertical-align: 1px;
 }
-.rpt-tag--warn { background: rgba(245, 158, 11, 0.16); color: var(--sp4-warn); }
-.rpt-tag--ok { background: rgba(22, 163, 74, 0.14); color: var(--sp4-ok, #16a34a); }
+.rpt-tag--warn { background: color-mix(in srgb, var(--rpt-orange-50) 16%, transparent); color: var(--sp4-warn); }
+.rpt-tag--ok { background: color-mix(in srgb, var(--rpt-green-36) 14%, transparent); color: var(--sp4-ok, var(--rpt-green-36)); }
 .rpt-table td > .rpt-tag:first-child { margin-left: 0; }
 
 /* A count column's total, a zero kept quiet, the table's closing total row. */
@@ -193,68 +258,68 @@
    PDF's tints; an edited cell is outlined; a row left out is struck through. */
 .mvr-table td { vertical-align: middle; }
 .mvr-edit {
-  width: 100%; min-width: 120px; box-sizing: border-box; font: inherit; font-size: 12px; color: #0f172a;
-  background: rgba(255, 255, 255, .7); border: 1px solid transparent; border-radius: 5px; padding: 4px 6px;
+  width: 100%; min-width: 120px; box-sizing: border-box; font: inherit; font-size: 12px; color: var(--rpt-blue-11);
+  background: color-mix(in srgb, var(--rpt-white) 70%, transparent); border: 1px solid transparent; border-radius: 5px; padding: 4px 6px;
 }
-.mvr-edit:hover:not(:disabled) { border-color: #cbd5e1; background: #fff; }
-.mvr-edit:focus { outline: none; border-color: #3b82f6; background: #fff; box-shadow: 0 0 0 2px rgba(59, 130, 246, .15); }
-.mvr-edit--changed { border-color: #2563eb; background: #eff6ff; }
+.mvr-edit:hover:not(:disabled) { border-color: var(--rpt-slate-84); background: var(--rpt-white); }
+.mvr-edit:focus { outline: none; border-color: var(--rpt-blue-60); background: var(--rpt-white); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rpt-blue-60) 15%, transparent); }
+.mvr-edit--changed { border-color: var(--rpt-blue-53); background: var(--rpt-blue-97); }
 /* A unit moving now: its Location cell filled green, as the PDF prints it. */
-.mvr-table td.mvr-cell--moving { background: #b5dfa6; }
-.mvr-cell--moving .mvr-edit { background: rgba(255, 255, 255, .35); }
+.mvr-table td.mvr-cell--moving { background: var(--rpt-green-76); }
+.mvr-cell--moving .mvr-edit { background: color-mix(in srgb, var(--rpt-white) 35%, transparent); }
 /* Loading in Mombasa (within 1 km of the loading point): orange, ahead of green. */
-.mvr-table td.mvr-cell--loading { background: #f8c08a; }
-.mvr-cell--loading .mvr-edit { background: rgba(255, 255, 255, .35); }
+.mvr-table td.mvr-cell--loading { background: var(--rpt-orange-76); }
+.mvr-cell--loading .mvr-edit { background: color-mix(in srgb, var(--rpt-white) 35%, transparent); }
 /* At MORL: yellow, as the operator's sheet has it, stale or not. */
-.mvr-table td.mvr-cell--morl { background: #fbe36b; }
-.mvr-cell--morl .mvr-edit { background: rgba(255, 255, 255, .35); }
+.mvr-table td.mvr-cell--morl { background: var(--rpt-yellow-70); }
+.mvr-cell--morl .mvr-edit { background: color-mix(in srgb, var(--rpt-white) 35%, transparent); }
 select.mvr-edit { min-width: 110px; }
-.mvr-table td.mvr-silent { color: #dc2626; }
+.mvr-table td.mvr-silent { color: var(--rpt-red-51); }
 .mvr-table input.mvr-edit { min-width: 220px; }
 .mvr-row--out td { opacity: .45; text-decoration: line-through; }
 .mvr-row--out td.mvr-keep { opacity: 1; text-decoration: none; }
 .mvr-keep { width: 36px; text-align: center; }
 .mvr-keep__btn {
   display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
-  border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #64748b; cursor: pointer;
+  border: 1px solid var(--rpt-slate-91); border-radius: 6px; background: var(--rpt-white); color: var(--rpt-slate-47); cursor: pointer;
 }
-.mvr-keep__btn:hover { border-color: #cbd5e1; color: #0f172a; }
-.mvr-keep__btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+.mvr-keep__btn:hover { border-color: var(--rpt-slate-84); color: var(--rpt-blue-11); }
+.mvr-keep__btn:focus-visible { outline: 2px solid var(--rpt-blue-60); outline-offset: 1px; }
 .mvr-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.rpt-edited { color: #2563eb; font-weight: 600; }
+.rpt-edited { color: var(--rpt-blue-53); font-weight: 600; }
 /* Asked before a new run or window replaces an edited table. */
 .mvr-confirm {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px;
-  background: #fffbeb; border-bottom: 1px solid #fde68a; font-size: 12.5px; color: #78350f;
+  background: var(--rpt-amber-96); border-bottom: 1px solid var(--rpt-amber-77); font-size: 12.5px; color: var(--rpt-orange-26);
 }
 .mvr-confirm span { margin-right: auto; font-weight: 600; }
-.mvr-confirm__go { background: #b45309; }
-.mvr-confirm__go:hover { background: #92400e; }
+.mvr-confirm__go { background: var(--rpt-orange-37); }
+.mvr-confirm__go:hover { background: var(--rpt-orange-31); }
 
 /* ── Movements: days and hours, vehicle types, a tab a day (operator, 2026-11-02) ── */
 /* Hours each day, under the calendar: a ruler of 24 hours drawn like the days above it */
 .mvr-hours__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.mvr-hours__l { font-size: 13px; font-weight: 600; color: var(--vdp-ink, #12181f); }
+.mvr-hours__l { font-size: 13px; font-weight: 600; color: var(--vdp-ink, var(--rpt-grey-10)); }
 .mvr-hours__ruler { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); row-gap: 2px; }
 .mvr-hour {
-  height: 28px; padding: 0; border: 0; background: transparent; color: var(--vdp-ink, #12181f);
+  height: 28px; padding: 0; border: 0; background: transparent; color: var(--vdp-ink, var(--rpt-grey-10));
   font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums; cursor: pointer;
 }
-.mvr-hour:hover { background: #eef2f7; border-radius: 4px; }
-.mvr-hour:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; border-radius: 4px; }
+.mvr-hour:hover { background: var(--rpt-grey-95-2); border-radius: 4px; }
+.mvr-hour:focus-visible { outline: 2px solid var(--rpt-blue-78); outline-offset: -2px; border-radius: 4px; }
 .mvr-hour:active { transform: translateY(1px); }
-.mvr-hour--in { background: #e6ecf5; }
-.mvr-hour--lo, .mvr-hour--hi { background: var(--vdp-navy, #0f2542); color: #fff; }
+.mvr-hour--in { background: var(--rpt-blue-93); }
+.mvr-hour--lo, .mvr-hour--hi { background: var(--vdp-navy, var(--rpt-blue-16)); color: var(--rpt-white); }
 .mvr-hour--lo { border-radius: 4px 0 0 4px; }
 .mvr-hour--hi { border-radius: 0 4px 4px 0; }
 .mvr-hour--lo.mvr-hour--hi { border-radius: 4px; }
-.mvr-hour--lo:hover, .mvr-hour--hi:hover { background: var(--vdp-navy, #0f2542); }
-.mvr-hour--anchor { box-shadow: inset 0 0 0 2px #93c5fd; }
-.mvr-hours__exact { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--vdp-mut, #6b757f); }
+.mvr-hour--lo:hover, .mvr-hour--hi:hover { background: var(--vdp-navy, var(--rpt-blue-16)); }
+.mvr-hour--anchor { box-shadow: inset 0 0 0 2px var(--rpt-blue-78); }
+.mvr-hours__exact { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--vdp-mut, var(--rpt-grey-46)); }
 .mvr-hours__exact label { display: inline-flex; align-items: center; gap: 5px; }
 .mvr-hours__exact .rpt-select { height: 26px; font-size: 12px; }
 .mvr-hours__span { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.mvr-hours__foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 10px -10px 0; padding: 10px 10px 0; border-top: 1px solid var(--vdp-border, #dfe4ea); }
+.mvr-hours__foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 10px -10px 0; padding: 10px 10px 0; border-top: 1px solid var(--vdp-border, var(--rpt-grey-90-2)); }
 .mvr-hours__foot .rpt-problem { margin-right: auto; font-size: 11.5px; }
 .mvr-hours__foot .frp-run { white-space: nowrap; }
 /* Vehicle types: the calendar's field and card, a checked row per type with its vehicles */
@@ -264,22 +329,22 @@ select.mvr-edit { min-width: 110px; }
 .mvr-types__list { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; }
 .mvr-type {
   display: flex; align-items: center; gap: 9px; width: 100%; height: 32px; padding: 0 6px;
-  border: 0; border-radius: 4px; background: transparent; color: var(--vdp-ink, #12181f);
+  border: 0; border-radius: 4px; background: transparent; color: var(--vdp-ink, var(--rpt-grey-10));
   font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
 }
-.mvr-type:hover { background: #eef2f7; }
-.mvr-type:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
+.mvr-type:hover { background: var(--rpt-grey-95-2); }
+.mvr-type:focus-visible { outline: 2px solid var(--rpt-blue-78); outline-offset: -2px; }
 .mvr-type:active { transform: translateY(1px); }
 .mvr-type__box {
   display: grid; place-items: center; flex: none; width: 16px; height: 16px;
-  border: 1.5px solid #b8c1cb; border-radius: 3px; background: #fff; color: transparent; font-size: 12px;
+  border: 1.5px solid var(--rpt-slate-76); border-radius: 3px; background: var(--rpt-white); color: transparent; font-size: 12px;
 }
-.mvr-type--on .mvr-type__box { border-color: var(--vdp-navy, #0f2542); background: var(--vdp-navy, #0f2542); color: #fff; }
+.mvr-type--on .mvr-type__box { border-color: var(--vdp-navy, var(--rpt-blue-16)); background: var(--vdp-navy, var(--rpt-blue-16)); color: var(--rpt-white); }
 .mvr-type__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mvr-type--on .mvr-type__name { font-weight: 600; }
-.mvr-type__n { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--vdp-mut, #6b757f); }
-.drp-chip:disabled { opacity: 0.45; cursor: default; }
-.drp-chip:disabled:hover { background: var(--vdp-hair, #eceff3); }
+.mvr-type__n { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--vdp-mut, var(--rpt-grey-46)); }
+.drp-chip:disabled { background: var(--vdp-hair, var(--rpt-grey-94)); color: var(--vdp-mut, var(--rpt-grey-46)); border-color: transparent; cursor: not-allowed; }
+.drp-chip:disabled:hover { background: var(--vdp-hair, var(--rpt-grey-94)); }
 .mvr-daytabs { padding: 8px var(--sp4-gutter) 0; flex-wrap: wrap; }   /* on the figures' and the table's gutter */
 
 /* PDF preview — Hallmark · component: modal · genre: modern-minimal · theme: the app's navy and slate
@@ -293,37 +358,37 @@ select.mvr-edit { min-width: 110px; }
   background: transparent; border: 0; box-shadow: none;
 }
 .mvr-pv__head { display: flex; align-items: center; gap: 12px; padding: 0 0 12px; }
-.mvr-pv__icon { flex: none; font-size: 26px; color: #fff; }
+.mvr-pv__icon { flex: none; font-size: 26px; color: var(--rpt-white); }
 .mvr-pv__what { flex: 1; min-width: 0; }
-.mvr-pv__title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.25; color: #fff; }
-.mvr-pv__facts { display: flex; flex-wrap: wrap; margin: 2px 0 0; font-size: 12px; color: rgb(255 255 255 / .78); font-variant-numeric: tabular-nums; }
-.mvr-pv__facts span:not(:last-child)::after { content: "·"; margin: 0 7px; color: rgb(255 255 255 / .5); }
+.mvr-pv__title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.25; color: var(--rpt-white); }
+.mvr-pv__facts { display: flex; flex-wrap: wrap; margin: 2px 0 0; font-size: 12px; color: color-mix(in srgb, var(--rpt-white) 78%, transparent); font-variant-numeric: tabular-nums; }
+.mvr-pv__facts span:not(:last-child)::after { content: "·"; margin: 0 7px; color: color-mix(in srgb, var(--rpt-white) 50%, transparent); }
 .mvr-pv__tools { display: flex; align-items: center; gap: 4px; flex: none; }
 .mvr-pv__tool {
   display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 4px;
-  background: transparent; color: #fff; font-size: 18px; text-decoration: none; cursor: pointer;
+  background: transparent; color: var(--rpt-white); font-size: 18px; text-decoration: none; cursor: pointer;
 }
-.mvr-pv__tool:hover { background: rgb(255 255 255 / .14); color: #fff; }
-.mvr-pv__tool:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.mvr-pv__tool:hover { background: color-mix(in srgb, var(--rpt-white) 14%, transparent); color: var(--rpt-white); }
+.mvr-pv__tool:focus-visible { outline: 2px solid var(--rpt-blue-78); outline-offset: 1px; }
 .mvr-pv__tool:active { transform: translateY(1px); }
-.mvr-pv__tool:disabled, .mvr-pv__tool.is-off { opacity: 0.35; pointer-events: none; }
+.mvr-pv__tool:disabled, .mvr-pv__tool.is-off { background: color-mix(in srgb, var(--rpt-white) 6%, transparent); color: color-mix(in srgb, var(--rpt-white) 35%, transparent); cursor: not-allowed; pointer-events: none; }
 .mvr-pv__save { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px 0 6px; white-space: nowrap; }
-.mvr-pv__x { display: grid; place-items: center; width: 34px; height: 34px; margin-left: 0; padding: 0; font-size: 18px; color: #fff; }
-.mvr-pv__x:hover { background: rgb(255 255 255 / .14); color: #fff; }
+.mvr-pv__x { display: grid; place-items: center; width: 34px; height: 34px; margin-left: 0; padding: 0; font-size: 18px; color: var(--rpt-white); }
+.mvr-pv__x:hover { background: color-mix(in srgb, var(--rpt-white) 14%, transparent); color: var(--rpt-white); }
 .mvr-pv__desk { position: relative; flex: 1; min-height: 0; background: transparent; }
 /* On the dimmed page a shadow, not a hairline, marks the sheet's edge */
-.mvr-pv .pdfp__page { border: 0; box-shadow: 0 10px 34px rgb(0 0 0 / .4); }
+.mvr-pv .pdfp__page { border: 0; box-shadow: 0 10px 34px color-mix(in srgb, var(--rpt-black) 40%, transparent); }
 .mvr-pv__doc { display: block; width: 100%; height: 100%; border: 0; }
 .mvr-pv__note {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 14px; padding: 24px; font-size: 13px; color: #fff; text-align: center;
+  gap: 14px; padding: 24px; font-size: 13px; color: var(--rpt-white); text-align: center;
 }
-.mvr-pv__note--error { flex-direction: row; flex-wrap: wrap; gap: 10px; color: #fed7aa; }
+.mvr-pv__note--error { flex-direction: row; flex-wrap: wrap; gap: 10px; color: var(--rpt-orange-83); }
 .mvr-pv__note--error .ti { font-size: 18px; }
 /* A blank sheet with its lines filling in, while the server draws the real one */
-.mvr-pv__sheet { display: flex; flex-direction: column; gap: 9px; width: 120px; height: 160px; padding: 18px 14px; background: #fff; border-radius: 2px; box-shadow: 0 2px 10px rgb(15 23 42 / .12); }
-.mvr-pv__sheet i { display: block; height: 6px; border-radius: 2px; background: #dfe4ea; animation: mvr-pv-line 1.2s var(--ease-in-out, cubic-bezier(.65,0,.35,1)) infinite alternate; }
-.mvr-pv__sheet i:nth-child(1) { width: 60%; height: 9px; background: #c9d1db; }
+.mvr-pv__sheet { display: flex; flex-direction: column; gap: 9px; width: 120px; height: 160px; padding: 18px 14px; background: var(--rpt-white); border-radius: 2px; box-shadow: 0 2px 10px color-mix(in srgb, var(--rpt-blue-11) 12%, transparent); }
+.mvr-pv__sheet i { display: block; height: 6px; border-radius: 2px; background: var(--rpt-grey-90-2); animation: mvr-pv-line 1.2s var(--ease-in-out, cubic-bezier(.65,0,.35,1)) infinite alternate; }
+.mvr-pv__sheet i:nth-child(1) { width: 60%; height: 9px; background: var(--rpt-slate-82); }
 .mvr-pv__sheet i:nth-child(2) { animation-delay: .15s; }
 .mvr-pv__sheet i:nth-child(3) { width: 85%; animation-delay: .3s; }
 .mvr-pv__sheet i:nth-child(4) { animation-delay: .45s; }
@@ -338,14 +403,14 @@ select.mvr-edit { min-width: 110px; }
 
 /* Driver conduct: the total leads the figures, drivers read on one line, and
    a zero steps back so the incidents stand out */
-.rpt-header--conduct .sp4-kpi:first-child .sp4-kpi-n { color: var(--vdp-navy, #0f2542); }
+.rpt-header--conduct .sp4-kpi:first-child .sp4-kpi-n { color: var(--vdp-navy, var(--rpt-blue-16)); }
 .rpt-header--conduct .sp4-kpi-l { white-space: normal; line-height: 1.2; }
 .rpt-driver { white-space: nowrap; }
-.rpt-zero { color: #b3bcc6; }
+.rpt-zero { color: var(--rpt-slate-74); }
 
 /* One choice from a list (ChoicePicker): the Type list's rows, a tick on the one picked */
 .mvr-type--one .mvr-type__tick { flex: none; width: 16px; font-size: 15px; color: transparent; }
-.mvr-type--one.mvr-type--on .mvr-type__tick { color: var(--vdp-navy, #0f2542); }
+.mvr-type--one.mvr-type--on .mvr-type__tick { color: var(--vdp-navy, var(--rpt-blue-16)); }
 .mvr-type--one.mvr-type--on .mvr-type__name { font-weight: 600; }
 
 /* One unit's overspeeds, each on its own row (Overspeeding made for one unit) */
@@ -359,43 +424,43 @@ select.mvr-edit { min-width: 110px; }
  */
 .stp { display: flex; flex-direction: column; gap: 10px; }
 .stp__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.stp__title { font-size: 13px; font-weight: 600; color: var(--vdp-ink, #12181f); }
-.stp__span { font-size: 11.5px; color: var(--vdp-mut, #6b757f); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stp__title { font-size: 13px; font-weight: 600; color: var(--vdp-ink, var(--rpt-grey-10)); }
+.stp__span { font-size: 11.5px; color: var(--vdp-mut, var(--rpt-grey-46)); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .stp__presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .stp__preset { display: flex; flex-direction: column; align-items: center; gap: 1px; height: auto; padding: 5px 4px; line-height: 1.2; white-space: nowrap; }
 .stp__preset-t { font-size: 10.5px; font-weight: 500; opacity: 0.75; font-variant-numeric: tabular-nums; }
-.stp__preset:focus-visible { outline: 2px solid var(--vdp-navy, #0f2542); outline-offset: 2px; }
+.stp__preset:focus-visible { outline: 2px solid var(--vdp-navy, var(--rpt-blue-16)); outline-offset: 2px; }
 .stp__preset:active { transform: translateY(1px); }
 
 .stp__clocks { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 6px; }
-.stp__arrow { color: var(--vdp-faint, #66717d); font-size: 13px; padding-bottom: 8px; }
+.stp__arrow { color: var(--vdp-faint, var(--rpt-grey-45)); font-size: 13px; padding-bottom: 8px; }
 .stp-clock { margin: 0; padding: 0; border: 0; min-width: 0; }
-.stp-clock__l { padding: 0; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--vdp-mut, #6b757f); }
+.stp-clock__l { padding: 0; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--vdp-mut, var(--rpt-grey-46)); }
 .stp-clock__face {
   display: flex; align-items: center; justify-content: center;
   /* Body-size figures on a fill, no outline (operator, 3 Nov 2026: "too magnified", "remove outlines") */
-  height: 30px; border: 0; border-radius: 6px; background: var(--vdp-hair, #eceff3);
+  height: 30px; border: 0; border-radius: 6px; background: var(--vdp-hair, var(--rpt-grey-94));
   transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
-.stp-clock__face:hover { background: #e2e7ed; }
-.stp-clock__face:focus-within { box-shadow: 0 0 0 2px #93c5fd; }
+.stp-clock__face:hover { background: var(--rpt-grey-91); }
+.stp-clock__face:focus-within { box-shadow: 0 0 0 2px var(--rpt-blue-78); }
 .stp-clock__sel {
   appearance: none; -webkit-appearance: none;
   border: 0; background: transparent; padding: 4px 2px; margin: 0;
   font: inherit; font-size: 13px; font-weight: 600; line-height: 1;
-  color: var(--vdp-ink, #12181f); font-variant-numeric: tabular-nums;
+  color: var(--vdp-ink, var(--rpt-grey-10)); font-variant-numeric: tabular-nums;
   text-align: center; text-align-last: center; cursor: pointer; border-radius: 5px;
 }
-.stp-clock__sel:hover { background: #d8dee6; }
-.stp-clock__sel:focus-visible { outline: 2px solid #93c5fd; outline-offset: 0; }
-.stp-clock__sel:disabled { color: var(--vdp-faint, #66717d); cursor: default; }
-.stp-clock__colon { font-size: 13px; font-weight: 600; color: var(--vdp-faint, #66717d); padding: 0 1px 2px; }
+.stp-clock__sel:hover { background: var(--rpt-slate-87); }
+.stp-clock__sel:focus-visible { outline: 2px solid var(--rpt-blue-78); outline-offset: 0; }
+.stp-clock__sel:disabled { color: var(--vdp-faint, var(--rpt-grey-45)); cursor: default; }
+.stp-clock__colon { font-size: 13px; font-weight: 600; color: var(--vdp-faint, var(--rpt-grey-45)); padding: 0 1px 2px; }
 
 .stp__day { display: flex; flex-direction: column; gap: 3px; }
-.stp__track { position: relative; height: 8px; border-radius: 999px; background: var(--vdp-hair, #eceff3); overflow: hidden; }
-.stp__fill { position: absolute; top: 0; bottom: 0; background: var(--vdp-navy, #0f2542); border-radius: 999px; }
-.stp__ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--vdp-faint, #66717d); font-variant-numeric: tabular-nums; }
+.stp__track { position: relative; height: 8px; border-radius: 999px; background: var(--vdp-hair, var(--rpt-grey-94)); overflow: hidden; }
+.stp__fill { position: absolute; top: 0; bottom: 0; background: var(--vdp-navy, var(--rpt-blue-16)); border-radius: 999px; }
+.stp__ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--vdp-faint, var(--rpt-grey-45)); font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
   .stp-clock__face { transition: none; }
@@ -446,9 +511,9 @@ select.mvr-edit { min-width: 110px; }
 .app--light .tkr-when { color-scheme: light; }
 .tkr-window { white-space: nowrap; }
 .tkr-table tr.tkr-row--tinted td,
-.tkr-table tr.tkr-row--tinted td.rpt-unit { color: #1c1c1c; }
+.tkr-table tr.tkr-row--tinted td.rpt-unit { color: var(--rpt-grey-11); }
 .tkr-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 10px var(--sp4-gutter) 0; color: var(--sp4-text-3); font-size: var(--sp4-body); }
-.tkr-key__sw { display: inline-block; width: 14px; height: 10px; margin-right: -8px; border: 1px solid var(--sp4-line-hi); border-radius: 2px; background: #fff; vertical-align: -1px; }
+.tkr-key__sw { display: inline-block; width: 14px; height: 10px; margin-right: -8px; border: 1px solid var(--sp4-line-hi); border-radius: 2px; background: var(--rpt-white); vertical-align: -1px; }
 
 
 /* Tankers: every column centred, as the operator's sheet is (3 Nov 2026) */
@@ -460,17 +525,17 @@ select.mvr-edit { min-width: 110px; }
 .gfr-table td:nth-child(3), .gfr-table td:nth-child(4) { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* End of shift's custom range (operator, 3 Nov 2026) */
-.stp-custom { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--sp4-line, rgba(127,127,127,.25)); }
+.stp-custom { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--sp4-line, color-mix(in srgb, var(--rpt-grey-50) 25%, transparent)); }
 .stp-custom .stp__clocks { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .stp-custom__now { margin-top: 8px; }
 .stp-custom__f { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 3px; }
 .stp-custom__f input {
   width: auto; flex: 1 1 auto; min-width: 0; max-width: 200px; height: 28px; padding: 0 8px;
-  border-radius: 6px; background: var(--vdp-hair, #eceff3);
-  font-size: 12.5px; font-weight: 500; color: var(--vdp-ink, #12181f);
+  border-radius: 6px; background: var(--vdp-hair, var(--rpt-grey-94));
+  font-size: 12.5px; font-weight: 500; color: var(--vdp-ink, var(--rpt-grey-10));
 }
-.stp-custom__f input:hover { background: #e2e7ed; }
-.stp-custom__f input:focus-visible { box-shadow: 0 0 0 2px #93c5fd; }
+.stp-custom__f input:hover { background: var(--rpt-grey-91); }
+.stp-custom__f input:focus-visible { box-shadow: 0 0 0 2px var(--rpt-blue-78); }
 /* The calendar is white in either theme: its date fields read as light */
 .drp-pop .tkr-when { color-scheme: light; }
 /* The filter bar and its calendar sit above the report below it, the PDF
@@ -481,7 +546,7 @@ select.mvr-edit { min-width: 110px; }
    as a group row like Movements' (Hallmark redesign, 3 Nov), in the sheet's blue */
 .rpt-table .ofl-group th { border-bottom-color: transparent; }
 .ofl-group .rpt-group__name,
-.ofl-group .rpt-group__meta { color: #0b1f2a; }
+.ofl-group .rpt-group__meta { color: var(--rpt-blue-10); }
 .ofl-group .rpt-group__meta { opacity: .75; }
 .ofl-table td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ofl-table .ofl-none { padding-left: var(--sp4-gutter); }
@@ -489,7 +554,7 @@ select.mvr-edit { min-width: 110px; }
 /* Tankers: leaving a row out before the PDF (operator, 3 Nov 2026) */
 .tkr-table th.mvr-keep, .tkr-table td.mvr-keep { width: 34px; text-align: center; }
 .tkr-table tr.mvr-row--out td { background: transparent; }
-.tkr-putback { margin-left: 6px; padding: 0; border: 0; background: none; color: var(--sp4-accent, #2563eb); font: inherit; text-decoration: underline; cursor: pointer; }
+.tkr-putback { margin-left: 6px; padding: 0; border: 0; background: none; color: var(--sp4-accent, var(--rpt-blue-53)); font: inherit; text-decoration: underline; cursor: pointer; }
 
 /* Movements' tabs (Movements · Tankers): each panel lays out as the page did */
 .mvt-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -550,8 +615,8 @@ select.mvr-edit { min-width: 110px; }
 }
 
 /* Movements: a unit at a depot (operator, 4 Nov 2026: Menengai's Van Sales at the Nairobi depot, blue) */
-.mvr-table td.mvr-cell--depot { background: #9cc7f5; }
-.mvr-cell--depot .mvr-edit { background: rgba(255, 255, 255, .35); }
+.mvr-table td.mvr-cell--depot { background: var(--rpt-blue-79); }
+.mvr-cell--depot .mvr-edit { background: color-mix(in srgb, var(--rpt-white) 35%, transparent); }
 .mvr-depots { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px var(--sp4-gutter, 12px) 0; color: var(--sp4-text-3); font-size: var(--sp4-body, 12px); }
 .mvr-depots__sw { display: inline-block; width: 14px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
 
@@ -565,34 +630,34 @@ select.mvr-edit { min-width: 110px; }
 .mvr-events__sub { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
 .mvr-events__note { margin: 0 0 6px; font-size: 12px; }
 
-.dlv-table th.dlv-day { text-align: center; background: #00b0f0; color: #0b1f2a; font-weight: 700; }
-.dlv-table td b.dlv-all { color: #2e7d32; }
+.dlv-table th.dlv-day { text-align: center; background: var(--rpt-blue-47); color: var(--rpt-blue-10); font-weight: 700; }
+.dlv-table td b.dlv-all { color: var(--rpt-green-34); }
 .dlv-more { padding: 2px 8px; font-size: 12px; }
 /* Planner sheets: listed above the hand list, a line under the plate, the marks over the stops */
 .dlv-sheet-line { display: block; min-width: 24ch; font-size: 11px; font-weight: 400; white-space: normal; }
 .dlv-sheet-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 4px 0 6px; font-size: 12px; }
-.dlv-cust td { background: color-mix(in srgb, var(--sp4-text-1, #000) 3%, transparent); }
+.dlv-cust td { background: color-mix(in srgb, var(--sp4-text-1, var(--rpt-grey-6)) 3%, transparent); }
 .dlv-cust ul { list-style: none; margin: 0; padding: 4px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
 .dlv-cust li { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.dlv-cust--done i { color: #2e7d32; } .dlv-cust--no i { color: #c62828; } .dlv-cust--near i { color: #b26a00; }
+.dlv-cust--done i { color: var(--rpt-green-34); } .dlv-cust--no i { color: var(--rpt-red-47); } .dlv-cust--near i { color: var(--rpt-orange-35); }
 .dlv-paste { flex: 1 0 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 0 10px; }
-.dlv-paste__box { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, var(--sp4-text-1, #000) 18%, transparent); border-radius: 8px; }
+.dlv-paste__box { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, var(--sp4-text-1, var(--rpt-grey-6)) 18%, transparent); border-radius: 8px; }
 .dlv-paste__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .dlv-paste__radius { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
-.dlv-paste__radius input { width: 68px; padding: 4px 6px; font: inherit; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, var(--sp4-text-1, #000) 18%, transparent); border-radius: 6px; }
+.dlv-paste__radius input { width: 68px; padding: 4px 6px; font: inherit; color: inherit; background: transparent; border: 1px solid color-mix(in srgb, var(--sp4-text-1, var(--rpt-grey-6)) 18%, transparent); border-radius: 6px; }
 .dlv-paste__clear { margin-left: auto; }
 .dlv-paste__pins { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
-.dlv-paste__pin { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 8px; font-size: 12px; border-radius: 999px; background: color-mix(in srgb, var(--sp4-text-1, #000) 6%, transparent); }
+.dlv-paste__pin { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 8px; font-size: 12px; border-radius: 999px; background: color-mix(in srgb, var(--sp4-text-1, var(--rpt-grey-6)) 6%, transparent); }
 .dlv-paste__pin button { padding: 0 4px; border: 0; background: none; color: inherit; cursor: pointer; }
 .dlv-find { position: relative; flex: 1 1 320px; max-width: 420px; }
 .dlv-find__list { position: static; list-style: none; margin: 4px 0 0; padding: 4px; max-height: 320px; overflow: auto;
-  background: var(--sp4-surface, #fff); border: 1px solid var(--sp4-line, rgba(127,127,127,.3)); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+  background: var(--sp4-surface, var(--rpt-white)); border: 1px solid var(--sp4-line, color-mix(in srgb, var(--rpt-grey-50) 30%, transparent)); border-radius: 8px; box-shadow: 0 8px 24px color-mix(in srgb, var(--rpt-black) 15%, transparent); }
 .dlv-find__hit { display: flex; width: 100%; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 0; background: none; border-radius: 6px; cursor: pointer; text-align: left; color: inherit; font: inherit; }
 .dlv-find__hit:hover, .dlv-find__hit:focus-visible { background: color-mix(in srgb, currentColor 8%, transparent); }
 .dlv-find__none { padding: 6px 8px; }
 .dlv-stops-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .dlv-orders { width: 72px; text-align: right; font-weight: 700; }
-.dlv-orders--bad { outline: 2px solid #c62828; }
+.dlv-orders--bad { outline: 2px solid var(--rpt-red-47); }
 
 /* Deliveries, Finished Goods template (operator, 11 Nov 2026): the sheet's own colours,
    green for a completed trip (delivered, then back at the yard), yellow once the truck
@@ -601,54 +666,163 @@ select.mvr-edit { min-width: 110px; }
 .dlv-fg td { white-space: nowrap; }
 .dlv-fg td:nth-child(3), .dlv-fg td:nth-child(4), .dlv-fg td:nth-child(5) { white-space: normal; min-width: 140px; }
 .rpt-table.dlv-fg .dlv-fg__row td,
-.rpt-table.dlv-fg .dlv-fg__row:hover td { background: var(--dlv-fg-fill); color: #111; border-color: rgba(0, 0, 0, 0.12); }
-.rpt-table.dlv-fg thead tr:last-child th { background: #6fa8dc; color: #0b1f2a; font-weight: 700; }
+.rpt-table.dlv-fg .dlv-fg__row:hover td { background: var(--dlv-fg-fill); color: var(--rpt-grey-7); border-color: color-mix(in srgb, var(--rpt-black) 12%, transparent); }
+.rpt-table.dlv-fg thead tr:last-child th { background: var(--rpt-blue-65); color: var(--rpt-blue-10); font-weight: 700; }
 /* Finished Goods: the day bar black with white words (operator, 11 Nov 2026), ✕ to drop a line */
-.rpt-table.dlv-fg th.dlv-day { background: #000; color: #fff; }
+.rpt-table.dlv-fg th.dlv-day { background: var(--rpt-grey-6); color: var(--rpt-white); }
 .dlv-fg__undo {
-  margin-left: 12px; padding: 2px 8px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 6px;
-  background: transparent; color: #fff; font: 600 11px/1.4 var(--font-body); cursor: pointer;
+  margin-left: 12px; padding: 2px 8px; border: 1px solid color-mix(in srgb, var(--rpt-white) 60%, transparent); border-radius: 6px;
+  background: transparent; color: var(--rpt-white); font: 600 11px/1.4 var(--font-body); cursor: pointer;
 }
-.dlv-fg__undo:hover { background: rgba(255, 255, 255, 0.15); }
-.dlv-fg__undo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.dlv-fg__undo:hover { background: color-mix(in srgb, var(--rpt-white) 15%, transparent); }
+.dlv-fg__undo:focus-visible { outline: 2px solid var(--rpt-white); outline-offset: 2px; }
 .rpt-table.dlv-fg td.dlv-fg__x { width: 32px; padding: 0 6px; text-align: center; }
 .dlv-fg__x button {
-  display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid rgba(0, 0, 0, 0.25);
-  border-radius: 6px; background: rgba(255, 255, 255, 0.55); color: #111; cursor: pointer;
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid color-mix(in srgb, var(--rpt-black) 25%, transparent);
+  border-radius: 6px; background: color-mix(in srgb, var(--rpt-white) 55%, transparent); color: var(--rpt-grey-7); cursor: pointer;
 }
-.dlv-fg__x button:hover { background: #fff; }
-.dlv-fg__x button:focus-visible { outline: 2px solid #000; outline-offset: 1px; }
+.dlv-fg__x button:hover { background: var(--rpt-white); }
+.dlv-fg__x button:focus-visible { outline: 2px solid var(--rpt-grey-6); outline-offset: 1px; }
 
 /* Machinery: each row against the register's burn rate, green at or below, red above */
 /* --rpt-depth: 0 on the rate to 1 far from it; the further, the deeper the colour */
-.rpt-row--good td { background: rgba(22, 163, 74, calc(0.10 + 0.40 * var(--rpt-depth, 0))); color: #14532d; }
-.rpt-row--bad td { background: rgba(220, 38, 38, calc(0.10 + 0.40 * var(--rpt-depth, 0))); color: #7f1d1d; }
+.rpt-row--good td { background: color-mix(in srgb, var(--rpt-green-36) calc((0.10 + 0.40 * var(--rpt-depth, 0)) * 100%), transparent); color: var(--rpt-green-20); }
+.rpt-row--bad td { background: color-mix(in srgb, var(--rpt-red-51) calc((0.10 + 0.40 * var(--rpt-depth, 0)) * 100%), transparent); color: var(--rpt-red-31); }
 /* Amber: Shift hours, 50-69% of the shift so far (operator, 17 Nov 2026). */
-.rpt-row--warn td { background: rgba(245, 158, 11, calc(0.14 + 0.40 * var(--rpt-depth, 0))); color: #78350f; }
-:root[data-theme="dark"] .rpt-row--good td { color: #bbf7d0; }
-:root[data-theme="dark"] .rpt-row--bad td { color: #fecaca; }
-:root[data-theme="dark"] .rpt-row--warn td { color: #fde68a; }
+.rpt-row--warn td { background: color-mix(in srgb, var(--rpt-orange-50) calc((0.14 + 0.40 * var(--rpt-depth, 0)) * 100%), transparent); color: var(--rpt-orange-26); }
+:root[data-theme="dark"] .rpt-row--good td { color: var(--rpt-green-85); }
+:root[data-theme="dark"] .rpt-row--bad td { color: var(--rpt-red-89); }
+:root[data-theme="dark"] .rpt-row--warn td { color: var(--rpt-amber-77); }
 /* The key in the note under the table */
 .rpt-tone { font-weight: 700; border-radius: 4px; padding: 1px 6px; }
-.rpt-tone--good { background: rgba(22, 163, 74, 0.16); color: #15803d; }
-.rpt-tone--bad { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
-.rpt-tone--warn { background: rgba(245, 158, 11, 0.18); color: #92400e; }
+.rpt-tone--good { background: color-mix(in srgb, var(--rpt-green-36) 16%, transparent); color: var(--rpt-green-29); }
+.rpt-tone--bad { background: color-mix(in srgb, var(--rpt-red-51) 14%, transparent); color: var(--rpt-red-42); }
+.rpt-tone--warn { background: color-mix(in srgb, var(--rpt-orange-50) 18%, transparent); color: var(--rpt-orange-31); }
 
 /* A report's key (ReportLegend): colour swatches, then the columns. The
    swatches are the rows' own colours at their lightest. */
 .rpt-legend { margin: 14px 2px 4px; font-size: 12px; color: var(--sp4-text-2); }
-.rpt-legend__h { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sp4-text-3); }
+.rpt-legend__h { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--sp4-text-3); }
 .rpt-legend__tones { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .rpt-legend__tones li { display: inline-flex; align-items: center; gap: 6px; }
 .rpt-legend__tones b { color: var(--sp4-text-1); }
 .rpt-legend__swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--sp4-line); background: transparent; flex-shrink: 0; }
-.rpt-legend__swatch--good { background: rgba(22, 163, 74, 0.28); border-color: rgba(22, 163, 74, 0.6); }
-.rpt-legend__swatch--warn { background: rgba(245, 158, 11, 0.32); border-color: rgba(245, 158, 11, 0.7); }
-.rpt-legend__swatch--bad { background: rgba(220, 38, 38, 0.26); border-color: rgba(220, 38, 38, 0.6); }
+.rpt-legend__swatch--good { background: color-mix(in srgb, var(--rpt-green-36) 28%, transparent); border-color: color-mix(in srgb, var(--rpt-green-36) 60%, transparent); }
+.rpt-legend__swatch--warn { background: color-mix(in srgb, var(--rpt-orange-50) 32%, transparent); border-color: color-mix(in srgb, var(--rpt-orange-50) 70%, transparent); }
+.rpt-legend__swatch--bad { background: color-mix(in srgb, var(--rpt-red-51) 26%, transparent); border-color: color-mix(in srgb, var(--rpt-red-51) 60%, transparent); }
 .rpt-legend__cols { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; }
 .rpt-legend__cols div { display: contents; }
 .rpt-legend__cols dt { font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
 .rpt-legend__cols dd { margin: 0; }
-:root[data-theme="dark"] .rpt-tone--good { color: #4ade80; }
-:root[data-theme="dark"] .rpt-tone--bad { color: #f87171; }
-:root[data-theme="dark"] .rpt-tone--warn { color: #fbbf24; }
+:root[data-theme="dark"] .rpt-tone--good { color: var(--rpt-green-58); }
+:root[data-theme="dark"] .rpt-tone--bad { color: var(--rpt-red-71); }
+:root[data-theme="dark"] .rpt-tone--warn { color: var(--rpt-amber-56); }
+
+/* ── Phones: the report switcher and the action rows ─────────────────────────
+ * Hallmark · component: select row + toolbar (Reports on a phone) · genre: modern-minimal · theme: sp4 (project tokens) · states: 8
+ * The sidebar's Reports tree is the only way to change report, and phones have
+ * no sidebar: the page was stuck on its first report. A full-width row at the
+ * top names the report and opens the phone's own picker. Under it the period
+ * and the category share a row, the secondary actions split the next row in
+ * equal parts, and Download PDF, the one primary, takes the last row whole. */
+.rpt-switch { display: none; }
+@media (max-width: 767px) {
+  .rpt-switch {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 0 var(--sp4-gutter);
+    border-bottom: 1px solid var(--sp4-line);
+    background: var(--sp4-surface);
+  }
+  .rpt-switch__l { flex: none; font-size: var(--sp4-label); color: var(--sp4-text-3); }
+  .rpt-switch__s {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    margin: 0;
+    padding: 0 28px 0 0;
+    border: 0;
+    background: none;
+    color: var(--sp4-text-1);
+    font: inherit;
+    font-size: var(--sp4-strong);
+    font-weight: 600;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+  }
+  .rpt-switch__s:hover { color: var(--sp4-accent); }
+  .rpt-switch__s:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: -2px; border-radius: 4px; }
+  .rpt-switch__s:disabled { color: var(--sp4-text-3); cursor: default; }
+  .rpt-switch__i { position: absolute; right: var(--sp4-gutter); font-size: 16px; color: var(--sp4-text-3); pointer-events: none; }
+
+  /* Minimal (19 Nov 2026, "not huge, just minimal, everything fits"): one
+     control height, 32px, for the period, the category and the four tools; the
+     tools split their row in even quarters with a 12px word and a 14px icon,
+     their carets dropped (the menus still open); Download PDF, the one
+     primary, keeps the row under them whole at 36px. */
+  .rpt-filterbar { gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+  .rpt-filterbar > * { flex: 1 1 auto; min-width: 0; }
+  .rpt-filterbar > :is(.rpt-log, .jpg-btn:has(> .rpt-log)) { flex: 1 1 calc(25% - 6px); order: 5; }
+  .rpt-filterbar > .jpg-btn:has(> .rpt-run) { flex: 1 1 100%; order: 10; }
+  .rpt-filterbar .jpg-btn > :is(.rpt-log, .rpt-run) { width: 100%; }
+  .rpt-filterbar > :is(.drp, .sp4-filter-group, .rpt-field) > button,
+  .rpt-filterbar > button,
+  .rpt-filterbar .jpg-btn > button {
+    min-height: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+  /* The period and the category share the first row, edge to edge */
+  .rpt-filterbar > .drp > .drp-field { width: 100%; justify-content: space-between; }
+  .rpt-filterbar .rpt-log {
+    justify-content: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .rpt-filterbar .rpt-log .ti { font-size: 14px; }
+  .rpt-filterbar .rpt-log .jpg-btn__caret { display: none; }
+  .rpt-filterbar .jpg-btn > .rpt-run {
+    justify-content: center;
+    min-height: 36px;
+    height: 36px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .rpt-filterbar > .rpt-problem { flex-basis: 100%; order: 11; }
+}
+
+/* The figures on a phone (Reports and Movements): three to a row in a grid,
+ * labels in sentence case broken only between words. The shared strip squeezed
+ * five cells into one row and broke "VEHICLES" as "VEHICLE / S". The controls
+ * come before the figures: on a phone the page is read top to bottom, and the
+ * figures are what the period and the group make. */
+@media (max-width: 599px) {
+  .rpt-root .sp4-header-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .rpt-root .sp4-header-kpis > :last-child:nth-child(3n + 1) { grid-column: span 3; }
+  .rpt-root .sp4-header-kpis > :last-child:nth-child(3n + 2) { grid-column: span 2; }
+  .rpt-root .sp4-kpi-l {
+    text-transform: none;
+    letter-spacing: 0;
+    overflow-wrap: normal;
+    hyphens: manual;
+  }
+}
+@media (max-width: 767px) {
+  .rpt-root > .rpt-switch { order: -2; }
+  .rpt-root > .rpt-filterbar { order: -1; }
+  /* A report's own tools (Edit, JPEG, PDF, Preview, CSV) ran off the right
+     edge in one line: they wrap under the summary instead */
+  .rpt-root .sp4-gridbar { flex-wrap: wrap; }
+  .rpt-root .sp4-gridbar-tools { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; margin-left: 0; }
+  .rpt-root .sp4-gridbar-tools :is(.sp4-ghost-btn, .jpg-btn > button) { min-height: 32px; height: 32px; padding: 0 8px; font-size: 12px; }
+}

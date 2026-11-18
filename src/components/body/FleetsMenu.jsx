@@ -79,10 +79,24 @@ export default function FleetsMenu({
   onToggleInTransit,
   flagged = [],
   onSelectFlagged,
+  /* Phones (FleetUnitsMenu): one rail button opens Fleets and Units as two
+     tabs of one panel. There this menu draws no button of its own (`bare`),
+     its open state is the parent's, and `tabs` takes the title's place. */
+  open: openProp,
+  onOpenChange,
+  bare = false,
+  tabs = null,
 }) {
   const { fleetTypes, trackedIds } = useAppFields("fleetTypes", "trackedIds");
   const { setFleetTypes } = useAppActions();
-  const [open, setOpen] = useState(false);
+  const [openLocal, setOpenLocal] = useState(false);
+  const controlled = typeof openProp === "boolean";
+  const open = controlled ? openProp : openLocal;
+  const setOpen = (next) => {
+    const v = typeof next === "function" ? next(open) : next;
+    if (!controlled) setOpenLocal(v);
+    onOpenChange?.(v);
+  };
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
   const panelId = useId();
@@ -124,7 +138,7 @@ export default function FleetsMenu({
   // entirely when it would have nothing at all to say. (The old rule hid the
   // whole control on a single-type fleet, which would now take the stranded
   // units with it.)
-  if (!showTypes && flagCount === 0 && !inTransitOnly) return null;
+  if (!bare && !showTypes && flagCount === 0 && !inTransitOnly) return null;
 
   function toggle(kind) {
     const next = selected.has(kind)
@@ -142,7 +156,7 @@ export default function FleetsMenu({
 
   return (
     <div className="fleets-menu" ref={wrapRef}>
-      <button
+      {!bare && <button
         ref={btnRef}
         type="button"
         className={`map-cam-btn fleets-menu__btn${open ? " fleets-menu__btn--open" : ""}${filtering ? " fleets-menu__btn--on" : ""}`}
@@ -172,12 +186,12 @@ export default function FleetsMenu({
              circle. CSS cannot measure its own text; the component can. */
           <span className="fleets-menu__flagcount" data-digits={String(flagCount).length}>{flagCount}</span>
         )}
-      </button>
+      </button>}
 
       {open && (
-        <div className="fleets-menu__panel" id={panelId} role="group" aria-label="Fleets">
+        <div className={`fleets-menu__panel${tabs ? " fleets-menu__panel--tabbed" : ""}`} id={panelId} role={tabs ? "tabpanel" : "group"} aria-label="Fleets">
           <div className="fleets-menu__head">
-            <span className="fleets-menu__title">Fleets</span>
+            {tabs || <span className="fleets-menu__title">Fleets</span>}
             {/* Only offered when it would do something. */}
             {filtering && (
               <button

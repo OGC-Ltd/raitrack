@@ -10,7 +10,8 @@
     align-items: center;
     justify-content: space-between;
     background: rgba(255, 255, 255, 0.97);
-    padding: 8px 14px;
+    padding: 8px 12px 8px 14px;
+    gap: 4px;
     border-bottom: 1px solid rgba(226, 232, 240, 0.8);
     position: relative;
     z-index: 200;
@@ -18,7 +19,8 @@
   }
 
   /* Company left */
-  .mobile-header__company { position: relative; }
+  /* Between the ☰ and the actions, and the part that gives way when the row is tight */
+  .mobile-header__company { position: relative; flex: 1; min-width: 0; margin-left: 4px; }
 
   .mobile-header__company-btn {
     display: flex;
@@ -70,6 +72,8 @@
   /* The name is the way into the company profile. */
   .mobile-header__company-name {
     min-height: 36px;
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 170px;
     font-size: 13px;
     font-weight: 700;

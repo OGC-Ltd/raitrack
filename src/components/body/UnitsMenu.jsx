@@ -273,6 +273,9 @@ export default function UnitsMenu({
   open: openProp,
   onOpenChange,
   asWindow = false,
+  /* Phones (FleetUnitsMenu): no button of its own, and `tabs` in the title's place */
+  bare = false,
+  tabs = null,
 }) {
   const [openLocal, setOpenLocal] = useState(false);
   const controlled = typeof openProp === "boolean";
@@ -431,7 +434,7 @@ export default function UnitsMenu({
 
   return (
     <div className="units-menu" ref={wrapRef}>
-      <button
+      {!bare && <button
         ref={btnRef}
         type="button"
         className={`map-cam-btn units-menu__btn${open ? " units-menu__btn--open" : ""}${trackedCount ? " units-menu__btn--on" : ""}`}
@@ -445,22 +448,24 @@ export default function UnitsMenu({
         {/* While the panel is shut this badge is the entire reason the map is
             showing four vehicles instead of six hundred. */}
         {trackedCount > 0 && <span className="units-menu__count" data-digits={String(trackedCount).length}>{trackedCount}</span>}
-      </button>
+      </button>}
 
       {open && (
         <div
-          className={`units-menu__panel${asWindow ? " units-menu__panel--window" : ""}${folded ? " units-menu__panel--min" : ""}`}
+          className={`units-menu__panel${asWindow ? " units-menu__panel--window" : ""}${folded ? " units-menu__panel--min" : ""}${tabs ? " units-menu__panel--tabbed" : ""}`}
           id={panelId}
-          role="group"
+          role={tabs ? "tabpanel" : "group"}
           aria-label="Units"
           ref={asWindow ? winRef : undefined}
         >
           {/* As a window the head is the drag handle; useFloatingWindow ignores
               a drag that starts on a button, so these keep their own press. */}
           <div className="units-menu__head" onPointerDown={asWindow ? onHeadPointerDown : undefined}>
-            <span className="units-menu__title">
-              Units{folded && trackedCount > 0 ? ` \u00b7 ${trackedCount} tracked` : ""}
-            </span>
+            {tabs || (
+              <span className="units-menu__title">
+                Units{folded && trackedCount > 0 ? ` \u00b7 ${trackedCount} tracked` : ""}
+              </span>
+            )}
             {trackedCount > 0 && !folded && (
               <button
                 type="button"

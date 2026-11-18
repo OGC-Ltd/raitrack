@@ -1,0 +1,170 @@
+/* Hallmark · component: radial menu (the phone map rail as one button) · genre: modern-minimal · theme: brand (the app's own .app--light tokens, App.css; the rail's .map-cam-btn chip, FleetMap.css) · states: 8 · contrast: pass · redesign: full, v2 (19 Nov: "not well arranged", "can't have them huge") · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R5 V5 · weakest: E, the tools still carry their own badges on their corners; on a 32px chip they crowd the ring a little, and moving them would change the menus the desktop rail shares */
+
+/* The phone map's rail, folded into one chip (MapRailWheel.jsx).
+
+   v1 threw the six buttons loose over the map on two wide arcs (r 80 and
+   140) at full size: they read as scattered, not as one control. v2 is a
+   wheel you can see: a quarter disc grows out of the chip and the tools sit
+   ON it, smaller and on two close rings that share the same three rays:
+
+     inner ring, r 48 (every corner inside the r 78 line): fuel alerts (left), fleets and units (diagonal), map layers (up)
+     outer ring, r 106: zoom out (left), reset (diagonal), zoom in (up)
+
+   so each tool lines up with its pair, and the whole thing is 120px from the
+   chip's centre instead of 157. With no fuel alerts the inner ring closes
+   up: its two tools move out to r 60 at 20 and 70 degrees, no gap.
+
+   Only the BUTTONS move (the `translate` and `scale` properties), and the disc
+   is a pseudo-element: no wrapper is transformed, so the menus' position:
+   fixed panels keep their place. */
+
+.rw {
+  --rw-chip: 32px;
+  --rw-btn: 40px;
+  --rw-inset: 4px;          /* (40 - 32) / 2: a tool's resting place, centred on the chip */
+  --rw-disc: 134px;         /* the disc's radius */
+  position: relative;
+  width: var(--rw-btn);
+  height: var(--rw-btn);
+  pointer-events: auto;
+}
+
+/* ── The disc ──────────────────────────────────────────────────────────────
+   Centred on the chip, so the screen's corner cuts it to a quarter. A ring
+   between the two rows of tools is the only line on it. */
+.rw__items {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.rw__items::before,
+.rw__items::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.2;
+  transition:
+    scale 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 160ms ease-out;
+}
+.rw__items::before {
+  left: calc(var(--rw-btn) / 2 - var(--rw-disc));
+  top: calc(var(--rw-btn) / 2 - var(--rw-disc));
+  width: calc(var(--rw-disc) * 2);
+  height: calc(var(--rw-disc) * 2);
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--text-primary) 16%, transparent);
+}
+.rw__items::after {
+  left: calc(var(--rw-btn) / 2 - 78px);
+  top: calc(var(--rw-btn) / 2 - 78px);
+  width: 156px;
+  height: 156px;
+  border: 1px solid var(--color-border);
+  box-sizing: border-box;
+}
+.rw--open .rw__items::before,
+.rw--open .rw__items::after { opacity: 1; scale: 1; }
+
+/* ── The tools ─────────────────────────────────────────────────────────── */
+/* Each tool's wrapper takes presses again (the ring itself does not), so the
+   panel a menu opens, its scrim and its lists are pressable and scroll; the
+   folded buttons opt out below. */
+.rw__items > * {
+  pointer-events: auto;
+  position: absolute !important;
+  right: var(--rw-inset);
+  bottom: var(--rw-inset);
+  width: var(--rw-chip);
+  height: var(--rw-chip);
+}
+.rw .map-cam-row { display: contents; }
+.rw .map-cam-row > .map-cam-btn {
+  position: absolute;
+  right: var(--rw-inset);
+  bottom: var(--rw-inset);
+}
+
+.rw .rw__items .map-cam-btn {
+  width: var(--rw-chip);
+  height: var(--rw-chip);
+  opacity: 0;
+  scale: 0.4;
+  translate: 0 0;
+  pointer-events: none;
+  box-shadow: none;
+  transition:
+    translate 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    scale 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 140ms ease-out;
+}
+.rw .rw__items .map-cam-btn svg { width: 16px; height: 16px; }
+.rw--open .rw__items .map-cam-btn {
+  opacity: 1;
+  scale: 1;
+  pointer-events: auto;
+}
+.rw--open .rw__items .map-cam-row > .map-cam-btn { transition-delay: 30ms; }
+
+/* Three rays, two rings. Offsets are from the chip's centre, up and left. */
+.rw--open .rw__items .fuel-alerts > .map-cam-btn { translate: -48px 0; }
+.rw--open .rw__items .fu-menu > .map-cam-btn     { translate: -34px -34px; }
+.rw--open .rw__items .map-layers > .map-cam-btn  { translate: 0 -48px; }
+.rw--open .rw__items .map-cam-btn--out           { translate: -106px 0; }
+.rw--open .rw__items .map-cam-btn--reset         { translate: -75px -75px; }
+.rw--open .rw__items .map-cam-btn--in            { translate: 0 -106px; }
+
+/* No fuel alerts: the inner ring closes up to two even places */
+.rw--open:not(:has(.fuel-alerts)) .rw__items .fu-menu > .map-cam-btn    { translate: -49px -18px; }
+.rw--open:not(:has(.fuel-alerts)) .rw__items .map-layers > .map-cam-btn { translate: -18px -49px; }
+
+/* ── The one chip ─────────────────────────────────────────────────────────── */
+.rw__btn {
+  position: relative;
+  z-index: 1;
+  width: var(--rw-btn);
+  height: var(--rw-btn);
+  border-radius: 999px;
+}
+.rw__btn svg { width: 18px; height: 18px; }
+.rw__btn--open {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--color-surface);
+}
+.rw__btn--open:hover { background: var(--text-secondary); border-color: var(--text-secondary); }
+.rw__btn:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 2px; }
+.rw__btn:disabled { opacity: 0.5; cursor: default; }
+
+/* What the folded tools were saying, in one number: fuel alerts and halted
+   units. Red when any of it is fuel, amber when it is only halts. */
+.rw__n {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-warn);
+  box-shadow: 0 0 0 2px var(--color-surface);
+  color: var(--color-surface);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.rw__n--crit { background: var(--accent-crit); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw .rw__items .map-cam-btn,
+  .rw__items::before,
+  .rw__items::after { transition: opacity 1ms; }
+}
