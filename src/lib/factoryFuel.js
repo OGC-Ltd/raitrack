@@ -16,6 +16,59 @@ import { vehicleReadings } from "./vehicleReadings";
 const plateKey = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 /**
+ * Fuel consumed over each machine's own plan period (operator 2026-11-18:
+ * Pump flags out, "fuel consumed" in), from its fuel probe, as a balance:
+ *
+ *   consumed = level at the period's start + fills − drains − level at its end
+ *
+ * `tankDays` is fleet-server planner/factory-fuel/tank-days (one row per unit
+ * and fleet day). The start is the first day's opening level; the end the last
+ * day's closing level, or, when the period runs to today, the live reading
+ * (`fuelNow`, from withFuelNow), since today's row is only written tonight.
+ * The period is the row's Period column, cut at today.
+ *
+ * Null ("-" on the page) when the machine has no tracked unit, no level at
+ * either end, or the balance comes out below zero, which only a bad reading
+ * can give; never a guess.
+ *
+ * @param {object[]} rows      fuelRoster rows, after withFuelNow
+ * @param {object[]} tankDays  [{ vehicleId, day, openingL, closingL, fillL, drainL }]
+ * @param {object[]} vehicles  the live fleet, to match a row by plate when it has no vehicleId
+ * @param {string}   today     the fleet day today, YYYY-MM-DD
+ */
+export function withConsumed(rows, tankDays, vehicles, today) {
+  const byVehicle = new Map();
+  for (const d of tankDays ?? []) {
+    const k = String(d.vehicleId);
+    if (!byVehicle.has(k)) byVehicle.set(k, new Map());
+    byVehicle.get(k).set(d.day, d);
+  }
+  const idByPlate = new Map();
+  for (const v of vehicles ?? []) {
+    const plate = plateKey(v?.id ?? v?.plate ?? v?.registrationPlate);
+    if (plate && v?.vehicleId) idByPlate.set(plate, String(v.vehicleId));
+  }
+  return (rows ?? []).map((row) => ({ ...row, consumed: consumedFor(row, byVehicle, idByPlate, today) }));
+}
+
+function consumedFor(row, byVehicle, idByPlate, today) {
+  const id = row.vehicleId ? String(row.vehicleId) : idByPlate.get(plateKey(row.plate));
+  const days = id && byVehicle.get(id);
+  if (!days || !row.firstDay || row.firstDay > today) return null;
+  const end = !row.lastDay || row.lastDay > today ? today : row.lastDay;
+  const start = days.get(row.firstDay)?.openingL;
+  const finish = end === today ? row.fuelNow : days.get(end)?.closingL;
+  if (start == null || finish == null) return null;
+  let fills = 0;
+  let drains = 0;
+  for (const [day, d] of days) {
+    if (day >= row.firstDay && day <= end) { fills += d.fillL ?? 0; drains += d.drainL ?? 0; }
+  }
+  const used = start + fills - drains - finish;
+  return used < 0 ? null : Math.round(used);
+}
+
+/**
  * Each machine's tank right now, from its fuel probe (operator 2026-11-17:
  * the Maintenance page's "Fuel now" column, on the Fuel page too). From the
  * live fleet snapshot, read through vehicleReadings exactly as Maintenance

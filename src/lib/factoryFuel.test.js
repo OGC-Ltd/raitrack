@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged } from "./factoryFuel";
+import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -236,5 +236,36 @@ describe("reconcileFills", () => {
   it("ignores a fuelling still in progress", () => {
     const [r] = reconcileFills([machine([{ at: "2026-11-15T06:12:00", litres: null, done: false }])], []);
     expect(r.fills).toEqual([]);
+  });
+});
+
+describe('withConsumed', () => {
+  const td = (day, o) => ({ vehicleId: 'v1', day, openingL: null, closingL: null, fillL: 0, drainL: 0, ...o });
+  const row = (o) => ({ reference: 'EX-21', vehicleId: 'v1', plate: null, firstDay: '2026-11-13', lastDay: '2026-11-15', fuelNow: null, ...o });
+
+  it('balances the period: start + fills - drains - end', () => {
+    const days = [td('2026-11-13', { openingL: 300, fillL: 200 }), td('2026-11-14', { fillL: 100, drainL: 20 }), td('2026-11-15', { closingL: 250 })];
+    const [r] = withConsumed([row({})], days, [], '2026-11-18');
+    expect(r.consumed).toBe(300 + 300 - 20 - 250);
+  });
+
+  it('ends on the live reading when the period runs to today, and stops at today', () => {
+    const days = [td('2026-11-17', { openingL: 400, fillL: 100 }), td('2026-11-18', { fillL: 50 }), td('2026-11-19', { fillL: 999 })];
+    const [r] = withConsumed([row({ firstDay: '2026-11-17', lastDay: '2026-11-19', fuelNow: 300 })], days, [], '2026-11-18');
+    expect(r.consumed).toBe(400 + 150 - 300);
+  });
+
+  it('matches by plate when the row has no vehicleId', () => {
+    const days = [td('2026-11-13', { openingL: 100 }), td('2026-11-15', { closingL: 40 })];
+    const [r] = withConsumed([row({ vehicleId: null, plate: 'KDA 101A' })], days, [{ vehicleId: 'v1', plate: 'KDA101A' }], '2026-11-18');
+    expect(r.consumed).toBe(60);
+  });
+
+  it('is null with no level at either end, no unit, a future period, or a negative balance', () => {
+    const days = [td('2026-11-13', { openingL: 100 }), td('2026-11-15', { closingL: 140 })];
+    expect(withConsumed([row({})], [td('2026-11-15', { closingL: 40 })], [], '2026-11-18')[0].consumed).toBeNull();
+    expect(withConsumed([row({ vehicleId: 'other' })], days, [], '2026-11-18')[0].consumed).toBeNull();
+    expect(withConsumed([row({ firstDay: '2026-11-19', lastDay: '2026-11-19' })], days, [], '2026-11-18')[0].consumed).toBeNull();
+    expect(withConsumed([row({})], days, [], '2026-11-18')[0].consumed).toBeNull();
   });
 });

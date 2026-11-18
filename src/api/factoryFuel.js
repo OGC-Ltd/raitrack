@@ -15,6 +15,19 @@ export async function getFactoryFuel({ companyId, from, to }) {
   return res.data ?? { factory: null, from, to }
 }
 
+/**
+ * Each probed machine's tank day by day over `from`..`to` (fleet days):
+ * [{ vehicleId, day, openingL, closingL, fillL, drainL }], for the Consumed
+ * column (lib/factoryFuel withConsumed). fleet-server planner tank-days.
+ */
+export async function getTankDays({ companyId, from, to }) {
+  const orgId = await resolveOrgId(companyId)
+  if (!orgId) return []
+  const q = new URLSearchParams({ from, to })
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/factory-fuel/tank-days?${q}`)
+  return res.data ?? []
+}
+
 /** Pages of fillings read at most: 200 a page, so up to 6,000 in a period. */
 const MAX_FILL_PAGES = 30
 
