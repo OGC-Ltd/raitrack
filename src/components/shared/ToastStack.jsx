@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAppActions } from '../../context/AppContext';
 import { LIFE_MS, dismissToast, pauseToasts, subscribeToasts, toastsSnapshot } from '../../lib/toasts';
-import { distanceWords, placeLabel, stopCopyText } from '../../lib/stopWatch';
+import { distanceWords, placeLabel, stopCopyText, stopKind } from '../../lib/stopWatch';
 import { copyText } from '../../lib/copyText';
 import { cachedPlaceName } from '../../hooks/usePlaceName';
 import { requestStopsView } from '../../hooks/useStopWatch';
@@ -45,7 +45,7 @@ const nearestWords = (n) => (n?.name ? `${n.name} (${placeLabel(n.category)}), $
 
 function icon(t) {
   if (t.level === 'success') return 'ti-circle-check';
-  if (t.kind === 'stop') return t.data?.kind === 'nogo' ? 'ti-hand-stop' : 'ti-map-pin-exclamation';
+  if (t.kind === 'stop') return stopKind(t.data).icon;
   return t.level === 'info' ? 'ti-bell' : 'ti-alert-triangle';
 }
 

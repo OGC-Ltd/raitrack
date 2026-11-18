@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
-import { desktopAlertsOn, distanceWords, nearestPlace, placeLabel, setDesktopAlerts, placesOf, standingWords, stopCopyText, storePlaces } from "../../lib/stopWatch";
+import { desktopAlertsOn, distanceWords, nearestPlace, placeLabel, setDesktopAlerts, placesOf, standingWords, stopCopyText, stopKind, storePlaces } from "../../lib/stopWatch";
 import { byRead } from "../../lib/geofenceExits";
 import { ZONE_STYLE } from "../../lib/zoneLegend";
 import { resolveOrgId } from "../../api/org";
@@ -39,7 +39,7 @@ function StopWhere({ f }) {
          className={`alr-stop-where__place${name ? "" : " alr-stop-where__place--pending"}`}
          title={name ? `${name} (${coords}), open in Google Maps` : `${coords}, open in Google Maps`}
          onClick={(event) => event.stopPropagation()}>{name ?? coords}</a>
-      <span className="alr-stop-where__rule">{f.kind === "nogo" ? `In ${f.zone}` : "Outside any authorised place"}</span>
+      <span className="alr-stop-where__rule">{stopKind(f).where}</span>
     </span>
   );
 }
@@ -103,6 +103,7 @@ const styleOf = (category) => {
  */
 function typeOf(f, places) {
   if (f.kind === "nogo") return { ...styleOf("restricted"), name: f.zone, category: "restricted" };
+  if (f.kind === "customer") return { ...styleOf("customer"), name: f.zone, category: "customer" };
   if (!places) return null;
   const n = nearestPlace(f, places);
   if (!n) return { ...styleOf("other"), name: null, category: "other", far: "No authorised place known" };
@@ -141,7 +142,7 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
   const copyOf = (f) => {
     const t = types.get(f.key);
     return stopCopyText(f, { now, area: cachedPlaceName(f.lat, f.lng),
-      place: f.kind === "nogo" || !t?.name ? null : `${t.name} (${t.label}), ${distanceWords(t.metres)}` });
+      place: f.kind !== "unauthorised" || !t?.name ? null : `${t.name} (${t.label}), ${distanceWords(t.metres)}` });
   };
   const pager = usePager(rows, q);
   const now = watch.checkedAt ?? Date.now();
@@ -208,8 +209,8 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
                     <span className="sp4-reg" title={f.plate}>{f.plate}</span>
                     {f.name && f.name !== f.plate && <div className="sp4-muted alr-stop-unit-name" title={f.name}>{f.name}</div>}</td>
                   <td className="sp4-td--left">
-                    <i className={`ti ${f.kind === "nogo" ? "ti-hand-stop" : "ti-map-pin-exclamation"}`} aria-hidden="true" />{" "}
-                    {f.kind === "nogo" ? <b style={{ color: "#c62828" }}>No-go zone</b> : "Unauthorised stop"}
+                    <i className={`ti ${stopKind(f).icon}`} aria-hidden="true" />{" "}
+                    {f.kind === "nogo" ? <b style={{ color: "#c62828" }}>No-go zone</b> : stopKind(f).label}
                   </td>
                   <td className="sp4-td--left">{clock(f.since)}</td>
                   <td className="sp4-td--left">{standingWords(f.since, now)}</td>
@@ -235,8 +236,8 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
         </div>
       )}
       {openRow && (
-        <DetailSidebar id="stop-watch-panel" title={openRow.kind === "nogo" ? "No-go zone stop" : "Unauthorised stop"}
-                       label={`${openRow.kind === "nogo" ? "No-go zone stop" : "Unauthorised stop"}, ${openRow.plate}`}
+        <DetailSidebar id="stop-watch-panel" title={stopKind(openRow).title}
+                       label={`${stopKind(openRow).title}, ${openRow.plate}`}
                        itemKey={openRow.key} onClose={() => setOpenKey(null)}
                        footer={(
                          <a className="sp4-ghost-btn" href={`https://www.google.com/maps?q=${openRow.lat},${openRow.lng}`}
@@ -245,8 +246,8 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
                          </a>
                        )}>
           <DetailSidebarIdent
-            kind={<span className="alr-kind"><i className={`ti ${openRow.kind === "nogo" ? "ti-hand-stop" : "ti-map-pin-exclamation"}`} aria-hidden="true" />
-              {openRow.kind === "nogo" ? "No-go zone" : "Unauthorised stop"}</span>}
+            kind={<span className="alr-kind"><i className={`ti ${stopKind(openRow).icon}`} aria-hidden="true" />
+              {stopKind(openRow).label}</span>}
             name={openRow.plate} nameTitle={openRow.name || openRow.plate} sub={openRow.name && openRow.name !== openRow.plate ? openRow.name : undefined}
           />
           <DetailSidebarFacts facts={[
@@ -254,7 +255,7 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
             { label: "For", value: standingWords(openRow.since, now) },
             { label: "Where", value: <StopWhere f={openRow} /> },
             { label: "Type", value: <ZoneType zone={types.get(openRow.key)} /> },
-            ...(openRow.kind === "nogo" ? [] : [{ label: "Nearest place", value: types.get(openRow.key)?.far ?? "…" }]),
+            ...(openRow.kind !== "unauthorised" ? [] : [{ label: "Nearest place", value: types.get(openRow.key)?.far ?? "…" }]),
           ]} />
           <DetailSidebarSection title="Location">
             <p className="dsb__note">{openRow.lat.toFixed(5)}, {openRow.lng.toFixed(5)}</p>

@@ -164,9 +164,20 @@ export const placeLabel = (category) => (category === 'parking' ? 'Rest stop' : 
 
 /** "Kahawa Depot (Customer), 1.2 km" for a stop outside; null for a no-go stop or none known. */
 export function nearestWords(f, places) {
-  if (f.kind === 'nogo') return null;
+  if (f.kind === 'nogo' || f.kind === 'customer') return null;
   const n = nearestPlace(f, places);
   return n?.name ? `${n.name} (${placeLabel(n.category)}), ${distanceWords(n.metres)}` : null;
+}
+
+/**
+ * A flag's kind in words (operator, 18 Nov 2026: a stop at a customer's fence
+ * says "stopped at X customer", not unauthorised). `kind`: the server's
+ * 'nogo' | 'customer' | 'unauthorised'.
+ */
+export function stopKind(f) {
+  if (f?.kind === 'nogo') return { label: 'No-go zone', title: 'No-go zone stop', icon: 'ti-hand-stop', where: `In ${f.zone}`, copyWhere: `no-go zone ${f.zone}` };
+  if (f?.kind === 'customer') return { label: 'Customer stop', title: 'Customer stop', icon: 'ti-building-store', where: `At customer ${f.zone}`, copyWhere: `at customer ${f.zone}` };
+  return { label: 'Unauthorised stop', title: 'Unauthorised stop', icon: 'ti-map-pin-exclamation', where: 'Outside any authorised place', copyWhere: 'outside any authorised place' };
 }
 
 /** The read marks' own store (lib/feedReads), apart from any organisation's feed. */
@@ -192,10 +203,10 @@ export function stopCopyText(f, { now = Date.now(), place, area } = {}) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(f.since);
   return [
-    `${f.kind === 'nogo' ? 'No-go zone stop' : 'Unauthorised stop'} · ${f.plate}`,
+    `${stopKind(f).title} · ${f.plate}`,
     `Standing since: ${when}`,
     `For: ${standingWords(f.since, now)}`,
-    `Where: ${[area, f.kind === 'nogo' ? `no-go zone ${f.zone}` : 'outside any authorised place'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())}`,
+    `Where: ${[area, stopKind(f).copyWhere].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())}`,
     place ? `Nearest place: ${place}` : null,
     `Location: ${f.lat.toFixed(5)}, ${f.lng.toFixed(5)} · https://www.google.com/maps?q=${f.lat},${f.lng}`,
   ].filter(Boolean).join('\n');
