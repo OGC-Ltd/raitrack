@@ -120,7 +120,7 @@ const EMPTY_READ = {
  * watch.flags come in as lines with read marks (lib/stopWatch stopLine).
  * reads: { unread(row), markRead(rows) }; read: the page's Read filter.
  */
-export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, read = "all" }) {
+export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, read = "all", customers = false }) {
   const places = useAuthorisedPlaces();
   const all = lines ?? watch.flags;
   // The nearest place moves only with the unit: once per flag and places.
@@ -174,7 +174,8 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
       ) : rows.length === 0 && EMPTY_READ[read] && all.length > 0 ? (
         <EmptyNote icon={EMPTY_READ[read].icon} title={EMPTY_READ[read].title}>{q ? `Nothing matches “${q}”.` : EMPTY_READ[read].sub}</EmptyNote>
       ) : rows.length === 0 ? (
-        <EmptyNote icon="ti-circle-check" title="No Stops">{q ? `Nothing matches “${q}”.` : "No Menengai unit is in a no-go zone, stopped at a customer, or stopped outside an authorised place."}</EmptyNote>
+        <EmptyNote icon="ti-circle-check" title={customers ? "No Customer Stops" : "No Unauthorised Stops"}>{q ? `Nothing matches “${q}”.`
+          : customers ? "No Menengai unit is stopped at a customer." : "No Menengai unit is standing in a no-go zone or stopped outside an authorised place."}</EmptyNote>
       ) : (
         <div className="sp4-table-scroll aud-units alr-table alr-stop-table">
           <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
@@ -232,7 +233,7 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
               ); })}
             </tbody>
           </table>
-          <TablePager pager={pager} label="Stop pages" />
+          <TablePager pager={pager} label={customers ? "Customer stop pages" : "Unauthorised stop pages"} />
         </div>
       )}
       {openRow && (

@@ -75,7 +75,7 @@ function Toast({ t }) {
         {t.body && <span>{t.body}</span>}
         {stop && (
           <div className="tst__acts">
-            <button type="button" className="tst__open" onClick={() => { setDesktopActiveTab('alerts'); requestStopsView(); dismissToast(t.id); }}>Open</button>
+            <button type="button" className="tst__open" onClick={() => { setDesktopActiveTab('alerts'); requestStopsView(stop?.kind); dismissToast(t.id); }}>Open</button>
             <CopyStop text={copyOf} plate={stop.plate} />
           </div>
         )}

@@ -56,7 +56,7 @@ import { idleHistoryQuery, searchHistory } from "./IdleHistory";
 import { loadGeofenceExits } from "../../api/geofenceExits";
 import { exitRows } from "../../lib/geofenceExits";
 import { useOrgsFeedReads } from "../../lib/feedReads";
-import { STOP_READS, stopLine } from "../../lib/stopWatch";
+import { STOP_READS, stopLine, splitStops } from "../../lib/stopWatch";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
 
@@ -569,11 +569,12 @@ export default function AlertsScreen() {
   // Which list: the server's alerts, today's geofence exits, or Menengai's unauthorised stops now
   const [view, setView] = useState("alerts");
   const geo = view === "geo";
-  const stops = view === "stops";
+  // Menengai's stops, two lists (operator, 18 Nov 2026): "stops" = unauthorised and no-go, "customers" = at a customer
+  const stops = view === "stops" || view === "customers";
   const setGeo = (on) => setView(on ? "geo" : "alerts");
   const watch = useStopWatch();
-  // A pop-up's "Open" (components/shared/StopWatch) lands on the stops
-  useEffect(() => { if (watch.open) setView("stops"); }, [watch.open]);
+  // A pop-up's "Open" (components/shared/StopWatch) lands on its stop's list
+  useEffect(() => { if (watch.open) setView(watch.openKind === "customer" ? "customers" : "stops"); }, [watch.open, watch.openKind]);
   // Menengai's idle units (server idle watch); the corner badge's "Open" lands here
   const idleWatch = useIdleWatch();
   const idle = view === "idle";
@@ -888,7 +889,8 @@ export default function AlertsScreen() {
     : r === "unread" ? exitsUnread : r === "read" ? geoRead.rows.length - exitsUnread : geoRead.rows.length);
   // The stops' read marks: their own store, in this browser, as the exits'.
   const stopReads = useOrgsFeedReads([STOP_READS]);
-  const stopLines = useMemo(() => (watch.flags ?? []).map(stopLine), [watch.flags]);
+  const stopLists = useMemo(() => splitStops((watch.flags ?? []).map(stopLine)), [watch.flags]);
+  const stopLines = view === "customers" ? stopLists.customer : stopLists.unauthorised;
   const stopsUnread = stopLines.filter(stopReads.unread).length;
   const nStopRead = (r) => (watch.status !== "done" && !watch.checkedAt ? undefined
     : r === "unread" ? stopsUnread : r === "read" ? stopLines.length - stopsUnread : stopLines.length);
@@ -949,7 +951,7 @@ export default function AlertsScreen() {
             </>
           ) : stops ? (
             <>
-              <b>{watch.flags.length}</b> Menengai unit{watch.flags.length === 1 ? "" : "s"} flagged now
+              <b>{stopLines.length}</b> Menengai unit{stopLines.length === 1 ? "" : "s"} {view === "customers" ? "stopped at a customer now" : "flagged now"}
               {stopsUnread > 0 && <> · <b>{stopsUnread}</b> unread</>}
             </>
           ) : geo ? (
@@ -1015,8 +1017,12 @@ export default function AlertsScreen() {
               <Chip on={geo} onClick={() => setGeo(true)} n={geoRead.status === "done" ? geoRead.rows.length : undefined}
                     title="Today’s geofence exits, as the server recorded them">Geofence exits</Chip>
               {watch.status !== "off" && watch.status !== "idle" && (
-                <Chip on={stops} onClick={() => setView("stops")} n={watch.status === "done" ? watch.flags.length : undefined}
-                      title="Menengai units in a no-go zone, stopped over 10 minutes at a customer, or outside every authorised place">Stops</Chip>
+                <>
+                  <Chip on={view === "stops"} onClick={() => setView("stops")} n={watch.status === "done" ? stopLists.unauthorised.length : undefined}
+                        title="Menengai units in a no-go zone, or stopped over 10 minutes outside every authorised place">Unauthorised stops</Chip>
+                  <Chip on={view === "customers"} onClick={() => setView("customers")} n={watch.status === "done" ? stopLists.customer.length : undefined}
+                        title="Menengai units stopped over 10 minutes at a customer">Customer stops</Chip>
+                </>
               )}
               {idleWatch.status !== "off" && idleWatch.status !== "idle" && (
                 <Chip on={idle} onClick={() => setView("idle")} n={idleWatch.status === "done" ? idleCount : undefined}
@@ -1090,7 +1096,7 @@ export default function AlertsScreen() {
           <GeofenceExits state={geoRead} q={q} orgName={(id) => shortName(orgById.get(id)) ?? "an organisation"}
                          showOrg={geoOrgIds.length > 1} onRetry={readGeo} reads={exitReads} read={readF} />
         )}
-        {stops && <UnauthorisedStops watch={watch} q={q} lines={stopLines} reads={stopReads} read={readF} />}
+        {stops && <UnauthorisedStops key={view} watch={watch} q={q} lines={stopLines} reads={stopReads} read={readF} customers={view === "customers"} />}
         {idle && <IdleAlertsTab watch={idleWatch} q={q} mode={idleMode} days={idleDays} />}
         {view === "alerts" && (<>
         {rows.length === 0 && first.loading ? (

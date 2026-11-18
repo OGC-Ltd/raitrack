@@ -5,7 +5,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-let state = { status: 'idle', flags: [], checkedAt: null, message: null, open: 0 };
+let state = { status: 'idle', flags: [], checkedAt: null, message: null, open: 0, openKind: null };
 const listeners = new Set();
 
 export const stopWatchState = () => state;
@@ -19,5 +19,5 @@ export function useStopWatch() {
   return useSyncExternalStore(subscribe, stopWatchState, stopWatchState);
 }
 
-/** Ask the Alerts page to show the stops (from a pop-up's "Open"). */
-export const requestStopsView = () => setStopWatch({ open: state.open + 1 });
+/** Ask the Alerts page to show the stops (from a pop-up's "Open"); a customer stop opens Customer stops. */
+export const requestStopsView = (kind = null) => setStopWatch({ open: state.open + 1, openKind: kind });
