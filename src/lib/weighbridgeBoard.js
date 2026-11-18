@@ -400,11 +400,14 @@ export function buildBoard(rows, {
     to: last,
     spanDays,
     bucketMs,
-    /* Three marks under each card's line. Quartiles rather than the ends, so a
-       day reads 06:00 · 12:00 · 18:00 and a fortnight reads three dates inside
-       it — an axis whose first label is the edge of the picture is a label
-       nobody can place. */
-    axis: [labelFor(12), labelFor(24), labelFor(36)],
+    /* Three marks under each card's line. A day reads 06:00 · 12:00 · 18:00.
+       A range reads its own ends with the middle between: the start date under
+       the left edge and the end date under the right (operator, 2026-11-18),
+       so the picker's From and To are what the axis says. `to` is the midnight
+       after the last day, so the end label is read a moment before it. */
+    axis: spanDays > 1
+      ? [DAYMON.format(from), labelFor(24), DAYMON.format(to - 1)]
+      : [labelFor(12), labelFor(24), labelFor(36)],
     closed,
     asOf,
     sites: list,

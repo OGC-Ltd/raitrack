@@ -403,7 +403,11 @@ button.wf-slot:focus-visible { outline: 2px solid var(--wf-accent); outline-offs
  * tracked capitals. The strip is sized as the Alerts one: four across down to
  * a tablet, two by two, then the Drivers phone stack. */
 /* Hallmark · waive 26b · SensorPanel.css draws :active on .sp4-filter-chip and .sp4-tr--incident · no control on this tab is ever disabled, so there is no :disabled state to draw */
-.fsw-tab { display: flex; flex-direction: column; min-width: 0; }
+/* Fills .sp4-body and stops there (flex: 1; min-height: 0), so the list's own
+   .sp4-table-scroll scrolls under the strip and filters. Without it the tab
+   grew to the list's full length and .sp4-body's overflow: hidden cut the
+   bottom rows off with no way down to them (operator, 2026-11-18). */
+.fsw-tab { flex: 1; min-height: 0; display: flex; flex-direction: column; min-width: 0; }
 .fsw-stats {
   display: block;
   flex-shrink: 0;

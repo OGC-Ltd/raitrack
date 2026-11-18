@@ -27,6 +27,9 @@ const OFFSET = 3 * 3600_000;
 
 const fmt = (n, d = 0) => Number(n ?? 0).toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
 const t1 = (kg) => (kg == null ? '-' : fmt(kg / 1000, 1));
+/** A book move, its direction in a word rather than a +/- sign (operator,
+ *  2026-11-18): "40.4 out", "12.3 in", "0.0". A table has no red to carry it. */
+const bookT = (kg) => (kg == null ? '-' : kg === 0 ? t1(0) : `${t1(Math.abs(kg))} ${kg > 0 ? 'in' : 'out'}`);
 const plural = (n, one, many = `${one}s`) => `${fmt(n)} ${n === 1 ? one : many}`;
 const dmy = (ms) => { const s = new Date(ms + OFFSET).toISOString(); return `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}`; };
 const hm = (ms) => new Date(ms + OFFSET).toISOString().slice(11, 16);
@@ -224,7 +227,7 @@ export function boardDoc(board, units, { fleet, orgCode, span, landscape = true,
     { label: 'At the mill, t', value: t1(arrivedKg) },
     { label: 'On the road', value: `${fmt(totals.onRoadRuns)}, ${t1(totals.onRoadKg)} t` },
     { label: 'Expected, t', value: expected == null ? '-' : t1(expected) },
-    { label: 'Book move, t', value: `${totals.bookMoveKg > 0 ? '+' : ''}${t1(totals.bookMoveKg)}` },
+    { label: 'Book move, t', value: bookT(totals.bookMoveKg) },
     { label: 'Lorries', value: fmt(totals.lorries) },
     { label: 'Bridges', value: `${fmt(totals.bridgesReporting)} of ${fmt(totals.bridges)}` },
   ];
@@ -237,7 +240,7 @@ export function boardDoc(board, units, { fleet, orgCode, span, landscape = true,
       s.lastAt == null ? 'Nothing weighed' : several ? dmyhm(s.lastAt) : hm(s.lastAt),
       t1(s.receivedKg), fmt(s.receivedTrips),
       t1(mill ? s.arrivedKg : s.dispatchedKg), fmt(mill ? s.arrivedRuns : s.dispatchedRuns),
-      t1(mill ? s.receivedKg + s.arrivedKg : s.bookMoveKg),
+      mill ? t1(s.receivedKg + s.arrivedKg) : bookT(s.bookMoveKg),
       fmt(s.openTickets), fmt(mill ? totals.onRoadRuns : s.onRoadRuns),
       fmt(s.lorries),
     ];

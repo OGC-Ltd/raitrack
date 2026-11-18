@@ -320,6 +320,13 @@ describe("a run of days", () => {
     expect(twoDays.axis.every(a => /^[A-Z][a-z]{2} \d{2}$/.test(a))).toBe(true);
   });
 
+  it("starts a span's axis on its start date and ends it on its end date", () => {
+    const board = buildBoard([], { from: "2026-10-21", to: "2026-11-05", now: Date.parse("2026-11-18T05:00:00Z") });
+    expect(board.axis[0]).toBe("Oct 21");
+    expect(board.axis[2]).toBe("Nov 05");
+    expect(board.axis).toHaveLength(3);
+  });
+
   it("keeps a stamp outside the SPAN out of the feed, not just outside a day", () => {
     const board = buildBoard(
       [delivery({ tareAt: "2026-09-07T22:00:00+03:00" })],
