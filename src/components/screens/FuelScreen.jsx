@@ -12,8 +12,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
-import { getFactoryFuel, getProbeFillings } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged, withFuelNow, reconcileFills } from "../../lib/factoryFuel";
+import { getFactoryFuel, getProbeFillings, getTankDays } from "../../api/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged, withFuelNow, reconcileFills, withConsumed } from "../../lib/factoryFuel";
+import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
@@ -94,7 +95,19 @@ export default function FuelScreen() {
     { cacheKey: `ft-factory-fuel-probe:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
   );
   const fillings = probe.error ? null : probe.data ?? null;
-  const checked = useMemo(() => reconcileFills(withFuelNow(roster, vehicles), fillings), [roster, vehicles, fillings]);
+  // Each probed machine's tank day by day, for Consumed (lib/factoryFuel
+  // withConsumed). Apart too: when it fails, Consumed reads "-" and nothing else moves.
+  const tank = useApiData(
+    () => getTankDays({ companyId: activeCompanyId, from, to }),
+    [activeCompanyId, from, to],
+    { cacheKey: `ft-factory-fuel-tank:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
+  );
+  const tankDays = tank.error ? null : tank.data ?? null;
+  const today = fleetDay(Date.now());
+  const checked = useMemo(
+    () => withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today),
+    [roster, vehicles, fillings, tankDays, today],
+  );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
 
   const [selected, setSelected] = useState(null);
@@ -337,8 +350,8 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                 {th("Need", "need", true)}
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
+                {th("Consumed", "consumed", true)}
                 {th("Variance", "variance", true)}
-                {th("Pump flags", "flagged", true)}
               </tr>
             </thead>
             <tbody>
@@ -393,10 +406,14 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
                         title="What the fuel probe recorded going in, for the fuellings the pump recorded">
                       {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
                     </td>
+                    {/* Burnt over the row's Period, from the probe (lib/factoryFuel withConsumed).
+                        Pump flags were here (operator 2026-11-18); they stay in the machine panel. */}
+                    <td className={r.consumed != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Consumed"
+                        title={r.consumed != null ? "Fuel used over the period, from the fuel probe: tank at the start + fills − drains − tank now"
+                          : "No probe reading at the start or end of the period"}>
+                      {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
+                    </td>
                     <VarianceCell r={r} />
-                    {r.flagged
-                      ? <td className="dr-num dr-incident dr-incident--speed" data-label="Pump flags"><span className="dr-incident__dot" aria-hidden="true" />{fmt(r.flagged)}</td>
-                      : <td className="dr-num dr-num--zero" data-label="Pump flags">0</td>}
                   </tr>
                 );
               })}
