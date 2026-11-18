@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as sw from './stopWatch';
-import { flaggedUnits, placesOf, placeAt, flagWords, NOGO_MIN_MS, UNAUTHORISED_MIN_MS } from './stopWatch';
+import { flaggedUnits, placesOf, placeAt, flagWords, stopKind, stopCopyText, NOGO_MIN_MS, UNAUTHORISED_MIN_MS } from './stopWatch';
 import { AUTHORISED, NO_GO } from '../data/menengaiStopPlaces';
 
 const now = Date.parse('2026-11-05T16:30:00+03:00');
@@ -93,5 +93,19 @@ describe('Alerts: an unauthorised stop’s place, copy and read marks', () => {
     ].join('\n'));
     expect(sw.stopCopyText(f, { area: 'Londiani, Kericho' })).toContain('Where: Londiani, Kericho, outside any authorised place');
     expect(sw.stopCopyText({ ...f, kind: 'nogo', zone: 'Awasi' })).toContain('Where: No-go zone Awasi');
+  });
+});
+
+describe('stopKind', () => {
+  it('words a stop at a customer as a customer stop', () => {
+    const f = { kind: 'customer', zone: 'NEEMA SHOP', plate: 'KDA 101A', since: Date.UTC(2026, 10, 18, 7, 0), lat: -0.5, lng: 36.5 };
+    expect(stopKind(f)).toMatchObject({ label: 'Customer stop', where: 'At customer NEEMA SHOP' });
+    const text = stopCopyText(f, { now: f.since + 15 * 60_000 });
+    expect(text).toContain('Customer stop · KDA 101A');
+    expect(text).toContain('Where: At customer NEEMA SHOP');
+  });
+  it('keeps the unauthorised and no-go wording', () => {
+    expect(stopKind({ kind: 'unauthorised' }).label).toBe('Unauthorised stop');
+    expect(stopKind({ kind: 'nogo', zone: 'Voi' }).where).toBe('In Voi');
   });
 });
