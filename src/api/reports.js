@@ -88,6 +88,18 @@ export async function loadUnitDistance({ orgId, day, vehicleIds }) {
   });
   return res.data;
 }
+/**
+ * Each unit's odometer at each moment (fleet-server reports/odometer-at), for a trip's
+ * distance between consecutive tickets. `pending` points are still being pulled: ask again.
+ * @returns {Promise<{ readings: { vehicleId, at, odometerM: number|null, pending: boolean }[], pending: number }>}
+ */
+export async function loadOdometerAt({ orgId, points }) {
+  if (!orgId) throw new Error('No organisation selected');
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/odometer-at`, {
+    method: 'POST', body: JSON.stringify({ points }),
+  });
+  return res.data;
+}
 /** Dashcam alarms per unit by kind; `partial` when the dashcam server gave only part. */
 export const loadAlarmDistribution = (o) => rangeReport('alarm-distribution', o);
 /** The Unauthorized Passengers incidents, with when each was shared. */

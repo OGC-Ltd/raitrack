@@ -1,6 +1,25 @@
 [
   {
     "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "shape": "app screen",
+    "theme": "brand (sp4 tokens)",
+    "entry": "Weighbridges › Coverage › consolidated unit side panel",
+    "signature": "measured km per trip leading the panel, with what it averages",
+    "sections": [
+      "identity",
+      "km per trip",
+      "figures",
+      "drivers by days",
+      "by-day ledger with drivers and total"
+    ],
+    "waived": [],
+    "prompt": "use /hallmark to design the sidepanel for the coverage consolidated",
+    "date": "2026-11-18"
+  },
+  {
+    "mode": "redesign",
     "depth": "restyle",
     "scope": "app",
     "theme": "brand",

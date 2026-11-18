@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst } from "./unitTrips";
+import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst, ticketTrip, tripLegs, tripKmByTicket, odoKey } from "./unitTrips";
 
 // Fleet days are East Africa Time (UTC+3): 22:30Z on the 17th is 01:30 on the 18th.
 const t = (tokenAt, plate, extra = {}) => ({ tokenAt, vehiclePlate: plate, vehicleNo: plate, netWeightKg: 10_000, ...extra });
@@ -34,7 +34,8 @@ describe("unitTripRows", () => {
     const by = Object.fromEntries(rows.map((r) => [r.plate, r]));
     expect(by.KBA123A.km).toBe(142.3);
     expect(by.KBA123A.kmSource).toBe("odometer");
-    expect(kmPerTrip(by.KBA123A)).toBe(71.2);
+    // The day's distance is not shared over its tickets: km per trip is measured trip by trip
+    expect(kmPerTrip(by.KBA123A)).toBeNull();
     expect(by.KCC555C.km).toBeNull();
     expect(by.KDD777D.km).toBeNull();
     expect(kmPerTrip(by.KCC555C)).toBeNull();
@@ -65,13 +66,13 @@ describe("unitTripRows", () => {
 describe("unitTripTotals", () => {
   it("adds trips and the tracked unit-days' kilometres", () => {
     const totals = unitTripTotals([
-      { plate: "A", trips: 3, netKg: 30_000, km: 100.25, kmSource: "odometer" },
-      { plate: "A", trips: 1, netKg: 5_000, km: null },
-      { plate: "B", trips: 2, netKg: 20_000, km: 50 },
+      { plate: "A", trips: 3, netKg: 30_000, km: 100.25, kmSource: "odometer", tripKm: 61, tripN: 2 },
+      { plate: "A", trips: 1, netKg: 5_000, km: null, tripKm: 0, tripN: 0 },
+      { plate: "B", trips: 2, netKg: 20_000, km: 50, tripKm: 30.2, tripN: 1 },
     ]);
     expect(totals).toEqual({
       unitDays: 3, units: 2, trips: 6, netKg: 55_000, tracked: 2, odometer: 1, km: 150.3,
-      avgLoadKg: 55_000 / 6, avgLoadMs: null, kmPerTrip: 30.1, tripsPerUnit: 2,
+      avgLoadKg: 55_000 / 6, avgLoadMs: null, kmPerTrip: 30.4, measuredTrips: 3, tripsPerUnit: 2,
     });
   });
 });
@@ -94,15 +95,19 @@ describe("each unit-day's figures", () => {
     expect(workSpanMs(r)).toBeNull();
     expect(avgLoadMs(r)).toBeNull();
   });
-  it("shares the distance over the tracked units' trips only", () => {
+  it("averages the measured trips only", () => {
     const km = new Map([["2026-11-18", new Map([["v1", { km: 90, source: "odometer" }]])]]);
-    const totals = unitTripTotals(unitTripRows([
-      t("2026-11-18T05:00:00Z", "AAA", { vehicleId: "v1" }), t("2026-11-18T08:00:00Z", "AAA", { vehicleId: "v1" }),
-      t("2026-11-18T05:00:00Z", "BBB"),
-    ], km));
-    expect(totals.kmPerTrip).toBe(45);
+    const rows = unitTripRows([
+      t("2026-11-18T05:00:00Z", "AAA", { id: 1, vehicleId: "v1" }), t("2026-11-18T08:00:00Z", "AAA", { id: 2, vehicleId: "v1" }),
+      t("2026-11-18T11:00:00Z", "AAA", { id: 3, vehicleId: "v1" }), t("2026-11-18T05:00:00Z", "BBB", { id: 4 }),
+    ], km, new Map([[2, 31.4], [3, 28.2]]));
+    expect([rows[0].tripN, kmPerTrip(rows[0])]).toEqual([2, 29.8]);
+    expect(kmPerTrip(rows[1])).toBeNull();
+    const totals = unitTripTotals(rows);
+    expect(totals.kmPerTrip).toBe(29.8);
+    expect(totals.measuredTrips).toBe(2);
     expect(totals.avgLoadKg).toBe(10_000);
-    expect(totals.tripsPerUnit).toBe(1.5);
+    expect(totals.tripsPerUnit).toBe(2);
   });
 });
 
@@ -125,16 +130,16 @@ describe("consolidateUnitRows", () => {
       ["2026-10-15", new Map([["v1", { km: 40, source: "odometer" }]])],
     ]);
     const daily = unitTripRows([
-      t("2026-10-10T05:00:00Z", "KBA123A", { vehicleId: "v1", driverName: "Otieno", centerName: "FACTORY", turnaroundMs: 600_000 }),
-      t("2026-10-10T09:00:00Z", "KBA123A", { vehicleId: "v1", driverName: "Otieno", centerName: "OPAPO" }),
-      t("2026-10-12T06:00:00Z", "KBA123A", { vehicleId: "v1", driverName: "Achieng", centerName: "FACTORY" }),
-      t("2026-10-15T07:00:00Z", "KBA123A", { vehicleId: "v1", centerName: "FACTORY", turnaroundMs: 1_200_000 }),
-      t("2026-10-11T07:00:00Z", "KCC555C"),
-    ], km);
+      t("2026-10-10T05:00:00Z", "KBA123A", { id: 1, vehicleId: "v1", driverName: "Otieno", centerName: "FACTORY", turnaroundMs: 600_000 }),
+      t("2026-10-10T09:00:00Z", "KBA123A", { id: 2, vehicleId: "v1", driverName: "Otieno", centerName: "OPAPO" }),
+      t("2026-10-12T06:00:00Z", "KBA123A", { id: 3, vehicleId: "v1", driverName: "Achieng", centerName: "FACTORY" }),
+      t("2026-10-15T07:00:00Z", "KBA123A", { id: 4, vehicleId: "v1", centerName: "FACTORY", turnaroundMs: 1_200_000 }),
+      t("2026-10-11T07:00:00Z", "KCC555C", { id: 5 }),
+    ], km, new Map([[2, 44], [3, 36]]));
     const [a, b] = consolidateUnitRows(daily);
     expect(a.plate).toBe("KBA123A");
     expect(a.days).toEqual(["2026-10-10", "2026-10-12", "2026-10-15"]);
-    expect([a.trips, a.netKg, a.km, a.kmDays, a.kmTrips]).toEqual([4, 40_000, 120, 2, 3]);
+    expect([a.trips, a.netKg, a.km, a.kmDays, a.tripKm, a.tripN]).toEqual([4, 40_000, 120, 2, 80, 2]);
     expect(kmPerTrip(a)).toBe(40);
     expect(a.drivers).toEqual(["Otieno", "Achieng"]);
     expect(a.bridges).toEqual(["FACTORY", "OPAPO"]);
@@ -166,5 +171,89 @@ describe("kmOfDay", () => {
       .toEqual([["v1", { km: 12.5, source: "odometer" }]]);
     expect(kmOfDay({ rows: [{ vehicleId: "v2", distanceKm: 4 }] }).get("v2")).toEqual({ km: 4, source: "gps" });
     expect(kmOfDay(null).size).toBe(0);
+  });
+});
+
+describe("trips between consecutive tickets", () => {
+  const tk = (id, vehicleId, tareAt, grossAt, extra = {}) => ({ id, vehicleId, tokenAt: grossAt ?? tareAt, tareAt, grossAt, ...extra });
+
+  it("takes a ticket's trip from its tare, the lorry leaving empty, to its gross, the lorry back laden", () => {
+    const ms = (x) => Date.parse(x);
+    expect(ticketTrip(tk(1, "v", "2026-11-18T03:10:00Z", "2026-11-18T09:40:00Z"))).toEqual({
+      first: ms("2026-11-18T03:10:00Z"), last: ms("2026-11-18T09:40:00Z"), start: ms("2026-11-18T03:10:00Z"), end: ms("2026-11-18T09:40:00Z"),
+    });
+    // Arrived laden, then tared: the trip began on the previous ticket
+    expect(ticketTrip(tk(2, "v", "2026-11-18T06:20:00Z", "2026-11-18T06:00:00Z")).start).toBeNull();
+    // Tared and not back yet: no trip to measure
+    expect(ticketTrip(tk(3, "v", "2026-11-18T06:20:00Z", null)).end).toBeNull();
+    expect(ticketTrip({ tokenAt: "2026-11-18T05:00:00Z" })).toBeNull();
+  });
+
+  it("measures a tare-first ticket within itself, not the yard time between tickets", () => {
+    const legs = tripLegs([
+      tk(1, "v1", "2026-11-18T03:00:00Z", "2026-11-18T08:00:00Z"),
+      tk(2, "v1", "2026-11-18T08:40:00Z", "2026-11-18T14:10:00Z"),
+    ]);
+    expect(legs.map((l) => [l.ticketId, new Date(l.startMs).toISOString(), new Date(l.endMs).toISOString()])).toEqual([
+      [1, "2026-11-18T03:00:00.000Z", "2026-11-18T08:00:00.000Z"],
+      [2, "2026-11-18T08:40:00.000Z", "2026-11-18T14:10:00.000Z"],
+    ]);
+  });
+
+  it("runs a gross-first ticket's trip from leaving after the one before, at any bridge and across midnight", () => {
+    const legs = tripLegs([
+      tk(3, "v1", "2026-11-18T09:40:00Z", "2026-11-18T09:10:00Z", { centerCode: 102 }),
+      tk(1, "v1", "2026-11-17T19:30:00Z", "2026-11-17T19:00:00Z", { centerCode: 101 }),
+      tk(2, "v1", "2026-11-18T02:15:00Z", "2026-11-18T02:00:00Z", { centerCode: 101 }),
+      tk(2, "v1", "2026-11-18T02:15:00Z", "2026-11-18T02:00:00Z", { centerCode: 101 }),
+      tk(9, null, "2026-11-18T03:00:00Z", "2026-11-18T02:00:00Z"),
+    ]);
+    expect(legs).toEqual([
+      { ticketId: 2, vehicleId: "v1", startMs: Date.parse("2026-11-17T19:30:00Z"), endMs: Date.parse("2026-11-18T02:00:00Z") },
+      { ticketId: 3, vehicleId: "v1", startMs: Date.parse("2026-11-18T02:15:00Z"), endMs: Date.parse("2026-11-18T09:10:00Z") },
+    ]);
+  });
+
+  it("takes a transfer's trip from the factory's tare to the factory's gross, the field centre between", () => {
+    const transfer = (id, factoryTare, centreTare, centreGross, factoryGross) => ({
+      id, vehicleId: "v1", category: "CANE_TRANSFER", tokenAt: factoryTare,
+      factoryTareAt: factoryTare, tareAt: centreTare, grossAt: centreGross, factoryGrossAt: factoryGross,
+    });
+    const legs = tripLegs([
+      transfer(1, "2026-11-17T03:58:00Z", "2026-11-17T05:30:00Z", "2026-11-17T18:14:00Z", "2026-11-17T19:44:00Z"),
+      // Still at the centre: no trip until the factory weighs it laden
+      transfer(2, "2026-11-17T21:00:00Z", "2026-11-17T22:30:00Z", null, null),
+    ]);
+    expect(legs).toEqual([
+      { ticketId: 1, vehicleId: "v1", startMs: Date.parse("2026-11-17T03:58:00Z"), endMs: Date.parse("2026-11-17T19:44:00Z") },
+    ]);
+  });
+
+  it("has no trip across more than a day, nor into a ticket that overlaps the one before", () => {
+    expect(tripLegs([
+      tk(1, "v1", "2026-11-15T10:00:00Z", "2026-11-15T09:00:00Z"),
+      tk(2, "v1", "2026-11-16T12:00:00Z", "2026-11-16T11:00:00Z"),
+    ])).toEqual([]);
+    expect(tripLegs([
+      tk(1, "v1", "2026-11-18T10:00:00Z", "2026-11-18T09:00:00Z"),
+      tk(2, "v1", "2026-11-18T09:50:00Z", "2026-11-18T09:30:00Z"),
+    ])).toEqual([]);
+  });
+
+  it("measures a trip by the odometer at its two ends, leaving out re-weighs, jumps and unread ends", () => {
+    const h = 3_600_000;
+    const legs = [
+      { ticketId: 1, vehicleId: "v", startMs: 0, endMs: 3 * h },
+      { ticketId: 2, vehicleId: "v", startMs: 4 * h, endMs: 5 * h },
+      { ticketId: 3, vehicleId: "v", startMs: 6 * h, endMs: 7 * h },
+      { ticketId: 4, vehicleId: "v", startMs: 8 * h, endMs: 9 * h },
+    ];
+    const readings = new Map([
+      [odoKey("v", 0), 100_000], [odoKey("v", 3 * h), 162_400],
+      [odoKey("v", 4 * h), 162_500], [odoKey("v", 5 * h), 163_000],
+      [odoKey("v", 6 * h), 163_000], [odoKey("v", 7 * h), 400_000],
+      [odoKey("v", 8 * h), null], [odoKey("v", 9 * h), 450_000],
+    ]);
+    expect([...tripKmByTicket(legs, readings)]).toEqual([[1, 62.4]]);
   });
 });

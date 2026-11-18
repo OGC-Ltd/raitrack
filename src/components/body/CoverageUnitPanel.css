@@ -1,0 +1,101 @@
+/* Hallmark · component: side panel (Weighbridges › Coverage, one unit consolidated) · genre: modern-minimal · theme: brand (the sp4 tokens, SensorPanel.css .sp4-root, both themes) · shape: app screen · redesign: full · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V3 · weakest: V, on purpose: it lives in the shared DetailSidebar frame beside the app's other panels; the inside is recomposed around the measured km per trip instead of a facts strip */
+/* Hallmark · answered: labels and section heads in sentence case, untracked, here only; the frame's own tracked-caps heads (DetailSidebar.css) belong to every other panel and were left alone */
+
+/* Who: the plate, the span, the bridges */
+.wcp-ident { padding: var(--sp4-md) 0 var(--sp4-sm); }
+.wcp-unit {
+  margin: 0 0 var(--sp4-2xs);
+  font-family: var(--font-mono);
+  font-size: var(--sp4-title);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--sp4-text-1);
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+.wcp-span { margin: 0; font-size: var(--sp4-body); line-height: 1.5; color: var(--sp4-text-3); }
+
+/* The lead: km per trip, measured, with what it is the average of */
+.wcp-lead {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-areas: "label label" "value note";
+  column-gap: var(--sp4-md);
+  row-gap: var(--sp4-2xs);
+  align-items: end;
+  padding: var(--sp4-md) 0;
+  border-top: 1px solid var(--sp4-line-hi);
+}
+.wcp-lead__label { grid-area: label; margin: 0; font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-2); }
+.wcp-lead__value {
+  grid-area: value;
+  margin: 0;
+  font-size: var(--sp4-num);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--sp4-text-1);
+}
+.wcp-lead__value--none { font-size: var(--sp4-title); color: var(--sp4-text-3); }
+.wcp-lead__unit { margin-left: var(--sp4-2xs); font-size: var(--sp4-strong); font-weight: 600; color: var(--sp4-text-3); }
+.wcp-lead__note { grid-area: note; margin: 0; font-size: var(--sp4-label); line-height: 1.45; color: var(--sp4-text-3); }
+
+/* The span's other figures, two to a row */
+.wcp-figs {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp4-sm) var(--sp4-md);
+  padding: var(--sp4-md) 0;
+  border-top: 1px solid var(--sp4-line-hi);
+}
+.wcp-figs dt { margin: 0 0 var(--sp4-3xs); font-size: var(--sp4-label); color: var(--sp4-text-3); }
+.wcp-figs dd {
+  margin: 0;
+  font-size: var(--sp4-strong);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--sp4-text-1);
+  overflow-wrap: anywhere;
+}
+
+.wcp-sec { padding: var(--sp4-md) 0; border-top: 1px solid var(--sp4-line-hi); }
+.wcp-h { margin: 0 0 var(--sp4-xs); font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-2); }
+.wcp-empty { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-3); }
+.wcp-dim { color: var(--sp4-text-4); }
+
+/* Drivers, the most days first, the count against the right edge */
+.wcp-drivers { list-style: none; margin: 0; padding: 0; display: grid; }
+.wcp-drivers li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp4-sm);
+  padding: var(--sp4-2xs) 0;
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-1);
+}
+.wcp-drivers li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.wcp-drivers__days { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--sp4-text-3); }
+
+/* The ledger: a day a row, its drivers under the date, the span's total at the foot */
+.wcp-days { width: 100%; border-collapse: collapse; font-size: var(--sp4-body); font-variant-numeric: tabular-nums; }
+.wcp-days th, .wcp-days td {
+  padding: var(--sp4-xs) var(--sp4-2xs);
+  text-align: right;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sp4-line);
+}
+.wcp-days th:first-child, .wcp-days td:first-child { text-align: left; padding-left: 0; }
+.wcp-days th:last-child, .wcp-days td:last-child { padding-right: 0; }
+.wcp-days thead th { font-size: var(--sp4-label); font-weight: 600; color: var(--sp4-text-3); }
+.wcp-days td { color: var(--sp4-text-1); }
+.wcp-days tbody th { font-weight: 400; }
+.wcp-days__date { display: block; font-weight: 600; color: var(--sp4-text-1); white-space: nowrap; }
+.wcp-days__who { display: block; margin-top: var(--sp4-3xs); font-size: var(--sp4-label); color: var(--sp4-text-3); overflow-wrap: anywhere; }
+.wcp-days tfoot th, .wcp-days tfoot td {
+  border-bottom: 0;
+  border-top: 1px solid var(--sp4-line-hi);
+  font-weight: 700;
+  color: var(--sp4-text-1);
+}

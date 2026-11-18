@@ -6,15 +6,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import TableToolbar from "./TableToolbar";
-import { loadFuelConsumptionRate, loadUnitDistance } from "../../api/reports";
+import { loadFuelConsumptionRate, loadUnitDistance, loadOdometerAt } from "../../api/reports";
 import { downloadTableCsv, exportLater } from "../../utils/tableExport";
 import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
 import { settleLimited } from "../../lib/settleLimited";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst } from "../../lib/unitTrips";
-import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
+import { fleetDaysBetween } from "../../lib/weighbridgeBoard";
+import {
+  unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs,
+  consolidateUnitRows, distanceFirst, tripLegs, tripKmByTicket, odoKey,
+} from "../../lib/unitTrips";
+import DetailSidebar from "../shared/DetailSidebar";
+import "./CoverageUnitPanel.css";
 import { ticketsByBridge } from "../../lib/weighbridgeSheets";
-import { tonnes, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
+import { tonnes, gapLabel, clockLabel, stampLabel, getWeighmentDay } from "../../api/weighments";
 
 const STEP = 25;
 
@@ -65,6 +70,115 @@ function readDayKm(orgId, day, ids) {
   return inFlight.get(key);
 }
 
+/** A finished day's tickets at every bridge, per organisation and day, for the trips' starts. */
+const ticketDayCache = new Map();
+async function readAllBridgeDay(orgId, day) {
+  const key = `${orgId}|${day}`;
+  if (ticketDayCache.has(key)) return ticketDayCache.get(key);
+  const rows = (await getWeighmentDay({ orgId, day }))?.rows ?? [];
+  if (day < fleetDayKey()) ticketDayCache.set(key, rows);
+  return rows;
+}
+const dayBefore = (day) => {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * The tickets a gross-first trip can start from: every bridge's, over the span and the day before, so a
+ * unit's first ticket of a day has the one before it, wherever that was weighed. With every
+ * bridge picked the span's are on screen already and only the day before is read. Null while
+ * reading, "failed" when a day could not be read.
+ */
+function useTripTickets(orgId, tickets, from, to, centre, enabled) {
+  const [extra, setExtra] = useState(null);
+  useEffect(() => {
+    if (!enabled || !orgId || !from) return undefined;
+    let live = true;
+    setExtra(null);
+    const days = centre == null ? [dayBefore(from)] : fleetDaysBetween(dayBefore(from), to);
+    settleLimited(days, 4, (d) => readAllBridgeDay(orgId, d)).then((res) => {
+      if (!live) return;
+      setExtra(res.some((r) => r.status === "rejected") ? "failed" : res.flatMap((r) => r.value));
+    });
+    return () => { live = false; };
+  }, [orgId, from, to, centre, enabled]);
+  return useMemo(
+    () => (Array.isArray(extra) ? (centre == null ? [...extra, ...tickets] : extra) : extra),
+    [extra, tickets, centre],
+  );
+}
+
+/** Odometer readings at moments that will not change, per organisation, unit and moment. */
+const odoCache = new Map();
+/** Points per request, half the server's cap so a day's fill stays within one ask. */
+const POINTS_PER_ASK = 1000;
+
+/** The readings at these moments ({ vehicleId, ms }), asked again while Wialon is still being read. */
+async function askOdometer(orgId, points) {
+  const got = new Map();
+  const settled = Date.now() - 12 * 3_600_000;
+  const want = [];
+  for (const p of points) {
+    const c = `${orgId}|${odoKey(p.vehicleId, p.ms)}`;
+    if (odoCache.has(c)) got.set(odoKey(p.vehicleId, p.ms), odoCache.get(c));
+    else want.push(p);
+  }
+  for (let i = 0; i < want.length; i += POINTS_PER_ASK) {
+    let ask = want.slice(i, i + POINTS_PER_ASK);
+    for (let n = 0; n < ASKS && ask.length; n++) {
+      const res = await loadOdometerAt({ orgId, points: ask.map((p) => ({ vehicleId: p.vehicleId, at: new Date(p.ms).toISOString() })) });
+      const again = [];
+      for (const r of res?.readings ?? []) {
+        const ms = Date.parse(r.at);
+        if (r.pending) { again.push({ vehicleId: r.vehicleId, ms }); continue; }
+        got.set(odoKey(r.vehicleId, ms), r.odometerM);
+        if (ms < settled) odoCache.set(`${orgId}|${odoKey(r.vehicleId, ms)}`, r.odometerM);
+      }
+      ask = again;
+    }
+  }
+  return got;
+}
+
+/**
+ * The odometer at both ends of each trip, a fleet day of trips at a time, the latest first.
+ * `reading` until every day has answered; `failed` when one could not be read.
+ */
+function useTripReadings(orgId, legs, enabled) {
+  const [readings, setReadings] = useState(() => new Map());
+  const [doneKey, setDoneKey] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const key = `${orgId}|${legs.length}|${legs.reduce((h, l) => (h * 31 + l.startMs / 1000 + l.endMs / 1000) % 1e9, 0)}`;
+  useEffect(() => {
+    if (!enabled || !orgId) return undefined;
+    let live = true;
+    setReadings(new Map());
+    setFailed(false);
+    const byDay = new Map();
+    for (const l of legs) {
+      const d = fleetDayKey(new Date(l.endMs));
+      if (!byDay.has(d)) byDay.set(d, new Map());
+      const pts = byDay.get(d);
+      pts.set(odoKey(l.vehicleId, l.startMs), { vehicleId: l.vehicleId, ms: l.startMs });
+      pts.set(odoKey(l.vehicleId, l.endMs), { vehicleId: l.vehicleId, ms: l.endMs });
+    }
+    const days = [...byDay.keys()].sort().reverse();
+    settleLimited(days, 2, async (d) => {
+      const got = await askOdometer(orgId, [...byDay.get(d).values()]);
+      if (live) setReadings((m) => new Map([...m, ...got]));
+    }).then((res) => {
+      if (!live) return;
+      if (res.some((r) => r.status === "rejected")) setFailed(true);
+      setDoneKey(key);
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, enabled]);
+  return { readings, reading: enabled && doneKey !== key, failed };
+}
+
 const kmLabel = (km) => (km == null ? "" : km.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 const dayLabel = (day) => new Date(`${day}T12:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
 
@@ -99,57 +213,126 @@ function useDayKm(orgId, idsByDay, enabled) {
   return { kmByDay, state };
 }
 
+/** Each driver on the unit's tickets and the days they drove it, the most days first. */
+function driverDays(perDay) {
+  const days = new Map();
+  for (const d of perDay) for (const name of d.drivers ?? []) days.set(name, (days.get(name) ?? 0) + 1);
+  return [...days].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+const spanOf = (days) => {
+  const short = (day) => new Date(`${day}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const first = days[0];
+  const last = days[days.length - 1];
+  return first === last ? short(first) : `${short(first)} to ${short(last)}`;
+};
+
 /**
  * One unit over the span, opened from a consolidated row (operator, 18 Nov 2026: "drop the drivers
  * column if we are consolidating and only have it populated on the sidebar if we click on the
- * single row"): its figures, who drove it, and each day it crossed a bridge.
+ * single row"). Km per trip leads, the figure the panel is opened for; the span's other figures
+ * under it; who drove it and on how many days; then the day-by-day ledger, each day's drivers
+ * under its date and the span's total at the foot.
+ *
+ * `tripsState` is "reading" | "failed" | "ok" for the trip measurements; `kmText` says why a
+ * distance cell is empty.
  */
-function UnitPanel({ row, kmText, onClose }) {
+function UnitPanel({ row, kmText, tripsState, onClose }) {
   const loadMs = avgLoadMs(row);
+  const perTrip = kmPerTrip(row);
+  const drivers = driverDays(row.perDay);
+  const nDays = row.days.length;
+  const distance = row.km == null ? (kmText(row) || "None") : `${kmLabel(row.km)} km`;
+  // Why there is no figure, said plainly rather than left as a dash
+  const perTripNote = perTrip != null
+    ? `The average of ${row.tripN} measured trip${row.tripN === 1 ? "" : "s"}, from leaving a weighbridge empty to coming back laden.`
+    : !row.vehicleId ? "Not a tracked unit, so its trips have no distance."
+      : tripsState === "reading" ? "Reading the odometer at each end of its trips."
+        : tripsState === "failed" ? "Its trips could not be read. Reload to try again."
+          : "None of its trips has an odometer reading at both ends.";
   return (
     <DetailSidebar title="Unit coverage" label={`Coverage for ${row.unit}`} itemKey={row.plate} onClose={onClose}>
-      <DetailSidebarIdent
-        name={row.unit}
-        sub={`${row.days.length} day${row.days.length === 1 ? "" : "s"}${row.bridges.length ? ` · ${row.bridges.join(", ")}` : ""}`}
-      />
-      <DetailSidebarFacts facts={[
-        { label: "Trips", value: String(row.trips) },
-        { label: "Net weighed", value: tonnes(row.netKg) },
-        { label: "Distance", value: row.km == null ? (kmText(row) || "-") : `${kmLabel(row.km)} km` },
-        { label: "Average load", value: tonnes(avgLoadKg(row)) },
-        { label: "Km per trip", value: kmPerTrip(row) == null ? "-" : kmLabel(kmPerTrip(row)) },
-        { label: "Average load time", value: loadMs == null ? "-" : gapLabel(loadMs) },
-      ]} />
-      <DetailSidebarSection title="Drivers">
-        {row.drivers.length
-          ? <ul className="wbm-drivers">{row.drivers.map((d) => <li key={d}>{d}</li>)}</ul>
-          : <p className="wb-ticket-note">No driver on its tickets.</p>}
-      </DetailSidebarSection>
-      <DetailSidebarSection title="By day">
-        <table className="wbm-days">
+      <div className="wcp-ident">
+        <h2 className="wcp-unit">{row.unit}</h2>
+        <p className="wcp-span">{nDays} day{nDays === 1 ? "" : "s"}, {spanOf(row.days)}</p>
+        {row.bridges.length > 0 && <p className="wcp-span">Weighed at {row.bridges.join(", ")}</p>}
+      </div>
+
+      <section className="wcp-lead" aria-label="Km per trip">
+        <p className="wcp-lead__label">Km per trip</p>
+        <p className={"wcp-lead__value" + (perTrip == null ? " wcp-lead__value--none" : "")}>
+          {perTrip == null ? (tripsState === "reading" && row.vehicleId ? "Measuring" : "None") : kmLabel(perTrip)}
+          {perTrip != null && <span className="wcp-lead__unit">km</span>}
+        </p>
+        <p className="wcp-lead__note">{perTripNote}</p>
+      </section>
+
+      <dl className="wcp-figs">
+        <div><dt>Trips</dt><dd>{row.trips}</dd></div>
+        <div><dt>Net weighed</dt><dd>{tonnes(row.netKg)}</dd></div>
+        <div><dt>Distance</dt><dd>{distance}</dd></div>
+        <div><dt>Average load</dt><dd>{tonnes(avgLoadKg(row))}</dd></div>
+        <div><dt>Average load time</dt><dd>{loadMs == null ? "None" : gapLabel(loadMs)}</dd></div>
+        <div><dt>Days with a distance</dt><dd>{row.kmDays} of {nDays}</dd></div>
+      </dl>
+
+      <section className="wcp-sec">
+        <h3 className="wcp-h">Drivers</h3>
+        {drivers.length
+          ? (
+            <ul className="wcp-drivers">
+              {drivers.map(([name, n]) => (
+                <li key={name}><span>{name}</span><span className="wcp-drivers__days">{n} day{n === 1 ? "" : "s"}</span></li>
+              ))}
+            </ul>
+          )
+          : <p className="wcp-empty">No driver is named on its tickets.</p>}
+      </section>
+
+      <section className="wcp-sec">
+        <h3 className="wcp-h">By day</h3>
+        <table className="wcp-days">
           <thead>
             <tr>
-              <th>Day</th>
-              <th>Trips</th>
-              <th>Net</th>
-              <th>Km</th>
+              <th scope="col">Day</th>
+              <th scope="col">Trips</th>
+              <th scope="col">Net, t</th>
+              <th scope="col">Km</th>
+              <th scope="col">Km per trip</th>
             </tr>
           </thead>
           <tbody>
             {[...row.perDay].reverse().map((d) => (
               <tr key={d.day}>
-                <td>{dayLabel(d.day)}</td>
+                <th scope="row">
+                  <span className="wcp-days__date">{dayLabel(d.day)}</span>
+                  {d.drivers.length > 0 && <span className="wcp-days__who">{d.drivers.join(", ")}</span>}
+                </th>
                 <td>{d.trips}</td>
-                <td>{tonnes(d.netKg)}</td>
-                <td>{d.km == null ? "" : kmLabel(d.km)}</td>
+                <td>{(d.netKg / 1000).toFixed(2)}</td>
+                <td>{d.km == null ? <span className="wcp-dim">{kmText(d) || "None"}</span> : kmLabel(d.km)}</td>
+                <td>{perTripOrNone(d)}</td>
               </tr>
             ))}
           </tbody>
+          {nDays > 1 && (
+            <tfoot>
+              <tr>
+                <th scope="row">All {nDays} days</th>
+                <td>{row.trips}</td>
+                <td>{(row.netKg / 1000).toFixed(2)}</td>
+                <td>{row.km == null ? "" : kmLabel(row.km)}</td>
+                <td>{perTripOrNone(row)}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
-      </DetailSidebarSection>
+      </section>
     </DetailSidebar>
   );
 }
+
+const perTripOrNone = (r) => (kmPerTrip(r) == null ? <span className="wcp-dim">None</span> : kmLabel(kmPerTrip(r)));
 
 /*
  * The exports, titles, pager and footer follow the Tickets table's (operator, 18 Nov 2026:
@@ -166,7 +349,18 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
   const idsByDay = useMemo(() => trackedIdsByDay(unitTripRows(tickets)), [tickets]);
   const days = useMemo(() => [...new Set(unitTripRows(tickets).map((r) => r.day))].sort(), [tickets]);
   const { kmByDay, state } = useDayKm(orgId, idsByDay, canKm && !loading);
-  const all = useMemo(() => unitTripRows(tickets, kmByDay), [tickets, kmByDay]);
+  // Km per trip: each trip arriving for a ticket on screen, measured by the odometer at its two ends
+  const tripTickets = useTripTickets(orgId, tickets, from, to, centre, canKm && !loading);
+  const legs = useMemo(() => {
+    if (!Array.isArray(tripTickets)) return [];
+    const shown = new Set(tickets.map((t) => t.id));
+    return tripLegs(tripTickets).filter((l) => shown.has(l.ticketId));
+  }, [tripTickets, tickets]);
+  const trips = useTripReadings(orgId, legs, canKm && !loading && Array.isArray(tripTickets));
+  const tripKm = useMemo(() => tripKmByTicket(legs, trips.readings), [legs, trips.readings]);
+  const tripsReading = canKm && (tripTickets == null || trips.reading);
+  const tripsFailed = tripTickets === "failed" || trips.failed;
+  const all = useMemo(() => unitTripRows(tickets, kmByDay, tripKm), [tickets, kmByDay, tripKm]);
   const q = search.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const keep = (r) => !q || r.plate.toUpperCase().replace(/[^A-Z0-9]/g, "").includes(q);
   // One row per unit when consolidating; either way, rows with a distance first, by date-time
@@ -178,7 +372,9 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
   );
   const totals = unitTripTotals(rows);
   const oneDay = from === to;
-  const reading = canKm && days.some((d) => !state.has(d));
+  const kmReading = canKm && days.some((d) => !state.has(d));
+  // The files wait for both: the day's distances and the trips' (operator, 18 Nov 2026)
+  const reading = kmReading || tripsReading;
 
   const [page, setPage] = useState(0);
   useEffect(() => { setPage(0); }, [from, to, q, consolidate]);
@@ -240,7 +436,7 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
       sheets: ticketsByBridge(tickets, centres).map((g) => ({
         name: g.name,
         title: titleOf(g.name),
-        body: bodyOf(fold(unitTripRows(g.rows, kmByDay).filter(keep))),
+        body: bodyOf(fold(unitTripRows(g.rows, kmByDay, tripKm).filter(keep))),
         meta: metaFor(g.name),
       })).filter((sh) => sh.body.length),
     }),
@@ -293,14 +489,22 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
 
   return (
     <>
-      {openRow && <UnitPanel row={openRow} kmText={noKm} onClose={() => setOpenPlate(null)} />}
+      {openRow && (
+        <UnitPanel
+          row={openRow}
+          kmText={noKm}
+          tripsState={tripsReading ? "reading" : tripsFailed ? "failed" : "ok"}
+          onClose={() => setOpenPlate(null)}
+        />
+      )}
       <TableToolbar
         summary={
           <>
             <b>{totals.units}</b> unit{totals.units === 1 ? "" : "s"} ·{" "}
             <b>{totals.trips}</b> trip{totals.trips === 1 ? "" : "s"} ·{" "}
             {tonnes(totals.netKg)} weighed ·{" "}
-            {kmLabel(totals.km) || "0.0"} km{reading ? " so far" : ""}
+            {kmLabel(totals.km) || "0.0"} km{kmReading ? " so far" : ""}
+            {totals.kmPerTrip != null && <> · {kmLabel(totals.kmPerTrip)} km a trip over {totals.measuredTrips} measured{tripsReading ? " so far" : ""}</>}
             {waiting > 0 && <span className="sp4-muted" role="status"> · your file follows once the distances are read</span>}
           </>
         }
@@ -389,7 +593,8 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
           {centreName ? ` · ${centreName}` : ""}
           {" · "}{totals.tracked} with a distance
           {consolidate && rows.length > 0 && <span className="sp4-muted"> · open a unit for its drivers and days</span>}
-          {(loading || reading) && <span className="sp4-muted"> · {reading ? "reading distances…" : "refreshing…"}</span>}
+          {(loading || reading) && <span className="sp4-muted"> · {loading ? "refreshing…" : kmReading ? "reading distances…" : "measuring trips…"}</span>}
+          {!loading && !reading && tripsFailed && <span className="sp4-muted"> · some trips could not be measured, reload to try again</span>}
         </div>
       </div>
     </>
