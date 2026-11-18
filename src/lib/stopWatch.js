@@ -180,6 +180,17 @@ export function stopKind(f) {
   return { label: 'Unauthorised stop', title: 'Unauthorised stop', icon: 'ti-map-pin-exclamation', where: 'Outside any authorised place', copyWhere: 'outside any authorised place' };
 }
 
+/**
+ * The Alerts page's two lists (operator, 18 Nov 2026): Customer stops, and
+ * Unauthorised stops (outside every place, and no-go zones).
+ */
+export function splitStops(lines) {
+  const customer = [];
+  const unauthorised = [];
+  for (const f of lines ?? []) (f.kind === 'customer' ? customer : unauthorised).push(f);
+  return { customer, unauthorised };
+}
+
 /** The read marks' own store (lib/feedReads), apart from any organisation's feed. */
 export const STOP_READS = 'menengai-stops';
 

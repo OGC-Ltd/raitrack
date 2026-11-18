@@ -109,3 +109,12 @@ describe('stopKind', () => {
     expect(stopKind({ kind: 'nogo', zone: 'Voi' }).where).toBe('In Voi');
   });
 });
+
+describe('splitStops', () => {
+  it('puts customer stops in their own list, no-go and unauthorised in the other', () => {
+    const got = sw.splitStops([{ key: 'a', kind: 'customer' }, { key: 'b', kind: 'unauthorised' }, { key: 'c', kind: 'nogo' }]);
+    expect(got.customer.map((f) => f.key)).toEqual(['a']);
+    expect(got.unauthorised.map((f) => f.key)).toEqual(['b', 'c']);
+    expect(sw.splitStops(null)).toEqual({ customer: [], unauthorised: [] });
+  });
+});
