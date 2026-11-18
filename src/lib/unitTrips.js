@@ -17,8 +17,16 @@
 // Km per trip is measured trip by trip (operator, 18 Nov 2026): the odometer
 // when the unit comes back laden, minus the odometer when it left empty, which
 // is mostly the same ticket's tare (tripLegs, tripKmByTicket).
+//
+// A row's distance reaches over its trips (operator, 18 Nov 2026: a 44.8 km trip
+// beside a 43.0 km day "will bring confusion"): a trip that left the evening before
+// its ticket's day, or came back the morning after, adds the part driven outside the
+// day, read off the odometer at midnight (tripEdgesKm). Shown over consecutive days,
+// that part is already in the neighbouring day's distance, so a unit's span counts it
+// once (spanKm).
 
 import { fleetDayKey } from "../hooks/useFuelEvents";
+import { fleetDayBounds } from "./weighbridgeBoard";
 
 /**
  * One row per unit per fleet day, the latest day first, then the most trips.
@@ -26,14 +34,16 @@ import { fleetDayKey } from "../hooks/useFuelEvents";
  * @param {object[]} tickets weighment rows ({ tokenAt, vehiclePlate, vehicleNo, vehicleId, driverName, netWeightKg })
  * @param {Map<string, Map<string, {km: number, source: string|null}>>} kmByDay fleet day → vehicleId → the day's distance, for the days read
  * @param {Map<string, number>} tripKm ticket id → the measured trip that arrived for it, km (tripKmByTicket)
+ * @param {Map<string, {leadKm: number, tailKm: number}>} edges unit|day → its trips' km outside the day (tripEdgesKm)
  * @returns {{ day, plate, unit, vehicleId, drivers: string[], bridges: string[], trips, netKg, firstAt, lastAt,
- *   loadMs, loadN, tripKm, tripN, km: number|null, kmSource: string|null, noFixes: boolean }[]}
- *   `tripKm`/`tripN` the measured trips' kilometres and count.
+ *   loadMs, loadN, tripKm, tripN, km: number|null, dayKm: number|null, leadKm, tailKm, kmSource: string|null, noFixes: boolean }[]}
+ *   `tripKm`/`tripN` the measured trips' kilometres and count. `km` is the day's distance (`dayKm`)
+ *   with the trips' kilometres before midnight (`leadKm`) and after the next (`tailKm`).
  *   `bridges` the weighbridges its tickets were raised at, `firstAt`/`lastAt` its first and last ticket's
  *   time (ISO), `loadMs`/`loadN` the summed load time (tare to gross) over the tickets that have one.
  *   `km` is null when the unit carries no tracker or its day was not read.
  */
-export function unitTripRows(tickets, kmByDay = new Map(), tripKm = new Map()) {
+export function unitTripRows(tickets, kmByDay = new Map(), tripKm = new Map(), edges = new Map()) {
   const byKey = new Map();
   for (const t of tickets ?? []) {
     if (!t?.tokenAt) continue;
@@ -68,12 +78,46 @@ export function unitTripRows(tickets, kmByDay = new Map(), tripKm = new Map()) {
       // unit-days on 17 Nov 2026 had none), not a unit that stood still, so no figure rather than 0.
       const noFixes = km != null && km <= 0;
       const none = km == null || noFixes;
-      return { ...r, km: none ? null : Math.round(km * 10) / 10, kmSource: none ? null : d.source ?? null, noFixes };
+      const e = r.vehicleId ? edges.get(`${r.vehicleId}|${r.day}`) : undefined;
+      const leadKm = none ? 0 : e?.leadKm ?? 0;
+      const tailKm = none ? 0 : e?.tailKm ?? 0;
+      return {
+        ...r, dayKm: none ? null : round1(km), leadKm, tailKm,
+        km: none ? null : round1(km + leadKm + tailKm), kmSource: none ? null : d.source ?? null, noFixes,
+      };
     })
     // In a day: the most trips, then the furthest, a unit with no distance after those with one
     .sort((a, b) => (a.day === b.day
       ? b.trips - a.trips || (b.km ?? -1) - (a.km ?? -1) || a.unit.localeCompare(b.unit)
       : a.day < b.day ? 1 : -1));
+}
+
+const round1 = (x) => Math.round(x * 10) / 10;
+const shiftDay = (day, n) => (day ? new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10) : null);
+
+/**
+ * One unit's kilometres over its rows (unitTripRows): each day's own distance, and the trips' part
+ * outside a day only where the neighbouring day is not among them with a distance of its own, which
+ * already holds that part. Null when no row has a distance.
+ */
+export function spanKm(rows) {
+  const read = (rows ?? []).filter((r) => r.km != null);
+  if (!read.length) return null;
+  const days = new Set(read.map((r) => r.day));
+  return round1(read.reduce((n, r) => n + (r.dayKm ?? r.km)
+    + (days.has(shiftDay(r.day, -1)) ? 0 : r.leadKm ?? 0)
+    + (days.has(shiftDay(r.day, 1)) ? 0 : r.tailKm ?? 0), 0));
+}
+
+/** Kilometres over unit-day rows, each unit by spanKm; consolidated rows carry theirs already. */
+function rowsKm(rows) {
+  if (rows.some((r) => r.perDay)) return round1(rows.reduce((n, r) => n + (r.km ?? 0), 0));
+  const byPlate = new Map();
+  for (const r of rows) {
+    if (!byPlate.has(r.plate)) byPlate.set(r.plate, []);
+    byPlate.get(r.plate).push(r);
+  }
+  return round1([...byPlate.values()].reduce((n, list) => n + (spanKm(list) ?? 0), 0));
 }
 
 /**
@@ -107,11 +151,11 @@ export function consolidateUnitRows(rows) {
     for (const d of r.drivers ?? []) if (!u.drivers.includes(d)) u.drivers.push(d);
     for (const b of r.bridges ?? []) if (!u.bridges.includes(b)) u.bridges.push(b);
     if (r.km != null) {
-      u.km = Math.round(((u.km ?? 0) + r.km) * 10) / 10;
       u.kmDays += 1;
       u.kmSource = u.kmSource == null || u.kmSource === r.kmSource ? r.kmSource : "mixed";
     }
   }
+  for (const u of byPlate.values()) u.km = spanKm(u.perDay);
   return [...byPlate.values()]
     .sort((a, b) => b.trips - a.trips || (b.km ?? -1) - (a.km ?? -1) || a.unit.localeCompare(b.unit));
 }
@@ -218,6 +262,58 @@ export function tripKmByTicket(legs, readings) {
 }
 
 /**
+ * The moments the odometer is read at: each trip's two ends, and midnight where a trip runs past its
+ * ticket's fleet day (`day` on the leg), the end of a day only once it has passed.
+ *
+ * @param {{vehicleId, startMs, endMs, day?: string}[]} legs
+ * @returns {{vehicleId: string, ms: number}[]}
+ */
+export function tripOdoPoints(legs, now = Date.now()) {
+  const out = new Map();
+  const add = (vehicleId, ms) => out.set(odoKey(vehicleId, ms), { vehicleId, ms });
+  for (const l of legs ?? []) {
+    add(l.vehicleId, l.startMs);
+    add(l.vehicleId, l.endMs);
+    if (!l.day) continue;
+    const { from, to } = fleetDayBounds(l.day);
+    if (l.startMs < from) add(l.vehicleId, from);
+    if (l.endMs > to && to <= now) add(l.vehicleId, to);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Each unit-day's measured trips' kilometres outside the day: `leadKm` from the earliest trip that
+ * left before midnight to midnight, `tailKm` from the next midnight to the latest that came back
+ * after it. Read off the odometer (`readings`, odoKey → metres); none where a reading is missing.
+ *
+ * @returns {Map<string, {leadKm: number, tailKm: number}>} unit|day →
+ */
+export function tripEdgesKm(legs, readings, tripKm) {
+  const span = new Map();
+  for (const l of legs ?? []) {
+    if (!l.day || !tripKm?.has(l.ticketId)) continue;
+    const k = `${l.vehicleId}|${l.day}`;
+    const s = span.get(k) ?? { vehicleId: l.vehicleId, ...fleetDayBounds(l.day), start: null, end: null };
+    s.start = s.start == null ? l.startMs : Math.min(s.start, l.startMs);
+    s.end = s.end == null ? l.endMs : Math.max(s.end, l.endMs);
+    span.set(k, s);
+  }
+  const km = (vehicleId, a, b) => {
+    const x = readings.get(odoKey(vehicleId, a));
+    const y = readings.get(odoKey(vehicleId, b));
+    return x == null || y == null ? 0 : Math.max(0, (y - x) / 1000);
+  };
+  const out = new Map();
+  for (const [k, s] of span) {
+    const leadKm = s.start < s.from ? km(s.vehicleId, s.start, s.from) : 0;
+    const tailKm = s.end > s.to ? km(s.vehicleId, s.to, s.end) : 0;
+    if (leadKm || tailKm) out.set(k, { leadKm, tailKm });
+  }
+  return out;
+}
+
+/**
  * The table's order (operator, 18 Nov 2026: "records with distance on top but still in
  * ascending order by the date time"): rows with a distance first, then the rest, each
  * part by its first ticket, earliest first.
@@ -242,7 +338,7 @@ export function unitTripTotals(rows) {
   const tracked = rows.filter((r) => r.km != null);
   const trips = rows.reduce((n, r) => n + r.trips, 0);
   const netKg = rows.reduce((n, r) => n + r.netKg, 0);
-  const km = Math.round(tracked.reduce((n, r) => n + r.km, 0) * 10) / 10;
+  const km = rowsKm(tracked);
   const tripKm = rows.reduce((n, r) => n + (r.tripKm ?? 0), 0);
   const tripN = rows.reduce((n, r) => n + (r.tripN ?? 0), 0);
   const loadMs = rows.reduce((n, r) => n + (r.loadMs ?? 0), 0);

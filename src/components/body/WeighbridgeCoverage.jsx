@@ -5,16 +5,16 @@
 // table in the Tickets view's grid card, pager and export bar.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import TableToolbar from "./TableToolbar";
 import { loadFuelConsumptionRate, loadUnitDistance, loadOdometerAt } from "../../api/reports";
 import { downloadTableCsv, exportLater } from "../../utils/tableExport";
-import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
+import ReportFilesBar from "./ReportFilesBar";
+import { coverageDoc, spanWords } from "../../lib/weighbridgeDocs";
 import { settleLimited } from "../../lib/settleLimited";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { fleetDaysBetween } from "../../lib/weighbridgeBoard";
 import {
   unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs,
-  consolidateUnitRows, distanceFirst, tripLegs, tripKmByTicket, odoKey,
+  consolidateUnitRows, distanceFirst, tripLegs, tripKmByTicket, odoKey, tripOdoPoints, tripEdgesKm,
 } from "../../lib/unitTrips";
 import DetailSidebar from "../shared/DetailSidebar";
 import "./CoverageUnitPanel.css";
@@ -143,26 +143,25 @@ async function askOdometer(orgId, points) {
 }
 
 /**
- * The odometer at both ends of each trip, a fleet day of trips at a time, the latest first.
- * `reading` until every day has answered; `failed` when one could not be read.
+ * The odometer at these moments (tripOdoPoints: each trip's two ends, midnight where a trip runs
+ * past its day), a fleet day at a time, the latest first. `reading` until every day has answered;
+ * `failed` when one could not be read.
  */
-function useTripReadings(orgId, legs, enabled) {
+function useTripReadings(orgId, points, enabled) {
   const [readings, setReadings] = useState(() => new Map());
   const [doneKey, setDoneKey] = useState(null);
   const [failed, setFailed] = useState(false);
-  const key = `${orgId}|${legs.length}|${legs.reduce((h, l) => (h * 31 + l.startMs / 1000 + l.endMs / 1000) % 1e9, 0)}`;
+  const key = `${orgId}|${points.length}|${points.reduce((h, p) => (h * 31 + p.ms / 1000) % 1e9, 0)}`;
   useEffect(() => {
     if (!enabled || !orgId) return undefined;
     let live = true;
     setReadings(new Map());
     setFailed(false);
     const byDay = new Map();
-    for (const l of legs) {
-      const d = fleetDayKey(new Date(l.endMs));
+    for (const p of points) {
+      const d = fleetDayKey(new Date(p.ms));
       if (!byDay.has(d)) byDay.set(d, new Map());
-      const pts = byDay.get(d);
-      pts.set(odoKey(l.vehicleId, l.startMs), { vehicleId: l.vehicleId, ms: l.startMs });
-      pts.set(odoKey(l.vehicleId, l.endMs), { vehicleId: l.vehicleId, ms: l.endMs });
+      byDay.get(d).set(odoKey(p.vehicleId, p.ms), p);
     }
     const days = [...byDay.keys()].sort().reverse();
     settleLimited(days, 2, async (d) => {
@@ -339,7 +338,8 @@ const perTripOrNone = (r) => (kmPerTrip(r) == null ? <span className="wcp-dim">N
  * "just like the default, especially when you pick more weighbridges"): the bridge picked
  * names the report; with every bridge, the Excel file's first sheet holds every unit and a
  * sheet follows for each weighbridge, counting the trips made over that bridge. A unit's
- * distance is its whole day's, so it is the same on every sheet it appears on.
+ * distance is its whole day's, with its trips' kilometres past midnight either side, so it is the
+ * same on every sheet it appears on.
  *
  * `consolidate` folds the span's days into one row per unit (operator, 18 Nov 2026: "if we
  * pick from 10/10 to 15/10 then we get to pick a single car and sum up its collective data");
@@ -353,14 +353,18 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
   const tripTickets = useTripTickets(orgId, tickets, from, to, centre, canKm && !loading);
   const legs = useMemo(() => {
     if (!Array.isArray(tripTickets)) return [];
-    const shown = new Set(tickets.map((t) => t.id));
-    return tripLegs(tripTickets).filter((l) => shown.has(l.ticketId));
+    // Each trip under its ticket's fleet day, the row it is counted in
+    const dayOf = new Map(tickets.filter((t) => t.tokenAt).map((t) => [t.id, fleetDayKey(new Date(t.tokenAt))]));
+    return tripLegs(tripTickets).filter((l) => dayOf.has(l.ticketId)).map((l) => ({ ...l, day: dayOf.get(l.ticketId) }));
   }, [tripTickets, tickets]);
-  const trips = useTripReadings(orgId, legs, canKm && !loading && Array.isArray(tripTickets));
+  const points = useMemo(() => tripOdoPoints(legs), [legs]);
+  const trips = useTripReadings(orgId, points, canKm && !loading && Array.isArray(tripTickets));
   const tripKm = useMemo(() => tripKmByTicket(legs, trips.readings), [legs, trips.readings]);
+  // A trip's kilometres outside its day, added to the row's distance (lib/unitTrips)
+  const edges = useMemo(() => tripEdgesKm(legs, trips.readings, tripKm), [legs, trips.readings, tripKm]);
   const tripsReading = canKm && (tripTickets == null || trips.reading);
   const tripsFailed = tripTickets === "failed" || trips.failed;
-  const all = useMemo(() => unitTripRows(tickets, kmByDay, tripKm), [tickets, kmByDay, tripKm]);
+  const all = useMemo(() => unitTripRows(tickets, kmByDay, tripKm, edges), [tickets, kmByDay, tripKm, edges]);
   const q = search.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const keep = (r) => !q || r.plate.toUpperCase().replace(/[^A-Z0-9]/g, "").includes(q);
   // One row per unit when consolidating; either way, rows with a distance first, by date-time
@@ -417,9 +421,7 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
         workSpanMs(r) == null ? "" : gapLabel(workSpanMs(r)), ...tail];
   });
   const body = bodyOf(rows);
-  // The same note, filename and sheets as the Tickets table's export.
-  const note = [span, centreName || null, q ? `matching “${search}”` : null, consolidate ? "one row per unit" : null]
-    .filter(Boolean).join(" · ");
+  // The same filename and sheets as the Tickets table's export.
   const filenameSlug = ["weighbridge-coverage", consolidate ? "by-unit" : "", from, oneDay ? "" : to, (centreName || "all").toLowerCase()]
     .filter(Boolean).join("-").replace(/[^a-z0-9-]/gi, "");
   // "Weighbridge Coverage at NYAONDO", each sheet its own bridge (operator, 18 Nov 2026)
@@ -436,27 +438,26 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
       sheets: ticketsByBridge(tickets, centres).map((g) => ({
         name: g.name,
         title: titleOf(g.name),
-        body: bodyOf(fold(unitTripRows(g.rows, kmByDay, tripKm).filter(keep))),
+        body: bodyOf(fold(unitTripRows(g.rows, kmByDay, tripKm, edges).filter(keep))),
         meta: metaFor(g.name),
       })).filter((sh) => sh.body.length),
     }),
   });
-  const savePdf = () => downloadLetterheadTablePdf({
-    ...fleet,
-    prefix: "WB",
-    reportTitle,
-    sectionTitle: `${centreName || "All weighbridges"}, ${span}`,
-    filterNote: note,
-    cards: [
+  // The PDF, JPEG and Preview the Movements tabs make, drawn by the server (operator, 18 Nov 2026)
+  const sheet = (landscape) => coverageDoc({
+    title: reportTitle, head, body,
+    fleet: fleet.companyName, orgCode: fleet.orgCode, bridge: centreName, span: spanWords(from, to),
+    search: q ? search : "", consolidated: consolidate, landscape,
+    figures: [
       { label: "Units", value: String(totals.units) },
       { label: "Trips", value: String(totals.trips) },
-      { label: "Net weighed", value: tonnes(totals.netKg) },
-      { label: "Distance", value: `${kmLabel(totals.km) || "0.0"} km` },
+      { label: "Net weighed, t", value: (totals.netKg / 1000).toFixed(2) },
+      { label: "Distance, km", value: kmLabel(totals.km) || "0.0" },
       { label: "Trips per unit", value: totals.tripsPerUnit == null ? "-" : String(totals.tripsPerUnit) },
-      { label: "Average load", value: totals.avgLoadKg == null ? "-" : tonnes(totals.avgLoadKg) },
+      { label: "Average load, t", value: totals.avgLoadKg == null ? "-" : (totals.avgLoadKg / 1000).toFixed(2) },
       { label: "Km per trip", value: totals.kmPerTrip == null ? "-" : kmLabel(totals.kmPerTrip) },
+      { label: "Trips measured", value: String(totals.measuredTrips ?? 0) },
     ],
-    head, body,
   });
 
   /*
@@ -466,7 +467,7 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
    * file holds the finished distances, not the ones on screen at the click.
    */
   const latest = useRef({});
-  latest.current = { saveCsv, savePdf };
+  latest.current = { saveCsv, sheet };
   const readWaiters = useRef([]);
   const [waiting, setWaiting] = useState(0);
   useEffect(() => {
@@ -485,7 +486,6 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
     return whenRead().then(() => run(save)).finally(() => setWaiting((n) => n - 1));
   };
   const exportCsv = () => afterRead(() => latest.current.saveCsv());
-  const exportPdf = () => afterRead(() => latest.current.savePdf());
 
   return (
     <>
@@ -497,7 +497,12 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
           onClose={() => setOpenPlate(null)}
         />
       )}
-      <TableToolbar
+      <ReportFilesBar
+        orgId={orgId}
+        source={rows}
+        title={reportTitle}
+        ready={whenRead}
+        sheet={(landscape) => latest.current.sheet(landscape)}
         summary={
           <>
             <b>{totals.units}</b> unit{totals.units === 1 ? "" : "s"} ·{" "}
@@ -508,11 +513,9 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
             {waiting > 0 && <span className="sp4-muted" role="status"> · your file follows once the distances are read</span>}
           </>
         }
-        note={note}
         loading={loading}
         onReload={onReload}
         onCsv={exportCsv}
-        onPdf={exportPdf}
         disabled={!rows.length}
       />
       <div className="wb-grid-card">

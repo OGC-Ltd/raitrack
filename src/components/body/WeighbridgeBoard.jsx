@@ -42,7 +42,9 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, ReferenceDot, Label,
 } from "recharts";
-import { buildBoard, roadUnits, FIELDS } from "../../lib/weighbridgeBoard";
+import { buildBoard, roadUnits } from "../../lib/weighbridgeBoard";
+import { boardDoc, roadByYard } from "../../lib/weighbridgeDocs";
+import ReportFilesBar from "./ReportFilesBar";
 import "./WeighbridgeBoard.css";
 
 const HOUR = 3_600_000;
@@ -568,7 +570,12 @@ function FeedRow({ e }) {
  * @param dispatched the server's /weighments/dispatched answer (the trucks and
  *                 tractors FactorySuite signed out and not yet back), or null.
  */
-export default function WeighbridgeBoard({ rows, from, to, centres, loading, dispatched = null }) {
+/**
+ * `files`, when given, puts the export bar over the board: the PDF, JPEG and Preview the
+ * Movements tabs make, drawn by the server from lib/weighbridgeDocs boardDoc
+ * ({ orgId, fleet: useLetterheadFleet's, span, onReload }).
+ */
+export default function WeighbridgeBoard({ rows, from, to, centres, loading, dispatched = null, files = null }) {
   /* `Date.now()` is read once per build rather than per render: the elapsed
      times below would otherwise disagree between two cards drawn in the same
      paint, and the span's figures do not move between them either. */
@@ -596,17 +603,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
      is looking for when the mill is short. The mill itself is left out: it is
      where these vehicles are going. Runs sent to a farm get one "Fields" row,
      drawn only when there is one: their cane comes to the mill's own scale. */
-  const roadBySite = useMemo(() => {
-    const out = sites
-      .filter(s => !s.factory)
-      .map(s => {
-        const trucks = units.filter(u => u.code === s.code);
-        return { code: s.code, name: s.name, trucks, kg: trucks.reduce((n, x) => n + (x.netKg ?? 0), 0) };
-      });
-    const fields = units.filter(u => u.code === FIELDS || !sites.some(s => s.code === u.code && !s.factory));
-    if (fields.length) out.push({ code: FIELDS, name: "Fields", trucks: fields, kg: 0 });
-    return out;
-  }, [sites, units]);
+  const roadBySite = useMemo(() => roadByYard(sites, units), [sites, units]);
 
   const overdue = useMemo(() => units.filter(u => u.overdue), [units]);
   /* The SHORTEST wait in the set, which is what makes the header honest as a
@@ -692,23 +689,23 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
             is short. */}
         <ul className="wbb-road">
           {roadBySite.map(r => (
-            <li key={r.code} className={"wbb-road__row" + (r.trucks.length ? "" : " wbb-road__row--none")}>
+            <li key={r.code} className={"wbb-road__row" + (r.units.length ? "" : " wbb-road__row--none")}>
               <span className="wbb-road__site" title={r.name}>{nameCase(r.name)}</span>
-              {r.trucks.length === 0 ? (
+              {r.units.length === 0 ? (
                 <span className="wbb-road__none">None out</span>
               ) : (
                 <span className="wbb-road__blocks">
-                  {r.trucks.slice(0, MAX_BLOCKS).map(x => (
+                  {r.units.slice(0, MAX_BLOCKS).map(x => (
                     <i key={x.key} className={blockClass(x)} title={unitTitle(x)} />
                   ))}
-                  {r.trucks.length > MAX_BLOCKS && (
-                    <em className="wbb-block__more">+{r.trucks.length - MAX_BLOCKS}</em>
+                  {r.units.length > MAX_BLOCKS && (
+                    <em className="wbb-block__more">+{r.units.length - MAX_BLOCKS}</em>
                   )}
                 </span>
               )}
               <span className="wbb-road__count">
                 {r.kg > 0 && <span className="wbb-road__t">{t1(r.kg)} t</span>}
-                <b>{r.trucks.length || "-"}</b>
+                <b>{r.units.length || "-"}</b>
               </span>
             </li>
           ))}
@@ -795,7 +792,28 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
     </>
   );
 
+  /* The export bar: the board's figures as the report the server draws, the
+     same PDF, JPEG and Preview as the Movements tabs. */
+  const bar = files && (
+    <ReportFilesBar
+      orgId={files.orgId}
+      source={board}
+      title="Weighbridge analytics"
+      summary={<>
+        <b>{totals.bridgesReporting}</b> of {totals.bridges} bridge{totals.bridges === 1 ? "" : "s"} reporting ·{" "}
+        {t1(totals.receivedKg)} t received · {units.length} on the road
+      </>}
+      loading={loading}
+      onReload={files.onReload}
+      sheet={(landscape) => boardDoc(board, units, {
+        fleet: files.fleet.companyName, orgCode: files.fleet.orgCode, span: files.span, landscape,
+      })}
+    />
+  );
+
   return (
+    <>
+    {bar}
     <div className="wbb">
       {/* ── The day in seven figures ─────────────────────────────────────
           The order is the cane's own: what is standing on the ground, how far
@@ -1022,5 +1040,6 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
         </aside>
       </div>
     </div>
+    </>
   );
 }

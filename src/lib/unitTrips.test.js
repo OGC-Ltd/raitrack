@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst, ticketTrip, tripLegs, tripKmByTicket, odoKey } from "./unitTrips";
+import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst, ticketTrip, tripLegs, tripKmByTicket, odoKey, tripOdoPoints, tripEdgesKm, spanKm } from "./unitTrips";
 
 // Fleet days are East Africa Time (UTC+3): 22:30Z on the 17th is 01:30 on the 18th.
 const t = (tokenAt, plate, extra = {}) => ({ tokenAt, vehiclePlate: plate, vehicleNo: plate, netWeightKg: 10_000, ...extra });
@@ -255,5 +255,50 @@ describe("trips between consecutive tickets", () => {
       [odoKey("v", 8 * h), null], [odoKey("v", 9 * h), 450_000],
     ]);
     expect([...tripKmByTicket(legs, readings)]).toEqual([[1, 62.4]]);
+  });
+});
+
+describe("a row's distance reaches over its trips", () => {
+  // 16 Nov 2026 runs 15 Nov 21:00 to 16 Nov 21:00 UTC (Nairobi midnight to midnight)
+  const DAY_START = Date.parse("2026-11-15T21:00:00Z");
+  const DAY_END = Date.parse("2026-11-16T21:00:00Z");
+  const leftEve = Date.parse("2026-11-15T12:24:00Z");   // 15:24 Nairobi, the evening before
+  const backMorn = Date.parse("2026-11-16T08:13:00Z");  // 11:13 Nairobi
+  const leg = { ticketId: 1, vehicleId: "v", startMs: leftEve, endMs: backMorn, day: "2026-11-16" };
+  const ticket = { id: 1, vehicleId: "v", vehicleNo: "KTCC 212G", vehiclePlate: "KTCC212G", tokenAt: "2026-11-16T08:13:00Z", netWeightKg: 10780 };
+
+  it("reads midnight where a trip left the day before, and the day's end only once it has passed", () => {
+    const pts = tripOdoPoints([leg, { ticketId: 2, vehicleId: "v", startMs: DAY_END - 3_600_000, endMs: DAY_END + 3_600_000, day: "2026-11-16" }], DAY_END + 4 * 3_600_000);
+    expect(pts.map((p) => p.ms).sort()).toEqual([leftEve, DAY_START, backMorn, DAY_END - 3_600_000, DAY_END, DAY_END + 3_600_000].sort());
+    // The day not over yet: no reading at its end
+    expect(tripOdoPoints([{ ...leg, endMs: DAY_END + 3_600_000 }], DAY_END - 1).some((p) => p.ms === DAY_END)).toBe(false);
+  });
+
+  it("adds the part of the trip driven before midnight, so the trip is never longer than the row", () => {
+    const readings = new Map([[odoKey("v", leftEve), 1_000_000], [odoKey("v", DAY_START), 1_018_000], [odoKey("v", backMorn), 1_044_800]]);
+    const tripKm = tripKmByTicket([leg], readings);
+    expect(tripKm.get(1)).toBeCloseTo(44.8);
+    const edges = tripEdgesKm([leg], readings, tripKm);
+    expect(edges.get("v|2026-11-16")).toEqual({ leadKm: 18, tailKm: 0 });
+    const [row] = unitTripRows([ticket], new Map([["2026-11-16", new Map([["v", { km: 43.0, source: "odometer" }]])]]), tripKm, edges);
+    expect(row).toMatchObject({ dayKm: 43, leadKm: 18, km: 61 });
+    expect(kmPerTrip(row)).toBeLessThanOrEqual(row.km);
+  });
+
+  it("leaves out a trip that was not measured, and a missing reading adds nothing", () => {
+    const readings = new Map([[odoKey("v", leftEve), 1_000_000], [odoKey("v", backMorn), 1_044_800]]);
+    expect(tripEdgesKm([leg], readings, new Map()).size).toBe(0);
+    expect(tripEdgesKm([leg], readings, new Map([[1, 44.8]])).size).toBe(0);
+  });
+
+  it("counts the part once when the day before is shown too, and in the totals", () => {
+    const rows = [
+      { plate: "P", day: "2026-11-15", km: 30, dayKm: 30, leadKm: 0, tailKm: 0 },
+      { plate: "P", day: "2026-11-16", km: 61, dayKm: 43, leadKm: 18, tailKm: 0 },
+    ];
+    expect(spanKm(rows)).toBe(73);
+    expect(spanKm([rows[1]])).toBe(61);
+    expect(unitTripTotals(rows.map((r) => ({ ...r, unit: "P", trips: 1, netKg: 0 }))).km).toBe(73);
+    expect(consolidateUnitRows(rows.map((r) => ({ ...r, unit: "P", trips: 1, netKg: 0, firstAt: `${r.day}T08:00:00Z`, lastAt: `${r.day}T08:00:00Z`, kmSource: "odometer" })))[0].km).toBe(73);
   });
 });

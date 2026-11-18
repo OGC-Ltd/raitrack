@@ -43,7 +43,6 @@ import { useDispatchedUnits } from "../../hooks/useDispatchedUnits";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
 import { tonnes, kilos, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
 import { WeighbridgeIcon } from "../footer/NavIcons";
-import TableToolbar from "../body/TableToolbar";
 import WeighbridgeBoard from "../body/WeighbridgeBoard";
 import WeighbridgeCoverage from "../body/WeighbridgeCoverage";
 import EmptyNote from "../shared/EmptyNote";
@@ -52,8 +51,9 @@ import { useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { downloadTableCsv } from "../../utils/tableExport";
 import { ticketsByBridge } from "../../lib/weighbridgeSheets";
-// The PDF on the report letterhead, named for the organisation (operator, 17 Nov 2026)
-import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
+// The PDF, JPEG and Preview the Movements tabs make, drawn by the server (operator, 18 Nov 2026)
+import ReportFilesBar from "../body/ReportFilesBar";
+import { ticketsDoc, spanWords } from "../../lib/weighbridgeDocs";
 import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
 import "../body/SensorPanel.css";
 /* For its TOKENS, not for its layout: the `an-*` chart palette the board draws
@@ -446,13 +446,8 @@ export default function WeighbridgesScreen() {
   const at        = Math.min(page, pageCount - 1);
   const pageRows  = rows.slice(at * GRID_STEP, at * GRID_STEP + GRID_STEP);
 
-  // What a downloaded file is a set OF. An export with no filter control on it
-  // has to say so out loud — the same rule the probes tab's note follows.
-  const exportNote = [
-    spanLabel(from, to),
-    centreName || null,
-    search ? `matching “${search}”` : null,
-  ].filter(Boolean).join(" · ");
+  // What a downloaded file is a set OF is said on it: the PDF's facts name the
+  // days, the bridge and the search (lib/weighbridgeDocs ticketsDoc).
   const filenameSlug = ["weighbridge", from, from === to ? "" : to, (centreName || "all").toLowerCase()]
     .join("-").replace(/[^a-z0-9-]/gi, "");
   // Weighed in the rows ON SCREEN — not the day's total, which the strip above
@@ -665,7 +660,8 @@ export default function WeighbridgesScreen() {
               </EmptyNote>
             ) : (
               <>
-                <WeighbridgeBoard rows={rows} from={from} to={to} centres={centres} loading={loading} dispatched={dispatched} />
+                <WeighbridgeBoard rows={rows} from={from} to={to} centres={centres} loading={loading} dispatched={dispatched}
+                                  files={{ orgId, fleet, span: spanWords(from, to), onReload: reload }} />
               </>
             )}
           </div>
@@ -756,28 +752,24 @@ export default function WeighbridgesScreen() {
                     Speed and Malfunction wear — same three buttons, same
                     order, same wording. A fifth tab with its own affordance
                     for getting data out is how the five drift apart. */}
-                <TableToolbar
+                <ReportFilesBar
+                  orgId={orgId}
+                  source={rows}
+                  title="Weighbridge tickets"
                   summary={
                     <>
                       <b>{data.matched}</b> ticket{data.matched === 1 ? "" : "s"} ·{" "}
                       {tonnes(shownNetKg)} weighed
                     </>
                   }
-                  note={exportNote}
                   loading={loading}
                   onReload={reload}
                   onCsv={exportCsv}
-                  onPdf={() => downloadLetterheadTablePdf({
-                    ...fleet,
-                    prefix:       "WB",
-                    reportTitle:  `Weighbridge Tickets${centreName ? `: ${centreName}` : ""}`,
-                    sectionTitle: `${centreName || "All weighbridges"}, ${spanLabel(from, to)}`,
-                    filterNote:   exportNote,
-                    cards: [
-                      { label: "Tickets", value: String(rows.length) },
-                      { label: "Net weighed", value: tonnes(shownNetKg) },
-                    ],
+                  sheet={(landscape) => ticketsDoc({
                     head: EXPORT_HEAD, body: exportBody(rows),
+                    fleet: fleet.companyName, orgCode: fleet.orgCode,
+                    bridge: centreName, span: spanWords(from, to), search,
+                    netKg: shownNetKg, landscape,
                   })}
                   disabled={!rows.length}
                 />
