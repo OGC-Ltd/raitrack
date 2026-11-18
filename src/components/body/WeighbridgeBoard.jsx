@@ -81,11 +81,15 @@ const t1 = (kg) => (kg == null ? "-" : fmt(kg / 1000, 1));
  *  small enough to carry it; a mill running to four figures reads 15,338 t. */
 const tHead = (kg) => (kg == null ? "-" : fmt(kg / 1000, Math.abs(kg) >= 1_000_000 ? 0 : 1));
 
-/** A tonnage that has a DIRECTION: "+41 t" in, "−93 t" out. The book move is
- *  the one figure on the strip that is a difference rather than a total, and a
- *  bare "93 t" under "cane on the ground" would read as a level. */
-const signed = (kg) =>
-  (kg == null ? "-" : (kg < 0 ? "−" : "+") + fmt(Math.abs(kg) / 1000, 0) + " t");
+/** A tonnage that has a DIRECTION, said in words: "41 t more in than out",
+ *  "93 t more out than in". The book move is the one figure on the strip that
+ *  is a difference rather than a total, and a bare "93 t" under "cane on the
+ *  ground" would read as a level; no +/− sign on the Book (operator, 2026-11-18). */
+const moved = (kg) => {
+  if (kg == null) return "-";
+  const t = fmt(Math.abs(kg) / 1000, 0);
+  return kg === 0 ? "level" : `${t} t more ${kg > 0 ? "in than out" : "out than in"}`;
+};
 
 /** A gap the way the yard says it: "2h 14m", "18m". */
 function gap(msVal) {
@@ -403,7 +407,9 @@ function SiteCard({ site, lastBucket, asOf, closed, totals, spanDays, axis, over
         <div className="wbb-fig">
           <span className="wbb-fig__l">Book</span>
           <span className={"wbb-fig__n" + (!mill && site.bookMoveKg < 0 ? " wbb-fig__n--down" : "")}>
-            {tHead(mill ? site.receivedKg + site.arrivedKg : site.bookMoveKg)}<i>t</i>
+            {/* The size only: which way it went is the red and the line under
+                it ("out over in"), so no minus sign (operator, 2026-11-18). */}
+            {tHead(mill ? site.receivedKg + site.arrivedKg : Math.abs(site.bookMoveKg))}<i>t</i>
           </span>
           {/* No "gap" line: a gap is book against physical, and there is no
               physical. What the figure IS gets said instead. */}
@@ -835,7 +841,7 @@ export default function WeighbridgeBoard({ rows, from, to, centres, loading, dis
         <Stat
           n="-"
           label="Cane on the ground"
-          sub={`No physical count · book moved ${signed(totals.bookMoveKg)}`}
+          sub={`No physical count · book moved ${moved(totals.bookMoveKg)}`}
           title="The heap standing in the yards. Nothing in the weighbridge feed counts it, a scale weighs lorries, and the yard tally is a walk round with a clipboard that reaches us nowhere. The figure underneath is what the day's weighings MOVED at the outstations: cane in off the fields less cane sent to the mill, which is a movement and not a level."
         />
 
