@@ -1016,7 +1016,7 @@ export default function AlertsScreen() {
                     title="Today’s geofence exits, as the server recorded them">Geofence exits</Chip>
               {watch.status !== "off" && watch.status !== "idle" && (
                 <Chip on={stops} onClick={() => setView("stops")} n={watch.status === "done" ? watch.flags.length : undefined}
-                      title="Menengai units standing in a no-go zone, or stopped over 10 minutes outside every authorised place">Unauthorised stops</Chip>
+                      title="Menengai units in a no-go zone, stopped over 10 minutes at a customer, or outside every authorised place">Stops</Chip>
               )}
               {idleWatch.status !== "off" && idleWatch.status !== "idle" && (
                 <Chip on={idle} onClick={() => setView("idle")} n={idleWatch.status === "done" ? idleCount : undefined}
