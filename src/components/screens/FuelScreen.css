@@ -60,3 +60,43 @@
   .fuel-grid .fuel-job { max-width: 170px; }
 }
 .fuel-grid td.fuel-var { white-space: normal; min-width: 5.5em; line-height: 1.3; }
+
+/* ── Phones (operator 2026-11-18: "the fuel tab … on mobile … responsive") ──
+   The Drivers page turns its rows into cards at 700px with ten placed cells;
+   a machine row has twelve, so Variance and Pump flags fell into whatever slot
+   was left. The machine card places all twelve:
+     machine            status
+     department · job   period
+     shifts  requested  fuel now
+     need    issued     probe filled
+     variance           pump flags
+   Same specificity as the Drivers rules, later in the cascade, so these win. */
+@media (max-width: 700px) {
+  .fuel-grid tbody tr {
+    grid-template-areas:
+      "who  who  status"
+      "rule rule rule"
+      "dept dept when"
+      "m1   m2   m3"
+      "m4   m5   m6"
+      "m7   m7   m8";
+  }
+  .fuel-grid tbody td:nth-child(2) { grid-area: dept; white-space: normal; }
+  .fuel-grid tbody td:nth-child(5) { grid-area: m1; }
+  .fuel-grid tbody td:nth-child(6) { grid-area: m2; }
+  .fuel-grid tbody td:nth-child(7) { grid-area: m3; }
+  .fuel-grid tbody td:nth-child(8) { grid-area: m4; }
+  .fuel-grid tbody td:nth-child(9) { grid-area: m5; }
+  .fuel-grid tbody td:nth-child(10) { grid-area: m6; }
+  .fuel-grid tbody td:nth-child(11) { grid-area: m7; }
+  .fuel-grid tbody td:nth-child(12) { grid-area: m8; }
+  /* The job under the department gets the card's two thirds, not the desk cap */
+  .fuel-grid .fuel-job { max-width: none; }
+  .fuel-grid tbody td.fuel-var { white-space: normal; }
+
+  /* The machine panel is the full screen here; the comparison table's heads
+     and dates wrap rather than run past its edge (the panel hides overflow) */
+  .fuel-rec { font-size: 12px; }
+  .fuel-rec th, .fuel-rec td { padding: 6px 4px; }
+  .fuel-rec thead th { white-space: normal; }
+}

@@ -194,6 +194,12 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
                   <i className="ti ti-clipboard-check" aria-hidden="true" /> Fuel audit
                 </button>
               )}
+              {/* The Fuel page (FactorySuite plans, pump issues, probes): on phones too (operator, 18 Nov 2026) */}
+              {can('factory_fuel:read') && (
+                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuel'); setUserOpen(false); }}>
+                  <i className="ti ti-gas-station" aria-hidden="true" /> Fuel
+                </button>
+              )}
               {can('fuel_filling:read') && (
                 <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuelReport'); setUserOpen(false); }}>
                   <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel metrics
