@@ -12,6 +12,8 @@
  *   Workshop day   one day's intake against the 3-a-day cap
  *   Security       investigations opened by suspected malicious damage
  *                  (security_case:read: the Head of Security)
+ *   Auto Workshop  FactorySuite's workshop floor and stores (KASULU only);
+ *                  its job cards are worked as jobs on the Jobs tab
  *
  * A row opens the job in the shared DetailSidebar (RepairWorkflowJob), the
  * same side panel every other page uses. Built from the Sensor Monitor's parts.
@@ -21,14 +23,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "../body/SensorPanel.css";
 import "./SystemScreen.css";
 import "../body/RepairWorkflow.css";
-import { usePermissions } from "../../hooks/usePermissions";
+import { usePermissions, FACTORY_WORKSHOP_ORGS } from "../../hooks/usePermissions";
 import { useAuth } from "../../context/AuthContext";
 import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
 import {
   listWorkflowJobs, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
-  takeWorkshopHandoff, WORKSHOP_OPEN,
+  takeWorkshopHandoff, WORKSHOP_OPEN, shortCard,
 } from "../../api/repairWorkflow";
+import FactoryWorkshopTab from "./FactoryWorkshopTab";
 import RepairWorkflowJob, { PhaseLadder, TrailList, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
 import TableToolbar from "../body/TableToolbar";
@@ -78,6 +81,7 @@ export function jobText(j) {
   return [
     j.vehicle?.registrationPlate, j.vehicle?.name, j.ticketNo, jobLabel(j), j.suspectedFault, j.problemNote,
     STAGE_LABEL[j.stage] ?? j.stage, NEXT_STEP[j.stage]?.who,
+    ...(j.fsJobCards ?? []).map((c) => c.cardNumber),
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
@@ -197,7 +201,10 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
                         <PhaseLadder stage={j.stage} compact />
                       </span>
                     </td>
-                    <td className="sp4-td--left"><span className="wf-mono">{j.ticketNo ?? "-"}</span></td>
+                    <td className="sp4-td--left">
+                      <span className="wf-mono">{j.ticketNo ?? "-"}</span>
+                      {j.fsJobCards?.length > 0 && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                    </td>
                     <td className="sp4-td--left sys-num">{booking ? isoDay(booking.bookingDate) : "-"}</td>
                     <td className="sp4-td--left">{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
                     <td className="sp4-td--right sys-num">{since(j.stageChangedAt ?? j.createdAt)}</td>
@@ -353,7 +360,10 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast }) {
                         <PhaseLadder stage={j.stage} compact />
                       </span>
                     </td>
-                    <td className="sp4-td--left"><span className="wf-mono">{j.ticketNo ?? "-"}</span></td>
+                    <td className="sp4-td--left">
+                      <span className="wf-mono">{j.ticketNo ?? "-"}</span>
+                      {j.fsJobCards?.length > 0 && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                    </td>
                     <td className="sp4-td--left">
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
                         : !j.assignedToId && !j.workshopTechnicianId ? (
@@ -673,7 +683,7 @@ function CaseDetail({ orgId, c, canUpdate, onToast, onSaved }) {
 // ── The screen ──────────────────────────────────────────────────────────────
 
 export default function WorkshopScreen() {
-  const { orgId, can } = usePermissions();
+  const { orgId, orgCode, can } = usePermissions();
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [toast, setToast] = useState(null);
@@ -690,7 +700,8 @@ export default function WorkshopScreen() {
     { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
     { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
-  ].filter((t) => t.allow), [can, board]);
+    { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) },
+  ].filter((t) => t.allow), [can, board, orgCode]);
   const [tab, setTab] = useState("jobs");
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
 
@@ -740,6 +751,7 @@ export default function WorkshopScreen() {
         {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} />}
         {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
         {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
+        {active === "factory" && <FactoryWorkshopTab orgId={orgId} onOpen={setOpenId} openId={openId} />}
       </div>
 
       {openId && (

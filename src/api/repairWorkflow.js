@@ -176,6 +176,32 @@ export const fetchInvestigations = (orgId, status = "open") => get(`${base(orgId
 export const fetchSecurityHolders = (orgId) => get(`${base(orgId)}/security-investigations/holders`).then((d) => d ?? []);
 export const fetchAssignees      = (orgId) => get(`${base(orgId)}/assignees`).then((d) => d ?? []);
 
+// ── FactorySuite Auto Workshop (KASULU) ───────────────────────────────────
+// The workshop's job cards feed the jobs above (server
+// factorysuite-workshop.sync); these read the cards and the stores themselves.
+
+/** Open job cards and a summary of the last `days`. */
+export const fetchFactoryBoard   = (orgId, days = 7) => get(`${base(orgId)}/factorysuite/board?days=${days}`);
+/** The stores part picker: search by part number or description; `low` = below minimum only. */
+export const fetchStoresParts    = (orgId, { q = "", low = false, limit = 50 } = {}) => {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (q.trim()) qs.set("q", q.trim());
+  if (low) qs.set("low", "1");
+  return get(`${base(orgId)}/factorysuite/parts?${qs}`).then((d) => d ?? []);
+};
+export const fetchVehicleJobCards = (orgId, vehicleId) => get(`${base(orgId)}/factorysuite/vehicles/${vehicleId}/job-cards`).then((d) => d ?? []);
+
+export const CARD_STATUS = {
+  IN_PROGRESS: ["In progress", "warn"], AWAITING_PARTS: ["Awaiting parts", "inc"],
+  RELEASED: ["Released", "con"], CANCELLED: ["Cancelled", "none"],
+};
+export const CARD_SOURCE = {
+  WORKSHOP_RAISED: "Raised in the workshop", DEPARTMENT_REPORT: "Department report",
+  SUPERVISOR_REPORT: "Supervisor report", SCHEDULED_SERVICE: "Scheduled service",
+};
+/** "MUFINDI PAPER MILLS-JC-2026-0247" → "JC-2026-0247". */
+export const shortCard = (n) => String(n ?? "").replace(/^.*-JC-/, "JC-");
+
 // ── Writes ─────────────────────────────────────────────────────────────────
 
 const item = (orgId, id, what) => `${base(orgId)}/items/${id}/${what}`;

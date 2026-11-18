@@ -4,6 +4,43 @@
     "depth": "full",
     "scope": "app",
     "shape": "app screen",
+    "theme": "in-project tokens (dr-strip, sp4 bars)",
+    "entry": "Workshop › Auto Workshop › tab layout",
+    "signature": "the Alerts page order: strip, count bar, search and chips, list",
+    "sections": [
+      "stats strip",
+      "count bar",
+      "filters: view, state, priority / stock",
+      "list"
+    ],
+    "waived": [
+      "26b"
+    ],
+    "date": "2026-11-18",
+    "prompt": "lay the auto workshop tab out as the alerts page"
+  },
+  {
+    "mode": "redesign",
+    "depth": "restyle",
+    "scope": "app",
+    "shape": "app screen",
+    "theme": "in-project tokens (DriversScreen .dr-tones / .dr-strip)",
+    "entry": "Workshop › Auto Workshop › stats strip",
+    "signature": "the Drivers strip read for the workshop: who is in now and in what state",
+    "sections": [
+      "in the workshop (state mix)",
+      "cards opened a day",
+      "released a day",
+      "last 14 days watch list"
+    ],
+    "date": "2026-11-18",
+    "prompt": "redesign the auto workshop stats cards to match those on the driver page; observe the theme and the layout"
+  },
+  {
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "shape": "app screen",
     "theme": "brand (sp4 tokens)",
     "entry": "Weighbridges › Coverage › consolidated unit side panel",
     "signature": "measured km per trip leading the panel, with what it averages",
