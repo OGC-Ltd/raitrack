@@ -37,6 +37,7 @@ import { eventMl } from "../../lib/eventLitres";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useAppFields, useAppActions } from "../../context/AppContext";
 import { usePermissions } from "../../hooks/usePermissions";
+import { mapFences } from "../../lib/fenceVisibility";
 import { useVssBadge } from "../../hooks/useVssBadge";
 import COMPANIES from "../../data/companyData";
 import { useEstateZones } from "../../hooks/useEstateZones";
@@ -2505,7 +2506,7 @@ export default function FleetMap() {
   // Read HERE rather than beside the layer menu that consumes it, because the
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
-  const { can: canDo, orgId: permOrgId } = usePermissions();
+  const { can: canDo, orgId: permOrgId, orgCode } = usePermissions();
   // The Geofences menu's two switches, each a right of its own (operator,
   // 2026-11-13): "Show on the map" is map:geofences, "Custom geos" is
   // map:custom_geos. A switch the person may not use counts as off.
@@ -2594,7 +2595,11 @@ export default function FleetMap() {
 
   // Estate boundaries — fetched once per org, cached, never polled. Keyed on
   // orgId, so switching company swaps the geometry rather than mixing it.
-  const { zones } = useEstateZones(orgId);
+  // `zones` is what the map DRAWS: for Menengai its inactive fences are left
+  // off (user, 2026-11-18; lib/fenceVisibility). The stranded-stop test below
+  // still reads every fence, as it did before (`allZones`).
+  const { zones: allZones } = useEstateZones(orgId);
+  const zones = useMemo(() => mapFences(allZones, orgCode), [allZones, orgCode]);
   // Mirrored for handlers that run outside render — the minute-dot card asks
   // which fences a point falls inside at CLICK time, and taking the value
   // through a ref keeps that current without making the playback layer rebuild
@@ -4241,7 +4246,7 @@ export default function FleetMap() {
    * it is fetched once per org and never polled, so this rebuilds on a company
    * switch and at no other time.
    */
-  const insideZone = useMemo(() => zoneTestFor(zones), [zones]);
+  const insideZone = useMemo(() => zoneTestFor(allZones), [allZones]);
 
   const strandedVehicles = useMemo(
     () => (canDo("map:filter")
