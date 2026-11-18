@@ -68,6 +68,8 @@ import FleetsMenu from "./FleetsMenu";
 import FuelAlertsMenu from "./FuelAlertsMenu";
 import { isTheftAlert } from "../../lib/fuelAlerts";
 import UnitsMenu from "./UnitsMenu";
+import FleetUnitsMenu from "./FleetUnitsMenu";
+import MapRailWheel from "./MapRailWheel";
 import { loadMapEngine } from "../../lib/mapEngine";
 import { installOsmBase, OSM_TYPE_ID, OSM_ATTRIBUTION } from "../../lib/osmBase";
 import MapStatusBar from "./MapStatusBar";
@@ -87,7 +89,6 @@ import {
 } from "../../lib/tomtomTraffic";
 import RouteCoveredCard from "./RouteCoveredCard";
 import MapToolRail from "./MapToolRail";
-import MapMoreMenu from "./MapMoreMenu";
 import {
   installGoogleBase, isGoogleBase, GOOGLE_BASE_AVAILABLE, GOOGLE_ATTRIBUTION,
   LIVE_TRAFFIC_AVAILABLE, GOOGLE_TRAFFIC_LEGEND, TRAFFIC_REDRAW_MS, addGoogleTraffic,
@@ -7512,9 +7513,8 @@ export default function FleetMap() {
           </div>
         )}
 
-        {/* Phones: the ☰ under the base map toggle, for the pages the bottom bar
-            has no room for and the work plans the desktop rail switches on (MapMoreMenu). */}
-        {isMobile && <MapMoreMenu workPlans={mapLayers.find((l) => l.id === "workplans") ?? null} />}
+        {/* The phone ☰ (MapMoreMenu) lives in the header since 19 Nov 2026
+            (MobileHeader): it opens pages, which is the app's navigation. */}
 
         {/* The status filters, for screens with no room for the sidebar's
             stat grid. This was two chips — CRITICAL and WARNING — which left
@@ -7638,6 +7638,11 @@ export default function FleetMap() {
             replaced a 241x30 button row and a separate key box, both of which
             were floating in the only clear band the map has. */}
         <div className="map-cam-controls">
+          {/* Phones: the whole rail is ONE chip that fans these out on a
+              wheel (MapRailWheel, operator 19 Nov 2026). Larger screens keep
+              the rail as it was. */}
+          {(() => {
+            const railTools = (<>
           <FuelAlertsMenu
             vehicles={flaggedVehicles}
             showOnMap={showFuelAlerts}
@@ -7645,6 +7650,30 @@ export default function FleetMap() {
             onSelect={(id) => { handleShowIncidentUnit(id); requestIncident(id); }}
           />
           <MapLayersMenu layers={mapLayers} />
+          {/* Phones: Fleets and Units are one button, one panel with a switch
+              (FleetUnitsMenu, operator 19 Nov 2026). Larger screens keep two. */}
+          {isMobile ? (
+            <FleetUnitsMenu
+              fleets={{
+                vehicles,
+                inTransitOnly,
+                onToggleInTransit: () => setInTransitOnly(v => !v),
+                flagged: strandedVehicles,
+                onSelectFlagged: handleFocusVehicle,
+              }}
+              units={{
+                vehicles,
+                trackedIds,
+                onSetTracked: setTrackedIds,
+                routeId,
+                onToggleRoute: toggleRoute,
+                onOpenDetail: handleOpenUnit,
+                nowTick,
+              }}
+              unitsOpen={unitsOpen}
+              onUnitsOpenChange={setUnitsOpen}
+            />
+          ) : (<>
           <FleetsMenu
             vehicles={vehicles}
             inTransitOnly={inTransitOnly}
@@ -7671,29 +7700,7 @@ export default function FleetMap() {
                hides the rail button on. */
             asWindow={!isCompact}
           />
-          {/* Halted: opened from the left tool rail, below geofences
-              (operator, 2026-10-07) — it was a sidebar row before. The window is FleetMap's because clicking a row
-              in it moves the CAMERA — the sidebar owns the flag, nothing
-              more. */}
-          <StrandedWindow
-            flagged={strandedVehicles}
-            open={strandedOpen}
-            onOpenChange={setStrandedOpen}
-            onSelect={(id) => {
-              handleFocusVehicle(id);
-              // Draw the halt's investigation: the row's own unit and the
-              // moment it stopped, as the window counts it.
-              const row = strandedVehicles.find((r) => r.vehicle.id === id);
-              const dbId = row?.vehicle?.vehicleId;
-              if (row && dbId) setInvestigateSubject({ kind: "halt", vehicleId: dbId, sinceMs: row.why.sinceMs });
-            }}
-            /* The SAME tracking state the Units panel writes, not a second
-               one: ticking a unit here and opening Units must show it already
-               ticked, or the map is being narrowed by two lists that disagree
-               about what they narrowed it to. */
-            trackedIds={trackedIds}
-            onSetTracked={setTrackedIds}
-          />
+          </>)}
           {/* The camera controls turn the corner — below 1024px.
               A single column of seven was 274px of a screen whose free height
               is often 450, which is what forced every menu panel to open into
@@ -7734,6 +7741,36 @@ export default function FleetMap() {
               aria-label="Zoom in"
             >+</button>
           </div>
+            </>);
+            return isMobile ? (
+              <MapRailWheel fuelCount={flaggedVehicles.length} haltedCount={strandedVehicles.length}>
+                {railTools}
+              </MapRailWheel>
+            ) : railTools;
+          })()}
+          {/* Halted: opened from the left tool rail, below geofences
+              (operator, 2026-10-07) — it was a sidebar row before. The window is FleetMap's because clicking a row
+              in it moves the CAMERA — the sidebar owns the flag, nothing
+              more. */}
+          <StrandedWindow
+            flagged={strandedVehicles}
+            open={strandedOpen}
+            onOpenChange={setStrandedOpen}
+            onSelect={(id) => {
+              handleFocusVehicle(id);
+              // Draw the halt's investigation: the row's own unit and the
+              // moment it stopped, as the window counts it.
+              const row = strandedVehicles.find((r) => r.vehicle.id === id);
+              const dbId = row?.vehicle?.vehicleId;
+              if (row && dbId) setInvestigateSubject({ kind: "halt", vehicleId: dbId, sinceMs: row.why.sinceMs });
+            }}
+            /* The SAME tracking state the Units panel writes, not a second
+               one: ticking a unit here and opening Units must show it already
+               ticked, or the map is being narrowed by two lists that disagree
+               about what they narrowed it to. */
+            trackedIds={trackedIds}
+            onSetTracked={setTrackedIds}
+          />
         </div>
 
 

@@ -1,3 +1,23 @@
+/* Hallmark · app screen: Logbook (phones) · genre: modern-minimal · theme: sp4 (project tokens) · states: 8 · contrast: pass · redesign: polish (responsiveness, 19 Nov 2026) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: E, a week of stops is a long scroll of stacked cards; the pager keeps it to 15 a page */
+/* The page's own palette: every colour it uses, named once (lifted from
+   the rules below, values unchanged). */
+:root {
+  --urv-black: #000000;
+  --urv-blue-11: #111827;
+  --urv-blue-50: #2a78d6;
+  --urv-blue-60: #3c83f2;
+  --urv-blue-78: #93c5fd;
+  --urv-grey-46: #6b7280;
+  --urv-grey-84: #d1d5db;
+  --urv-grey-96: #f1f5f9;
+  --urv-grey-98: #f9fafb;
+  --urv-orange-37: #b45309;
+  --urv-orange-50: #f59e0b;
+  --urv-slate-27: #374151;
+  --urv-slate-34: #4b5563;
+  --urv-white: #ffffff;
+}
 /* Highlights — built on the sp4 panel tokens, so it follows the theme like
    the Fuel Report and Audit pages beside it. */
 
@@ -104,14 +124,14 @@
   gap: 3px;
   padding: 6px 9px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #111827;
+  background: color-mix(in srgb, var(--urv-white) 92%, transparent);
+  color: var(--urv-blue-11);
   font-size: 11px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--urv-black) 15%, transparent);
   pointer-events: none;
 }
 .urv-map__legend span { display: inline-flex; align-items: center; gap: 6px; }
-.urv-map__legend i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+.urv-map__legend i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--urv-white); box-shadow: 0 0 0 1px color-mix(in srgb, var(--urv-black) 15%, transparent); }
 .urv-map__legend i.urv-line { width: 14px; height: 3px; border-radius: 2px; border: 0; box-shadow: none; }
 
 .urv-map__base {
@@ -120,8 +140,8 @@
   padding: 2px;
   gap: 2px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  background: color-mix(in srgb, var(--urv-white) 95%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--urv-black) 15%, transparent);
   pointer-events: auto;
 }
 .urv-map__base button {
@@ -129,14 +149,15 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #374151;
+  color: var(--urv-slate-27);
   font: inherit;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
-.urv-map__base button:hover { background: #f1f5f9; }
-.urv-map__base button.is-on { background: var(--frv-s1, #2a78d6); color: #fff; }
+.urv-map__base button:hover { background: var(--urv-grey-96); }
+/* A step darker than the series blue, so white on it clears 4.5:1 */
+.urv-map__base button.is-on { background: color-mix(in srgb, var(--frv-s1, var(--urv-blue-50)) 88%, var(--urv-black)); color: var(--urv-white); }
 
 .urv-map__note {
   position: absolute;
@@ -146,10 +167,10 @@
   max-width: 260px;
   padding: 6px 9px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #b45309;
+  background: color-mix(in srgb, var(--urv-white) 95%, transparent);
+  color: var(--urv-orange-37);
   font-size: 11px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--urv-black) 15%, transparent);
 }
 
 /* What is picked, docked bottom-left above the scale bar (and Google's logo
@@ -165,13 +186,13 @@
   max-width: calc(100% - 70px);
   padding: 7px 8px 7px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  color: #111827;
+  background: color-mix(in srgb, var(--urv-white) 96%, transparent);
+  color: var(--urv-blue-11);
   font-size: 11px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--urv-black) 18%, transparent);
 }
 .urv-map__pick b { display: block; font-size: 12px; font-weight: 700; }
-.urv-map__pick span { color: #4b5563; }
+.urv-map__pick span { color: var(--urv-slate-34); }
 .urv-map__pick button {
   display: grid;
   place-items: center;
@@ -181,10 +202,10 @@
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #6b7280;
+  color: var(--urv-grey-46);
   cursor: pointer;
 }
-.urv-map__pick button:hover { background: #f1f5f9; color: #111827; }
+.urv-map__pick button:hover { background: var(--urv-grey-96); color: var(--urv-blue-11); }
 
 /* Place names beside their circles (PlaceNames in the .jsx). Light pills so
    they read on OpenStreetMap and on satellite imagery alike. */
@@ -195,17 +216,17 @@
   top: 0;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #111827;
+  background: color-mix(in srgb, var(--urv-white) 90%, transparent);
+  color: var(--urv-blue-11);
   font-size: 10.5px;
   font-weight: 600;
   line-height: 1.45;
   white-space: nowrap;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--urv-black) 8%, transparent), 0 1px 2px color-mix(in srgb, var(--urv-black) 12%, transparent);
   pointer-events: none;
 }
 .urv-name.is-dim { opacity: 0.45; }
-.urv-name.is-on { font-weight: 700; box-shadow: 0 0 0 1.5px #111827; }
+.urv-name.is-on { font-weight: 700; box-shadow: 0 0 0 1.5px var(--urv-blue-11); }
 
 /* The hover card that follows the pointer over a place, route or stop. */
 .urv-tip {
@@ -217,16 +238,16 @@
   max-width: 230px;
   padding: 7px 10px;
   border-radius: 8px;
-  background: rgba(17, 24, 39, 0.94);
-  color: #f9fafb;
+  background: color-mix(in srgb, var(--urv-blue-11) 94%, transparent);
+  color: var(--urv-grey-98);
   font-size: 11px;
   line-height: 1.35;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--urv-black) 25%, transparent);
   pointer-events: none;
 }
 .urv-tip b { font-size: 12px; font-weight: 700; }
-.urv-tip span { color: #d1d5db; }
-.urv-tip em { margin-top: 2px; font-style: normal; color: #93c5fd; }
+.urv-tip span { color: var(--urv-grey-84); }
+.urv-tip em { margin-top: 2px; font-style: normal; color: var(--urv-blue-78); }
 
 .urv-card--top { height: var(--urv-map-h); }
 .urv-card--top .urv-chart { flex: 1 1 auto; min-height: 0; height: auto; }
@@ -468,7 +489,7 @@
   height: 18px;
   border-radius: 3px;
   background: var(--sp4-accent);
-  color: #fff;
+  color: var(--urv-white);
   font-size: 12px;
 }
 .urv-tl--night .urv-tl__node .ti {
@@ -489,9 +510,7 @@
 .urv-when span { display: block; font-size: var(--sp4-label); color: var(--sp4-text-3); }
 .urv-what {
   font-size: var(--sp4-label);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 600;
   color: var(--sp4-text-3);
 }
 .urv-what--drive { color: var(--sp4-accent); }
@@ -556,16 +575,14 @@
   padding: 2px 8px;
   border-radius: 4px;
   font-size: var(--sp4-label);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 600;
   white-space: nowrap;
   border: 1px solid transparent;
 }
 .urv-kind .ti { font-size: 12px; }
-.urv-kind--drive { background: rgba(59, 130, 246, 0.1); color: var(--sp4-accent); border-color: rgba(59, 130, 246, 0.22); }
+.urv-kind--drive { background: color-mix(in srgb, var(--urv-blue-60) 10%, transparent); color: var(--sp4-accent); border-color: color-mix(in srgb, var(--urv-blue-60) 22%, transparent); }
 .urv-kind--stop { background: var(--sp4-raised); color: var(--sp4-text-2); border-color: var(--sp4-line); }
-.urv-kind--night { background: rgba(245, 158, 11, 0.1); color: var(--sp4-warn); border-color: rgba(245, 158, 11, 0.22); }
+.urv-kind--night { background: color-mix(in srgb, var(--urv-orange-50) 10%, transparent); color: var(--sp4-warn); border-color: color-mix(in srgb, var(--urv-orange-50) 22%, transparent); }
 
 .urv-where { white-space: nowrap; }
 .urv-arrow { color: var(--sp4-text-3); margin: 0 2px; }
@@ -596,7 +613,7 @@
   border: 0;
   border-radius: 4px;
   background: var(--sp4-accent);
-  color: #fff;
+  color: var(--urv-white);
   font: inherit;
   font-size: var(--sp4-label);
   font-weight: 700;
@@ -641,4 +658,42 @@
   .app--light .urv-root .sp4-date-input,
   .app--light .urv-root .sp4-filterbar .sp4-filter-chip:not(.sp4-filter-chip--on) { background: var(--sp4-surface); }
   .app--light .urv-root .sp4-filterbar .sp4-filter-chip:not(.sp4-filter-chip--on):hover { background: var(--sp4-raised); }
+}
+
+/* ── Phones: the unit first, then its figures ──────────────────────────────────
+ * Hallmark · component: page order + figure grid (Logbook on a phone) · genre: modern-minimal · theme: sp4 (project tokens) · states: 8
+ * The page's job is "pick a unit and a period, then Build", but a phone opened
+ * on six empty figures and had to scroll to reach the search. The search, the
+ * period and Build lead; the figures follow, three to a row, labelled in
+ * sentence case and broken only between words. */
+@media (max-width: 767px) {
+  .urv-root > .sp4-filterbar { order: -1; }
+}
+@media (max-width: 599px) {
+  .urv-root .sp4-header-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .urv-root .sp4-header-kpis > :last-child:nth-child(3n + 1) { grid-column: span 3; }
+  .urv-root .sp4-header-kpis > :last-child:nth-child(3n + 2) { grid-column: span 2; }
+  .urv-root .sp4-kpi-l {
+    text-transform: none;
+    letter-spacing: 0;
+    overflow-wrap: normal;
+  }
+  .urv-root .urv-kpi__sub { max-width: none; white-space: normal; text-align: center; }
+}
+@media (max-width: 599px) {
+  /* Stacked rows read as small cards: their labels in sentence case, the
+     kind of entry (Drive, Stop, Overnight) in its written case too */
+  .urv-root .sp4-table > tbody > tr > td::before { text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .urv-root .urv-what { text-transform: none; letter-spacing: 0; }
+  .urv-root .urv-kind { text-transform: none; letter-spacing: 0; }
+}
+@media (max-width: 767px) {
+  /* "Where it spent its time" kept its desktop box, 300px tall: as stacked
+     rows that held one place per screen. On a phone the card grows with its
+     page of rows and the page scrolls, as the detail card below already does. */
+  .urv-card--table { height: auto; }
+  .urv-card--table .sp4-table-scroll { flex: 0 0 auto; overflow: visible; }
 }

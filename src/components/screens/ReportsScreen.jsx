@@ -79,7 +79,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
+import { REPORT_NODES, chooseReport, reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
 // Shift hours: the day's approved shifts (FactorySuite) against the engine hours run in them
 import { dayShifts, shiftHoursRows } from '../../lib/shiftHours';
 import { getFactoryFuel } from '../../api/factoryFuel';
@@ -232,8 +232,12 @@ function ShiftSheet({ doc, version, onChange }) {
       const cs = getComputedStyle(el);
       const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      const scale = Math.min(1, w / SHEET_PX.width, h / SHEET_PX.height);
-      setFit({ scale, height: h / scale });
+      // A phone's page scrolls, so the desk has no height of its own (0, and a
+      // zoom of 0 is ignored: the sheet drew at full A4 width, cut off at the
+      // right). There the sheet fits the width and shows its first page.
+      const tall = h >= 240;
+      const scale = Math.max(0.1, Math.min(1, w / SHEET_PX.width, tall ? h / SHEET_PX.height : 1));
+      setFit({ scale, height: tall ? h / scale : SHEET_PX.height });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -1830,6 +1834,20 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   return (
     <div className="sp4-root rpt-root" aria-label={(SERVER_TABS[key] ?? REPORTS[key]).label}>
       {/* No tab strip (operator, 2026-11-02): the sidebar's Reports tree picks the report. */}
+      {/* Phones have no sidebar, so the tree was out of reach and the page was
+          stuck on its first report: there the report is picked here, from the
+          same list (the phone's own picker). Hidden from 768px. */}
+      {!only && tabs.length > 1 && (
+        <label className="rpt-switch">
+          <span className="rpt-switch__l">Report</span>
+          <select className="rpt-switch__s" value={key} onChange={(e) => chooseReport(e.target.value)}>
+            {REPORT_NODES.filter((n) => tabs.includes(n.key)).map((n) => (
+              <option key={n.key} value={n.key}>{n.label}</option>
+            ))}
+          </select>
+          <i className="ti ti-selector rpt-switch__i" aria-hidden="true" />
+        </label>
+      )}
       {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
         : (<>
 

@@ -11,37 +11,30 @@ import { companyMark as companyLogo } from '../../lib/companyLogos';
 import { usePermissions } from '../../hooks/usePermissions';
 import { initialsOf, avatarHue } from '../../lib/avatar';
 import { requestTour } from '../../lib/productTour';
-import { useAlertSummary, badgeText } from '../../hooks/useAlertSummary';
-import { useFuelAlarm } from '../../hooks/useFuelAlarm';
 import ManualIcon from './ManualIcon';
+import MapMoreMenu from '../body/MapMoreMenu';
 
 export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
-  const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setDesktopActiveTab } = useAppActions();
+  const { setActiveCompanyId, setAccountOpen, setUserAdminOpen } = useAppActions();
   const { activeCompany, companies } = useCompanies();
   const { user, logout } = useAuth();
   const { can, orgsWhere } = usePermissions();
-  // The sidebar's System section, for a phone, which has no sidebar.
-  // Fuel Audit readers: the roles the operator named (fuel_audit:read).
-  const canTriage = can('fuel_audit:read');
-  // Open alerts across every organisation held (the sidebar's badge): a dot
-  // on the avatar, the count beside Alerts in its menu.
-  const canAlerts = can(['alerts:read', 'fuel_theft:read', 'analytics:read']);
-  const alertSummary = useAlertSummary(canAlerts);
-  const openAlerts = alertSummary?.open ?? 0;
-  const fuelAlarm = useFuelAlarm(alertSummary);
-  // Alerts, its count and the avatar's dot live in the map's ☰ for those who
-  // can open the map (operator, 18 Nov 2026: "in the new hamburger, not in
-  // both"); here only for those who cannot.
-  const alertsHere = canAlerts && !can('map:read');
+  // Alerts, its count, the pages and the account all live in the ☰ (MapMoreMenu).
   const { vehicles = [] } = useFleetLiveShared();
-  const { focusVehicle } = useMapLayers();
+  const { focusVehicle, layers, revealMap } = useMapLayers();
+  // Work plans is the map's own layer (published by FleetMap): picked from
+  // any page, it puts the map on screen with the layer on.
+  const plansLayer = layers.find((l) => l.id === 'workplans');
+  const workPlans = plansLayer ? {
+    on: plansLayer.on,
+    onToggle: plansLayer.onToggle,
+    onShow: () => { revealMap(); if (!plansLayer.on) plansLayer.onToggle(); },
+  } : null;
 
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [userOpen, setUserOpen] = useState(false);
   const dropRef = useRef(null);
-  const userRef = useRef(null);
 
   // Limited access (no map:read): the bell counts 0, as on the desktop header.
   const unreadCount = !can('map:read') ? 0 : vehicles.filter(v =>
@@ -51,7 +44,6 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   useEffect(() => {
     const handler = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setDropdownOpen(false);
-      if (userRef.current && !userRef.current.contains(e.target)) setUserOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -62,6 +54,23 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
    * the avatar drew its initials from the email, so everyone at one company
    * got the same two letters. */
   const displayName = user?.fullName?.trim() || user?.name?.trim() || '';
+
+  // The account, as the ☰'s last group: who is signed in, then what the
+  // avatar's menu held.
+  const account = user ? {
+    name: displayName || user.email || 'Signed in',
+    email: displayName ? user.email : null,
+    initials: initialsOf(displayName, user.email),
+    hue: avatarHue(displayName || user.email),
+    items: [
+      { key: 'owner', label: 'Owner', icon: <i className="ti ti-user-circle" aria-hidden="true" />, onClick: () => setAccountOpen(true) },
+      ...(orgsWhere('user:read').length > 0
+        ? [{ key: 'iam', label: 'IAM', icon: <i className="ti ti-users" aria-hidden="true" />, onClick: () => setUserAdminOpen(true) }]
+        : []),
+      { key: 'guide', label: 'Guide', icon: <ManualIcon />, onClick: () => requestTour() },
+      { key: 'signout', label: 'Sign out', icon: <i className="ti ti-logout" aria-hidden="true" />, onClick: () => logout() },
+    ],
+  } : null;
 
   return (
     <header className="mobile-header">
@@ -126,7 +135,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
         )}
       </div>
 
-      {/* Right — search + bell + avatar */}
+      {/* Right — search, bell, then the ☰ */}
       <div className="mobile-header__actions">
         <button className="mobile-header__icon-btn" onClick={onSearchOpen} aria-label="Search" data-tour="m-search">
           <i className="ti ti-search" aria-hidden="true" />
@@ -138,101 +147,12 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
             {unreadCount > 0 && <span className="mobile-header__alert-dot" />}
           </button>
         )}
-        {/* Holds the bell's place so the avatar does not move. */}
+        {/* Holds the bell's place so the ☰ does not move. */}
         {!can('map:read') && <span className="mobile-header__icon-btn" aria-hidden="true" style={{ visibility: 'hidden', pointerEvents: 'none' }} />}
-        {/* Account menu — the avatar is a BUTTON: on mobile it was a plain
-            div, so there was no way to reach Account or to sign out. */}
-        <div className="mobile-header__user" ref={userRef}>
-          <button
-            className="mobile-header__avatar"
-            data-tour="m-account"
-            onClick={() => setUserOpen(o => !o)}
-            aria-haspopup="menu"
-            aria-expanded={userOpen}
-            aria-label={alertsHere && fuelAlarm ? 'Account menu, new fuel theft alert'
-              : alertsHere && openAlerts > 0 ? `Account menu, ${openAlerts} open alert${openAlerts === 1 ? '' : 's'}` : 'Account menu'}
-          >
-            {user ? (
-              <span className="mobile-header__avatar-initials" style={{ '--ua': avatarHue(displayName || user.email) }}>
-                {initialsOf(displayName, user.email)}
-              </span>
-            ) : (
-              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
-                <circle cx="18" cy="18" r="18" fill="#e2e8f0"/>
-                <circle cx="18" cy="14" r="6" fill="#94a3b8"/>
-                <ellipse cx="18" cy="30" rx="10" ry="7" fill="#94a3b8"/>
-              </svg>
-            )}
-          </button>
-          {alertsHere && (openAlerts > 0 || fuelAlarm) && (
-            <span className={`mobile-header__avatar-dot${fuelAlarm ? ' nav-alarm' : ''}`} aria-hidden="true" />
-          )}
-
-          {userOpen && (
-            <div className="mobile-header__user-menu" role="menu">
-              <div className="mobile-header__user-info">
-                <div className="mobile-header__user-name" title={displayName || user?.email || undefined}>
-                  {displayName || user?.email || 'Signed in'}
-                </div>
-                {displayName && user?.email && (
-                  <div className="mobile-header__user-email">{user.email}</div>
-                )}
-              </div>
-              <div className="mobile-header__user-divider" />
-              <button className="mobile-header__user-item" onClick={() => { setAccountOpen(true); setUserOpen(false); }}>
-                <i className="ti ti-user-circle" aria-hidden="true" /> Owner
-              </button>
-              {alertsHere && (
-                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('alerts'); setUserOpen(false); }}>
-                  <i className="ti ti-bell-ringing" aria-hidden="true" /> Alerts
-                  {openAlerts > 0 && (
-                    <span className={`mobile-header__user-badge${fuelAlarm ? ' nav-alarm' : ''}`}
-                          title={`${openAlerts} open alert${openAlerts === 1 ? '' : 's'} you have not read, last 7 days`}>
-                      {badgeText(openAlerts)}
-                    </span>
-                  )}
-                </button>
-              )}
-              {/* Fuel audit, Fuel and Fuel metrics live in the map's ☰ (body/MapMoreMenu,
-                  operator 18 Nov 2026). Here only for those who cannot open the map,
-                  or they would have no way to these pages at all. */}
-              {!can('map:read') && canTriage && (
-                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('audit'); setUserOpen(false); }}>
-                  <i className="ti ti-clipboard-check" aria-hidden="true" /> Fuel audit
-                </button>
-              )}
-              {!can('map:read') && can('factory_fuel:read') && (
-                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuel'); setUserOpen(false); }}>
-                  <i className="ti ti-gas-station" aria-hidden="true" /> Fuel
-                </button>
-              )}
-              {!can('map:read') && can('fuel_filling:read') && (
-                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('fuelReport'); setUserOpen(false); }}>
-                  <i className="ti ti-report-analytics" aria-hidden="true" /> Fuel metrics
-                </button>
-              )}
-              {/* In the map's ☰ too; here only for those who cannot open the map */}
-              {!can('map:read') && can('logbook:read') && (
-                <button className="mobile-header__user-item" onClick={() => { setDesktopActiveTab('usageReview'); setUserOpen(false); }}>
-                  <i className="ti ti-car" aria-hidden="true" /> Logbook
-                </button>
-              )}
-              {orgsWhere('user:read').length > 0 && (
-                <button className="mobile-header__user-item" onClick={() => { setUserAdminOpen(true); setUserOpen(false); }}>
-                  <i className="ti ti-users" aria-hidden="true" /> IAM
-                </button>
-              )}
-              {/* The Guide: the first-time tour, again (lib/productTour). */}
-              <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); requestTour(); }}>
-                <ManualIcon /> Guide
-              </button>
-              <div className="mobile-header__user-divider" />
-              <button className="mobile-header__user-item" onClick={() => { setUserOpen(false); logout(); }}>
-                <i className="ti ti-logout" aria-hidden="true" /> Sign out
-              </button>
-            </div>
-          )}
-        </div>
+        {/* The ☰ closes the row (operator, 19 Nov 2026): the pages the five
+            tabs have no room for, and the account the avatar used to open,
+            in one menu (MapMoreMenu). */}
+        <MapMoreMenu workPlans={workPlans} account={account} />
       </div>
     </header>
   );

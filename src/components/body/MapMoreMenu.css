@@ -1,114 +1,196 @@
-/* The phone map's ☰ (MapMoreMenu).
-   The wrapper takes no place of its own, so the button and the panel are both
-   placed against the map, like the base map toggle beside them. */
-.map-more { position: static; }
+/* Hallmark · component: navigation menu (the phone header's ☰) · genre: modern-minimal · theme: brand (the app's own .app--light tokens, App.css, and the sp4 type scale, SensorPanel.css) · states: 8 · contrast: pass · redesign: full, v4 (19 Nov 2026: a full-height drawer, a third of the width, the ✕ at the top) · v2.0.0 */
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R4 V5 · weakest: E, on a 375px phone a true third is 125px, so the drawer holds a 248px floor and covers two thirds there; long emails ellipsize beside the ✕ */
 
-/* The ☰: under the Map / Satellite toggle, at its left edge, the same white
-   box and shadow so the two read as one stack. */
+/* The phone ☰ (MapMoreMenu), in the header since 19 Nov 2026.
+   It opens PAGES (fuel, audit, alerts, logbook, reports), which is navigation,
+   and navigation is the app's chrome, not the map's: floating under the Map /
+   Satellite toggle it read as one more map control, sat over the fleet, and
+   was gone on every other screen. Now it closes the phone header, at the far
+   right of the header, on every page, holding the account the avatar
+   used to open as well (operator, 19 Nov 2026).
+
+   Every colour and the face come from the theme every page reads: the
+   .app--light block in App.css and --font-body (src/index.css). Nothing is
+   redeclared. */
+.map-more { position: relative; flex: none; font-family: var(--font-body); }
+
+/* The ☰: a bare 36px icon, the header's own button size, no disc: the leading
+   icon of a bar is read by its place. */
 .map-more__btn {
-  position: absolute;
-  top: calc(12px + var(--map-type-h, 36px) + 8px);
-  left: 12px;
-  z-index: 10;
+  position: relative;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  background: #fff;
-  color: #334155;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-  font-size: 20px;
-  cursor: pointer;
-}
-.map-more__btn:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
-
-/* Open (operator, 18 Nov 2026): a panel as wide as the row above it (12px in
-   from each side, as the work-plans card), as tall as its items, at the top of
-   the area between that row and the map's foot (8px under the row), scrolling
-   if it ever reaches the foot. The area lets taps through, so a tap on the map
-   around the panel still closes it. It lies over the ☰ and the work-plans card. */
-.map-more__area {
-  position: absolute;
-  top: calc(12px + var(--map-type-h, 36px) + 8px);
-  bottom: 8px;
-  left: 12px;
-  right: 12px;
-  z-index: 1200;
-  display: flex;
-  align-items: flex-start;
-  pointer-events: none;
-}
-.map-more__panel {
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-height: 100%;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
-  overflow: hidden;
-}
-/* The ✕, centred under the list; it stays in view when the list scrolls */
-.map-more__foot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  padding: 4px;
-  border-top: 1px solid #e2e8f0;
-}
-.map-more__x {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   background: none;
+  color: var(--text-primary);
   border: 0;
-  border-radius: 7px;
-  color: #475569;
-  font-size: 20px;
+  border-radius: 999px;
+  font-size: 22px;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.map-more__x:hover, .map-more__x:active { background: #f1f5f9; }
-.map-more__x:focus-visible { outline: 2px solid #0f766e; outline-offset: -2px; }
+.map-more__btn:hover { background: var(--color-bg); }
+.map-more__btn:active { background: var(--color-card-inner); }
+.map-more__btn[aria-expanded="true"] { background: var(--color-card-inner); }
+.map-more__btn:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 2px; }
+.map-more__btn:disabled { opacity: 0.5; cursor: default; }
 
-.map-more__menu { overflow-y: auto; overscroll-behavior: contain; }
+/* Open: a drawer on the right edge, the screen's full height (over the header
+   and the tab bar) and a third of its width (operator, 19 Nov 2026). A third
+   of a 375px phone is 125px, too narrow for "Fuel metrics" beside its icon or
+   any email, so the drawer never goes under 248px; it reaches a true third
+   from 744px up, and stops at 320px. The rest of the page stays in view,
+   dimmed, and a tap on it closes the menu. */
+.map-more__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1199;
+  background: color-mix(in srgb, var(--text-primary) 24%, transparent);
+  animation: map-more-fade 200ms ease-out;
+}
+.map-more__panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  width: clamp(248px, calc(100vw / 3), 320px);
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+  background: var(--color-surface);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--text-primary) 12%, transparent);
+  animation: map-more-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes map-more-in {
+  from { transform: translateX(100%); }
+  to   { transform: none; }
+}
+@keyframes map-more-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* The top row, the header's own height, so the ✕ lands where the ☰ was */
+.map-more__top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--app-header-h, 52px);
+  padding: env(safe-area-inset-top, 0px) 4px 0 16px;
+  box-sizing: content-box;
+  border-bottom: 1px solid var(--color-border);
+}
+.map-more__title { flex: 1; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+
+.map-more__menu {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0 16px;
+}
+
+/* A group: its plain name in the muted tier, then its rows */
+.map-more__group + .map-more__group { margin-top: 4px; }
+.map-more__head {
+  padding: 12px 16px 4px;
+  color: var(--color-text-muted);
+  font-size: var(--sp4-label, 11px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* A row: the icon in a soft tile, the name, then a chevron (a page) or its state */
 .map-more__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 52px;
-  padding: 0 16px;
+  min-height: 44px;
+  padding: 8px 16px;
   background: none;
   border: 0;
-  color: #0f172a;
+  color: var(--text-primary);
   font: inherit;
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-/* A rule between the rows, as drawn */
-.map-more__item + .map-more__item { border-top: 1px solid #eef2f6; }
-.map-more__item .ti { font-size: 20px; color: #475569; }
-.map-more__item:active,
-.map-more__item:hover { background: #f1f5f9; }
-.map-more__item:focus-visible { outline: 2px solid #0f766e; outline-offset: -2px; }
+/* The rule between rows starts under the name, not under the tile */
+.map-more__item + .map-more__item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 56px;
+  right: 0;
+  border-top: 1px solid var(--color-border);
+}
+.map-more__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--color-card-inner);
+  color: var(--text-secondary);
+  font-size: 16px;
+  transition: transform 120ms ease-out, background-color 120ms ease-out;
+}
+.map-more__label { flex: 1; min-width: 0; }
+.map-more__go { flex: none; color: var(--color-text-muted); font-size: 16px; }
+.map-more__on { flex: none; color: var(--color-text-muted); font-size: var(--sp4-label, 11px); font-weight: 400; }
+
+.map-more__item:hover { background: var(--color-bg); }
+.map-more__item:hover .map-more__icon { background: var(--color-border); }
+.map-more__item:active { background: var(--color-card-inner); }
+.map-more__item:active .map-more__icon { transform: scale(0.92); }
+.map-more__item:focus-visible { outline: 2px solid var(--accent-info); outline-offset: -2px; }
+.map-more__item:disabled,
+.map-more__item[aria-disabled="true"] { color: var(--color-text-muted); cursor: default; background: none; }
+
+/* The ✕, bare, at the top row's right end; it stays put when the list scrolls */
+.map-more__x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 22px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.map-more__x:hover { background: var(--color-bg); color: var(--text-primary); }
+.map-more__x:disabled { opacity: 0.5; cursor: default; }
+.map-more__x:active { transform: scale(0.94); }
+.map-more__x:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 2px; }
 
 /* Unread alerts: a dot on the ☰, the count on the Alerts row (as the side menu's badge) */
 .map-more__dot {
   position: absolute; top: 6px; right: 6px; width: 9px; height: 9px;
-  border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 2px #fff;
+  border-radius: 50%; background: var(--accent-crit); box-shadow: 0 0 0 2px var(--color-surface);
 }
 .map-more__badge {
-  margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 999px;
-  background: #fee2e2; color: #b91c1c; font-size: 12px; font-weight: 700; text-align: center;
+  flex: none; min-width: 24px; padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-crit) 12%, var(--color-surface));
+  color: var(--accent-crit);
+  font-size: var(--sp4-label, 11px); font-weight: 700; font-variant-numeric: tabular-nums; text-align: center;
 }
 
 /* A new fuel theft: the dot and the count shake, as the avatar's did
@@ -116,5 +198,33 @@
 .map-more__dot.nav-alarm { width: 12px; height: 12px; animation: mh-alarm-shake 2.4s ease-in-out infinite; }
 .map-more__badge.nav-alarm { animation: mh-alarm-shake 2.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .map-more__dot.nav-alarm, .map-more__badge.nav-alarm { animation: none; }
+  .map-more__dot.nav-alarm, .map-more__badge.nav-alarm, .map-more__panel, .map-more__scrim { animation: none; }
+  .map-more__icon { transition: none; }
+  .map-more__btn:active, .map-more__x:active, .map-more__item:active .map-more__icon { transform: none; }
 }
+
+/* The account: who is signed in, in the top row beside the ✕ */
+.map-more__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.map-more__face {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--color-card-inner);
+  color: var(--ua, var(--text-secondary));
+  font-size: 12px;
+  font-weight: 600;
+}
+.map-more__whotext { display: flex; flex-direction: column; min-width: 0; }
+.map-more__name, .map-more__email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-more__name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.map-more__email { font-size: 11px; color: var(--color-text-muted); }
+.map-more__item--out .map-more__label { color: var(--accent-crit); }

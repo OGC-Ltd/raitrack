@@ -1,0 +1,375 @@
+/* Hallmark · component: bottom sheet (fleets and units), lightened · genre: modern-minimal · theme: brand (the app's own .app--light tokens, App.css; --font-body) · states: 8 · contrast: pass · redesign: full · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V5 · weakest: E, the Units table keeps its nine columns rather than a phone-native card per unit; recomposing it would change wiring the redesign keeps. Lightened 19 Nov ("looks heavy"): a shorter sheet over a faint dim, a text switch with an underline instead of a filled track, a bare close button, no hairline between head, sections and foot, one weight step down on every row */
+
+/* The phone's one Fleets and units button (FleetUnitsMenu.jsx).
+   The button reuses the rail's own chip (.map-cam-btn + .fleets-menu__btn), so
+   nothing here restyles it. What is here: the switch at the head of the panel,
+   and the Fleets panel in the app's light theme, so the two tabs are one
+   surface (the Units panel is already light, UnitsMenu.css). Every colour and
+   the face are the app's tokens; nothing is declared. */
+
+/* The bare menus have no button left in the rail; their wrappers must not
+   take a slot (or a gap) there. Their panels are position: fixed on phones. */
+.fu-menu { display: flex; pointer-events: auto; }
+.fu-menu .fleets-menu,
+.fu-menu .units-menu { display: contents; }
+
+/* ── The switch ──────────────────────────────────────────────────────────── */
+.fu-tabs {
+  display: inline-flex;
+  gap: 4px;
+  font-family: var(--font-body);
+}
+.fu-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fu-tabs__tab:hover { color: var(--text-primary); }
+.fu-tabs__tab:active { transform: scale(0.97); }
+.fu-tabs__tab:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 1px; }
+.fu-tabs__tab[aria-selected="true"] {
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--text-primary);
+}
+.fu-tabs__tab:disabled { color: var(--color-text-muted); cursor: default; }
+.fu-tabs__n {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: none;
+  color: var(--accent-ok);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* ── The head: the switch, then "Show all" when there is one, then the ✕ ──── */
+.fu-head { display: contents; }
+.fleets-menu__panel--tabbed .fleets-menu__head,
+.units-menu__panel--tabbed .units-menu__head { gap: 8px; }
+.fleets-menu__panel--tabbed .fleets-menu__clear,
+.units-menu__panel--tabbed .units-menu__clear { order: 2; margin-left: auto; }
+.fu-head__x {
+  order: 3;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fleets-menu__head:has(.fleets-menu__clear) .fu-head__x,
+.units-menu__head:has(.units-menu__clear) .fu-head__x { margin-left: 0; }
+.fu-head__x:hover { background: var(--color-bg); color: var(--text-primary); }
+.fu-head__x:active { transform: scale(0.94); }
+.fu-head__x:focus-visible { outline: 2px solid var(--accent-info); outline-offset: 2px; }
+.fu-head__x:disabled { color: var(--color-text-muted); cursor: default; }
+
+/* ── A bottom sheet (operator, 19 Nov 2026: "doesn't feel like a phone") ────
+   Full width, docked on the tab bar (the map is its own layer under the bar,
+   so the sheet sits above it rather than over it, and the bar stays usable),
+   one fixed height for both tabs so switching never jumps, risen from the
+   bottom over a dimmed map. The handle drags it down to close
+   (FleetUnitsMenu.jsx); the ✕, the truck, Esc and a tap on the dim close it too. */
+@media (max-width: 767px) {
+  .fleets-menu__panel--tabbed,
+  .units-menu__panel--tabbed {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--footer-h, 64px);
+    width: auto;
+    max-width: none;
+    height: min(58dvh, calc(100dvh - var(--header-h, 52px) - var(--footer-h, 64px) - 56px));
+    max-height: none;
+    padding: 20px 16px 4px;
+    border: 0 !important;
+    border-radius: 0 !important;   /* square to the screen (operator, 19 Nov 2026) */
+    box-shadow: 0 -1px 12px color-mix(in srgb, var(--text-primary) 8%, transparent) !important;
+    font-size: 14px;
+    animation: fu-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    touch-action: pan-y;
+  }
+  .fu-sheet--dragging { transition: none; }
+
+  /* The dim behind it: the map's own band, under the sheet, over the rail */
+  .fu-scrim {
+    position: fixed;
+    top: var(--header-h, 52px);
+    left: 0;
+    right: 0;
+    bottom: var(--footer-h, 64px);
+    z-index: 450;
+    background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+    animation: fu-fade-in 220ms ease-out;
+  }
+
+  /* The handle: a pill, on a strip the width of the sheet that takes the drag */
+  .fu-grab {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .fu-grab::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 32px;
+    height: 4px;
+    margin-left: -16px;
+    border-radius: 999px;
+    background: var(--color-border);
+  }
+
+  /* The switch spans the head: two even halves, a thumb's width each */
+  .fleets-menu__panel--tabbed .fleets-menu__head,
+  .units-menu__panel--tabbed .units-menu__head { margin-bottom: 4px; padding-bottom: 0; border-bottom: 0 !important; }
+  .fleets-menu__panel--tabbed .fu-tabs,
+  .units-menu__panel--tabbed .fu-tabs { flex: 1; }
+  .fleets-menu__panel--tabbed .fu-tabs__tab,
+  .units-menu__panel--tabbed .fu-tabs__tab { flex: 1; justify-content: center; min-height: 44px; font-size: 14px; }
+  .fleets-menu__panel--tabbed .fleets-menu__clear,
+  .units-menu__panel--tabbed .units-menu__clear { margin-left: 0; }
+  .fu-head__x { width: 44px; height: 44px; margin: 0 -8px 0 0; }
+
+  /* Fleets: rows a thumb tall; the type list keeps a cap, the halted list
+     takes the rest of the sheet */
+  .fleets-menu__panel--tabbed .fleets-menu__row,
+  .fleets-menu__panel--tabbed .fleets-menu__switchrow { min-height: 44px; padding: 8px; gap: 12px; }
+  .fleets-menu__panel--tabbed .fleets-menu__row,
+  .fleets-menu__panel--tabbed .fleets-menu__switchrow { font-size: 14px; }
+  .fleets-menu__panel--tabbed .fleets-menu__box { width: 18px; height: 18px; }
+  .fleets-menu__panel--tabbed .fleets-menu__box::after { left: 5px; top: 2px; }
+  .fleets-menu__panel--tabbed .fleets-menu__switch { width: 36px; height: 20px; }
+  .fleets-menu__panel--tabbed .fleets-menu__switch::after { width: 16px; height: 16px; }
+  .fleets-menu__panel--tabbed .fleets-menu__switchrow[aria-checked="true"] .fleets-menu__switch::after { transform: translateX(16px); }
+  .fleets-menu__panel--tabbed .fleets-menu__rows { max-height: 176px; }
+  .fleets-menu__panel--tabbed .fleets-menu__section { flex: none; }
+  .fleets-menu__panel--tabbed .fleets-menu__section:has(.fleets-menu__flaglist) { flex: 1 1 auto; min-height: 0; }
+  .fleets-menu__panel--tabbed .fleets-menu__flaglist { flex: 1; max-height: none; }
+  .fleets-menu__panel--tabbed .fleets-menu__sechead { margin: 4px 0; padding: 0 8px; }
+  .fleets-menu__panel--tabbed .fleets-menu__flagrow { min-height: 44px; padding: 4px 8px; }
+  .fleets-menu__panel--tabbed .fleets-menu__flagmeta { font-size: 12px; }
+  .fleets-menu__panel--tabbed .fleets-menu__foot { margin-top: 0; padding: 8px; font-size: 12px; }
+
+  /* Units: a search field and rows a thumb tall */
+  .units-menu__panel--tabbed .units-menu__search { min-height: 40px; padding: 8px 12px; font-size: 14px !important; border-radius: 10px !important; }
+  .units-menu__panel--tabbed .units-menu__row:not(.units-menu__row--head) { min-height: 44px; padding: 4px; }
+  .units-menu__panel--tabbed .units-menu__foot { font-size: 12px; }
+}
+
+@keyframes fu-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: none; }
+}
+@keyframes fu-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── The Fleets panel, tabbed: the app's light theme ─────────────────────── */
+.fleets-menu__panel--tabbed {
+  border: 0;
+  background: var(--color-surface);
+  backdrop-filter: none;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+}
+.fleets-menu__panel--tabbed .fleets-menu__head,
+.fleets-menu__panel--tabbed .fleets-menu__foot { border: 0; }
+.fleets-menu__panel--tabbed .fleets-menu__section--rule { border-color: color-mix(in srgb, var(--color-border) 70%, transparent); }
+.fleets-menu__panel--tabbed .fleets-menu__clear { color: var(--accent-info); font-size: 12px; font-weight: 600; }
+.fleets-menu__panel--tabbed .fleets-menu__clear:focus-visible,
+.fleets-menu__panel--tabbed .fleets-menu__row:focus-visible,
+.fleets-menu__panel--tabbed .fleets-menu__switchrow:focus-visible,
+.fleets-menu__panel--tabbed .fleets-menu__flagrow:focus-visible { outline: 2px solid var(--accent-info); }
+
+.fleets-menu__panel--tabbed .fleets-menu__row,
+.fleets-menu__panel--tabbed .fleets-menu__switchrow,
+.fleets-menu__panel--tabbed .fleets-menu__flagrow { color: var(--text-primary); font-weight: 400; }
+.fleets-menu__panel--tabbed .fleets-menu__flagplate,
+.fleets-menu__panel--tabbed .fleets-menu__flagfor { font-weight: 500; }
+.fleets-menu__panel--tabbed .fleets-menu__n { font-weight: 400; }
+.fleets-menu__panel--tabbed .fleets-menu__row:hover,
+.fleets-menu__panel--tabbed .fleets-menu__switchrow:hover,
+.fleets-menu__panel--tabbed .fleets-menu__flagrow:hover { background: var(--color-bg); }
+.fleets-menu__panel--tabbed .fleets-menu__row:active,
+.fleets-menu__panel--tabbed .fleets-menu__switchrow:active,
+.fleets-menu__panel--tabbed .fleets-menu__flagrow:active { background: var(--color-card-inner); }
+.fleets-menu__panel--tabbed .fleets-menu__n,
+.fleets-menu__panel--tabbed .fleets-menu__flagmeta,
+.fleets-menu__panel--tabbed .fleets-menu__foot { color: var(--color-text-muted); }
+.fleets-menu__panel--tabbed .fleets-menu__flagmeta { font-size: 11px; }
+.fleets-menu__panel--tabbed .fleets-menu__foot { font-size: 11px; }
+
+/* The tick box and the switch, in the app's "ok" green */
+.fleets-menu__panel--tabbed .fleets-menu__box { border-color: color-mix(in srgb, var(--color-text-muted) 60%, var(--color-surface)); }
+.fleets-menu__panel--tabbed .fleets-menu__row[aria-checked="true"] .fleets-menu__box {
+  background: var(--accent-ok);
+  border-color: var(--accent-ok);
+}
+.fleets-menu__panel--tabbed .fleets-menu__box::after { border-color: var(--color-surface); }
+.fleets-menu__panel--tabbed .fleets-menu__switch { background: var(--color-border); }
+.fleets-menu__panel--tabbed .fleets-menu__switch::after {
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 25%, transparent);
+}
+.fleets-menu__panel--tabbed .fleets-menu__switchrow[aria-checked="true"] .fleets-menu__switch { background: var(--accent-ok); }
+.fleets-menu__panel--tabbed .fleets-menu__switchrow[aria-checked="true"] .fleets-menu__switch::after { background: var(--color-surface); }
+
+/* Halted: a plain heading in the warning tone, not tracked capitals */
+.fleets-menu__panel--tabbed .fleets-menu__sectitle {
+  color: var(--accent-warn);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.fleets-menu__panel--tabbed .fleets-menu__secn {
+  background: none;
+  color: var(--accent-warn);
+  font-size: 12px;
+  font-weight: 500;
+}
+/* The warning colour on the time already marks each row; the dot repeated it */
+.fleets-menu__panel--tabbed .fleets-menu__flagdot { display: none; }
+.fleets-menu__panel--tabbed .fleets-menu__flagrow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "plate for" "meta meta";
+}
+.fleets-menu__panel--tabbed .fleets-menu__flagfor { color: var(--accent-warn); }
+
+/* The Units head holds the switch where its title was */
+.units-menu__panel--tabbed .units-menu__head { align-items: center; }
+.fu-menu .units-menu__panel--tabbed .units-menu__search {
+  border-color: transparent !important;
+  background: var(--color-bg) !important;
+}
+.fu-menu .units-menu__panel--tabbed .units-menu__plate { font-weight: 500 !important; }
+.fu-menu .units-menu__panel--tabbed .units-menu__age { font-weight: 500; }
+.fu-menu .units-menu__panel--tabbed .units-menu__row--head { border-bottom: 0 !important; }
+.fu-menu .units-menu__panel--tabbed .units-menu__foot { border-top: 0 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fu-tabs__tab:active, .fu-head__x:active { transform: none; }
+  .fleets-menu__panel--tabbed, .units-menu__panel--tabbed, .fu-scrim { animation: none; transition: none; }
+}
+
+/* ── Phones: the same sheet as a unit's (19 Nov 2026) ───────────────────────────
+ * Hallmark · component: bottom sheet, matched to the unit sheet (VehicleDetailPanel) · genre: modern-minimal · theme: brand (the app's own tokens) · states: 8
+ * The unit sheet is the phone's model: as tall, square to the screen, its tabs
+ * a left-set strip on a full-width hairline with the picked one underlined,
+ * and its content in bordered cards under plain section heads ("Driver").
+ * Fleets now reads the same way: the fleet list in one card, In transit only in
+ * the next, Halted under its own head in a third; rows split by hairlines. */
+@media (max-width: 767px) {
+  .fleets-menu__panel--tabbed,
+  .units-menu__panel--tabbed {
+    height: min(78dvh, calc(100dvh - var(--header-h, 52px) - var(--footer-h, 64px) - 56px));
+    padding: 20px 16px 4px;
+    gap: 0;
+  }
+
+  /* Tabs: a strip across the sheet, left-set, the picked one underlined */
+  .fleets-menu__panel--tabbed .fleets-menu__head,
+  .units-menu__panel--tabbed .units-menu__head {
+    margin: 0 -16px 16px;
+    padding: 0 8px 0 16px;
+    border-bottom: 1px solid var(--color-border) !important;
+  }
+  .fleets-menu__panel--tabbed .fu-tabs,
+  .units-menu__panel--tabbed .fu-tabs { flex: 1; gap: 24px; }
+  .fleets-menu__panel--tabbed .fu-tabs__tab,
+  .units-menu__panel--tabbed .fu-tabs__tab {
+    flex: none;
+    justify-content: flex-start;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 0;
+    color: var(--color-text-muted);
+    font-size: 14px;
+    font-weight: 400;
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+  .fleets-menu__panel--tabbed .fu-tabs__tab[aria-selected="true"],
+  .units-menu__panel--tabbed .fu-tabs__tab[aria-selected="true"] {
+    color: var(--text-primary);
+    font-weight: 500;
+    box-shadow: inset 0 -2px 0 var(--text-primary);
+  }
+
+  /* Cards: a border, a 10px corner, no rule between sections, space instead */
+  .fleets-menu__panel--tabbed .fleets-menu__section {
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+  }
+  .fleets-menu__panel--tabbed .fleets-menu__rows,
+  .fleets-menu__panel--tabbed .fleets-menu__switchrow,
+  .fleets-menu__panel--tabbed .fleets-menu__flaglist {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+  }
+  .fleets-menu__panel--tabbed .fleets-menu__rows { overflow-y: auto; }
+  .fleets-menu__panel--tabbed .fleets-menu__flaglist { overflow-y: auto; }
+  .fleets-menu__panel--tabbed .fleets-menu__row,
+  .fleets-menu__panel--tabbed .fleets-menu__flagrow { padding: 8px 12px; border-radius: 0; }
+  .fleets-menu__panel--tabbed .fleets-menu__switchrow { width: 100%; padding: 8px 12px; }
+  .fleets-menu__panel--tabbed .fleets-menu__row + .fleets-menu__row,
+  .fleets-menu__panel--tabbed .fleets-menu__flagrow + .fleets-menu__flagrow {
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  }
+
+  /* Section heads, as "Driver" on the unit sheet: the body face, a step up, ink */
+  .fleets-menu__panel--tabbed .fleets-menu__sechead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 4px 0 8px;
+    padding: 0;
+  }
+  .fleets-menu__panel--tabbed .fleets-menu__sectitle {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .fleets-menu__panel--tabbed .fleets-menu__secn {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .fleets-menu__panel--tabbed .fleets-menu__foot { padding: 4px 0 8px; }
+
+  /* Units: the search and the list under the same strip */
+  .units-menu__panel--tabbed .units-menu__search { border-radius: 10px !important; }
+}

@@ -41,8 +41,14 @@ describe('MapMoreMenu', () => {
   it('shows the ☰ when there is a page or work plans, and nothing when there is neither', () => {
     allowed = new Set();
     expect(renderToStaticMarkup(h(MapMoreMenu, { workPlans: null }))).toBe('');
-    expect(renderToStaticMarkup(h(MapMoreMenu, { workPlans: { on: false, onToggle: () => {} } }))).toContain('More pages');
+    expect(renderToStaticMarkup(h(MapMoreMenu, { workPlans: { on: false, onToggle: () => {} } }))).toContain('aria-label="Menu');
     allowed = new Set(['analytics:read']);
-    expect(renderToStaticMarkup(h(MapMoreMenu, { workPlans: null }))).toContain('More pages');
+    expect(renderToStaticMarkup(h(MapMoreMenu, { workPlans: null }))).toContain('aria-label="Menu');
+  });
+
+  it('shows the ☰ for a signed-in account even with no pages', () => {
+    allowed = new Set();
+    const account = { name: 'A', email: null, initials: 'A', hue: 0, items: [] };
+    expect(renderToStaticMarkup(h(MapMoreMenu, { workPlans: null, account }))).toContain('aria-label="Menu');
   });
 });

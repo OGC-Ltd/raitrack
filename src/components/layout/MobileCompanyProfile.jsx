@@ -61,78 +61,66 @@ export default function MobileCompanyProfile({ open, onClose }) {
       pct: total ? (n / total) * 100 : 0,
     }));
 
+  const stats = [
+    { key: 'moving',  label: 'Moving',  n: moving },
+    { key: 'idle',    label: 'Idle',    n: idle },
+    { key: 'alerts',  label: 'Alerts',  n: alerts },
+    { key: 'offline', label: 'Offline', n: offline },
+  ];
+
+  // Redesigned for phones 19 Nov 2026 (Hallmark): the company is the title,
+  // one big total over four plain counts, and the composition as quiet bars.
   return (
     <>
       {open && <div className="mcp-backdrop" onClick={onClose} />}
-      <div className={`mcp-sheet${open ? ' mcp-sheet--open' : ''}`}>
+      <div className={`mcp-sheet${open ? ' mcp-sheet--open' : ''}`}
+           role="dialog" aria-modal="true" aria-labelledby="mcp-org-name" aria-hidden={!open}>
 
-        {/* Handle */}
-        <div className="mcp-handle" />
+        <div className="mcp-handle" aria-hidden="true" />
 
-        {/* Header row */}
         <div className="mcp-header">
-          <span className="mcp-title">Company Profile</span>
-          <button className="mcp-close" onClick={onClose} aria-label="Close">×</button>
+          <div className="mcp-org">
+            <h2 className="mcp-org-name" id="mcp-org-name">{activeCompany?.name ?? 'Fleet Command'}</h2>
+            <p className="mcp-org-meta">
+              {activeCompany?.hqLocation && <span>{activeCompany.hqLocation}</span>}
+              {weather && <span>{weather.temp}°C, {weather.desc.toLowerCase()}</span>}
+            </p>
+          </div>
+          <button type="button" className="mcp-close" onClick={onClose} aria-label="Close company profile">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none"
+                 stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
         </div>
 
         <div className="mcp-body">
+          <p className="mcp-total">
+            <span className="mcp-total-num">{total}</span>
+            <span className="mcp-total-lbl">{total === 1 ? 'unit' : 'units'}</span>
+          </p>
 
-          {/* Org name + location + weather */}
-          <div className="mcp-org">
-            <div className="mcp-org-name">{activeCompany?.name ?? 'Fleet Command'}</div>
-            <div className="mcp-org-meta">
-              {activeCompany?.hqLocation ?? ''}
-              {weather && (
-                <span className="mcp-org-weather"> · {weather.temp}°C · {weather.desc}</span>
-              )}
-            </div>
-          </div>
+          <dl className="mcp-stats">
+            {stats.map((s) => (
+              <div key={s.key} className={`mcp-stat mcp-stat--${s.key}`}>
+                <dt className="mcp-stat-lbl">{s.label}</dt>
+                <dd className="mcp-stat-num">{s.n}</dd>
+              </div>
+            ))}
+          </dl>
 
-          {/* Divider */}
-          <div className="mcp-divider" />
+          <h3 className="mcp-section-lbl">Fleet composition</h3>
 
-          {/* Fleet stats — plain numbers */}
-          <div className="mcp-stats">
-            <div className="mcp-stat">
-              <span className="mcp-stat-num">{total}</span>
-              <span className="mcp-stat-lbl">Total</span>
-            </div>
-            <div className="mcp-stat">
-              <span className="mcp-stat-num mcp-stat-num--green">{moving}</span>
-              <span className="mcp-stat-lbl">Moving</span>
-            </div>
-            <div className="mcp-stat">
-              <span className="mcp-stat-num mcp-stat-num--amber">{idle}</span>
-              <span className="mcp-stat-lbl">Idle</span>
-            </div>
-            <div className="mcp-stat">
-              <span className="mcp-stat-num mcp-stat-num--red">{alerts}</span>
-              <span className="mcp-stat-lbl">Alerts</span>
-            </div>
-            <div className="mcp-stat">
-              <span className="mcp-stat-num mcp-stat-num--grey">{offline}</span>
-              <span className="mcp-stat-lbl">Offline</span>
-            </div>
-          </div>
-
-          <div className="mcp-divider" />
-
-          {/* Fleet composition — simple bars */}
-          <div className="mcp-section-lbl">Fleet composition</div>
-
-          {composition.length === 0 && <div className="mcp-comp-label">No vehicles reported yet</div>}
-          {composition.map(c => (
-            <div key={c.label} className="mcp-comp-row">
-              <div className="mcp-comp-top">
+          {composition.length === 0 && <p className="mcp-empty">No vehicles reported yet</p>}
+          <ul className="mcp-comp">
+            {composition.map(c => (
+              <li key={c.label} className="mcp-comp-row">
                 <span className="mcp-comp-label">{c.label}</span>
                 <span className="mcp-comp-count">{c.count}</span>
-              </div>
-              <div className="mcp-comp-track">
-                <div className="mcp-comp-fill" style={{ width: `${c.pct}%` }} />
-              </div>
-            </div>
-          ))}
-
+                <span className="mcp-comp-track" aria-hidden="true">
+                  <span className="mcp-comp-fill" style={{ transform: `scaleX(${c.pct / 100})` }} />
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </>
