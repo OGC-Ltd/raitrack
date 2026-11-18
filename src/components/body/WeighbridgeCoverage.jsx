@@ -4,15 +4,17 @@
 // pulls a day it holds no odometer for from Wialon and stores it, and draws the
 // table in the Tickets view's grid card, pager and export bar.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TableToolbar from "./TableToolbar";
 import { loadFuelConsumptionRate, loadUnitDistance } from "../../api/reports";
-import { downloadTableCsv } from "../../utils/tableExport";
+import { downloadTableCsv, exportLater } from "../../utils/tableExport";
 import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
 import { settleLimited } from "../../lib/settleLimited";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay } from "../../lib/unitTrips";
-import { tonnes, tonnesTotal } from "../../api/weighments";
+import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows } from "../../lib/unitTrips";
+import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
+import { ticketsByBridge } from "../../lib/weighbridgeSheets";
+import { tonnes, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
 
 const STEP = 25;
 
@@ -97,107 +99,270 @@ function useDayKm(orgId, idsByDay, enabled) {
   return { kmByDay, state };
 }
 
-export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, canKm, fleet, periodLabel, loading, onReload }) {
+/**
+ * One unit over the span, opened from a consolidated row (operator, 18 Nov 2026: "drop the drivers
+ * column if we are consolidating and only have it populated on the sidebar if we click on the
+ * single row"): its figures, who drove it, and each day it crossed a bridge.
+ */
+function UnitPanel({ row, kmText, onClose }) {
+  const loadMs = avgLoadMs(row);
+  return (
+    <DetailSidebar title="Unit coverage" label={`Coverage for ${row.unit}`} itemKey={row.plate} onClose={onClose}>
+      <DetailSidebarIdent
+        name={row.unit}
+        sub={`${row.days.length} day${row.days.length === 1 ? "" : "s"}${row.bridges.length ? ` · ${row.bridges.join(", ")}` : ""}`}
+      />
+      <DetailSidebarFacts facts={[
+        { label: "Trips", value: String(row.trips) },
+        { label: "Net weighed", value: tonnes(row.netKg) },
+        { label: "Distance", value: row.km == null ? (kmText(row) || "-") : `${kmLabel(row.km)} km` },
+        { label: "Average load", value: tonnes(avgLoadKg(row)) },
+        { label: "Km per trip", value: kmPerTrip(row) == null ? "-" : kmLabel(kmPerTrip(row)) },
+        { label: "Average load time", value: loadMs == null ? "-" : gapLabel(loadMs) },
+      ]} />
+      <DetailSidebarSection title="Drivers">
+        {row.drivers.length
+          ? <ul className="wbm-drivers">{row.drivers.map((d) => <li key={d}>{d}</li>)}</ul>
+          : <p className="wb-ticket-note">No driver on its tickets.</p>}
+      </DetailSidebarSection>
+      <DetailSidebarSection title="By day">
+        <table className="wbm-days">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Trips</th>
+              <th>Net</th>
+              <th>Km</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...row.perDay].reverse().map((d) => (
+              <tr key={d.day}>
+                <td>{dayLabel(d.day)}</td>
+                <td>{d.trips}</td>
+                <td>{tonnes(d.netKg)}</td>
+                <td>{d.km == null ? "" : kmLabel(d.km)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </DetailSidebarSection>
+    </DetailSidebar>
+  );
+}
+
+/*
+ * The exports, titles, pager and footer follow the Tickets table's (operator, 18 Nov 2026:
+ * "just like the default, especially when you pick more weighbridges"): the bridge picked
+ * names the report; with every bridge, the Excel file's first sheet holds every unit and a
+ * sheet follows for each weighbridge, counting the trips made over that bridge. A unit's
+ * distance is its whole day's, so it is the same on every sheet it appears on.
+ *
+ * `consolidate` folds the span's days into one row per unit (operator, 18 Nov 2026: "if we
+ * pick from 10/10 to 15/10 then we get to pick a single car and sum up its collective data");
+ * search picks the car. Its drivers are in the panel a row opens, not in a column.
+ */
+export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, canKm, fleet, span, centre, centreName, centres, consolidate, loading, onReload }) {
   const idsByDay = useMemo(() => trackedIdsByDay(unitTripRows(tickets)), [tickets]);
   const days = useMemo(() => [...new Set(unitTripRows(tickets).map((r) => r.day))].sort(), [tickets]);
   const { kmByDay, state } = useDayKm(orgId, idsByDay, canKm && !loading);
   const all = useMemo(() => unitTripRows(tickets, kmByDay), [tickets, kmByDay]);
   const q = search.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const keep = (r) => !q || r.plate.toUpperCase().replace(/[^A-Z0-9]/g, "").includes(q);
+  const fold = (list) => (consolidate ? consolidateUnitRows(list) : list);
   const rows = useMemo(
-    () => (q ? all.filter((r) => r.plate.toUpperCase().replace(/[^A-Z0-9]/g, "").includes(q)) : all),
-    [all, q],
+    () => fold(q ? all.filter(keep) : all),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [all, q, consolidate],
   );
   const totals = unitTripTotals(rows);
   const oneDay = from === to;
   const reading = canKm && days.some((d) => !state.has(d));
 
   const [page, setPage] = useState(0);
-  useEffect(() => { setPage(0); }, [from, to, q]);
+  useEffect(() => { setPage(0); }, [from, to, q, consolidate]);
   const pageCount = Math.max(1, Math.ceil(rows.length / STEP));
   const at = Math.min(page, pageCount - 1);
   const pageRows = rows.slice(at * STEP, at * STEP + STEP);
 
-  /** What the distance cell says when there is no figure. */
-  const noKm = (r) => (!canKm ? "Not available"
-    : !r.vehicleId ? "No tracker"
-      : state.get(r.day) === "failed" ? "Not read"
-        : !state.has(r.day) ? "Reading…" : "No GPS that day");
+  // The unit open in the side panel, by plate; only a consolidated row opens one
+  const [openPlate, setOpenPlate] = useState(null);
+  useEffect(() => { setOpenPlate(null); }, [from, to, centre, consolidate]);
+  const openRow = consolidate && openPlate ? rows.find((r) => r.plate === openPlate) ?? null : null;
+  const toggleRow = (r) => setOpenPlate((p) => (p === r.plate ? null : r.plate));
 
-  const head = ["Day", "Unit", "Driver", "Trips", "Net weighed, t", "Distance, km", "Km per trip"];
-  const body = rows.map((r) => [
-    r.day, r.unit, r.drivers.join(", "), r.trips, (r.netKg / 1000).toFixed(2),
-    r.km == null ? noKm(r) : r.km.toFixed(1), kmPerTrip(r) == null ? "" : kmPerTrip(r).toFixed(1),
-  ]);
-  const note = [periodLabel, q ? `matching “${search}”` : null, "distance by the tracker's odometer, from Wialon"].filter(Boolean).join(", ");
-  const filenameSlug = ["weighbridge-coverage", from, oneDay ? "" : to].join("-").replace(/[^a-z0-9-]/gi, "");
+  /** What the distance cell says when there is no figure: blank for a unit with no tracker or none counted (operator, 18 Nov 2026). */
+  const noKm = (r) => {
+    const ds = r.days ?? [r.day];
+    return !canKm ? "Not available"
+      : !r.vehicleId ? ""
+        : ds.some((d) => state.get(d) === "failed") ? "Not read"
+          : ds.some((d) => !state.has(d)) ? "Reading…" : "";
+  };
+  /** A ticket's time: the clock on one day, the date with it over a span. */
+  const when = (iso) => (oneDay ? clockLabel(iso) : stampLabel(iso, null));
+
+  const allBridges = centre == null;
+  const head = consolidate
+    ? ["Unit", "Weighbridges", "Days", "Days with distance", "Trips", "First ticket", "Last ticket",
+      "Net weighed, t", "Average load, t", "Average load time", "Distance, km", "Km per trip"]
+    : ["Day", "Unit", "Driver", "Weighbridges", "Trips", "First ticket", "Last ticket", "First to last",
+      "Net weighed, t", "Average load, t", "Average load time", "Distance, km", "Km per trip"];
+  const bodyOf = (list) => list.map((r) => {
+    const tail = [
+      (r.netKg / 1000).toFixed(2), (avgLoadKg(r) / 1000).toFixed(2), avgLoadMs(r) == null ? "" : gapLabel(avgLoadMs(r)),
+      r.km == null ? noKm(r) : r.km.toFixed(1), kmPerTrip(r) == null ? "" : kmPerTrip(r).toFixed(1),
+    ];
+    return consolidate
+      ? [r.unit, r.bridges.join(", "), r.days.length, r.kmDays, r.trips, when(r.firstAt), r.trips > 1 ? when(r.lastAt) : "", ...tail]
+      : [r.day, r.unit, r.drivers.join(", "), r.bridges.join(", "), r.trips,
+        clockLabel(r.firstAt), r.trips > 1 ? clockLabel(r.lastAt) : "",
+        workSpanMs(r) == null ? "" : gapLabel(workSpanMs(r)), ...tail];
+  });
+  const body = bodyOf(rows);
+  // The same note, filename and sheets as the Tickets table's export.
+  const note = [span, centreName || null, q ? `matching “${search}”` : null, consolidate ? "one row per unit" : null]
+    .filter(Boolean).join(" · ");
+  const filenameSlug = ["weighbridge-coverage", consolidate ? "by-unit" : "", from, oneDay ? "" : to, (centreName || "all").toLowerCase()]
+    .filter(Boolean).join("-").replace(/[^a-z0-9-]/gi, "");
+  // "Weighbridge Coverage at NYAONDO", each sheet its own bridge (operator, 18 Nov 2026)
+  const titleOf = (bridge) => `Weighbridge Coverage at ${bridge}`;
+  const reportTitle = centreName ? titleOf(centreName) : "Weighbridge Coverage across All Weighbridges";
+  // Every sheet says what it covers: the dates, the bridge, a search
+  const metaFor = (bridge) => [["Period", span], ["Weighbridge", bridge], ...(q ? [["Units matching", search.trim()]] : [])];
+  const saveCsv = () => downloadTableCsv({
+    head, body, filenameSlug, title: reportTitle,
+    sheetName: centreName || "Coverage",
+    meta: metaFor(centreName || "All"),
+    ...(allBridges && {
+      sheetName: "All weighbridges",
+      sheets: ticketsByBridge(tickets, centres).map((g) => ({
+        name: g.name,
+        title: titleOf(g.name),
+        body: bodyOf(fold(unitTripRows(g.rows, kmByDay).filter(keep))),
+        meta: metaFor(g.name),
+      })).filter((sh) => sh.body.length),
+    }),
+  });
+  const savePdf = () => downloadLetterheadTablePdf({
+    ...fleet,
+    prefix: "WB",
+    reportTitle,
+    sectionTitle: `${centreName || "All weighbridges"}, ${span}`,
+    filterNote: note,
+    cards: [
+      { label: "Units", value: String(totals.units) },
+      { label: "Trips", value: String(totals.trips) },
+      { label: "Net weighed", value: tonnes(totals.netKg) },
+      { label: "Distance", value: `${kmLabel(totals.km) || "0.0"} km` },
+      { label: "Trips per unit", value: totals.tripsPerUnit == null ? "-" : String(totals.tripsPerUnit) },
+      { label: "Average load", value: totals.avgLoadKg == null ? "-" : tonnes(totals.avgLoadKg) },
+      { label: "Km per trip", value: totals.kmPerTrip == null ? "-" : kmLabel(totals.kmPerTrip) },
+    ],
+    head, body,
+  });
+
+  /*
+   * A file asked for while distances are still being read waits for them, then saves with
+   * every figure in (operator, 18 Nov 2026: Excel "click does nothing" — the buttons were
+   * disabled until the read finished). The save runs the latest render's handlers, so the
+   * file holds the finished distances, not the ones on screen at the click.
+   */
+  const latest = useRef({});
+  latest.current = { saveCsv, savePdf };
+  const readWaiters = useRef([]);
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    if (reading) return;
+    const ws = readWaiters.current;
+    readWaiters.current = [];
+    ws.forEach((resolve) => resolve());
+  }, [reading]);
+  const whenRead = () => (reading
+    ? new Promise((resolve) => { readWaiters.current.push(resolve); })
+    : Promise.resolve());
+  const afterRead = (save) => {
+    if (!reading) return save();
+    const run = exportLater();
+    setWaiting((n) => n + 1);
+    return whenRead().then(() => run(save)).finally(() => setWaiting((n) => n - 1));
+  };
+  const exportCsv = () => afterRead(() => latest.current.saveCsv());
+  const exportPdf = () => afterRead(() => latest.current.savePdf());
 
   return (
     <>
+      {openRow && <UnitPanel row={openRow} kmText={noKm} onClose={() => setOpenPlate(null)} />}
       <TableToolbar
         summary={
           <>
-            <b>{totals.units}</b> unit{totals.units === 1 ? "" : "s"}, <b>{totals.trips}</b> trip{totals.trips === 1 ? "" : "s"},{" "}
+            <b>{totals.units}</b> unit{totals.units === 1 ? "" : "s"} ·{" "}
+            <b>{totals.trips}</b> trip{totals.trips === 1 ? "" : "s"} ·{" "}
+            {tonnes(totals.netKg)} weighed ·{" "}
             {kmLabel(totals.km) || "0.0"} km{reading ? " so far" : ""}
+            {waiting > 0 && <span className="sp4-muted" role="status"> · your file follows once the distances are read</span>}
           </>
         }
+        note={note}
         loading={loading}
         onReload={onReload}
-        onCsv={() => downloadTableCsv({ head, body, filenameSlug, title: "Weighbridge Coverage", sheetName: "Coverage" })}
-        onPdf={() => downloadLetterheadTablePdf({
-          ...fleet,
-          prefix: "WB",
-          reportTitle: "Weighbridge Coverage",
-          sectionTitle: `Trips and distance, ${periodLabel}`,
-          filterNote: note,
-          cards: [
-            { label: "Units", value: String(totals.units) },
-            { label: "Trips", value: String(totals.trips) },
-            { label: "Distance", value: `${kmLabel(totals.km) || "0.0"} km` },
-          ],
-          head, body,
-        })}
-        disabled={!rows.length || reading}
+        onCsv={exportCsv}
+        onPdf={exportPdf}
+        disabled={!rows.length}
       />
       <div className="wb-grid-card">
         <div className="sp4-table-scroll sp4-keep-table wb-grid">
           <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable wbm-table">
             <thead>
               <tr>
-                {!oneDay && <th className="sp4-th--left">Day</th>}
+                {!oneDay && !consolidate && <th className="sp4-th--left">Day</th>}
                 <th className="sp4-th--left sp4-th--pin">Unit</th>
-                <th className="sp4-th--left wb-col-full">Driver</th>
+                {!consolidate && <th className="sp4-th--left wb-col-full">Driver</th>}
+                {allBridges && <th className="sp4-th--left wb-col-full">Weighbridges</th>}
+                {consolidate && <th className="sp4-th--right">Days</th>}
                 <th className="sp4-th--right">Trips</th>
+                <th className="sp4-th--right wb-col-full">First ticket</th>
+                <th className="sp4-th--right wb-col-full">Last ticket</th>
+                {!consolidate && <th className="sp4-th--right wb-col-full">First to last</th>}
                 <th className="sp4-th--right wb-col-full">Net weighed</th>
+                <th className="sp4-th--right wb-col-full">Average load</th>
+                <th className="sp4-th--right wb-col-full">Average load time</th>
                 <th className="sp4-th--right">Distance, km</th>
                 <th className="sp4-th--right wb-col-full">Km per trip</th>
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((r) => (
-                <tr key={`${r.day}|${r.plate}`} className="sp4-tr">
-                  {!oneDay && <td className="sp4-td--left wb-mono">{dayLabel(r.day)}</td>}
-                  <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{r.unit}</span></td>
-                  <td className="sp4-td--left wb-td-driver wb-col-full">{r.drivers.join(", ")}</td>
-                  <td className="sp4-td--right sp4-num">{r.trips}</td>
-                  <td className="sp4-td--right sp4-num wb-col-full">{tonnes(r.netKg)}</td>
-                  <td className="sp4-td--right sp4-num">
-                    {r.km == null ? <span className="sp4-muted">{noKm(r)}</span> : kmLabel(r.km)}
-                  </td>
-                  <td className="sp4-td--right sp4-num wb-col-full">{kmLabel(kmPerTrip(r))}</td>
-                </tr>
-              ))}
+              {pageRows.map((r) => {
+                const on = openRow?.plate === r.plate;
+                const open = consolidate ? {
+                  className: "sp4-tr" + (on ? " sp4-tr--selected" : ""),
+                  "aria-selected": on,
+                  tabIndex: 0,
+                  onClick: () => toggleRow(r),
+                  onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRow(r); } },
+                } : { className: "sp4-tr" };
+                return (
+                  <tr key={`${r.day ?? "all"}|${r.plate}`} {...open}>
+                    {!oneDay && !consolidate && <td className="sp4-td--left wb-mono">{dayLabel(r.day)}</td>}
+                    <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{r.unit}</span></td>
+                    {!consolidate && <td className="sp4-td--left wb-td-driver wb-col-full">{r.drivers.join(", ")}</td>}
+                    {allBridges && <td className="sp4-td--left wb-col-full">{r.bridges.join(", ")}</td>}
+                    {consolidate && <td className="sp4-td--right sp4-num">{r.days.length}</td>}
+                    <td className="sp4-td--right sp4-num">{r.trips}</td>
+                    <td className="sp4-td--right wb-mono wb-col-full">{consolidate ? when(r.firstAt) : clockLabel(r.firstAt)}</td>
+                    <td className="sp4-td--right wb-mono wb-col-full">{r.trips > 1 ? (consolidate ? when(r.lastAt) : clockLabel(r.lastAt)) : ""}</td>
+                    {!consolidate && <td className="sp4-td--right sp4-num wb-col-full">{workSpanMs(r) == null ? "" : gapLabel(workSpanMs(r))}</td>}
+                    <td className="sp4-td--right sp4-num wb-col-full">{tonnes(r.netKg)}</td>
+                    <td className="sp4-td--right sp4-num wb-col-full">{tonnes(avgLoadKg(r))}</td>
+                    <td className="sp4-td--right sp4-num wb-col-full">{avgLoadMs(r) == null ? "" : gapLabel(avgLoadMs(r))}</td>
+                    <td className="sp4-td--right sp4-num">
+                      {r.km == null ? <span className="sp4-muted">{noKm(r)}</span> : kmLabel(r.km)}
+                    </td>
+                    <td className="sp4-td--right sp4-num wb-col-full">{kmLabel(kmPerTrip(r))}</td>
+                  </tr>
+                );
+              })}
             </tbody>
-            <tfoot>
-              <tr className="wbm-total">
-                {!oneDay && <td className="sp4-td--left" />}
-                <td className="sp4-td--left sp4-td--pin">Total</td>
-                <td className="sp4-td--left wb-col-full" />
-                <td className="sp4-td--right sp4-num">{totals.trips}</td>
-                <td className="sp4-td--right sp4-num wb-col-full">{tonnesTotal(totals.netKg)}</td>
-                <td className="sp4-td--right sp4-num">{kmLabel(totals.km)}</td>
-                <td className="sp4-td--right sp4-num wb-col-full" />
-              </tr>
-            </tfoot>
           </table>
         </div>
         {pageCount > 1 && (
@@ -205,16 +370,25 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
             <button type="button" className="wb-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>
               ← Prev
             </button>
-            <span className="wb-pager__info" aria-live="polite">Page {at + 1} of {pageCount}</span>
+            <span className="wb-pager__info" aria-live="polite">
+              Page {at + 1} of {pageCount}
+              <span className="wb-pager__range">
+                {" · "}{at * STEP + 1}–{at * STEP + pageRows.length} of {rows.length}
+              </span>
+            </span>
             <button type="button" className="wb-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>
               Next →
             </button>
           </nav>
         )}
         <div className="sp4-grid-footer">
-          A trip is one weighbridge ticket. Distance is the tracker&apos;s own odometer over the day, from Wialon;
-          {" "}{totals.tracked} of {totals.unitDays} unit-days have one.
-          {reading && <span className="sp4-muted"> Reading distances…</span>}
+          {consolidate
+            ? `${totals.units} unit${totals.units === 1 ? "" : "s"} in ${span}`
+            : `${totals.unitDays} unit-day${totals.unitDays === 1 ? "" : "s"} in ${span}`}
+          {centreName ? ` · ${centreName}` : ""}
+          {" · "}{totals.tracked} with a distance
+          {consolidate && rows.length > 0 && <span className="sp4-muted"> · open a unit for its drivers and days</span>}
+          {(loading || reading) && <span className="sp4-muted"> · {reading ? "reading distances…" : "refreshing…"}</span>}
         </div>
       </div>
     </>

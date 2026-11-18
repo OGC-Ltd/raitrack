@@ -83,6 +83,22 @@ export function takenForExcel(o) {
   return true;
 }
 
+/**
+ * For a CSV handler that must wait before it saves (Weighbridges › Coverage waits for the
+ * distances still being read): call it at once, inside the handler, and run the save
+ * later through the function it returns. That save is Excel when the Excel button asked
+ * and a CSV when the CSV button did; nothing clicked in between is caught up in it.
+ * The handler returns the promise of its save, which the Excel button waits for.
+ */
+export function exportLater() {
+  const into = asExcel;
+  return (save) => {
+    const was = asExcel;
+    asExcel = into;
+    try { return save(); } finally { asExcel = was; }
+  };
+}
+
 /** Run `exportCsv` (a report's CSV handler), making the Excel file instead. */
 export async function exportExcelVia(exportCsv) {
   const asked = [];
@@ -93,9 +109,12 @@ export async function exportExcelVia(exportCsv) {
   } finally {
     asExcel = null;
   }
+  // A handler that waits saves through exportLater, into this same file
+  const later = ran && typeof ran.then === "function";
+  if (later && !asked.length) await ran;
   if (!asked.length) {
-    // Never quietly: a handler that saved nothing, or one that saves later
-    if (ran && typeof ran.then === "function") throw new Error("This table saves its rows later, so it has no Excel file yet");
+    // Never quietly: a handler that saved nothing, or one that saved outside exportLater
+    if (later) throw new Error("This table saves its rows later, so it has no Excel file yet");
     throw new Error("There were no rows to put in an Excel file");
   }
   const { downloadTableXlsx } = await import("./xlsxExport");

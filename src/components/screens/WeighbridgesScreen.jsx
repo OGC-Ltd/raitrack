@@ -364,6 +364,8 @@ export default function WeighbridgesScreen() {
      Coverage button in its filter bar (operator, 18 Nov 2026: "a button for coverage that will
      replace the metrics"). It follows the weighbridge picked, and searches units on the page. */
   const [coverage, setCoverage] = useState(false);
+  // Coverage folded to one row per unit over the whole span (operator, 18 Nov 2026)
+  const [consolidate, setConsolidate] = useState(false);
   const [selected, setSelected] = useState(null);
   const { can } = usePermissions();
   const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
@@ -429,7 +431,7 @@ export default function WeighbridgesScreen() {
     if (!row) return;
     if (view !== "tickets" || coverage) { pendingTicket.current = row; setCoverage(false); setView("tickets"); }
     else setSelected(row);
-  }, [view]);
+  }, [view, coverage]);
   useEffect(() => {
     if (view === "tickets" && !coverage && pendingTicket.current) { setSelected(pendingTicket.current); pendingTicket.current = null; }
   }, [view, coverage]);
@@ -596,6 +598,15 @@ export default function WeighbridgesScreen() {
               onClick={() => setCoverage((c) => !c)}
             >Coverage</button>
           )}
+          {view === "tickets" && coverage && (
+            <button
+              type="button"
+              className={"sp4-filter-chip" + (consolidate ? " sp4-filter-chip--on" : "")}
+              aria-pressed={consolidate}
+              title="One row per unit over the whole span, its days summed"
+              onClick={() => setConsolidate((c) => !c)}
+            >Consolidate</button>
+          )}
           {SPANS.map(sp => {
             const [a, b] = sp.range();
             const on = from === a && to === b;
@@ -688,7 +699,11 @@ export default function WeighbridgesScreen() {
               search={search}
               canKm={can("telemetry:read")}
               fleet={fleet}
-              periodLabel={[spanLabel(from, to), centreName].filter(Boolean).join(", ")}
+              span={spanLabel(from, to)}
+              centre={centre}
+              centreName={centreName}
+              centres={centres}
+              consolidate={consolidate}
               loading={loading}
               onReload={reload}
             />

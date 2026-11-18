@@ -787,5 +787,12 @@
 /* With From, To, five spans and the weighbridge, the bar can outgrow a laptop: it wraps rather than crop. */
 .wb-root .sp4-filterbar { flex-wrap: wrap; row-gap: 8px; align-items: center; }
 
-/* Metrics (operator, 18 Nov 2026): the totals row under each unit's trips and kilometres */
-.wbm-table tfoot td { font-weight: 700; border-top: 1px solid var(--sp4-line); }
+/* Coverage › Consolidate: the unit's panel (drivers, then each day) */
+.wbm-drivers { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+/* Its own small grid, so it stays a table at a phone's width too */
+.wbm-days { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.wbm-days th, .wbm-days td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--sp4-line); }
+.wbm-days th:first-child, .wbm-days td:first-child { text-align: left; }
+.wbm-days th { font-weight: 600; color: var(--sp4-text-3); }
+.wbm-days td { color: var(--sp4-text-1); }
+.wbm-days tr:last-child td { border-bottom: 0; }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import ExcelJS from 'exceljs';
 import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH, numericColumn } from './xlsxExport';
-import { exportExcelVia, downloadTableCsv } from './tableExport';
+import { exportExcelVia, exportLater, downloadTableCsv } from './tableExport';
 import { downloadProbeCsv } from './probeReport';
 
 describe('the Excel export (operator, 11 Nov 2026)', () => {
@@ -85,6 +85,25 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
   it('says so when a CSV handler gave no rows, and never saves a CSV in its place', async () => {
     await expect(exportExcelVia(() => undefined)).rejects.toThrow(/no rows/);
     await expect(exportExcelVia(() => Promise.resolve().then(() => {}))).rejects.toThrow(/later/);
+  });
+  it('a handler that waits saves into the Excel file through exportLater, and a CSV click stays a CSV', async () => {
+    const saved = [];
+    globalThis.document = { createElement: () => ({ click() {}, set download(v) { saved.push(v); } }), body: { appendChild() {}, removeChild() {} }, title: '' };
+    globalThis.URL.createObjectURL ??= () => 'blob:x';
+    let ready;
+    const read = new Promise((r) => { ready = r; });
+    const handler = (slug) => () => {
+      const run = exportLater();
+      return read.then(() => run(() => downloadTableCsv({ head: ['Plate'], body: [['KTCC 787D']], filenameSlug: slug })));
+    };
+    const excel = exportExcelVia(handler('waited'));
+    const csv = handler('plain')();
+    ready();
+    await excel;
+    await csv;
+    delete globalThis.document;
+    expect(saved.find((n) => n.startsWith('waited'))).toMatch(/\.xlsx$/);
+    expect(saved.find((n) => n.startsWith('plain'))).toMatch(/\.csv$/);
   });
   it('a CSV saved after the Excel click is a CSV, not taken into the Excel file', async () => {
     const saved = [];

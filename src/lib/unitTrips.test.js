@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay } from "./unitTrips";
+import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows } from "./unitTrips";
 
 // Fleet days are East Africa Time (UTC+3): 22:30Z on the 17th is 01:30 on the 18th.
 const t = (tokenAt, plate, extra = {}) => ({ tokenAt, vehiclePlate: plate, vehicleNo: plate, netWeightKg: 10_000, ...extra });
@@ -69,7 +69,69 @@ describe("unitTripTotals", () => {
       { plate: "A", trips: 1, netKg: 5_000, km: null },
       { plate: "B", trips: 2, netKg: 20_000, km: 50 },
     ]);
-    expect(totals).toEqual({ unitDays: 3, units: 2, trips: 6, netKg: 55_000, tracked: 2, odometer: 1, km: 150.3 });
+    expect(totals).toEqual({
+      unitDays: 3, units: 2, trips: 6, netKg: 55_000, tracked: 2, odometer: 1, km: 150.3,
+      avgLoadKg: 55_000 / 6, avgLoadMs: null, kmPerTrip: 30.1, tripsPerUnit: 2,
+    });
+  });
+});
+
+describe("each unit-day's figures", () => {
+  it("keeps the bridges, the first and last ticket, the average load and load time", () => {
+    const [r] = unitTripRows([
+      t("2026-11-18T09:00:00Z", "KBA123A", { centerName: "OPAPO", turnaroundMs: 20 * 60_000, netWeightKg: 12_000 }),
+      t("2026-11-18T05:00:00Z", "KBA123A", { centerName: "FACTORY", turnaroundMs: 40 * 60_000, netWeightKg: 8_000 }),
+      t("2026-11-18T12:00:00Z", "KBA123A", { centerName: "OPAPO", netWeightKg: 10_000 }),
+    ]);
+    expect(r.bridges).toEqual(["OPAPO", "FACTORY"]);
+    expect([r.firstAt, r.lastAt]).toEqual(["2026-11-18T05:00:00Z", "2026-11-18T12:00:00Z"]);
+    expect(avgLoadKg(r)).toBe(10_000);
+    expect(avgLoadMs(r)).toBe(30 * 60_000);
+    expect(workSpanMs(r)).toBe(7 * 3_600_000);
+  });
+  it("has no span for one trip and no load time without one", () => {
+    const [r] = unitTripRows([t("2026-11-18T05:00:00Z", "KBA123A")]);
+    expect(workSpanMs(r)).toBeNull();
+    expect(avgLoadMs(r)).toBeNull();
+  });
+  it("shares the distance over the tracked units' trips only", () => {
+    const km = new Map([["2026-11-18", new Map([["v1", { km: 90, source: "odometer" }]])]]);
+    const totals = unitTripTotals(unitTripRows([
+      t("2026-11-18T05:00:00Z", "AAA", { vehicleId: "v1" }), t("2026-11-18T08:00:00Z", "AAA", { vehicleId: "v1" }),
+      t("2026-11-18T05:00:00Z", "BBB"),
+    ], km));
+    expect(totals.kmPerTrip).toBe(45);
+    expect(totals.avgLoadKg).toBe(10_000);
+    expect(totals.tripsPerUnit).toBe(1.5);
+  });
+});
+
+describe("consolidateUnitRows", () => {
+  it("sums each unit's days into one row", () => {
+    const km = new Map([
+      ["2026-10-10", new Map([["v1", { km: 80, source: "odometer" }]])],
+      ["2026-10-12", new Map([["v1", { km: 0, source: "gps" }]])],
+      ["2026-10-15", new Map([["v1", { km: 40, source: "odometer" }]])],
+    ]);
+    const daily = unitTripRows([
+      t("2026-10-10T05:00:00Z", "KBA123A", { vehicleId: "v1", driverName: "Otieno", centerName: "FACTORY", turnaroundMs: 600_000 }),
+      t("2026-10-10T09:00:00Z", "KBA123A", { vehicleId: "v1", driverName: "Otieno", centerName: "OPAPO" }),
+      t("2026-10-12T06:00:00Z", "KBA123A", { vehicleId: "v1", driverName: "Achieng", centerName: "FACTORY" }),
+      t("2026-10-15T07:00:00Z", "KBA123A", { vehicleId: "v1", centerName: "FACTORY", turnaroundMs: 1_200_000 }),
+      t("2026-10-11T07:00:00Z", "KCC555C"),
+    ], km);
+    const [a, b] = consolidateUnitRows(daily);
+    expect(a.plate).toBe("KBA123A");
+    expect(a.days).toEqual(["2026-10-10", "2026-10-12", "2026-10-15"]);
+    expect([a.trips, a.netKg, a.km, a.kmDays, a.kmTrips]).toEqual([4, 40_000, 120, 2, 3]);
+    expect(kmPerTrip(a)).toBe(40);
+    expect(a.drivers).toEqual(["Otieno", "Achieng"]);
+    expect(a.bridges).toEqual(["FACTORY", "OPAPO"]);
+    expect([a.firstAt, a.lastAt]).toEqual(["2026-10-10T05:00:00Z", "2026-10-15T07:00:00Z"]);
+    expect(avgLoadMs(a)).toBe(900_000);
+    expect(a.kmSource).toBe("odometer");
+    expect([b.plate, b.km, b.days]).toEqual(["KCC555C", null, ["2026-10-11"]]);
+    expect(unitTripTotals([a, b]).kmPerTrip).toBe(40);
   });
 });
 
