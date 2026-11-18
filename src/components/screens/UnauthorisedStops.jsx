@@ -15,12 +15,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
-import { desktopAlertsOn, distanceWords, nearestPlace, placeLabel, setDesktopAlerts, placesOf, standingWords, stopCopyText, stopKind, storePlaces } from "../../lib/stopWatch";
+import { desktopAlertsOn, setDesktopAlerts, standingWords, stopCopyText, stopKind } from "../../lib/stopWatch";
 import { byRead } from "../../lib/geofenceExits";
 import { ZONE_STYLE } from "../../lib/zoneLegend";
-import { resolveOrgId } from "../../api/org";
-import { loadZones } from "../../hooks/useEstateZones";
-import { AUTHORISED } from "../../data/menengaiStopPlaces";
 import { CopyExit, ZoneType } from "./GeofenceExits";
 import { cachedPlaceName, usePlaceName } from "../../hooks/usePlaceName";
 
@@ -74,40 +71,16 @@ function DesktopAlerts() {
   );
 }
 
-/**
- * Every authorised place, as the watch judges against: the file's, MORL and
- * STO, and Menengai's geofences (read once a page; the watch has read them).
- */
-function useAuthorisedPlaces() {
-  const [places, setPlaces] = useState(null);
-  useEffect(() => {
-    let live = true;
-    const base = [...storePlaces(), ...placesOf(AUTHORISED)];
-    resolveOrgId("menengai")
-      .then((id) => (id ? loadZones(id) : null))
-      .catch(() => null)
-      .then((fc) => { if (live) setPlaces([...base, ...placesOf(fc?.features ?? [])]); });
-    return () => { live = false; };
-  }, []);
-  return places;
-}
-
-const styleOf = (category) => {
-  const s = ZONE_STYLE[category] ?? ZONE_STYLE.other;
-  return { label: placeLabel(category), color: s.osmColor ?? s.color };
-};
+const colourOf = (category) => { const s = ZONE_STYLE[category] ?? ZONE_STYLE.other; return s.osmColor ?? s.color; };
 
 /**
- * The Type cell's facts for a stop: a no-go zone is its own type; a stop
- * outside is given the nearest authorised place. Null while places are read.
+ * The Type cell: at a customer or not (operator, 18 Nov 2026: "either it's a
+ * customer or not"; the type is "Unauthorised stop", not the nearest place's).
  */
-function typeOf(f, places) {
-  if (f.kind === "nogo") return { ...styleOf("restricted"), name: f.zone, category: "restricted" };
-  if (f.kind === "customer") return { ...styleOf("customer"), name: f.zone, category: "customer" };
-  if (!places) return null;
-  const n = nearestPlace(f, places);
-  if (!n) return { ...styleOf("other"), name: null, category: "other", far: "No authorised place known" };
-  return { ...styleOf(n.category), name: n.name, category: n.category, metres: n.metres, far: `${distanceWords(n.metres)} · ${n.name}` };
+function typeOf(f) {
+  if (f.kind === "nogo") return { label: "No-go zone", color: colourOf("restricted"), name: f.zone, category: "restricted" };
+  if (f.kind === "customer") return { label: "Customer", color: colourOf("customer"), name: f.zone, category: "customer" };
+  return { label: "Unauthorised stop", color: "#e8590c", name: null, category: "unauthorised" };
 }
 
 const NO_READS = { unread: () => false, markRead: () => {} };
@@ -121,10 +94,8 @@ const EMPTY_READ = {
  * reads: { unread(row), markRead(rows) }; read: the page's Read filter.
  */
 export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, read = "all", customers = false }) {
-  const places = useAuthorisedPlaces();
   const all = lines ?? watch.flags;
-  // The nearest place moves only with the unit: once per flag and places.
-  const types = useMemo(() => new Map(all.map((f) => [f.key, typeOf(f, places)])), [all, places]);
+  const types = useMemo(() => new Map(all.map((f) => [f.key, typeOf(f)])), [all]);
   const [keep, setKeep] = useState(() => new Set());
   useEffect(() => { setKeep(new Set()); }, [read]);
   const rows = useMemo(() => {
@@ -139,11 +110,7 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
     if (read !== "all") setKeep((k) => (k.has(row.key) ? k : new Set(k).add(row.key)));
     reads.markRead([row]);
   };
-  const copyOf = (f) => {
-    const t = types.get(f.key);
-    return stopCopyText(f, { now, area: cachedPlaceName(f.lat, f.lng),
-      place: f.kind !== "unauthorised" || !t?.name ? null : `${t.name} (${t.label}), ${distanceWords(t.metres)}` });
-  };
+  const copyOf = (f) => stopCopyText(f, { now, area: cachedPlaceName(f.lat, f.lng) });
   const pager = usePager(rows, q);
   const now = watch.checkedAt ?? Date.now();
   const [openKey, setOpenKey] = useState(null);
@@ -217,7 +184,6 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
                   <td className="sp4-td--left">{standingWords(f.since, now)}</td>
                   <td className="sp4-td--left">
                     <ZoneType zone={type} />
-                    {type?.far && <span className="alr-stop-near" title={`Nearest authorised place: ${type.name ?? "none"}`}>{type.far}</span>}
                   </td>
                   <td className="sp4-td--left"><StopWhere f={f} /></td>
                   <td className="sp4-td--right">
@@ -256,7 +222,6 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
             { label: "For", value: standingWords(openRow.since, now) },
             { label: "Where", value: <StopWhere f={openRow} /> },
             { label: "Type", value: <ZoneType zone={types.get(openRow.key)} /> },
-            ...(openRow.kind !== "unauthorised" ? [] : [{ label: "Nearest place", value: types.get(openRow.key)?.far ?? "…" }]),
           ]} />
           <DetailSidebarSection title="Location">
             <p className="dsb__note">{openRow.lat.toFixed(5)}, {openRow.lng.toFixed(5)}</p>
