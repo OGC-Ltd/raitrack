@@ -174,7 +174,7 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
       ) : rows.length === 0 && EMPTY_READ[read] && all.length > 0 ? (
         <EmptyNote icon={EMPTY_READ[read].icon} title={EMPTY_READ[read].title}>{q ? `Nothing matches “${q}”.` : EMPTY_READ[read].sub}</EmptyNote>
       ) : rows.length === 0 ? (
-        <EmptyNote icon="ti-circle-check" title="No Unauthorised Stops">{q ? `Nothing matches “${q}”.` : "No Menengai unit is standing in a no-go zone or stopped outside an authorised place."}</EmptyNote>
+        <EmptyNote icon="ti-circle-check" title="No Stops">{q ? `Nothing matches “${q}”.` : "No Menengai unit is in a no-go zone, stopped at a customer, or stopped outside an authorised place."}</EmptyNote>
       ) : (
         <div className="sp4-table-scroll aud-units alr-table alr-stop-table">
           <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
@@ -232,7 +232,7 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
               ); })}
             </tbody>
           </table>
-          <TablePager pager={pager} label="Unauthorised stop pages" />
+          <TablePager pager={pager} label="Stop pages" />
         </div>
       )}
       {openRow && (
