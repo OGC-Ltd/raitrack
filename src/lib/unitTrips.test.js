@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows } from "./unitTrips";
+import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst } from "./unitTrips";
 
 // Fleet days are East Africa Time (UTC+3): 22:30Z on the 17th is 01:30 on the 18th.
 const t = (tokenAt, plate, extra = {}) => ({ tokenAt, vehiclePlate: plate, vehicleNo: plate, netWeightKg: 10_000, ...extra });
@@ -103,6 +103,17 @@ describe("each unit-day's figures", () => {
     expect(totals.kmPerTrip).toBe(45);
     expect(totals.avgLoadKg).toBe(10_000);
     expect(totals.tripsPerUnit).toBe(1.5);
+  });
+});
+
+describe("distanceFirst", () => {
+  it("puts rows with a distance first, each part by date-time ascending", () => {
+    const r = (unit, firstAt, km) => ({ unit, firstAt, km });
+    const out = distanceFirst([
+      r("C", "2026-11-12T08:00:00Z", null), r("B", "2026-11-12T09:00:00Z", 40),
+      r("A", "2026-11-11T15:00:00Z", 12), r("D", "2026-11-11T06:00:00Z", null),
+    ]);
+    expect(out.map((x) => x.unit)).toEqual(["A", "B", "D", "C"]);
   });
 });
 

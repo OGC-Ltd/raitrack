@@ -11,7 +11,7 @@ import { downloadTableCsv, exportLater } from "../../utils/tableExport";
 import { downloadLetterheadTablePdf } from "../../api/tableLetterheadPdf";
 import { settleLimited } from "../../lib/settleLimited";
 import { fleetDayKey } from "../../hooks/useFuelEvents";
-import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows } from "../../lib/unitTrips";
+import { unitTripRows, unitTripTotals, kmPerTrip, kmOfDay, kmOfUnitDistance, trackedIdsByDay, avgLoadKg, avgLoadMs, workSpanMs, consolidateUnitRows, distanceFirst } from "../../lib/unitTrips";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { ticketsByBridge } from "../../lib/weighbridgeSheets";
 import { tonnes, gapLabel, clockLabel, stampLabel } from "../../api/weighments";
@@ -169,7 +169,8 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
   const all = useMemo(() => unitTripRows(tickets, kmByDay), [tickets, kmByDay]);
   const q = search.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const keep = (r) => !q || r.plate.toUpperCase().replace(/[^A-Z0-9]/g, "").includes(q);
-  const fold = (list) => (consolidate ? consolidateUnitRows(list) : list);
+  // One row per unit when consolidating; either way, rows with a distance first, by date-time
+  const fold = (list) => distanceFirst(consolidate ? consolidateUnitRows(list) : list);
   const rows = useMemo(
     () => fold(q ? all.filter(keep) : all),
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -113,6 +113,17 @@ export const kmPerTrip = (r) => {
   return r.km == null || !trips ? null : Math.round((r.km / trips) * 10) / 10;
 };
 
+/**
+ * The table's order (operator, 18 Nov 2026: "records with distance on top but still in
+ * ascending order by the date time"): rows with a distance first, then the rest, each
+ * part by its first ticket, earliest first.
+ */
+export function distanceFirst(rows) {
+  return [...rows].sort((a, b) => (a.km == null) - (b.km == null)
+    || Date.parse(a.firstAt) - Date.parse(b.firstAt)
+    || a.unit.localeCompare(b.unit));
+}
+
 /** The average net load a trip carried, kg. */
 export const avgLoadKg = (r) => (r.trips ? r.netKg / r.trips : null);
 
