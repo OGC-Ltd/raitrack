@@ -30,6 +30,7 @@ import {
   voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
   INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, WORK_KINDS_AT, workKindsFor, loggedThisStage, editWork, deleteWork, componentLabel, routeOf,
+  fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard,
 } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
@@ -87,6 +88,105 @@ export function PhaseLadder({ stage, compact = false, onPick = null, picked = nu
 function Fact({ label, children }) {
   if (children == null || children === "" || children === "-") return null;
   return <div className="wf-fact"><dt>{label}</dt><dd>{children}</dd></div>;
+}
+
+/** "3,823.4 → 3,830.1", or one side alone. */
+const num = (n) => (n == null ? null : Number(n).toLocaleString("en-GB", { maximumFractionDigits: 1 }));
+const inOut = (a, b, unit = "") => (a == null && b == null ? null : `${num(a) ?? "?"} → ${b == null ? "not out yet" : `${num(b)}${unit}`}`);
+
+/**
+ * The FactorySuite job card(s) the job is worked under (KASULU). The workshop
+ * keeps the card there; this job follows it: checked in, repair started,
+ * waiting on parts, released. Meter and fuel are the workshop's readings in
+ * and out; a fuel discrepancy is FactorySuite's own flag.
+ */
+export function FactoryCards({ cards }) {
+  if (!cards?.length) return null;
+  return (
+    <Section title="FactorySuite job card" aside={cards.length > 1 ? `${cards.length}` : null}>
+      {cards.map((c) => {
+        const [label, pill] = CARD_STATUS[c.status] ?? [c.status, "none"];
+        return (
+          <div key={c.id} className="wf-fscard">
+            <div className="wf-fscard__head">
+              <span className="wf-mono" title={c.cardNumber}>{shortCard(c.cardNumber)}</span>
+              <span className={`sp4-pill sp4-pill--${pill}`}>{label}</span>
+              {c.priority && <span className={"wf-fscard__tag" + (c.priority === "Urgent" ? " wf-fscard__tag--urgent" : "")}>{c.priority}</span>}
+              {c.category && <span className="wf-fscard__tag">{c.category.charAt(0) + c.category.slice(1).toLowerCase()}</span>}
+            </div>
+            <dl className="wf-facts wf-facts--tight">
+              <Fact label="Raised by">{CARD_SOURCE[c.source] ?? c.source}</Fact>
+              <Fact label="Reported">{c.reportedFault}</Fact>
+              <Fact label="Diagnosis">{c.diagnosis}</Fact>
+              <Fact label="Service">{c.isService ? (c.serviceType ? `Service ${c.serviceType}` : "Yes") : null}</Fact>
+              <Fact label="Checked in">{c.checkedInAt && at(c.checkedInAt)}</Fact>
+              <Fact label="Repair started">{c.repairStartedAt && at(c.repairStartedAt)}</Fact>
+              <Fact label="Parts asked">{c.partsRequestedAt && at(c.partsRequestedAt)}</Fact>
+              <Fact label="Parts in">{c.partsReceivedAt && at(c.partsReceivedAt)}</Fact>
+              <Fact label="Released">{c.releasedAt && at(c.releasedAt)}</Fact>
+              <Fact label="Meter">{inOut(c.meterIn, c.meterOut)}</Fact>
+              <Fact label="Fuel">{inOut(c.fuelIn, c.fuelOut, " L")}{c.fuelSourceIn ? <span className="wf-muted"> · {c.fuelSourceIn.toLowerCase()}</span> : null}</Fact>
+              <Fact label="Costs">{c.labourCost != null || c.partsCost != null ? `Labour ${num(c.labourCost) ?? "-"} · parts ${num(c.partsCost) ?? "-"}` : null}</Fact>
+            </dl>
+            {c.fuelDiscrepancy && (
+              <p className="wf-fscard__flag"><i className="ti ti-gas-station" aria-hidden="true" /> FactorySuite flags a fuel discrepancy between check-in and release.</p>
+            )}
+          </div>
+        );
+      })}
+    </Section>
+  );
+}
+
+/**
+ * Pick a part from the stores (FactorySuite's catalogue, with stock), or type
+ * one that is not listed. Picking fills the name and the item code; the stock
+ * is FactorySuite's last count, read hourly.
+ */
+function StoresPartPicker({ orgId, value, onPick }) {
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => {
+      fetchStoresParts(orgId, { q, limit: 12 })
+        .then((r) => { if (live) { setRows(r); setErr(null); } })
+        .catch((e) => { if (live) setErr(e?.message || "Could not read the stores"); });
+    }, q ? 250 : 0);
+    return () => { live = false; clearTimeout(t); };
+  }, [orgId, q]);
+  return (
+    <div className="wf-stores">
+      <label className="sp4-field wf-field">
+        <span className="sp4-label">Find in stores</span>
+        <input className="sp4-input" value={q} maxLength={100} placeholder="Part number or description"
+               onChange={(e) => setQ(e.target.value)} />
+      </label>
+      {err && <p className="wf-muted">{err}</p>}
+      {rows && rows.length === 0 && !err && <p className="wf-muted">{q ? "Nothing in the stores matches. Type the part below." : "The stores catalogue is empty."}</p>}
+      {rows && rows.length > 0 && (
+        <ul className="wf-stores__list" role="listbox" aria-label="Stores parts">
+          {rows.map((r) => {
+            const on = value === r.partNumber;
+            return (
+              <li key={r.id}>
+                <button type="button" role="option" aria-selected={on}
+                        className={"wf-stores__opt" + (on ? " wf-stores__opt--on" : "")}
+                        onClick={() => onPick(r)}>
+                  <span className="wf-stores__name">{r.description ?? r.partNumber}</span>
+                  <span className="wf-stores__code">{r.partNumber}</span>
+                  <span className={"wf-stores__qty" + (r.inStock ? "" : " wf-stores__qty--out")}>
+                    {r.inStock ? `${num(r.quantityOnHand)} ${String(r.unit ?? "").toLowerCase()} in stock` : "Out of stock"}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function Section({ title, aside, children }) {
@@ -300,7 +400,7 @@ function ReasonButton({ label, busyLabel, placeholder, onSend, busy, tone = "gho
 
 // ── The ticket record ───────────────────────────────────────────────────────
 
-function Parts({ orgId, job, act, busy, canWork, canIssue, canSource }) {
+function Parts({ orgId, job, act, busy, canWork, canIssue, canSource, stores = false }) {
   const [adding, setAdding] = useState(false);
   const [p, setP] = useState({ name: "", quantity: 1, source: "inventory", itemCode: "", note: "" });
   const parts = job.spareParts ?? [];
@@ -366,6 +466,10 @@ function Parts({ orgId, job, act, busy, canWork, canIssue, canSource }) {
               <input className="sp4-input" type="number" min={1} max={1000} value={p.quantity} onChange={(e) => setP({ ...p, quantity: e.target.value })} />
             </label>
           </div>
+          {p.source === "inventory" && stores && (
+            <StoresPartPicker orgId={orgId} value={p.itemCode}
+                              onPick={(r) => setP({ ...p, name: (r.description ?? r.partNumber).slice(0, 200), itemCode: r.partNumber.slice(0, 100) })} />
+          )}
           {p.source === "inventory" && (
             <label className="sp4-field wf-field">
               <span className="sp4-label">Stores item code</span>
@@ -961,13 +1065,15 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       <Section title="The fault">
         <dl className="wf-facts">
           <Fact label="Suspected fault">{job.suspectedFault ?? job.problemNote}</Fact>
-          <Fact label="Flagged">{[job.report?.reportedBy?.fullName, at(job.report?.reportedAt)].filter(Boolean).join(" · ")}</Fact>
+          <Fact label="Flagged">{[job.report?.source === "factorysuite" ? "FactorySuite workshop" : job.report?.reportedBy?.fullName, at(job.report?.reportedAt)].filter(Boolean).join(" · ")}</Fact>
           <Fact label="Route">{job.queue === "controltech" ? "ControlTech queue" : job.queue === "workshop" ? "Workshop" : null}</Fact>
           <Fact label="ControlTech">{job.assignedTo?.fullName}</Fact>
           <Fact label="Path">{job.path ? `${PATH_LABEL[job.path]}${job.pathNote ? ` · ${job.pathNote}` : ""}` : null}</Fact>
           <Fact label="Ticket">{job.ticketNo ? [job.ticketNo, job.ticketIssuedAt && at(job.ticketIssuedAt)].filter(Boolean).join(" · ") : null}</Fact>
         </dl>
       </Section>
+
+      <FactoryCards cards={job.fsJobCards} />
 
       {(job.assessments?.length ?? 0) > 0 && (
         <Section title="Assessment">
@@ -1000,7 +1106,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       {(job.ticketNo || (job.spareParts?.length ?? 0) > 0) && (
         <Parts orgId={orgId} job={job} act={act} busy={busy}
                canWork={canWork && ["in_workshop", "field_inspection", "fixing", "spare_outsourced"].includes(s)}
-               canIssue={can("repair:parts_issue")} canSource={can("repair:parts_source")} />
+               canIssue={can("repair:parts_issue")} canSource={can("repair:parts_source")}
+               stores={(job.fsJobCards?.length ?? 0) > 0 || job.report?.source === "factorysuite"} />
       )}
 
       <WorkLog orgId={orgId} job={job} act={act} busy={busy} kinds={workKindsFor(job, can, userId)} userId={userId} />

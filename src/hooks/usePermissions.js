@@ -64,6 +64,9 @@ const PLANNER_SLUGS = ["planner:read", "planner:write"];
  */
 export const FACTORY_FUEL = "factory_fuel:read";
 export const FACTORY_FUEL_ORGS = ["KASULU"];
+/** Where FactorySuite's Auto Workshop feeds the repair workflow (fleet-server
+ *  factorysuite-workshop.sync): MUFINDI PAPER MILLS, our KASULU. */
+export const FACTORY_WORKSHOP_ORGS = ["KASULU"];
 
 /**
  * The grader for one organisation BY ID, with no active company involved.
@@ -128,6 +131,8 @@ export function usePermissions() {
 
   return useMemo(() => ({
     orgId: org?.id ?? null,
+    /** The organisation's code (KASULU, MENENGAI…), for org-bound features. */
+    orgCode: org?.code ? String(org.code).toUpperCase() : null,
     isPlatform,
     can,
     /** Restricted to units with an open repair job (technicians, or set in IAM). */
