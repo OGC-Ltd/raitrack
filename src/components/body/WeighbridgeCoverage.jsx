@@ -404,15 +404,16 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
   const when = (iso) => (oneDay ? clockLabel(iso) : stampLabel(iso, null));
 
   const allBridges = centre == null;
+  // No km per trip column (operator, 18 Nov 2026): the figure stays in the totals and the unit panel
   const head = consolidate
     ? ["Unit", "Weighbridges", "Days", "Days with distance", "Trips", "First ticket", "Last ticket",
-      "Net weighed, t", "Average load, t", "Average load time", "Distance, km", "Km per trip"]
+      "Net weighed, t", "Average load, t", "Average load time", "Distance, km"]
     : ["Day", "Unit", "Driver", "Weighbridges", "Trips", "First ticket", "Last ticket", "First to last",
-      "Net weighed, t", "Average load, t", "Average load time", "Distance, km", "Km per trip"];
+      "Net weighed, t", "Average load, t", "Average load time", "Distance, km"];
   const bodyOf = (list) => list.map((r) => {
     const tail = [
       (r.netKg / 1000).toFixed(2), (avgLoadKg(r) / 1000).toFixed(2), avgLoadMs(r) == null ? "" : gapLabel(avgLoadMs(r)),
-      r.km == null ? noKm(r) : r.km.toFixed(1), kmPerTrip(r) == null ? "" : kmPerTrip(r).toFixed(1),
+      r.km == null ? noKm(r) : r.km.toFixed(1),
     ];
     return consolidate
       ? [r.unit, r.bridges.join(", "), r.days.length, r.kmDays, r.trips, when(r.firstAt), r.trips > 1 ? when(r.lastAt) : "", ...tail]
@@ -536,7 +537,6 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
                 <th className="sp4-th--right wb-col-full">Average load</th>
                 <th className="sp4-th--right wb-col-full">Average load time</th>
                 <th className="sp4-th--right">Distance, km</th>
-                <th className="sp4-th--right wb-col-full">Km per trip</th>
               </tr>
             </thead>
             <tbody>
@@ -566,7 +566,6 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
                     <td className="sp4-td--right sp4-num">
                       {r.km == null ? <span className="sp4-muted">{noKm(r)}</span> : kmLabel(r.km)}
                     </td>
-                    <td className="sp4-td--right sp4-num wb-col-full">{kmLabel(kmPerTrip(r))}</td>
                   </tr>
                 );
               })}
