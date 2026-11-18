@@ -1,0 +1,120 @@
+/* The phone map's ☰ (MapMoreMenu).
+   The wrapper takes no place of its own, so the button and the panel are both
+   placed against the map, like the base map toggle beside them. */
+.map-more { position: static; }
+
+/* The ☰: under the Map / Satellite toggle, at its left edge, the same white
+   box and shadow so the two read as one stack. */
+.map-more__btn {
+  position: absolute;
+  top: calc(12px + var(--map-type-h, 36px) + 8px);
+  left: 12px;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: #fff;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  font-size: 20px;
+  cursor: pointer;
+}
+.map-more__btn:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+
+/* Open (operator, 18 Nov 2026): a panel as wide as the row above it (12px in
+   from each side, as the work-plans card), as tall as its items, at the top of
+   the area between that row and the map's foot (8px under the row), scrolling
+   if it ever reaches the foot. The area lets taps through, so a tap on the map
+   around the panel still closes it. It lies over the ☰ and the work-plans card. */
+.map-more__area {
+  position: absolute;
+  top: calc(12px + var(--map-type-h, 36px) + 8px);
+  bottom: 8px;
+  left: 12px;
+  right: 12px;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.map-more__panel {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+/* The ✕, centred under the list; it stays in view when the list scrolls */
+.map-more__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 4px;
+  border-top: 1px solid #e2e8f0;
+}
+.map-more__x {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  color: #475569;
+  font-size: 20px;
+  cursor: pointer;
+}
+.map-more__x:hover, .map-more__x:active { background: #f1f5f9; }
+.map-more__x:focus-visible { outline: 2px solid #0f766e; outline-offset: -2px; }
+
+.map-more__menu { overflow-y: auto; overscroll-behavior: contain; }
+.map-more__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  background: none;
+  border: 0;
+  color: #0f172a;
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+/* A rule between the rows, as drawn */
+.map-more__item + .map-more__item { border-top: 1px solid #eef2f6; }
+.map-more__item .ti { font-size: 20px; color: #475569; }
+.map-more__item:active,
+.map-more__item:hover { background: #f1f5f9; }
+.map-more__item:focus-visible { outline: 2px solid #0f766e; outline-offset: -2px; }
+
+/* Unread alerts: a dot on the ☰, the count on the Alerts row (as the side menu's badge) */
+.map-more__dot {
+  position: absolute; top: 6px; right: 6px; width: 9px; height: 9px;
+  border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 2px #fff;
+}
+.map-more__badge {
+  margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 999px;
+  background: #fee2e2; color: #b91c1c; font-size: 12px; font-weight: 700; text-align: center;
+}
+
+/* A new fuel theft: the dot and the count shake, as the avatar's did
+   (mh-alarm-shake, MobileHeader.css, loaded on every phone screen) */
+.map-more__dot.nav-alarm { width: 12px; height: 12px; animation: mh-alarm-shake 2.4s ease-in-out infinite; }
+.map-more__badge.nav-alarm { animation: mh-alarm-shake 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .map-more__dot.nav-alarm, .map-more__badge.nav-alarm { animation: none; }
+}
