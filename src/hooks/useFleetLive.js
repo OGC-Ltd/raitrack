@@ -16,7 +16,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sseUrl } from '../services/api'
 import { fetchSnapshot } from '../services/snapshot'
-import { resolveOrgId } from '../api/org'
+import { resolveOrgId, ORG_CODE_BY_COMPANY } from '../api/org'
 import { mapSnapshotVehicle, applyLiveUpdate, applyDispatchUpdate, applyConnectionRefresh, applyFuelIncident } from '../lib/vehicleMap'
 import { readCache, writeCache } from '../services/cache'
 import { repairsChanged } from '../api/repairs'
@@ -365,7 +365,8 @@ export function useFleetLive(companyId, { keepFeed = false } = {}) {
        words of a web push (fleet-server lib/toasts). Stacked first in, first
        out by components/shared/ToastStack. */
     es.addEventListener('toast', (e) => {
-      try { receiveServerToast(JSON.parse(e.data)) } catch { /* ignore malformed frame */ }
+      // The company open decides which stop pop-ups show (lib/serverToasts belongsHere)
+      try { receiveServerToast(JSON.parse(e.data), ORG_CODE_BY_COMPANY[companyId] ?? null) } catch { /* ignore malformed frame */ }
     })
     /* An administrator changed THIS account's role or access. The server
        closes the stream after this frame; the reconnect is checked against
