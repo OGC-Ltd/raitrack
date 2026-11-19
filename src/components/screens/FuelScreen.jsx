@@ -584,6 +584,28 @@ function FillCheck({ m }) {
               </tfoot>
             )}
           </table>
+          {/* The tank before and after each fill, by the probe, under the comparison
+              (operator, 2026-11-19: as columns of it, it read cramped) */}
+          {rows.some((f) => f.before != null || f.probeFill?.after != null) && (
+            <table className="fuel-rec fuel-rec--tank">
+              <thead>
+                <tr>
+                  <th>Tank level</th>
+                  <th className="r">Before fill</th>
+                  <th className="r">After fill</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((f) => (
+                  <tr key={f.key}>
+                    <td>{f.at != null ? fmtFillWhen.format(f.at) : f.day ? fmtDay(f.day) : "-"}</td>
+                    <td className="r">{f.before != null ? `${fmt(f.before)} L` : "-"}</td>
+                    <td className="r">{f.probeFill?.after != null ? `${fmt(f.probeFill.after)} L` : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
     </section>

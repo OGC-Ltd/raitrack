@@ -121,3 +121,6 @@
 /* The period (FuelPeriodPicker): Today, 7, 14, 31 days and a day on the
    calendar, side by side on the filter row (Fuel and Staffs › Operators). */
 .fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* The tank before and after each fill, a table of its own under the comparison (operator, 2026-11-19) */
+.fuel-rec--tank { margin-top: 14px; }
