@@ -34,6 +34,21 @@ export async function getTankDays({ companyId, from, to }) {
   return res.data ?? []
 }
 
+/**
+ * One machine's fuellings over `from`..`to` with what only the tracker knows
+ * (fleet-server planner fuel-refills): the meter either side of each fuelling
+ * and the fuel burned in the shift it was for. For the machine panel's
+ * Refills (lib/factoryFuel refillFigures).
+ * `{ refills: [{ issueId, tracked, meterBefore, meterAfter, shift }] }`.
+ */
+export async function getFuelRefills({ companyId, from, to, machine }) {
+  const orgId = await resolveOrgId(companyId)
+  if (!orgId) return { refills: [] }
+  const q = new URLSearchParams({ from, to, machine })
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/factory-fuel/refills?${q}`)
+  return res.data ?? { refills: [] }
+}
+
 /** Pages of fillings read at most: 200 a page, so up to 6,000 in a period. */
 const MAX_FILL_PAGES = 30
 

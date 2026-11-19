@@ -122,5 +122,12 @@
    calendar, side by side on the filter row (Fuel and Staffs › Operators). */
 .fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* The tank before and after each fill, a table of its own under the comparison (operator, 2026-11-19) */
-.fuel-rec--tank { margin-top: 14px; }
+/* Refills: each fuelling's seven figures, a two-column table each (operator,
+   2026-11-19). Replaces the tank-level table that sat under the comparison. */
+.fuel-refill { margin-top: 12px; }
+.fuel-refill + .fuel-refill { margin-top: 16px; }
+.fuel-refill caption { caption-side: top; text-align: left; padding: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--ink); }
+.fuel-refill__siv { margin-left: 8px; font-weight: 600; color: var(--dg-label); }
+.fuel-refill tbody th { font-weight: 500; color: var(--dg-label); }
+.fuel-refill td { white-space: normal; }
+.fuel-refill__note { font-weight: 500; color: var(--text-2); }

@@ -326,6 +326,69 @@ function probeFill(f) {
 }
 
 /**
+ * Each refill's seven figures (operator 2026-11-19, from the EX-17 test of that
+ * day): fuel before and after the refill, consumed, planned, the odometer
+ * before and after, and issued. One per fuelling the pump finished, newest
+ * first.
+ *
+ * - Fuel before and after: the probe fill matched to the fuelling
+ *   (reconcileFills), else FactorySuite's own probe check of it.
+ * - Consumed: fuel burned in the shift the fuelling was for, with the engine
+ *   hours run (fleet-server fuel-refills); to now while the shift runs.
+ * - Planned: the plan line the fuelling's request came from.
+ * - Odometer before: the tracker's meter just before the nozzle went in.
+ * - Odometer after: the meter read at the pump, with the tracker's beside it.
+ * - Issued: what the pump put in, and its voucher.
+ *
+ * The odometer is hours on an hour-rated machine and km on a km-rated one.
+ *
+ * @param {object} row     a reconcileFills row (fills, pumpIssues, lines)
+ * @param {object} server  getFuelRefills' answer, or null while it loads or when it failed
+ */
+export function refillFigures(row, server) {
+  const issueOf = new Map((row?.pumpIssues ?? []).map((i) => [i.id, i]));
+  const lineOf = new Map((row?.lines ?? []).filter((l) => l.requestId).map((l) => [l.requestId, l]));
+  const trackerOf = new Map((server?.refills ?? []).map((r) => [r.issueId, r]));
+  return (row?.fills ?? [])
+    .filter((f) => f.key?.startsWith("pump-"))
+    .map((f) => {
+      const id = f.key.slice("pump-".length);
+      const i = issueOf.get(id) ?? {};
+      const line = i.requestId ? lineOf.get(i.requestId) ?? null : null;
+      const t = trackerOf.get(id) ?? null;
+      const s = i.sensor ?? null;
+      const level = (probe, fs) =>
+        probe != null ? { litres: probe, source: "probe" } : fs != null ? { litres: fs, source: "factorysuite" } : null;
+      const shift = t?.shift ?? null;
+      return {
+        key: f.key,
+        id,
+        at: f.at,
+        day: f.day,
+        siv: i.siv ?? null,
+        fuelBefore: level(f.probeFill?.before ?? f.before, s?.beforeL),
+        fuelAfter: level(f.probeFill?.after, s?.afterL),
+        consumed: shift
+          ? { litres: shift.consumedL ?? null, engineHours: shift.engineHours ?? null, open: Boolean(shift.open), ahead: Boolean(shift.ahead) }
+          : null,
+        planned: line
+          ? {
+            full: Boolean(line.fullTank), litres: line.fullTank ? null : line.litresRequested ?? null,
+            need: line.needLitres ?? null, shiftNo: line.shiftNo ?? 1, shiftStart: line.shiftStart ?? null,
+            hours: line.plannedHours ?? null, km: line.plannedKm ?? null,
+          }
+          : null,
+        odometerBefore: t?.meterBefore ?? null,
+        odometerAfter: i.readings?.physical ?? null,
+        trackerAfter: t?.meterAfter ?? null,
+        issued: f.actual ?? i.litres ?? null,
+        tracked: t ? Boolean(t.tracked) : null,
+      };
+    })
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+}
+
+/**
  * @param {object[]} rows      fuelRoster rows (with vehicleId, plate, pumpIssues, lines, tankLitres)
  * @param {object[]} fillings  fuel/fillings rows for the period, or null when they could not be read
  * @returns rows with `fills` (one per fuelling or unclaimed probe fill, newest first) and

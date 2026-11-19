@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
-import { getFactoryFuel, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit } from "../../lib/factoryFuel";
+import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -584,31 +584,138 @@ function FillCheck({ m }) {
               </tfoot>
             )}
           </table>
-          {/* The tank before and after each fill, by the probe, under the comparison
-              (operator, 2026-11-19: as columns of it, it read cramped) */}
-          {rows.some((f) => f.before != null || f.probeFill?.after != null) && (
-            <table className="fuel-rec fuel-rec--tank">
-              <thead>
-                <tr>
-                  <th>Tank level</th>
-                  <th className="r">Before fill</th>
-                  <th className="r">After fill</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((f) => (
-                  <tr key={f.key}>
-                    <td>{f.at != null ? fmtFillWhen.format(f.at) : f.day ? fmtDay(f.day) : "-"}</td>
-                    <td className="r">{f.before != null ? `${fmt(f.before)} L` : "-"}</td>
-                    <td className="r">{f.probeFill?.after != null ? `${fmt(f.probeFill.after)} L` : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
         </>
       )}
     </section>
+  );
+}
+
+const ELLIPSIS = "…";
+
+/**
+ * Refills (operator 2026-11-19, after the EX-17 test of that day): each
+ * fuelling's seven figures, in the order asked: fuel before and after the
+ * refill, consumed, planned, odometer before and after, issued. The tank before
+ * and after each fill was a table of its own under the comparison (#132); its
+ * two figures are the first two rows here. lib/factoryFuel refillFigures; the
+ * tracker's figures (fleet-server fuel-refills) are read when the panel opens.
+ */
+function Refills({ m, from, to }) {
+  const companyId = useAppSelector((a) => a.activeCompanyId);
+  const any = (m.fills ?? []).some((f) => f.key?.startsWith("pump-"));
+  const tracker = useApiData(
+    () => (any ? getFuelRefills({ companyId, from, to, machine: m.reference }) : Promise.resolve({ refills: [] })),
+    [companyId, from, to, m.reference, any],
+    { cacheKey: `ft-factory-fuel-refills:${companyId}:${from}:${to}:${m.reference}` },
+  );
+  const server = tracker.error ? null : tracker.data ?? null;
+  const refills = useMemo(() => refillFigures(m, server), [m, server]);
+  if (!refills.length) return null;
+  const waiting = tracker.loading && !tracker.data;
+
+  return (
+    <section className="dr-panel__sec fuel-refills">
+      <h3 className="dr-panel__h">Refills<span className="dr-panel__count">{fmt(refills.length)}</span></h3>
+      {refills.map((r) => (
+        <table key={r.key} className="fuel-rec fuel-refill">
+          <caption>
+            {r.at != null ? fmtFillWhen.format(r.at) : r.day ? fmtDay(r.day) : "-"}
+            {r.siv && <span className="fuel-refill__siv">{r.siv}</span>}
+          </caption>
+          <tbody>
+            <tr>
+              <th scope="row">Fuel before refill</th>
+              <td className="r" title={levelSource(r.fuelBefore)}>{r.fuelBefore ? `${fmt(r.fuelBefore.litres)} L` : "-"}</td>
+            </tr>
+            <tr>
+              <th scope="row">Fuel after refill</th>
+              <td className="r" title={levelSource(r.fuelAfter)}>{r.fuelAfter ? `${fmt(r.fuelAfter.litres)} L` : "-"}</td>
+            </tr>
+            <tr>
+              <th scope="row">Consumed</th>
+              <ConsumedCell r={r} waiting={waiting} />
+            </tr>
+            <tr>
+              <th scope="row">Planned</th>
+              <td className="r" title={r.planned ? plannedTitle(r.planned) : "No plan line for this fuelling"}>
+                {!r.planned ? "-" : r.planned.full ? "Full tank" : r.planned.litres != null ? `${fmt(r.planned.litres)} L` : "-"}
+                {r.planned?.need != null && <span className="fuel-refill__note">, needs about {fmt(r.planned.need)} L</span>}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Odometer before refill</th>
+              <td className="r" title={r.odometerBefore ? `The tracker, ${clockOf(r.odometerBefore.at)}`
+                : waiting ? undefined : trackerWhy(r, "The tracker sent no reading just before the fuelling")}>
+                {r.odometerBefore ? odometerText(r.odometerBefore.value, m.basis) : waiting ? ELLIPSIS : "-"}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Odometer after refill</th>
+              <OdometerAfterCell r={r} basis={m.basis} />
+            </tr>
+            <tr>
+              <th scope="row">Issued</th>
+              <td className="r">{r.issued != null ? `${fmt(r.issued)} L` : "-"}</td>
+            </tr>
+          </tbody>
+        </table>
+      ))}
+    </section>
+  );
+}
+
+const fmtClock = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false });
+const clockOf = (iso) => (iso ? fmtClock.format(new Date(iso)) : "");
+const levelSource = (x) => (!x ? undefined : x.source === "probe" ? "Our fuel probe" : "FactorySuite's probe check");
+const plannedTitle = (p) => [
+  `Shift ${p.shiftNo}${p.shiftStart ? ` from ${p.shiftStart.slice(0, 5)}` : ""}`,
+  p.hours != null ? `${fmt(p.hours)} h` : p.km != null ? `${fmt(p.km)} km` : null,
+].filter(Boolean).join(", ");
+
+/** Why a tracker figure is "-": the read failed, the machine is not tracked, or the tracker gave none. */
+const trackerWhy = (r, none) =>
+  r.tracked == null ? "The tracker's figures could not be read" : r.tracked === false ? "Not one of our tracked units" : none;
+
+/** Fuel burned in the shift the fuelling was for, with the engine hours run in it. */
+function ConsumedCell({ r, waiting }) {
+  const c = r.consumed;
+  if (!c) {
+    const why = waiting ? undefined
+      : !r.planned ? "No plan line for this fuelling"
+      : r.planned.hours == null ? "The plan line gives no planned hours"
+      : trackerWhy(r, "No plan shift for this fuelling");
+    return <td className="r" title={why}>{waiting ? ELLIPSIS : "-"}</td>;
+  }
+  if (c.ahead) return <td className="r">Shift not started</td>;
+  if (c.litres == null) return <td className="r" title={trackerWhy(r, "The probe gave no tank level at one end of the shift")}>-</td>;
+  return (
+    <td className="r" title={c.open ? "The shift is still running: up to now" : "Over the planned shift"}>
+      {fmt(c.litres)} L
+      {(c.open || c.engineHours != null) && (
+        <span className="fuel-refill__note">
+          {c.open ? " so far" : ""}{c.engineHours != null ? `, ${fmt(c.engineHours, 1)} h run` : ""}
+        </span>
+      )}
+    </td>
+  );
+}
+
+/** The meter read at the pump, with the tracker's where the two differ. */
+function OdometerAfterCell({ r, basis }) {
+  const tracker = r.trackerAfter;
+  if (r.odometerAfter == null) {
+    return (
+      <td className="r" title={tracker ? `The tracker, ${clockOf(tracker.at)}; the pump recorded no reading` : "The pump recorded no reading"}>
+        {tracker ? odometerText(tracker.value, basis) : "-"}
+      </td>
+    );
+  }
+  const differs = tracker && Math.abs(tracker.value - r.odometerAfter) >= 0.1;
+  return (
+    <td className="r" title={`Read at the pump${tracker ? `; the tracker read ${odometerText(tracker.value, basis)} at ${clockOf(tracker.at)}` : ""}`}>
+      {odometerText(r.odometerAfter, basis)}
+      {differs && <span className="fuel-refill__note">, tracker {odometerText(tracker.value, basis)}</span>}
+    </td>
   );
 }
 
@@ -682,6 +789,8 @@ function MachinePanel({ m, from, to, onClose }) {
         </section>
 
         <FillCheck m={m} />
+
+        <Refills m={m} from={from} to={to} />
 
         {m.shifts > 0 && (
           <section className="dr-panel__sec dr-panel__charts">
