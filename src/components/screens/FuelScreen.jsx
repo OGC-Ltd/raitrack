@@ -858,6 +858,7 @@ function MachinePanel({ m, from, to, onClose }) {
     // Moved here from the grid (operator 2026-11-19); the table below lists each fuelling.
     { label: "Variance, pump less probe", value: probeWords(m.variance), band: varianceBand(m.variance), wide: true },
   ];
+  const odoNow = m.lastRefill?.trackerNow ?? m.meterNow ?? null;
   const lines = [...m.lines].sort((a, b) => b.day.localeCompare(a.day) || (a.shiftNo ?? 1) - (b.shiftNo ?? 1));
 
   return (
@@ -887,9 +888,10 @@ function MachinePanel({ m, from, to, onClose }) {
             <div>
               <dt>Odometer</dt>
               {/* In km (operator 2026-11-20): the tracker's GPS odometer now, else a km reading keyed in at the pump; an hour meter is no km figure. */}
-              {m.meterNow?.value != null ? (
-                <dd title={`The tracker's GPS odometer${m.meterNow.at ? `, last read ${fmtFillWhen.format(Date.parse(m.meterNow.at))}` : ""}${m.odometer != null && odometerUnit(m.basis) === "km" ? `; at the pump on ${fmtDay(m.odometerDay)}: ${odometerText(m.odometer, m.basis)}` : ""}`}>
-                  {meterText(m.meterNow.value, "km")}<span className="dr-window__unit"> now</span>
+              {/* The refills' telemetry odometer where there is one, the same counter as the Odometer columns. */}
+              {odoNow?.value != null ? (
+                <dd title={`The tracker's GPS odometer${odoNow.at ? `, last read ${fmtFillWhen.format(Date.parse(odoNow.at))}` : ""}${m.odometer != null && odometerUnit(m.basis) === "km" ? `; at the pump on ${fmtDay(m.odometerDay)}: ${odometerText(m.odometer, m.basis)}` : ""}`}>
+                  {meterText(odoNow.value, "km")}<span className="dr-window__unit"> now</span>
                 </dd>
               ) : m.odometer != null && odometerUnit(m.basis) === "km" ? (
                 <dd title={`Read at the pump on ${fmtDay(m.odometerDay)} (FactorySuite)`}>

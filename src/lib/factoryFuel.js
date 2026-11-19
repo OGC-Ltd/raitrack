@@ -476,12 +476,16 @@ export function refillFigures(row, server) {
         trackerBefore: t?.meterBefore?.unit === "km" ? t.meterBefore : null,
         odometerAfter: i.readings?.physical ?? null,
         trackerAfter: t?.meterAfter ?? null,
+        trackerNow: t?.meterNow?.unit === "km" ? t.meterNow : null,
         issued: f.actual ?? i.litres ?? null,
         tracked: t ? Boolean(t.tracked) : null,
       };
     })
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
-  return withMeterAfter(list, row?.meterNow ?? null);
+  // The odometer now off the server's telemetry, the same column as the
+  // before figures: the live snapshot's mileage is Wialon's own counter on
+  // another base (MTR-21: 37,488 km there, 1,815 km here) and is never mixed in.
+  return withMeterAfter(list, list.find((x) => x.trackerNow)?.trackerNow ?? null);
 }
 
 /**
