@@ -65,7 +65,9 @@ function consumedFor(row, byVehicle, idByPlate, today) {
     if (day >= row.firstDay && day <= end) { fills += d.fillL ?? 0; drains += d.drainL ?? 0; }
   }
   const used = start + fills - drains - finish;
-  return used < 0 ? null : Math.round(used);
+  // To the hundredth, the probe's own step (10 ml), only to drop float noise;
+  // not to whole litres (operator 2026-11-20: "let us not round off at all").
+  return used < 0 ? null : Math.round(used * 100) / 100;
 }
 
 /**

@@ -27,8 +27,14 @@ import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 
-const fmt = (n, d = 0) =>
-  Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+// Figures as they come, not rounded to whole litres (operator 2026-11-20: the
+// probe's 77.66 L showed as 78 L beside FactorySuite's 77 L — "let us not round
+// off at all"). Probe levels are in millilitres, so two places are exact; a
+// whole number shows no decimals. `d` fixes the places where one is wanted.
+const fmt = (n, d = null) =>
+  Number(n ?? 0).toLocaleString(undefined, d == null
+    ? { maximumFractionDigits: 2 }
+    : { minimumFractionDigits: d, maximumFractionDigits: d });
 const litres = (n) => (n == null ? "-" : `${fmt(n)} L`);
 /** An odometer reading with its unit: "5,086.5 h", "12,340 km"; to one decimal, as the pump reads it. */
 const odometerText = (n, basis) => {
