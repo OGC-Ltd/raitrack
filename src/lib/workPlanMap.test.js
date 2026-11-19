@@ -175,6 +175,22 @@ describe("scopeView: one department", () => {
     expect(scopeView(v, "IRRIGATION").counts).toMatchObject({ units: 2, lines: 3 });
   });
 
+  it("counts plan lines at their own location, not machines (19 Nov: 21 of 80 machines read against 96 lines)", () => {
+    const d = data([
+      line({ id: "a", shiftNo: 1 }),                                                     // EX-01 day, Zone 4
+      line({ id: "b", shiftNo: 2, shiftStart: "18:00:00" }),                              // EX-01 night, Zone 4
+      line({ id: "c", machine: "EX-02", vehicleId: "v2", shiftNo: 1 }),                    // EX-02 day, Zone 4
+      line({ id: "e", machine: "EX-02", vehicleId: "v2", shiftNo: 2, workLocation: "Intake 3", fenceId: null }), // EX-02 night elsewhere
+    ]);
+    d.plans.push({ id: "q", planCode: "WP-2", department: "ROADS", status: "DRAFT", lines: [line({ id: "r", machine: "GR-01", vehicleId: "v5" })] });
+    const inside = { lat: -3.995, lng: 30.005, online: true };
+    const v = workPlanView(d, [{ vehicleId: "v1", ...inside }, { vehicleId: "v2", ...inside }, { vehicleId: "v5", ...inside }], [zone4], NOON_EAT);
+    // EX-01 both lines, EX-02 its Zone 4 line; GR-01 is inside but its plan is pending
+    expect(v.counts).toMatchObject({ lines: 5, linesHere: 3, units: 3, here: 2 });
+    expect(scopeView(v, "IRRIGATION").counts).toMatchObject({ lines: 4, linesHere: 3 });
+    expect(scopeView(v, "ROADS").counts).toMatchObject({ lines: 1, linesHere: 0 });
+  });
+
   it("a machine with lines in two departments is in both", () => {
     const d = data([line({ id: "a" })]);
     d.plans.push({ id: "q", planCode: "WP-2", department: "ROADS", status: "APPROVED", lines: [line({ id: "r", shiftNo: 2, shiftStart: "18:00:00" })] });
