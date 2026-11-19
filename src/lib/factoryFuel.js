@@ -93,11 +93,10 @@ export function withFuelNow(rows, vehicles) {
     const live = (row.vehicleId && byId.get(String(row.vehicleId)))
       || (row.plate && byPlate.get(plateKey(row.plate)))
       || null;
-    // The meter now, on the meter the tracker's refill figures use: km for a
-    // km-rated machine, engine hours otherwise (Odometer after, operator
-    // 2026-11-20: "meter now").
-    const km = row.basis === "KM_PER_LITRE";
-    const meter = km ? live?.odometerKm : live?.engineHours;
+    // The meter now, on the meter the tracker's refill figures use: its GPS
+    // odometer in km on every machine (Odometer after, operator 2026-11-20:
+    // "meter now", then "do conversion into km for the odometers").
+    const meter = live?.odometerKm;
     return {
       ...row,
       fuelNow: live?.fuelLitres ?? null,
@@ -381,21 +380,49 @@ function probeFill(f) {
 /**
  * Odometer after a refill: the meter once the machine has done the work that
  * tank was for (operator 2026-11-20: "the after refill is for when the unit
- * completed its shifts after the refill" — "meter now"). For the latest refill
- * that is the tracker's meter now; for an earlier one, the meter just before
- * the refill that followed it. Always the tracker's, the same meter as
- * Odometer before: the pump's keyed-in reading is another meter (EX-26:
- * 1,891.5 h at the pump against 2,310.9 h on the tracker) and stays in the
- * hover. An after below the before is a bad reading and shows as nothing.
+ * completed its shifts after the refill" — "meter now"), on the same meter as
+ * Odometer before so the two never cross:
+ *
+ * - pump meter (the default, operator 2026-11-20): an earlier refill takes the
+ *   next fuelling's pump reading; the latest takes its pump reading plus what
+ *   the tracker has run since (tracker now less tracker at the fuelling);
+ * - tracker meter (no pump reading): the next refill's tracker before, or the
+ *   tracker now for the latest.
+ *
+ * Mixed meters, or an after below the before, show as nothing.
  */
 function withMeterAfter(refills, now) {
   return refills.map((r, k) => {
-    const next = k === 0 ? null : refills[k - 1];
-    const m = k === 0 ? now : next.odometerBefore;
-    const after = m?.value != null ? { value: m.value, at: m.at ?? null, source: k === 0 ? "now" : "next-refill" } : null;
-    const before = r.odometerBefore?.value ?? null;
-    return { ...r, meterAfter: after && (before == null || after.value >= before) ? after : null };
+    const b = r.odometerBefore;
+    let after = null;
+    if (b?.value != null && k > 0) {
+      const n = refills[k - 1].odometerBefore;
+      if (n?.value != null && n.source === b.source && n.unit === b.unit) {
+        after = { value: n.value, at: n.at ?? null, unit: b.unit, source: b.source === "pump" ? "next-refill-pump" : "next-refill" };
+      }
+    } else if (b?.value != null && now?.value != null) {
+      if (b.source !== "pump") after = { value: now.value, at: now.at ?? null, unit: "km", source: "now" };
+      else if (b.unit === "km" && r.trackerBefore?.value != null && now.value >= r.trackerBefore.value) {
+        const run = now.value - r.trackerBefore.value;
+        after = { value: Math.round((b.value + run) * 100) / 100, at: now.at ?? null, unit: "km", source: "now-pump", run: Math.round(run * 100) / 100 };
+      }
+    }
+    return { ...r, meterAfter: after && after.value >= b.value ? after : null };
   });
+}
+
+/** One fuelling's Odometer before, with its source and unit (see refillFigures). */
+function odometerBeforeOf(row, issue, tracker, fill) {
+  const physical = issue.readings?.physical ?? null;
+  const pump = physical != null
+    ? { value: physical, at: fill.at != null ? new Date(fill.at).toISOString() : null, source: "pump", unit: odometerUnit(row?.basis) }
+    : null;
+  if (pump && pump.unit === "km") return pump;
+  // Only a meter the server says is km: an older server sends engine hours.
+  if (tracker?.meterBefore?.unit === "km") return { ...tracker.meterBefore, source: "tracker", unit: "km" };
+  // Never hours (operator 2026-11-20, on DG-19's 320.4 h: "still in h"): an
+  // hour meter keyed in at the pump is no km figure; the hover gives it.
+  return null;
 }
 
 export function refillFigures(row, server) {
@@ -410,8 +437,15 @@ export function refillFigures(row, server) {
       const line = i.requestId ? lineOf.get(i.requestId) ?? null : null;
       const t = trackerOf.get(id) ?? null;
       const s = i.sensor ?? null;
-      const level = (probe, fs) =>
-        probe != null ? { litres: probe, source: "probe" } : fs != null ? { litres: fs, source: "factorysuite" } : null;
+      const level = (probe, fs, pump) =>
+        probe != null ? { litres: probe, source: "probe" } : fs != null ? { litres: fs, source: "factorysuite" }
+          : pump != null ? { litres: pump, source: "pump" } : null;
+      // From the pump alone (operator 2026-11-20: "fuel before, if we can get
+      // it from the pump"): a full-tank fuelling ends at the tank's size, so it
+      // began at the size less what went in. Only where neither probe read it.
+      const issuedL = f.actual ?? i.litres ?? null;
+      const tank = row?.tankLitres ?? null;
+      const fullFill = Boolean(line?.fullTank) && tank != null && issuedL != null && issuedL <= tank;
       const shift = t?.shift ?? null;
       return {
         key: f.key,
@@ -419,8 +453,8 @@ export function refillFigures(row, server) {
         at: f.at,
         day: f.day,
         siv: i.siv ?? null,
-        fuelBefore: level(f.probeFill?.before ?? f.before, s?.beforeL),
-        fuelAfter: level(f.probeFill?.after, s?.afterL),
+        fuelBefore: level(f.probeFill?.before ?? f.before, s?.beforeL, fullFill ? Math.round((tank - issuedL) * 100) / 100 : null),
+        fuelAfter: level(f.probeFill?.after, s?.afterL, fullFill ? tank : null),
         consumed: shift
           ? { litres: shift.consumedL ?? null, engineHours: shift.engineHours ?? null, open: Boolean(shift.open), ahead: Boolean(shift.ahead) }
           : null,
@@ -431,15 +465,27 @@ export function refillFigures(row, server) {
             hours: line.plannedHours ?? null, km: line.plannedKm ?? null,
           }
           : null,
-        odometerBefore: t?.meterBefore ?? null,
+        // In km (operator 2026-11-20: "do conversion into km for the
+        // odometers"): the reading keyed in at the pump where it is in km (a
+        // km-rated machine; "by default lets use the odometer value keyed at
+        // the pump"), else the tracker's GPS odometer. An hour-rated
+        // machine's pump hours stand in only where the tracker has nothing:
+        // not ours, or no reading near the fuelling. trackerBefore stays for
+        // the latest refill's after and the hover.
+        odometerBefore: odometerBeforeOf(row, i, t, f),
+        trackerBefore: t?.meterBefore?.unit === "km" ? t.meterBefore : null,
         odometerAfter: i.readings?.physical ?? null,
         trackerAfter: t?.meterAfter ?? null,
+        trackerNow: t?.meterNow?.unit === "km" ? t.meterNow : null,
         issued: f.actual ?? i.litres ?? null,
         tracked: t ? Boolean(t.tracked) : null,
       };
     })
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
-  return withMeterAfter(list, row?.meterNow ?? null);
+  // The odometer now off the server's telemetry, the same column as the
+  // before figures: the live snapshot's mileage is Wialon's own counter on
+  // another base (MTR-21: 37,488 km there, 1,815 km here) and is never mixed in.
+  return withMeterAfter(list, list.find((x) => x.trackerNow)?.trackerNow ?? null);
 }
 
 /**

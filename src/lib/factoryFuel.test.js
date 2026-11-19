@@ -333,8 +333,8 @@ describe("refillFigures", () => {
   const tracker = {
     refills: [{
       issueId: "i17", tracked: true,
-      meterBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" },
-      meterAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z" },
+      meterBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z", unit: "km" },
+      meterAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z", unit: "km" },
       shift: { start: "2026-11-19T03:00:00Z", end: "2026-11-19T11:00:00Z", open: false, ahead: false, consumedL: 100.4, engineHours: 4.6 },
     }],
   };
@@ -347,13 +347,37 @@ describe("refillFigures", () => {
       fuelAfter: { litres: 641.9, source: "probe" },
       consumed: { litres: 100.4, engineHours: 4.6, open: false, ahead: false },
       planned: { full: true, litres: 650, need: 240, shiftNo: 1, shiftStart: "06:00:00", hours: 8, km: null },
-      odometerBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" },
+      // km off the tracker: the pump's 4,215.2 is engine hours (operator 2026-11-20: odometers in km)
+      odometerBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z", unit: "km", source: "tracker" },
+      trackerBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z", unit: "km" },
       odometerAfter: 4215.2,
-      trackerAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z" },
+      trackerAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z", unit: "km" },
+      trackerNow: null,
       meterAfter: null,
       issued: 543,
       tracked: true,
     }]);
+  });
+
+  it("takes the pump's odometer for a machine with no tracker: before at each fuelling, after at the next", () => {
+    const [row] = fuelRoster({
+      factory: "MUFINDI PAPER MILLS", from: "2026-11-18", to: "2026-11-19",
+      lines: [],
+      issues: [
+        { id: "a", machine: "T895DSZ", day: "2026-11-18", litres: 150, done: true, flags: [], note: null, at: "2026-11-18T09:00:00", readings: { physical: 7800 } },
+        { id: "b", machine: "T895DSZ", day: "2026-11-19", litres: 202, done: true, flags: [], note: null, at: "2026-11-19T09:06:47", readings: { physical: 7961 } },
+      ],
+      machines: [{ reference: "T895DSZ", basis: "KM_PER_LITRE" }],
+    });
+    const meters = { refills: [{ issueId: "a", tracked: false }, { issueId: "b", tracked: false }] };
+    const [latest, earlier] = refillFigures(reconcileFills([row], [])[0], meters);
+    expect(latest.odometerBefore).toMatchObject({ value: 7961, source: "pump" });
+    expect(latest.meterAfter).toBe(null);
+    expect(earlier.odometerBefore).toMatchObject({ value: 7800, source: "pump" });
+    expect(earlier.meterAfter).toMatchObject({ value: 7961, source: "next-refill-pump" });
+    // The pump's reading is the default whether or not the machine is tracked.
+    const tracked = refillFigures(reconcileFills([row], [])[0], { refills: [{ issueId: "a", tracked: true }, { issueId: "b", tracked: true }] });
+    expect(tracked.map((r) => r.odometerBefore?.value)).toEqual([7961, 7800]);
   });
 
   it("falls back to FactorySuite's probe check where ours has no fill, and waits on the tracker without it", () => {
@@ -361,7 +385,18 @@ describe("refillFigures", () => {
     const [r] = refillFigures(row, null);
     expect(r.fuelBefore).toEqual({ litres: 77, source: "factorysuite" });
     expect(r.fuelAfter).toEqual({ litres: 641.9, source: "factorysuite" });
-    expect(r).toMatchObject({ consumed: null, odometerBefore: null, trackerAfter: null, odometerAfter: 4215.2, issued: 543, tracked: null });
+    expect(r).toMatchObject({ consumed: null, odometerBefore: null, trackerBefore: null, trackerAfter: null, odometerAfter: 4215.2, issued: 543, tracked: null });
+  });
+
+  it("works a full tank's fuel before out from the pump where neither probe read it: the tank less what went in", () => {
+    const bare = ex17();
+    bare.pumpIssues = bare.pumpIssues.map((i) => ({ ...i, sensor: null }));
+    const [r] = refillFigures(reconcileFills([bare], [])[0], null);
+    expect(r.fuelBefore).toEqual({ litres: 107, source: "pump" }); // 650 − 543
+    expect(r.fuelAfter).toEqual({ litres: 650, source: "pump" });
+    // not a full tank, or no tank size: nothing to work it out from
+    const part = { ...bare, tankLitres: null };
+    expect(refillFigures(reconcileFills([part], [])[0], null)[0].fuelBefore).toBeNull();
   });
 
   it("has nothing to list for a machine the pump has not fuelled", () => {
@@ -394,9 +429,11 @@ describe("plannedLitres", () => {
 });
 
 describe("withRefillColumns", () => {
+  // The server's odometer now (telemetry), on each refill of the machine.
+  const nowAt = (meters, value, at = null) => ({ refills: meters.refills.map((r) => ({ ...r, meterNow: { value, at, unit: "km" } })) });
   const fills = (row, id, at, before, after) => ({
     ...row,
-    pumpIssues: [...(row.pumpIssues ?? []), { id, litres: 100, done: true, readings: { physical: 10 } }],
+    pumpIssues: [...(row.pumpIssues ?? []), { id, litres: 100, done: true, readings: { physical: null } }],
     fills: [...(row.fills ?? []), { key: `pump-${id}`, at: Date.parse(at), day: at.slice(0, 10), before, actual: 100, probeFill: { before, after } }],
   });
 
@@ -404,32 +441,73 @@ describe("withRefillColumns", () => {
     let row = { reference: "EX-17", lines: [], pumpIssues: [], fills: [] };
     row = fills(row, "a", "2026-11-18T06:00:00Z", 50, 400);
     row = fills(row, "b", "2026-11-19T06:00:00Z", 78.8, 641.9);
-    const meters = { refills: [{ issueId: "b", tracked: true, meterBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" }, meterAfter: null, shift: null }] };
+    const meters = { refills: [{ issueId: "b", tracked: true, meterBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z", unit: "km" }, meterAfter: null, shift: null }] };
     const [out] = withRefillColumns([row], meters);
     expect(out).toMatchObject({ fuelBefore: 78.8, fuelAfter: 641.9, odometerBefore: 4214.1, refillCount: 2 });
     expect(out.lastRefill.id).toBe("b");
   });
 
-  it("takes Odometer after as the tracker's meter now, or before the next refill, never below the before", () => {
+  it("takes a km pump reading by default: after is the next fuelling's reading, or the latest's plus the tracker's km since", () => {
+    let row = { reference: "FT-14", basis: "KM_PER_LITRE", lines: [], pumpIssues: [], fills: [] };
+    row = fills(row, "a", "2026-11-18T04:41:00Z", 226.7, 376.4);
+    row = fills(row, "b", "2026-11-19T08:42:00Z", 148.7, 377.1);
+    row.pumpIssues[0].readings = { physical: 1870.13 };
+    row.pumpIssues[1].readings = { physical: 1891.52 };
+    const at = (v, t = "2026-11-19T05:42:00Z") => ({ value: v, at: t, unit: "km" });
+    const meters = { refills: [
+      { issueId: "a", tracked: true, meterBefore: at(2289.6, "2026-11-18T04:40:00Z"), meterAfter: null, shift: null },
+      { issueId: "b", tracked: true, meterBefore: at(2310.9), meterAfter: at(2311), shift: null },
+    ] };
+    const [out] = withRefillColumns([row], nowAt(meters, 2318.4, "2026-11-20T10:00:00Z"));
+    // 1,891.52 km at the pump + 7.5 km the tracker has run since (2,318.4 − 2,310.9)
+    expect(out).toMatchObject({ odometerBefore: 1891.52, odometerAfter: 1899.02 });
+    expect(out.lastRefill.meterAfter).toMatchObject({ source: "now-pump", run: 7.5 });
+    const all = refillFigures(row, meters);
+    expect(all[1].odometerBefore).toMatchObject({ value: 1870.13, source: "pump" });
+    expect(all[1].meterAfter).toMatchObject({ value: 1891.52, source: "next-refill-pump" });
+    // no meter now, or no tracker reading at the fuelling: no run to add, blank
+    expect(withRefillColumns([row], meters)[0].odometerAfter).toBeNull();
+    const noTracker = { refills: meters.refills.map((r) => ({ ...r, meterBefore: null })) };
+    expect(withRefillColumns([row], nowAt(noTracker, 2318.4))[0].odometerAfter).toBeNull();
+  });
+
+  it("falls back to the tracker's meter without a pump reading: its meter now, or before the next refill, never below the before", () => {
     let row = { reference: "EX-26", lines: [], pumpIssues: [], fills: [] };
     row = fills(row, "a", "2026-11-19T04:41:00Z", 226.7, 376.4);
     row = fills(row, "b", "2026-11-19T08:42:00Z", 148.7, 377.1);
-    row.pumpIssues[1].readings = { physical: 1891.52 };
-    const at = (v, t = "2026-11-19T05:42:00Z") => ({ value: v, at: t });
+    const at = (v, t = "2026-11-19T05:42:00Z") => ({ value: v, at: t, unit: "km" });
     const meters = { refills: [
       { issueId: "a", tracked: true, meterBefore: at(2306.2, "2026-11-19T04:40:00Z"), meterAfter: null, shift: null },
       { issueId: "b", tracked: true, meterBefore: at(2310.9), meterAfter: at(2311), shift: null },
     ] };
-    const [out] = withRefillColumns([{ ...row, meterNow: at(2318.4, "2026-11-20T10:00:00Z") }], meters);
-    // the latest: the meter now, not the pump's 1,891.52 (another meter)
+    const [out] = withRefillColumns([row], nowAt(meters, 2318.4, "2026-11-20T10:00:00Z"));
     expect(out).toMatchObject({ odometerBefore: 2310.9, odometerAfter: 2318.4 });
+    // the live snapshot's mileage (Wialon's own counter) is never used for it
+    expect(withRefillColumns([{ ...row, meterNow: at(37488) }], meters)[0].odometerAfter).toBeNull();
     expect(out.lastRefill.meterAfter.source).toBe("now");
-    // the earlier: the meter just before the refill that followed it
-    const all = refillFigures(row, meters);
-    expect(all[1].meterAfter).toMatchObject({ value: 2310.9, source: "next-refill" });
-    // no meter now: blank; a meter now below the before: a bad reading, blank
-    expect(withRefillColumns([row], meters)[0].odometerAfter).toBeNull();
-    expect(withRefillColumns([{ ...row, meterNow: at(2300) }], meters)[0].odometerAfter).toBeNull();
+    expect(refillFigures(row, meters)[1].meterAfter).toMatchObject({ value: 2310.9, source: "next-refill" });
+    expect(withRefillColumns([row], nowAt(meters, 2300))[0].odometerAfter).toBeNull();
+    // an hour-rated machine's pump hours give way to the tracker's km
+    row.pumpIssues[1].readings = { physical: 1891.52 };
+    expect(refillFigures({ ...row, basis: "HOUR" }, meters)[0].odometerBefore).toMatchObject({ value: 2310.9, unit: "km" });
+  });
+
+  it("shows nothing from an older server that sends the tracker's hours, never them as km", () => {
+    let row = { reference: "EX-17", basis: "HOUR", lines: [], pumpIssues: [], fills: [] };
+    row = fills(row, "b", "2026-11-19T06:00:00Z", 78.8, 641.9);
+    const hours = { refills: [{ issueId: "b", tracked: true, meterBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" }, meterAfter: null, shift: null }] };
+    const [out] = withRefillColumns([{ ...row, meterNow: { value: 598, at: null } }], hours);
+    expect(out).toMatchObject({ odometerBefore: null, odometerAfter: null });
+  });
+
+  it("never shows an hour-rated machine's pump hours: no tracker km, no odometer", () => {
+    let row = { reference: "DG-19", basis: "HOUR", lines: [], pumpIssues: [], fills: [] };
+    row = fills(row, "a", "2026-11-19T06:41:00Z", null, null);
+    row.pumpIssues[0].readings = { physical: 320.41 };
+    const [out] = withRefillColumns([{ ...row, meterNow: { value: 900, at: null } }], { refills: [{ issueId: "a", tracked: false }] });
+    expect(out.lastRefill.odometerBefore).toBeNull();
+    expect(out).toMatchObject({ odometerBefore: null, odometerAfter: null });
+    expect(out.lastRefill.odometerAfter).toBe(320.41); // the pump's hours, for the hover
   });
 
   it("counts Consumed from the latest refill, to now or to the period's last day", () => {
