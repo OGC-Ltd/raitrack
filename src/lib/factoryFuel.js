@@ -93,10 +93,16 @@ export function withFuelNow(rows, vehicles) {
     const live = (row.vehicleId && byId.get(String(row.vehicleId)))
       || (row.plate && byPlate.get(plateKey(row.plate)))
       || null;
+    // The meter now, on the meter the tracker's refill figures use: km for a
+    // km-rated machine, engine hours otherwise (Odometer after, operator
+    // 2026-11-20: "meter now").
+    const km = row.basis === "KM_PER_LITRE";
+    const meter = km ? live?.odometerKm : live?.engineHours;
     return {
       ...row,
       fuelNow: live?.fuelLitres ?? null,
       fuelNowPct: live?.fuelLitres != null ? live.fuelPct ?? null : null,
+      meterNow: meter != null ? { value: meter, at: live?.lastReportedAt != null ? new Date(live.lastReportedAt).toISOString() : null } : null,
     };
   });
 }
@@ -360,28 +366,30 @@ function probeFill(f) {
  * @param {object} server  getFuelRefills' answer, or null while it loads or when it failed
  */
 /**
- * The meter after a refill, on the same meter as the one before it. Before and
- * after can never go backwards (operator 2026-11-20, EX-26: before 2,310.9 h
- * from the tracker, after 1,891.5 h keyed in at the pump — two different
- * meters). So the after is the tracker's whenever the before is the tracker's;
- * the pump's reading stands in only when there is no tracker reading before
- * the refill to compare it with. An after below the before is a bad reading
- * and shows as nothing.
+ * Odometer after a refill: the meter once the machine has done the work that
+ * tank was for (operator 2026-11-20: "the after refill is for when the unit
+ * completed its shifts after the refill" — "meter now"). For the latest refill
+ * that is the tracker's meter now; for an earlier one, the meter just before
+ * the refill that followed it. Always the tracker's, the same meter as
+ * Odometer before: the pump's keyed-in reading is another meter (EX-26:
+ * 1,891.5 h at the pump against 2,310.9 h on the tracker) and stays in the
+ * hover. An after below the before is a bad reading and shows as nothing.
  */
-function meterAfter(t, pump) {
-  const before = t?.meterBefore?.value ?? null;
-  const after = t?.meterAfter
-    ? { value: t.meterAfter.value, at: t.meterAfter.at ?? null, source: "tracker" }
-    : before == null && pump != null ? { value: pump, at: null, source: "pump" } : null;
-  if (!after || (before != null && after.value < before)) return null;
-  return after;
+function withMeterAfter(refills, now) {
+  return refills.map((r, k) => {
+    const next = k === 0 ? null : refills[k - 1];
+    const m = k === 0 ? now : next.odometerBefore;
+    const after = m?.value != null ? { value: m.value, at: m.at ?? null, source: k === 0 ? "now" : "next-refill" } : null;
+    const before = r.odometerBefore?.value ?? null;
+    return { ...r, meterAfter: after && (before == null || after.value >= before) ? after : null };
+  });
 }
 
 export function refillFigures(row, server) {
   const issueOf = new Map((row?.pumpIssues ?? []).map((i) => [i.id, i]));
   const lineOf = new Map((row?.lines ?? []).filter((l) => l.requestId).map((l) => [l.requestId, l]));
   const trackerOf = new Map((server?.refills ?? []).map((r) => [r.issueId, r]));
-  return (row?.fills ?? [])
+  const list = (row?.fills ?? [])
     .filter((f) => f.key?.startsWith("pump-"))
     .map((f) => {
       const id = f.key.slice("pump-".length);
@@ -413,12 +421,12 @@ export function refillFigures(row, server) {
         odometerBefore: t?.meterBefore ?? null,
         odometerAfter: i.readings?.physical ?? null,
         trackerAfter: t?.meterAfter ?? null,
-        meterAfter: meterAfter(t, i.readings?.physical),
         issued: f.actual ?? i.litres ?? null,
         tracked: t ? Boolean(t.tracked) : null,
       };
     })
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  return withMeterAfter(list, row?.meterNow ?? null);
 }
 
 /**

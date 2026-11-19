@@ -767,41 +767,39 @@ function ConsumedCell({ r, waiting }) {
 }
 
 /**
- * The meter after the refill, on the same meter as the one before it
- * (lib/factoryFuel meterAfter): the tracker's, or the pump's when the tracker
- * gave nothing before. The pump's own reading is in the hover when it is a
- * different figure (operator 2026-11-20, EX-26: 1,891.5 h at the pump against
- * 2,310.9 h on the tracker before).
+ * Odometer after the refill (lib/factoryFuel withMeterAfter): the tracker's
+ * meter now for the latest refill, or just before the next refill for an
+ * earlier one (operator 2026-11-20: "meter now"). The pump's keyed-in reading
+ * is another meter and stays in the hover (EX-26: 1,891.5 h at the pump
+ * against 2,310.9 h on the tracker).
  */
-const pumpNote = (r, basis) =>
-  r.odometerAfter != null && r.meterAfter?.source !== "pump" ? `; keyed in at the pump: ${odometerText(r.odometerAfter, basis)}` : "";
+const pumpNote = (r, basis) => (r?.odometerAfter != null ? `; keyed in at the pump: ${odometerText(r.odometerAfter, basis)}` : "");
+const afterSource = (a) => (a.source === "now"
+  ? `The tracker now${a.at ? `, last read ${fmtFillWhen.format(Date.parse(a.at))}` : ""}`
+  : `The tracker just before the next refill, ${clockOf(a.at)}`);
+const afterWhy = (r) => (r.odometerBefore ? "The tracker gives no later reading" : trackerWhy(r, "The tracker gives no reading"));
 
 function OdometerAfterCell({ r, basis }) {
   const a = r.meterAfter;
-  if (!a) {
-    const why = r.odometerBefore ? "The tracker sent no reading just after the fuelling" : trackerWhy(r, "No reading after the fuelling");
-    return <td className="r" title={`${why}${pumpNote(r, basis)}`}>-</td>;
-  }
+  if (!a) return <td className="r" title={`${afterWhy(r)}${pumpNote(r, basis)}`}>-</td>;
   return (
-    <td className="r" title={`${a.source === "pump" ? "Keyed in at the pump (no tracker reading before the fuelling)" : `The tracker, ${clockOf(a.at)}`}${pumpNote(r, basis)}`}>
+    <td className="r" title={`${afterSource(a)}${pumpNote(r, basis)}`}>
       {odometerText(a.value, basis)}
+      {a.source === "now" && <span className="fuel-refill__note"> now</span>}
     </td>
   );
 }
 
-/** The table's Odometer after: the latest refill's, on the same meter as Odometer before. */
+/** The table's Odometer after: the latest refill's, the tracker's meter now. */
 function OdometerAfterRefillCell({ r }) {
   const l = r.lastRefill;
   const a = l?.meterAfter;
   if (!a) {
-    const why = !l ? "No fuelling at the pump in this range"
-      : l.odometerBefore ? "The tracker sent no reading just after the fuelling"
-      : trackerWhy(l, "No reading after the fuelling");
-    return <td className="dr-num dr-num--zero" data-label="Odometer after" title={`${why}${pumpNote(l ?? {}, r.basis)}`}>-</td>;
+    const why = !l ? "No fuelling at the pump in this range" : afterWhy(l);
+    return <td className="dr-num dr-num--zero" data-label="Odometer after" title={`${why}${pumpNote(l, r.basis)}`}>-</td>;
   }
   return (
-    <td className="dr-num" data-label="Odometer after"
-        title={`${refillTitle(r, a.source === "pump" ? "Keyed in at the pump (no tracker reading before the fuelling)" : `The tracker, ${clockOf(a.at)}`)}${pumpNote(l, r.basis)}`}>
+    <td className="dr-num" data-label="Odometer after" title={`${refillTitle(r, afterSource(a))}${pumpNote(l, r.basis)}`}>
       {odometerText(a.value, r.basis)}
     </td>
   );
