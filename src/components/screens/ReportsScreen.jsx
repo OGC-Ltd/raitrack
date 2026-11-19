@@ -21,7 +21,7 @@ import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
-import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
+import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
   machineKind, machineryRows, machineWindows, MACHINE_SECTIONS,
@@ -924,7 +924,7 @@ function MovementsReport({ orgId, orgCode = null }) {
         const r = await loadMovementReport({ orgId, from: w.from, to: w.to });
         // Menengai by its fleet list (Tankers, Finished Goods, …); the others come by vehicle type
         // Aquamist: Mvita / Liwatoni read "Aquamist Mombasa" (lib/movementReport PLACE_SWAPS)
-        reports.push(withPlaceSwaps(splitsByType(r) ? r : byFleetList(r, groupsFor(r.orgCode))));
+        reports.push(withPlaceSwaps(splitsByType(r) ? r : byFleetList(r, reportGroupsFor(r.orgCode))));
         if (id !== runId.current) return;
         setRun({ status: 'loading', done: reports.length, of: windows.length });
       }
@@ -976,7 +976,7 @@ function MovementsReport({ orgId, orgCode = null }) {
   }, [siteKey, allTypes]);
   const picked = useMemo(() => types ?? [], [types]);
   // Menengai's fleet list, when its report is grouped by it: the menu lists every group of it
-  const fleetList = reports?.some((r) => r.byList) ? groupsFor(reports[0].orgCode) : null;
+  const fleetList = reports?.some((r) => r.byList) ? reportGroupsFor(reports[0].orgCode) : null;
   // Vehicles of each type on the day shown, before the type filter
   const typeCounts = useMemo(() => Object.fromEntries((reports?.[day] ?? reports?.[0])?.groups.map((g) => [g.name, g.rows.length]) ?? []), [reports, day]);
   const report = useMemo(() => (reports ? onlyTypes(reports[day] ?? reports[0], picked) : null), [reports, day, picked]);
@@ -1439,7 +1439,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const { vehicles = [], orgId } = useFleetLiveShared();
   const { activeCompany } = useCompanies();
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
-  const groups = useMemo(() => groupsFor(orgCode), [orgCode]);
+  const groups = useMemo(() => reportGroupsFor(orgCode), [orgCode]);
   // Mufindi (KASULU) has the machine register: utilization reads each unit
   // against its own rated burn, L/h or L/km, rather than one picked unit.
   const rated = String(orgCode ?? '').toUpperCase() === 'KASULU';

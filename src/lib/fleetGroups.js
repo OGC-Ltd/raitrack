@@ -72,6 +72,32 @@ export function groupsFor(orgCode) {
 }
 
 /**
+ * Groups shown as one in the reports' pickers (operator, 2026-11-19: Menengai's
+ * Equipment and Farm Equipment as "MORL Farm and Equipment"). Reports only: the
+ * fleet list, geofence rules, fuel targets and fleet-server's access groups keep
+ * the two, by their own names, so nothing saved against either changes.
+ */
+const REPORT_MERGES = {
+  MENENGAI: [{ name: 'MORL Farm and Equipment', from: ['Equipment', 'Farm Equipment'] }],
+};
+
+/** groupsFor, with the report merges: the merged group where its first part stood, its units in list order. */
+export function reportGroupsFor(orgCode) {
+  const groups = groupsFor(orgCode);
+  const merges = REPORT_MERGES[String(orgCode ?? '').toUpperCase()];
+  if (!groups || !merges) return groups;
+  const out = [];
+  for (const g of groups) {
+    const m = merges.find((x) => x.from.includes(g.name));
+    if (!m) { out.push(g); continue; }
+    if (out.some((x) => x.name === m.name)) continue;
+    const units = groups.filter((x) => m.from.includes(x.name)).flatMap((x) => x.units);
+    out.push({ ...g, name: m.name, units });
+  }
+  return out;
+}
+
+/**
  * The units a report covers.
  *
  * @param {object[]} vehicles  the organisation's live units (FleetLiveContext)

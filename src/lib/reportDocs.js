@@ -20,7 +20,7 @@ import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, s
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
 import { KEY as HEALTH_KEY, NOT_WORKING, WORKING, byGroup as healthByGroup, cellsFor as healthCells, headsFor as healthHeads, hasFleetList, summary as healthSummary } from './probeHealthReport';
-import { groupsFor } from './fleetGroups';
+import { reportGroupsFor } from './fleetGroups';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, sheetSub, spansDays, stopWords, SHEET_STOP_HEADS, sheetStopCells } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
@@ -369,7 +369,7 @@ export function probeDoc(rows, { from, to, fleet, orgCode, now = Date.now() }) {
  * saying which filter. `trucks` names it for the Trucks filter. Grouped by the
  * fleet's list (lib/fleetGroups) when it has one.
  */
-export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode, groups = groupsFor(orgCode), now = Date.now(), landscape = false, fleetList = undefined }) {
+export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode, groups = reportGroupsFor(orgCode), now = Date.now(), landscape = false, fleetList = undefined }) {
   const asAt = dmyhm(now);
   const items = healthSummary(rows).map((x) => ({ label: x.label, value: fmt(x.value), ...(x.flag ? { flag: true } : {}) }));
   const blocks = [{ kind: 'h2', title: '1. Overview', aside: `as at ${asAt}` }];

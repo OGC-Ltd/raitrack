@@ -21,7 +21,7 @@
  */
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { groupsFor, scopeUnits } from '../../lib/fleetGroups';
+import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import { fleetDay, periodWords, dayStart, daysCovering } from '../../lib/fleetReports';
 import { marksOf } from '../../lib/plannerDayMarks';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -390,7 +390,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // Every Menengai unit on the platform (operator, 4 Nov 2026: "search any
   // vehicle in Menengai"), with its group on the fleet list where it has one
   const units = useMemo(() => {
-    const listed = new Map(groupsFor('MENENGAI').flatMap((g) => scopeUnits(vehicles, groupsFor('MENENGAI'), g.name).units.map((u) => [u.key, g.name])));
+    const listed = new Map(reportGroupsFor('MENENGAI').flatMap((g) => scopeUnits(vehicles, reportGroupsFor('MENENGAI'), g.name).units.map((u) => [u.key, g.name])));
     return scopeUnits(vehicles, null).units.map((u) => ({ ...u, group: listed.get(u.key) ?? null, name: u.vehicles[0]?.name ?? '' }))
       .sort((a, b) => a.plate.localeCompare(b.plate, 'en', { numeric: true }));
   }, [vehicles]);
@@ -790,7 +790,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     return t ? { ...r, fulfilled: t.fulfilled, planned: t.planned, typed: true } : r;
   }) } : null), [ran, typed, group, tabList]); // eslint-disable-line react-hooks/exhaustive-deps
   // How many on the day's list in each group
-  const groupNames = useMemo(() => groupsFor('MENENGAI').map((g) => g.name), []);
+  const groupNames = useMemo(() => reportGroupsFor('MENENGAI').map((g) => g.name), []);
   const sheetGroup = (p) => units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group ?? null;
   const groupCount = (name) => listRows.filter((v) => !sheetPlates.has(plateKey(v.plate)) && groupOfV(v) === name).length
     + sheets.list.filter((p) => sheetGroup(p) === name).length;

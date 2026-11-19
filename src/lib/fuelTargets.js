@@ -11,7 +11,7 @@
 // Pure: no React, no network.
 
 import { fleetListEntry, fleetListMap } from './probeHealthReport';
-import { groupsFor, unitKey } from './fleetGroups';
+import { reportGroupsFor, unitKey } from './fleetGroups';
 
 /** FUEL_RATES_FOR_FLEET_2.xlsx Sheet 2, as the server has it (fleet-server reports/fuel-target-rates). */
 export const MODEL_RATES = {
@@ -77,12 +77,12 @@ export function withTypeTargets(rows, entries = null) {
 // ── By category (operator, 13 Nov 2026: "run the report by a specific category, Tankers, FG or all") ──
 
 /** The organisation's categories (its fleet groups), or null where it has none. */
-export const fuelGroupsFor = (orgCode) => groupsFor(orgCode);
+export const fuelGroupsFor = (orgCode) => reportGroupsFor(orgCode);
 
 /** The rows of one category: a unit is in it when its plate is on the group's list. Null: every row. */
 export function rowsInGroup(rows, orgCode, name) {
   if (!name) return rows ?? [];
-  const g = (groupsFor(orgCode) ?? []).find((x) => x.name === name);
+  const g = (reportGroupsFor(orgCode) ?? []).find((x) => x.name === name);
   if (!g) return rows ?? [];
   const keys = new Set(g.units.map(([plate]) => unitKey(plate)));
   return (rows ?? []).filter((r) => keys.has(unitKey(r.plate)));
@@ -90,7 +90,7 @@ export function rowsInGroup(rows, orgCode, name) {
 
 /** How many of the rows each category holds, for the picker. */
 export function groupCounts(rows, orgCode) {
-  return Object.fromEntries((groupsFor(orgCode) ?? []).map((g) => [g.name, rowsInGroup(rows, orgCode, g.name).length]));
+  return Object.fromEntries((reportGroupsFor(orgCode) ?? []).map((g) => [g.name, rowsInGroup(rows, orgCode, g.name).length]));
 }
 
 /** The totals over these rows, as the server works them for the whole fleet: only units with a measured rate. */

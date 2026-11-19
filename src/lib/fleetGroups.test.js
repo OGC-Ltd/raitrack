@@ -21,3 +21,24 @@ describe('a machine named in full matches the list\'s short name', () => {
     expect(vehicleKeys({ name: 'WL - RAIMDF - WLOADER 03' }).has(unitKey('WL 03'))).toBe(true);
   });
 });
+
+describe('reportGroupsFor', () => {
+  it("shows Menengai's Equipment and Farm Equipment as one group, MORL Farm and Equipment, in the Equipment's place", async () => {
+    const { groupsFor, reportGroupsFor } = await import('./fleetGroups');
+    const plain = groupsFor('MENENGAI').map((g) => g.name);
+    const merged = reportGroupsFor('MENENGAI');
+    const names = merged.map((g) => g.name);
+    expect(names).not.toContain('Equipment');
+    expect(names).not.toContain('Farm Equipment');
+    expect(names.indexOf('MORL Farm and Equipment')).toBe(plain.indexOf('Equipment'));
+    const both = groupsFor('MENENGAI').filter((g) => g.name === 'Equipment' || g.name === 'Farm Equipment').flatMap((g) => g.units);
+    expect(merged.find((g) => g.name === 'MORL Farm and Equipment').units).toEqual(both);
+    expect(names).toHaveLength(plain.length - 1);
+  });
+
+  it('leaves the plain groups (geofence rules, access) and other organisations alone', async () => {
+    const { groupsFor, reportGroupsFor } = await import('./fleetGroups');
+    expect(groupsFor('MENENGAI').map((g) => g.name)).toEqual(expect.arrayContaining(['Equipment', 'Farm Equipment']));
+    expect(reportGroupsFor('KASULU')).toEqual(groupsFor('KASULU'));
+  });
+});
