@@ -153,8 +153,10 @@ function DeptTabs({ departments, total, current, onPick }) {
     items[(at + step + items.length) % items.length].focus();
   };
 
-  const title = (d) => `Only ${titleCase(d.name)}'s ${plural(d.units, "machine")}, here and on the map`;
-  const hiddenUnits = hidden.reduce((n, d) => n + d.units, 0);
+  // The number on a tab is plan lines, as FactorySuite counts them; machines
+  // (one machine can run two shifts) are in the title.
+  const title = (d) => `${titleCase(d.name)}: ${plural(d.lines, "plan line")}${d.pending ? ` (${d.pending} pending approval)` : ""} on ${plural(d.units, "machine")}. Only these, here and on the map`;
+  const hiddenLines = hidden.reduce((n, d) => n + d.lines, 0);
 
   return (
     <div ref={wrapRef} className="wpm-depts-wrap">
@@ -164,14 +166,14 @@ function DeptTabs({ departments, total, current, onPick }) {
         </button>
         {shown.map((d) => (
           <button type="button" key={d.name} className="wpm-dept" aria-pressed={current === d.name} onClick={() => pick(d.name)} title={title(d)}>
-            {titleCase(d.name)} <span className="wpm-dept__n">{d.units}</span>
+            {titleCase(d.name)} <span className="wpm-dept__n">{d.lines}</span>
           </button>
         ))}
         {hidden.length > 0 && (
           <button
             ref={moreRef} type="button" className="wpm-dept wpm-dept--more"
             aria-expanded={open} aria-controls="wpm-more" onClick={() => setOpen((v) => !v)}
-            title={`${plural(hidden.length, "more department")}, ${plural(hiddenUnits, "machine")}`}
+            title={`${plural(hidden.length, "more department")}, ${plural(hiddenLines, "plan line")}`}
           >
             More <span className="wpm-dept__n">{hidden.length}</span>
             <i className="ti ti-chevron-down wpm-dept__chev" aria-hidden="true" />
@@ -183,7 +185,7 @@ function DeptTabs({ departments, total, current, onPick }) {
       <div ref={measureRef} className="wpm-depts wpm-depts--measure" aria-hidden="true">
         <span className="wpm-dept">All <span className="wpm-dept__n">{total}</span></span>
         {departments.map((d) => (
-          <span key={d.name} className="wpm-dept">{titleCase(d.name)} <span className="wpm-dept__n">{d.units}</span></span>
+          <span key={d.name} className="wpm-dept">{titleCase(d.name)} <span className="wpm-dept__n">{d.lines}</span></span>
         ))}
         <span className="wpm-dept">More <span className="wpm-dept__n">{departments.length}</span><i className="ti ti-chevron-down wpm-dept__chev" /></span>
       </div>
@@ -193,7 +195,7 @@ function DeptTabs({ departments, total, current, onPick }) {
           {hidden.map((d) => (
             <button type="button" key={d.name} className="wpm-more__item" onClick={() => pick(d.name)} title={title(d)}>
               <span>{titleCase(d.name)}</span>
-              <span className="wpm-dept__n">{d.units}</span>
+              <span className="wpm-dept__n">{d.lines}</span>
             </button>
           ))}
         </div>
@@ -580,7 +582,7 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
       </header>
 
       {bodyOpen && full && departments.length > 1 && (
-        <DeptTabs departments={departments} total={allView.counts.units} current={deptOn} onPick={pickDept} />
+        <DeptTabs departments={departments} total={allView.counts.lines} current={deptOn} onPick={pickDept} />
       )}
 
       <div id="wpm-body" className="wpm-body" hidden={!bodyOpen}>
@@ -610,7 +612,10 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
                 <h3 id="wpm-h-today" className="wpm-title">Today</h3>
                 <span className="wpm-block__meta">{plural(c.plans, "plan")}{statusText ? `, ${statusText}` : ""}</span>
               </div>
-              <p className="wpm-plans">{c.onShift} of {c.units} machines on shift now.</p>
+              <p className="wpm-plans">
+                {plural(c.lines, "plan line")} on {plural(c.units, "machine")}
+                {c.pendingLines ? `, ${c.pendingLines} pending approval` : ""}. {c.onShift} on shift now.
+              </p>
               <div className="wpm-bar" aria-hidden="true">
                 {WP_ORDER.map((t) => c[t] > 0 && <span key={t} data-tone={t} style={{ flexGrow: c[t] }} />)}
               </div>

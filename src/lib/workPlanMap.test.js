@@ -156,8 +156,31 @@ describe("scopeView: one department", () => {
     return workPlanView(d, vehicles, [zone4], NOON_EAT);
   };
 
-  it("lists each department with its machines", () => {
-    expect(twoDepts().departments).toEqual([{ name: "IRRIGATION", units: 2 }, { name: "ROADS", units: 2 }]);
+  it("lists each department with its plan lines and machines", () => {
+    expect(twoDepts().departments).toEqual([
+      { name: "IRRIGATION", lines: 2, pending: 0, units: 2 },
+      { name: "ROADS", lines: 2, pending: 2, units: 2 },
+    ]);
+  });
+
+  it("counts plan lines as FactorySuite does: a machine on the day and the night shift is two (19 Nov: 96 lines, 80 machines)", () => {
+    const d = data([
+      line({ id: "a", shiftNo: 1 }),
+      line({ id: "b", shiftNo: 2, shiftStart: "18:00:00" }),
+      line({ id: "c", machine: "EX-02", vehicleId: "v2" }),
+    ]);
+    const v = workPlanView(d, [], [zone4], NOON_EAT);
+    expect(v.counts).toMatchObject({ units: 2, lines: 3, pendingLines: 0 });
+    expect(v.departments).toEqual([{ name: "IRRIGATION", lines: 3, pending: 0, units: 2 }]);
+    expect(scopeView(v, "IRRIGATION").counts).toMatchObject({ units: 2, lines: 3 });
+  });
+
+  it("a machine with lines in two departments is in both", () => {
+    const d = data([line({ id: "a" })]);
+    d.plans.push({ id: "q", planCode: "WP-2", department: "ROADS", status: "APPROVED", lines: [line({ id: "r", shiftNo: 2, shiftStart: "18:00:00" })] });
+    const v = workPlanView(d, [], [zone4], NOON_EAT);
+    expect(scopeView(v, "ROADS").units.map((u) => u.machine)).toEqual(["EX-01"]);
+    expect(scopeView(v, "IRRIGATION").units.map((u) => u.machine)).toEqual(["EX-01"]);
   });
 
   it("keeps only the department's machines, plans and locations, recounted", () => {

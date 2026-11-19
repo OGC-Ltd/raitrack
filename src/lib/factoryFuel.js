@@ -213,13 +213,18 @@ export function fuelTotals(rows) {
 
 /** The department filter's options: each department with its machine count. */
 export function departmentOptions(rows) {
+  // `count` is machines; `shifts` is plan lines, as FactorySuite counts them
+  // (operator 2026-11-19: FactorySuite "96 approved", we showed 80 machines;
+  // a machine on the day and the night shift is two lines).
   const counts = new Map();
   for (const r of rows) {
     const k = r.department ?? "";
-    counts.set(k, (counts.get(k) ?? 0) + 1);
+    const c = counts.get(k) ?? counts.set(k, { count: 0, shifts: 0 }).get(k);
+    c.count += 1;
+    c.shifts += r.shifts ?? 0;
   }
   return [...counts.entries()]
-    .map(([key, count]) => ({ key, label: key ? key.charAt(0) + key.slice(1).toLowerCase() : "No department", count }))
+    .map(([key, c]) => ({ key, label: key ? key.charAt(0) + key.slice(1).toLowerCase() : "No department", ...c }))
     .sort((a, b) => (a.key === "") - (b.key === "") || a.label.localeCompare(b.label));
 }
 

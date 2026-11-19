@@ -169,7 +169,8 @@ export default function FuelScreen() {
               selected={selected}
               onSelect={setSelected}
               rangePicker={rangePicker}
-              deptPicker={<DeptPicker value={dept} options={deptOptions} total={roster.length} onChange={setDeptPick} />}
+              deptPicker={<DeptPicker value={dept} options={deptOptions}
+                total={{ count: roster.length, shifts: roster.reduce((n, r) => n + (r.shifts ?? 0), 0) }} onChange={setDeptPick} />}
             />
 
             {/* Plan lines updated in place (pending → approved / rejected), and plans never decided. */}
@@ -267,13 +268,21 @@ function PumpSummary({ totals, loading }) {
   );
 }
 
+/**
+ * Each department with its plan lines (shifts), as FactorySuite counts them,
+ * and its machines: "Irrigation (35 shifts, 24 machines)" (operator
+ * 2026-11-19: FactorySuite showed 96 approved where we showed 80 machines).
+ */
+const deptCount = ({ shifts, count }) =>
+  `${fmt(shifts)} shift${shifts === 1 ? "" : "s"}, ${fmt(count)} machine${count === 1 ? "" : "s"}`;
+
 function DeptPicker({ value, options, total, onChange }) {
   return (
     <label className="dr-typepick">
       <span className="dr-typepick__label">Department</span>
       <select className="dr-typepick__select" value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value={ALL}>All departments ({fmt(total)})</option>
-        {options.map((o) => <option key={o.key} value={o.key}>{o.label} ({fmt(o.count)})</option>)}
+        <option value={ALL}>All departments ({deptCount(total)})</option>
+        {options.map((o) => <option key={o.key} value={o.key}>{o.label} ({deptCount(o)})</option>)}
       </select>
     </label>
   );

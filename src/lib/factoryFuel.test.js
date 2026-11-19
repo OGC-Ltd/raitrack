@@ -58,10 +58,10 @@ describe("factoryFuel", () => {
     expect(t.flags).toMatchObject({ "Operator mismatch": 1, note: 1, "Off plan": 0 });
   });
 
-  it("offers each department once", () => {
+  it("offers each department once, with its machines and plan lines (shifts)", () => {
     expect(departmentOptions(fuelRoster(data))).toEqual([
-      { key: "AGRICULTURE", label: "Agriculture", count: 1 },
-      { key: "ROADS", label: "Roads", count: 2 },
+      { key: "AGRICULTURE", label: "Agriculture", count: 1, shifts: 2 },
+      { key: "ROADS", label: "Roads", count: 2, shifts: 1 },
     ]);
   });
 

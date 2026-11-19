@@ -162,15 +162,26 @@ export function workPlanView(data, vehicles, features, now = Date.now(), drawing
   }
 
   const plans = data.plans.map((p) => ({ planCode: p.planCode, department: p.department, status: planStage(p.status) }));
+  // Departments count plan lines, as FactorySuite counts them (operator
+  // 2026-11-19: FactorySuite "96 approved", we read 80 machines; a machine on
+  // the day and the night shift is two lines), with their machines beside.
   const depts = new Map();
-  for (const u of units) depts.set(u.line.department, (depts.get(u.line.department) ?? 0) + 1);
+  for (const l of lines) {
+    const d = depts.get(l.department) ?? depts.set(l.department, { name: l.department, lines: 0, pending: 0, machines: new Set() }).get(l.department);
+    d.lines += 1;
+    if (planStage(l.planStatus) === "PENDING") d.pending += 1;
+    d.machines.add(l.vehicleId ?? `m:${l.machine}`);
+  }
   return {
     day: data.day,
     units,
+    lines,
     places: [...places.values()].filter((p) => p.planned > 0),
-    ...tally(units, plans),
+    ...tally(units, plans, lines),
     plans,
-    departments: [...depts.entries()].map(([name, n]) => ({ name, units: n })).sort((a, b) => a.name.localeCompare(b.name)),
+    departments: [...depts.values()]
+      .map((d) => ({ name: d.name, lines: d.lines, pending: d.pending, units: d.machines.size }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     unplacedLocations: (data.locations ?? []).filter((l) => !shapeOf(l.fenceId, l.name)).map((l) => l.name),
     noGps: data.unplacedMachines ?? [],
   };
@@ -218,13 +229,14 @@ export function fitDepartments({ all, depts, more, gap, avail, current = -1 }) {
   return every.filter((i) => shown.has(i));
 }
 
-/** The counts and plan statuses for a set of machines and plans. */
-function tally(units, plans) {
+/** The counts and plan statuses for a set of machines, plans and plan lines. */
+function tally(units, plans, lines) {
   const count = (t) => units.filter((u) => u.tone === t).length;
   const statuses = {};
   for (const p of plans) statuses[p.status] = (statuses[p.status] ?? 0) + 1;
   return {
-    counts: { plans: plans.length, units: units.length, lines: units.reduce((n, u) => n + u.lines.length, 0),
+    counts: { plans: plans.length, units: units.length, lines: lines.length,
+              pendingLines: lines.filter((l) => planStage(l.planStatus) === "PENDING").length,
               here: count("here"), away: count("away"), pending: count("pending"), offshift: count("offshift"), silent: count("silent"), unplaced: count("unplaced"),
               onShift: units.filter((u) => u.onShift).length },
     statuses,
@@ -238,8 +250,10 @@ function tally(units, plans) {
  */
 export function scopeView(view, department) {
   if (!view || !department || !view.departments.some((d) => d.name === department)) return view;
-  const units = view.units.filter((u) => u.line.department === department);
+  // A machine belongs to every department it has a line with today.
+  const units = view.units.filter((u) => u.lines.some((l) => l.department === department));
   const plans = view.plans.filter((p) => p.department === department);
+  const lines = view.lines.filter((l) => l.department === department);
   const places = view.places.map((p) => {
     const mine = units.filter((u) => u.fenceId === p.fenceId);
     return { ...p, planned: mine.length, here: mine.filter((u) => u.tone === "here").length };
@@ -249,7 +263,8 @@ export function scopeView(view, department) {
     ...view,
     units,
     places,
-    ...tally(units, plans),
+    lines,
+    ...tally(units, plans, lines),
     plans,
     unplacedLocations: view.unplacedLocations.filter((name) => units.some((u) => !u.fenceId && u.line.workLocation === name)),
     noGps: view.noGps.filter((m) => machines.has(m)),
