@@ -65,15 +65,35 @@
   .fuel-grid .fuel-job { max-width: 170px; }
 }
 
+/* Fourteen columns once the refill figures joined the table (operator,
+   2026-11-19: "the columns on the table, not on the side panels alone").
+   Above the phone cards the figure columns' heads wrap onto two lines, so each
+   is as wide as its figures ("4,214.1 h") rather than its name ("ODOMETER
+   BEFORE", 150px on one line), and the register name under the machine's code
+   is cut sooner (it ends in "…", the full name is its title). */
+@media (min-width: 701px) {
+  .fuel-grid thead th.dr-num { white-space: normal; vertical-align: bottom; }
+  .fuel-grid thead th.dr-num .dr-grid__sort { align-items: flex-end; line-height: 1.25; }
+  .fuel-grid .dr-driver__sub { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+}
+/* With the menu open the whole row fits from 1920px (measured 2026-11-19);
+   narrower, the card scrolls sideways as it did before the refill columns. */
+@media (min-width: 1141px) {
+  .fuel-grid tbody td.dr-num:not(:last-child),
+  .fuel-grid thead th.dr-num:not(:last-child) .dr-grid__sort { padding-inline: 8px; }
+}
+
 /* ── Phones (operator 2026-11-18: "the fuel tab … on mobile … responsive") ──
    The Drivers page turns its rows into cards at 700px with ten placed cells;
-   a machine row has twelve, so Variance and Pump flags fell into whatever slot
-   was left. The machine card places all twelve:
-     machine            status
-     department · job   period
-     shifts  requested  fuel now
-     need    issued     probe filled
-     consumed  variance
+   a machine row has more, so the extra cells fell into whatever slot was left.
+   The machine card places all fourteen (the refill columns joined 2026-11-19):
+     machine                        status
+     department · job               period
+     shifts        planned          fuel before
+     issued        probe filled     fuel after
+     fuel now      consumed
+     odometer before  odometer after
+   In the table's order (reordered 2026-11-19: before, issued, probe, after, now).
    Same specificity as the Drivers rules, later in the cascade, so these win. */
 @media (max-width: 700px) {
   .fuel-grid tbody tr {
@@ -83,7 +103,8 @@
       "dept dept when"
       "m1   m2   m3"
       "m4   m5   m6"
-      "m7   m8   m8";
+      "m7   m8   m8"
+      "m9   m10  m10";
   }
   .fuel-grid tbody td:nth-child(2) { grid-area: dept; white-space: normal; }
   .fuel-grid tbody td:nth-child(5) { grid-area: m1; }
@@ -94,6 +115,8 @@
   .fuel-grid tbody td:nth-child(10) { grid-area: m6; }
   .fuel-grid tbody td:nth-child(11) { grid-area: m7; }
   .fuel-grid tbody td:nth-child(12) { grid-area: m8; }
+  .fuel-grid tbody td:nth-child(13) { grid-area: m9; }
+  .fuel-grid tbody td:nth-child(14) { grid-area: m10; }
   /* The job under the department gets the card's two thirds, not the desk cap */
   .fuel-grid .fuel-job { max-width: none; }
 
@@ -122,5 +145,12 @@
    calendar, side by side on the filter row (Fuel and Staffs › Operators). */
 .fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* The tank before and after each fill, a table of its own under the comparison (operator, 2026-11-19) */
-.fuel-rec--tank { margin-top: 14px; }
+/* Refills: each fuelling's seven figures, a two-column table each (operator,
+   2026-11-19). Replaces the tank-level table that sat under the comparison. */
+.fuel-refill { margin-top: 12px; }
+.fuel-refill + .fuel-refill { margin-top: 16px; }
+.fuel-refill caption { caption-side: top; text-align: left; padding: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--ink); }
+.fuel-refill__siv { margin-left: 8px; font-weight: 600; color: var(--dg-label); }
+.fuel-refill tbody th { font-weight: 500; color: var(--dg-label); }
+.fuel-refill td { white-space: normal; }
+.fuel-refill__note { font-weight: 500; color: var(--text-2); }

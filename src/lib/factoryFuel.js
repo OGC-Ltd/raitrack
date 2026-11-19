@@ -65,7 +65,9 @@ function consumedFor(row, byVehicle, idByPlate, today) {
     if (day >= row.firstDay && day <= end) { fills += d.fillL ?? 0; drains += d.drainL ?? 0; }
   }
   const used = start + fills - drains - finish;
-  return used < 0 ? null : Math.round(used);
+  // To the hundredth, the probe's own step (10 ml), only to drop float noise;
+  // not to whole litres (operator 2026-11-20: "let us not round off at all").
+  return used < 0 ? null : Math.round(used * 100) / 100;
 }
 
 /**
@@ -111,6 +113,14 @@ export function daysBetween(from, to) {
 const fold = (s) => String(s ?? "").trim().toUpperCase();
 const add = (a, b) => (b == null ? a : (a ?? 0) + b);
 
+/**
+ * The litres a plan line plans (operator 2026-11-19: "Need" to "Planned", with
+ * the planned value): what it asked for, or, for a full tank, the litres on its
+ * fuel request, as FactorySuite puts a figure there (EX-17, 19 Nov: 650 L).
+ * Null for a full tank whose request has none yet.
+ */
+export const plannedLitres = (l) => (l.fullTank ? l.requestLitres ?? null : l.litresRequested ?? l.requestLitres ?? null);
+
 /** An issue the pump flagged: one of its three checks failed, or it wrote a note. */
 export const issueFlagged = (i) => (i.flags?.length ?? 0) > 0 || Boolean(i.note);
 
@@ -140,6 +150,8 @@ export function fuelRoster(data) {
         department: null, activity: null, workLocation: null, lastDay: null,
         shifts: 0, approved: 0, pending: 0, fullTanks: 0, days: new Set(),
         requested: null, need: null, issued: 0, issues: 0, flagged: 0,
+        // plannedLitres over the lines; full tanks with no litres yet counted apart.
+        planned: null, plannedFull: 0,
         odometer: null, odometerDay: null, odometerAt: null,
         lines: [], pumpIssues: [],
       });
@@ -154,6 +166,8 @@ export function fuelRoster(data) {
     if (planStage(l.planStatus) === "PENDING") r.pending += 1; else r.approved += 1;
     if (l.fullTank) r.fullTanks += 1; else r.requested = add(r.requested, l.litresRequested);
     r.need = add(r.need, l.needLitres);
+    const planned = plannedLitres(l);
+    if (planned != null) r.planned = add(r.planned, planned); else if (l.fullTank) r.plannedFull += 1;
     if (!r.lastDay || l.day >= r.lastDay) {
       r.lastDay = l.day; r.department = l.department; r.activity = l.activity; r.workLocation = l.workLocation;
     }
@@ -323,6 +337,144 @@ function probeFill(f) {
     doubtful: f.verdict === "REDISTRIBUTION",
     verdict: f.verdict ?? null,
   };
+}
+
+/**
+ * Each refill's seven figures (operator 2026-11-19, from the EX-17 test of that
+ * day): fuel before and after the refill, consumed, planned, the odometer
+ * before and after, and issued. One per fuelling the pump finished, newest
+ * first.
+ *
+ * - Fuel before and after: the probe fill matched to the fuelling
+ *   (reconcileFills), else FactorySuite's own probe check of it.
+ * - Consumed: fuel burned in the shift the fuelling was for, with the engine
+ *   hours run (fleet-server fuel-refills); to now while the shift runs.
+ * - Planned: the plan line the fuelling's request came from.
+ * - Odometer before: the tracker's meter just before the nozzle went in.
+ * - Odometer after: the meter read at the pump, with the tracker's beside it.
+ * - Issued: what the pump put in, and its voucher.
+ *
+ * The odometer is hours on an hour-rated machine and km on a km-rated one.
+ *
+ * @param {object} row     a reconcileFills row (fills, pumpIssues, lines)
+ * @param {object} server  getFuelRefills' answer, or null while it loads or when it failed
+ */
+export function refillFigures(row, server) {
+  const issueOf = new Map((row?.pumpIssues ?? []).map((i) => [i.id, i]));
+  const lineOf = new Map((row?.lines ?? []).filter((l) => l.requestId).map((l) => [l.requestId, l]));
+  const trackerOf = new Map((server?.refills ?? []).map((r) => [r.issueId, r]));
+  return (row?.fills ?? [])
+    .filter((f) => f.key?.startsWith("pump-"))
+    .map((f) => {
+      const id = f.key.slice("pump-".length);
+      const i = issueOf.get(id) ?? {};
+      const line = i.requestId ? lineOf.get(i.requestId) ?? null : null;
+      const t = trackerOf.get(id) ?? null;
+      const s = i.sensor ?? null;
+      const level = (probe, fs) =>
+        probe != null ? { litres: probe, source: "probe" } : fs != null ? { litres: fs, source: "factorysuite" } : null;
+      const shift = t?.shift ?? null;
+      return {
+        key: f.key,
+        id,
+        at: f.at,
+        day: f.day,
+        siv: i.siv ?? null,
+        fuelBefore: level(f.probeFill?.before ?? f.before, s?.beforeL),
+        fuelAfter: level(f.probeFill?.after, s?.afterL),
+        consumed: shift
+          ? { litres: shift.consumedL ?? null, engineHours: shift.engineHours ?? null, open: Boolean(shift.open), ahead: Boolean(shift.ahead) }
+          : null,
+        planned: line
+          ? {
+            full: Boolean(line.fullTank), litres: plannedLitres(line),
+            need: line.needLitres ?? null, shiftNo: line.shiftNo ?? 1, shiftStart: line.shiftStart ?? null,
+            hours: line.plannedHours ?? null, km: line.plannedKm ?? null,
+          }
+          : null,
+        odometerBefore: t?.meterBefore ?? null,
+        odometerAfter: i.readings?.physical ?? null,
+        trackerAfter: t?.meterAfter ?? null,
+        issued: f.actual ?? i.litres ?? null,
+        tracked: t ? Boolean(t.tracked) : null,
+      };
+    })
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+}
+
+/**
+ * The refill figures as table columns (operator 2026-11-19: "we should also
+ * have the columns on the table, not on the side panels alone"): each row
+ * takes its machine's latest refill in the period, as the Odometer column
+ * takes the latest pump reading. `fuelBefore`, `fuelAfter` and
+ * `odometerBefore` are plain numbers so the columns sort; `lastRefill` keeps
+ * where each came from, and `refillCount` how many the panel lists.
+ *
+ * @param {object[]} rows    reconcileFills rows
+ * @param {object}   meters  getFuelRefills' answer for every machine, or null
+ */
+export function withRefillColumns(rows, meters) {
+  return (rows ?? []).map((row) => {
+    const all = refillFigures(row, meters);
+    const last = all[0] ?? null;
+    return {
+      ...row,
+      lastRefill: last,
+      refillCount: all.length,
+      fuelBefore: last?.fuelBefore?.litres ?? null,
+      fuelAfter: last?.fuelAfter?.litres ?? null,
+      odometerBefore: last?.odometerBefore?.value ?? null,
+    };
+  });
+}
+
+/**
+ * Consumed since the latest refill (operator 2026-11-20: "consumed should be
+ * accumulative" — since the last refill): what the tank held just after the
+ * machine's latest refill in the period, less what it holds at the period's
+ * end, as one running figure that grows until the next refill.
+ *
+ *   consumed = fuel after the refill + later fills − later drains − level at the end
+ *
+ * The end is the live probe reading when the row's Period runs to today, else
+ * the closing level of its last day. "Later" is the days after the refill's
+ * day (tank days are whole days, and the refill's own day already holds the
+ * refill); fuel drained out is not counted as burnt. The period balance
+ * withConsumed gave stays on the row as `consumedPeriod`.
+ *
+ * Null ("-") with no refill in the period, no level after it or at the end,
+ * or a balance below zero, which only a bad reading can give.
+ *
+ * @param {object[]} rows      withRefillColumns rows
+ * @param {object[]} tankDays  [{ vehicleId, day, openingL, closingL, fillL, drainL }], or null
+ * @param {string}   today     the fleet day today, YYYY-MM-DD
+ */
+export function withConsumedSinceRefill(rows, tankDays, today) {
+  const byVehicle = new Map();
+  for (const d of tankDays ?? []) {
+    const k = String(d.vehicleId);
+    if (!byVehicle.has(k)) byVehicle.set(k, new Map());
+    byVehicle.get(k).set(d.day, d);
+  }
+  return (rows ?? []).map((row) => {
+    const out = { ...row, consumedPeriod: row.consumed ?? null, consumed: null, consumedEnd: null };
+    const refill = row.lastRefill;
+    const after = refill?.fuelAfter?.litres;
+    if (after == null || !refill.day) return out;
+    const days = row.vehicleId ? byVehicle.get(String(row.vehicleId)) : null;
+    const end = !row.lastDay || row.lastDay >= today ? today : row.lastDay;
+    if (end < refill.day) return out;
+    const endL = end === today ? row.fuelNow ?? null : days?.get(end)?.closingL ?? null;
+    if (endL == null) return out;
+    let fills = 0;
+    let drains = 0;
+    for (const [day, d] of days ?? []) {
+      if (day > refill.day && day <= end) { fills += d.fillL ?? 0; drains += d.drainL ?? 0; }
+    }
+    const used = after + fills - drains - endL;
+    if (used < 0) return out;
+    return { ...out, consumed: Math.round(used * 100) / 100, consumedEnd: end === today ? "now" : end };
+  });
 }
 
 /**
