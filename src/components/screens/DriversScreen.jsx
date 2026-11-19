@@ -13,6 +13,8 @@ import { resolveOrgId, ORG_CODE_BY_COMPANY } from "../../api/org";
 import { loadWeighbridgeCredit } from "../../api/weighbridgeTonnage";
 import { withWeighbridgeTonnes } from "../../lib/weighbridgeTonnage";
 import DriverScorecard from "./DriverScorecard";
+import OperatorsView from "./OperatorsView";
+import { hasOperators } from "../../lib/factoryOperators";
 import TrendStat from "./TrendStat";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { pendingDriver, clearPendingDriver, driverNameMatches } from "../../lib/driverHandoff";
@@ -277,7 +279,13 @@ export default function DriversScreen() {
   const [leaderView, setLeaderView] = useState("top"); // "top" | "bottom" 6 by tonnes
   // "analytics" — the roster and its trends; "scorecard" — the pay proposal's
   // speed and safety points per driver (DriverScorecard).
-  const [view, setView] = useState("analytics");
+  const [viewPick, setView] = useState("analytics");
+  // Operators (operator 2026-11-19): FactorySuite's machine operators off the
+  // work plans, for the organisations whose factory keeps them (Mufindi). An
+  // org without them never lands on the tab.
+  const operatorsTab = hasOperators(activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id]);
+  const view = viewPick === "operators" && !operatorsTab ? "analytics" : viewPick;
+  const [operatorsSub, setOperatorsSub] = useState("");
 
   // Default to the first driver in the table; keep a valid selection on refresh.
   useEffect(() => {
@@ -351,18 +359,29 @@ export default function DriversScreen() {
   };
 
   const isEmpty = !loading && roster.length === 0;
+  // Mufindi has operators but no drivers yet: open on the tab that has people.
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || loading) return;
+    landed.current = true;
+    if (isEmpty && operatorsTab) setView("operators");
+  }, [loading, isEmpty, operatorsTab]);
+  useEffect(() => { landed.current = false; }, [activeCompanyId]);
+  const views = [["analytics", "Analytics"], ["scorecard", "Scorecard"], ...(operatorsTab ? [["operators", "Operators"]] : [])];
   const typeName = vehicleType === ALL_TYPES ? null : driverTypeLabel(vehicleType);
 
   return (
     <div className="drivers-page">
       <div className="drivers-page__inner">
         {/* The empty state already names the page — no header needed then. */}
-        {(!isEmpty || view === "scorecard") && (
+        {(!isEmpty || view !== "analytics" || operatorsTab) && (
           <div className="dr-head">
             <div>
-              <h1 className="dr-title">{view === "scorecard" ? "Driver Scorecard" : "Driver Analytics"}</h1>
+              <h1 className="dr-title">{view === "scorecard" ? "Driver Scorecard" : view === "operators" ? "Operators" : "Driver Analytics"}</h1>
               <div className="dr-subtitle">
-                {view === "scorecard"
+                {view === "operators"
+                  ? operatorsSub || "Loading…"
+                  : view === "scorecard"
                   ? `Speed and safety points per driver · ${activeCompany?.name || "Fleet"}`
                   : loading
                   ? "Loading…"
@@ -373,7 +392,7 @@ export default function DriversScreen() {
               </div>
             </div>
             <div className="dr-viewswitch" role="tablist" aria-label="Drivers view">
-              {[["analytics", "Analytics"], ["scorecard", "Scorecard"]].map(([key, label]) => (
+              {views.map(([key, label]) => (
                 <button key={key} type="button" role="tab" aria-selected={view === key}
                   className={`dr-viewswitch__btn${view === key ? " is-on" : ""}`} onClick={() => setView(key)}>
                   {label}
@@ -393,6 +412,8 @@ export default function DriversScreen() {
           <ErrorBoundary label="Driver scorecard">
             <DriverScorecard />
           </ErrorBoundary>
+        ) : view === "operators" ? (
+          <OperatorsView companyId={activeCompanyId} company={activeCompany?.name || "Fleet"} onSubtitle={setOperatorsSub} />
         ) : error ? (
           <LoadError label="Drivers" onRetry={retry} fullSection />
         ) : isEmpty ? (
@@ -457,7 +478,7 @@ export default function DriversScreen() {
           </ErrorBoundary>
         )}
       </div>
-      {panelOpen && detail?.driver && (
+      {view === "analytics" && panelOpen && detail?.driver && (
         <DriverPanel
           companyId={activeCompanyId}
           orgId={liveOrgId}
