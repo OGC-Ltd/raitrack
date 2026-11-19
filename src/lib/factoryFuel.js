@@ -111,6 +111,14 @@ export function daysBetween(from, to) {
 const fold = (s) => String(s ?? "").trim().toUpperCase();
 const add = (a, b) => (b == null ? a : (a ?? 0) + b);
 
+/**
+ * The litres a plan line plans (operator 2026-11-19: "Need" to "Planned", with
+ * the planned value): what it asked for, or, for a full tank, the litres on its
+ * fuel request, as FactorySuite puts a figure there (EX-17, 19 Nov: 650 L).
+ * Null for a full tank whose request has none yet.
+ */
+export const plannedLitres = (l) => (l.fullTank ? l.requestLitres ?? null : l.litresRequested ?? l.requestLitres ?? null);
+
 /** An issue the pump flagged: one of its three checks failed, or it wrote a note. */
 export const issueFlagged = (i) => (i.flags?.length ?? 0) > 0 || Boolean(i.note);
 
@@ -140,6 +148,8 @@ export function fuelRoster(data) {
         department: null, activity: null, workLocation: null, lastDay: null,
         shifts: 0, approved: 0, pending: 0, fullTanks: 0, days: new Set(),
         requested: null, need: null, issued: 0, issues: 0, flagged: 0,
+        // plannedLitres over the lines; full tanks with no litres yet counted apart.
+        planned: null, plannedFull: 0,
         odometer: null, odometerDay: null, odometerAt: null,
         lines: [], pumpIssues: [],
       });
@@ -154,6 +164,8 @@ export function fuelRoster(data) {
     if (planStage(l.planStatus) === "PENDING") r.pending += 1; else r.approved += 1;
     if (l.fullTank) r.fullTanks += 1; else r.requested = add(r.requested, l.litresRequested);
     r.need = add(r.need, l.needLitres);
+    const planned = plannedLitres(l);
+    if (planned != null) r.planned = add(r.planned, planned); else if (l.fullTank) r.plannedFull += 1;
     if (!r.lastDay || l.day >= r.lastDay) {
       r.lastDay = l.day; r.department = l.department; r.activity = l.activity; r.workLocation = l.workLocation;
     }
@@ -373,7 +385,7 @@ export function refillFigures(row, server) {
           : null,
         planned: line
           ? {
-            full: Boolean(line.fullTank), litres: line.fullTank ? null : line.litresRequested ?? null,
+            full: Boolean(line.fullTank), litres: plannedLitres(line),
             need: line.needLitres ?? null, shiftNo: line.shiftNo ?? 1, shiftStart: line.shiftStart ?? null,
             hours: line.plannedHours ?? null, km: line.plannedKm ?? null,
           }
@@ -386,6 +398,32 @@ export function refillFigures(row, server) {
       };
     })
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+}
+
+/**
+ * The refill figures as table columns (operator 2026-11-19: "we should also
+ * have the columns on the table, not on the side panels alone"): each row
+ * takes its machine's latest refill in the period, as the Odometer column
+ * takes the latest pump reading. `fuelBefore`, `fuelAfter` and
+ * `odometerBefore` are plain numbers so the columns sort; `lastRefill` keeps
+ * where each came from, and `refillCount` how many the panel lists.
+ *
+ * @param {object[]} rows    reconcileFills rows
+ * @param {object}   meters  getFuelRefills' answer for every machine, or null
+ */
+export function withRefillColumns(rows, meters) {
+  return (rows ?? []).map((row) => {
+    const all = refillFigures(row, meters);
+    const last = all[0] ?? null;
+    return {
+      ...row,
+      lastRefill: last,
+      refillCount: all.length,
+      fuelBefore: last?.fuelBefore?.litres ?? null,
+      fuelAfter: last?.fuelAfter?.litres ?? null,
+      odometerBefore: last?.odometerBefore?.value ?? null,
+    };
+  });
 }
 
 /**

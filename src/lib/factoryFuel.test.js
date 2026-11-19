@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed, refillFigures } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed, refillFigures, plannedLitres, withRefillColumns } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -304,7 +304,7 @@ describe("refillFigures", () => {
   const ex17 = () => {
     const [row] = fuelRoster({
       factory: "MUFINDI PAPER MILLS", from: "2026-11-19", to: "2026-11-19",
-      lines: [line({ day: "2026-11-19", machine: "EX-17", fullTank: true, needLitres: 240, requestId: "r17", shiftStart: "06:00:00", plannedHours: 8 })],
+      lines: [line({ day: "2026-11-19", machine: "EX-17", fullTank: true, needLitres: 240, requestId: "r17", requestLitres: 650, shiftStart: "06:00:00", plannedHours: 8 })],
       issues: [{
         id: "i17", machine: "EX-17", day: "2026-11-19", litres: 543, done: true, flags: [], note: null, requestId: "r17",
         at: "2026-11-19T09:07:33.754", startedAt: "2026-11-19T08:31:45.901", siv: "SIV-000027",
@@ -332,7 +332,7 @@ describe("refillFigures", () => {
       fuelBefore: { litres: 78.8, source: "probe" },
       fuelAfter: { litres: 641.9, source: "probe" },
       consumed: { litres: 100.4, engineHours: 4.6, open: false, ahead: false },
-      planned: { full: true, litres: null, need: 240, shiftNo: 1, shiftStart: "06:00:00", hours: 8, km: null },
+      planned: { full: true, litres: 650, need: 240, shiftNo: 1, shiftStart: "06:00:00", hours: 8, km: null },
       odometerBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" },
       odometerAfter: 4215.2,
       trackerAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z" },
@@ -352,5 +352,54 @@ describe("refillFigures", () => {
   it("has nothing to list for a machine the pump has not fuelled", () => {
     const [row] = reconcileFills([{ ...ex17(), pumpIssues: [] }], [probe]);
     expect(refillFigures(row, tracker)).toEqual([]);
+  });
+});
+
+describe("plannedLitres", () => {
+  it("is what a line asked for, or a full tank's request litres", () => {
+    expect(plannedLitres(line({ litresRequested: 80 }))).toBe(80);
+    expect(plannedLitres(line({ fullTank: true, requestLitres: 650 }))).toBe(650);
+    expect(plannedLitres(line({ fullTank: true }))).toBeNull();
+    expect(plannedLitres(line({ litresRequested: null, requestLitres: 25 }))).toBe(25);
+  });
+
+  it("adds up per machine, counting full tanks with no litres yet apart", () => {
+    const [row] = fuelRoster({
+      factory: "MUFINDI PAPER MILLS", from: "2026-11-19", to: "2026-11-20",
+      lines: [
+        line({ day: "2026-11-19", fullTank: true, requestLitres: 380, requestId: "a" }),
+        line({ day: "2026-11-19", shiftNo: 2, litresRequested: 40 }),
+        line({ day: "2026-11-20", fullTank: true }),
+      ],
+      issues: [],
+      machines: [],
+    });
+    expect(row).toMatchObject({ planned: 420, plannedFull: 1 });
+  });
+});
+
+describe("withRefillColumns", () => {
+  const fills = (row, id, at, before, after) => ({
+    ...row,
+    pumpIssues: [...(row.pumpIssues ?? []), { id, litres: 100, done: true, readings: { physical: 10 } }],
+    fills: [...(row.fills ?? []), { key: `pump-${id}`, at: Date.parse(at), day: at.slice(0, 10), before, actual: 100, probeFill: { before, after } }],
+  });
+
+  it("puts each row's latest refill in its columns, and counts the rest for the panel", () => {
+    let row = { reference: "EX-17", lines: [], pumpIssues: [], fills: [] };
+    row = fills(row, "a", "2026-11-18T06:00:00Z", 50, 400);
+    row = fills(row, "b", "2026-11-19T06:00:00Z", 78.8, 641.9);
+    const meters = { refills: [{ issueId: "b", tracked: true, meterBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" }, meterAfter: null, shift: null }] };
+    const [out] = withRefillColumns([row], meters);
+    expect(out).toMatchObject({ fuelBefore: 78.8, fuelAfter: 641.9, odometerBefore: 4214.1, refillCount: 2 });
+    expect(out.lastRefill.id).toBe("b");
+  });
+
+  it("leaves the columns empty for a machine the pump has not fuelled, or while the meters are unread", () => {
+    const [none] = withRefillColumns([{ reference: "EX-02", lines: [], pumpIssues: [], fills: [] }], null);
+    expect(none).toMatchObject({ lastRefill: null, refillCount: 0, fuelBefore: null, fuelAfter: null, odometerBefore: null });
+    const [unread] = withRefillColumns([fills({ reference: "EX-17", lines: [] }, "b", "2026-11-19T06:00:00Z", 78.8, 641.9)], null);
+    expect(unread).toMatchObject({ fuelBefore: 78.8, odometerBefore: null });
+    expect(unread.lastRefill.tracked).toBeNull();
   });
 });

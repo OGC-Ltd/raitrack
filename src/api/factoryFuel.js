@@ -35,16 +35,17 @@ export async function getTankDays({ companyId, from, to }) {
 }
 
 /**
- * One machine's fuellings over `from`..`to` with what only the tracker knows
- * (fleet-server planner fuel-refills): the meter either side of each fuelling
- * and the fuel burned in the shift it was for. For the machine panel's
- * Refills (lib/factoryFuel refillFigures).
- * `{ refills: [{ issueId, tracked, meterBefore, meterAfter, shift }] }`.
+ * Fuellings over `from`..`to` with what only the tracker knows (fleet-server
+ * planner fuel-refills): the meter either side of each fuelling, and, for one
+ * `machine`, the fuel burned in the shift it was for. With a machine, the
+ * machine panel's Refills; without, every machine's meters for the table's
+ * columns (lib/factoryFuel refillFigures, withRefillColumns).
+ * `{ refills: [{ issueId, machine, tracked, meterBefore, meterAfter, shift }] }`.
  */
-export async function getFuelRefills({ companyId, from, to, machine }) {
+export async function getFuelRefills({ companyId, from, to, machine = null }) {
   const orgId = await resolveOrgId(companyId)
   if (!orgId) return { refills: [] }
-  const q = new URLSearchParams({ from, to, machine })
+  const q = new URLSearchParams({ from, to, ...(machine ? { machine } : {}) })
   const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/factory-fuel/refills?${q}`)
   return res.data ?? { refills: [] }
 }

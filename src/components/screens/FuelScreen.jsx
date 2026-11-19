@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures, withRefillColumns } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -63,7 +63,7 @@ const ALL = "__all";
 const GRID_CARDS_QUERY = "(max-width: 700px)";
 const GRID_STEP = 15;
 const GRID_STEP_PHONE = 10;
-const BAR_KEYS = new Set(["need", "issued", "shifts", "requested"]);
+const BAR_KEYS = new Set(["need", "issued", "shifts", "planned"]);
 const GRID_METRICS = [
   { key: "shifts", label: "Shifts" },
   { key: "issued", label: "Issued" },
@@ -108,10 +108,19 @@ export default function FuelScreen() {
     { cacheKey: `ft-factory-fuel-tank:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
   );
   const tankDays = tank.error ? null : tank.data ?? null;
+  // The tracker's meter either side of each fuelling, for the table's refill
+  // columns (lib/factoryFuel withRefillColumns). Apart too: when it fails,
+  // Odometer before reads "-" and nothing else moves.
+  const meterRead = useApiData(
+    () => getFuelRefills({ companyId: activeCompanyId, from, to }),
+    [activeCompanyId, from, to],
+    { cacheKey: `ft-factory-fuel-meters:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
+  );
+  const meters = meterRead.error ? null : meterRead.data ?? null;
   const today = fleetDay(Date.now());
   const checked = useMemo(
-    () => withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today),
-    [roster, vehicles, fillings, tankDays, today],
+    () => withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
+    [roster, vehicles, fillings, tankDays, today, meters],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
 
@@ -359,12 +368,16 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Status", "status")}
                 {th("Period", "period")}
                 {th("Shifts", "shifts", true)}
-                {th("Planned", "requested", true)}
+                {th("Planned", "planned", true)}
                 {th("Fuel now", "fuelNow", true)}
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
+                {/* The latest refill's figures, as in the machine panel (operator 2026-11-19). */}
+                {th("Fuel before", "fuelBefore", true)}
+                {th("Fuel after", "fuelAfter", true)}
                 {th("Consumed", "consumed", true)}
-                {th("Odometer", "odometer", true)}
+                {th("Odometer before", "odometerBefore", true)}
+                {th("Odometer after", "odometer", true)}
               </tr>
             </thead>
             <tbody>
@@ -417,6 +430,8 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title="What the fuel probe recorded going in, for the fuellings the pump recorded">
                       {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
                     </td>
+                    <RefillLevelCell r={r} which="fuelBefore" label="Fuel before" />
+                    <RefillLevelCell r={r} which="fuelAfter" label="Fuel after" />
                     {/* Burnt over the row's Period, from the probe (lib/factoryFuel withConsumed).
                         Pump flags were here (operator 2026-11-18); they stay in the machine panel. */}
                     <td className={r.consumed != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Consumed"
@@ -424,11 +439,12 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                           : "No probe reading at the start or end of the period"}>
                       {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
                     </td>
+                    <OdometerBeforeCell r={r} />
                     <OdometerCell r={r} />
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={11} className="dr-grid__empty">No machines match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={14} className="dr-grid__empty">No machines match.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -456,12 +472,50 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
 function OdometerCell({ r }) {
   if (r.odometer == null) {
     const why = r.issues ? "The pump recorded no odometer reading for these fuellings" : "No fuelling at the pump in this range";
-    return <td className="dr-num dr-num--zero" data-label="Odometer" title={why}>-</td>;
+    return <td className="dr-num dr-num--zero" data-label="Odometer after" title={why}>-</td>;
   }
   return (
-    <td className="dr-num" data-label="Odometer"
+    <td className="dr-num" data-label="Odometer after"
         title={`Read at the pump on ${fmtDay(r.odometerDay)}${r.odometerAt ? `, ${clock(r.odometerAt)}` : ""} (FactorySuite)`}>
       {odometerText(r.odometer, r.basis)}
+    </td>
+  );
+}
+
+/** Where a refill column's figure came from, and which refill it is when the period has several. */
+const refillTitle = (r, source) => [
+  source,
+  r.lastRefill?.at != null ? `at the fuelling of ${fmtFillWhen.format(r.lastRefill.at)}` : null,
+  r.refillCount > 1 ? `the latest of ${r.refillCount}; the machine panel lists each` : null,
+].filter(Boolean).join(", ");
+
+/** The tank before or after the machine's latest refill in the period (lib/factoryFuel withRefillColumns). */
+function RefillLevelCell({ r, which, label }) {
+  const level = r.lastRefill?.[which];
+  if (!level) {
+    const why = r.lastRefill ? "No probe reading for this fuelling" : "No fuelling at the pump in this range";
+    return <td className="dr-num dr-num--zero" data-label={label} title={why}>-</td>;
+  }
+  return (
+    <td className="dr-num" data-label={label} title={refillTitle(r, level.source === "probe" ? "Our fuel probe" : "FactorySuite's probe check")}>
+      {fmt(level.litres)} L
+    </td>
+  );
+}
+
+/** The tracker's meter just before the machine's latest refill in the period. */
+function OdometerBeforeCell({ r }) {
+  const m = r.lastRefill?.odometerBefore;
+  if (!m) {
+    const why = !r.lastRefill ? "No fuelling at the pump in this range"
+      : r.lastRefill.tracked === false ? "Not one of our tracked units"
+      : r.lastRefill.tracked == null ? "The tracker's figures could not be read"
+      : "The tracker sent no reading just before the fuelling";
+    return <td className="dr-num dr-num--zero" data-label="Odometer before" title={why}>-</td>;
+  }
+  return (
+    <td className="dr-num" data-label="Odometer before" title={refillTitle(r, `The tracker, ${clockOf(m.at)}`)}>
+      {odometerText(m.value, r.basis)}
     </td>
   );
 }
@@ -503,14 +557,18 @@ function MetricCell({ label, k, value, sortKey, max, suffix = "" }) {
  * planned and fill in the value … either full or the actual value"). A line is
  * either a full tank or a number of litres; most are full tanks, so "Full"
  * shows in full, not as a muted note. Several full-tank lines read "Full ×2".
+ *
+ * Later the same day (operator: "reflect planned value"): a full tank counts at
+ * the litres on its fuel request (lib/factoryFuel plannedLitres), so the column
+ * is a figure; "Full" is left only for a full tank whose request has none yet.
  */
 function PlannedCell({ r, sortKey, max }) {
-  const full = r.fullTanks ? `Full${r.fullTanks > 1 ? ` ×${r.fullTanks}` : ""}` : "";
-  const title = r.fullTanks ? `${r.fullTanks} full-tank line${r.fullTanks === 1 ? "" : "s"}` : undefined;
-  if (r.requested == null) {
+  const full = r.plannedFull ? `Full${r.plannedFull > 1 ? ` ×${r.plannedFull}` : ""}` : "";
+  const title = r.plannedFull ? `${r.plannedFull} full-tank line${r.plannedFull === 1 ? "" : "s"} with no litres on a request yet` : undefined;
+  if (r.planned == null) {
     return <td className={full ? "dr-num" : "dr-num dr-num--zero"} data-label="Planned" title={title}>{full || "-"}</td>;
   }
-  return <MetricCell label="Planned" k="requested" value={r.requested} sortKey={sortKey} max={max}
+  return <MetricCell label="Planned" k="planned" value={r.planned} sortKey={sortKey} max={max}
     suffix={full ? ` + ${full}` : ""} />;
 }
 
@@ -638,8 +696,8 @@ function Refills({ m, from, to }) {
             <tr>
               <th scope="row">Planned</th>
               <td className="r" title={r.planned ? plannedTitle(r.planned) : "No plan line for this fuelling"}>
-                {!r.planned ? "-" : r.planned.full ? "Full tank" : r.planned.litres != null ? `${fmt(r.planned.litres)} L` : "-"}
-                {r.planned?.need != null && <span className="fuel-refill__note">, needs about {fmt(r.planned.need)} L</span>}
+                {!r.planned ? "-" : r.planned.litres != null ? `${fmt(r.planned.litres)} L` : r.planned.full ? "Full tank" : "-"}
+                {r.planned?.full && r.planned.litres != null && <span className="fuel-refill__note">, full tank</span>}
               </td>
             </tr>
             <tr>
@@ -670,6 +728,7 @@ const levelSource = (x) => (!x ? undefined : x.source === "probe" ? "Our fuel pr
 const plannedTitle = (p) => [
   `Shift ${p.shiftNo}${p.shiftStart ? ` from ${p.shiftStart.slice(0, 5)}` : ""}`,
   p.hours != null ? `${fmt(p.hours)} h` : p.km != null ? `${fmt(p.km)} km` : null,
+  p.need != null ? `needs about ${fmt(p.need)} L` : null,
 ].filter(Boolean).join(", ");
 
 /** Why a tracker figure is "-": the read failed, the machine is not tracked, or the tracker gave none. */
@@ -719,6 +778,13 @@ function OdometerAfterCell({ r, basis }) {
   );
 }
 
+/** The headline's Planned: litres, and any full tank whose request carries none yet ("+ Full"). */
+function plannedLead(m) {
+  const full = m.plannedFull ? `Full${m.plannedFull > 1 ? ` ×${m.plannedFull}` : ""}` : "";
+  if (m.planned == null) return { label: "Planned", value: full || "-" };
+  return { label: "Planned", value: fmt(m.planned), unit: `L${full ? ` + ${full}` : ""}` };
+}
+
 function MachinePanel({ m, from, to, onClose }) {
   const ref = useRef(null);
   const st = machineState(m);
@@ -738,7 +804,9 @@ function MachinePanel({ m, from, to, onClose }) {
   const rate = m.rate == null ? null : m.basis === "KM_PER_LITRE" ? `${fmt(m.rate, 1)} km per litre` : m.basis === "HOUR" ? `${fmt(m.rate, 1)} litres an hour` : null;
   const headline = [
     { label: "Shifts", value: fmt(m.shifts) },
-    { label: "Need", value: m.need == null ? "-" : fmt(m.need), unit: m.need == null ? null : "L" },
+    // "Planned", not "Need" (operator 2026-11-19): what the plan lines asked
+    // for, a full tank at its request's litres (lib/factoryFuel plannedLitres).
+    plannedLead(m),
     { label: "Issued", value: fmt(m.issued), unit: "L" },
     // Moved here from the grid (operator 2026-11-19); the table below lists each fuelling.
     { label: "Variance, pump less probe", value: probeWords(m.variance), bad: m.varianceOver, wide: true },
