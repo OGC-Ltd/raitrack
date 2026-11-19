@@ -369,7 +369,6 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Period", "period")}
                 {th("Shifts", "shifts", true)}
                 {th("Planned", "planned", true)}
-                {th("Fuel now", "fuelNow", true)}
                 {/* In the order a fuelling happens: the tank before, what the pump
                     issued, what the probe saw go in, the tank after (operator
                     2026-11-19). Fuel before/after and the odometers are the
@@ -378,6 +377,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
                 {th("Fuel after", "fuelAfter", true)}
+                {th("Fuel now", "fuelNow", true)}
                 {th("Consumed", "consumed", true)}
                 {th("Odometer before", "odometerBefore", true)}
                 {th("Odometer after", "odometer", true)}
@@ -420,12 +420,6 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                     </td>
                     <MetricCell label="Shifts" k="shifts" value={r.shifts} sortKey={sortKey} max={barMax} />
                     <PlannedCell r={r} sortKey={sortKey} max={barMax} />
-                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%".
-                        The Need column went 2026-11-19 (operator). */}
-                    <td className={r.fuelNow != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel now"
-                        title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
-                      {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
-                    </td>
                     <RefillLevelCell r={r} which="fuelBefore" label="Fuel before" />
                     <MetricCell label="Issued" k="issued" value={r.issues ? r.issued : null} sortKey={sortKey} max={barMax} />
                     {/* Pump against probe (lib/factoryFuel reconcileFills): totals over the
@@ -435,6 +429,13 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                       {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
                     </td>
                     <RefillLevelCell r={r} which="fuelAfter" label="Fuel after" />
+                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%".
+                        The Need column went 2026-11-19 (operator); after Fuel after
+                        since 2026-11-19 (operator). */}
+                    <td className={r.fuelNow != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel now"
+                        title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
+                      {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
+                    </td>
                     {/* Burnt over the row's Period, from the probe (lib/factoryFuel withConsumed).
                         Pump flags were here (operator 2026-11-18); they stay in the machine panel. */}
                     <td className={r.consumed != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Consumed"

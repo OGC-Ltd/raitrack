@@ -89,11 +89,11 @@
    The machine card places all fourteen (the refill columns joined 2026-11-19):
      machine                        status
      department · job               period
-     shifts        planned          fuel now
-     fuel before   issued           probe filled
-     fuel after    consumed
+     shifts        planned          fuel before
+     issued        probe filled     fuel after
+     fuel now      consumed
      odometer before  odometer after
-   In the table's order (reordered 2026-11-19: before, issued, probe, after).
+   In the table's order (reordered 2026-11-19: before, issued, probe, after, now).
    Same specificity as the Drivers rules, later in the cascade, so these win. */
 @media (max-width: 700px) {
   .fuel-grid tbody tr {
