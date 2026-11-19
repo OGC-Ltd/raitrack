@@ -63,15 +63,16 @@ export async function getProbeFillings({ companyId, from, to }) {
 }
 
 /**
- * What fleet-server's work plan watch recorded changing on FactorySuite's plans
- * for days `from`..`to` (planner/work-plan-watch): `{ watching, watchedSince,
- * changes: [{ kind, planCode, department, day, machine, shiftNo, field,
- * fromValue, toValue, source, detectedAt }] }`, newest first.
+ * FactorySuite plan lines that changed on days `from`..`to`, one row per line
+ * as fleet-server's work plan watch keeps it (planner/work-plan-watch):
+ * `{ watching, watchedSince, items: [{ id, lineId, day, machine, shiftNo,
+ * planCode, department, status, previousStatus, statusChangedAt, lastEdits,
+ * editedAt, reviewedBy }] }`, last updated first.
  */
-export async function getWorkPlanChanges({ companyId, from, to }) {
+export async function getWorkPlanUpdates({ companyId, from, to }) {
   const orgId = await resolveOrgId(companyId)
-  if (!orgId) return { watching: false, changes: [] }
+  if (!orgId) return { watching: false, items: [] }
   const q = new URLSearchParams({ from, to })
-  const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/work-plan-changes?${q}`)
-  return res.data ?? { watching: false, changes: [] }
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/work-plan-updates?${q}`)
+  return res.data ?? { watching: false, items: [] }
 }

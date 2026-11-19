@@ -121,8 +121,9 @@
    calendar, side by side on the filter row (Fuel and Staffs › Operators). */
 .fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* Plan changes (PlanChanges.jsx): the work plan watch's list and the plan
-   flags, in the machine table's card. Drivers page tokens throughout. */
+/* Plan updates (PlanUpdates.jsx): plan lines the work plan watch updated in
+   place, and plans never decided, in the machine table's card. Drivers page
+   tokens throughout. */
 .plan-changes { margin-top: 16px; }
 .plan-changes__head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap;
