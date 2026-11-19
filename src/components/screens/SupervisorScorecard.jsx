@@ -3,271 +3,401 @@
 // assigned — the goal is to derive the performing supervisors"; first,
 // "populate the supervisors records on the score card").
 //
+// Drawn as the Operators tab is (operator 2026-11-19: "use the same design as
+// the operators page"): the four-cell strip over the period, the ranked grid
+// under the Rank by chips, and the side panel a row opens (operator: "whenever
+// I click on a line the data should appear on the side panel").
+//
 // One row per FactorySuite supervisor named on the work plans: the machines
 // and shifts they had, the hours those lines planned and the hours the
 // machines ran in them (fleet-server planner/factory-supervisors), with the
-// lines that did not run, started late, sent no signal or are on a machine we
-// do not track. Figures only: no rank and no badge says who performs, until
-// the operator settles how that is judged. Clicking a row opens the side panel
-// (operator 2026-11-19: "whenever I click on a line the data should appear on
-// the side panel"): the supervisor's machines, shifts, operators and lines.
-//
-// Drawn in the Driver scorecard's grammar (DriverScorecard.jsx and .css, which
-// borrow the Analytics roster's): `dr-filters`, the `dr-strip`, the `dr-grid`
-// datagrid with sortable heads, and the roster's `dr-panel` down the right.
+// lines that did not run and the late starts. Rank by orders the grid; no
+// badge says who performs until the operator settles how that is judged.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
-import "./DriverScorecard.css";
+import "./FuelScreen.css";
 import "./SupervisorScorecard.css";
 import { getFactorySupervisors } from "../../api/factorySupervisors";
-import DateRangePicker from "../layout/DateRangePicker";
+import { periodRange } from "../../lib/factoryFuel";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import TrendStat from "./TrendStat";
+import FuelPeriodPicker from "./FuelPeriodPicker";
+import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
+import TabEmptyState from "../shared/TabEmptyState";
+import { DriversIcon } from "../footer/NavIcons";
 import { downloadTableCsv } from "../../utils/tableExport";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
-import { LINE_STATE, linesByDay, nameCase, operatorName, shiftLabel, supervisorPeriods, supervisorTotals } from "../../lib/factorySupervisors";
+import {
+  LINE_STATE, linesByDay, nameCase, operatorName, shiftLabel,
+  supervisorDepartments, supervisorsByDay, supervisorTotals,
+} from "../../lib/factorySupervisors";
 
-const MAX_DAYS = 31;
-const PAGE = 15;
-const PAGE_PHONE = 10;
-const CARDS_QUERY = "(max-width: 700px)";
-const COLS = 12;
+const ALL = "__all";
+const GRID_CARDS_QUERY = "(max-width: 700px)";
+const GRID_STEP = 15;
+const GRID_STEP_PHONE = 10;
+/** The figures Rank by orders the grid on; the ranked column draws its bar. */
+const BAR_KEYS = new Set(["lines", "runHours", "deliveredPct"]);
+const GRID_METRICS = [
+  { key: "lines", label: "Plan lines" },
+  { key: "runHours", label: "Hours run" },
+  { key: "deliveredPct", label: "Delivered" },
+];
 
-const fmt = (n, dp = 0) => (n == null || !Number.isFinite(n) ? "–" : n.toLocaleString("en-KE", { maximumFractionDigits: dp, minimumFractionDigits: 0 }));
-const hrs = (n) => (n == null ? "–" : `${fmt(n, 1)} h`);
-const pct = (n) => (n == null ? "–" : `${fmt(n)}%`);
+const fmt = (n, dp = 0) => (n == null || !Number.isFinite(n) ? "-" : n.toLocaleString("en-KE", { maximumFractionDigits: dp, minimumFractionDigits: 0 }));
+const hrs = (n) => (n == null ? "-" : `${fmt(n, 1)} h`);
+const pct = (n) => (n == null ? "-" : `${fmt(n)}%`);
+const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? "" : "s"}`;
 const initialsOf = (name = "") => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
-const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Dar_es_Salaam" }) : "–");
-const shortDay = (day) => (day ? new Date(`${day}T12:00:00Z`).toLocaleDateString("en-KE", { day: "numeric", month: "short" }) : "–");
-const sentence = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : "");
-
-const SORTS = {
-  supervisor: (s) => s.name.toLowerCase(),
-  machines: (s) => s.machines.length,
-  lines: (s) => s.lines,
-  days: (s) => s.days,
-  planned: (s) => s.plannedHours,
-  run: (s) => s.runHours,
-  delivered: (s) => s.deliveredPct ?? -1,
-  ran: (s) => s.ran,
-  notRun: (s) => s.notRun,
-  late: (s) => s.lateStarts,
-  silent: (s) => s.silent,
-  untracked: (s) => s.untracked,
-};
+const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Dar_es_Salaam" }) : "-");
+const shortDay = (day) => (day ? new Date(`${day}T12:00:00Z`).toLocaleDateString("en-KE", { day: "numeric", month: "short" }) : "-");
+const sentence = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ") : "");
 
 export default function SupervisorScorecard({ companyId, lead = null }) {
-  const options = useMemo(() => supervisorPeriods(), []);
-  const today = options[0].to;
-  const [periodKey, setPeriodKey] = useState("14d");
-  const [custom, setCustom] = useState(null);
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(null);
-  const closePanel = useCallback(() => setOpen(null), []);
-  const [sortKey, setSortKey] = useState("lines");
-  const [sortDir, setSortDir] = useState("desc");
-  const [page, setPage] = useState(0);
-  const cards = useMediaQuery(CARDS_QUERY);
-  const step = cards ? PAGE_PHONE : PAGE;
-  const period = custom ?? options.find((p) => p.key === periodKey) ?? options[0];
-  const pickPeriod = (next) => { setPeriodKey(next.key ?? null); setCustom(next.key ? null : next); setOpen(null); setPage(0); };
-
-  const { data, loading, stale, error, retry } = useApiData(
-    () => getFactorySupervisors({ companyId, from: period.from, to: period.to }),
-    [companyId, period.from, period.to],
-    { cacheKey: `ft-factory-supervisors:${companyId}:${period.from}:${period.to}`, keepPreviousData: true }
+  const [pick, setPick] = useState(7);
+  const { from, to } = useMemo(() => periodRange(pick), [pick]);
+  const { data, loading, error, retry } = useApiData(
+    () => getFactorySupervisors({ companyId, from, to }),
+    [companyId, from, to],
+    { cacheKey: `ft-factory-supervisors:${companyId}:${from}:${to}`, keepPreviousData: true },
   );
 
-  const all = useMemo(() => data?.supervisors ?? [], [data]);
-  const sorted = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = all.filter((s) => !q
-      || s.name.toLowerCase().includes(q)
-      || s.machines.some((m) => String(m.reference).toLowerCase().includes(q))
-      || s.operators.some((o) => o.toLowerCase().includes(q)));
-    const key = SORTS[sortKey] ?? SORTS.lines;
-    const sign = sortDir === "asc" ? 1 : -1;
-    return [...list].sort((a, b) => {
-      const x = key(a), y = key(b);
-      return (x < y ? -1 : x > y ? 1 : 0) * sign || a.name.localeCompare(b.name);
-    });
-  }, [all, query, sortKey, sortDir]);
-  const totals = useMemo(() => supervisorTotals(all), [all]);
-  const openRec = open ? all.find((s) => s.key === open) ?? null : null;
+  const roster = useMemo(() => data?.supervisors ?? [], [data]);
+  const [deptPick, setDeptPick] = useState(ALL);
+  const deptOptions = useMemo(() => supervisorDepartments(roster), [roster]);
+  const dept = deptPick === ALL || deptOptions.some((o) => o.key === deptPick) ? deptPick : ALL;
+  const rows = useMemo(() => (dept === ALL ? roster : roster.filter((s) => s.departments.includes(dept))), [roster, dept]);
+  const byDay = useMemo(() => supervisorsByDay(data, rows), [data, rows]);
+  const totals = useMemo(() => supervisorTotals(rows), [rows]);
 
+  const [selected, setSelected] = useState(null);
+  const supervisor = selected ? roster.find((s) => s.key === selected) ?? null : null;
+  const closePanel = useCallback(() => setSelected(null), []);
+
+  const noFactory = !loading && data && data.factory === null;
+  const isEmpty = !loading && !noFactory && roster.length === 0;
+  const half = Math.max(1, Math.floor(byDay.length / 2));
+  const sub = byDay.length > 1 ? `last ${half}d vs previous ${half}d` : "";
+  const busy = loading && !data;
+  const late = data?.rules?.lateStartMinutes ?? 60;
+
+  const rangePicker = <FuelPeriodPicker pick={pick} onPick={setPick} chips />;
+
+  if (error && !data) return <LoadError label="Supervisor scorecard" onRetry={retry} fullSection />;
+  if (noFactory) {
+    return <TabEmptyState icon={<DriversIcon size={44} />} title="Supervisors"
+      hint="This organisation's FactorySuite factory keeps no work plans, so there are no supervisors to show." />;
+  }
+
+  return (
+    <ErrorBoundary label="Supervisors">
+      {isEmpty ? (
+        <>
+          <div className="dr-filters">{lead}{rangePicker}</div>
+          <TabEmptyState icon={<DriversIcon size={44} />} title="Supervisors"
+            hint={`No FactorySuite work plan names a supervisor from ${shortDay(from)} to ${shortDay(to)}.`} />
+        </>
+      ) : (
+        <>
+          <div className="dr-layout">
+            <section className="dr-strip" aria-label="All supervisors">
+              <SupervisorsCard totals={totals} loading={busy} />
+              <TrendStat title="Hours run" series={byDay} valueKey="run" unit="h" tone="tonnes" type="bar"
+                value={busy ? "-" : fmt(totals.runHours)} sub={sub} loading={busy}
+                pointWords={(d) => `${shortDay(d.day)} · ${fmt(d.run, 1)} of ${fmt(d.planned, 1)} h planned`} />
+              <TrendStat title="Supervisors on shift" series={byDay} valueKey="supervisors" unit="a day" tone="mileage" type="line"
+                value={busy ? "-" : fmt(Math.max(0, ...byDay.map((d) => d.supervisors)))} sub="most on one day"
+                loading={busy} pointWords={(d) => `${shortDay(d.day)} · ${plural(d.supervisors, "supervisor")}, ${plural(d.lines, "line")}`} />
+              <DeliveryCard totals={totals} late={late} loading={busy} />
+            </section>
+          </div>
+          <SupervisorsSection rows={rows} selected={selected} onSelect={setSelected} lead={lead} rangePicker={rangePicker}
+            period={{ from: data?.from ?? from, to: data?.to ?? to }}
+            deptPicker={<DeptPicker value={dept} options={deptOptions} total={roster.length} onChange={setDeptPick} />} />
+        </>
+      )}
+      {supervisor && (
+        <SupervisorPanel key={supervisor.key} s={supervisor} late={late} from={data?.from ?? from} to={data?.to ?? to} onClose={closePanel} />
+      )}
+    </ErrorBoundary>
+  );
+}
+
+/** The roster cell: supervisors on the plans, and how their lines went. */
+function SupervisorsCard({ totals, loading }) {
+  if (loading) {
+    return <div className="dr-cell dr-fleet"><div className="dr-cell__empty" aria-busy="true">Loading supervisors…</div></div>;
+  }
+  const facts = [
+    { label: "Machines", value: fmt(totals.machines) },
+    { label: "Plan lines", value: fmt(totals.lines) },
+    { label: "Operators", value: fmt(totals.operators) },
+  ];
+  const notJudged = totals.silent + totals.untracked + totals.open;
+  const mix = [
+    { key: "good", label: "Ran", n: totals.ran },
+    { key: "low", label: "Did not run", n: totals.notRun },
+    { key: "new", label: "Not judged", n: notJudged },
+  ];
+  return (
+    <div className="dr-cell dr-fleet">
+      <div className="dr-statchart__head"><span className="dr-statchart__label">Supervisors</span></div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{fmt(totals.supervisors)}</span>
+        <span className="dr-summary__caption">on work plans,<br />{plural(totals.departments, "department")}</span>
+      </div>
+      <dl className="dr-fleet__facts">
+        {facts.map((f) => (
+          <div key={f.label} className="dr-fleet__fact"><dt>{f.label}</dt><dd>{f.value}</dd></div>
+        ))}
+      </dl>
+      <div className="dr-fleet__mix">
+        <span className="dr-fleet__mixlabel">Plan lines</span>
+        <span className="dr-fleet__bar" role="img" aria-label={mix.map((m) => `${m.n} ${m.label}`).join(", ")}>
+          {mix.map((m) => m.n > 0 && (
+            <span key={m.label} className={`dr-fleet__seg dr-fleet__seg--${m.key}`} style={{ flexGrow: m.n }} title={`${m.label}: ${plural(m.n, "line")}`} />
+          ))}
+        </span>
+        <ul className="dr-fleet__legend">
+          {mix.map((m) => (
+            <li key={m.label} className={`dr-fleet__key dr-fleet__key--${m.key}`}>
+              <span className="dr-fleet__swatch" aria-hidden="true" />{m.label}<b>{fmt(m.n)}</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/** The delivery cell: planned hours run on tracked lines, and what fell short. */
+function DeliveryCard({ totals, late, loading }) {
+  if (loading) {
+    return <div className="dr-cell dr-summary"><div className="dr-cell__empty" aria-busy="true">Loading…</div></div>;
+  }
+  const incidents = [
+    { label: "Did not run", n: totals.notRun, tone: "theft" },
+    { label: `Started over ${late} min late`, n: totals.lateStarts, tone: "speed" },
+    { label: "No signal", n: totals.silent, tone: null },
+  ];
+  return (
+    <div className="dr-cell dr-summary">
+      <div className="dr-statchart__head"><span className="dr-statchart__label">Delivered</span></div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{pct(totals.deliveredPct)}</span>
+        <span className="dr-summary__caption">{hrs(totals.runHours)} run of<br />{hrs(totals.judgedPlannedHours)} planned</span>
+      </div>
+      <div className="dr-summary__incidents">
+        {incidents.map((x) => (
+          <div key={x.label} className={`dr-summary__incident${x.n && x.tone ? ` dr-summary__incident--${x.tone}` : ""}`}>
+            <span className="dr-summary__dot" aria-hidden="true" />
+            <span className="dr-summary__name">{x.label}</span>
+            <span className="dr-summary__count">{fmt(x.n)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DeptPicker({ value, options, total, onChange }) {
+  return (
+    <label className="dr-typepick">
+      <span className="dr-typepick__label">Department</span>
+      <select className="dr-typepick__select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value={ALL}>All departments ({fmt(total)})</option>
+        {options.map((o) => <option key={o.key} value={o.key}>{o.label} ({fmt(o.count)})</option>)}
+      </select>
+    </label>
+  );
+}
+
+const machineWords = (s) => s.machines.map((m) => m.reference).join(", ");
+
+function SupervisorsSection({ rows, selected, onSelect, lead, rangePicker, deptPicker, period }) {
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState("lines");
+  const [sortDir, setSortDir] = useState("desc");
+  const cardView = useMediaQuery(GRID_CARDS_QUERY);
+  const step = cardView ? GRID_STEP_PHONE : GRID_STEP;
+  const [page, setPage] = useState(0);
+
+  const q = query.trim().toLowerCase();
+  const filtered = rows.filter((s) => !q || [s.name, machineWords(s), ...s.departments, ...s.operators]
+    .some((v) => String(v ?? "").toLowerCase().includes(q)));
+  const barMax = Math.max(1, ...rows.map((s) => s[sortKey] ?? 0));
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp;
+    if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+    else if (sortKey === "department") cmp = String(a.departments[0] ?? "~").localeCompare(String(b.departments[0] ?? "~"));
+    else if (sortKey === "machines") cmp = a.machines.length - b.machines.length;
+    else if (sortKey === "period") cmp = String(a.lastDay ?? "").localeCompare(String(b.lastDay ?? ""));
+    else cmp = (a[sortKey] ?? -1) - (b[sortKey] ?? -1);
+    return (sortDir === "asc" ? cmp : -cmp) || a.name.localeCompare(b.name);
+  });
   const pageCount = Math.max(1, Math.ceil(sorted.length / step));
   const at = Math.min(page, pageCount - 1);
   const pageRows = sorted.slice(at * step, at * step + step);
+  const ranked = BAR_KEYS.has(sortKey);
 
-  const toggleSort = (k) => {
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir(["name", "department"].includes(key) ? "asc" : "desc"); }
     setPage(0);
-    if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(k); setSortDir(k === "supervisor" ? "asc" : "desc"); }
   };
+  const rankBy = (key) => { setSortKey(key); setSortDir("desc"); setPage(0); };
+  const th = (label, k, num = false) => <GridTh label={label} k={k} sortKey={sortKey} dir={sortDir} onClick={toggleSort} num={num} />;
 
   const downloadCsv = () => downloadTableCsv({
     head: ["Supervisor", "Departments", "Machines", "Plan lines", "Days", "Planned hours", "Judged lines", "Planned hours judged", "Hours run",
       "Delivered %", "Ran", "Did not run", "Late starts", "No signal", "Not tracked", "Shift not over"],
-    body: sorted.map((s) => [nameCase(s.name), s.departments.map(sentence).join(" · "), s.machines.map((m) => m.reference).join(" · "), s.lines, s.days,
+    body: sorted.map((s) => [nameCase(s.name), s.departments.map(sentence).join(", "), machineWords(s), s.lines, s.days,
       s.plannedHours, s.judged, s.judgedPlannedHours, s.runHours, s.deliveredPct ?? "", s.ran, s.notRun, s.lateStarts, s.silent, s.untracked, s.open]),
     filenameSlug: `supervisor-scorecard-${period.from}${period.to !== period.from ? `-to-${period.to}` : ""}`,
   });
 
-  if (error && !data) return <LoadError label="Supervisor scorecard" onRetry={retry} fullSection />;
-  if (data && data.factory === null) {
-    return <p className="sc-status" role="status">This organisation has no FactorySuite work plans, so it has no supervisors to show.</p>;
-  }
-
-  const waiting = loading && !data;
-  const refreshing = Boolean(stale);
-  const late = data?.rules?.lateStartMinutes ?? 60;
-  const skipped = (data?.skipped?.draft ?? 0) + (data?.skipped?.cancelled ?? 0);
-
   return (
-    <section className="sc" aria-label="Supervisor scorecard">
+    <>
       <div className="dr-filters">
-        <div className="dr-filters__chips" role="group" aria-label="Period">
-          {lead}
-          <span className="dr-rankby__label" aria-hidden="true">Period</span>
+        {lead && <div className="dr-filters__chips" role="group" aria-label="Scorecard for">{lead}</div>}
+        <div className="dr-filters__chips" role="group" aria-label="Rank supervisors by">
+          <span className="dr-rankby__label" aria-hidden="true">Rank by</span>
           <span className="dr-seg">
-            {options.map((p) => (
-              <button key={p.key} type="button"
-                      className={`dr-chip${!custom && p.key === periodKey ? " dr-chip--active" : ""}`}
-                      aria-pressed={!custom && p.key === periodKey} onClick={() => pickPeriod(p)}>
-                {p.label}
-              </button>
+            {GRID_METRICS.map((m) => (
+              <button key={m.key} type="button" className={`dr-chip${sortKey === m.key ? " dr-chip--active" : ""}`}
+                aria-pressed={sortKey === m.key} onClick={() => rankBy(m.key)}>{m.label}</button>
             ))}
           </span>
-          <DateRangePicker from={period.from} to={period.to} today={today} maxDays={MAX_DAYS} quickPicks={false}
-                           label="Scorecard dates" onChange={(from, to) => pickPeriod({ key: null, from, to })} />
         </div>
-        <div className="sc-pdf">
-          <button type="button" className="dr-pager__btn" disabled={!sorted.length} onClick={downloadCsv}
-                  title="Every supervisor in the list as a CSV (opens in Excel)">
-            CSV
-          </button>
-        </div>
+        {rangePicker}
+        {deptPicker}
+        <button type="button" className="dr-pager__btn" disabled={!sorted.length} onClick={downloadCsv}
+                title="The supervisors in the list as a CSV (opens in Excel)">CSV</button>
         <div className="dr-searchwrap">
           <svg className="dr-searchwrap__icon" width="13" height="13" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
           </svg>
-          <input className="dr-search" type="search" value={query}
-                 onChange={(e) => { setQuery(e.target.value); setPage(0); setOpen(null); }}
-                 placeholder="Search supervisor, machine, operator…" aria-label="Search supervisor, machine or operator" />
+          <input className="dr-search" value={query} aria-label="Search supervisors"
+            onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+            placeholder="Search supervisor, machine, operator…" />
         </div>
       </div>
 
-      <section className="dr-strip sc-strip" aria-label="Supervisor totals">
-        <StatCell label="Supervisors" loading={waiting} value={fmt(totals.supervisors)}
-                  sub={`${fmt(totals.machines)} machines · ${fmt(totals.lines)} plan lines`} />
-        <StatCell label="Hours run" loading={waiting} value={hrs(totals.runHours)}
-                  sub={`of ${hrs(totals.judgedPlannedHours)} planned on ${fmt(totals.judged)} tracked lines · ${pct(totals.deliveredPct)}`} />
-        <StatCell label="Did not run" loading={waiting} value={fmt(totals.notRun)} tone={totals.notRun ? "sc-down" : ""}
-                  sub={`${fmt(totals.lateStarts)} started over ${late} min late`} />
-        <StatCell label="Not judged" loading={waiting} value={fmt(totals.silent + totals.untracked + totals.open)}
-                  sub={`${fmt(totals.untracked)} not tracked · ${fmt(totals.silent)} no signal · ${fmt(totals.open)} shift not over`} />
-      </section>
-
-      {data && (
-        <ul className="sc-notes">
-          <li>
-            A plan line&rsquo;s shift runs from its start time for its planned hours. Hours run are the machine&rsquo;s engine hours inside that window;
-            a line under {fmt(data.rules?.notRunHours ?? 0.25, 2)} h did not run, and one whose machine first worked more than {late} minutes after the start is a late start.
-          </li>
-          {skipped > 0 && (
-            <li className="sc-notes__quiet">
-              {fmt(data.skipped.draft)} draft and {fmt(data.skipped.cancelled)} cancelled plan lines are left out.
-            </li>
-          )}
-        </ul>
-      )}
-
-      {waiting && <p className="sc-status" role="status" aria-live="polite">Loading supervisors and the hours their machines ran…</p>}
-
-      <div className={`dr-grid-card sc-card${refreshing ? " sc-card--refreshing" : ""}`} aria-busy={waiting || refreshing}>
-        {refreshing && <div className="sc-progress" role="progressbar" aria-label="Updating supervisors" />}
+      <div className="dr-grid-card">
         <div className="dr-grid-scroll">
-          <table className="dr-grid sv-grid">
+          <table className="dr-grid">
             <thead>
               <tr>
-                <SortTh label="Supervisor" k="supervisor" {...{ sortKey, sortDir }} onClick={toggleSort} />
-                <SortTh label="Machines" k="machines" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Plan lines" k="lines" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Days" k="days" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Planned" k="planned" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Run" k="run" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Delivered" k="delivered" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Ran" k="ran" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Did not run" k="notRun" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Late starts" k="late" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="No signal" k="silent" {...{ sortKey, sortDir }} onClick={toggleSort} num />
-                <SortTh label="Not tracked" k="untracked" {...{ sortKey, sortDir }} onClick={toggleSort} num />
+                {th("Supervisor", "name")}
+                {th("Department", "department")}
+                {th("Machines", "machines")}
+                {th("Period", "period")}
+                {th("Plan lines", "lines", true)}
+                {th("Hours run", "runHours", true)}
+                {th("Delivered", "deliveredPct", true)}
+                {th("Did not run", "notRun", true)}
+                {th("Late starts", "lateStarts", true)}
               </tr>
             </thead>
             <tbody>
-              {waiting && Array.from({ length: 8 }, (_, i) => (
-                <tr key={i} className="sc-skel" aria-hidden="true">
-                  <td className="dr-drivercell"><span className="dr-driver"><span className="sc-skel__avatar" /><span className="sc-skel__lines"><span style={{ width: `${110 + (i * 37) % 60}px` }} /><span /></span></span></td>
-                  {Array.from({ length: COLS - 1 }, (_, j) => <td key={j} className="dr-num"><span className="sc-skel__bar" /></td>)}
-                </tr>
-              ))}
-              {data && sorted.length === 0 && (
-                <tr><td colSpan={COLS} className="dr-grid__empty">
-                  {query ? "No supervisor matches." : "No work plan in this period names a supervisor."}
-                </td></tr>
-              )}
-              {pageRows.map((s) => {
-                const isOpen = open === s.key;
-                const toggle = () => setOpen(isOpen ? null : s.key);
-                const refs = s.machines.map((m) => m.reference);
+              {pageRows.map((s, i) => {
+                const pos = at * step + i;
+                const rank = sortDir === "desc" ? pos + 1 : sorted.length - pos;
+                const on = s.key === selected;
                 return (
-                    <tr key={s.key} className={isOpen ? "dr-grid__row--selected" : ""} onClick={toggle} tabIndex={0} aria-selected={isOpen}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}>
-                      <td className="dr-drivercell">
-                        <span className="dr-driver">
-                          <span className="dr-avatar">{initialsOf(nameCase(s.name))}</span>
-                          <span className="dr-driver__ident">
-                            <span className="dr-driver__name">{nameCase(s.name)}</span>
-                            <span className="dr-driver__sub">{s.departments.map(sentence).join(" · ") || "–"}</span>
-                          </span>
+                  <tr key={s.key} className={on ? "dr-grid__row--selected" : ""} tabIndex={0} aria-selected={on}
+                      onClick={() => onSelect(s.key)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(s.key); } }}>
+                    <td className="dr-drivercell">
+                      <span className="dr-driver">
+                        <span className="dr-rank" aria-label={ranked ? `Rank ${rank}` : undefined}>{ranked ? rank : ""}</span>
+                        <span className="dr-avatar">{initialsOf(nameCase(s.name))}</span>
+                        <span className="dr-driver__ident">
+                          <span className="dr-driver__name">{nameCase(s.name)}</span>
+                          <span className="dr-driver__sub">{plural(s.shifts.length, "shift")}, {plural(s.operators.length, "operator")}</span>
                         </span>
-                      </td>
-                      <td className="dr-num" data-label="Machines" title={refs.join(", ")}>
-                        {fmt(refs.length)}<span className="sv-sub">{refs.slice(0, 2).join(" · ")}{refs.length > 2 ? ` +${refs.length - 2}` : ""}</span>
-                      </td>
-                      <td className="dr-num" data-label="Plan lines">{fmt(s.lines)}</td>
-                      <td className="dr-num" data-label="Days">{fmt(s.days)}</td>
-                      <td className="dr-num" data-label="Planned">{hrs(s.plannedHours)}</td>
-                      <td className="dr-num" data-label="Run" title={`${hrs(s.runHours)} of ${hrs(s.judgedPlannedHours)} planned on ${s.judged} tracked lines`}>{hrs(s.judged ? s.runHours : null)}</td>
-                      <td className="dr-num" data-label="Delivered">{pct(s.deliveredPct)}</td>
-                      <td className="dr-num" data-label="Ran">{fmt(s.ran)}</td>
-                      <CountCell n={s.notRun} label="Did not run" />
-                      <CountCell n={s.lateStarts} label="Late starts" tone="speed" />
-                      <td className={`dr-num${s.silent ? "" : " dr-num--zero"}`} data-label="No signal">{fmt(s.silent)}</td>
-                      <td className={`dr-num${s.untracked ? "" : " dr-num--zero"}`} data-label="Not tracked">{fmt(s.untracked)}</td>
-                    </tr>
+                      </span>
+                    </td>
+                    <td data-label="Department">
+                      <span className="fuel-dept">{s.departments.map(sentence).join(", ") || "-"}</span>
+                    </td>
+                    <td data-label="Machines" title={s.machines.map((m) => [m.reference, m.name, m.plate].filter(Boolean).join(" ")).join("\n")}>
+                      <span className="fuel-dept">{s.machines.slice(0, 3).map((m) => m.reference).join(", ") || "-"}</span>
+                      {s.machines.length > 3 && <span className="dr-driver__sub">+{fmt(s.machines.length - 3)} more</span>}
+                    </td>
+                    <td className={`dr-when${s.lastDay ? "" : " dr-when--none"}`} data-label="Period"
+                        title={s.days ? `${plural(s.days, "day")} on a plan` : undefined}>
+                      {!s.lastDay ? "-" : s.firstDay && s.firstDay !== s.lastDay ? `${shortDay(s.firstDay)} to ${shortDay(s.lastDay)}` : shortDay(s.lastDay)}
+                    </td>
+                    <MetricCell label="Plan lines" k="lines" value={s.lines} sortKey={sortKey} max={barMax} />
+                    <MetricCell label="Hours run" k="runHours" value={s.judged ? s.runHours : null} sortKey={sortKey} max={barMax} dp={1}
+                      title={`${hrs(s.runHours)} of ${hrs(s.judgedPlannedHours)} planned on ${plural(s.judged, "tracked line")}`} />
+                    <MetricCell label="Delivered" k="deliveredPct" value={s.deliveredPct} sortKey={sortKey} max={100} suffix="%" />
+                    <CountCell n={s.notRun} label="Did not run" tone="theft" />
+                    <CountCell n={s.lateStarts} label="Late starts" tone="speed" />
+                  </tr>
                 );
               })}
+              {sorted.length === 0 && <tr><td colSpan={9} className="dr-grid__empty">No supervisors match.</td></tr>}
             </tbody>
           </table>
         </div>
         {pageCount > 1 && (
           <nav className="dr-pager" aria-label="Supervisor pages">
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>← Prev</button>
+            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>Previous</button>
             <span className="dr-pager__info" aria-live="polite">
               Page {at + 1} of {pageCount}
-              <span className="dr-pager__range">{" · "}{fmt(at * step + 1)}–{fmt(at * step + pageRows.length)} of {fmt(sorted.length)}</span>
+              <span className="dr-pager__range">{", "}{fmt(at * step + 1)} to {fmt(at * step + pageRows.length)} of {fmt(sorted.length)}</span>
             </span>
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>Next →</button>
+            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>Next</button>
           </nav>
         )}
       </div>
-      {openRec && <SupervisorPanel key={openRec.key} s={openRec} late={late} from={data?.from} to={data?.to} onClose={closePanel} />}
-    </section>
+    </>
+  );
+}
+
+function GridTh({ label, k, sortKey, dir, onClick, num }) {
+  const active = sortKey === k;
+  return (
+    <th className={num ? "dr-num" : undefined} aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className="dr-grid__sort" onClick={() => onClick(k)} title={`Sort by ${label.toLowerCase()}`}>
+        <span>{label}</span>
+        <span className={"dr-caret" + (active ? ` dr-caret--${dir}` : "")} aria-hidden="true" />
+      </button>
+    </th>
+  );
+}
+
+function MetricCell({ label, k, value, sortKey, max, dp = 0, suffix = "", title }) {
+  const barred = BAR_KEYS.has(k) && sortKey === k;
+  if (value == null) return <td className="dr-num dr-num--zero" data-label={label}>-</td>;
+  return (
+    <td className={"dr-num" + (barred ? " dr-num--ranked" : "")} data-label={label} title={title}>
+      <span className="dr-metric">
+        <span className="dr-metric__num">{fmt(value, dp)}{suffix}</span>
+        {barred && (
+          <span className="dr-metric__track" aria-hidden="true">
+            <span className="dr-metric__fill" style={{ "--share": Math.max(0, Math.min(value / max, 1)) }} />
+          </span>
+        )}
+      </span>
+    </td>
+  );
+}
+
+/** The roster's incident cell: a dot as well as the colour. */
+function CountCell({ n, label, tone }) {
+  if (!n) return <td className="dr-num dr-num--zero" data-label={label}>-</td>;
+  return (
+    <td className={`dr-num dr-incident dr-incident--${tone}`} data-label={label}>
+      <span className="dr-incident__dot" aria-hidden="true" />{fmt(n)}
+    </td>
   );
 }
 
@@ -299,7 +429,7 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
   const headline = [
     { label: "Plan lines", value: fmt(s.lines) },
     { label: "Planned", value: fmt(s.plannedHours, 1), unit: "h" },
-    { label: "Run", value: s.judged ? fmt(s.runHours, 1) : "–", unit: s.judged ? "h" : null },
+    { label: "Run", value: s.judged ? fmt(s.runHours, 1) : "-", unit: s.judged ? "h" : null },
     { label: "Delivered", value: pct(s.deliveredPct) },
   ];
   const outcomes = [
@@ -419,36 +549,3 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
   );
 }
 
-function SortTh({ label, k, sortKey, sortDir, onClick, num }) {
-  const active = sortKey === k;
-  return (
-    <th className={num ? "dr-num" : undefined} aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" className="dr-grid__sort" onClick={() => onClick(k)} title={`Sort by ${label.toLowerCase()}`}>
-        <span>{label}</span>
-        <span className={"dr-caret" + (active ? ` dr-caret--${sortDir}` : "")} aria-hidden="true" />
-      </button>
-    </th>
-  );
-}
-
-/** The roster's incident cell: a dot as well as the colour. */
-function CountCell({ n, label, tone = "theft" }) {
-  if (!n) return <td className="dr-num dr-num--zero" data-label={label}>0</td>;
-  return (
-    <td className={`dr-num dr-incident dr-incident--${tone}`} data-label={label}>
-      <span className="dr-incident__dot" aria-hidden="true" />{fmt(n)}
-    </td>
-  );
-}
-
-function StatCell({ label, value, sub, tone = "", loading = false }) {
-  return (
-    <div className="dr-cell">
-      <div className="dr-statchart__head"><span className="dr-statchart__label">{label}</span></div>
-      <div className={`dr-statchart__value ${tone}`}>
-        {loading ? <span className="sc-skel__bar sc-skel__bar--figure" aria-label="Loading" /> : value}
-      </div>
-      <div className="dr-statchart__sub">{loading ? <span className="sc-skel__bar sc-skel__bar--caption" /> : sub}</div>
-    </div>
-  );
-}

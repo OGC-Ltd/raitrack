@@ -6,6 +6,8 @@
 //
 // Pure: no React, no network.
 
+import { daysBetween } from "./factoryFuel";
+
 const DAY = 86_400_000;
 /** A fleet day (EAT) as YYYY-MM-DD. */
 const eatDay = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
@@ -47,15 +49,52 @@ export function supervisorTotals(rows) {
   const machines = new Set();
   const t = { supervisors: rows.length, lines: 0, plannedHours: 0, judged: 0, judgedPlannedHours: 0, runHours: 0,
     ran: 0, notRun: 0, lateStarts: 0, silent: 0, untracked: 0, open: 0 };
+  const departments = new Set();
   for (const s of rows) {
+    for (const d of s.departments ?? []) departments.add(d);
     for (const k of ["lines", "plannedHours", "judged", "judgedPlannedHours", "runHours", "ran", "notRun", "lateStarts", "silent", "untracked", "open"]) {
       t[k] += s[k] ?? 0;
     }
     for (const m of s.machines ?? []) machines.add(String(m.reference).toUpperCase());
   }
   t.machines = machines.size;
+  t.departments = departments.size;
+  t.operators = new Set(rows.flatMap((s) => (s.operators ?? []).map((o) => operatorName(o).toLowerCase()))).size;
   t.deliveredPct = t.judgedPlannedHours > 0 ? Math.round((100 * t.runHours) / t.judgedPlannedHours) : null;
   return t;
+}
+
+/**
+ * Each day of the range, for the strip's charts: hours planned and run on the
+ * lines that were judged, and how many supervisors had a line that day.
+ */
+export function supervisorsByDay(data, rows = null) {
+  if (!data?.from || !data?.to) return [];
+  const days = new Map(daysBetween(data.from, data.to).map((day) => [day, { day, planned: 0, run: 0, lines: 0, supervisors: 0 }]));
+  for (const s of rows ?? data.supervisors ?? []) {
+    const onDay = new Set();
+    for (const l of s.history ?? []) {
+      const d = days.get(l.day);
+      if (!d) continue;
+      d.lines += 1;
+      onDay.add(l.day);
+      if (l.state === "ran" || l.state === "not-run") {
+        d.planned += l.plannedHours ?? 0;
+        d.run += l.runHours ?? 0;
+      }
+    }
+    for (const day of onDay) days.get(day).supervisors += 1;
+  }
+  return [...days.values()].map((d) => ({ ...d, run: Math.round(d.run * 10) / 10 }));
+}
+
+/** Departments on the supervisors' rows, biggest first. */
+export function supervisorDepartments(rows) {
+  const counts = new Map();
+  for (const s of rows) for (const d of s.departments ?? []) counts.set(d, (counts.get(d) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([key, count]) => ({ key, label: key ? key.charAt(0) + key.slice(1).toLowerCase().replace(/_/g, " ") : "", count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
 /** A supervisor's lines grouped by day, newest first, for the open row. */
