@@ -22,6 +22,7 @@ import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import TrendStat from "./TrendStat";
 import FuelPeriodPicker from "./FuelPeriodPicker";
+import PlanUpdates from "./PlanUpdates";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
@@ -59,9 +60,8 @@ const GRID_STEP = 15;
 const GRID_STEP_PHONE = 10;
 const BAR_KEYS = new Set(["need", "issued", "shifts", "requested"]);
 const GRID_METRICS = [
-  { key: "need", label: "Need" },
-  { key: "issued", label: "Issued" },
   { key: "shifts", label: "Shifts" },
+  { key: "issued", label: "Issued" },
 ];
 
 export default function FuelScreen() {
@@ -169,8 +169,13 @@ export default function FuelScreen() {
               selected={selected}
               onSelect={setSelected}
               rangePicker={rangePicker}
-              deptPicker={<DeptPicker value={dept} options={deptOptions} total={roster.length} onChange={setDeptPick} />}
+              deptPicker={<DeptPicker value={dept} options={deptOptions}
+                total={{ count: roster.length, shifts: roster.reduce((n, r) => n + (r.shifts ?? 0), 0) }} onChange={setDeptPick} />}
             />
+
+            {/* Plan lines updated in place (pending → approved / rejected), and plans never decided. */}
+            <PlanUpdates companyId={activeCompanyId} from={from} to={to} lines={data?.lines}
+              dept={dept === ALL ? null : dept} today={today} />
           </ErrorBoundary>
         )}
       </div>
@@ -263,13 +268,21 @@ function PumpSummary({ totals, loading }) {
   );
 }
 
+/**
+ * Each department with its plan lines (shifts), as FactorySuite counts them,
+ * and its machines: "Irrigation (35 shifts, 24 machines)" (operator
+ * 2026-11-19: FactorySuite showed 96 approved where we showed 80 machines).
+ */
+const deptCount = ({ shifts, count }) =>
+  `${fmt(shifts)} shift${shifts === 1 ? "" : "s"}, ${fmt(count)} machine${count === 1 ? "" : "s"}`;
+
 function DeptPicker({ value, options, total, onChange }) {
   return (
     <label className="dr-typepick">
       <span className="dr-typepick__label">Department</span>
       <select className="dr-typepick__select" value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value={ALL}>All departments ({fmt(total)})</option>
-        {options.map((o) => <option key={o.key} value={o.key}>{o.label} ({fmt(o.count)})</option>)}
+        <option value={ALL}>All departments ({deptCount(total)})</option>
+        {options.map((o) => <option key={o.key} value={o.key}>{o.label} ({deptCount(o)})</option>)}
       </select>
     </label>
   );
@@ -277,7 +290,7 @@ function DeptPicker({ value, options, total, onChange }) {
 
 function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) {
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState("need");
+  const [sortKey, setSortKey] = useState("shifts");
   const [sortDir, setSortDir] = useState("desc");
   const cardView = useMediaQuery(GRID_CARDS_QUERY);
   const step = cardView ? GRID_STEP_PHONE : GRID_STEP;
@@ -345,9 +358,8 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Status", "status")}
                 {th("Period", "period")}
                 {th("Shifts", "shifts", true)}
-                {th("Requested", "requested", true)}
+                {th("Planned", "requested", true)}
                 {th("Fuel now", "fuelNow", true)}
-                {th("Need", "need", true)}
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
                 {th("Consumed", "consumed", true)}
@@ -390,15 +402,13 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                       {!r.lastDay ? "No plan" : r.firstDay && r.firstDay !== r.lastDay ? `${fmtDay(r.firstDay)} – ${fmtDay(r.lastDay)}` : fmtDay(r.lastDay)}
                     </td>
                     <MetricCell label="Shifts" k="shifts" value={r.shifts} sortKey={sortKey} max={barMax} />
-                    <MetricCell label="Requested" k="requested" value={r.requested} sortKey={sortKey} max={barMax}
-                      suffix={r.fullTanks ? ` + ${r.fullTanks} full` : ""} />
-                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%". Before
-                        Need (operator 2026-11-17): what is in the tank, then what the plan needs. */}
+                    <PlannedCell r={r} sortKey={sortKey} max={barMax} />
+                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%".
+                        The Need column went 2026-11-19 (operator). */}
                     <td className={r.fuelNow != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel now"
                         title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
                       {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
                     </td>
-                    <MetricCell label="Need" k="need" value={r.need} sortKey={sortKey} max={barMax} />
                     <MetricCell label="Issued" k="issued" value={r.issues ? r.issued : null} sortKey={sortKey} max={barMax} />
                     {/* Pump against probe (lib/factoryFuel reconcileFills): totals over the
                         fuellings that have both figures; the machine panel lists each one. */}
@@ -417,7 +427,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={12} className="dr-grid__empty">No machines match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={11} className="dr-grid__empty">No machines match.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -488,6 +498,22 @@ function MetricCell({ label, k, value, sortKey, max, suffix = "" }) {
       </span>
     </td>
   );
+}
+
+/**
+ * What the plan lines asked for (operator 2026-11-19: "rename requested to
+ * planned and fill in the value … either full or the actual value"). A line is
+ * either a full tank or a number of litres; most are full tanks, so "Full"
+ * shows in full, not as a muted note. Several full-tank lines read "Full ×2".
+ */
+function PlannedCell({ r, sortKey, max }) {
+  const full = r.fullTanks ? `Full${r.fullTanks > 1 ? ` ×${r.fullTanks}` : ""}` : "";
+  const title = r.fullTanks ? `${r.fullTanks} full-tank line${r.fullTanks === 1 ? "" : "s"}` : undefined;
+  if (r.requested == null) {
+    return <td className={full ? "dr-num" : "dr-num dr-num--zero"} data-label="Planned" title={title}>{full || "-"}</td>;
+  }
+  return <MetricCell label="Planned" k="requested" value={r.requested} sortKey={sortKey} max={max}
+    suffix={full ? ` + ${full}` : ""} />;
 }
 
 function DayBlock({ day }) {

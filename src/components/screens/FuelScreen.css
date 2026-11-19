@@ -120,3 +120,29 @@
 /* The period (FuelPeriodPicker): Today, 7, 14, 31 days and a day on the
    calendar, side by side on the filter row (Fuel and Staffs › Operators). */
 .fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Plan updates (PlanUpdates.jsx): plan lines the work plan watch updated in
+   place, and plans never decided, in the machine table's card. Drivers page
+   tokens throughout. */
+.plan-changes { margin-top: 16px; }
+.plan-changes__head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap;
+  padding: 14px 16px 10px;
+}
+.plan-changes__title { margin: 0; font-size: 15px; font-weight: 700; }
+.plan-changes__meta { font-size: 12.5px; color: var(--dg-label); }
+.plan-changes__empty { margin: 0; padding: 4px 16px 16px; font-size: 13px; color: var(--dg-label); }
+.plan-changes__none { color: var(--dg-label); }
+.plan-changes__what { white-space: normal; text-align: left; }
+
+.plan-changes__flags {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px;
+  padding: 0 16px 14px;
+}
+.plan-flag { min-width: 0; }
+.plan-flag__title { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.plan-flag__count { color: var(--dg-label); font-weight: 600; }
+.plan-flag__list {
+  margin: 0; padding: 0 0 0 18px; font-size: 12.5px; line-height: 1.5; color: var(--dg-cell);
+  max-height: 168px; overflow-y: auto; overflow-wrap: anywhere;
+}
