@@ -324,6 +324,19 @@ export function pumpTimeMs(at) {
   return Number.isFinite(t) ? t : null;
 }
 
+/**
+ * The colour a variance shows in (operator 2026-11-20): 2 L or less green,
+ * over 2 L up to 5 L amber, past 5 L red. Judged on the litres as recorded,
+ * either way round. null when there is no variance.
+ */
+export const VARIANCE_GREEN_L = 2;
+export const VARIANCE_AMBER_L = 5;
+export const varianceBand = (variance) => {
+  if (variance == null || !Number.isFinite(Number(variance))) return null;
+  const a = Math.round(Math.abs(Number(variance)) * 100) / 100;
+  return a <= VARIANCE_GREEN_L ? "ok" : a <= VARIANCE_AMBER_L ? "warn" : "bad";
+};
+
 /** Over tolerance: more than VARIANCE_LITRES and more than VARIANCE_SHARE of what the pump issued. */
 export const varianceFlagged = (actual, variance) =>
   // On the whole litres the page shows: 20.3 L reads "20 L" and is not past 20 L.

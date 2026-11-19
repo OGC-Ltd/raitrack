@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures, withRefillColumns, withConsumedSinceRefill } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, varianceBand } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -46,13 +46,14 @@ const odometerText = (n, basis) => {
  * A variance (actual fill less probe refill) in words (operator 2026-11-17:
  * "either it tells us probe recorded more than actual fill or less, then in
  * brackets the amount"): "Probe less (20 L)", "Probe more (15 L)", "Same".
- * Judged on the whole litres shown, so a figure never reads as one thing and
- * is coloured as another.
+ * Coloured by varianceBand: 2 L or less green, to 5 L amber, past that red.
  */
 const NBSP = "\u00a0";
 const probeWords = (n) => {
   if (n == null) return "-";
-  const l = Math.round(n);
+  // Unrounded like every litre on the page (operator 2026-11-20), so the
+  // 2 L / 5 L colour bands read true against the figure shown.
+  const l = Math.round(n * 100) / 100;
   // Non-breaking inside each half, so a narrow column wraps only between "Probe less" and "(20 L)".
   return l > 0 ? `Probe${NBSP}less (${fmt(l)}${NBSP}L)` : l < 0 ? `Probe${NBSP}more (${fmt(-l)}${NBSP}L)` : "Same";
 };
@@ -625,9 +626,9 @@ function FillCheck({ m }) {
             </thead>
             <tbody>
               {rows.map((f) => {
-                const bad = f.state === "over" || f.state === "no-probe";
+                const band = f.state === "no-probe" ? "bad" : varianceBand(f.variance);
                 return (
-                  <tr key={f.key} className={bad ? "is-bad" : undefined}>
+                  <tr key={f.key} className={band ? `is-${band}` : undefined}>
                     <td>{f.at != null ? fmtFillWhen.format(f.at) : f.day ? fmtDay(f.day) : "-"}</td>
                     <td className="r">{f.actual != null ? `${fmt(f.actual)} L` : "-"}</td>
                     <td className="r">
@@ -640,7 +641,7 @@ function FillCheck({ m }) {
             </tbody>
             {m.variance != null && (
               <tfoot>
-                <tr className={m.varianceOver ? "is-bad" : undefined}>
+                <tr className={varianceBand(m.variance) ? `is-${varianceBand(m.variance)}` : undefined}>
                   <th scope="row">Total</th>
                   <td className="r">{fmt(m.pumpMatched)} L</td>
                   <td className="r">{fmt(m.probeFilled)} L</td>
@@ -836,7 +837,7 @@ function MachinePanel({ m, from, to, onClose }) {
     plannedLead(m),
     { label: "Issued", value: fmt(m.issued), unit: "L" },
     // Moved here from the grid (operator 2026-11-19); the table below lists each fuelling.
-    { label: "Variance, pump less probe", value: probeWords(m.variance), bad: m.varianceOver, wide: true },
+    { label: "Variance, pump less probe", value: probeWords(m.variance), band: varianceBand(m.variance), wide: true },
   ];
   const lines = [...m.lines].sort((a, b) => b.day.localeCompare(a.day) || (a.shiftNo ?? 1) - (b.shiftNo ?? 1));
 
@@ -878,7 +879,7 @@ function MachinePanel({ m, from, to, onClose }) {
           <h3 className="dr-panel__h">{fmtDay(from)} to {fmtDay(to)}</h3>
           <dl className="dr-window__lead">
             {headline.map((x) => (
-              <div key={x.label} className={x.wide ? "fuel-lead--wide" : undefined}><dt>{x.label}</dt><dd className={x.bad ? "fuel-lead--bad" : undefined}>{x.value}{x.unit && <span className="dr-window__unit"> {x.unit}</span>}</dd></div>
+              <div key={x.label} className={x.wide ? "fuel-lead--wide" : undefined}><dt>{x.label}</dt><dd className={x.band ? `fuel-lead--${x.band}` : undefined}>{x.value}{x.unit && <span className="dr-window__unit"> {x.unit}</span>}</dd></div>
             ))}
           </dl>
         </section>

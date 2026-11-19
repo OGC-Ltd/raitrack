@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -134,6 +134,20 @@ describe("pumpTimeMs", () => {
   it("takes a time with a zone as it is, and nothing as null", () => {
     expect(pumpTimeMs("2026-11-15T06:12:00Z")).toBe(Date.parse("2026-11-15T06:12:00Z"));
     expect(pumpTimeMs(null)).toBeNull();
+  });
+});
+
+describe("varianceBand", () => {
+  it("is green to 2 L, amber to 5 L, red past that, either way round", () => {
+    expect(varianceBand(null)).toBe(null);
+    expect(varianceBand(0)).toBe("ok");
+    expect(varianceBand(2)).toBe("ok");
+    expect(varianceBand(-2)).toBe("ok");
+    expect(varianceBand(2.01)).toBe("warn");
+    expect(varianceBand(-4.5)).toBe("warn");
+    expect(varianceBand(5)).toBe("warn");
+    expect(varianceBand(5.01)).toBe("bad");
+    expect(varianceBand(-6.62)).toBe("bad");
   });
 });
 

@@ -38,9 +38,16 @@
 .fuel-rec td { color: var(--ink); }
 .fuel-rec .r { text-align: right; }
 .fuel-rec tfoot th, .fuel-rec tfoot td { font-weight: 700; border-bottom: 0; border-top: 1.5px solid var(--ink); }
-.fuel-rec tr.is-bad .fuel-rec__var, .fuel-rec tr.is-bad .fuel-rec__none { color: var(--tone-down); font-weight: 700; }
-/* The panel headline's Variance past tolerance (moved from the grid 2026-11-19). */
-.fuel-panel .dr-window__lead dd.fuel-lead--bad { color: var(--tone-down); }
+/* Variance bands (operator 2026-11-20): 2 L or less green, to 5 L amber, past 5 L red. */
+.fuel-panel { --var-ok: var(--accent-ok, #15803d); --var-warn: var(--accent-warn, #b45309); --var-bad: var(--accent-crit, #b91c1c); }
+.app--dark .fuel-panel { --var-ok: #22c55e; --var-warn: #f59e0b; --var-bad: #ef4444; }
+.fuel-rec tr.is-ok .fuel-rec__var { color: var(--var-ok); font-weight: 700; }
+.fuel-rec tr.is-warn .fuel-rec__var { color: var(--var-warn); font-weight: 700; }
+.fuel-rec tr.is-bad .fuel-rec__var, .fuel-rec tr.is-bad .fuel-rec__none { color: var(--var-bad); font-weight: 700; }
+/* The panel headline's Variance (moved from the grid 2026-11-19), in the same bands. */
+.fuel-panel .dr-window__lead dd.fuel-lead--ok { color: var(--var-ok); }
+.fuel-panel .dr-window__lead dd.fuel-lead--warn { color: var(--var-warn); }
+.fuel-panel .dr-window__lead dd.fuel-lead--bad { color: var(--var-bad); }
 .fuel-panel .dr-window__lead .fuel-lead--wide { grid-column: 1 / -1; }
 .fuel-rec__none { color: var(--dg-label); }
 
