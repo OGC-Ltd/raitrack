@@ -5,8 +5,24 @@
 // of the ~36 components that read the fleet (vehicles update on every SSE
 // position flush, so doing it per reader would repeat it per frame).
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useFleetLive } from "../hooks/useFleetLive";
+import { useWorkPlans } from "../hooks/useWorkPlans";
+import { linesByVehicle, withPlanDrivers } from "../lib/shiftOperators";
+
+/** The one company whose FactorySuite keeps work plans: Mufindi, our Kasulu. */
+const PLAN_COMPANY = "kasulu";
+
+/** The time, to the minute, while `on`: a shift starts or ends without a reload. */
+function useMinute(on) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [on]);
+  return now;
+}
 import { useAppSelector } from "./AppContext";
 import { useDismissedIncidents, withoutDismissed } from "../lib/fuelDismissals";
 import { deriveStatus } from "../lib/vehicleMap";
@@ -32,10 +48,18 @@ export function FleetLiveProvider({ children }) {
   // a count or a type chip reads it (operator, 2026-10-27). The server sends
   // only those; this also keeps a fleet cached in the browser from before out.
   const flagged = useMemo(() => (flaggedOnly && vehicleIds ? new Set(vehicleIds) : null), [flaggedOnly, vehicleIds]);
+  // Mufindi's units on a work-plan shift take its operators as their driver
+  // where the tracker has none (operator, 2026-11-19: "the drivers name to
+  // appear even when searching", alike everywhere). lib/shiftOperators.
+  const planDrivers = activeCompanyId === PLAN_COMPANY;
+  const workPlans = useWorkPlans(live.orgId, planDrivers);
+  const byVehicle = useMemo(() => (planDrivers ? linesByVehicle(workPlans.data) : null), [planDrivers, workPlans.data]);
+  const minute = useMinute(Boolean(byVehicle?.size));
   const vehicles = useMemo(() => {
     const kept = withoutDismissed(live.vehicles, dismissed, deriveStatus);
-    return flagged && kept ? kept.filter((v) => flagged.has(v.vehicleId)) : kept;
-  }, [live.vehicles, dismissed, flagged]);
+    const mine = flagged && kept ? kept.filter((v) => flagged.has(v.vehicleId)) : kept;
+    return withPlanDrivers(mine, byVehicle, minute);
+  }, [live.vehicles, dismissed, flagged, byVehicle, minute]);
   // Repair notices only without notification:all_events (since 2026-11-14).
   const feed = useMemo(() => (repairFeedOnly ? repairOnly(live.feed) : live.feed), [repairFeedOnly, live.feed]);
   const fleet = useMemo(
