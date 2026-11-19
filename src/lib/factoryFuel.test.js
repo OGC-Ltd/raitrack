@@ -336,6 +336,7 @@ describe("refillFigures", () => {
       odometerBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" },
       odometerAfter: 4215.2,
       trackerAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z" },
+      meterAfter: null,
       issued: 543,
       tracked: true,
     }]);
@@ -393,6 +394,28 @@ describe("withRefillColumns", () => {
     const [out] = withRefillColumns([row], meters);
     expect(out).toMatchObject({ fuelBefore: 78.8, fuelAfter: 641.9, odometerBefore: 4214.1, refillCount: 2 });
     expect(out.lastRefill.id).toBe("b");
+  });
+
+  it("takes Odometer after as the tracker's meter now, or before the next refill, never below the before", () => {
+    let row = { reference: "EX-26", lines: [], pumpIssues: [], fills: [] };
+    row = fills(row, "a", "2026-11-19T04:41:00Z", 226.7, 376.4);
+    row = fills(row, "b", "2026-11-19T08:42:00Z", 148.7, 377.1);
+    row.pumpIssues[1].readings = { physical: 1891.52 };
+    const at = (v, t = "2026-11-19T05:42:00Z") => ({ value: v, at: t });
+    const meters = { refills: [
+      { issueId: "a", tracked: true, meterBefore: at(2306.2, "2026-11-19T04:40:00Z"), meterAfter: null, shift: null },
+      { issueId: "b", tracked: true, meterBefore: at(2310.9), meterAfter: at(2311), shift: null },
+    ] };
+    const [out] = withRefillColumns([{ ...row, meterNow: at(2318.4, "2026-11-20T10:00:00Z") }], meters);
+    // the latest: the meter now, not the pump's 1,891.52 (another meter)
+    expect(out).toMatchObject({ odometerBefore: 2310.9, odometerAfter: 2318.4 });
+    expect(out.lastRefill.meterAfter.source).toBe("now");
+    // the earlier: the meter just before the refill that followed it
+    const all = refillFigures(row, meters);
+    expect(all[1].meterAfter).toMatchObject({ value: 2310.9, source: "next-refill" });
+    // no meter now: blank; a meter now below the before: a bad reading, blank
+    expect(withRefillColumns([row], meters)[0].odometerAfter).toBeNull();
+    expect(withRefillColumns([{ ...row, meterNow: at(2300) }], meters)[0].odometerAfter).toBeNull();
   });
 
   it("counts Consumed from the latest refill, to now or to the period's last day", () => {
