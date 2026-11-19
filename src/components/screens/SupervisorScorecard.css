@@ -1,31 +1,35 @@
-/* Scorecard › Supervisors. Everything else comes from DriverScorecard.css
- * and DriversScreen.css (the grid, and the `dr-panel` a row opens); only the
- * grid's machine sub-line and the panel's outcome counts are its own, on
- * tokens those files already declare. */
-
-.dr-grid.sv-grid td .sv-sub {
-  display: block;
-  font-size: 11px; font-weight: 400;
-  color: var(--dg-label);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 120px; margin-left: auto;
-}
+/* Hallmark · redesign · full · scope: app · design-system: DriversScreen.css (the Operators tab's strip, grid and panel) · built: the project
+ * critique: P5 H4 E5 S4 R5 V4 · the screen takes the Operators tab's grammar whole; nothing here draws a part of its own beyond two panel rules
+ */
+/* Hallmark · waive 26b · every control is a shared DriversScreen.css class (dr-chip, dr-pager__btn, dr-grid__sort) · that file draws their pressed and disabled states for the whole Staffs page */
+/*
+ *
+ * Scorecard › Supervisors is drawn from DriversScreen.css and FuelScreen.css,
+ * exactly as Staffs › Operators is: the four-cell `dr-strip`, the
+ * `dr-filters` with Rank by chips, the ranked `dr-grid` and the `dr-panel` a
+ * row opens. Only the panel's outcome counts and its wrapping are its own,
+ * on tokens those files declare. */
 
 /* The panel's outcome counts, two to a row under the headline figures. */
 .sv-outcomes {
-  margin: 10px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px;
-  font-size: 12px; color: var(--dg-cell, var(--text-2));
+  margin: 12px 0 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 16px;
+  font-size: 12px; color: var(--text-2);
 }
-.sv-outcomes > div { display: flex; justify-content: space-between; gap: 8px; }
-.sv-outcomes dt { color: var(--text-2); }
+.sv-outcomes > div { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
 .sv-outcomes dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* The panel never scrolls sideways (operator 2026-11-19): rows without a date
  * block take the whole width, and long machine names, activities, places and
  * operator lists wrap instead of running off the edge. */
-.sv-panel .dr-panel__body { overflow-x: hidden; }
+.sv-panel .dr-panel__body { overflow-x: clip; }
 .sv-panel .dr-case--nodate { grid-template-columns: minmax(0, 1fr); }
 .sv-panel .dr-case__line { flex-wrap: wrap; row-gap: 2px; }
 .sv-panel .dr-case__plate { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 .sv-panel .dr-case__sub { white-space: normal; overflow-wrap: anywhere; }
 .sv-panel .dr-panel__note { overflow-wrap: anywhere; }
+
+/* Focus, instant, on what this view adds to the shared grammar: the grid's
+ * rows, the panel's close, the CSV and the Who chips already carry
+ * DriversScreen.css's ring; restated here so the view stands on its own. */
+.drivers-page .dr-grid tbody tr:focus-visible,
+.sv-panel .dr-panel__x:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; transition: none; }

@@ -3,6 +3,24 @@
     "mode": "redesign",
     "depth": "full",
     "scope": "app",
+    "shape": "Operators tab grammar (strip, ranked grid, side panel)",
+    "theme": "project (DriversScreen.css)",
+    "prompt": "Scorecard Supervisors view in the Operators page design",
+    "waived": [
+      "26b"
+    ],
+    "sections": [
+      "strip",
+      "filters",
+      "grid",
+      "panel"
+    ],
+    "date": "2026-11-19"
+  },
+  {
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
     "shape": "app screen",
     "theme": "in-project tokens (dr-strip, sp4 bars)",
     "entry": "Workshop › Auto Workshop › tab layout",

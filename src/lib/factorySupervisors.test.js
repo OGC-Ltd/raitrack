@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { linesByDay, operatorName, shiftLabel, supervisorPeriods, supervisorTotals } from "./factorySupervisors";
+import { linesByDay, operatorName, shiftLabel, supervisorPeriods, supervisorsByDay, supervisorTotals } from "./factorySupervisors";
 
 const sup = (name, extra = {}) => ({
   key: name.toLowerCase(), name, lines: 2, plannedHours: 18, judged: 2, judgedPlannedHours: 18, runHours: 9,
@@ -11,6 +11,19 @@ describe("factorySupervisors", () => {
     const t = supervisorTotals([sup("A"), sup("B", { machines: [{ reference: "ex-01" }, { reference: "TR-02" }], judgedPlannedHours: 6, runHours: 6, untracked: 3 })]);
     expect(t).toMatchObject({ supervisors: 2, lines: 4, machines: 2, runHours: 15, judgedPlannedHours: 24, deliveredPct: 63, untracked: 3, notRun: 2 });
     expect(supervisorTotals([]).deliveredPct).toBeNull();
+  });
+
+  it("charts each day: judged hours planned and run, and supervisors on a line", () => {
+    const data = { from: "2026-11-13", to: "2026-11-15" };
+    const rows = [
+      { history: [{ day: "2026-11-13", state: "ran", plannedHours: 10, runHours: 8 }, { day: "2026-11-13", state: "untracked", plannedHours: 8 }] },
+      { history: [{ day: "2026-11-14", state: "not-run", plannedHours: 6, runHours: 0.1 }] },
+    ];
+    expect(supervisorsByDay(data, rows)).toEqual([
+      { day: "2026-11-13", planned: 10, run: 8, lines: 2, supervisors: 1 },
+      { day: "2026-11-14", planned: 6, run: 0.1, lines: 1, supervisors: 1 },
+      { day: "2026-11-15", planned: 0, run: 0, lines: 0, supervisors: 0 },
+    ]);
   });
 
   it("groups a supervisor's lines by day, newest first", () => {
