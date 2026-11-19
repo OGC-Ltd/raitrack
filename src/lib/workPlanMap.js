@@ -237,6 +237,7 @@ function tally(units, plans, lines) {
   return {
     counts: { plans: plans.length, units: units.length, lines: lines.length,
               pendingLines: lines.filter((l) => planStage(l.planStatus) === "PENDING").length,
+              approvedUnits: units.filter((u) => u.tone !== "pending").length,
               here: count("here"), away: count("away"), pending: count("pending"), offshift: count("offshift"), silent: count("silent"), unplaced: count("unplaced"),
               onShift: units.filter((u) => u.onShift).length },
     statuses,
