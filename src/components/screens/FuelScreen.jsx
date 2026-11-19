@@ -22,7 +22,6 @@ import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import TrendStat from "./TrendStat";
 import FuelPeriodPicker from "./FuelPeriodPicker";
-import PlanUpdates from "./PlanUpdates";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
@@ -172,10 +171,6 @@ export default function FuelScreen() {
               deptPicker={<DeptPicker value={dept} options={deptOptions}
                 total={{ count: roster.length, shifts: roster.reduce((n, r) => n + (r.shifts ?? 0), 0) }} onChange={setDeptPick} />}
             />
-
-            {/* Plan lines updated in place (pending → approved / rejected), and plans never decided. */}
-            <PlanUpdates companyId={activeCompanyId} from={from} to={to} lines={data?.lines}
-              dept={dept === ALL ? null : dept} today={today} />
           </ErrorBoundary>
         )}
       </div>
