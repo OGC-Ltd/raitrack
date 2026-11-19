@@ -116,3 +116,7 @@
   .dr-grid.fuel-grid tbody td::before { font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; }
   .dr-grid.fuel-grid .dr-when { white-space: normal; }
 }
+
+/* The period (FuelPeriodPicker): Today, 7, 14, 31 days and a day on the
+   calendar, side by side on the filter row (Fuel and Staffs › Operators). */
+.fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }

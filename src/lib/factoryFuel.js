@@ -230,6 +230,18 @@ export function machineState(r) {
   return { label: words, tone: r.status === "BROKEN_DOWN" ? "terminated" : "suspended" };
 }
 
+/**
+ * The days a Fuel or Operators period reads (operator, 19 Nov 2026: "select a
+ * custom day and by default it should be on today"). `pick` is "today", a
+ * number of days (7, 14, 31: fuelRange, so tomorrow's plans are in), or one
+ * fleet day ('YYYY-MM-DD').
+ */
+export function periodRange(pick, now = Date.now()) {
+  if (typeof pick === "number") return fuelRange(pick, now);
+  const day = pick === "today" ? new Date(now + 3 * 3_600_000).toISOString().slice(0, 10) : pick;
+  return { from: day, to: day };
+}
+
 /** The range that ends on the plans' day: tomorrow is planned today, so it is in. */
 export function fuelRange(days, now = Date.now()) {
   const to = new Date(now + 3 * 3_600_000 + 86_400_000).toISOString().slice(0, 10);

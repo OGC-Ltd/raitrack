@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed } from "./factoryFuel";
+import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -267,5 +267,18 @@ describe('withConsumed', () => {
     expect(withConsumed([row({ vehicleId: 'other' })], days, [], '2026-11-18')[0].consumed).toBeNull();
     expect(withConsumed([row({ firstDay: '2026-11-19', lastDay: '2026-11-19' })], days, [], '2026-11-18')[0].consumed).toBeNull();
     expect(withConsumed([row({})], days, [], '2026-11-18')[0].consumed).toBeNull();
+  });
+});
+
+describe("periodRange", () => {
+  const now = Date.parse("2026-11-19T22:30:00Z"); // 01:30 on the 20th in EAT
+  it("reads Today as the fleet day", () => {
+    expect(periodRange("today", now)).toEqual({ from: "2026-11-20", to: "2026-11-20" });
+  });
+  it("reads a picked day as that day", () => {
+    expect(periodRange("2026-11-03", now)).toEqual({ from: "2026-11-03", to: "2026-11-03" });
+  });
+  it("reads a number of days as fuelRange", () => {
+    expect(periodRange(7, now)).toEqual(fuelRange(7, now));
   });
 });

@@ -12,12 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryOperators } from "../../api/factoryOperators";
-import { fuelRange, issueFlagged } from "../../lib/factoryFuel";
+import { periodRange, issueFlagged } from "../../lib/factoryFuel";
 import { operatorsByDay, operatorTotals, operatorDepartments, machineKind, kindMix, sentence, nameCase, initials } from "../../lib/factoryOperators";
 import { planStage } from "../../lib/workPlanMap";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import TrendStat from "./TrendStat";
+import FuelPeriodPicker from "./FuelPeriodPicker";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
@@ -31,7 +32,6 @@ const fmtDay = (day) =>
 const clock = (s) => /[T ](\d{2}:\d{2})/.exec(String(s ?? ""))?.[1] ?? "";
 const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? "" : "s"}`;
 
-const RANGES = [[7, "7 days"], [14, "14 days"], [31, "31 days"]];
 const ALL = "__all";
 const GRID_CARDS_QUERY = "(max-width: 700px)";
 const GRID_STEP = 15;
@@ -47,12 +47,12 @@ const GRID_METRICS = [
 export function operatorsSubtitle({ data, rows, loading, company }) {
   if (loading && !data) return "Loading…";
   if (!data?.from) return company;
-  return `${plural(rows.length, "operator")} · ${fmtDay(data.from)} to ${fmtDay(data.to)} · ${company}`;
+  return `${plural(rows.length, "operator")} · ${data.from === data.to ? fmtDay(data.from) : `${fmtDay(data.from)} to ${fmtDay(data.to)}`} · ${company}`;
 }
 
 export default function OperatorsView({ companyId, company, onSubtitle }) {
-  const [days, setDays] = useState(14);
-  const { from, to } = useMemo(() => fuelRange(days), [days]);
+  const [pick, setPick] = useState("today");
+  const { from, to } = useMemo(() => periodRange(pick), [pick]);
   const { data, loading, error, retry } = useApiData(
     () => getFactoryOperators({ companyId, from, to }),
     [companyId, from, to],
@@ -82,12 +82,7 @@ export default function OperatorsView({ companyId, company, onSubtitle }) {
   const busy = loading && !data;
 
   const rangePicker = (
-    <span className="dr-seg" role="group" aria-label="Days shown">
-      {RANGES.map(([n, label]) => (
-        <button key={n} type="button" aria-pressed={days === n}
-          className={`dr-chip${days === n ? " dr-chip--active" : ""}`} onClick={() => setDays(n)}>{label}</button>
-      ))}
-    </span>
+    <FuelPeriodPicker pick={pick} onPick={setPick} chips />
   );
 
   if (error) return <LoadError label="Operators" onRetry={retry} fullSection />;
