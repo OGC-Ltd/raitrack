@@ -855,7 +855,23 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           </div>
         )}
 
-        {/* Trip: from, then to, as two stops on one line */}
+        {/* On a work plan shift (Mufindi): the shift in place of the trip
+            (operator, 2026-11-19), in the same two lines. lib/shiftOperators */}
+        {vehicle.planShift ? (
+          <ol className="vh-route vh-route--shift" aria-label="Shift">
+            <li className="vh-stop vh-stop--from">
+              <span className="vh-stop-lbl">Shift</span>
+              <span className="vh-stop-val" title={vehicle.planShift.planCode ? `Work plan ${vehicle.planShift.planCode}` : ''}>
+                {[vehicle.planShift.shift, vehicle.planShift.workLocation].filter(Boolean).join(' · ') || 'On shift'}
+              </span>
+            </li>
+            <li className={`vh-stop vh-stop--to${vehicle.planShift.activity ? '' : ' vh-stop--none'}`}>
+              <span className="vh-stop-lbl">Activity</span>
+              <span className="vh-stop-val" title={vehicle.planShift.activity ?? ''}>{vehicle.planShift.activity ?? 'Not on the plan'}</span>
+            </li>
+          </ol>
+        ) : (
+        /* Trip: from, then to, as two stops on one line */
         <ol className="vh-route" aria-label="Trip">
           <li className="vh-stop vh-stop--from">
             {/* Departed when FactorySuite dispatched it; its own first
@@ -872,6 +888,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           </li>
           <TripTrafficEta vehicle={vehicle} />
         </ol>
+        )}
 
         {/* Quick actions */}
         <div className="vh-actions">

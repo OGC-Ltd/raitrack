@@ -213,6 +213,9 @@
   text-overflow: ellipsis;
 }
 .vh-stop--none .vh-stop-val { color: var(--vh-mut); font-weight: 400; }
+/* The work plan shift (Mufindi): a plan's activity runs long ("Factory - Sugar
+   Plant_Clarification…"), so its lines wrap in full rather than end in "…" */
+.vh-route--shift .vh-stop-val { white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.35; }
 
 /* Live-traffic arrival (TripTrafficEta). The line from Departed is drawn by
    --from::after; the destination now gets one down to this stop too. */

@@ -44,12 +44,20 @@ describe('withPlanDrivers', () => {
     expect(out[2]).toBe(fleet[2]);
   });
 
-  it("keeps a unit's own driver, and returns the same fleet when nothing changes", async () => {
+  it("keeps a unit's own driver but still gives it the shift, and returns the same fleet when nothing changes", async () => {
     const { withPlanDrivers, linesByVehicle } = await import('./shiftOperators');
-    const own = [{ vehicleId: 'v1', driver: 'JANE DOE' }];
-    expect(withPlanDrivers(own, linesByVehicle(data), NOW)).toBe(own);
+    const own = withPlanDrivers([{ vehicleId: 'v1', driver: 'JANE DOE' }], linesByVehicle(data), NOW);
+    expect(own[0]).toMatchObject({ driver: 'JANE DOE', planShift: { shift: '06:00–16:00', workLocation: 'Zone 4' } });
+    expect(own[0].driverSource).toBeUndefined();
     const offShift = [{ vehicleId: 'v1', driver: null }];
     expect(withPlanDrivers(offShift, linesByVehicle(data), Date.parse('2026-11-19T20:00:00Z'))).toBe(offShift);
     expect(withPlanDrivers(offShift, null, NOW)).toBe(offShift);
+  });
+
+  it('gives the shift to a unit whose line names nobody, leaving it Unassigned', async () => {
+    const { withPlanDrivers, linesByVehicle } = await import('./shiftOperators');
+    const nobody = plans('APPROVED', [line({ operator: '' })]);
+    const out = withPlanDrivers([{ vehicleId: 'v1', driver: 'Unassigned' }], linesByVehicle(nobody), NOW);
+    expect(out[0]).toMatchObject({ driver: 'Unassigned', planShift: { names: [], activity: 'Cane haulage' } });
   });
 });

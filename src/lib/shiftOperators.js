@@ -38,12 +38,13 @@ export function linesByVehicle(data) {
   return out;
 }
 
-function crewOf(lines, now) {
+/** The line on shift now; `anyone`: kept even when it names no operator (for the shift itself). */
+function crewOf(lines, now, { anyone = false } = {}) {
   if (!lines?.length) return null;
   const { line, onShift } = lineNow(lines, now);
   if (!onShift) return null;
   const names = [...new Set([line.operator, line.secondOperator, line.thirdOperator].map(operatorName).filter(Boolean))];
-  if (!names.length) return null;
+  if (!names.length && !anyone) return null;
   return { names, shift: shiftText(line), activity: line.activity ?? null, workLocation: line.workLocation ?? null, planCode: line.planCode ?? null };
 }
 
@@ -61,10 +62,12 @@ export function withPlanDrivers(vehicles, byVehicle, now = Date.now()) {
   if (!vehicles?.length || !byVehicle?.size) return vehicles;
   let changed = false;
   const out = vehicles.map((v) => {
-    if (hasOwnDriver(v)) return v;
-    const crew = crewOf(byVehicle.get(v.vehicleId), now);
+    const crew = crewOf(byVehicle.get(v.vehicleId), now, { anyone: true });
     if (!crew) return v;
     changed = true;
+    // A driver of its own stays, as does a line that names nobody; the shift is
+    // still the unit's (the side panel's trip box shows it)
+    if (hasOwnDriver(v) || !crew.names.length) return { ...v, planShift: crew };
     return { ...v, driver: crew.names.join(', '), driverSource: 'work-plan', planShift: crew };
   });
   return changed ? out : vehicles;
