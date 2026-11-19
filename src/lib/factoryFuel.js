@@ -359,6 +359,24 @@ function probeFill(f) {
  * @param {object} row     a reconcileFills row (fills, pumpIssues, lines)
  * @param {object} server  getFuelRefills' answer, or null while it loads or when it failed
  */
+/**
+ * The meter after a refill, on the same meter as the one before it. Before and
+ * after can never go backwards (operator 2026-11-20, EX-26: before 2,310.9 h
+ * from the tracker, after 1,891.5 h keyed in at the pump — two different
+ * meters). So the after is the tracker's whenever the before is the tracker's;
+ * the pump's reading stands in only when there is no tracker reading before
+ * the refill to compare it with. An after below the before is a bad reading
+ * and shows as nothing.
+ */
+function meterAfter(t, pump) {
+  const before = t?.meterBefore?.value ?? null;
+  const after = t?.meterAfter
+    ? { value: t.meterAfter.value, at: t.meterAfter.at ?? null, source: "tracker" }
+    : before == null && pump != null ? { value: pump, at: null, source: "pump" } : null;
+  if (!after || (before != null && after.value < before)) return null;
+  return after;
+}
+
 export function refillFigures(row, server) {
   const issueOf = new Map((row?.pumpIssues ?? []).map((i) => [i.id, i]));
   const lineOf = new Map((row?.lines ?? []).filter((l) => l.requestId).map((l) => [l.requestId, l]));
@@ -395,6 +413,7 @@ export function refillFigures(row, server) {
         odometerBefore: t?.meterBefore ?? null,
         odometerAfter: i.readings?.physical ?? null,
         trackerAfter: t?.meterAfter ?? null,
+        meterAfter: meterAfter(t, i.readings?.physical),
         issued: f.actual ?? i.litres ?? null,
         tracked: t ? Boolean(t.tracked) : null,
       };
@@ -424,6 +443,7 @@ export function withRefillColumns(rows, meters) {
       fuelBefore: last?.fuelBefore?.litres ?? null,
       fuelAfter: last?.fuelAfter?.litres ?? null,
       odometerBefore: last?.odometerBefore?.value ?? null,
+      odometerAfter: last?.meterAfter?.value ?? null,
     };
   });
 }

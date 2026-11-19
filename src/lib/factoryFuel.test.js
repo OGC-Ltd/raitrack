@@ -336,6 +336,7 @@ describe("refillFigures", () => {
       odometerBefore: { value: 4214.1, at: "2026-11-19T05:30:00Z" },
       odometerAfter: 4215.2,
       trackerAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z" },
+      meterAfter: { value: 4214.1, at: "2026-11-19T06:10:00Z", source: "tracker" },
       issued: 543,
       tracked: true,
     }]);
@@ -393,6 +394,22 @@ describe("withRefillColumns", () => {
     const [out] = withRefillColumns([row], meters);
     expect(out).toMatchObject({ fuelBefore: 78.8, fuelAfter: 641.9, odometerBefore: 4214.1, refillCount: 2 });
     expect(out.lastRefill.id).toBe("b");
+  });
+
+  it("takes Odometer after on the same meter as Odometer before, never below it", () => {
+    const row = fills({ reference: "EX-26", lines: [], pumpIssues: [], fills: [] }, "b", "2026-11-19T08:42:00Z", 148.7, 377.1);
+    row.pumpIssues[0].readings = { physical: 1891.52 };
+    const at = (v) => ({ value: v, at: "2026-11-19T05:42:00Z" });
+    const read = (t) => withRefillColumns([row], { refills: [{ issueId: "b", tracked: true, meterBefore: null, meterAfter: null, shift: null, ...t }] })[0];
+    // EX-26: tracker 2,310.9 → 2,311.0, pump keyed 1,891.52: the tracker's after
+    expect(read({ meterBefore: at(2310.9), meterAfter: at(2311) })).toMatchObject({ odometerBefore: 2310.9, odometerAfter: 2311 });
+    expect(read({ meterBefore: at(2310.9), meterAfter: at(2311) }).lastRefill.meterAfter.source).toBe("tracker");
+    // tracker before but none after: blank, never the pump's other meter
+    expect(read({ meterBefore: at(2310.9) })).toMatchObject({ odometerBefore: 2310.9, odometerAfter: null });
+    // no tracker before: the pump's reading stands
+    expect(read({})).toMatchObject({ odometerBefore: null, odometerAfter: 1891.52 });
+    // an after below the before is a bad reading
+    expect(read({ meterBefore: at(2310.9), meterAfter: at(2300) }).odometerAfter).toBeNull();
   });
 
   it("counts Consumed from the latest refill, to now or to the period's last day", () => {
