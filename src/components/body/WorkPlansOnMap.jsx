@@ -577,7 +577,7 @@ export default function WorkPlansOnMap({ map, maps, DomMarker, data, loading, er
           {view?.day && <span className="wpm-fact"><i className="ti ti-calendar" aria-hidden="true" />{dayLabel(view.day)}</span>}
           {full && (filtered
             ? <span className="wpm-chip wpm-chip--filter"><b>{shown.length}</b> {[tone && ROW_STATE[tone].toLowerCase(), place && `at ${place.name}`].filter(Boolean).join(" ")}</span>
-            : <span className="wpm-chip" title={`${c.linesHere} of ${c.lines} plan lines have their machine at the line's work location now; ${c.here} of ${c.units} machines are at the location of their current shift`}><b>{c.linesHere}</b> of {c.lines} plan lines at their location</span>)}
+            : <span className="wpm-chip" title={`${c.here} of the ${c.approvedUnits} machines on an approved plan are at the work location their plan assigns them now (${c.lines} plan lines)`}><b>{c.here}</b> of {c.approvedUnits} approved machines at their assigned place</span>)}
         </div>
       </header>
 

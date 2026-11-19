@@ -147,17 +147,6 @@ export function workPlanView(data, vehicles, features, now = Date.now(), drawing
     };
   }).sort(byDepartmentThenHere);
 
-  // Each plan line at its own work location now: its machine reporting and
-  // inside that line's location, on an approved plan. The card counts these
-  // against the plan lines, as the tabs do (a machine on the day and the
-  // night shift at the same place is two lines there).
-  const unitByKey = new Map(units.map((u) => [u.key, u]));
-  for (const l of lines) {
-    const u = unitByKey.get(l.vehicleId ?? `m:${l.machine}`);
-    const fence = shapeOf(l.fenceId, l.workLocation)?.feature ?? null;
-    l.here = Boolean(u?.position && u.online && fence && planStage(l.planStatus) !== "PENDING" && fenceContains(u.position, fence));
-  }
-
   // Each placed work location with how many of its machines are on it
   const places = new Map();
   for (const loc of data.locations ?? []) {
@@ -248,7 +237,7 @@ function tally(units, plans, lines) {
   return {
     counts: { plans: plans.length, units: units.length, lines: lines.length,
               pendingLines: lines.filter((l) => planStage(l.planStatus) === "PENDING").length,
-              linesHere: lines.filter((l) => l.here).length,
+              approvedUnits: units.filter((u) => u.tone !== "pending").length,
               here: count("here"), away: count("away"), pending: count("pending"), offshift: count("offshift"), silent: count("silent"), unplaced: count("unplaced"),
               onShift: units.filter((u) => u.onShift).length },
     statuses,
