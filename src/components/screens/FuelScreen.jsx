@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, issueFlagged, withFuelNow, reconcileFills, withConsumed } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -21,6 +21,7 @@ import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import TrendStat from "./TrendStat";
+import FuelPeriodPicker from "./FuelPeriodPicker";
 import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
@@ -52,7 +53,6 @@ const clock = (s) => /[T ](\d{2}:\d{2})/.exec(String(s ?? ""))?.[1] ?? "";
 /** The machine's kind as the register's code starts: "EX" for EX-10, "CTR" for CTR-02. */
 const badge = (ref) => (/^[A-Z]+/i.exec(ref)?.[0] ?? ref).slice(0, 3).toUpperCase();
 
-const RANGES = [[7, "7 days"], [14, "14 days"], [31, "31 days"]];
 const ALL = "__all";
 const GRID_CARDS_QUERY = "(max-width: 700px)";
 const GRID_STEP = 15;
@@ -67,8 +67,8 @@ const GRID_METRICS = [
 export default function FuelScreen() {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const { activeCompany } = useCompanies();
-  const [days, setDays] = useState(7);
-  const { from, to } = useMemo(() => fuelRange(days), [days]);
+  const [pick, setPick] = useState("today");
+  const { from, to } = useMemo(() => periodRange(pick), [pick]);
 
   const { data, loading, error, retry } = useApiData(
     () => getFactoryFuel({ companyId: activeCompanyId, from, to }),
@@ -121,6 +121,9 @@ export default function FuelScreen() {
   const half = Math.max(1, Math.floor(byDay.length / 2));
   const sub = byDay.length > 1 ? `last ${half}d vs previous ${half}d` : "";
 
+  // On the filter row, as on Staffs › Operators (operator, 19 Nov 2026).
+  const rangePicker = <FuelPeriodPicker pick={pick} onPick={setPick} chips />;
+
   return (
     <div className="drivers-page fuel-page">
       <div className="drivers-page__inner">
@@ -130,15 +133,7 @@ export default function FuelScreen() {
             <div className="dr-subtitle">
               {loading && !data
                 ? "Loading…"
-                : `${fmt(rows.length)} machine${rows.length === 1 ? "" : "s"}${deptName ? ` · ${deptName}` : ""} · ${fmtDay(from)} to ${fmtDay(to)} · ${company}`}            </div>
-          </div>
-          <div className="dr-viewswitch" role="group" aria-label="Days shown">
-            {RANGES.map(([n, label]) => (
-              <button key={n} type="button" aria-pressed={days === n}
-                className={`dr-viewswitch__btn${days === n ? " is-on" : ""}`} onClick={() => setDays(n)}>
-                {label}
-              </button>
-            ))}
+                : `${fmt(rows.length)} machine${rows.length === 1 ? "" : "s"}${deptName ? ` · ${deptName}` : ""} · ${from === to ? fmtDay(from) : `${fmtDay(from)} to ${fmtDay(to)}`} · ${company}`}            </div>
           </div>
         </div>
 
@@ -148,8 +143,11 @@ export default function FuelScreen() {
           <TabEmptyState icon={<i className="ti ti-gas-station" aria-hidden="true" />} title="Fuel"
             hint="This organisation's FactorySuite factory does not fuel by work plan, so there is nothing to show here." />
         ) : isEmpty ? (
-          <TabEmptyState icon={<i className="ti ti-gas-station" aria-hidden="true" />} title="Fuel"
-            hint={`No work plans or pump issues in FactorySuite from ${fmtDay(from)} to ${fmtDay(to)}.`} />
+          <>
+            <div className="dr-filters">{rangePicker}</div>
+            <TabEmptyState icon={<i className="ti ti-gas-station" aria-hidden="true" />} title="Fuel"
+              hint={`No work plans or pump issues in FactorySuite from ${fmtDay(from)} to ${fmtDay(to)}.`} />
+          </>
         ) : (
           <ErrorBoundary label="Fuel">
             <div className="dr-layout">
@@ -170,6 +168,7 @@ export default function FuelScreen() {
               rows={tableRows}
               selected={selected}
               onSelect={setSelected}
+              rangePicker={rangePicker}
               deptPicker={<DeptPicker value={dept} options={deptOptions} total={roster.length} onChange={setDeptPick} />}
             />
           </ErrorBoundary>
@@ -276,7 +275,7 @@ function DeptPicker({ value, options, total, onChange }) {
   );
 }
 
-function MachinesSection({ rows, selected, onSelect, deptPicker }) {
+function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("need");
   const [sortDir, setSortDir] = useState("desc");
@@ -322,6 +321,7 @@ function MachinesSection({ rows, selected, onSelect, deptPicker }) {
             ))}
           </span>
         </div>
+        {rangePicker}
         {deptPicker}
         <div className="dr-searchwrap">
           <svg className="dr-searchwrap__icon" width="13" height="13" viewBox="0 0 24 24"

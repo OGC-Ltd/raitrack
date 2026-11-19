@@ -35,6 +35,7 @@ function periods(now = Date.now()) {
   const monday = Date.parse(`${today}T00:00:00Z`) - dow * DAY;
   const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
   return [
+    { key: "today", label: "Today", from: today, to: today },
     { key: "7d", label: "7 days", from: iso(Date.parse(`${today}T00:00:00Z`) - 6 * DAY), to: today },
     { key: "week", label: "This week", from: iso(monday), to: today },
     { key: "last", label: "Last week", from: iso(monday - 7 * DAY), to: iso(monday - DAY) },
@@ -133,8 +134,8 @@ const SORTS = {
 export default function DriverScorecard() {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const options = useMemo(() => periods(), []);
-  const today = options[0].to;
-  const [periodKey, setPeriodKey] = useState("7d");
+  const today = options[0].to; // options[0] is Today
+  const [periodKey, setPeriodKey] = useState("today");
   // A day or a range picked on the calendar, when no quick pick is in use.
   const [custom, setCustom] = useState(null);
   // Drivers ticked for the PDF; none ticked means all of them.
