@@ -16,6 +16,7 @@
 import { useAppSelector, useAppActions } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { NAV_ITEMS } from './SidePanel';
+import { withOrgLabel } from '../../lib/orgLabels';
 import './MobileTabBar.css';
 
 /* `fleet` carries a map icon for the case where it is NOT in the centre — the
@@ -57,14 +58,14 @@ export function barTabs(allowed) {
 export default function MobileTabBar() {
   const desktopActiveTab = useAppSelector((a) => a.desktopActiveTab);
   const { setDesktopActiveTab } = useAppActions();
-  const { can } = usePermissions();
+  const { can, orgCode } = usePermissions();
 
   /* The list and its permission come from the shared navigation catalogue. */
   const allowed = (key) => {
     const perm = permissionFor(key);
     return Boolean(perm) && can(perm);
   };
-  const tabs = barTabs(allowed);
+  const tabs = barTabs(allowed).map((tab) => withOrgLabel(tab, orgCode));
   if (tabs.length === 0) return null;
 
   return (

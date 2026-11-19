@@ -29,6 +29,7 @@ import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { DriversIcon } from "../footer/NavIcons";
+import { navLabel, peopleWords } from "../../lib/orgLabels";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 import { fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
 
@@ -332,6 +333,7 @@ export default function DriversScreen() {
   // screen, so the weighbridge tonnes and the vehicle-type filter carry over.
   const fleetName = activeCompany?.name || "Fleet";
   const orgCode = activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id] ?? null;
+  const who = peopleWords(orgCode);
   const savePdf = async (doc) => {
     const orgId = await resolveOrgId(activeCompanyId);
     if (!orgId) throw new Error("This company has no backend organisation to report on");
@@ -377,21 +379,21 @@ export default function DriversScreen() {
         {(!isEmpty || view !== "analytics" || operatorsTab) && (
           <div className="dr-head">
             <div>
-              <h1 className="dr-title">{view === "scorecard" ? "Driver Scorecard" : view === "operators" ? "Operators" : "Driver Analytics"}</h1>
+              <h1 className="dr-title">{view === "scorecard" ? `${who.title} Scorecard` : view === "operators" ? "Operators" : `${who.title} Analytics`}</h1>
               <div className="dr-subtitle">
                 {view === "operators"
                   ? operatorsSub || "Loading…"
                   : view === "scorecard"
-                  ? `Speed and safety points per driver · ${activeCompany?.name || "Fleet"}`
+                  ? `Speed and safety points per ${who.one} · ${activeCompany?.name || "Fleet"}`
                   : loading
                   ? "Loading…"
                   : typeName
-                    ? `${fmt(drivers.length)} of ${fmt(roster.length)} drivers · ${typeName} · ${activeCompany?.name || "Fleet"}`
-                    : `${fmt(drivers.length)} driver${drivers.length === 1 ? "" : "s"} · ${activeCompany?.name || "Fleet"}`}
+                    ? `${fmt(drivers.length)} of ${fmt(roster.length)} ${who.many} · ${typeName} · ${activeCompany?.name || "Fleet"}`
+                    : `${fmt(drivers.length)} ${drivers.length === 1 ? who.one : who.many} · ${activeCompany?.name || "Fleet"}`}
                 {view === "analytics" && !loading && <WeighbridgeNote wb={wb} />}
               </div>
             </div>
-            <div className="dr-viewswitch" role="tablist" aria-label="Drivers view">
+            <div className="dr-viewswitch" role="tablist" aria-label={`${navLabel("drivers", "Drivers", orgCode)} view`}>
               {views.map(([key, label]) => (
                 <button key={key} type="button" role="tab" aria-selected={view === key}
                   className={`dr-viewswitch__btn${view === key ? " is-on" : ""}`} onClick={() => setView(key)}>
@@ -415,12 +417,12 @@ export default function DriversScreen() {
         ) : view === "operators" ? (
           <OperatorsView companyId={activeCompanyId} company={activeCompany?.name || "Fleet"} onSubtitle={setOperatorsSub} />
         ) : error ? (
-          <LoadError label="Drivers" onRetry={retry} fullSection />
+          <LoadError label={navLabel("drivers", "Drivers", orgCode)} onRetry={retry} fullSection />
         ) : isEmpty ? (
           <TabEmptyState
             icon={<DriversIcon size={44} />}
-            title="Drivers"
-            hint="No drivers yet. Driver profiles and analytics will appear here once the live integration is connected."
+            title={navLabel("drivers", "Drivers", orgCode)}
+            hint={`No ${who.many} yet. ${who.title} profiles and analytics will appear here once the live integration is connected.`}
           />
         ) : (
           <ErrorBoundary label="Drivers">
