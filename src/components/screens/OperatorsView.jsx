@@ -13,7 +13,7 @@ import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryOperators } from "../../api/factoryOperators";
 import { periodRange, issueFlagged } from "../../lib/factoryFuel";
-import { operatorsByDay, operatorTotals, operatorDepartments, machineKind, kindMix, sentence, nameCase, initials } from "../../lib/factoryOperators";
+import { operatorsByDay, operatorTotals, operatorDepartments, machineKind, kindMix, sentence, nameCase, initials, onShiftNow } from "../../lib/factoryOperators";
 import { planStage } from "../../lib/workPlanMap";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -63,7 +63,18 @@ export default function OperatorsView({ companyId, company, onSubtitle }) {
   const [deptPick, setDeptPick] = useState(ALL);
   const deptOptions = useMemo(() => operatorDepartments(roster), [roster]);
   const dept = deptPick === ALL || deptOptions.some((o) => o.key === deptPick) ? deptPick : ALL;
-  const rows = useMemo(() => (dept === ALL ? roster : roster.filter((o) => o.departments.includes(dept))), [roster, dept]);
+  // On shift now (operator, 2026-11-19): only those on an approved plan line
+  // covering this moment, re-judged each minute; picking it shows Today.
+  const [onShift, setOnShift] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!onShift) return undefined;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [onShift]);
+  const rows = useMemo(() => roster.filter((o) => (dept === ALL || o.departments.includes(dept)) && (!onShift || onShiftNow(o, now))),
+    [roster, dept, onShift, now]);
   const byDay = useMemo(() => operatorsByDay(data, rows), [data, rows]);
   const totals = useMemo(() => operatorTotals(rows), [rows]);
 
@@ -82,7 +93,16 @@ export default function OperatorsView({ companyId, company, onSubtitle }) {
   const busy = loading && !data;
 
   const rangePicker = (
-    <FuelPeriodPicker pick={pick} onPick={setPick} chips />
+    <>
+      <FuelPeriodPicker pick={pick} onPick={(p) => { setPick(p); if (p !== "today") setOnShift(false); }} chips />
+      {/* A button like Pick a day beside it, dark while on (DateRangePicker.css drp-field) */}
+      <button type="button" className={`drp-field${onShift ? " drp-field--on" : ""}`} aria-pressed={onShift}
+              title="Only the operators on an approved work plan shift at this moment"
+              onClick={() => { setOnShift((v) => !v); setPick("today"); }}>
+        <i className="ti ti-clock-play" aria-hidden="true" />
+        <span className="drp-text">On shift</span>
+      </button>
+    </>
   );
 
   if (error) return <LoadError label="Operators" onRetry={retry} fullSection />;
@@ -113,7 +133,7 @@ export default function OperatorsView({ companyId, company, onSubtitle }) {
               <PumpCard totals={totals} loading={busy} />
             </section>
           </div>
-          <OperatorsSection rows={rows} selected={selected} onSelect={setSelected} rangePicker={rangePicker}
+          <OperatorsSection rows={rows} emptyWords={onShift ? "No operator is on shift now." : "No operators match."} selected={selected} onSelect={setSelected} rangePicker={rangePicker}
             deptPicker={<DeptPicker value={dept} options={deptOptions} total={roster.length} onChange={setDeptPick} />} />
         </>
       )}
@@ -210,7 +230,7 @@ function DeptPicker({ value, options, total, onChange }) {
 
 const machineWords = (o) => o.machines.map((m) => m.reference).join(", ");
 
-function OperatorsSection({ rows, selected, onSelect, rangePicker, deptPicker }) {
+function OperatorsSection({ rows, selected, onSelect, rangePicker, deptPicker, emptyWords = "No operators match." }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("shifts");
   const [sortDir, setSortDir] = useState("desc");
@@ -331,7 +351,7 @@ function OperatorsSection({ rows, selected, onSelect, rangePicker, deptPicker })
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={8} className="dr-grid__empty">No operators match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={8} className="dr-grid__empty">{q ? "No operators match." : emptyWords}</td></tr>}
             </tbody>
           </table>
         </div>

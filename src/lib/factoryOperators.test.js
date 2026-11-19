@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { kindMix, machineKind, operatorsByDay, operatorTotals, operatorDepartments, roleKind, hasOperators, nameCase, initials } from "./factoryOperators";
+import { kindMix, onShiftNow, shiftWindow, machineKind, operatorsByDay, operatorTotals, operatorDepartments, roleKind, hasOperators, nameCase, initials } from "./factoryOperators";
 
 const op = (name, lines, extra = {}) => ({
   key: name.toLowerCase(), name, role: "EXCAVATOR OPERATOR", shifts: lines.length,
@@ -46,5 +46,24 @@ describe("factoryOperators", () => {
     expect(initials("Emmanuel Vicent Mtulo")).toBe("EV");
     expect(hasOperators("kasulu")).toBe(true);
     expect(hasOperators("MENENGAI")).toBe(false);
+  });
+});
+
+describe("onShiftNow", () => {
+  const NOW = Date.parse("2026-11-19T09:00:00Z"); // 12:00 East Africa
+  const l = (o) => ({ day: "2026-11-19", shiftStart: "08:00:00", plannedHours: 12, planStatus: "APPROVED", ...o });
+
+  it("is on shift on an approved line whose shift covers now", () => {
+    expect(shiftWindow(l())).toEqual({ from: Date.parse("2026-11-19T05:00:00Z"), to: Date.parse("2026-11-19T17:00:00Z") });
+    expect(onShiftNow({ lines: [l({ shiftStart: "20:00:00" }), l()] }, NOW)).toBe(true);
+  });
+
+  it("is not before or after the shift, on a plan awaiting approval or cancelled, or without a start or hours", () => {
+    expect(onShiftNow({ lines: [l({ shiftStart: "13:00:00" })] }, NOW)).toBe(false);
+    expect(onShiftNow({ lines: [l({ shiftStart: "06:00:00", plannedHours: 4 })] }, NOW)).toBe(false);
+    expect(onShiftNow({ lines: [l({ planStatus: "SUBMITTED" })] }, NOW)).toBe(false);
+    expect(onShiftNow({ lines: [l({ planStatus: "CANCELLED" })] }, NOW)).toBe(false);
+    expect(onShiftNow({ lines: [l({ shiftStart: null }), l({ plannedHours: null })] }, NOW)).toBe(false);
+    expect(onShiftNow({}, NOW)).toBe(false);
   });
 });

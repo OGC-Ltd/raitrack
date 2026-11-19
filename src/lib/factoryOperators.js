@@ -3,6 +3,7 @@
 // (fleet-server planner/factory-operators.ts).
 
 import { daysBetween } from "./factoryFuel";
+import { planStage } from "./workPlanMap";
 
 /** The org codes whose FactorySuite factory keeps work plans with operators. */
 export const OPERATOR_ORGS = ["KASULU"];
@@ -96,3 +97,24 @@ export const nameCase = (name = "") =>
 
 export const initials = (name = "") =>
   String(name).trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+
+// ── On shift now (operator, 2026-11-19: "a filter … On Shift … the ones who are on shift at the moment") ──
+
+/** Plans that put nobody to work: awaiting approval, or taken back. */
+const OFF_PLAN = /CANCEL|REJECT|WITHDRAW|SENT_BACK|RETURN|DECLIN/;
+
+/** A plan line's shift as times: its day's start time in East Africa, for its planned hours. Null without both. */
+export function shiftWindow(line) {
+  if (!line?.day || !line.shiftStart || !(line.plannedHours > 0)) return null;
+  const from = Date.parse(`${line.day}T${line.shiftStart.slice(0, 5)}:00+03:00`);
+  return Number.isFinite(from) ? { from, to: from + line.plannedHours * 3_600_000 } : null;
+}
+
+/** On an approved plan line whose shift covers `now`: the same "on shift" as the unit card and the map's layer. */
+export function onShiftNow(operator, now = Date.now()) {
+  return (operator?.lines ?? []).some((l) => {
+    if (planStage(l.planStatus) === "PENDING" || OFF_PLAN.test(String(l.planStatus ?? "").toUpperCase())) return false;
+    const w = shiftWindow(l);
+    return Boolean(w) && w.from <= now && now < w.to;
+  });
+}
