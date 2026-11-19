@@ -227,6 +227,128 @@ const spanOf = (days) => {
 };
 
 /**
+ * The panels' lead: km per trip, measured, with what it is the average of, or why there is none,
+ * said plainly rather than left as a dash. One unit-day and one consolidated unit lead the same way.
+ */
+function KmPerTripLead({ row, tripsState }) {
+  const perTrip = kmPerTrip(row);
+  const note = perTrip != null
+    ? `The average of ${row.tripN} measured trip${row.tripN === 1 ? "" : "s"}, from leaving a weighbridge empty to coming back laden.`
+    : !row.vehicleId ? "Not a tracked unit, so its trips have no distance."
+      : tripsState === "reading" ? "Reading the odometer at each end of its trips."
+        : tripsState === "failed" ? "Its trips could not be read. Reload to try again."
+          : "None of its trips has an odometer reading at both ends.";
+  return (
+    <section className="wcp-lead" aria-label="Km per trip">
+      <p className="wcp-lead__label">Km per trip</p>
+      <p className={"wcp-lead__value" + (perTrip == null ? " wcp-lead__value--none" : "")}>
+        {perTrip == null ? (tripsState === "reading" && row.vehicleId ? "Measuring" : "None") : kmLabel(perTrip)}
+        {perTrip != null && <span className="wcp-lead__unit">km</span>}
+      </p>
+      <p className="wcp-lead__note">{note}</p>
+    </section>
+  );
+}
+
+const longDay = (day) => new Date(`${day}T12:00:00`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+/** Each driver on the day's tickets and how many they drove, the most first. */
+function driverTrips(tickets) {
+  const n = new Map();
+  for (const t of tickets) {
+    const name = String(t.driverName ?? "").trim();
+    if (name) n.set(name, (n.get(name) ?? 0) + 1);
+  }
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+/**
+ * One unit on one day, opened from a single row (operator, 18 Nov 2026: "whenever I click on the
+ * individual item ... I need the side panel populated"). The consolidated panel's frame and order:
+ * who and where, km per trip measured that day, the day's figures, who drove it; then the day's
+ * tickets one by one, each with the trip that came back laden on it, which is what the row adds up.
+ * Everything in it is on screen already, so opening it costs no request.
+ */
+function UnitDayPanel({ row, tickets, tripKm, kmText, tripsState, onClose }) {
+  const loadMs = avgLoadMs(row);
+  const span = workSpanMs(row);
+  const drivers = driverTrips(tickets);
+  const distance = row.km == null ? (kmText(row) || "None") : `${kmLabel(row.km)} km`;
+  const tracked = Boolean(row.vehicleId);
+  const tripCell = (t) => {
+    const km = tripKm.get(t.id);
+    if (km != null) return kmLabel(km);
+    return <span className="wcp-dim">{tripsState === "reading" ? "Measuring" : "None"}</span>;
+  };
+  return (
+    <DetailSidebar title="Unit day" label={`${row.unit} on ${longDay(row.day)}`} itemKey={`${row.day}|${row.plate}`} onClose={onClose}>
+      <div className="wcp-ident">
+        <h2 className="wcp-unit">{row.unit}</h2>
+        <p className="wcp-span">{longDay(row.day)}</p>
+        {row.bridges.length > 0 && <p className="wcp-span">Weighed at {row.bridges.join(", ")}</p>}
+      </div>
+
+      <KmPerTripLead row={row} tripsState={tripsState} />
+
+      <dl className="wcp-figs">
+        <div><dt>Trips</dt><dd>{row.trips}</dd></div>
+        <div><dt>Net weighed</dt><dd>{tonnes(row.netKg)}</dd></div>
+        <div><dt>Distance</dt><dd>{distance}</dd></div>
+        <div><dt>First to last</dt><dd>{span == null ? "One ticket" : gapLabel(span)}</dd></div>
+        <div><dt>Average load</dt><dd>{tonnes(avgLoadKg(row))}</dd></div>
+        <div><dt>Average load time</dt><dd>{loadMs == null ? "None" : gapLabel(loadMs)}</dd></div>
+      </dl>
+
+      <section className="wcp-sec">
+        <h3 className="wcp-h">Drivers</h3>
+        {drivers.length
+          ? (
+            <ul className="wcp-drivers">
+              {drivers.map(([name, n]) => (
+                <li key={name}><span>{name}</span><span className="wcp-drivers__days">{n} trip{n === 1 ? "" : "s"}</span></li>
+              ))}
+            </ul>
+          )
+          : <p className="wcp-empty">No driver is named on its tickets.</p>}
+      </section>
+
+      <section className="wcp-sec">
+        <h3 className="wcp-h">Tickets</h3>
+        {tickets.length
+          ? (
+            <table className="wcp-days">
+              <thead>
+                <tr>
+                  <th scope="col">Ticket</th>
+                  <th scope="col">Net, t</th>
+                  <th scope="col">Load time</th>
+                  {tracked && <th scope="col">Trip km</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {tickets.map((t) => (
+                  <tr key={t.id}>
+                    <th scope="row">
+                      <span className="wcp-days__date">{clockLabel(t.tokenAt)}</span>
+                      <span className="wcp-days__who">
+                        {[t.centerName, t.token != null && `token ${t.token}`].filter(Boolean).join(", ")}
+                      </span>
+                    </th>
+                    <td>{t.netWeightKg == null ? <span className="wcp-dim">None</span> : (t.netWeightKg / 1000).toFixed(2)}</td>
+                    <td>{Number.isFinite(t.turnaroundMs) && t.turnaroundMs >= 0 ? gapLabel(t.turnaroundMs) : <span className="wcp-dim">None</span>}</td>
+                    {tracked && <td>{tripCell(t)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+          : <p className="wcp-empty">Its tickets are no longer on screen. Reload to read them again.</p>}
+      </section>
+    </DetailSidebar>
+  );
+}
+
+/**
  * One unit over the span, opened from a consolidated row (operator, 18 Nov 2026: "drop the drivers
  * column if we are consolidating and only have it populated on the sidebar if we click on the
  * single row"). Km per trip leads, the figure the panel is opened for; the span's other figures
@@ -238,17 +360,9 @@ const spanOf = (days) => {
  */
 function UnitPanel({ row, kmText, tripsState, onClose }) {
   const loadMs = avgLoadMs(row);
-  const perTrip = kmPerTrip(row);
   const drivers = driverDays(row.perDay);
   const nDays = row.days.length;
   const distance = row.km == null ? (kmText(row) || "None") : `${kmLabel(row.km)} km`;
-  // Why there is no figure, said plainly rather than left as a dash
-  const perTripNote = perTrip != null
-    ? `The average of ${row.tripN} measured trip${row.tripN === 1 ? "" : "s"}, from leaving a weighbridge empty to coming back laden.`
-    : !row.vehicleId ? "Not a tracked unit, so its trips have no distance."
-      : tripsState === "reading" ? "Reading the odometer at each end of its trips."
-        : tripsState === "failed" ? "Its trips could not be read. Reload to try again."
-          : "None of its trips has an odometer reading at both ends.";
   return (
     <DetailSidebar title="Unit coverage" label={`Coverage for ${row.unit}`} itemKey={row.plate} onClose={onClose}>
       <div className="wcp-ident">
@@ -257,14 +371,7 @@ function UnitPanel({ row, kmText, tripsState, onClose }) {
         {row.bridges.length > 0 && <p className="wcp-span">Weighed at {row.bridges.join(", ")}</p>}
       </div>
 
-      <section className="wcp-lead" aria-label="Km per trip">
-        <p className="wcp-lead__label">Km per trip</p>
-        <p className={"wcp-lead__value" + (perTrip == null ? " wcp-lead__value--none" : "")}>
-          {perTrip == null ? (tripsState === "reading" && row.vehicleId ? "Measuring" : "None") : kmLabel(perTrip)}
-          {perTrip != null && <span className="wcp-lead__unit">km</span>}
-        </p>
-        <p className="wcp-lead__note">{perTripNote}</p>
-      </section>
+      <KmPerTripLead row={row} tripsState={tripsState} />
 
       <dl className="wcp-figs">
         <div><dt>Trips</dt><dd>{row.trips}</dd></div>
@@ -386,11 +493,21 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
   const at = Math.min(page, pageCount - 1);
   const pageRows = rows.slice(at * STEP, at * STEP + STEP);
 
-  // The unit open in the side panel, by plate; only a consolidated row opens one
-  const [openPlate, setOpenPlate] = useState(null);
-  useEffect(() => { setOpenPlate(null); }, [from, to, centre, consolidate]);
-  const openRow = consolidate && openPlate ? rows.find((r) => r.plate === openPlate) ?? null : null;
-  const toggleRow = (r) => setOpenPlate((p) => (p === r.plate ? null : r.plate));
+  // The row open in the side panel: a unit-day, or a unit when consolidated. Every row opens one
+  // (operator, 18 Nov 2026: "whenever I click on the individual item ... I need the side panel populated").
+  const rowKey = (r) => `${r.day ?? "all"}|${r.plate}`;
+  const [openKey, setOpenKey] = useState(null);
+  useEffect(() => { setOpenKey(null); }, [from, to, centre, consolidate]);
+  const openRow = openKey ? rows.find((r) => rowKey(r) === openKey) ?? null : null;
+  const toggleRow = (r) => setOpenKey((k) => (k === rowKey(r) ? null : rowKey(r)));
+  // A unit-day's own tickets, the earliest first: the ledger its panel ends on
+  const openTickets = useMemo(() => {
+    if (!openRow || consolidate) return [];
+    return tickets
+      .filter((t) => t?.tokenAt && (t.vehiclePlate || t.vehicleNo) === openRow.plate && fleetDayKey(new Date(t.tokenAt)) === openRow.day)
+      .sort((a, b) => Date.parse(a.tokenAt) - Date.parse(b.tokenAt));
+  }, [openRow, consolidate, tickets]);
+  const tripsState = tripsReading ? "reading" : tripsFailed ? "failed" : "ok";
 
   /** What the distance cell says when there is no figure: blank for a unit with no tracker or none counted (operator, 18 Nov 2026). */
   const noKm = (r) => {
@@ -490,12 +607,17 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
 
   return (
     <>
-      {openRow && (
-        <UnitPanel
+      {openRow && consolidate && (
+        <UnitPanel row={openRow} kmText={noKm} tripsState={tripsState} onClose={() => setOpenKey(null)} />
+      )}
+      {openRow && !consolidate && (
+        <UnitDayPanel
           row={openRow}
+          tickets={openTickets}
+          tripKm={tripKm}
           kmText={noKm}
-          tripsState={tripsReading ? "reading" : tripsFailed ? "failed" : "ok"}
-          onClose={() => setOpenPlate(null)}
+          tripsState={tripsState}
+          onClose={() => setOpenKey(null)}
         />
       )}
       <ReportFilesBar
@@ -541,16 +663,16 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
             </thead>
             <tbody>
               {pageRows.map((r) => {
-                const on = openRow?.plate === r.plate;
-                const open = consolidate ? {
+                const on = openKey === rowKey(r);
+                const open = {
                   className: "sp4-tr" + (on ? " sp4-tr--selected" : ""),
                   "aria-selected": on,
                   tabIndex: 0,
                   onClick: () => toggleRow(r),
                   onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRow(r); } },
-                } : { className: "sp4-tr" };
+                };
                 return (
-                  <tr key={`${r.day ?? "all"}|${r.plate}`} {...open}>
+                  <tr key={rowKey(r)} {...open}>
                     {!oneDay && !consolidate && <td className="sp4-td--left wb-mono">{dayLabel(r.day)}</td>}
                     <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{r.unit}</span></td>
                     {!consolidate && <td className="sp4-td--left wb-td-driver wb-col-full">{r.drivers.join(", ")}</td>}
@@ -594,7 +716,9 @@ export default function WeighbridgeCoverage({ orgId, tickets, from, to, search, 
             : `${totals.unitDays} unit-day${totals.unitDays === 1 ? "" : "s"} in ${span}`}
           {centreName ? ` · ${centreName}` : ""}
           {" · "}{totals.tracked} with a distance
-          {consolidate && rows.length > 0 && <span className="sp4-muted"> · open a unit for its drivers and days</span>}
+          {rows.length > 0 && (
+            <span className="sp4-muted"> · {consolidate ? "open a unit for its drivers and days" : "open a row for its tickets"}</span>
+          )}
           {(loading || reading) && <span className="sp4-muted"> · {loading ? "refreshing…" : kmReading ? "reading distances…" : "measuring trips…"}</span>}
           {!loading && !reading && tripsFailed && <span className="sp4-muted"> · some trips could not be measured, reload to try again</span>}
         </div>

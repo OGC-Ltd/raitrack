@@ -1,4 +1,4 @@
-/* Hallmark · component: side panel (Weighbridges › Coverage, one unit consolidated) · genre: modern-minimal · theme: brand (the sp4 tokens, SensorPanel.css .sp4-root, both themes) · shape: app screen · redesign: full · v2.0.0 */
+/* Hallmark · component: side panels (Weighbridges › Coverage: one unit-day from a single row, one unit consolidated) · genre: modern-minimal · theme: brand (the sp4 tokens, SensorPanel.css .sp4-root, both themes) · shape: app screen · redesign: full · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V3 · weakest: V, on purpose: it lives in the shared DetailSidebar frame beside the app's other panels; the inside is recomposed around the measured km per trip instead of a facts strip */
 /* Hallmark · answered: labels and section heads in sentence case, untracked, here only; the frame's own tracked-caps heads (DetailSidebar.css) belong to every other panel and were left alone */
 
