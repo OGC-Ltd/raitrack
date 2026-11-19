@@ -39,6 +39,9 @@
 .fuel-rec .r { text-align: right; }
 .fuel-rec tfoot th, .fuel-rec tfoot td { font-weight: 700; border-bottom: 0; border-top: 1.5px solid var(--ink); }
 .fuel-rec tr.is-bad .fuel-rec__var, .fuel-rec tr.is-bad .fuel-rec__none { color: var(--tone-down); font-weight: 700; }
+/* The panel headline's Variance past tolerance (moved from the grid 2026-11-19). */
+.fuel-panel .dr-window__lead dd.fuel-lead--bad { color: var(--tone-down); }
+.fuel-panel .dr-window__lead .fuel-lead--wide { grid-column: 1 / -1; }
 .fuel-rec__none { color: var(--dg-label); }
 
 /* The machine table fits a desktop (operator 2026-11-17: "doesn't look
@@ -61,7 +64,6 @@
   .fuel-grid thead th:last-child .dr-grid__sort { padding-right: var(--dg-gutter, 16px); }
   .fuel-grid .fuel-job { max-width: 170px; }
 }
-.fuel-grid td.fuel-var { white-space: normal; min-width: 5.5em; line-height: 1.3; }
 
 /* ── Phones (operator 2026-11-18: "the fuel tab … on mobile … responsive") ──
    The Drivers page turns its rows into cards at 700px with ten placed cells;
@@ -94,7 +96,6 @@
   .fuel-grid tbody td:nth-child(12) { grid-area: m8; }
   /* The job under the department gets the card's two thirds, not the desk cap */
   .fuel-grid .fuel-job { max-width: none; }
-  .fuel-grid tbody td.fuel-var { white-space: normal; }
 
   /* The machine panel is the full screen here; the comparison table's heads
      and dates wrap rather than run past its edge (the panel hides overflow) */
