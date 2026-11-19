@@ -951,7 +951,7 @@ export default function AlertsScreen() {
             </>
           ) : stops ? (
             <>
-              <b>{stopLines.length}</b> Menengai unit{stopLines.length === 1 ? "" : "s"} {view === "customers" ? "stopped at a customer now" : "flagged now"}
+              <b>{stopLines.length}</b> unit{stopLines.length === 1 ? "" : "s"} {view === "customers" ? "stopped at a customer now" : "flagged now"}
               {stopsUnread > 0 && <> · <b>{stopsUnread}</b> unread</>}
             </>
           ) : geo ? (
@@ -1019,7 +1019,7 @@ export default function AlertsScreen() {
               {watch.status !== "off" && watch.status !== "idle" && (
                 <>
                   <Chip on={view === "stops"} onClick={() => setView("stops")} n={watch.status === "done" ? stopLists.unauthorised.length : undefined}
-                        title="Menengai units in a no-go zone, or stopped over 10 minutes outside every authorised place">Unauthorised stops</Chip>
+                        title="Units in a no-go zone, or stopped outside every authorised place: Menengai over 10 minutes; West Kenya trucks and prime movers over 5 minutes off site or weighbridge">Unauthorised stops</Chip>
                   <Chip on={view === "customers"} onClick={() => setView("customers")} n={watch.status === "done" ? stopLists.customer.length : undefined}
                         title="Menengai units stopped over 10 minutes at a customer">Customer stops</Chip>
                 </>

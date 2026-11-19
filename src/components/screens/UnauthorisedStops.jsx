@@ -137,12 +137,12 @@ export default function UnauthorisedStops({ watch, q, lines, reads = NO_READS, r
         {watch.status === "error" && <span className="rpt-warn"> The last check failed: {watch.message}</span>}
       </p>
       {watch.status === "loading" && !watch.checkedAt ? (
-        <EmptyNote icon="ti-loader-2" tone="busy" title="Checking Menengai’s Units">Where every unit stands, against the authorised places and the no-go zones.</EmptyNote>
+        <EmptyNote icon="ti-loader-2" tone="busy" title="Checking the Units">Where every unit stands, against the authorised places and the no-go zones.</EmptyNote>
       ) : rows.length === 0 && EMPTY_READ[read] && all.length > 0 ? (
         <EmptyNote icon={EMPTY_READ[read].icon} title={EMPTY_READ[read].title}>{q ? `Nothing matches “${q}”.` : EMPTY_READ[read].sub}</EmptyNote>
       ) : rows.length === 0 ? (
         <EmptyNote icon="ti-circle-check" title={customers ? "No Customer Stops" : "No Unauthorised Stops"}>{q ? `Nothing matches “${q}”.`
-          : customers ? "No Menengai unit is stopped at a customer." : "No Menengai unit is standing in a no-go zone or stopped outside an authorised place."}</EmptyNote>
+          : customers ? "No unit is stopped at a customer." : "No unit is standing in a no-go zone or stopped outside an authorised place."}</EmptyNote>
       ) : (
         <div className="sp4-table-scroll aud-units alr-table alr-stop-table">
           <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
