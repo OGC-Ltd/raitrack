@@ -888,8 +888,7 @@ function MachinePanel({ m, from, to, onClose }) {
 
         {m.shifts > 0 && (
           <section className="dr-panel__sec dr-panel__charts">
-            <TrendStat title="Need per day" series={series} valueKey="need" unit="L" tone="tonnes" type="bar"
-              value={fmt(m.need ?? 0)} sub={`${fmt(m.days)} day${m.days === 1 ? "" : "s"} on a plan`} />
+            {/* Need per day went 2026-11-20 (operator); Issued per day stays. */}
             <TrendStat title="Issued per day" series={series} valueKey="issued" unit="L" tone="mileage" type="line"
               value={fmt(m.issued)} sub={m.issues ? `${fmt(m.issues)} fuelling${m.issues === 1 ? "" : "s"}` : "nothing issued yet"} />
           </section>
