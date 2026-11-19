@@ -20,6 +20,7 @@ import ReportIcon from '../shared/ReportIcon';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { REPORT_NODES, reportKeysFor, useCurrentReport, chooseReport, firstReport } from '../../lib/reportNav';
 import './SidePanel.css';
+import { withOrgLabel } from '../../lib/orgLabels';
 
 export const NAV_ITEMS = [
   { key: 'fleet',        label: 'Live Map',     icon: 'map-2',     permission: 'map:read'         },
@@ -233,8 +234,9 @@ export default function SidePanel() {
   }, [desktopActiveTab]);
   const { setDesktopActiveTab } = useAppActions();
   const { activeCompany } = useCompanies();
-  const { can } = usePermissions();
-  const mainNavItems = NAV_ITEMS.filter(item => !item.section && can(item.permission));
+  const { can, orgCode } = usePermissions();
+  const mainNavItems = NAV_ITEMS.filter(item => !item.section && can(item.permission))
+    .map(item => withOrgLabel(item, orgCode));
   const systemItems = NAV_ITEMS.filter(item => item.section === 'system' && can(item.permission));
   const { orgId } = useFleetLiveShared();
   // The end-of-shift report is a tab on the Reports page (operator, 2026-11-01).
