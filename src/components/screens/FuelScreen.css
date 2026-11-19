@@ -90,9 +90,10 @@
      machine                        status
      department · job               period
      shifts        planned          fuel now
-     issued        probe filled     consumed
-     fuel before   fuel after
+     fuel before   issued           probe filled
+     fuel after    consumed
      odometer before  odometer after
+   In the table's order (reordered 2026-11-19: before, issued, probe, after).
    Same specificity as the Drivers rules, later in the cascade, so these win. */
 @media (max-width: 700px) {
   .fuel-grid tbody tr {
@@ -101,8 +102,8 @@
       "rule rule rule"
       "dept dept when"
       "m1   m2   m3"
-      "m4   m5   m8"
-      "m6   m7   m7"
+      "m4   m5   m6"
+      "m7   m8   m8"
       "m9   m10  m10";
   }
   .fuel-grid tbody td:nth-child(2) { grid-area: dept; white-space: normal; }

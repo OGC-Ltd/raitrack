@@ -370,10 +370,13 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Shifts", "shifts", true)}
                 {th("Planned", "planned", true)}
                 {th("Fuel now", "fuelNow", true)}
+                {/* In the order a fuelling happens: the tank before, what the pump
+                    issued, what the probe saw go in, the tank after (operator
+                    2026-11-19). Fuel before/after and the odometers are the
+                    latest refill's, as in the machine panel. */}
+                {th("Fuel before", "fuelBefore", true)}
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
-                {/* The latest refill's figures, as in the machine panel (operator 2026-11-19). */}
-                {th("Fuel before", "fuelBefore", true)}
                 {th("Fuel after", "fuelAfter", true)}
                 {th("Consumed", "consumed", true)}
                 {th("Odometer before", "odometerBefore", true)}
@@ -423,6 +426,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
                       {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
                     </td>
+                    <RefillLevelCell r={r} which="fuelBefore" label="Fuel before" />
                     <MetricCell label="Issued" k="issued" value={r.issues ? r.issued : null} sortKey={sortKey} max={barMax} />
                     {/* Pump against probe (lib/factoryFuel reconcileFills): totals over the
                         fuellings that have both figures; the machine panel lists each one. */}
@@ -430,7 +434,6 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title="What the fuel probe recorded going in, for the fuellings the pump recorded">
                       {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
                     </td>
-                    <RefillLevelCell r={r} which="fuelBefore" label="Fuel before" />
                     <RefillLevelCell r={r} which="fuelAfter" label="Fuel after" />
                     {/* Burnt over the row's Period, from the probe (lib/factoryFuel withConsumed).
                         Pump flags were here (operator 2026-11-18); they stay in the machine panel. */}
