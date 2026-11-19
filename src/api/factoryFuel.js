@@ -12,7 +12,13 @@ export async function getFactoryFuel({ companyId, from, to }) {
   if (!orgId) return { factory: null, from, to }
   const q = new URLSearchParams({ from, to })
   const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/factory-fuel?${q}`)
-  return res.data ?? { factory: null, from, to }
+  const data = res.data ?? { factory: null, from, to }
+  // A cancelled plan was withdrawn: its lines are not shifts, and a line of it
+  // would pick up the request of the plan that replaced it (same machine, day
+  // and shift). Operator 2026-11-19 on EX-12, 18 Nov: WP-261118-FAC cancelled,
+  // WP-261118-FAC-3 approved, both shift 1 at 08:00.
+  if (Array.isArray(data.lines)) data.lines = data.lines.filter((l) => String(l.planStatus ?? '').toUpperCase() !== 'CANCELLED')
+  return data
 }
 
 /**
@@ -54,4 +60,18 @@ export async function getProbeFillings({ companyId, from, to }) {
     if (!more || !cursor) break
   }
   return out
+}
+
+/**
+ * What fleet-server's work plan watch recorded changing on FactorySuite's plans
+ * for days `from`..`to` (planner/work-plan-watch): `{ watching, watchedSince,
+ * changes: [{ kind, planCode, department, day, machine, shiftNo, field,
+ * fromValue, toValue, source, detectedAt }] }`, newest first.
+ */
+export async function getWorkPlanChanges({ companyId, from, to }) {
+  const orgId = await resolveOrgId(companyId)
+  if (!orgId) return { watching: false, changes: [] }
+  const q = new URLSearchParams({ from, to })
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/work-plan-changes?${q}`)
+  return res.data ?? { watching: false, changes: [] }
 }
