@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -27,6 +27,21 @@ const data = {
 describe("factoryFuel", () => {
   it("walks the days of a range", () => {
     expect(daysBetween("2026-10-30", "2026-11-02")).toEqual(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"]);
+  });
+
+  it("keeps each machine's latest odometer read at the pump (19 Nov: every Kasulu fuelling carries one)", () => {
+    const d = { ...data, issues: [
+      { id: "a", machine: "EX-14", day: "2026-11-17", at: "2026-11-17T07:10:00", litres: 90, readings: { physical: 5070.1 } },
+      { id: "b", machine: "EX-14", day: "2026-11-18", at: "2026-11-18T06:40:00", litres: 100, readings: { physical: 5086.5 } },
+      { id: "c", machine: "EX-14", day: "2026-11-18", at: "2026-11-18T05:00:00", litres: 20, readings: { physical: 5080 } },
+      { id: "e", machine: "EX-14", day: "2026-11-18", at: "2026-11-18T09:00:00", litres: 5, readings: { physical: null } },
+      { id: "f", machine: "GR-04", day: "2026-11-18", litres: 30 },
+    ] };
+    const byRef = Object.fromEntries(fuelRoster(d).map((r) => [r.reference, r]));
+    expect(byRef["EX-14"]).toMatchObject({ odometer: 5086.5, odometerDay: "2026-11-18", odometerAt: "2026-11-18T06:40:00" });
+    expect(byRef["GR-04"]).toMatchObject({ odometer: null, odometerDay: null });
+    expect(byRef["FT-06"].odometer).toBeNull();
+    expect([odometerUnit("HOUR"), odometerUnit("KM_PER_LITRE"), odometerUnit(null)]).toEqual(["h", "km", ""]);
   });
 
   it("adds each machine up, department first, code in natural order", () => {

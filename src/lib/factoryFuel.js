@@ -114,6 +114,13 @@ const add = (a, b) => (b == null ? a : (a ?? 0) + b);
 /** An issue the pump flagged: one of its three checks failed, or it wrote a note. */
 export const issueFlagged = (i) => (i.flags?.length ?? 0) > 0 || Boolean(i.note);
 
+/** Whether fuelling `i` was after the row's current odometer reading (day, then pump time). */
+const readingAfter = (i, r) =>
+  i.day > r.odometerDay || (i.day === r.odometerDay && String(i.at ?? "") > String(r.odometerAt ?? ""));
+
+/** The odometer's unit: hours for an hour-rated machine, km for a km-rated one, none when not rated. */
+export const odometerUnit = (basis) => (basis === "HOUR" ? "h" : basis === "KM_PER_LITRE" ? "km" : "");
+
 /**
  * One row per machine on the range's plans or at its pumps, with its
  * department and activity as on its latest plan line.
@@ -133,6 +140,7 @@ export function fuelRoster(data) {
         department: null, activity: null, workLocation: null, lastDay: null,
         shifts: 0, approved: 0, pending: 0, fullTanks: 0, days: new Set(),
         requested: null, need: null, issued: 0, issues: 0, flagged: 0,
+        odometer: null, odometerDay: null, odometerAt: null,
         lines: [], pumpIssues: [],
       });
     }
@@ -156,6 +164,13 @@ export function fuelRoster(data) {
     r.issues += 1;
     r.issued += i.litres ?? 0;
     if (issueFlagged(i)) r.flagged += 1;
+    // The odometer (operator 2026-11-19: "capture the odometer from factory
+    // suite"): the meter the pump attendant reads at each fuelling, km or
+    // hours as the machine is rated. The latest reading in the range stands.
+    const reading = i.readings?.physical;
+    if (Number.isFinite(reading) && (r.odometerDay == null || readingAfter(i, r))) {
+      r.odometer = reading; r.odometerDay = i.day; r.odometerAt = i.at ?? null;
+    }
     if (!r.department) r.department = i.department ?? null;
     if (!r.lastDay || i.day > r.lastDay) r.lastDay = i.day;
   }

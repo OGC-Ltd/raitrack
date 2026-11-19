@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -30,6 +30,12 @@ import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 const fmt = (n, d = 0) =>
   Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const litres = (n) => (n == null ? "-" : `${fmt(n)} L`);
+/** An odometer reading with its unit: "5,086.5 h", "12,340 km"; to one decimal, as the pump reads it. */
+const odometerText = (n, basis) => {
+  if (n == null) return "-";
+  const u = odometerUnit(basis);
+  return `${Number(n).toLocaleString(undefined, { maximumFractionDigits: 1 })}${u ? ` ${u}` : ""}`;
+};
 /**
  * A variance (actual fill less probe refill) in words (operator 2026-11-17:
  * "either it tells us probe recorded more than actual fill or less, then in
@@ -358,7 +364,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
                 {th("Consumed", "consumed", true)}
-                {th("Variance", "variance", true)}
+                {th("Odometer", "odometer", true)}
               </tr>
             </thead>
             <tbody>
@@ -418,7 +424,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                           : "No probe reading at the start or end of the period"}>
                       {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
                     </td>
-                    <VarianceCell r={r} />
+                    <OdometerCell r={r} />
                   </tr>
                 );
               })}
@@ -442,23 +448,20 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
 }
 
 /**
- * The pump less the probe, over the fuellings both recorded (operator
- * 2026-11-17: fuellings only). "+13 L": the pump says 13 L more went in than
- * the probe saw. Red past tolerance (lib/factoryFuel varianceFlagged); the
- * fuellings behind it are in the machine panel.
+ * The odometer FactorySuite's pump attendant read at the machine's last
+ * fuelling in the range (operator 2026-11-19: "capture the odometer from
+ * factory suite"): hours on an hour-rated machine, km on a km-rated one.
+ * The variance moved to the machine panel the same day.
  */
-function VarianceCell({ r }) {
-  if (r.variance == null) {
-    const why = !r.probeKnown ? "The probe fills could not be read"
-      : r.issues ? "The probe recorded no fill for these fuellings" : "No fuelling at the pump in this range";
-    return <td className="dr-num dr-num--zero fuel-var" data-label="Variance" title={why}>-</td>;
+function OdometerCell({ r }) {
+  if (r.odometer == null) {
+    const why = r.issues ? "The pump recorded no odometer reading for these fuellings" : "No fuelling at the pump in this range";
+    return <td className="dr-num dr-num--zero" data-label="Odometer" title={why}>-</td>;
   }
-  const check = r.varianceFlags ? `. ${r.varianceFlags} fuelling${r.varianceFlags === 1 ? "" : "s"} to check: open the machine` : "";
   return (
-    <td className={"dr-num fuel-var" + (r.varianceOver ? " dr-incident dr-incident--speed" : "")} data-label="Variance"
-        title={`Pump ${fmt(r.pumpMatched ?? 0)} L less probe ${fmt(r.probeFilled ?? 0)} L, over the fuellings both recorded${check}`}>
-      {r.varianceOver && <span className="dr-incident__dot" aria-hidden="true" />}
-      {probeWords(r.variance)}
+    <td className="dr-num" data-label="Odometer"
+        title={`Read at the pump on ${fmtDay(r.odometerDay)}${r.odometerAt ? `, ${clock(r.odometerAt)}` : ""} (FactorySuite)`}>
+      {odometerText(r.odometer, r.basis)}
     </td>
   );
 }
@@ -608,6 +611,8 @@ function MachinePanel({ m, from, to, onClose }) {
     { label: "Shifts", value: fmt(m.shifts) },
     { label: "Need", value: m.need == null ? "-" : fmt(m.need), unit: m.need == null ? null : "L" },
     { label: "Issued", value: fmt(m.issued), unit: "L" },
+    // Moved here from the grid (operator 2026-11-19); the table below lists each fuelling.
+    { label: "Variance, pump less probe", value: probeWords(m.variance), bad: m.varianceOver, wide: true },
   ];
   const lines = [...m.lines].sort((a, b) => b.day.localeCompare(a.day) || (a.shiftNo ?? 1) - (b.shiftNo ?? 1));
 
@@ -635,6 +640,12 @@ function MachinePanel({ m, from, to, onClose }) {
             <div><dt>Department</dt><dd>{sentence(m.department) || "-"}</dd></div>
             <div><dt>Rated use</dt><dd>{rate ?? "-"}</dd></div>
             <div><dt>Tank</dt><dd>{litres(m.tankLitres)}</dd></div>
+            <div>
+              <dt>Odometer</dt>
+              <dd title={m.odometer != null ? `Read at the pump on ${fmtDay(m.odometerDay)} (FactorySuite)` : undefined}>
+                {odometerText(m.odometer, m.basis)}{m.odometer != null && <span className="dr-window__unit">, {fmtDay(m.odometerDay)}</span>}
+              </dd>
+            </div>
           </dl>
           {m.downReason && <p className="dr-panel__note fuel-down">{sentence(m.downReason)}</p>}
         </section>
@@ -643,7 +654,7 @@ function MachinePanel({ m, from, to, onClose }) {
           <h3 className="dr-panel__h">{fmtDay(from)} to {fmtDay(to)}</h3>
           <dl className="dr-window__lead">
             {headline.map((x) => (
-              <div key={x.label}><dt>{x.label}</dt><dd>{x.value}{x.unit && <span className="dr-window__unit"> {x.unit}</span>}</dd></div>
+              <div key={x.label} className={x.wide ? "fuel-lead--wide" : undefined}><dt>{x.label}</dt><dd className={x.bad ? "fuel-lead--bad" : undefined}>{x.value}{x.unit && <span className="dr-window__unit"> {x.unit}</span>}</dd></div>
             ))}
           </dl>
         </section>
@@ -712,7 +723,7 @@ function MachinePanel({ m, from, to, onClose }) {
                     </span>
                     <span className="dr-case__sub">
                       {[i.activity, i.operator,
-                        i.readings?.physical != null ? `meter ${fmt(i.readings.physical)}${i.readings.estimated != null ? ` (expected ${fmt(i.readings.estimated)})` : ""}` : null,
+                        i.readings?.physical != null ? `odometer ${odometerText(i.readings.physical, m.basis)}${i.readings.estimated != null ? ` (expected ${odometerText(i.readings.estimated, m.basis)})` : ""}` : null,
                         i.minutes != null ? `${fmt(i.minutes)} min` : null].filter(Boolean).join(", ")}
                     </span>
                     {issueFlagged(i) && (
