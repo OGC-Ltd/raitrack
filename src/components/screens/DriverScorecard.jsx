@@ -131,7 +131,7 @@ const SORTS = {
   ...Object.fromEntries(VIOLATIONS.map((k) => [k, (d) => d.violations[k] ?? 0])),
 };
 
-export default function DriverScorecard() {
+export default function DriverScorecard({ lead = null }) {
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const options = useMemo(() => periods(), []);
   const today = options[0].to; // options[0] is Today
@@ -234,6 +234,7 @@ export default function DriverScorecard() {
     <section className="sc" aria-label="Driver scorecard">
       <div className="dr-filters">
         <div className="dr-filters__chips" role="group" aria-label="Period">
+          {lead}
           <span className="dr-rankby__label" aria-hidden="true">Period</span>
           <span className="dr-seg">
             {options.map((p) => (

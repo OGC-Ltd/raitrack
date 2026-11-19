@@ -13,6 +13,7 @@ import { resolveOrgId, ORG_CODE_BY_COMPANY } from "../../api/org";
 import { loadWeighbridgeCredit } from "../../api/weighbridgeTonnage";
 import { withWeighbridgeTonnes } from "../../lib/weighbridgeTonnage";
 import DriverScorecard from "./DriverScorecard";
+import SupervisorScorecard from "./SupervisorScorecard";
 import OperatorsView from "./OperatorsView";
 import { hasOperators } from "../../lib/factoryOperators";
 import TrendStat from "./TrendStat";
@@ -287,6 +288,12 @@ export default function DriversScreen() {
   const operatorsTab = hasOperators(activeCompany?.code ?? ORG_CODE_BY_COMPANY[activeCompany?.id]);
   const view = viewPick === "operators" && !operatorsTab ? "analytics" : viewPick;
   const [operatorsSub, setOperatorsSub] = useState("");
+  // Scorecard › Supervisors (operator 2026-11-19): the work plans' supervisors
+  // with the hours their machines ran, beside the drivers' pay scorecard, for
+  // the same organisations. Supervisors first: Mufindi's drivers are not yet
+  // on the platform.
+  const [scoreWhoPick, setScoreWho] = useState("supervisors");
+  const scoreWho = operatorsTab ? scoreWhoPick : "drivers";
 
   // Default to the first driver in the table; keep a valid selection on refresh.
   useEffect(() => {
@@ -379,10 +386,12 @@ export default function DriversScreen() {
         {(!isEmpty || view !== "analytics" || operatorsTab) && (
           <div className="dr-head">
             <div>
-              <h1 className="dr-title">{view === "scorecard" ? `${who.title} Scorecard` : view === "operators" ? "Operators" : `${who.title} Analytics`}</h1>
+              <h1 className="dr-title">{view === "scorecard" ? `${scoreWho === "supervisors" ? "Supervisor" : who.title} Scorecard` : view === "operators" ? "Operators" : `${who.title} Analytics`}</h1>
               <div className="dr-subtitle">
                 {view === "operators"
                   ? operatorsSub || "Loading…"
+                  : view === "scorecard" && scoreWho === "supervisors"
+                  ? `Supervisors' machines and shifts against the hours run · ${activeCompany?.name || "Fleet"}`
                   : view === "scorecard"
                   ? `Speed and safety points per ${who.one} · ${activeCompany?.name || "Fleet"}`
                   : loading
@@ -411,9 +420,15 @@ export default function DriversScreen() {
         )}
 
         {view === "scorecard" ? (
-          <ErrorBoundary label="Driver scorecard">
-            <DriverScorecard />
-          </ErrorBoundary>
+          scoreWho === "supervisors" ? (
+            <ErrorBoundary label="Supervisor scorecard">
+              <SupervisorScorecard companyId={activeCompanyId} lead={<ScoreWhoSwitch who={scoreWho} onPick={setScoreWho} driversLabel={who.title} />} />
+            </ErrorBoundary>
+          ) : (
+            <ErrorBoundary label="Driver scorecard">
+              <DriverScorecard lead={operatorsTab ? <ScoreWhoSwitch who={scoreWho} onPick={setScoreWho} driversLabel={who.title} /> : null} />
+            </ErrorBoundary>
+          )
         ) : view === "operators" ? (
           <OperatorsView companyId={activeCompanyId} company={activeCompany?.name || "Fleet"} onSubtitle={setOperatorsSub} />
         ) : error ? (
@@ -1677,5 +1692,22 @@ function IncidentCell({ n, tone, label }) {
       <span className="dr-incident__dot" aria-hidden="true" />
       {fmt(n)}
     </td>
+  );
+}
+
+/** Scorecard › Supervisors | Drivers, for the organisations with work plan supervisors. */
+function ScoreWhoSwitch({ who, onPick, driversLabel }) {
+  return (
+    <>
+      <span className="dr-rankby__label" aria-hidden="true">Who</span>
+      <span className="dr-seg" role="group" aria-label="Scorecard for">
+        {[["supervisors", "Supervisors"], ["drivers", driversLabel]].map(([k, label]) => (
+          <button key={k} type="button" className={`dr-chip${who === k ? " dr-chip--active" : ""}`}
+                  aria-pressed={who === k} onClick={() => onPick(k)}>
+            {label}
+          </button>
+        ))}
+      </span>
+    </>
   );
 }
