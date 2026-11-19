@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures, withRefillColumns } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillFigures, withRefillColumns, withConsumedSinceRefill } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -125,7 +125,12 @@ export default function FuelScreen() {
   const meters = meterRead.error ? null : meterRead.data ?? null;
   const today = fleetDay(Date.now());
   const checked = useMemo(
-    () => withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
+    // Consumed runs from the latest refill (operator 2026-11-20), the period
+    // balance kept beside it as consumedPeriod.
+    () => withConsumedSinceRefill(
+      withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
+      tankDays, today,
+    ),
     [roster, vehicles, fillings, tankDays, today, meters],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
@@ -442,11 +447,11 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
                       {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
                     </td>
-                    {/* Burnt over the row's Period, from the probe (lib/factoryFuel withConsumed).
-                        Pump flags were here (operator 2026-11-18); they stay in the machine panel. */}
+                    {/* Burnt since the latest refill, from the probe (lib/factoryFuel
+                        withConsumedSinceRefill, operator 2026-11-20). Pump flags were
+                        here (operator 2026-11-18); they stay in the machine panel. */}
                     <td className={r.consumed != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Consumed"
-                        title={r.consumed != null ? "Fuel used over the period, from the fuel probe: tank at the start + fills − drains − tank now"
-                          : "No probe reading at the start or end of the period"}>
+                        title={consumedTitle(r)}>
                       {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
                     </td>
                     <OdometerBeforeCell r={r} />
@@ -498,6 +503,17 @@ const refillTitle = (r, source) => [
   r.lastRefill?.at != null ? `at the fuelling of ${fmtFillWhen.format(r.lastRefill.at)}` : null,
   r.refillCount > 1 ? `the latest of ${r.refillCount}; the machine panel lists each` : null,
 ].filter(Boolean).join(", ");
+
+/** Consumed's hover: where the running figure starts and ends, or why it is blank. */
+function consumedTitle(r) {
+  const since = r.lastRefill?.at ? fmtFillWhen.format(r.lastRefill.at) : null;
+  const period = r.consumedPeriod != null ? ` Over the whole period: ${fmt(r.consumedPeriod)} L.` : "";
+  if (r.consumed != null) {
+    return `Fuel used since the refill on ${since}, from the fuel probe: tank after the refill + later fills − drains − tank ${r.consumedEnd === "now" ? "now" : `at the end of ${fmtDay(r.consumedEnd)}`}.${period}`;
+  }
+  if (!r.lastRefill) return `No refill in the period, so nothing to count from.${period}`;
+  return `No probe reading after the refill on ${since} or at the end of the period.${period}`;
+}
 
 /** The tank before or after the machine's latest refill in the period (lib/factoryFuel withRefillColumns). */
 function RefillLevelCell({ r, which, label }) {

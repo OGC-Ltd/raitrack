@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed, refillFigures, plannedLitres, withRefillColumns } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -393,6 +393,27 @@ describe("withRefillColumns", () => {
     const [out] = withRefillColumns([row], meters);
     expect(out).toMatchObject({ fuelBefore: 78.8, fuelAfter: 641.9, odometerBefore: 4214.1, refillCount: 2 });
     expect(out.lastRefill.id).toBe("b");
+  });
+
+  it("counts Consumed from the latest refill, to now or to the period's last day", () => {
+    let row = { reference: "EX-17", vehicleId: "v17", lines: [], pumpIssues: [], fills: [], consumed: 606 };
+    row = fills(row, "b", "2026-11-19T06:00:00Z", 77.66, 641.92);
+    const days = [
+      { vehicleId: "v17", day: "2026-11-19", openingL: 89.846, closingL: 468.197, fillL: 557.651, drainL: 0 },
+      { vehicleId: "v17", day: "2026-11-20", openingL: 468.197, closingL: null, fillL: 30, drainL: 10 },
+    ];
+    const [now] = withConsumedSinceRefill(withRefillColumns([{ ...row, lastDay: "2026-11-20", fuelNow: 468.36 }], null), days, "2026-11-20");
+    expect(now).toMatchObject({ consumed: 193.56, consumedEnd: "now", consumedPeriod: 606 }); // 641.92 + 30 − 10 − 468.36
+    const [past] = withConsumedSinceRefill(withRefillColumns([{ ...row, lastDay: "2026-11-19", fuelNow: 468.36 }], null), days, "2026-11-20");
+    expect(past).toMatchObject({ consumed: 173.72, consumedEnd: "2026-11-19" }); // 641.92 − 468.197
+  });
+
+  it("leaves Consumed empty with no refill, no level at the end, or a balance below zero", () => {
+    const base = { reference: "EX-17", vehicleId: "v17", lines: [], pumpIssues: [], fills: [], lastDay: "2026-11-20" };
+    expect(withConsumedSinceRefill(withRefillColumns([{ ...base, fuelNow: 300 }], null), [], "2026-11-20")[0].consumed).toBeNull();
+    const refilled = fills(base, "b", "2026-11-19T06:00:00Z", 77.66, 641.92);
+    expect(withConsumedSinceRefill(withRefillColumns([{ ...refilled, fuelNow: null }], null), [], "2026-11-20")[0].consumed).toBeNull();
+    expect(withConsumedSinceRefill(withRefillColumns([{ ...refilled, fuelNow: 700 }], null), [], "2026-11-20")[0].consumed).toBeNull();
   });
 
   it("leaves the columns empty for a machine the pump has not fuelled, or while the meters are unread", () => {
