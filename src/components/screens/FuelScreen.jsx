@@ -37,6 +37,9 @@ const fmt = (n, d = null) =>
     : { minimumFractionDigits: d, maximumFractionDigits: d });
 const litres = (n) => (n == null ? "-" : `${fmt(n)} L`);
 /** An odometer reading with its unit: "5,086.5 h", "12,340 km"; to one decimal, as the pump reads it. */
+/** A refill meter with its own unit: km off the tracker, the pump's unit off the pump. */
+const meterText = (n, unit) =>
+  (n == null ? "-" : `${Number(n).toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ""}`);
 const odometerText = (n, basis) => {
   if (n == null) return "-";
   const u = odometerUnit(basis);
@@ -505,7 +508,7 @@ function RefillLevelCell({ r, which, label }) {
     return <td className="dr-num dr-num--zero" data-label={label} title={why}>-</td>;
   }
   return (
-    <td className="dr-num" data-label={label} title={refillTitle(r, level.source === "probe" ? "Our fuel probe" : "FactorySuite's probe check")}>
+    <td className="dr-num" data-label={label} title={refillTitle(r, levelSource(level))}>
       {fmt(level.litres)} L
     </td>
   );
@@ -515,15 +518,16 @@ function RefillLevelCell({ r, which, label }) {
 function OdometerBeforeCell({ r }) {
   const m = r.lastRefill?.odometerBefore;
   if (!m) {
-    const why = !r.lastRefill ? "No fuelling at the pump in this range"
-      : r.lastRefill.tracked === false ? "Not one of our tracked units"
+    // Never the pump's hours (operator 2026-11-20: "never render the pump hours on the odometer").
+    const why = (!r.lastRefill ? "No fuelling at the pump in this range"
+      : r.lastRefill.tracked === false ? "No km reading: not one of our tracked units"
       : r.lastRefill.tracked == null ? "The tracker's figures could not be read"
-      : "The tracker sent no reading just before the fuelling";
+      : "No km reading: the tracker sent none just before the fuelling");
     return <td className="dr-num dr-num--zero" data-label="Odometer before" title={why}>-</td>;
   }
   return (
-    <td className="dr-num" data-label="Odometer before" title={refillTitle(r, `The tracker, ${clockOf(m.at)}`)}>
-      {odometerText(m.value, r.basis)}
+    <td className="dr-num" data-label="Odometer before" title={`${refillTitle(r, beforeSource(m, r.lastRefill.tracked, false))}${meterNote(r.lastRefill)}`}>
+      {meterText(m.value, m.unit)}
     </td>
   );
 }
@@ -710,14 +714,14 @@ function Refills({ m, from, to }) {
             </tr>
             <tr>
               <th scope="row">Odometer before refill</th>
-              <td className="r" title={r.odometerBefore ? `The tracker, ${clockOf(r.odometerBefore.at)}`
+              <td className="r" title={r.odometerBefore ? `${beforeSource(r.odometerBefore, r.tracked)}${meterNote(r)}`
                 : waiting ? undefined : trackerWhy(r, "The tracker sent no reading just before the fuelling")}>
-                {r.odometerBefore ? odometerText(r.odometerBefore.value, m.basis) : waiting ? ELLIPSIS : "-"}
+                {r.odometerBefore ? meterText(r.odometerBefore.value, r.odometerBefore.unit) : waiting ? ELLIPSIS : "-"}
               </td>
             </tr>
             <tr>
               <th scope="row">Odometer after refill</th>
-              <OdometerAfterCell r={r} basis={m.basis} />
+              <OdometerAfterCell r={r} />
             </tr>
             <tr>
               <th scope="row">Issued</th>
@@ -732,12 +736,18 @@ function Refills({ m, from, to }) {
 
 const fmtClock = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false });
 const clockOf = (iso) => (iso ? fmtClock.format(new Date(iso)) : "");
-const levelSource = (x) => (!x ? undefined : x.source === "probe" ? "Our fuel probe" : "FactorySuite's probe check");
+const levelSource = (x) => (!x ? undefined : x.source === "probe" ? "Our fuel probe"
+  : x.source === "pump" ? "From the pump: a full tank less the litres issued" : "FactorySuite's probe check");
 const plannedTitle = (p) => [
   `Shift ${p.shiftNo}${p.shiftStart ? ` from ${p.shiftStart.slice(0, 5)}` : ""}`,
   p.hours != null ? `${fmt(p.hours)} h` : p.km != null ? `${fmt(p.km)} km` : null,
   p.need != null ? `needs about ${fmt(p.need)} L` : null,
 ].filter(Boolean).join(", ");
+
+/** Where an Odometer before came from: the tracker, or the pump for a machine with no tracker. */
+const beforeSource = (m, tracked, when = true) => (m.source === "pump"
+  ? `Keyed in at the pump${when && m.at ? ` at this fuelling, ${fmtFillWhen.format(Date.parse(m.at))}` : ""}${tracked === false ? " (no tracker on this machine)" : ""}`
+  : `The tracker's GPS odometer, ${clockOf(m.at)}`);
 
 /** Why a tracker figure is "-": the read failed, the machine is not tracked, or the tracker gave none. */
 const trackerWhy = (r, none) =>
@@ -768,25 +778,34 @@ function ConsumedCell({ r, waiting }) {
 }
 
 /**
- * Odometer after the refill (lib/factoryFuel withMeterAfter): the tracker's
- * meter now for the latest refill, or just before the next refill for an
- * earlier one (operator 2026-11-20: "meter now"). The pump's keyed-in reading
- * is another meter and stays in the hover (EX-26: 1,891.5 h at the pump
- * against 2,310.9 h on the tracker).
+ * Odometer after the refill (lib/factoryFuel withMeterAfter), on the same
+ * meter as Odometer before: by default the pump's (operator 2026-11-20), so
+ * the next fuelling's pump reading, or for the latest refill the pump reading
+ * plus what the tracker has run since ("meter now"). Where the pump has no
+ * reading, the tracker's own meter.
  */
-const pumpNote = (r, basis) => (r?.odometerAfter != null ? `; keyed in at the pump: ${odometerText(r.odometerAfter, basis)}` : "");
+const meterNote = (r) => (r?.odometerBefore?.source === "pump" && r.trackerBefore?.value != null
+  ? `; the tracker read ${meterText(r.trackerBefore.value, "km")} at the fuelling` : "");
 const afterSource = (a) => (a.source === "now"
-  ? `The tracker now${a.at ? `, last read ${fmtFillWhen.format(Date.parse(a.at))}` : ""}`
-  : `The tracker just before the next refill, ${clockOf(a.at)}`);
-const afterWhy = (r) => (r.odometerBefore ? "The tracker gives no later reading" : trackerWhy(r, "The tracker gives no reading"));
+  ? `The tracker's GPS odometer now${a.at ? `, last read ${fmtFillWhen.format(Date.parse(a.at))}` : ""}`
+  : a.source === "now-pump"
+    ? `The pump reading plus the ${meterText(a.run, "km")} the tracker has run since${a.at ? `, last read ${fmtFillWhen.format(Date.parse(a.at))}` : ""}`
+    : a.source === "next-refill-pump"
+      ? `Keyed in at the pump at the next fuelling, ${fmtFillWhen.format(Date.parse(a.at))}`
+      : `The tracker's GPS odometer just before the next refill, ${clockOf(a.at)}`);
+const afterWhy = (r) => (r.odometerBefore?.source === "pump"
+  ? (r.tracked === false ? "No tracker on this machine: the next fuelling's pump reading gives it, and there is none yet"
+    : r.trackerBefore?.value == null ? trackerWhy(r, "The tracker gave no reading at the fuelling, so its run since cannot be added")
+    : "The tracker gives no later reading")
+  : r.odometerBefore ? "The tracker gives no later reading" : trackerWhy(r, "The tracker gives no reading"));
 
-function OdometerAfterCell({ r, basis }) {
+function OdometerAfterCell({ r }) {
   const a = r.meterAfter;
-  if (!a) return <td className="r" title={`${afterWhy(r)}${pumpNote(r, basis)}`}>-</td>;
+  if (!a) return <td className="r" title={`${afterWhy(r)}${meterNote(r)}`}>-</td>;
   return (
-    <td className="r" title={`${afterSource(a)}${pumpNote(r, basis)}`}>
-      {odometerText(a.value, basis)}
-      {a.source === "now" && <span className="fuel-refill__note"> now</span>}
+    <td className="r" title={`${afterSource(a)}${meterNote(r)}`}>
+      {meterText(a.value, a.unit)}
+      {(a.source === "now" || a.source === "now-pump") && <span className="fuel-refill__note"> now</span>}
     </td>
   );
 }
@@ -797,11 +816,11 @@ function OdometerAfterRefillCell({ r }) {
   const a = l?.meterAfter;
   if (!a) {
     const why = !l ? "No fuelling at the pump in this range" : afterWhy(l);
-    return <td className="dr-num dr-num--zero" data-label="Odometer after" title={`${why}${pumpNote(l, r.basis)}`}>-</td>;
+    return <td className="dr-num dr-num--zero" data-label="Odometer after" title={`${why}${meterNote(l)}`}>-</td>;
   }
   return (
-    <td className="dr-num" data-label="Odometer after" title={`${refillTitle(r, afterSource(a))}${pumpNote(l, r.basis)}`}>
-      {odometerText(a.value, r.basis)}
+    <td className="dr-num" data-label="Odometer after" title={`${refillTitle(r, afterSource(a))}${meterNote(l)}`}>
+      {meterText(a.value, a.unit)}
     </td>
   );
 }
@@ -867,9 +886,18 @@ function MachinePanel({ m, from, to, onClose }) {
             <div><dt>Tank</dt><dd>{litres(m.tankLitres)}</dd></div>
             <div>
               <dt>Odometer</dt>
-              <dd title={m.odometer != null ? `Read at the pump on ${fmtDay(m.odometerDay)} (FactorySuite)` : undefined}>
-                {odometerText(m.odometer, m.basis)}{m.odometer != null && <span className="dr-window__unit">, {fmtDay(m.odometerDay)}</span>}
-              </dd>
+              {/* In km (operator 2026-11-20): the tracker's GPS odometer now, else a km reading keyed in at the pump; an hour meter is no km figure. */}
+              {m.meterNow?.value != null ? (
+                <dd title={`The tracker's GPS odometer${m.meterNow.at ? `, last read ${fmtFillWhen.format(Date.parse(m.meterNow.at))}` : ""}${m.odometer != null && odometerUnit(m.basis) === "km" ? `; at the pump on ${fmtDay(m.odometerDay)}: ${odometerText(m.odometer, m.basis)}` : ""}`}>
+                  {meterText(m.meterNow.value, "km")}<span className="dr-window__unit"> now</span>
+                </dd>
+              ) : m.odometer != null && odometerUnit(m.basis) === "km" ? (
+                <dd title={`Read at the pump on ${fmtDay(m.odometerDay)} (FactorySuite)`}>
+                  {odometerText(m.odometer, m.basis)}<span className="dr-window__unit">, {fmtDay(m.odometerDay)}</span>
+                </dd>
+              ) : (
+                <dd title="No km reading for this machine">-</dd>
+              )}
             </div>
           </dl>
           {m.downReason && <p className="dr-panel__note fuel-down">{sentence(m.downReason)}</p>}
@@ -949,7 +977,7 @@ function MachinePanel({ m, from, to, onClose }) {
                     </span>
                     <span className="dr-case__sub">
                       {[i.activity, i.operator,
-                        i.readings?.physical != null ? `odometer ${odometerText(i.readings.physical, m.basis)}${i.readings.estimated != null ? ` (expected ${odometerText(i.readings.estimated, m.basis)})` : ""}` : null,
+                        i.readings?.physical != null ? `${odometerUnit(m.basis) === "h" ? "hour meter" : "odometer"} ${odometerText(i.readings.physical, m.basis)}${i.readings.estimated != null ? ` (expected ${odometerText(i.readings.estimated, m.basis)})` : ""}` : null,
                         i.minutes != null ? `${fmt(i.minutes)} min` : null].filter(Boolean).join(", ")}
                     </span>
                     {issueFlagged(i) && (
