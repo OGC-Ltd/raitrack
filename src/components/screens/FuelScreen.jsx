@@ -748,7 +748,7 @@ function Refills({ m, from, to }) {
   return (
     <section className="dr-panel__sec fuel-refills">
       <h3 className="dr-panel__h">Refills<span className="dr-panel__count">{fmt(refills.length)}</span></h3>
-      {refills.map((r) => (
+      {refills.map((r, k) => (
         <table key={r.key} className="fuel-rec fuel-refill">
           <caption>
             {r.at != null ? fmtFillWhen.format(r.at) : r.day ? fmtDay(r.day) : "-"}
@@ -765,7 +765,7 @@ function Refills({ m, from, to }) {
             </tr>
             <tr>
               <th scope="row">Consumed</th>
-              <ConsumedCell r={r} waiting={waiting} />
+              <ConsumedCell r={r} used={usedAfter(m, refills, k)} />
             </tr>
             <tr>
               <th scope="row">Planned</th>
@@ -818,26 +818,35 @@ const beforeSource = (m, tracked, when = true) => (m.source === "pump"
 const trackerWhy = (r, none) =>
   r.tracked == null ? "The tracker's figures could not be read" : r.tracked === false ? "Not one of our tracked units" : none;
 
-/** Fuel burned in the shift the fuelling was for, with the engine hours run in it. */
-function ConsumedCell({ r, waiting }) {
-  const c = r.consumed;
-  if (!c) {
-    const why = waiting ? undefined
-      : !r.planned ? "No plan line for this fuelling"
-      : r.planned.hours == null ? "The plan line gives no planned hours"
-      : trackerWhy(r, "No plan shift for this fuelling");
-    return <td className="r" title={why}>{waiting ? ELLIPSIS : "-"}</td>;
+/**
+ * Consumed after one refill, the table's own figure (operator 2026-11-20:
+ * "pull that from the consumed row"). The latest refill takes the row's
+ * Consumed as it stands (lib/factoryFuel withConsumedSinceRefill: fuel after +
+ * later fills − drains − tank now). An earlier refill runs to the next one:
+ * its fuel after less the next refill's fuel before.
+ */
+function usedAfter(m, refills, k) {
+  if (k === 0) {
+    if (m.lastRefill?.key !== refills[0]?.key || m.consumed == null) return null;
+    return { litres: m.consumed, end: m.consumedEnd };
   }
-  if (c.ahead) return <td className="r">Shift not started</td>;
-  if (c.litres == null) return <td className="r" title={trackerWhy(r, "The probe gave no tank level at one end of the shift")}>-</td>;
+  const after = refills[k].fuelAfter?.litres;
+  const next = refills[k - 1].fuelBefore?.litres;
+  if (after == null || next == null || after < next) return null;
+  return { litres: Math.round((after - next) * 100) / 100, end: "next" };
+}
+
+function ConsumedCell({ r, used }) {
+  if (!used) {
+    const why = !r.fuelAfter ? "No fuel level after this refill" : "No probe level at the end to count to";
+    return <td className="r" title={why}>-</td>;
+  }
+  const title = used.end === "next" ? "Fuel after this refill − fuel before the next refill"
+    : `Fuel after the refill + later fills − drains − tank ${used.end === "now" ? "now" : `at the end of ${fmtDay(used.end)}`}, from the fuel probe; the table's Consumed`;
   return (
-    <td className="r" title={c.open ? "The shift is still running: up to now" : "Over the planned shift"}>
-      {fmt(c.litres)} L
-      {(c.open || c.engineHours != null) && (
-        <span className="fuel-refill__note">
-          {c.open ? " so far" : ""}{c.engineHours != null ? `, ${fmt(c.engineHours, 1)} h run` : ""}
-        </span>
-      )}
+    <td className="r" title={title}>
+      {fmt(used.litres)} L
+      {used.end === "now" && <span className="fuel-refill__note"> so far</span>}
     </td>
   );
 }
