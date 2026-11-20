@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cellDetail, cellTitle, wallClock, weekday, isWeekend, cellIndex, planStats, unitRows, filterUnitRows, planStatus } from "./planSubmissions";
+import { cellDetail, cellTitle, wallClock, weekday, isWeekend, cellIndex, planStats, unitRows, filterUnitRows, planStatus, dailySent } from "./planSubmissions";
 
 describe("plan submissions words", () => {
   it("reads FactorySuite's wall clock as text", () => {
@@ -39,7 +39,7 @@ describe("the day's plans, unit by unit", () => {
     { id: "e", planCode: "WP-3-IRR", department: "IRRIGATION", status: "CANCELLED", lines: [{ id: 6, machine: "EX-09" }] },
   ];
   it("counts the four figures", () => {
-    expect(planStats(plans)).toEqual({ approved: 1, waiting: 1, changes: 1, machines: 1, plans: 5 });
+    expect(planStats(plans)).toEqual({ approved: 1, waiting: 1, changes: 1, drafts: 1, cancelled: 1, machines: 1, lines: 2, hours: 0, departments: 3, plans: 5 });
   });
   it("lists every line, by department then status", () => {
     const rows = unitRows(plans, { name: (s) => s.toUpperCase() });
@@ -57,5 +57,13 @@ describe("the day's plans, unit by unit", () => {
   it("names a status it does not know as it comes", () => {
     expect(planStatus("cancelled").label).toBe("Cancelled");
     expect(planStatus("ON_HOLD").label).toBe("On hold");
+  });
+});
+
+describe("the strip's daily series", () => {
+  it("counts departments sent and sent on time a day", () => {
+    const board = { days: ["2026-11-19", "2026-11-20"], departments: ["CIVIL", "ROADS"], sent: { "2026-11-19": 1, "2026-11-20": 2 },
+      cells: [{ department: "CIVIL", day: "2026-11-19", state: "approved_late" }, { department: "CIVIL", day: "2026-11-20", state: "approved" }, { department: "ROADS", day: "2026-11-20", state: "sent" }] };
+    expect(dailySent(board)).toEqual([{ day: "2026-11-19", sent: 1, onTime: 0 }, { day: "2026-11-20", sent: 2, onTime: 2 }]);
   });
 });
