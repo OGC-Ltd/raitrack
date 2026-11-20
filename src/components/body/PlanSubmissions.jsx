@@ -18,6 +18,7 @@ import { shiftText } from "../../lib/workPlanMap";
 import { nameCase } from "../../lib/factorySupervisors";
 import { operatorName } from "../../lib/shiftOperators";
 import LoadError from "../shared/LoadError";
+import { StaffSpinner } from "../screens/StaffLoading";
 import DateRangePicker from "../layout/DateRangePicker";
 import TablePager, { PAGE_STEP } from "./TablePager";
 import PlanLinePanel from "./PlanLinePanel";
@@ -62,7 +63,8 @@ export default function PlanSubmissions({ orgId }) {
   const dayPlans = useWorkPlans(orgId, Boolean(selected), selected ?? undefined);
 
   if (error && !data) return <div className="psb"><LoadError label="Plan" onRetry={refetch} fullSection /></div>;
-  if (loading || !data) return <div className="psb"><p className="psb__empty">Loading the plan…</p></div>;
+  // The Workshop's and the Staffs page's loader: the turning ring (operator, 2026-11-21).
+  if (loading || !data) return <div className="psb"><StaffSpinner what="plan" /></div>;
   if (data.factory == null) {
     return <div className="psb"><p className="psb__empty">This organisation keeps no FactorySuite work plans.</p></div>;
   }
@@ -502,7 +504,7 @@ function UnitsTable({ orgId, latest, plans, loading, error, day, departments }) 
         {tError ? (
           <p className="dr-grid__empty psb-units__state">The plans for {dayWords} could not be read. They load again on the next FactorySuite update.</p>
         ) : tLoading ? (
-          <p className="dr-grid__empty psb-units__state" aria-busy="true">Loading the plans for {dayWords}…</p>
+          <StaffSpinner what="plans" />
         ) : rows.length === 0 ? (
           <p className="dr-grid__empty psb-units__state">No department has started a plan for {dayWords} yet.</p>
         ) : (

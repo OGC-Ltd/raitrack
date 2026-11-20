@@ -22,20 +22,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "../body/SensorPanel.css";
 import "./SystemScreen.css";
+import "./DriversScreen.css";
+import "./WorkshopScreen.css";
 import "../body/RepairWorkflow.css";
 import { usePermissions, FACTORY_WORKSHOP_ORGS } from "../../hooks/usePermissions";
 import { useAuth } from "../../context/AuthContext";
 import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
 import {
-  listWorkflowJobs, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
+  listWorkflowJobs, listWorkflowJobsSince, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, viewOnly, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
   takeWorkshopHandoff, WORKSHOP_OPEN, shortCard,
 } from "../../api/repairWorkflow";
 import FactoryWorkshopTab from "./FactoryWorkshopTab";
+import { JobsStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay } from "./WorkshopStats";
 import RepairWorkflowJob, { PhaseLadder, TrailList, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
-import TableToolbar from "../body/TableToolbar";
-import FilterBar from "../body/FilterBar";
+import { usePager } from "../body/TablePager";
+import { WfFilters, WfGrid, Reload, rowProps, Badge, Ident } from "./WorkshopParts";
 import EmptyNote from "../shared/EmptyNote";
 import DetailSidebar, { DetailSidebarFacts, DetailSidebarIdent, DetailSidebarSection } from "../shared/DetailSidebar";
 import { watchTableLabels } from "../../lib/tableLabels";
@@ -46,6 +49,14 @@ const BUCKETS = [
   ["controltech",  "ControlTech",  ["forwarded", "remote_fix", "spare_outsourced"]],
   ["workshop",     "Workshop",     ["in_workshop", "field_inspection", "fixing"]],
 ];
+/** Each view's title and the line under it, as the Staffs page heads its views. */
+const VIEW_HEAD = {
+  jobs:     ["Repair jobs", "Every repair job, where it stands and who acts next"],
+  mine:     ["My jobs", "Jobs assigned to you, open and closed"],
+  day:      ["Workshop day", "Each workshop's bookings, one day at a time"],
+  security: ["Security cases", "Suspected malicious damage found in repairs"],
+  factory:  ["Auto Workshop", "FactorySuite job cards in the workshop, and the stores"],
+};
 /** Any one of these opens the Jobs and Workshop Day tabs. */
 const BOARD_VERBS = ["repair:flag", "repair:assess", "repair:book", "repair:verify", "repair:work_any"];
 const bucketOf = (stage) => BUCKETS.find(([, , list]) => list.includes(stage))?.[0] ?? null;
@@ -91,6 +102,9 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
   const [flagging, setFlagging] = useState(false);
   const [search, setSearch] = useState("");
   const jobs = useLive(() => listWorkflowJobs(orgId, { status: state === "closed" ? "all" : state }), [orgId, state]);
+  // The strip's history: every job raised in the window and a month before it,
+  // so a job closed in the window counts though it was flagged earlier.
+  const history = useLive(() => listWorkflowJobsSince(orgId, Date.now() - (STAT_DAYS + 31) * 86_400_000), [orgId]);
   // The search narrows before the counts, so each chip says how many match.
   const q = search.trim().toLowerCase();
   const all = (jobs.data ?? [])
@@ -98,60 +112,30 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
     .filter((j) => !q || jobText(j).includes(q));
   const counts = Object.fromEntries(BUCKETS.map(([k]) => [k, all.filter((j) => bucketOf(j.stage) === k).length]));
   const rows = bucket === "all" ? all : all.filter((j) => bucketOf(j.stage) === bucket);
+  const pager = usePager(rows, `${state}|${bucket}|${q}`);
 
   return (
     <>
-      <TableToolbar
-        summary={<><b>{rows.length}</b> job{rows.length === 1 ? "" : "s"}{q ? <> matching “{search.trim()}”</> : null}</>}
-        loading={jobs.loading}
-        onReload={jobs.read}
-        actions={can("repair:flag") ? (
-          <button type="button" className="sp4-submit-btn wf-flag-btn" onClick={() => setFlagging(true)}>
-            <i className="ti ti-flag" aria-hidden="true" /> Flag for repair
-          </button>
-        ) : null}
+      {state === "open" && (
+        <JobsStrip open={(jobs.data ?? []).filter((j) => !j.resolvedAt)} history={history.data}
+                   bucketOf={bucketOf} loading={jobs.loading && !jobs.data} />
+      )}
+      <WfFilters
+        label="Search jobs" placeholder="Search reg, ticket or fault…" search={search} onSearch={setSearch}
+        groups={[
+          { label: "Jobs", value: state, onPick: (id) => { setState(id); setBucket("all"); }, options: [["open", "Open"], ["closed", "Closed"]] },
+          ...(state === "open" ? [{ label: "Next", value: bucket, onPick: setBucket,
+            options: [["all", "Everyone", all.length], ...BUCKETS.map(([id, label]) => [id, label, counts[id]])] }] : []),
+        ]}
+        tools={<>
+          {can("repair:flag") && (
+            <button type="button" className="sp4-submit-btn wf-flag-btn" onClick={() => setFlagging(true)}>
+              <i className="ti ti-flag" aria-hidden="true" /> Flag for repair
+            </button>
+          )}
+          <Reload loading={jobs.loading} onReload={jobs.read} />
+        </>}
       />
-      <FilterBar
-        label="Filters"
-        activeCount={(state !== "open" ? 1 : 0) + (bucket !== "all" ? 1 : 0)}
-        peek={(
-          <div className="sp4-search-wrap">
-            <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              className="sp4-search"
-              type="text"
-              placeholder="Search reg, ticket or fault…"
-              aria-label="Search jobs"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && <button type="button" className="sp4-search-clear" aria-label="Clear search" onClick={() => setSearch("")}>✕</button>}
-          </div>
-        )}
-      >
-        <div className="sp4-filter-group">
-          <span className="sp4-filter-label">Jobs</span>
-          {[["open", "Open"], ["closed", "Closed"]].map(([id, label]) => (
-            <button key={id} type="button" aria-pressed={state === id}
-                    className={"sp4-filter-chip" + (state === id ? " sp4-filter-chip--on" : "")}
-                    onClick={() => { setState(id); setBucket("all"); }}>{label}</button>
-          ))}
-        </div>
-        {state === "open" && (
-          <div className="sp4-filter-group">
-            <span className="sp4-filter-label">Next</span>
-            <button type="button" aria-pressed={bucket === "all"} className={"sp4-filter-chip" + (bucket === "all" ? " sp4-filter-chip--on" : "")}
-                    onClick={() => setBucket("all")}>Everyone<span className="sys-chip-n">{all.length}</span></button>
-            {BUCKETS.map(([id, label]) => (
-              <button key={id} type="button" aria-pressed={bucket === id}
-                      className={"sp4-filter-chip" + (bucket === id ? " sp4-filter-chip--on" : "")}
-                      onClick={() => setBucket(id)}>{label}<span className="sys-chip-n">{counts[id]}</span></button>
-            ))}
-          </div>
-        )}
-      </FilterBar>
 
       {rows.length === 0 && jobs.loading ? (
         <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Jobs">Repair jobs and where each one stands.</EmptyNote>
@@ -167,53 +151,36 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
           {state === "open" ? "No unit is waiting on a repair." : "Nothing has been verified, signed off or voided yet."}
         </EmptyNote>
       ) : (
-        <div className="sp4-table-scroll">
-          <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable wf-table">
-            <thead>
-              <tr>
-                <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
-                <th className="sp4-th--left">Fault</th>
-                <th className="sp4-th--left">Stage</th>
-                <th className="sp4-th--left">Ticket</th>
-                <th className="sp4-th--left">Workshop day</th>
-                <th className="sp4-th--left">Next</th>
-                <th className="sp4-th--right">In stage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((j) => {
+        <WfGrid label="Job pages" pager={pager}
+                head={[["Unit reg"], ["Fault"], ["Stage"], ["Ticket"], ["Workshop day"], ["Next"], ["In stage", true]]}>
+              {pager.pageRows.map((j) => {
                 const booking = j.bookings?.[0];
                 const next = NEXT_STEP[j.stage];
                 const open = () => onOpen(j.id);
                 return (
-                  <tr key={j.id} data-job={j.id} tabIndex={0}
-                      className={"sp4-tr sp4-tr--incident wf-tr" + (openId === j.id ? " wf-tr--open" : "")}
-                      aria-expanded={openId === j.id} onClick={open}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}>
-                    <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{j.vehicle?.registrationPlate ?? "-"}</span></td>
-                    <td className="sp4-td--left">
+                  <tr key={j.id} data-job={j.id} {...rowProps(openId === j.id, open)}>
+                    <td><Ident name={j.vehicle?.registrationPlate ?? "-"} sub={j.vehicle?.name !== j.vehicle?.registrationPlate ? j.vehicle?.name : null} /></td>
+                    <td>
                       <span className="wf-cell-fault">{jobLabel(j)}</span>
                       {(j.suspectedFault ?? j.problemNote) && <span className="wf-cell-sub">{j.suspectedFault ?? j.problemNote}</span>}
                     </td>
-                    <td className="sp4-td--left">
+                    <td>
                       <span className="wf-cell-stage">
-                        <span className={`sp4-pill sp4-pill--${STAGE_PILL[j.stage] ?? "none"}`}>{STAGE_LABEL[j.stage] ?? j.stage}</span>
+                        <Badge tone={STAGE_PILL[j.stage]}>{STAGE_LABEL[j.stage] ?? j.stage}</Badge>
                         <PhaseLadder stage={j.stage} compact />
                       </span>
                     </td>
-                    <td className="sp4-td--left">
-                      <span className="wf-mono">{j.ticketNo ?? "-"}</span>
-                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                    <td>
+                      <span className="dr-veh">{j.ticketNo ?? "-"}</span>
+                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="dr-veh">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
                     </td>
-                    <td className="sp4-td--left sys-num">{booking ? isoDay(booking.bookingDate) : "-"}</td>
-                    <td className="sp4-td--left">{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
-                    <td className="sp4-td--right sys-num">{since(j.stageChangedAt ?? j.createdAt)}</td>
+                    <td className="sys-num">{booking ? isoDay(booking.bookingDate) : "-"}</td>
+                    <td>{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
+                    <td className="dr-num sys-num">{since(j.stageChangedAt ?? j.createdAt)}</td>
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+        </WfGrid>
       )}
 
       <FlagRepairDialog
@@ -256,7 +223,7 @@ const MINE_EMPTY = {
 export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = true }) {
   const jobs = useLive(() => Promise.all([fetchMyJobs(orgId), fetchQueue(orgId)]).then(([mine, queue]) => {
     const own = new Set(mine.map((j) => j.id));
-    return [...queue.filter((r) => !r.assignedToId && !own.has(r.id)), ...mine];
+    return [...queue.filter((r) => !r.assignedToId && !own.has(r.id)).map((r) => ({ ...r, fromQueue: true })), ...mine];
   }), [orgId]);
   const [busy, setBusy] = useState(null);
   const claim = async (r) => {
@@ -278,43 +245,16 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
   const all = (jobs.data ?? []).filter((j) => !q || jobText(j).includes(q));
   const counts = Object.fromEntries(MINE_GROUPS.map(([k]) => [k, all.filter((j) => mineGroup(j) === k).length]));
   const rows = all.filter((j) => mineGroup(j) === group);
+  const pager = usePager(rows, `${group}|${q}`);
 
   return (
     <>
-      <TableToolbar
-        summary={<><b>{rows.length}</b> job{rows.length === 1 ? "" : "s"}{q ? <> matching “{search.trim()}”</> : null}</>}
-        loading={jobs.loading}
-        onReload={jobs.read}
+      <MineStrip rows={jobs.data ?? []} groupOf={mineGroup} loading={jobs.loading && !jobs.data} />
+      <WfFilters
+        label="Search my jobs" placeholder="Search reg, ticket or fault…" search={search} onSearch={setSearch}
+        groups={[{ label: "Jobs", value: group, onPick: setGroup, options: MINE_GROUPS.map(([id, text]) => [id, text, counts[id]]) }]}
+        tools={<Reload loading={jobs.loading} onReload={jobs.read} />}
       />
-      <FilterBar
-        label="Filters"
-        activeCount={group !== "open" ? 1 : 0}
-        peek={(
-          <div className="sp4-search-wrap">
-            <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              className="sp4-search"
-              type="text"
-              placeholder="Search reg, ticket or fault…"
-              aria-label="Search my jobs"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && <button type="button" className="sp4-search-clear" aria-label="Clear search" onClick={() => setSearch("")}>✕</button>}
-          </div>
-        )}
-      >
-        <div className="sp4-filter-group">
-          <span className="sp4-filter-label">Jobs</span>
-          {MINE_GROUPS.map(([id, text]) => (
-            <button key={id} type="button" aria-pressed={group === id}
-                    className={"sp4-filter-chip" + (group === id ? " sp4-filter-chip--on" : "")}
-                    onClick={() => setGroup(id)}>{text}<span className="sys-chip-n">{counts[id]}</span></button>
-          ))}
-        </div>
-      </FilterBar>
       {rows.length === 0 && jobs.loading ? (
         <EmptyNote icon="ti-loader-2" tone="busy" title="Reading Your Jobs">Jobs assigned to you, open and closed.</EmptyNote>
       ) : rows.length === 0 && jobs.error ? (
@@ -326,58 +266,42 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
       ) : rows.length === 0 ? (
         <EmptyNote icon="ti-circle-check" title={MINE_EMPTY[group][0]}>{MINE_EMPTY[group][1]}</EmptyNote>
       ) : (
-        <div className="sp4-table-scroll">
-          <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable wf-table">
-            <thead>
-              <tr>
-                <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
-                <th className="sp4-th--left">Fault</th>
-                <th className="sp4-th--left">Stage</th>
-                <th className="sp4-th--left">Ticket</th>
-                <th className="sp4-th--left">{group === "workshop" ? "Workshop" : "Your part"}</th>
-                <th className="sp4-th--right">{group === "closed" ? "Closed" : "In stage"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((j) => {
+        <WfGrid label="Job pages" pager={pager}
+                head={[["Unit reg"], ["Fault"], ["Stage"], ["Ticket"], [group === "workshop" ? "Workshop" : "Your part"], [group === "closed" ? "Closed" : "In stage", true]]}>
+              {pager.pageRows.map((j) => {
                 const booking = j.bookings?.[0];
                 const open = () => onOpen(j.id);
                 const where = [booking?.workshop?.name, booking ? isoDay(booking.bookingDate) : null,
                   j.workshopTechnician?.fullName ?? j.workshopTechnicianName].filter(Boolean).join(" · ");
                 return (
-                  <tr key={j.id} data-job={j.id} tabIndex={0}
-                      className={"sp4-tr wf-tr" + (openId === j.id ? " wf-tr--open" : "")}
-                      aria-expanded={openId === j.id} onClick={open}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}>
-                    <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{j.vehicle?.registrationPlate ?? "-"}</span></td>
-                    <td className="sp4-td--left">
+                  <tr key={j.id} data-job={j.id} {...rowProps(openId === j.id, open)}>
+                    <td><Ident name={j.vehicle?.registrationPlate ?? "-"} sub={j.vehicle?.name !== j.vehicle?.registrationPlate ? j.vehicle?.name : null} /></td>
+                    <td>
                       <span className="wf-cell-fault">{jobLabel(j)}</span>
                       {(j.suspectedFault ?? j.problemNote) && <span className="wf-cell-sub">{j.suspectedFault ?? j.problemNote}</span>}
                     </td>
-                    <td className="sp4-td--left">
+                    <td>
                       <span className="wf-cell-stage">
-                        <span className={`sp4-pill sp4-pill--${STAGE_PILL[j.stage] ?? "none"}`}>{STAGE_LABEL[j.stage] ?? j.stage}</span>
+                        <Badge tone={STAGE_PILL[j.stage]}>{STAGE_LABEL[j.stage] ?? j.stage}</Badge>
                         <PhaseLadder stage={j.stage} compact />
                       </span>
                     </td>
-                    <td className="sp4-td--left">
-                      <span className="wf-mono">{j.ticketNo ?? "-"}</span>
-                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                    <td>
+                      <span className="dr-veh">{j.ticketNo ?? "-"}</span>
+                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="dr-veh">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
                     </td>
-                    <td className="sp4-td--left">
+                    <td>
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
                         : !j.assignedToId && !j.workshopTechnicianId ? (!canClaim ? <span className="sp4-muted">Unclaimed</span> : (
                           <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
                                   onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Claiming…" : "Claim"}</button>
                         )) : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
                     </td>
-                    <td className="sp4-td--right sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.forwardedAt ?? j.createdAt)}</td>
+                    <td className="dr-num sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.forwardedAt ?? j.createdAt)}</td>
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+        </WfGrid>
       )}
     </>
   );
@@ -460,6 +384,36 @@ function DaySkeleton() {
   );
 }
 
+/** The strip's window: the {STAT_DAYS} days up to the day on screen, for one
+ *  workshop. A past day does not change, so it is read once and kept; today
+ *  and later are read again whenever a repair changes. */
+const pastDays = new Map();
+function useDayWindow(orgId, wid, date) {
+  const days = useMemo(() => windowDays(date), [date]);
+  const [got, setGot] = useState({});
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const again = () => setTick((t) => t + 1);
+    window.addEventListener(REPAIRS_CHANGED, again);
+    return () => window.removeEventListener(REPAIRS_CHANGED, again);
+  }, []);
+  useEffect(() => {
+    if (!wid) return undefined;
+    let live = true;
+    const today = eatDay(Date.now());
+    days.forEach((d) => {
+      const key = `${orgId}|${wid}|${d}`;
+      if (d < today && pastDays.has(key)) { setGot((g) => (g[key] ? g : { ...g, [key]: pastDays.get(key) })); return; }
+      fetchWorkshopDay(orgId, wid, d).then((data) => {
+        if (d < today) pastDays.set(key, data);
+        if (live) setGot((g) => ({ ...g, [key]: data }));
+      }).catch(() => {});
+    });
+    return () => { live = false; };
+  }, [orgId, wid, days, tick]);
+  return days.map((d) => ({ day: d, data: wid ? got[`${orgId}|${wid}|${d}`] ?? null : null }));
+}
+
 function DayTab({ orgId, onOpen }) {
   const [workshops, setWorkshops] = useState(null);
   const [wid, setWid] = useState(null);
@@ -468,14 +422,23 @@ function DayTab({ orgId, onOpen }) {
     fetchWorkshops(orgId).then((w) => { setWorkshops(w); setWid(w[0]?.id ?? null); }).catch(() => setWorkshops([]));
   }, [orgId]);
   const day = useWorkshopDay(orgId, wid, date);
+  const week = useDayWindow(orgId, wid, date);
   const shift = (n) => setDate(dayShift(date, n));
   const d = day.data;
   const live = (d?.bookings ?? []).filter((b) => b.status === "booked" || b.status === "arrived");
   const other = (d?.bookings ?? []).filter((b) => b.status === "no_show");
   const label = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }).format(new Date(`${date}T00:00:00Z`));
+  // One row a unit on the day, booked first, then the unbooked arrivals, then the no-shows.
+  const dayRows = [
+    ...live.map((b) => ({ key: b.id, job: b.repairItem, tag: b.status === "arrived" ? "Arrived" : "Booked", tone: b.status === "arrived" ? "con" : "info" })),
+    ...(d?.unbookedArrivals ?? []).map((j) => ({ key: j.id, job: j, tag: "Arrived, unbooked", tone: "warn" })),
+    ...other.map((b) => ({ key: b.id, job: b.repairItem, tag: "No show", tone: "inc" })),
+  ];
+  const dayPager = usePager(dayRows, `${wid}|${date}`);
 
   return (
     <div className="wf-day-board">
+      <DayStrip current={day.data} week={week} date={date} loading={workshops === null || (day.loading && !day.data)} />
       <div className="wf-day-board__head">
         <div className="wf-day-board__nav">
           <button type="button" className="sp4-ghost-btn" onClick={() => shift(-1)} aria-label="Previous day"><i className="ti ti-chevron-left" aria-hidden="true" /></button>
@@ -512,30 +475,25 @@ function DayTab({ orgId, onOpen }) {
       ) : live.length === 0 && (d?.unbookedArrivals?.length ?? 0) === 0 ? (
         <EmptyNote icon="ti-calendar" title="Nothing Booked">No unit is booked into the workshop on this day.</EmptyNote>
       ) : (
-        <ol className="wf-board">
-          {live.map((b) => (
-            <BoardRow key={b.id} job={b.repairItem} onOpen={onOpen}
-                      tag={b.status === "arrived" ? "Arrived" : "Booked"} tagTone={b.status === "arrived" ? "con" : "info"} />
-          ))}
-          {d.unbookedArrivals.map((j) => <BoardRow key={j.id} job={j} onOpen={onOpen} tag="Arrived, unbooked" tagTone="warn" />)}
-          {other.map((b) => <BoardRow key={b.id} job={b.repairItem} onOpen={onOpen} tag="No show" tagTone="inc" />)}
-        </ol>
+        <WfGrid label="Day pages" pager={dayPager}
+                head={[["Unit reg"], ["Fault"], ["Ticket"], ["Technician"], ["Status"]]}>
+          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} onOpen={onOpen} tag={r.tag} tagTone={r.tone} />)}
+        </WfGrid>
       )}
     </div>
   );
 }
 
 function BoardRow({ job, onOpen, tag, tagTone }) {
+  const tech = job.workshopTechnician?.fullName ?? job.workshopTechnicianName;
   return (
-    <li>
-      <button type="button" className="wf-board__row" onClick={() => onOpen(job.id)}>
-        <span className="wf-board__plate">{job.vehicle?.registrationPlate}</span>
-        <span className="wf-board__fault">{jobLabel(job)}</span>
-        <span className="wf-mono wf-board__ticket">{job.ticketNo ?? "No ticket yet"}</span>
-        <span className="wf-board__tech">{job.workshopTechnician?.fullName ?? job.workshopTechnicianName ?? "No technician"}</span>
-        <span className={`sp4-pill sp4-pill--${tagTone}`}>{tag}</span>
-      </button>
-    </li>
+    <tr {...rowProps(false, () => onOpen(job.id))}>
+      <td><Ident name={job.vehicle?.registrationPlate ?? "-"} sub={job.vehicle?.name !== job.vehicle?.registrationPlate ? job.vehicle?.name : null} /></td>
+      <td><span className="wf-cell-fault">{jobLabel(job)}</span></td>
+      <td><span className="dr-veh">{job.ticketNo ?? "No ticket yet"}</span></td>
+      <td>{tech ?? <span className="sp4-muted">No technician</span>}</td>
+      <td><Badge tone={tagTone}>{tag}</Badge></td>
+    </tr>
   );
 }
 
@@ -545,18 +503,16 @@ function SecurityTab({ orgId, openCase, setOpenCase }) {
   const [state, setState] = useState("open");
   const list = useLive(() => fetchInvestigations(orgId, state), [orgId, state]);
   const rows = list.data ?? [];
+  const pager = usePager(rows, state);
+  // The strip counts every case, whichever state the table shows.
+  const everything = useLive(() => fetchInvestigations(orgId, "all"), [orgId]);
   return (
     <>
-      <TableToolbar summary={<><b>{rows.length}</b> investigation{rows.length === 1 ? "" : "s"}</>} loading={list.loading} onReload={list.read} />
-      <FilterBar label="State" activeCount={state !== "open" ? 1 : 0}>
-        <div className="sp4-filter-group">
-          <span className="sp4-filter-label">State</span>
-          {[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([id, label]) => (
-            <button key={id} type="button" aria-pressed={state === id}
-                    className={"sp4-filter-chip" + (state === id ? " sp4-filter-chip--on" : "")} onClick={() => setState(id)}>{label}</button>
-          ))}
-        </div>
-      </FilterBar>
+      <SecurityStrip cases={everything.data} />
+      <WfFilters
+        groups={[{ label: "State", value: state, onPick: setState, options: [["open", "Open"], ["closed", "Closed"], ["all", "All"]] }]}
+        tools={<Reload loading={list.loading} onReload={list.read} />}
+      />
       {rows.length === 0 && list.loading ? (
         <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Investigations">Suspected malicious damage found in repairs.</EmptyNote>
       ) : rows.length === 0 ? (
@@ -564,35 +520,20 @@ function SecurityTab({ orgId, openCase, setOpenCase }) {
           An investigation opens when a technician classes damage as suspected malicious.
         </EmptyNote>
       ) : (
-        <div className="sp4-table-scroll">
-          <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable wf-table">
-            <thead>
-              <tr>
-                <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
-                <th className="sp4-th--left">Ticket</th>
-                <th className="sp4-th--left">Damage</th>
-                <th className="sp4-th--left">Warranty</th>
-                <th className="sp4-th--left">State</th>
-                <th className="sp4-th--left">Held by</th>
-                <th className="sp4-th--right">Opened</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} tabIndex={0} className={"sp4-tr wf-tr" + (openCase?.id === c.id ? " wf-tr--open" : "")}
-                    onClick={() => setOpenCase(c)} onKeyDown={(e) => { if (e.key === "Enter") setOpenCase(c); }}>
-                  <td className="sp4-td--left sp4-td--pin"><span className="sp4-reg">{c.vehicle?.registrationPlate}</span></td>
-                  <td className="sp4-td--left"><span className="wf-mono">{c.repairItem?.ticketNo ?? "-"}</span></td>
-                  <td className="sp4-td--left wf-cell-wrap">{c.repairItem?.damageNote ?? "-"}</td>
-                  <td className="sp4-td--left">{c.repairItem?.warrantyVoid ? "Void" : "Stands"}</td>
-                  <td className="sp4-td--left"><span className={`sp4-pill sp4-pill--${INVESTIGATION_PILL[c.status] ?? "none"}`}>{INVESTIGATION_LABEL[c.status] ?? c.status}</span></td>
-                  <td className="sp4-td--left">{c.assignedTo?.fullName ?? <span className="sp4-muted">Nobody yet</span>}</td>
-                  <td className="sp4-td--right sys-num">{at(c.openedAt)}</td>
+        <WfGrid label="Investigation pages" pager={pager}
+                head={[["Unit reg"], ["Ticket"], ["Damage"], ["Warranty"], ["State"], ["Held by"], ["Opened", true]]}>
+              {pager.pageRows.map((c) => (
+                <tr key={c.id} {...rowProps(openCase?.id === c.id, () => setOpenCase(c))}>
+                  <td><Ident name={c.vehicle?.registrationPlate ?? "-"} /></td>
+                  <td><span className="dr-veh">{c.repairItem?.ticketNo ?? "-"}</span></td>
+                  <td className="wf-cell-wrap">{c.repairItem?.damageNote ?? "-"}</td>
+                  <td>{c.repairItem?.warrantyVoid ? "Void" : "Stands"}</td>
+                  <td><Badge tone={INVESTIGATION_PILL[c.status]}>{INVESTIGATION_LABEL[c.status] ?? c.status}</Badge></td>
+                  <td>{c.assignedTo?.fullName ?? <span className="sp4-muted">Nobody yet</span>}</td>
+                  <td className="dr-num sys-num">{at(c.openedAt)}</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+        </WfGrid>
       )}
     </>
   );
@@ -698,13 +639,15 @@ export default function WorkshopScreen() {
   // Tabs follow the person's own verbs; everything inside them is view-only.
   const look = useMemo(() => viewOnly(can), [can]);
   const tabs = useMemo(() => [
+    // Auto Workshop leads where the org has it (operator, 2026-11-21).
+    { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) },
     { key: "jobs",     label: "Jobs",          allow: board },
     { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
     { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
-    { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) },
   ].filter((t) => t.allow), [can, board, orgCode]);
-  const [tab, setTab] = useState("jobs");
+  // No pick yet: the first view this role can open, Auto Workshop where there is one.
+  const [tab, setTab] = useState(null);
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
 
   // "Open in Workshop" from Maintenance or Fuel Audit while this screen is mounted.
@@ -740,20 +683,32 @@ export default function WorkshopScreen() {
           <button type="button" className="sp4-toast-x" aria-label="Dismiss notification" onClick={() => setToast(null)}>×</button>
         </div>
       )}
-      <div className="sp4-tabs" role="tablist" aria-label="Workshop">
-        {tabs.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={active === t.key}
-                  className={"sp4-tab" + (active === t.key ? " sp4-tab--on" : "")}
-                  onClick={() => { setTab(t.key); setOpenId(null); setOpenCase(null); }}>{t.label}</button>
-        ))}
-      </div>
+      {/* The Staffs page's frame: the view's title and what it holds, the
+          view switch at the head's right edge, then the view. */}
+      <div className="drivers-page wf-page">
+        <div className="drivers-page__inner">
+          <div className="dr-head">
+            <div>
+              <h1 className="dr-title">{VIEW_HEAD[active][0]}</h1>
+              <div className="dr-subtitle">{VIEW_HEAD[active][1]}</div>
+            </div>
+            <div className="dr-viewswitch" role="tablist" aria-label="Workshop view">
+              {tabs.map((t) => (
+                <button key={t.key} type="button" role="tab" aria-selected={active === t.key}
+                        className={`dr-viewswitch__btn${active === t.key ? " is-on" : ""}`}
+                        onClick={() => { setTab(t.key); setOpenId(null); setOpenCase(null); }}>{t.label}</button>
+              ))}
+            </div>
+          </div>
 
-      <div className="sp4-body">
-        {active === "jobs" && <JobsTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} />}
-        {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
-        {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
-        {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
-        {active === "factory" && <FactoryWorkshopTab orgId={orgId} onOpen={setOpenId} openId={openId} />}
+          <div className="dr-layout wf-layout">
+            {active === "jobs" && <JobsTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} />}
+            {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
+            {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
+            {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
+            {active === "factory" && <FactoryWorkshopTab orgId={orgId} onOpen={setOpenId} openId={openId} />}
+          </div>
+        </div>
       </div>
 
       {openId && (

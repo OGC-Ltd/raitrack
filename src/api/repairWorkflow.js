@@ -171,6 +171,24 @@ export const listWorkflowJobs = (orgId, { status = "open", queue } = {}) => {
   if (queue) qs.set("queue", queue);
   return get(`${base(orgId)}/items?${qs}`).then((d) => d ?? []);
 };
+/**
+ * Every job raised since `sinceMs`, newest first, read 200 at a time down the
+ * id cursor (ids rise with time) until a page reaches past it. For the stats
+ * strip's daily counts, which a single 200-row page undercounts.
+ */
+export async function listWorkflowJobsSince(orgId, sinceMs, maxPages = 6) {
+  const out = [];
+  let cursor = null;
+  for (let i = 0; i < maxPages; i++) {
+    const qs = new URLSearchParams({ status: "all", limit: "200" });
+    if (cursor) qs.set("cursor", cursor);
+    const page = (await get(`${base(orgId)}/items?${qs}`)) ?? [];
+    out.push(...page);
+    if (page.length < 200 || new Date(page[page.length - 1].createdAt).getTime() < sinceMs) break;
+    cursor = page[page.length - 1].id;
+  }
+  return out;
+}
 export const fetchQueue          = (orgId) => get(`${base(orgId)}/queue`).then((d) => d ?? []);
 /** The caller's own jobs, open and closed: assigned to them, or theirs in the workshop. */
 export const fetchMyJobs         = (orgId) => get(`${base(orgId)}/mine`).then((d) => d ?? []);

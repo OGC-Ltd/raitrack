@@ -24,6 +24,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import LoadError from "../shared/LoadError";
 import { downloadTableCsv } from "../../utils/tableExport";
 import TablePager from "../body/TablePager";
+import { StaffSpinner } from "./StaffLoading";
 
 const DAY = 86_400_000;
 /** A fleet day (EAT) as YYYY-MM-DD. */
@@ -346,7 +347,7 @@ export default function DriverScorecard({ lead = null }) {
               </tr>
             </thead>
             <tbody>
-              {waiting && <SkeletonRows n={8} />}
+              {waiting && <tr><td colSpan={COLS} className="sc-loading"><StaffSpinner what="scores" /></td></tr>}
               {data && sorted.length === 0 && (
                 <tr><td colSpan={COLS} className="dr-grid__empty">
                   {query ? "No driver matches." : "No assigned driver drove in this period."}
@@ -454,33 +455,14 @@ function ViolationCell({ n, label }) {
 }
 
 /** One strip cell, in the Summary / trend cards' head + figure + caption stack. */
-/** Placeholder rows in the grid's own shape while the first answer is on its way. */
-function SkeletonRows({ n }) {
-  return Array.from({ length: n }, (_, i) => (
-    <tr key={i} className="sc-skel" aria-hidden="true">
-      <td className="sc-pick" />
-      <td className="dr-drivercell">
-        <span className="dr-driver">
-          <span className="sc-skel__avatar" />
-          <span className="sc-skel__lines"><span style={{ width: `${110 + (i * 37) % 60}px` }} /><span /></span>
-        </span>
-      </td>
-      {Array.from({ length: COLS - 3 }, (_, j) => (
-        <td key={j} className="dr-num"><span className="sc-skel__bar" /></td>
-      ))}
-      <td><span className="sc-skel__pill" /></td>
-    </tr>
-  ));
-}
-
 function StatCell({ label, value, sub, tone = "", loading = false }) {
   return (
     <div className="dr-cell">
       <div className="dr-statchart__head"><span className="dr-statchart__label">{label}</span></div>
       <div className={`dr-statchart__value ${tone}`}>
-        {loading ? <span className="sc-skel__bar sc-skel__bar--figure" aria-label="Loading" /> : value}
+        {loading ? "-" : value}
       </div>
-      <div className="dr-statchart__sub">{loading ? <span className="sc-skel__bar sc-skel__bar--caption" /> : sub}</div>
+      <div className="dr-statchart__sub">{loading ? "Reading…" : sub}</div>
     </div>
   );
 }

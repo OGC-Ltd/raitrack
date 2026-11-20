@@ -1,0 +1,71 @@
+/* Hallmark · redesign: full · scope: app · Workshop (Repair jobs, My jobs, Workshop day, Security cases, Auto Workshop) laid out as the Staffs page · genre: modern-minimal · theme: in-project tokens, preserved (DriversScreen.css, both themes) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E5 S5 R5 V4 · weakest: P, on purpose: the brief is to look like Staffs, not to look new */
+/* Hallmark · waive 24b · the head pads 9/14 because DriversScreen.css .dr-grid__sort does · on the 4px scale the labels would stand off the cells they name */
+/* Hallmark · answered: no new colour and no new control; every value here is a DriversScreen.css or RepairWorkflow.css token. This file holds only what the Workshop needs that the Staffs page has no case for: a summary cell that filters, a count in a chip, a reload chip, a fault cell that clips, and rows that open nothing. */
+
+/* The view sits inside the Workshop's own root (.sp4-root .wf-root carry the
+   pills' and the job panel's tokens); .drivers-page is the scroller. */
+.wf-page { min-width: 0; }
+.wf-layout { gap: 12px; }
+.wf-layout .dr-filters { margin-bottom: 0; }
+.wf-layout > .fsw-tab { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Stats strips (WorkshopStats.jsx): the Auto Workshop strip on every view ── */
+.wf-day-board > .fsw-stats { margin-bottom: 12px; }
+
+/* ── Filter row ───────────────────────────────────────────────────────── */
+.wf-chip-n {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.dr-chip--active .wf-chip-n { color: var(--ink); }
+.wf-reload { display: inline-flex; align-items: center; justify-content: center; padding: 4px 8px; font-size: 14px; }
+.wf-reload:active:not(:disabled) { transform: translateY(1px); }
+.wf-reload:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; transition: none; }
+.wf-reload:disabled { cursor: not-allowed; color: var(--text-3); background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.wf-spin { display: inline-block; animation: wf-turn 900ms linear infinite; }
+@keyframes wf-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .wf-spin { animation: none; } }
+.wf-count { margin: 0; font-size: 12px; color: var(--text-2); }
+.wf-count b { color: var(--ink); font-weight: 700; }
+
+/* ── Grid ─────────────────────────────────────────────────────────────── */
+/* Not sortable: the heads are labels, not buttons. Sentence case, untracked:
+   the one place this view parts from the Staffs grid (Floor 9). */
+.wf-grid thead th { cursor: default; text-transform: none; letter-spacing: normal; font-size: 12px; }
+/* The Staffs grid zeroes the head's padding and hands it to its sort button
+   (DriversScreen.css .dr-grid__sort). These heads have no button, so the th
+   takes the button's 9/14 back, and the card's 16px gutter at either edge,
+   which puts every label over the first character of its column. */
+.dr-grid.wf-grid thead th { padding: 9px 14px; }
+.dr-grid.wf-grid thead th:first-child { padding-left: var(--dg-gutter, 16px); }
+.dr-grid.wf-grid thead th:last-child { padding-right: var(--dg-gutter, 16px); }
+.wf-grid tbody tr[tabindex="0"] { cursor: pointer; }
+.wf-grid tbody tr.wf-row--still { cursor: default; }
+.wf-grid tbody tr.wf-row--still:hover { background: none; }
+/* The fault and its note: one line each, clipped, the full text on the job. */
+.wf-grid .wf-cell-fault,
+.wf-grid .wf-cell-sub {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wf-grid .wf-cell-fault { color: var(--ink); font-weight: 600; }
+.wf-grid .wf-cell-sub { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+.wf-grid .wf-cell-stage { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.wf-grid td.wf-cell-wrap { white-space: normal; min-width: 220px; }
+
+/* Auto Workshop's strip and note sit in the page's own gutter now. */
+.wf-page .fsw-stats { padding: 0; border-bottom: 0; }
+.wf-page .fsw-tab { flex: none; }
+.wf-page .fsw-note { margin: 0; }
+/* The Staffs grid's cells, as the Workshop uses them. The first cell's name
+   clips at 220px: FactorySuite files some parts under their description as the
+   number. The badge has no info tone on Staffs; a booking is the accent. */
+.wf-grid .dr-driver__name { max-width: 220px; }
+.wf-grid .dr-driver__sub { max-width: 220px; }
+.dr-grid__badge--info { --tone: var(--accent); }
+.wf-grid .wf-cell-stage .dr-grid__badge { align-self: flex-start; }

@@ -98,7 +98,7 @@ export default function SupervisorScorecard({ companyId, lead = null }) {
   return (
     <ErrorBoundary label="Supervisors">
       {busy ? (
-        <StaffLoading what="supervisors" cols={6} filters={<>{lead}{rangePicker}</>} />
+        <StaffLoading what="supervisors" filters={<>{lead}{rangePicker}</>} />
       ) : isEmpty ? (
         <>
           <div className="dr-filters">{lead}{rangePicker}</div>

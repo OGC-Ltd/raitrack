@@ -117,7 +117,7 @@ export default function OperatorsView({ companyId, company, onSubtitle }) {
   return (
     <ErrorBoundary label="Operators">
       {busy ? (
-        <StaffLoading what="operators" cols={6} filters={rangePicker} />
+        <StaffLoading what="operators" filters={rangePicker} />
       ) : isEmpty ? (
         <>
           <div className="dr-filters">{rangePicker}</div>

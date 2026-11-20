@@ -437,7 +437,7 @@ export default function DriversScreen() {
           <LoadError label={navLabel("drivers", "Drivers", orgCode)} onRetry={retry} fullSection />
         ) : loading && !serverOverview ? (
           // The first read only: the cache repaints a revisit straight away.
-          <StaffLoading what={who.many} cols={7} />
+          <StaffLoading what={who.many} />
         ) : isEmpty ? (
           <TabEmptyState
             icon={<DriversIcon size={44} />}
