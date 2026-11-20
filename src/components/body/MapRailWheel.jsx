@@ -30,6 +30,17 @@ function ToolsIcon() {
   );
 }
 
+/** Desktop's chip holds only the camera: a magnifier says zoom, the grid would not. */
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none"
+         stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5 5M8 10.5h5M10.5 8v5" />
+    </svg>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none"
@@ -38,11 +49,12 @@ function CloseIcon() {
 }
 
 /**
- * @param {{ children: React.ReactNode, fuelCount?: number, haltedCount?: number }} props
+ * @param {{ children: React.ReactNode, fuelCount?: number, haltedCount?: number, cameraOnly?: boolean }} props
  *   The counts the hidden buttons carry, so the closed chip still says when
- *   something needs looking at.
+ *   something needs looking at. `cameraOnly`: desktop, where the menus live in
+ *   the sidebar and the wheel carries just zoom in, reset and zoom out.
  */
-export default function MapRailWheel({ children, fuelCount = 0, haltedCount = 0 }) {
+export default function MapRailWheel({ children, fuelCount = 0, haltedCount = 0, cameraOnly = false }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef(null);
   const items = useRef(null);
@@ -83,14 +95,15 @@ export default function MapRailWheel({ children, fuelCount = 0, haltedCount = 0 
   };
 
   const news = fuelCount + haltedCount;
+  const name = cameraOnly ? "Zoom and view" : "Map tools";
   const label = [
-    "Map tools",
+    name,
     fuelCount ? `${fuelCount} fuel ${fuelCount === 1 ? "alert" : "alerts"}` : null,
     haltedCount ? `${haltedCount} halted` : null,
   ].filter(Boolean).join(", ");
 
   return (
-    <div className={`rw${open ? " rw--open" : ""}`} ref={wrap}>
+    <div className={`rw${cameraOnly ? " rw--camera" : ""}${open ? " rw--open" : ""}`} ref={wrap}>
       <div className="rw__items" ref={items} onClick={onItemClick}>
         {children}
       </div>
@@ -99,11 +112,11 @@ export default function MapRailWheel({ children, fuelCount = 0, haltedCount = 0 
         type="button"
         className={`map-cam-btn rw__btn${open ? " rw__btn--open" : ""}`}
         aria-expanded={open}
-        aria-label={open ? "Close map tools" : label}
-        title="Map tools"
+        aria-label={open ? `Close ${name.toLowerCase()}` : label}
+        title={name}
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? <CloseIcon /> : <ToolsIcon />}
+        {open ? <CloseIcon /> : cameraOnly ? <CameraIcon /> : <ToolsIcon />}
         {!open && news > 0 && (
           <span className={`rw__n${fuelCount ? " rw__n--crit" : ""}`} aria-hidden="true"
                 data-digits={String(news).length}>{news}</span>

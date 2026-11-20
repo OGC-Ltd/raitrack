@@ -317,7 +317,8 @@ function DeptPicker({ value, options, total, onChange }) {
 
 function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) {
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState("shifts");
+  // Ranked by litres issued first (operator, 2026-11-20: "by default lets pick by issued").
+  const [sortKey, setSortKey] = useState("issued");
   const [sortDir, setSortDir] = useState("desc");
   const cardView = useMediaQuery(GRID_CARDS_QUERY);
   const step = cardView ? GRID_STEP_PHONE : GRID_STEP;
@@ -333,6 +334,8 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
     else if (sortKey === "department") cmp = String(a.department ?? "~").localeCompare(String(b.department ?? "~"));
     else if (sortKey === "status") cmp = machineState(a).label.localeCompare(machineState(b).label);
     else if (sortKey === "period") cmp = String(a.lastDay ?? "").localeCompare(String(b.lastDay ?? ""));
+    // L/h and km/L do not compare: hour-rated machines together, then km-rated, each by rate.
+    else if (sortKey === "rate") cmp = String(a.basis ?? "~").localeCompare(String(b.basis ?? "~")) || (a.rate ?? -1) - (b.rate ?? -1);
     else cmp = (a[sortKey] ?? -1) - (b[sortKey] ?? -1);
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -401,7 +404,10 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                     so the phone card's cell positions do not move. */}
                 {th("Probe used", "probeUsed", true)}
                 {th("Odometer before", "odometerBefore", true)}
-                {th("Odometer after", "odometerAfter", true)}
+                {/* Burn rate, the register's standard, in Odometer after's place
+                    (operator 2026-11-20: "remove the odometer after and replace it
+                    with burn rate value the standard"); the machine panel keeps the meter. */}
+                {th("Burn rate", "rate", true)}
               </tr>
             </thead>
             <tbody>
@@ -466,7 +472,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                     </td>
                     <ProbeUsedCell r={r} />
                     <OdometerBeforeCell r={r} />
-                    <OdometerAfterRefillCell r={r} />
+                    <BurnRateCell r={r} />
                   </tr>
                 );
               })}
@@ -533,7 +539,7 @@ function probeUsedTitle(u) {
   const sum = u.unit === "h"
     ? `${run} worked × standard ${fmt(u.rate, 1)} L/h`
     : `${run} run ÷ standard ${fmt(u.rate, 2)} km/L`;
-  return `Fuel the standard rate allows since the latest refill${u.open ? ", so far" : ""}: ${sum} = ${fmt(u.litres)} L. The run is Odometer after − Odometer before.`;
+  return `Fuel the standard rate allows since the latest refill${u.open ? ", so far" : ""}: ${sum} = ${fmt(u.litres)} L. The run is the meter now (or after the refill) less Odometer before.`;
 }
 
 /** Fuel before's hover while the machine waits for its refill. */
@@ -884,19 +890,15 @@ function OdometerAfterCell({ r }) {
   );
 }
 
-/** The table's Odometer after: the latest refill's, the tracker's meter now. */
-function OdometerAfterRefillCell({ r }) {
-  const l = r.lastRefill;
-  const a = l?.meterAfter;
-  if (!a) {
-    const why = !l ? "No fuelling at the pump in this range" : afterWhy(l);
-    return <td className="dr-num dr-num--zero" data-label="Odometer after" title={`${why}${meterNote(l)}`}>-</td>;
-  }
-  return (
-    <td className="dr-num" data-label="Odometer after" title={`${refillTitle(r, afterSource(a))}${meterNote(l)}`}>
-      {meterText(a.value, a.unit)}
-    </td>
-  );
+/** The register's standard burn rate, in its own unit: litres an hour, or km a litre. */
+const rateText = (m) => (m.rate == null ? null : m.basis === "KM_PER_LITRE" ? `${fmt(m.rate, 1)} km/L` : m.basis === "HOUR" ? `${fmt(m.rate, 1)} L/h` : null);
+const rateWords = (m) => (m.basis === "HOUR" ? "Litres an hour" : "Kilometres a litre");
+
+/** The table's Burn rate: the standard from the FactorySuite register (/machines). */
+function BurnRateCell({ r }) {
+  const text = rateText(r);
+  if (!text) return <td className="dr-num dr-num--zero" data-label="Burn rate" title="No standard burn rate in the register for this machine">-</td>;
+  return <td className="dr-num" data-label="Burn rate" title={`${rateWords(r)}, the standard from the FactorySuite register`}>{text}</td>;
 }
 
 /** The headline's Planned: litres, and any full tank whose request carries none yet ("+ Full"). */
@@ -922,7 +924,8 @@ function MachinePanel({ m, from, to, onClose }) {
   }, []);
 
   const series = useMemo(() => fuelByDay({ from, to }, [m]), [m, from, to]);
-  const rate = m.rate == null ? null : m.basis === "KM_PER_LITRE" ? `${fmt(m.rate, 1)} km per litre` : m.basis === "HOUR" ? `${fmt(m.rate, 1)} litres an hour` : null;
+  // Short units, so the figure holds one line in its third of the card (operator 2026-11-20: "fix the un alligend text").
+  const rate = rateText(m);
   const headline = [
     { label: "Shifts", value: fmt(m.shifts) },
     // "Planned", not "Need" (operator 2026-11-19): what the plan lines asked
@@ -958,7 +961,7 @@ function MachinePanel({ m, from, to, onClose }) {
               <dd><span className={`dr-grid__badge dr-grid__badge--${st.tone}`}><span className="dr-grid__dot" aria-hidden="true" />{st.label}</span></dd>
             </div>
             <div><dt>Department</dt><dd>{sentence(m.department) || "-"}</dd></div>
-            <div><dt>Rated use</dt><dd>{rate ?? "-"}</dd></div>
+            <div><dt>Rated use</dt><dd title={rate ? `${rateWords(m)}, from the FactorySuite register` : undefined}>{rate ?? "-"}</dd></div>
             <div><dt>Tank</dt><dd>{litres(m.tankLitres)}</dd></div>
             <div>
               <dt>{odoUnit === "h" ? "Hour meter" : "Odometer"}</dt>
@@ -977,7 +980,7 @@ function MachinePanel({ m, from, to, onClose }) {
               )}
             </div>
           </dl>
-          {m.downReason && <p className="dr-panel__note fuel-down">{sentence(m.downReason)}</p>}
+          {m.downReason && <p className="fuel-down">{sentence(m.downReason)}</p>}
         </section>
 
         <section className="dr-panel__sec">

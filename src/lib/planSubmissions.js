@@ -24,6 +24,25 @@ export const isWeekend = (day) => [0, 6].includes(utc(day).getUTCDay());
 export const dayOfMonth = (day) => Number(day.slice(8, 10));
 export const longDay = (day) => `${WEEKDAYS_LONG[utc(day).getUTCDay()]} ${dayOfMonth(day)} ${MONTHS[Number(day.slice(5, 7)) - 1]}`;
 export const addDays = (day, n) => new Date(utc(day).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+/** "Sa 21 Nov": a row's day in the units table when it spans several. */
+export const shortDay = (day) => `${weekday(day)} ${dayOfMonth(day)} ${MONTHS[Number(day.slice(5, 7)) - 1]}`;
+
+/** The most days the units table reads at once: one request a day. */
+export const MAX_RANGE_DAYS = 31;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Every day from `from` to `to`, both included, in order; the two swap if
+ * given backwards, and the list stops at MAX_RANGE_DAYS. Empty when either is
+ * not a YYYY-MM-DD day.
+ */
+export function daysBetween(from, to, max = MAX_RANGE_DAYS) {
+  if (!DAY_RE.test(from ?? "") || !DAY_RE.test(to ?? "")) return [];
+  const [a, b] = from <= to ? [from, to] : [to, from];
+  const out = [];
+  for (let d = a; d <= b && out.length < max; d = addDays(d, 1)) out.push(d);
+  return out;
+}
 
 /**
  * FactorySuite's own wall clock (EAT, no offset) as "19 Nov 15:44", or "15:44"
@@ -149,6 +168,9 @@ export function unitRows(plans = [], { shift = () => "", name = (s) => s } = {})
         activity: l.activity ?? null,
         workLocation: l.workLocation ?? null,
         operators: [l.operator, l.secondOperator, l.thirdOperator].filter(Boolean).map(name),
+        // The whole line and its plan, for the side panel (PlanLinePanel).
+        line: l,
+        plan: p,
       });
     }
   }

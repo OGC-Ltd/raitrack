@@ -26,13 +26,15 @@ const PAGES = [
   { key: "fuelReport",  label: "Fuel metrics", icon: "report-analytics" },
   { key: "usageReview", label: "Logbook",      icon: "car" },
   { key: "reports",     label: "Reports",      icon: "file-analytics" },
+  // Was Maintenance › Plan, which the bottom bar reached; its own page since 20 Nov 2026.
+  { key: "plans",       label: "Work plan",    icon: "clipboard-list" },
 ];
 
 // Open, the pages sit in two groups: the fuel pages together, then the rest
 // of the fleet's (with Work plans, the map's own layer, at its foot).
 const GROUPS = [
   { id: "fuel",  label: "Fuel",  keys: ["fuel", "audit", "fuelReport"] },
-  { id: "fleet", label: "Fleet", keys: ["alerts", "usageReview", "reports"] },
+  { id: "fleet", label: "Fleet", keys: ["alerts", "usageReview", "reports", "plans"] },
 ];
 
 const permissionFor = (key) => NAV_ITEMS.find((n) => n.key === key)?.permission;

@@ -1,5 +1,6 @@
-/* Hallmark · component: radial menu (the phone map rail as one button) · genre: modern-minimal · theme: brand (the app's own .app--light tokens, App.css; the rail's .map-cam-btn chip, FleetMap.css) · states: 8 · contrast: pass · redesign: full, v2 (19 Nov: "not well arranged", "can't have them huge") · v2.0.0 */
+/* Hallmark · component: radial menu (the phone map rail as one button; desktop: the camera alone, rw--camera) · genre: modern-minimal · theme: brand (the app's own .app--light tokens, App.css; the rail's .map-cam-btn chip, FleetMap.css) · states: 8 · contrast: pass · redesign: full, v2 (19 Nov: "not well arranged", "can't have them huge"); rw--camera: restyle, v3 (20 Nov: "use /hallmark to restyle it") · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H5 E4 S5 R5 V5 · weakest: E, the tools still carry their own badges on their corners; on a 32px chip they crowd the ring a little, and moving them would change the menus the desktop rail shares */
+/* Hallmark · answered · rw--camera states: loading, error and success have no logic behind a zoom press (Leaflet answers at once); left to the owner, not built */
 
 /* The phone map's rail, folded into one chip (MapRailWheel.jsx).
 
@@ -120,6 +121,88 @@
 /* No fuel alerts: the inner ring closes up to two even places */
 .rw--open:not(:has(.fuel-alerts)) .rw__items .fu-menu > .map-cam-btn    { translate: -49px -18px; }
 .rw--open:not(:has(.fuel-alerts)) .rw__items .map-layers > .map-cam-btn { translate: -18px -49px; }
+
+/* ── Desktop: the camera alone (rw--camera) ────────────────────────────────
+   The menus live in the sidebar at 1024 and up, so the three camera buttons
+   take one ring's three rays and the disc shrinks to fit them: zoom out left,
+   reset on the diagonal, zoom in up, as on the phone's outer ring.
+
+   v3 restyle: the disc is the ONE surface. v2 left each button its own white
+   chip, border and shadow on a white disc, a card inside a card that read as
+   three stickers on a plate. Now the buttons are bare 36px targets cut into the
+   disc: ink only at rest, a tint circle on hover, a deeper one pressed. A
+   hairline rims the disc so it holds its edge over a bright satellite tile.
+   The ring sits at 56 so 36px targets keep a 7px gap on the diagonal. */
+.rw--camera {
+  --rw-disc: 86px;
+  --rw-chip: 36px;
+  --rw-inset: 2px;          /* (40 - 36) / 2 */
+  --rw-cam-ring: 56px;
+  --rw-cam-diag: 39.6px;    /* 56 x cos 45 */
+  --rw-cam-ink: var(--text-secondary);
+  --rw-cam-ink-hot: var(--text-primary);
+  --rw-cam-tint: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --rw-cam-tint-deep: color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+.rw--camera .rw__items::before {
+  background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+  box-shadow:
+    0 0 0 1px var(--color-border),
+    0 6px 28px color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+.rw--camera .rw__items::after { display: none; }
+
+.rw--camera .rw__items .map-cam-btn {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--rw-cam-ink);
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 500;
+  transition:
+    translate 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    scale 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 140ms ease-out,
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+/* ⌖ draws at about half the size of + and − in the body face, and hairline:
+   set larger and heavier so the centre control weighs what its neighbours do. */
+.rw--camera .rw__items .map-cam-btn--reset { font-size: 26px; font-weight: 700; }
+.rw--camera .rw__items .map-cam-btn:hover,
+.rw--camera .rw__items .map-cam-btn.is-hover {
+  background: var(--rw-cam-tint);
+  color: var(--rw-cam-ink-hot);
+}
+.rw--camera .rw__items .map-cam-btn:active,
+.rw--camera .rw__items .map-cam-btn.is-active {
+  background: var(--rw-cam-tint-deep);
+  color: var(--rw-cam-ink-hot);
+  transform: none;
+  scale: 0.92;
+}
+.rw--camera .rw__items .map-cam-btn:focus-visible,
+.rw--camera .rw__items .map-cam-btn.is-focus {
+  outline: 2px solid var(--accent-info);
+  outline-offset: 1px;
+  box-shadow: none;
+  color: var(--rw-cam-ink-hot);
+  transition: none;
+}
+.rw--camera .rw__items .map-cam-btn:disabled {
+  opacity: 0.4;
+  background: transparent;
+  cursor: default;
+}
+
+/* Out first, in last: the three arrive round the arc rather than at once. */
+.rw--open.rw--camera .rw__items .map-cam-btn--out   { translate: calc(var(--rw-cam-ring) * -1) 0; transition-delay: 0ms; }
+.rw--open.rw--camera .rw__items .map-cam-btn--reset { translate: calc(var(--rw-cam-diag) * -1) calc(var(--rw-cam-diag) * -1); transition-delay: 25ms; }
+.rw--open.rw--camera .rw__items .map-cam-btn--in    { translate: 0 calc(var(--rw-cam-ring) * -1); transition-delay: 50ms; }
+/* The delay is for the fan-out only; hover and press answer at once. */
+.rw--open.rw--camera .rw__items .map-cam-btn:is(:hover, :active, :focus-visible) { transition-delay: 0ms; }
 
 /* ── The one chip ─────────────────────────────────────────────────────────── */
 .rw__btn {

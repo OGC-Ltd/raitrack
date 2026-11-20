@@ -16,6 +16,7 @@ import DriverScorecard from "./DriverScorecard";
 import SupervisorScorecard from "./SupervisorScorecard";
 import OperatorsView from "./OperatorsView";
 import { hasOperators } from "../../lib/factoryOperators";
+import StaffLoading from "./StaffLoading";
 import TrendStat from "./TrendStat";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { pendingDriver, clearPendingDriver, driverNameMatches } from "../../lib/driverHandoff";
@@ -395,7 +396,7 @@ export default function DriversScreen() {
                   : view === "scorecard"
                   ? `Speed and safety points per ${who.one} · ${activeCompany?.name || "Fleet"}`
                   : loading
-                  ? "Loading…"
+                  ? `Loading the ${who.many}…`
                   : typeName
                     ? `${fmt(drivers.length)} of ${fmt(roster.length)} ${who.many} · ${typeName} · ${activeCompany?.name || "Fleet"}`
                     : `${fmt(drivers.length)} ${drivers.length === 1 ? who.one : who.many} · ${activeCompany?.name || "Fleet"}`}
@@ -433,6 +434,9 @@ export default function DriversScreen() {
           <OperatorsView companyId={activeCompanyId} company={activeCompany?.name || "Fleet"} onSubtitle={setOperatorsSub} />
         ) : error ? (
           <LoadError label={navLabel("drivers", "Drivers", orgCode)} onRetry={retry} fullSection />
+        ) : loading && !serverOverview ? (
+          // The first read only: the cache repaints a revisit straight away.
+          <StaffLoading what={who.many} cols={7} />
         ) : isEmpty ? (
           <TabEmptyState
             icon={<DriversIcon size={44} />}

@@ -12,7 +12,17 @@
 .fuel-job { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fuel-full { margin-left: 4px; font-size: 11px; font-weight: 500; color: var(--dg-label); }
 
-.fuel-down { color: var(--dg-speed-ink); font-weight: 600; }
+/* Why the machine is down: the ID card's last row, on the card's own 14px
+   inset with a hairline above, as the facts row is (it sat flush left). */
+.fuel-down {
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--dg-line, var(--border));
+  background: color-mix(in srgb, var(--dg-speed-ink) 7%, transparent);
+  color: var(--dg-speed-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
 .fuel-case__plan { color: var(--dg-label); }
 .fuel-case__flag { color: var(--dg-speed-ink); font-weight: 600; }
 

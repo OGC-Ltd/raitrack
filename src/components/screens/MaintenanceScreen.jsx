@@ -18,8 +18,7 @@ import { useAppFields, useAppActions } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import MaintenancePage from "../body/MaintenancePage";
 import SensorPanel from "../body/SensorPanel";
-import PlanSubmissions from "../body/PlanSubmissions";
-import { usePermissions, FACTORY_FUEL_ORGS } from "../../hooks/usePermissions";
+import { usePermissions } from "../../hooks/usePermissions";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { MaintenanceIcon } from "../footer/NavIcons";
@@ -46,10 +45,9 @@ export default function MaintenanceScreen() {
   // Held in AppContext so it survives a refresh — see the restore helpers there.
   const { maintenanceView: savedView } = useAppFields("maintenanceView");
   const { setMaintenanceView: setActiveTab } = useAppActions();
-  // FactorySuite's plan board (the Plan view): only where FactorySuite keeps work
-  // plans (KASULU), the same orgs as the Fuel page.
+  // The org, so the stored view is not corrected before it is known (below).
+  // The Plan view that needed it moved to its own page (PlansScreen, 2026-11-20).
   const { orgCode } = usePermissions();
-  const plansOn = FACTORY_FUEL_ORGS.includes(orgCode ?? "");
 
   /**
    * The sub-views, and which of them this person can actually open.
@@ -69,7 +67,6 @@ export default function MaintenanceScreen() {
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
     { key: "sensors", label: "Sensor Monitor", enabled: true },
-    { key: "plans", label: "Plan", enabled: plansOn },
   ];
   const available = VIEWS.filter((v) => v.enabled);
   const activeTab = available.some((v) => v.key === savedView) ? savedView : available[0].key;
@@ -79,8 +76,8 @@ export default function MaintenanceScreen() {
   // desktop tab, and for the same reason: a permission set can change under a
   // stored choice.
   useEffect(() => {
-    // Not before the org is known: a saved "plans" would read as unavailable
-    // for that moment and be lost on every refresh.
+    // Not before the org is known, so a view that depends on the org is not
+    // lost for that moment on every refresh.
     if (orgCode && activeTab !== savedView) setActiveTab(activeTab);
   }, [activeTab, savedView, setActiveTab, orgCode]);
 
@@ -146,11 +143,6 @@ export default function MaintenanceScreen() {
 
       {activeTab === "sensors" && (
         <SensorPanel />
-      )}
-
-      {/* Scrolls itself, like SensorPanel: a direct flex child. */}
-      {activeTab === "plans" && (
-        <PlanSubmissions orgId={orgId} />
       )}
     </div>
   );

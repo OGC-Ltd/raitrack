@@ -7639,8 +7639,8 @@ export default function FleetMap() {
             were floating in the only clear band the map has. */}
         <div className="map-cam-controls">
           {/* Phones: the whole rail is ONE chip that fans these out on a
-              wheel (MapRailWheel, operator 19 Nov 2026). Larger screens keep
-              the rail as it was. */}
+              wheel (MapRailWheel, operator 19 Nov 2026). Desktop folds its
+              camera buttons into the same chip (20 Nov); tablets keep the L. */}
           {(() => {
             const railTools = (<>
           <FuelAlertsMenu
@@ -7742,11 +7742,19 @@ export default function FleetMap() {
             >+</button>
           </div>
             </>);
-            return isMobile ? (
+            /* Desktop folds the camera into the same wheel (operator, 20 Nov
+               2026: "use the styles for mobile view" on larger screens). Its
+               menus live in the sidebar there, so the wheel carries only the
+               three camera buttons, and no counts: the fuel alerts and halted
+               units have their own places beside the map. Tablets keep the L. */
+            if (isMobile) return (
               <MapRailWheel fuelCount={flaggedVehicles.length} haltedCount={strandedVehicles.length}>
                 {railTools}
               </MapRailWheel>
-            ) : railTools;
+            );
+            return isCompact ? railTools : (
+              <MapRailWheel cameraOnly>{railTools}</MapRailWheel>
+            );
           })()}
           {/* Halted: opened from the left tool rail, below geofences
               (operator, 2026-10-07) — it was a sidebar row before. The window is FleetMap's because clicking a row

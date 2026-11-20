@@ -36,6 +36,7 @@ import ReportsScreen     from './components/screens/ReportsScreen';
 import WeighbridgesScreen from './components/screens/WeighbridgesScreen';
 import FuelScreen from './components/screens/FuelScreen';
 import PlannerScreen     from './components/screens/PlannerScreen';
+import PlansScreen       from './components/screens/PlansScreen';
 import AuditScreen       from './components/screens/AuditScreen';
 import WorkshopScreen    from './components/screens/WorkshopScreen';
 import FuelReportScreen  from './components/screens/FuelReportScreen';
@@ -211,6 +212,13 @@ function AppShell() {
             </div>
           )}
 
+          {show('plans') && (
+            <div className="app-tab-panel app-tab-panel--screen">
+              <ErrorBoundary label="Work Plan" fullSection>
+                <PlansScreen />
+              </ErrorBoundary>
+            </div>
+          )}
           {show('analytics') && (
             <div className="app-tab-panel app-tab-panel--screen">
               <ErrorBoundary label="Analytics" fullSection>
@@ -323,7 +331,7 @@ function AppShell() {
           // the unit comes back when the list closes.
           // Drivers as well (operator, 2026-10-03: "do the same with the
           // drivers page") — so the panel now takes width on the map only.
-          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'reports', 'maintenance', 'weighbridges', 'fuel', 'planner', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
+          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'reports', 'maintenance', 'plans', 'weighbridges', 'fuel', 'planner', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
             && !fuelAlertsOpen;
           const selectedVehicle = selectedVehicleId && panelAllowed
             ? _liveVehicles.find(v => v.id === selectedVehicleId) ?? { id: selectedVehicleId }

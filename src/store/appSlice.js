@@ -20,10 +20,12 @@ import { restoreChoice, restoreOverlay } from "../lib/navMemory";
 // Every page in the sidebar (SidePanel's NAV_ITEMS) belongs here, or a reload
 // on it lands on the map instead — Fuel Audit and Fuel Report did, until
 // 2026-10-02. appSlice.test.js fails if the two lists drift apart.
-export const DESKTOP_TABS = ["fleet", "dashcam", "alerts", "drivers", "weighbridges", "fuel", "planner", "maintenance", "workshop", "analytics", "reports", "audit", "fuelReport", "usageReview"];
+export const DESKTOP_TABS = ["fleet", "dashcam", "alerts", "drivers", "weighbridges", "fuel", "planner", "maintenance", "plans", "workshop", "analytics", "reports", "audit", "fuelReport", "usageReview"];
 export const MOBILE_TABS  = ["home", "map", "search", "drivers"];
 // "users" is deliberately gone: User Accounts moved to the avatar menu.
-export const MAINT_VIEWS  = ["service", "sensors", "plans"];
+// "plans" left for its own sidebar page (PlansScreen, 2026-11-20); a stored
+// "plans" restores to "sensors".
+export const MAINT_VIEWS  = ["service", "sensors"];
 
 export const DESKTOP_TAB_KEY = "ft-desktop-tab";
 export const MOBILE_TAB_KEY  = "ft-mobile-tab";

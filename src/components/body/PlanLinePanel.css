@@ -1,0 +1,129 @@
+/* Hallmark · component: Work Plan › plan line side panel (PlanLinePanel, in the Fuel machine panel's .dr-panel frame) · genre: modern-minimal · theme: in-project tokens, preserved (both themes) · scope: component · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: P, on purpose: the frame is the app's one side panel, kept so Fuel and Work Plan open alike · fixed 2026-11-20: status on its own row, line badges under their text, nothing truncated or overlapping */
+/* Hallmark · answered: loading, error and empty are the table's; the panel opens only on a loaded row, and each section says plainly when FactorySuite holds nothing for it. The tracked-caps section heads of .dr-panel__h are set in sentence case here. */
+
+:root {
+  --psl-white: #fff;
+  --psl-warn-base: #b45309;
+}
+
+.psl {
+  --psl-line: var(--dg-line, var(--border));
+  --psl-ink: var(--ink);
+  --psl-text-2: var(--text-2);
+  --psl-card: var(--card);
+  --psl-raise: color-mix(in srgb, var(--ink) 4%, transparent);
+  --psl-on: color-mix(in srgb, var(--accent) 9%, transparent);
+  --psl-accent: var(--accent);
+  --psl-on-accent: var(--psl-white);
+  --psl-warn: var(--accent-warn, var(--psl-warn-base));
+  --psl-warn-bg: color-mix(in srgb, var(--psl-warn) 10%, transparent);
+  --psl-small: 12px;
+  --psl-body: 13px;
+}
+
+/* Section heads: sentence case, untracked, one step below the body. */
+.psl .dr-panel__h {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--psl-body);
+  color: var(--psl-ink);
+}
+
+/* The unit, the day and the five facts that place the line. */
+.psl-id {
+  margin: 12px 0 4px;
+  border: 1px solid var(--psl-line);
+  border-radius: 12px;
+  background: var(--psl-card);
+  overflow: hidden;
+}
+.psl-id__who { display: grid; gap: 2px; padding: 16px 16px 0; min-width: 0; }
+.psl-id__name {
+  font-size: 22px; font-weight: 700; line-height: 1.15;
+  color: var(--psl-ink);
+  overflow-wrap: break-word; min-width: 0;
+}
+.psl-id__meta { font-size: var(--psl-small); color: var(--psl-text-2); }
+.psl-id__when { margin: 8px 16px 12px; font-size: var(--psl-body); font-weight: 600; color: var(--psl-ink); }
+.psl-id__facts {
+  margin: 0; padding: 12px 16px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  border-top: 1px solid var(--psl-line);
+}
+.psl-id__status { grid-column: 1 / -1; }
+.psl-id__facts dt { font-size: 11px; font-weight: 600; color: var(--psl-text-2); margin-bottom: 4px; }
+.psl-id__facts dd { margin: 0; font-size: var(--psl-body); font-weight: 600; color: var(--psl-ink); overflow-wrap: anywhere; }
+.psl-id__down {
+  margin: 0; padding: 8px 16px;
+  border-top: 1px solid var(--psl-line);
+  background: var(--psl-warn-bg); color: var(--psl-warn);
+  font-size: var(--psl-small); font-weight: 600;
+}
+
+/* Label and value, two columns, a hairline between rows. */
+.psl-facts { margin: 0; display: grid; }
+.psl-facts > div {
+  display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--psl-line);
+}
+.psl-facts > div:first-child { border-top: 0; padding-top: 0; }
+.psl-facts dt { font-size: var(--psl-small); color: var(--psl-text-2); }
+.psl-facts dd { margin: 0; font-size: var(--psl-body); color: var(--psl-ink); overflow-wrap: anywhere; }
+
+/* The pump's fuellings against this line. */
+.psl-issues { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.psl-issues li {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--psl-line); border-radius: 8px;
+}
+.psl-issues__l { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--psl-ink); }
+.psl-issues__at { font-size: var(--psl-small); color: var(--psl-text-2); align-self: center; }
+.psl-issues__flag { grid-column: 1 / -1; margin-top: 4px; font-size: var(--psl-small); color: var(--psl-warn); }
+
+/* Every line of this unit in the dates picked; the open one is marked. */
+.psl-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.psl-line {
+  width: 100%;
+  display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: start; gap: 12px;
+  padding: 8px 12px;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--psl-ink);
+  font: inherit; text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.psl-line:hover, .psl-line.is-hover { background: var(--psl-raise); }
+.psl-line:active, .psl-line.is-active { background: var(--psl-on); }
+.psl-line:focus-visible, .psl-line.is-focus { outline: 2px solid var(--psl-accent); outline-offset: -2px; transition: none; }
+.psl-line.is-on { background: var(--psl-on); }
+.psl-line:disabled { opacity: 0.45; cursor: default; }
+.psl-line__day { font-size: var(--psl-small); font-weight: 600; color: var(--psl-text-2); font-variant-numeric: tabular-nums; }
+.psl-line__what { display: grid; min-width: 0; }
+.psl-line__job { font-size: var(--psl-body); font-weight: 600; overflow-wrap: anywhere; }
+.psl-line__sub { font-size: var(--psl-small); color: var(--psl-text-2); overflow-wrap: anywhere; }
+.psl-line__badge { margin-top: 4px; }
+.psl-line__day { padding-top: 2px; }
+
+/* The one action: open this unit on the live map. */
+.psl-map {
+  padding: 8px 16px;
+  border: 0; border-radius: 8px;
+  background: var(--psl-accent); color: var(--psl-on-accent);
+  font: inherit; font-size: var(--psl-body); font-weight: 600;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.psl-map:hover, .psl-map.is-hover { opacity: 0.9; }
+.psl-map:active, .psl-map.is-active { transform: scale(0.97); }
+.psl-map:focus-visible, .psl-map.is-focus { outline: 2px solid var(--psl-accent); outline-offset: 2px; transition: none; }
+.psl-map:disabled { opacity: 0.45; cursor: default; }
+
+/* The table's rows open the panel. */
+.psb-units__grid tbody tr[tabindex] { cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  .psl-line, .psl-map { transition: none; }
+}

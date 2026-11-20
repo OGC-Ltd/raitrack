@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cellDetail, cellTitle, wallClock, weekday, isWeekend, cellIndex, planStats, unitRows, filterUnitRows, planStatus, dailySent } from "./planSubmissions";
+import { cellDetail, cellTitle, wallClock, weekday, isWeekend, cellIndex, planStats, unitRows, filterUnitRows, planStatus, dailySent, daysBetween, shortDay } from "./planSubmissions";
 
 describe("plan submissions words", () => {
   it("reads FactorySuite's wall clock as text", () => {
@@ -65,5 +65,21 @@ describe("the strip's daily series", () => {
     const board = { days: ["2026-11-19", "2026-11-20"], departments: ["CIVIL", "ROADS"], sent: { "2026-11-19": 1, "2026-11-20": 2 },
       cells: [{ department: "CIVIL", day: "2026-11-19", state: "approved_late" }, { department: "CIVIL", day: "2026-11-20", state: "approved" }, { department: "ROADS", day: "2026-11-20", state: "sent" }] };
     expect(dailySent(board)).toEqual([{ day: "2026-11-19", sent: 1, onTime: 0 }, { day: "2026-11-20", sent: 2, onTime: 2 }]);
+  });
+});
+
+describe("units table date range", () => {
+  it("lists every day in the range, both ends included", () => {
+    expect(daysBetween("2026-11-29", "2026-12-02")).toEqual(["2026-11-29", "2026-11-30", "2026-12-01", "2026-12-02"]);
+  });
+  it("takes a backwards range the right way round", () => {
+    expect(daysBetween("2026-11-21", "2026-11-20")).toEqual(["2026-11-20", "2026-11-21"]);
+  });
+  it("stops at the cap and refuses a half-typed day", () => {
+    expect(daysBetween("2026-01-01", "2026-12-31")).toHaveLength(31);
+    expect(daysBetween("2026-11-2", "2026-11-21")).toEqual([]);
+  });
+  it("names a row's day short", () => {
+    expect(shortDay("2026-11-21")).toBe("Sa 21 Nov");
   });
 });

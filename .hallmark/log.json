@@ -1,5 +1,39 @@
 [
   {
+    "mode": "build",
+    "scope": "component",
+    "theme": "in-project tokens",
+    "entry": "Work Plan › plan line side panel (PlanLinePanel)",
+    "shape": "side panel",
+    "signature": "the line as FactorySuite holds it, then every line of the unit in the dates picked",
+    "sections": [
+      "unit card",
+      "the work",
+      "people",
+      "fuel",
+      "lines for the unit"
+    ],
+    "waived": [],
+    "prompt": "on the table for work plan when I click on a row we should get the sidepanel populated",
+    "date": "2026-11-20"
+  },
+  {
+    "mode": "redesign",
+    "depth": "restyle",
+    "scope": "component",
+    "entry": "Live Map › camera wheel (desktop, rw--camera)",
+    "theme": "brand (.app--light tokens)",
+    "files": [
+      "src/components/body/MapRailWheel.css",
+      "src/components/body/MapRailWheel.jsx",
+      "src/components/body/FleetMap.jsx"
+    ],
+    "change": "Desktop camera folded into the phone wheel (one 40px chip, magnifier icon). Restyled: the disc is the one surface (97% surface, 1px border rim, soft shadow); zoom out/reset/in are bare 36px round targets on a 56px ring, ink --text-secondary, 7% tint hover, 13% tint + scale .92 pressed, instant 2px --accent-info focus ring, .4 disabled; fan-out staggered 0/25/50ms; reset glyph 26px/700 to weigh like + and -. Removed the v2 card-in-card (each button its own white chip on the white disc). Tablet keeps the L row, phone unchanged.",
+    "waived": [],
+    "date": "2026-11-20",
+    "prompt": "use the mobile wheel styles for the desktop zoom buttons, restyled"
+  },
+  {
     "mode": "redesign",
     "depth": "full",
     "scope": "app",

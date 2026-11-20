@@ -22,6 +22,7 @@ import { getFactorySupervisors } from "../../api/factorySupervisors";
 import { periodRange } from "../../lib/factoryFuel";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import StaffLoading from "./StaffLoading";
 import TrendStat from "./TrendStat";
 import FuelPeriodPicker from "./FuelPeriodPicker";
 import ErrorBoundary from "../shared/ErrorBoundary";
@@ -94,7 +95,9 @@ export default function SupervisorScorecard({ companyId, lead = null }) {
 
   return (
     <ErrorBoundary label="Supervisors">
-      {isEmpty ? (
+      {busy ? (
+        <StaffLoading what="supervisors" cols={6} filters={<>{lead}{rangePicker}</>} />
+      ) : isEmpty ? (
         <>
           <div className="dr-filters">{lead}{rangePicker}</div>
           <TabEmptyState icon={<DriversIcon size={44} />} title="Supervisors"

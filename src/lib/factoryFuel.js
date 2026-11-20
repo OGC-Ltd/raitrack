@@ -282,14 +282,23 @@ export function machineState(r) {
 /**
  * The days a Fuel or Operators period reads (operator, 19 Nov 2026: "select a
  * custom day and by default it should be on today"). `pick` is "today", a
- * number of days (7, 14, 31: fuelRange, so tomorrow's plans are in), or one
- * fleet day ('YYYY-MM-DD').
+ * number of days (7, 14, 31: fuelRange, so tomorrow's plans are in), one
+ * fleet day ('YYYY-MM-DD'), or a range picked on the calendar
+ * ('YYYY-MM-DD..YYYY-MM-DD', operator 20 Nov 2026: "pick a single date or a
+ * range of dates").
  */
 export function periodRange(pick, now = Date.now()) {
   if (typeof pick === "number") return fuelRange(pick, now);
+  if (typeof pick === "string" && pick.includes("..")) {
+    const [a, b] = pick.split("..");
+    return a <= b ? { from: a, to: b } : { from: b, to: a };
+  }
   const day = pick === "today" ? new Date(now + 3 * 3_600_000).toISOString().slice(0, 10) : pick;
   return { from: day, to: day };
 }
+
+/** The calendar's pick as a `pick`: one day as itself, a range as 'from..to'. */
+export const calendarPick = (from, to) => (!to || to === from ? from : `${from}..${to}`);
 
 /** The range that ends on the plans' day: tomorrow is planned today, so it is in. */
 export function fuelRange(days, now = Date.now()) {

@@ -7,15 +7,20 @@
 // day spelled out beside its name, then the 14 days ending on the picked date
 // as squares. A square picks its day; the date field moves the two weeks.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { usePlanSubmissions } from "../../hooks/usePlanSubmissions";
-import { STATES, LEGEND, cellDetail, cellIndex, cellTitle, dayOfMonth, isWeekend, longDay, weekday, planStats, unitRows, filterUnitRows, planStatus, dailySent } from "../../lib/planSubmissions";
+import { STATES, LEGEND, cellDetail, cellIndex, cellTitle, dayOfMonth, isWeekend, longDay, weekday, planStats, unitRows, filterUnitRows, planStatus, dailySent, daysBetween, shortDay as rowDay, MAX_RANGE_DAYS, addDays } from "../../lib/planSubmissions";
 import TrendStat from "../screens/TrendStat";
 import { useWorkPlans } from "../../hooks/useWorkPlans";
+import { fetchWorkPlans, WORK_PLANS_CHANGED } from "../../api/workPlans";
 import { shiftText } from "../../lib/workPlanMap";
 import { nameCase } from "../../lib/factorySupervisors";
 import { operatorName } from "../../lib/shiftOperators";
 import LoadError from "../shared/LoadError";
+import DateRangePicker from "../layout/DateRangePicker";
+import TablePager, { PAGE_STEP } from "./TablePager";
+import PlanLinePanel from "./PlanLinePanel";
 import "../screens/DriversScreen.css";
 import "../screens/FuelScreen.css";
 import "./plan/tokens.css";
@@ -184,7 +189,7 @@ export default function PlanSubmissions({ orgId }) {
         </ul>
       </section>
 
-      <UnitsTable plans={dayPlans.data?.plans} loading={dayPlans.loading} error={dayPlans.error} day={selected} departments={departments} />
+      <UnitsTable orgId={orgId} latest={data.today ? addDays(data.today, 1) : selected} plans={dayPlans.data?.plans} loading={dayPlans.loading} error={dayPlans.error} day={selected} departments={departments} />
     </div>
   );
 }
@@ -299,7 +304,8 @@ function ChangesCell({ st, busy }) {
 const STATUS_FILTERS = ["APPROVED", "SUBMITTED", "DRAFT", "REJECTED", "WITHDRAWN", "CANCELLED"];
 /** A plan status as the Drivers grid's badge tone. */
 const BADGE = { APPROVED: "active", SUBMITTED: "suspended", DRAFT: "draft", REJECTED: "terminated", WITHDRAWN: "terminated", CANCELLED: "unknown" };
-const PAGE = 25;
+// The app's one pager and its step (TablePager): 15 rows a page.
+const PAGE = PAGE_STEP;
 const ALL = "__all";
 
 function SortTh({ label, k, sortKey, dir, onClick }) {
@@ -315,6 +321,7 @@ function SortTh({ label, k, sortKey, dir, onClick }) {
 }
 
 const SORTS = {
+  day: (r) => r.day,
   unit: (r) => r.machine,
   department: (r) => r.department,
   status: (r) => STATUS_FILTERS.indexOf(r.status),
@@ -323,19 +330,84 @@ const SORTS = {
 };
 
 /**
- * Every unit on the picked day's plans, whatever the plan's status, in the
- * Drivers page's grid: the filter row (status, department, search), then the
- * table and its pager.
+ * The plans for every day of a From–To range (operator, 2026-11-20: "a date
+ * picker for filtering for given dates"), one request a day, the same
+ * work-plans endpoint and cache entries the picked day already uses, so the
+ * board's own day is never read twice. Re-read on FactorySuite's plan hook,
+ * as useWorkPlans does.
  */
-function UnitsTable({ plans, loading, error, day, departments }) {
+function useRangePlans(orgId, days, enabled) {
+  const qc = useQueryClient();
+  const results = useQueries({
+    queries: (enabled ? days : []).map((d) => ({
+      queryKey: ["work-plans", orgId, d],
+      queryFn: ({ signal }) => fetchWorkPlans(orgId, d, { signal }),
+      enabled: Boolean(orgId),
+      staleTime: 30_000,
+    })),
+  });
+  useEffect(() => {
+    if (!orgId || !enabled) return undefined;
+    const onChange = () => { qc.invalidateQueries({ queryKey: ["work-plans", orgId] }); };
+    window.addEventListener(WORK_PLANS_CHANGED, onChange);
+    return () => window.removeEventListener(WORK_PLANS_CHANGED, onChange);
+  }, [orgId, enabled, qc]);
+  if (!enabled) return null;
+  const done = results.every((r) => r.data);
+  return {
+    // Each day's plans tagged with their day, in the range's order.
+    perDay: results.map((r, i) => ({ day: days[i], plans: r.data?.plans ?? [] })),
+    loading: results.some((r) => r.isLoading),
+    error: results.some((r) => r.isError) && !done,
+    failedDays: results.filter((r) => r.isError).length,
+    ready: results.some((r) => r.data),
+  };
+}
+
+/**
+ * Every unit on the plans for the picked day, or for a From–To range, whatever
+ * the plan's status, in the Drivers page's grid: the filter row (dates,
+ * status, department, search), then the table and its pager.
+ */
+function UnitsTable({ orgId, latest, plans, loading, error, day, departments }) {
+  // The range follows the board: picking a day there resets it to that day.
+  const [range, setRange] = useState({ from: day, to: day, for: day });
+  if (range.for !== day) setRange({ from: day, to: day, for: day });
+  const days = useMemo(() => daysBetween(range.from, range.to), [range.from, range.to]);
+  const span = days.length > 1 || (days.length === 1 && days[0] !== day);
+  const capped = days.length === MAX_RANGE_DAYS && daysBetween(range.from, range.to, MAX_RANGE_DAYS + 1).length > MAX_RANGE_DAYS;
+  const ranged = useRangePlans(orgId, days, span);
+  // The app's one calendar (layout/DateRangePicker), as on Fuel (operator,
+  // 2026-11-20: "do the same on the work plan"): a click picks a day, a second
+  // click the range between the two.
+  const pickDates = (f, t) => { setRange({ from: f, to: t ?? f, for: day }); setPage(0); };
+  const rangeText = range.from === range.to ? rowDay(range.from) : `${rowDay(range.from)} – ${rowDay(range.to)}`;
+  const resetRange = () => { setRange({ from: day, to: day, for: day }); setPage(0); };
+
   const [dept, setDept] = useState(ALL);
   const [status, setStatus] = useState(ALL);
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState("department");
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(0);
+  // The row open in the side panel (PlanLinePanel), by its key.
+  const [openKey, setOpenKey] = useState(null);
 
-  const rows = useMemo(() => unitRows(plans ?? [], { shift: shiftText, name: operatorName }), [plans]);
+  // Day by day, each day in unitRows' own order; keys carry the day, as a plan
+  // line can be on two days' plans. Built each render: a month of lines is a
+  // few thousand objects, and memoising on query results is not worth a stale table.
+  const fmt = { shift: shiftText, name: operatorName };
+  const rows = span
+    ? (ranged?.perDay ?? []).flatMap(({ day: d, plans: p }) =>
+        unitRows(p, fmt).map((r) => ({ ...r, day: d, key: `${d}:${r.key}` })))
+    : unitRows(plans ?? [], fmt).map((r) => ({ ...r, day }));
+  // Looked up in every row, not the filtered ones: a filter does not close the panel; new dates without the line do.
+  const open = openKey ? rows.find((r) => r.key === openKey) ?? null : null;
+  const openLines = open
+    ? rows.filter((r) => r.machine === open.machine).sort((a, b) => a.day.localeCompare(b.day) || (a.shiftNo ?? 0) - (b.shiftNo ?? 0))
+    : [];
+  const tLoading = span ? ranged?.loading && !ranged?.ready : loading && !plans;
+  const tError = span ? ranged?.error : error && !plans;
   const deptOptions = useMemo(() => [...new Set([...departments, ...rows.map((r) => r.department)])]
     .map((d) => ({ key: d, label: nameCase(d), count: rows.filter((r) => r.department === d).length })), [departments, rows]);
   const inDept = useMemo(() => filterUnitRows(rows, { departments: dept === ALL ? [] : [dept], q }), [rows, dept, q]);
@@ -355,7 +427,9 @@ function UnitsTable({ plans, loading, error, day, departments }) {
   const pageRows = ordered.slice(at * PAGE, at * PAGE + PAGE);
   const units = new Set(ordered.map((r) => r.machine)).size;
   const statusOptions = STATUS_FILTERS.filter((s) => rows.some((r) => r.status === s));
-  const dayWords = day ? longDay(day) : "the day";
+  const dayWords = !span ? (day ? longDay(day) : "the day")
+    : days.length === 1 ? longDay(days[0]) : `${longDay(days[0])} to ${longDay(days.at(-1))}`;
+  const cols = span ? 8 : 7;
 
   const toggleSort = (k) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -370,11 +444,24 @@ function UnitsTable({ plans, loading, error, day, departments }) {
       <div className="psb-units__head">
         <h3 id="psb-units-title" className="dr-title">Units on the plans for {dayWords}</h3>
         <p className="dr-subtitle">
-          {loading && !plans ? "Loading…" : `${units} ${units === 1 ? "unit" : "units"} on ${ordered.length} ${ordered.length === 1 ? "line" : "lines"}${ordered.length !== rows.length ? `, of ${rows.length}` : ""}`}
+          {tLoading ? "Loading…" : `${units} ${units === 1 ? "unit" : "units"} on ${ordered.length} ${ordered.length === 1 ? "line" : "lines"}${ordered.length !== rows.length ? `, of ${rows.length}` : ""}`}
         </p>
       </div>
 
       <div className="dr-filters">
+        {/* The dates: the board's picked day until changed; the calendar picks a day or a range. */}
+        <div className="psb-range" role="group" aria-label="Dates">
+          {/* Tomorrow is pickable: plans are sent the day before. `today` is the
+              calendar's last day, so the field's words are set here rather
+              than let it call tomorrow "Today". */}
+          {range.from && (
+            <DateRangePicker
+              from={range.from} to={range.to} today={latest ?? range.to} maxDays={MAX_RANGE_DAYS}
+              quickPicks={false} label="Dates" text={rangeText} on={span} onChange={pickDates}
+            />
+          )}
+          {span && <button type="button" className="psb-link" onClick={resetRange}>Back to {day ? shortDay(day) : "the picked day"}</button>}
+        </div>
         <div className="dr-filters__chips" role="group" aria-label="Plan status">
           <span className="dr-rankby__label" aria-hidden="true">Status</span>
           <span className="dr-seg">
@@ -406,9 +493,15 @@ function UnitsTable({ plans, loading, error, day, departments }) {
       </div>
 
       <div className="dr-grid-card">
-        {error && !plans ? (
+        {capped && (
+          <p className="psb-units__note">Showing the first {MAX_RANGE_DAYS} days of the range, {longDay(days[0])} to {longDay(days.at(-1))}.</p>
+        )}
+        {span && ranged?.failedDays > 0 && !tError && (
+          <p className="psb-units__note">{ranged.failedDays} {ranged.failedDays === 1 ? "day" : "days"} of this range could not be read and {ranged.failedDays === 1 ? "is" : "are"} left out.</p>
+        )}
+        {tError ? (
           <p className="dr-grid__empty psb-units__state">The plans for {dayWords} could not be read. They load again on the next FactorySuite update.</p>
-        ) : loading && !plans ? (
+        ) : tLoading ? (
           <p className="dr-grid__empty psb-units__state" aria-busy="true">Loading the plans for {dayWords}…</p>
         ) : rows.length === 0 ? (
           <p className="dr-grid__empty psb-units__state">No department has started a plan for {dayWords} yet.</p>
@@ -418,6 +511,7 @@ function UnitsTable({ plans, loading, error, day, departments }) {
               <table className="dr-grid psb-units__grid">
                 <thead>
                   <tr>
+                    {span && <SortTh label="Date" k="day" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />}
                     <SortTh label="Unit" k="unit" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                     <SortTh label="Department" k="department" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                     <SortTh label="Status" k="status" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
@@ -431,7 +525,11 @@ function UnitsTable({ plans, loading, error, day, departments }) {
                   {pageRows.map((r) => {
                     const st = planStatus(r.status);
                     return (
-                      <tr key={r.key}>
+                      <tr key={r.key} tabIndex={0} aria-selected={r.key === openKey}
+                          className={r.key === openKey ? "dr-grid__row--selected" : undefined}
+                          onClick={() => setOpenKey(r.key)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenKey(r.key); } }}>
+                        {span && <td className="dr-when psb-units__day" data-label="Date">{rowDay(r.day)}</td>}
                         <td className="dr-drivercell">
                           <span className="dr-driver__ident">
                             <span className="dr-driver__name">{r.machine}</span>
@@ -462,7 +560,7 @@ function UnitsTable({ plans, loading, error, day, departments }) {
                   })}
                   {ordered.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="dr-grid__empty">
+                      <td colSpan={cols} className="dr-grid__empty">
                         No unit matches these filters. <button type="button" className="psb-link" onClick={clear}>Show all</button>
                       </td>
                     </tr>
@@ -470,19 +568,14 @@ function UnitsTable({ plans, loading, error, day, departments }) {
                 </tbody>
               </table>
             </div>
-            {pages > 1 && (
-              <nav className="dr-pager" aria-label="Unit pages">
-                <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>Previous</button>
-                <span className="dr-pager__info" aria-live="polite">
-                  Page {at + 1} of {pages}
-                  <span className="dr-pager__range">{", "}{at * PAGE + 1} to {at * PAGE + pageRows.length} of {ordered.length}</span>
-                </span>
-                <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pages - 1, at + 1))} disabled={at >= pages - 1}>Next</button>
-              </nav>
-            )}
+            <TablePager label="Unit pages" pager={{
+              page: at, pageCount: pages, total: ordered.length,
+              from: ordered.length ? at * PAGE + 1 : 0, to: at * PAGE + pageRows.length, setPage,
+            }} />
           </>
         )}
       </div>
+      {open && <PlanLinePanel row={open} lines={openLines} onPick={setOpenKey} onClose={() => setOpenKey(null)} />}
     </section>
   );
 }

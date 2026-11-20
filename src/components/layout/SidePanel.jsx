@@ -39,6 +39,11 @@ export const NAV_ITEMS = [
   // Reports: harsh acceleration, night driving, overspeeding, utilisation (operator, 2026-11-01).
   { key: 'reports',      label: 'Reports',      icon: 'file-analytics', permission: 'analytics:read' },
   { key: 'maintenance',  label: 'Maintenance',  icon: 'tool',      permission: 'sensor:read'      },
+  // Work Plan: FactorySuite's plan submissions board, which department sent
+  // the day's work plan and whether by 16:00. Was Maintenance › Plan; its own
+  // item since 2026-11-20 (operator: "rename to work plan"). Only where
+  // FactorySuite keeps work plans; see usePermissions' WORK_PLANS.
+  { key: 'plans',        label: 'Work Plan',    icon: 'clipboard-list', permission: 'work_plans:read' },
   // The Vehicle Support and Repair Workflow: flag, assess, book, repair,
   // verify. On repair:read alone, so the Control Room's operator and
   // supervisor (no sensor:read) reach it.

@@ -64,6 +64,13 @@ const PLANNER_SLUGS = ["planner:read", "planner:write"];
  */
 export const FACTORY_FUEL = "factory_fuel:read";
 export const FACTORY_FUEL_ORGS = ["KASULU"];
+/**
+ * The Plans page (FactorySuite's plan submissions board), its own sidebar item
+ * since 2026-11-20 (operator: "remove the plan page from maintenance and have
+ * it on the side panel"). Granted as it was inside Maintenance: an org that
+ * keeps FactorySuite work plans, and Maintenance's own right, sensor:read.
+ */
+export const WORK_PLANS = "work_plans:read";
 /** Where FactorySuite's Auto Workshop feeds the repair workflow (fleet-server
  *  factorysuite-workshop.sync): MUFINDI PAPER MILLS, our KASULU. */
 export const FACTORY_WORKSHOP_ORGS = ["KASULU"];
@@ -124,8 +131,9 @@ export function usePermissions() {
     if (vssOn && list.includes(VSS_ALARMS)) return true;
     const code = String(org?.code ?? "").toUpperCase();
     if (list.includes(FACTORY_FUEL) && FACTORY_FUEL_ORGS.includes(code) && canHere(["fuel_filling:read"])) return true;
+    if (list.includes(WORK_PLANS) && FACTORY_FUEL_ORGS.includes(code) && canHere(["sensor:read"])) return true;
     const plannerOn = PLANNER_ORGS.includes(code);
-    const rest = list.filter((s) => s !== VSS_ALARMS && s !== FACTORY_FUEL && (plannerOn || !PLANNER_SLUGS.includes(s)));
+    const rest = list.filter((s) => s !== VSS_ALARMS && s !== FACTORY_FUEL && s !== WORK_PLANS && (plannerOn || !PLANNER_SLUGS.includes(s)));
     return rest.length > 0 && canHere(rest);
   }, [canHere, vssOn, org?.code]);
 

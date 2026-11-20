@@ -17,6 +17,7 @@ import { operatorsByDay, operatorTotals, operatorDepartments, machineKind, kindM
 import { planStage } from "../../lib/workPlanMap";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import StaffLoading from "./StaffLoading";
 import TrendStat from "./TrendStat";
 import FuelPeriodPicker from "./FuelPeriodPicker";
 import ErrorBoundary from "../shared/ErrorBoundary";
@@ -45,7 +46,7 @@ const GRID_METRICS = [
 
 /** The subtitle the Drivers page shows over this tab. */
 export function operatorsSubtitle({ data, rows, loading, company }) {
-  if (loading && !data) return "Loading…";
+  if (loading && !data) return "Loading the operators…";
   if (!data?.from) return company;
   return `${plural(rows.length, "operator")} · ${data.from === data.to ? fmtDay(data.from) : `${fmtDay(data.from)} to ${fmtDay(data.to)}`} · ${company}`;
 }
@@ -113,7 +114,9 @@ export default function OperatorsView({ companyId, company, onSubtitle }) {
 
   return (
     <ErrorBoundary label="Operators">
-      {isEmpty ? (
+      {busy ? (
+        <StaffLoading what="operators" cols={6} filters={rangePicker} />
+      ) : isEmpty ? (
         <>
           <div className="dr-filters">{rangePicker}</div>
           <TabEmptyState icon={<DriversIcon size={44} />} title="Operators"

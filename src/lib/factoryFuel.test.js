@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -310,6 +310,18 @@ describe("periodRange", () => {
   });
   it("reads a number of days as fuelRange", () => {
     expect(periodRange(7, now)).toEqual(fuelRange(7, now));
+  });
+  it("reads a calendar range, either way round", () => {
+    expect(periodRange("2026-11-03..2026-11-09", now)).toEqual({ from: "2026-11-03", to: "2026-11-09" });
+    expect(periodRange("2026-11-09..2026-11-03", now)).toEqual({ from: "2026-11-03", to: "2026-11-09" });
+  });
+});
+
+describe("calendarPick", () => {
+  it("keeps one day as a day and a range as from..to", () => {
+    expect(calendarPick("2026-11-03", "2026-11-03")).toBe("2026-11-03");
+    expect(calendarPick("2026-11-03")).toBe("2026-11-03");
+    expect(calendarPick("2026-11-03", "2026-11-09")).toBe("2026-11-03..2026-11-09");
   });
 });
 

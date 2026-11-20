@@ -257,6 +257,11 @@ td.psb-grid__pick { color: var(--tone-text); font-weight: 500; }
 .psb-units__grid .dr-driver__sub { display: block; white-space: normal; }
 .psb-units__grid .dr-drivercell { max-width: 150px; white-space: normal; }
 .psb-units__grid .psb-units__code { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The dates: From and To, the board's own date field twice, at the head of the filter row. */
+.psb-range { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-width: 0; }
+.psb-range .psb-link { font-size: var(--psb-small); white-space: nowrap; }
+.psb-units__grid .psb-units__day { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.psb-units__note { margin: 0; padding: 8px 12px; font-size: var(--psb-small); color: var(--psb-text-3); border-bottom: 1px solid var(--border); }
 
 /* A draft is neither decided nor refused: the page's own blue. */
 .dr-grid__badge--draft { --tone: var(--accent); }
