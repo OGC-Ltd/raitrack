@@ -26,7 +26,7 @@ import { vehicleReadings } from '../../lib/vehicleReadings';
 import { menengaiGroup, fleetTypeLabel } from '../../lib/vehicleMap';
 import { unitSite } from '../../lib/siteLists';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { burnAgainst, burnRate, cachedDay, dayBounds, loadDay, overWords, summariseDay, movingSpans } from '../../lib/vehicleDay';
+import { burnAgainst, burnRate, cachedDay, dayBounds, loadDay, summariseDay, movingSpans } from '../../lib/vehicleDay';
 import { useFuelEpisodes, useVehicleFuelEventsRange } from '../../hooks/useVehicleFuelEvents';
 import { clampRange, daysBetween, joinDays, rangeWords } from '../../lib/dayRange';
 import { settleLimited } from '../../lib/settleLimited';
@@ -982,13 +982,11 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               { icon: 'ti-satellite', label: 'GPS', value: gps.label, sub: gps.sub, tone: gps.tone },
               // Litres per engine hour today, and litres per km once it has
               // driven far enough (lib/vehicleDay burnRate, as the unit card)
-              // A unit the FactorySuite register rates: in the register's
-              // unit, against its standard, amber when well over it
+              // A unit the FactorySuite register rates shows the register's
+              // standard only, not today's figure (operator 2026-11-20:
+              // "remove this from the unit card and we stick with the standard burn rate")
               vsStd
-                ? { icon: 'ti-flame', label: 'Burn rate', tone: vsStd.high ? 'warn' : null,
-                    value: vsStd.today != null ? `${num(vsStd.today, vsStd.digits)} ${vsStd.unit}` : null,
-                    sub: vsStd.over != null ? `${overWords(vsStd.over)} (${num(vsStd.std, vsStd.digits)} ${vsStd.unit})`
-                      : `standard ${num(vsStd.std, vsStd.digits)} ${vsStd.unit}${tele.loading ? '' : ', not enough today'}` }
+                ? { icon: 'ti-flame', label: 'Burn rate', value: `${num(vsStd.std, vsStd.digits)} ${vsStd.unit}`, sub: 'standard' }
                 : { icon: 'ti-flame', label: 'Burn rate', value: burn?.lPerH != null ? `${num(burn.lPerH, 1)} L/h`
                     : burn?.lPerKm != null ? `${num(burn.lPerKm, 2)} L/km` : null,
                   sub: !burn ? (tele.loading ? 'reading today…' : 'not enough today')

@@ -17,7 +17,7 @@ import { vehicleActivity, isInTransit, isOnline, equipmentLabel, carriesCargo, m
 import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
-import { burnAgainst, overWords } from "../../lib/vehicleDay";
+import { burnAgainst } from "../../lib/vehicleDay";
 import { displayPlate } from "../../lib/plate";
 import TripReportButton from "../shared/TripReportButton";
 import { useAppSelector } from "../../context/AppContext";
@@ -629,21 +629,16 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
             unit={vehicle.engineHours != null ? " h" : ""}
             sub="total run time"
           />
-          {/* Litres per engine hour today, with litres per km once it has
-              driven far enough to say (lib/vehicleDay burnRate): always L/h or
-              L/km. A unit the FactorySuite register rates is read on the
-              register's basis and set against its standard, amber when well
-              over it. */}
+          {/* A unit the FactorySuite register rates shows its standard burn
+              rate only (operator 2026-11-20). Any other unit: litres per
+              engine hour today, with litres per km once it has driven far
+              enough to say (lib/vehicleDay burnRate). */}
           {vsStd ? (
             <Tile
               label="BURN RATE"
-              value={vsStd.today != null ? vsStd.today.toFixed(vsStd.digits) : "-"}
+              value={vsStd.std.toFixed(vsStd.digits)}
               unit={` ${vsStd.unit}`}
-              sub={vsStd.over != null
-                ? <>{vsStd.high && <WarnGlyph />}{` ${overWords(vsStd.over)} (${vsStd.std.toFixed(vsStd.digits)} ${vsStd.unit})`}</>
-                : `standard ${vsStd.std.toFixed(vsStd.digits)} ${vsStd.unit}`}
-              valColor={vsStd.high ? "var(--accent-warn)" : undefined}
-              subColor={vsStd.high ? "var(--accent-warn)" : undefined}
+              sub="standard"
             />
           ) : (
             <Tile
