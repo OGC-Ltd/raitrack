@@ -93,15 +93,17 @@ export function withFuelNow(rows, vehicles) {
     const live = (row.vehicleId && byId.get(String(row.vehicleId)))
       || (row.plate && byPlate.get(plateKey(row.plate)))
       || null;
-    // The meter now, for a km-rated machine only: the live GPS odometer in km
-    // (Odometer after, operator 2026-11-20: "meter now"). An hour-rated
-    // machine's meter is engine hours, which the refills read gives.
-    const meter = refillMeterUnit(row.basis) === "km" ? live?.odometerKm : null;
+    // The meter now, on the machine's own meter (operator 2026-11-20: "meter
+    // now"): the live GPS odometer in km, or the live engine-hours counter on
+    // an hour-rated machine, the same counter the server's refills read gives
+    // (DG-08 967.62 h live, 967.6 h there).
+    const unit = refillMeterUnit(row.basis);
+    const meter = unit === "km" ? live?.odometerKm : live?.engineHours;
     return {
       ...row,
       fuelNow: live?.fuelLitres ?? null,
       fuelNowPct: live?.fuelLitres != null ? live.fuelPct ?? null : null,
-      meterNow: meter != null ? { value: meter, unit: "km", at: live?.lastReportedAt != null ? new Date(live.lastReportedAt).toISOString() : null } : null,
+      meterNow: meter != null ? { value: meter, unit, at: live?.lastReportedAt != null ? new Date(live.lastReportedAt).toISOString() : null } : null,
     };
   });
 }
@@ -571,6 +573,54 @@ export function withConsumedSinceRefill(rows, tankDays, today) {
     const used = after + fills - drains - endL;
     if (used < 0) return out;
     return { ...out, consumed: Math.round(used * 100) / 100, consumedEnd: end === today ? "now" : end };
+  });
+}
+
+/**
+ * Fuel before and Odometer before while a machine waits for its refill
+ * (operator 2026-11-20: "fuel before it should be their closing fuel level
+ * that continuously updates until their first refill for the day which will
+ * also be captured during the refill stage"; "we don't expect the fuel before
+ * to be empty, neither the odometer before"). For a row with no fuelling on
+ * its period's last day:
+ *
+ *  - fuel: the tank from the fuel probe, live when the period runs to today
+ *    (it moves with the probe), else that day's closing level;
+ *  - meter: the live engine hours (withFuelNow) on an hour-rated machine,
+ *    today only: the tank days carry no meter for a past day, and the live
+ *    km counter runs on another base than the refills' (MTR-21: 37,488 km
+ *    live, 1,815 km there), so a km figure would jump at the refill.
+ *
+ * Once the day's refill comes in, the refill's own before readings take over.
+ * Kept as `fuelBeforeWaiting` / `odometerBeforeWaiting` beside the refill's,
+ * and in `fuelBefore` / `odometerBefore` so the columns sort. Untouched when
+ * the day had a refill whose before nobody read: the level now is after it.
+ *
+ * @param {object[]} rows      withConsumedSinceRefill rows
+ * @param {object[]} tankDays  [{ vehicleId, day, closingL }], or null
+ * @param {string}   today     the fleet day today, YYYY-MM-DD
+ */
+export function withFuelBeforeWaiting(rows, tankDays, today) {
+  const closing = new Map();
+  for (const d of tankDays ?? []) closing.set(`${d.vehicleId}|${d.day}`, d.closingL);
+  return (rows ?? []).map((row) => {
+    const end = !row.lastDay || row.lastDay >= today ? today : row.lastDay;
+    if (row.lastRefill?.day && row.lastRefill.day >= end) return row;
+    const live = end === today;
+    const out = { ...row };
+    if (row.fuelBefore == null) {
+      const litres = live ? row.fuelNow ?? null
+        : row.vehicleId ? closing.get(`${row.vehicleId}|${end}`) ?? null : null;
+      if (litres != null) {
+        out.fuelBefore = litres;
+        out.fuelBeforeWaiting = { litres, source: live ? "live" : "closing", day: end };
+      }
+    }
+    if (row.odometerBefore == null && live && row.meterNow?.unit === "h" && row.meterNow.value != null) {
+      out.odometerBefore = row.meterNow.value;
+      out.odometerBeforeWaiting = { ...row.meterNow, source: "live" };
+    }
+    return out;
   });
 }
 

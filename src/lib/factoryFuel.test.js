@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -551,5 +551,54 @@ describe("withRefillColumns", () => {
     const [unread] = withRefillColumns([fills({ reference: "EX-17", lines: [] }, "b", "2026-11-19T06:00:00Z", 78.8, 641.9)], null);
     expect(unread).toMatchObject({ fuelBefore: 78.8, odometerBefore: null });
     expect(unread.lastRefill.tracked).toBeNull();
+  });
+});
+
+describe("withFuelBeforeWaiting", () => {
+  // Operator 2026-11-20: Fuel before is the closing level, moving with the
+  // probe, until the day's first refill, which then gives its own before.
+  const days = [{ vehicleId: "v1", day: "2026-11-19", closingL: 42.4 }];
+  const base = { vehicleId: "v1", fuelBefore: null, lastRefill: null, fuelNow: 59.2 };
+
+  it("shows the live tank on Today until the day's refill", () => {
+    const [row] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-20" }], days, "2026-11-20");
+    expect(row.fuelBefore).toBe(59.2);
+    expect(row.fuelBeforeWaiting).toEqual({ litres: 59.2, source: "live", day: "2026-11-20" });
+  });
+
+  it("shows a past day's closing level when that day had no refill", () => {
+    const [row] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-19" }], days, "2026-11-20");
+    expect(row.fuelBeforeWaiting).toEqual({ litres: 42.4, source: "closing", day: "2026-11-19" });
+  });
+
+  it("keeps the refill's own before, and never puts a post-refill level in its place", () => {
+    const read = { ...base, lastDay: "2026-11-20", fuelBefore: 37.4, lastRefill: { day: "2026-11-20" } };
+    expect(withFuelBeforeWaiting([read], days, "2026-11-20")[0]).toBe(read);
+    const unread = { ...base, lastDay: "2026-11-20", lastRefill: { day: "2026-11-20" } };
+    expect(withFuelBeforeWaiting([unread], days, "2026-11-20")[0].fuelBefore).toBeNull();
+  });
+
+  it("shows the engine hours now as Odometer before on Today, never on a past day or in km", () => {
+    const meterNow = { value: 967.62, unit: "h", at: null };
+    const [today] = withFuelBeforeWaiting([{ ...base, meterNow, odometerBefore: null, lastDay: "2026-11-20" }], days, "2026-11-20");
+    expect(today.odometerBefore).toBe(967.62);
+    expect(today.odometerBeforeWaiting).toEqual({ ...meterNow, source: "live" });
+    const [past] = withFuelBeforeWaiting([{ ...base, meterNow, odometerBefore: null, lastDay: "2026-11-19" }], days, "2026-11-20");
+    expect(past.odometerBefore).toBeNull();
+    const km = { value: 217078, unit: "km", at: null };
+    const [kmRow] = withFuelBeforeWaiting([{ ...base, meterNow: km, odometerBefore: null, lastDay: "2026-11-20" }], days, "2026-11-20");
+    expect(kmRow.odometerBefore).toBeNull();
+  });
+
+  it("reads an hour-rated machine's live meter in engine hours", () => {
+    const vehicles = [{ vehicleId: "v1", engineHours: 967.62, odometerKm: 12 }];
+    expect(withFuelNow([{ vehicleId: "v1", basis: "HOUR" }], vehicles)[0].meterNow).toMatchObject({ value: 967.62, unit: "h" });
+    expect(withFuelNow([{ vehicleId: "v1", basis: "KM_PER_LITRE" }], vehicles)[0].meterNow).toMatchObject({ value: 12, unit: "km" });
+  });
+
+  it("leaves a machine without a probe level blank", () => {
+    const [row] = withFuelBeforeWaiting([{ ...base, fuelNow: null, lastDay: "2026-11-20" }], days, "2026-11-20");
+    expect(row.fuelBefore).toBeNull();
+    expect(row.fuelBeforeWaiting).toBeUndefined();
   });
 });

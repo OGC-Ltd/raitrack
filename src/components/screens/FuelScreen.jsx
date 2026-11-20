@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, varianceBand } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, varianceBand } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -132,10 +132,10 @@ export default function FuelScreen() {
   const checked = useMemo(
     // Consumed runs from the latest refill (operator 2026-11-20), the period
     // balance kept beside it as consumedPeriod.
-    () => withConsumedSinceRefill(
+    () => withFuelBeforeWaiting(withConsumedSinceRefill(
       withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
       tankDays, today,
-    ),
+    ), tankDays, today),
     [roster, vehicles, fillings, tankDays, today, meters],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
@@ -519,11 +519,27 @@ function probeConsumedTitle(r) {
   return "The fuel probe gave no tank level at the start or the end of the period";
 }
 
+/** Fuel before's hover while the machine waits for its refill. */
+const waitingTitle = (w) => (w.source === "live"
+  ? "No refill yet today: the tank now, from the fuel probe. It follows the probe until the day's first refill, whose before reading then takes over"
+  : `No refill on ${fmtDay(w.day)}: the tank's closing level that day, from the fuel probe`);
+
 /** The tank before or after the machine's latest refill in the period (lib/factoryFuel withRefillColumns). */
 function RefillLevelCell({ r, which, label }) {
   const level = r.lastRefill?.[which];
+  // Waiting for the day's refill: the tank from the probe (lib/factoryFuel withFuelBeforeWaiting).
+  const waiting = which === "fuelBefore" && !level ? r.fuelBeforeWaiting : null;
+  if (waiting) {
+    return (
+      <td className="dr-num" data-label={label} title={waitingTitle(waiting)}>
+        {fmt(waiting.litres)} L
+      </td>
+    );
+  }
   if (!level) {
-    const why = r.lastRefill ? "No probe reading for this fuelling" : "No fuelling at the pump in this range";
+    const why = r.lastRefill ? "No probe reading for this fuelling"
+      : which === "fuelBefore" && r.fuelNow == null ? "No refill yet, and no fuel probe reading for this machine"
+      : "No fuelling at the pump in this range";
     return <td className="dr-num dr-num--zero" data-label={label} title={why}>-</td>;
   }
   return (
@@ -536,9 +552,19 @@ function RefillLevelCell({ r, which, label }) {
 /** The tracker's meter just before the machine's latest refill in the period. */
 function OdometerBeforeCell({ r }) {
   const m = r.lastRefill?.odometerBefore;
+  // Waiting for the day's refill: the meter now (lib/factoryFuel withFuelBeforeWaiting).
+  const waiting = !m ? r.odometerBeforeWaiting : null;
+  if (waiting) {
+    return (
+      <td className="dr-num" data-label="Odometer before" title={`No refill yet today: ${trackerMeter(waiting.unit).toLowerCase()} now. It follows the tracker until the day's first refill, whose before reading then takes over`}>
+        {meterText(waiting.value, waiting.unit)}
+      </td>
+    );
+  }
   if (!m) {
     // Never the pump's hours (operator 2026-11-20: "never render the pump hours on the odometer").
-    const why = (!r.lastRefill ? "No fuelling at the pump in this range"
+    const why = (!r.lastRefill ? (r.meterNow?.unit === "km" ? "No refill yet: the live GPS odometer runs on another count than the refills', so it waits for the refill's reading"
+        : r.meterNow ? "No fuelling at the pump in this range" : "No refill yet, and no tracker reading for this machine")
       : r.lastRefill.tracked === false ? "No meter reading: not one of our tracked units"
       : r.lastRefill.tracked == null ? "The tracker's figures could not be read"
       : "No meter reading: the tracker sent none just before the fuelling");
