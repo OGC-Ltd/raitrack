@@ -44,16 +44,40 @@ function fuelProbe(r) {
   return NO_DATA;
 }
 
+// Each part's verdict (`read`, which drives the red fill and the overview) and
+// its last reading (`at`). The report shows the time, not the verdict
+// (operator, 20 Nov 2026: "instead of working or not working, the last time
+// the unit sent the readings"). The fuel probe's time is its last real level.
 export const PARTS = [
-  { label: 'GPS tracker', read: tracker },
-  { label: 'Ignition', read: (r) => channel(r, 'ignition') },
-  { label: 'Odometer', read: (r) => channel(r, 'odometer') },
-  { label: 'Fuel probe', read: fuelProbe },
+  { label: 'GPS tracker', read: tracker, at: (r) => r.channels?.gps?.lastSeenAt ?? r.lastReportedAt },
+  { label: 'Ignition', read: (r) => channel(r, 'ignition'), at: (r) => r.channels?.ignition?.lastSeenAt },
+  { label: 'Odometer', read: (r) => channel(r, 'odometer'), at: (r) => r.channels?.odometer?.lastSeenAt },
+  { label: 'Fuel probe', read: fuelProbe, at: (r) => r.fuelProbe?.lastAliveAt },
 ];
+
+export const NEVER = 'Never';
+const OFFSET = 3 * 3_600_000;   // East Africa Time, as the rest of the report
+/** "20/11/26 18:32" in East Africa Time; null without a time. */
+export function stampOf(at) {
+  const ms = at == null ? NaN : new Date(at).getTime();
+  if (!Number.isFinite(ms)) return null;
+  const s = new Date(ms + OFFSET).toISOString();
+  return `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)} ${s.slice(11, 16)}`;
+}
+/** What a part's cell says: its last reading; with none, Not set up / Not fitted as they are, Never for a stopped part, else a dash. */
+export function partText(r, p) {
+  const stamp = stampOf(p.at(r));
+  if (stamp) return stamp;
+  const v = p.read(r);
+  if (v === NOT_SET_UP || v === NOT_FITTED) return v;
+  return v === NOT_WORKING ? NEVER : '-';
+}
+/** Each part's verdict for the row, in PARTS order. */
+export const partStates = (r) => PARTS.map((p) => p.read(r));
 
 export const HEADS = ['Plate', 'Unit', ...PARTS.map((p) => p.label)];
 
-export const rowCells = (r) => [r.plate || r.name || '', r.deviceId ?? '', ...PARTS.map((p) => p.read(r))];
+export const rowCells = (r) => [r.plate || r.name || '', r.deviceId ?? '', ...PARTS.map((p) => partText(r, p))];
 
 // The driver and status from the client's fleet list (operator, 13 Nov 2026: "add columns driver's name
 // and status, the data we should pick from this Excel file"), by plate however it is spaced
@@ -87,7 +111,8 @@ export function cellsFor(r, withList, list = BUILT_IN) {
 }
 
 /** What the words mean, under the table. */
-export const KEY = 'Not working: the part has stopped and needs a technician. No data: the tracker is silent, so the part cannot be judged. '
+export const KEY = 'Times are each part’s last reading (East Africa Time); the fuel probe’s is its last fuel level. '
+  + 'Red: the part has stopped (no reading for 24 hours; GPS 3 hours). Never: no reading in the last 30 days. '
   + 'Not set up: the fuel sensor has no calibration table in Wialon. Not fitted: the unit has no such part.';
 
 /** The overview figures, for the rows in the report (not the fleet). */

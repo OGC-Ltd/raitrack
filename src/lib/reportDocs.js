@@ -19,7 +19,7 @@ import { counts as geofenceCounts, endsNow, periodWords as geofencePeriod, rowCe
 import { dayWords, periodWords, rowCells as tatCells, sections as tatSections, summary as tatSummary } from './tatFuelReport';
 import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections, summary as speedSummary } from './speedReport';
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
-import { KEY as HEALTH_KEY, NOT_WORKING, WORKING, byGroup as healthByGroup, cellsFor as healthCells, headsFor as healthHeads, hasFleetList, summary as healthSummary } from './probeHealthReport';
+import { KEY as HEALTH_KEY, NOT_WORKING, WORKING, partStates, byGroup as healthByGroup, cellsFor as healthCells, headsFor as healthHeads, hasFleetList, summary as healthSummary } from './probeHealthReport';
 import { reportGroupsFor } from './fleetGroups';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, sheetSub, spansDays, stopWords, SHEET_STOP_HEADS, sheetStopCells } from './deliveriesReport';
 
@@ -384,11 +384,17 @@ export function probeHealthDoc(rows, { note = '', fleet, trucks = false, orgCode
   const cols = listed
     ? columns([22, 24, 38, 21, 19, 19, 19, 19], body, { wrap: new Set([0, 2]) })
     : columns([40, 28, 29, 29, 29, 29], body, { wrap: new Set([0]) });
-  // Faulty hardware stands out; what cannot be judged steps back. A truck in an accident stands out too
-  const cell = (t, i) => (i < info ? (listed && i === 3 && t === 'Accident' ? { text: t, bold: true, tone: 'flag' } : textCell(t, i === 0))
-    : t === NOT_WORKING ? { text: t, bold: true, tone: 'flag', fill: '#fbe3e0' }
-    : t === WORKING ? textCell(t) : { text: t, tone: 'mut' });
-  const table = (list) => ({ kind: 'table', cols, head, size: 7.8, rows: list.map((r) => healthCells(r, listed, fleetList).map(cell)) });
+  // A part's cell is its last reading; the verdict decides how it looks: a
+  // stopped part stands out, what cannot be judged steps back. A truck in an
+  // accident stands out too
+  const cell = (t, i, states) => {
+    if (i < info) return listed && i === 3 && t === 'Accident' ? { text: t, bold: true, tone: 'flag' } : textCell(t, i === 0);
+    const st = states[i - info];
+    return st === NOT_WORKING ? { text: t, bold: true, tone: 'flag', fill: '#fbe3e0' }
+      : st === WORKING ? textCell(t) : { text: t, tone: 'mut' };
+  };
+  const table = (list) => ({ kind: 'table', cols, head, size: 7.8,
+    rows: list.map((r) => { const states = partStates(r); return healthCells(r, listed, fleetList).map((t, i) => cell(t, i, states)); }) });
   // By the client's fleet-list groups (Tankers, Finished Goods, ...) where the
   // fleet has a list; one table otherwise.
   const grouped = healthByGroup(rows, groups);
