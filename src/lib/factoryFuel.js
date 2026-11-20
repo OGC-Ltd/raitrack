@@ -93,15 +93,15 @@ export function withFuelNow(rows, vehicles) {
     const live = (row.vehicleId && byId.get(String(row.vehicleId)))
       || (row.plate && byPlate.get(plateKey(row.plate)))
       || null;
-    // The meter now, on the meter the tracker's refill figures use: its GPS
-    // odometer in km on every machine (Odometer after, operator 2026-11-20:
-    // "meter now", then "do conversion into km for the odometers").
-    const meter = live?.odometerKm;
+    // The meter now, for a km-rated machine only: the live GPS odometer in km
+    // (Odometer after, operator 2026-11-20: "meter now"). An hour-rated
+    // machine's meter is engine hours, which the refills read gives.
+    const meter = refillMeterUnit(row.basis) === "km" ? live?.odometerKm : null;
     return {
       ...row,
       fuelNow: live?.fuelLitres ?? null,
       fuelNowPct: live?.fuelLitres != null ? live.fuelPct ?? null : null,
-      meterNow: meter != null ? { value: meter, at: live?.lastReportedAt != null ? new Date(live.lastReportedAt).toISOString() : null } : null,
+      meterNow: meter != null ? { value: meter, unit: "km", at: live?.lastReportedAt != null ? new Date(live.lastReportedAt).toISOString() : null } : null,
     };
   });
 }
@@ -134,7 +134,15 @@ const readingAfter = (i, r) =>
   i.day > r.odometerDay || (i.day === r.odometerDay && String(i.at ?? "") > String(r.odometerAt ?? ""));
 
 /** The odometer's unit: hours for an hour-rated machine, km for a km-rated one, none when not rated. */
-export const odometerUnit = (basis) => (basis === "HOUR" ? "h" : basis === "KM_PER_LITRE" ? "km" : "");
+export const odometerUnit = (basis) => (/^HOURS?$/i.test(String(basis ?? "").trim()) ? "h" : basis === "KM_PER_LITRE" ? "km" : "");
+
+/**
+ * The meter the refill figures read (fleet-server planner/fuel-refills): engine
+ * hours on an hour-rated machine (generators, excavators, loaders), else the
+ * tracker's GPS odometer in km. A standing generator's GPS odometer only drifts
+ * (operator 2026-11-20: "why is a generator having odometer in KM").
+ */
+export const refillMeterUnit = (basis) => (odometerUnit(basis) === "h" ? "h" : "km");
 
 /**
  * One row per machine on the range's plans or at its pumps, with its
@@ -401,10 +409,11 @@ function withMeterAfter(refills, now) {
         after = { value: n.value, at: n.at ?? null, unit: b.unit, source: b.source === "pump" ? "next-refill-pump" : "next-refill" };
       }
     } else if (b?.value != null && now?.value != null) {
-      if (b.source !== "pump") after = { value: now.value, at: now.at ?? null, unit: "km", source: "now" };
-      else if (b.unit === "km" && r.trackerBefore?.value != null && now.value >= r.trackerBefore.value) {
+      if (now.unit !== b.unit) after = null;
+      else if (b.source !== "pump") after = { value: now.value, at: now.at ?? null, unit: b.unit, source: "now" };
+      else if (r.trackerBefore?.unit === b.unit && r.trackerBefore.value != null && now.value >= r.trackerBefore.value) {
         const run = now.value - r.trackerBefore.value;
-        after = { value: Math.round((b.value + run) * 100) / 100, at: now.at ?? null, unit: "km", source: "now-pump", run: Math.round(run * 100) / 100 };
+        after = { value: Math.round((b.value + run) * 100) / 100, at: now.at ?? null, unit: b.unit, source: "now-pump", run: Math.round(run * 100) / 100 };
       }
     }
     return { ...r, meterAfter: after && after.value >= b.value ? after : null };
@@ -417,11 +426,12 @@ function odometerBeforeOf(row, issue, tracker, fill) {
   const pump = physical != null
     ? { value: physical, at: fill.at != null ? new Date(fill.at).toISOString() : null, source: "pump", unit: odometerUnit(row?.basis) }
     : null;
-  if (pump && pump.unit === "km") return pump;
-  // Only a meter the server says is km: an older server sends engine hours.
-  if (tracker?.meterBefore?.unit === "km") return { ...tracker.meterBefore, source: "tracker", unit: "km" };
-  // Never hours (operator 2026-11-20, on DG-19's 320.4 h: "still in h"): an
-  // hour meter keyed in at the pump is no km figure; the hover gives it.
+  // On the machine's own meter only: hours on an hour-rated machine, km on the
+  // rest. A reading on the other meter (an older server sent km for every
+  // machine) is left out rather than shown under the wrong unit.
+  const unit = refillMeterUnit(row?.basis);
+  if (pump && pump.unit === unit) return pump;
+  if (tracker?.meterBefore?.unit === unit) return { ...tracker.meterBefore, source: "tracker", unit };
   return null;
 }
 
@@ -429,6 +439,7 @@ export function refillFigures(row, server) {
   const issueOf = new Map((row?.pumpIssues ?? []).map((i) => [i.id, i]));
   const lineOf = new Map((row?.lines ?? []).filter((l) => l.requestId).map((l) => [l.requestId, l]));
   const trackerOf = new Map((server?.refills ?? []).map((r) => [r.issueId, r]));
+  const unit = refillMeterUnit(row?.basis);
   const list = (row?.fills ?? [])
     .filter((f) => f.key?.startsWith("pump-"))
     .map((f) => {
@@ -465,18 +476,17 @@ export function refillFigures(row, server) {
             hours: line.plannedHours ?? null, km: line.plannedKm ?? null,
           }
           : null,
-        // In km (operator 2026-11-20: "do conversion into km for the
-        // odometers"): the reading keyed in at the pump where it is in km (a
-        // km-rated machine; "by default lets use the odometer value keyed at
-        // the pump"), else the tracker's GPS odometer. An hour-rated
-        // machine's pump hours stand in only where the tracker has nothing:
-        // not ours, or no reading near the fuelling. trackerBefore stays for
-        // the latest refill's after and the hover.
+        // On the machine's meter (refillMeterUnit): the reading keyed in at
+        // the pump ("by default lets use the odometer value keyed at the
+        // pump"), else the tracker's: km on a km-rated machine (operator
+        // 2026-11-20: "do conversion into km for the odometers"), engine hours
+        // on an hour-rated one. trackerBefore stays for the latest refill's
+        // after and the hover.
         odometerBefore: odometerBeforeOf(row, i, t, f),
-        trackerBefore: t?.meterBefore?.unit === "km" ? t.meterBefore : null,
+        trackerBefore: t?.meterBefore?.unit === unit ? t.meterBefore : null,
         odometerAfter: i.readings?.physical ?? null,
         trackerAfter: t?.meterAfter ?? null,
-        trackerNow: t?.meterNow?.unit === "km" ? t.meterNow : null,
+        trackerNow: t?.meterNow?.unit === unit ? t.meterNow : null,
         issued: f.actual ?? i.litres ?? null,
         tracked: t ? Boolean(t.tracked) : null,
       };
