@@ -1016,7 +1016,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
           <span className="wf-job__fault">{jobLabel(job)}</span>
         </div>
         {job.ticketNo
-          ? <span className="wf-ticket" title="Repair ticket number">{job.ticketNo}</span>
+          ? <span className="wf-ticket" title={job.ticketNo.startsWith("JC-") ? "FactorySuite job card number" : "Repair ticket number"}>{job.ticketNo}</span>
           : <span className="wf-ticket wf-ticket--none">No ticket yet</span>}
       </header>
 

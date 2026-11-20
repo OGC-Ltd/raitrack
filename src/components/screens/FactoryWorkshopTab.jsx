@@ -116,7 +116,7 @@ function BoardTable({ rows, onOpen, openId }) {
                 </td>
                 <td className="sp4-td--left">
                   {job
-                    ? <span className="wf-cell-stage"><span className={`sp4-pill sp4-pill--${STAGE_PILL[job.stage] ?? "none"}`}>{STAGE_LABEL[job.stage] ?? job.stage}</span><span className="wf-cell-sub wf-mono">{job.ticketNo ?? ""}</span></span>
+                    ? <span className="wf-cell-stage"><span className={`sp4-pill sp4-pill--${STAGE_PILL[job.stage] ?? "none"}`}>{STAGE_LABEL[job.stage] ?? job.stage}</span>{job.ticketNo && job.ticketNo !== shortCard(c.cardNumber) && <span className="wf-cell-sub wf-mono">{job.ticketNo}</span>}</span>
                     : <span className="sp4-muted" title="The machine on this card is not one of our tracked units">Not tracked</span>}
                 </td>
                 <td className="sp4-td--left sys-num">{at(c.checkedInAt)}</td>

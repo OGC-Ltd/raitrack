@@ -203,7 +203,7 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
                     </td>
                     <td className="sp4-td--left">
                       <span className="wf-mono">{j.ticketNo ?? "-"}</span>
-                      {j.fsJobCards?.length > 0 && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
                     </td>
                     <td className="sp4-td--left sys-num">{booking ? isoDay(booking.bookingDate) : "-"}</td>
                     <td className="sp4-td--left">{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
@@ -362,7 +362,7 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
                     </td>
                     <td className="sp4-td--left">
                       <span className="wf-mono">{j.ticketNo ?? "-"}</span>
-                      {j.fsJobCards?.length > 0 && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="wf-mono">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
                     </td>
                     <td className="sp4-td--left">
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
