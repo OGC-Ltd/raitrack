@@ -78,3 +78,72 @@ export function cellIndex(board) {
   }
   return out;
 }
+
+// ── The day's plans, unit by unit (operator 2026-11-20: the stat cards and a
+// table of every unit, approved, drafted, cancelled or rejected). Read from
+// the map's work plans feed (planner/work-plans), which keeps every status.
+
+/** A plan's FactorySuite status in the board's words, and its tone. */
+export const PLAN_STATUS = {
+  APPROVED:  { label: "Approved",             tone: "approved" },
+  SUBMITTED: { label: "Waiting for approval", tone: "sent_late" },
+  DRAFT:     { label: "Draft",                tone: "draft" },
+  REJECTED:  { label: "Rejected",             tone: "sent_back" },
+  WITHDRAWN: { label: "Withdrawn",            tone: "sent_back" },
+  CANCELLED: { label: "Cancelled",            tone: "none" },
+};
+export const planStatus = (status) => PLAN_STATUS[String(status ?? "").toUpperCase()] ?? { label: String(status ?? "Unknown").toLowerCase().replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()), tone: "none" };
+
+/** The four figures over the board, for one day's plans. */
+export function planStats(plans = []) {
+  const is = (...s) => plans.filter((p) => s.includes(String(p.status).toUpperCase()));
+  const approved = is("APPROVED");
+  const machines = new Set(approved.flatMap((p) => (p.lines ?? []).map((l) => l.machine).filter(Boolean)));
+  return {
+    approved: approved.length,
+    waiting: is("SUBMITTED").length,
+    changes: is("REJECTED", "WITHDRAWN").length,
+    machines: machines.size,
+    plans: plans.length,
+  };
+}
+
+/**
+ * One row a plan line: the unit, its department and plan, the plan's status,
+ * the shift and what it is to do. `shift` and `name` are passed in so this
+ * stays free of the map's helpers.
+ */
+export function unitRows(plans = [], { shift = () => "", name = (s) => s } = {}) {
+  const rows = [];
+  for (const p of plans) {
+    for (const l of p.lines ?? []) {
+      rows.push({
+        key: `${p.id}:${l.id}`,
+        machine: l.machine ?? "-",
+        machineName: l.machineName ?? null,
+        plate: l.plate ?? null,
+        department: p.department ?? "-",
+        planCode: p.planCode ?? null,
+        status: String(p.status ?? "").toUpperCase(),
+        shift: shift(l),
+        shiftNo: l.shiftNo ?? null,
+        activity: l.activity ?? null,
+        workLocation: l.workLocation ?? null,
+        operators: [l.operator, l.secondOperator, l.thirdOperator].filter(Boolean).map(name),
+      });
+    }
+  }
+  const ORDER = ["APPROVED", "SUBMITTED", "DRAFT", "REJECTED", "WITHDRAWN", "CANCELLED"];
+  const rank = (s) => (ORDER.includes(s) ? ORDER.indexOf(s) : ORDER.length);
+  return rows.sort((a, b) => a.department.localeCompare(b.department) || rank(a.status) - rank(b.status)
+    || a.machine.localeCompare(b.machine, undefined, { numeric: true }) || (a.shiftNo ?? 0) - (b.shiftNo ?? 0));
+}
+
+/** Rows that match the picked departments and statuses (empty = all) and the search words. */
+export function filterUnitRows(rows, { departments = [], statuses = [], q = "" } = {}) {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return rows.filter((r) => (!departments.length || departments.includes(r.department))
+    && (!statuses.length || statuses.includes(r.status))
+    && words.every((w) => [r.machine, r.machineName, r.plate, r.planCode, r.activity, r.workLocation, ...r.operators]
+      .some((v) => v && String(v).toLowerCase().includes(w))));
+}

@@ -194,10 +194,38 @@
    screen. */
 .maint-crumbs {
   flex-shrink: 0;
-  padding: 10px var(--maint-gutter, 24px) 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px var(--maint-gutter, 24px);
   border-bottom: 1px solid #2a2d35;
   background: #080809;
+
+  /* The view chips are Movements' own (.sp4-filter-chip, SensorPanel.css),
+     which read the sp4 tokens; this row sits outside .sp4-root, so it carries
+     the ones the chips need, dark here and light below. */
+  --sp4-text-1: #f0f4f8;
+  --sp4-text-3: #9aa7b6;
+  --sp4-raised: #1e2330;
+  --sp4-line-hi: #2e3440;
+  --sp4-info: #93c5fd;
+  --sp4-accent: #3b82f6;
+  --sp4-body: 12.5px;
 }
+.app--light .maint-crumbs {
+  --sp4-text-1: #0f172a;
+  --sp4-text-3: #52606f;
+  --sp4-raised: #f5f7fa;
+  --sp4-line-hi: #cbd5e1;
+  --sp4-info: var(--accent-info, #0369a1);
+  --sp4-accent: var(--accent-info, #0369a1);
+}
+/* The chips sit on the right, as on Movements; on a narrow screen they wrap
+   under the crumbs and start from the left. */
+.maint-views { margin-left: auto; }
+@media (max-width: 560px) { .maint-views { margin-left: 0; } }
 
 .maint-crumbs__list {
   display: flex;
@@ -239,47 +267,6 @@
 .app--light .maint-crumbs__item { color: var(--color-text-sec, #475569); }
 .app--light .maint-crumbs__item + .maint-crumbs__item::before { color: var(--color-text-muted, #94a3b8); }
 .app--light .maint-crumbs__item--current { color: var(--color-text-primary, #0f172a); }
-
-.maint-subtabs {
-  flex-shrink: 0;
-  display: flex;
-  /* The tabs define the bar's baseline via their own bottom border, so the row
-     aligns to that edge rather than stretching its children. */
-  align-items: end;
-  gap: 2px;
-  /* Minus the sub-tab's own 20px so the first LABEL sits on the gutter, not its
-     hit area — the label is what the eye lines up against the content below.
-     Bottoms out at 0 because the gutter floor is 20px. */
-  padding: 12px calc(var(--maint-gutter, 24px) - 20px) 0;
-  border-bottom: 1px solid #2a2d35;
-  background: #080809;
-}
-
-/* Narrow: the bar wraps rather than compressing the tab labels to two lines.
-   The inset is left to the gutter — a separate 10px here put the tab labels
-   inboard of the content they label. */
-@media (max-width: 560px) {
-  .maint-subtabs { flex-wrap: wrap; }
-}
-.maint-subtab {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 20px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: #a3b1c2;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--font-ui, system-ui);
-  cursor: pointer;
-  transition: color .15s, border-color .15s;
-  margin-bottom: -1px;
-  white-space: nowrap;
-}
-.maint-subtab:hover { color: #f0f4f8; }
-.maint-subtab--active { color: #f0f4f8; border-bottom-color: #3b82f6; }
 
 /* ── The header is white, as on the Fuel report ──────────────────────────────
  * Hallmark · redesign 2026-10-03 · scope: Maintenance header (breadcrumb + KPI strip)

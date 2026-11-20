@@ -1,0 +1,58 @@
+/* The Plan board's palette (components/body/PlanSubmissions.css reads it): the
+   Sensor Monitor's values, so the two Maintenance views read as one tab. */
+.psb {
+  --psb-bg: #04050a;
+  --psb-card: #06070d;
+  --psb-card-2: #0a0c12;
+  --psb-line: #1a1e28;
+  --psb-text-1: #f0f4f8;
+  --psb-text-2: #c7d1dd;
+  --psb-text-3: #9aa7b6;
+  --psb-weekend: rgba(148, 163, 184, 0.05);
+  --psb-selected: rgba(59, 130, 246, 0.10);
+  --psb-ink: #f0f4f8;
+  --psb-on-solid: #ffffff;
+  --psb-focus: #3b82f6;
+  --psb-field-line: #64748b;
+
+  --psb-ok: #16a34a;
+  --psb-ok-soft-bg: rgba(34, 197, 94, 0.14);
+  --psb-ok-soft-fg: #86efac;
+  --psb-late: #f59e0b;
+  --psb-late-on: #1c1204;
+  --psb-late-soft-bg: rgba(245, 158, 11, 0.14);
+  --psb-late-soft-fg: #fbbf24;
+  --psb-bad: #ef4444;
+  --psb-bad-soft-bg: rgba(239, 68, 68, 0.12);
+  --psb-bad-fg: #fca5a5;
+
+  --psb-body: 13px;
+  --psb-small: 12px;
+
+}
+
+.app--light .psb {
+  --psb-bg: #f0f4f8;
+  --psb-card: #ffffff;
+  --psb-card-2: #f8fafc;
+  --psb-line: #dde1e7;
+  --psb-text-1: #0f172a;
+  --psb-text-2: #334155;
+  --psb-text-3: #52606f;
+  --psb-weekend: rgba(100, 116, 139, 0.06);
+  --psb-selected: rgba(3, 105, 161, 0.07);
+  --psb-ink: #0f172a;
+  --psb-focus: #0369a1;
+
+  --psb-ok: #15803d;
+  --psb-ok-soft-bg: #ecfdf5;
+  --psb-ok-soft-fg: #047857;
+  --psb-late: #d97706;
+  --psb-late-on: #ffffff;
+  --psb-late-soft-bg: #fffbeb;
+  --psb-late-soft-fg: #b45309;
+  --psb-bad: #dc2626;
+  --psb-bad-soft-bg: #fef2f2;
+  --psb-bad-fg: #b91c1c;
+
+}

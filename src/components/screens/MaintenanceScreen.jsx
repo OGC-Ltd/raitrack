@@ -46,7 +46,7 @@ export default function MaintenanceScreen() {
   // Held in AppContext so it survives a refresh — see the restore helpers there.
   const { maintenanceView: savedView } = useAppFields("maintenanceView");
   const { setMaintenanceView: setActiveTab } = useAppActions();
-  // FactorySuite's Plan submissions board: only where FactorySuite keeps work
+  // FactorySuite's plan board (the Plan view): only where FactorySuite keeps work
   // plans (KASULU), the same orgs as the Fuel page.
   const { orgCode } = usePermissions();
   const plansOn = FACTORY_FUEL_ORGS.includes(orgCode ?? "");
@@ -69,7 +69,7 @@ export default function MaintenanceScreen() {
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
     { key: "sensors", label: "Sensor Monitor", enabled: true },
-    { key: "plans", label: "Plan submissions", enabled: plansOn },
+    { key: "plans", label: "Plan", enabled: plansOn },
   ];
   const available = VIEWS.filter((v) => v.enabled);
   const activeTab = available.some((v) => v.key === savedView) ? savedView : available[0].key;
@@ -90,37 +90,36 @@ export default function MaintenanceScreen() {
 
   return (
     <div className="maint-screen-scroll">
-      {/* Orientation line. It carries real weight now that the sub-tab bar is
-          hidden: without it the panel opens with no statement of where you are,
-          and "Sensor Monitor" existed nowhere on screen. Not links — Maintenance
-          is this tab, so there is nowhere for a click to go, and a crumb that
-          looks clickable and isn't is worse than plain text. */}
-      <nav className="maint-crumbs" aria-label="Breadcrumb">
-        <ol className="maint-crumbs__list">
-          <li className="maint-crumbs__item">Maintenance</li>
-          <li className="maint-crumbs__item maint-crumbs__item--current" aria-current="page">
-            {crumbLabel}
-          </li>
-        </ol>
-      </nav>
-
-      {/* Shown only when there is a genuine choice — "a tab strip with one tab
-          in it is chrome that does nothing". With User Accounts moved out and
-          Service Status hidden, that is nobody today; it comes back the moment
-          SHOW_SERVICE_STATUS is flipped. */}
-      {available.length > 1 && (
-        <div className="maint-subtabs">
-          {available.map((v) => (
-            <button
-              key={v.key}
-              className={"maint-subtab" + (activeTab === v.key ? " maint-subtab--active" : "")}
-              onClick={() => setActiveTab(v.key)}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Orientation line, with the views as chips on its right, as Movements
+          shows its reports (operator, 2026-11-20: the separate tab bar is gone).
+          The crumbs are plain text: Maintenance is this tab, so there is nowhere
+          for a click to go. The chips show only when there is a choice. */}
+      <div className="maint-crumbs">
+        <nav aria-label="Breadcrumb">
+          <ol className="maint-crumbs__list">
+            <li className="maint-crumbs__item">Maintenance</li>
+            <li className="maint-crumbs__item maint-crumbs__item--current" aria-current="page">
+              {crumbLabel}
+            </li>
+          </ol>
+        </nav>
+        {available.length > 1 && (
+          <div className="sp4-filter-group maint-views" role="tablist" aria-label="Maintenance views">
+            {available.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === v.key}
+                className={"sp4-filter-chip" + (activeTab === v.key ? " sp4-filter-chip--on" : "")}
+                onClick={() => setActiveTab(v.key)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {activeTab === "service" && (
         <div className="maint-screen-panel">

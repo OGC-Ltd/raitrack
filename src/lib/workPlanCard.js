@@ -11,6 +11,7 @@
  */
 
 import { lineNow, planStage } from "./workPlanMap";
+import { nameCase } from "./factorySupervisors";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -77,7 +78,8 @@ export function planCard({ plan, line, shifts = 1 }) {
     planned ? `, ${planned}` : "",
   ].join("");
 
-  const operators = [line.operator, line.secondOperator, line.thirdOperator].filter(Boolean).join(", ") || "none";
+  // Cased like the Operators page (operator, 2026-11-20: "capitalized across all").
+  const operators = [line.operator, line.secondOperator, line.thirdOperator].filter(Boolean).map(nameCase).join(", ") || "none";
 
   // The line's fuel request and the pump's issues against it (server
   // work-plan-match: request by machine, day and shift; issues by request).
@@ -128,7 +130,7 @@ export function planCard({ plan, line, shifts = 1 }) {
     shift: {
       when: shift + (shifts > 1 ? ` (1 of ${shifts} shifts today)` : ""),
       operators: `Operators: ${operators}`,
-      supervisors: `Supervisors: ${line.supervisor || "none"}`,
+      supervisors: `Supervisors: ${line.supervisor ? nameCase(line.supervisor) : "none"}`,
     },
     pump,
     flags: line.flags?.length ? `Flags: ${line.flags.join("; ")}` : null,
