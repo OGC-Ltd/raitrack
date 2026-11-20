@@ -508,7 +508,7 @@ function OperatorPanel({ o, from, to, onClose }) {
                     <span className="dr-case__sub">
                       {[l.workLocation && `At ${l.workLocation}`,
                         l.plannedKm != null ? `${fmt(l.plannedKm)} km` : l.plannedHours != null ? `${fmt(l.plannedHours)} h` : null,
-                        l.supervisor && `supervisor ${l.supervisor}`,
+                        l.supervisor && `supervisor ${nameCase(l.supervisor)}`,
                         SEAT[l.seat]].filter(Boolean).join(", ")}
                     </span>
                     <span className="dr-case__sub fuel-case__plan">

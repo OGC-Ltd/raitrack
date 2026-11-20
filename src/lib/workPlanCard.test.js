@@ -85,3 +85,11 @@ describe("planCard", () => {
     expect(c.flags).toBeNull();
   });
 });
+
+describe("planCard names (operator, 2026-11-20: capitalised across all)", () => {
+  it("cases the operators and the supervisor as the Operators page does", () => {
+    const c = planCard({ plan, line: { ...line, operator: "WILLIAM CORNEL KAFIPA", secondOperator: "george heneriko", supervisor: "ALSON MESHI" } });
+    expect(c.shift.operators).toBe("Operators: William Cornel Kafipa, George Heneriko");
+    expect(c.shift.supervisors).toBe("Supervisors: Alson Meshi");
+  });
+});

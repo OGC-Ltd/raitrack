@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cellDetail, cellTitle, wallClock, weekday, isWeekend, cellIndex } from "./planSubmissions";
+import { cellDetail, cellTitle, wallClock, weekday, isWeekend, cellIndex, planStats, unitRows, filterUnitRows, planStatus } from "./planSubmissions";
 
 describe("plan submissions words", () => {
   it("reads FactorySuite's wall clock as text", () => {
@@ -27,5 +27,35 @@ describe("plan submissions words", () => {
   it("indexes cells by department and day", () => {
     const idx = cellIndex({ cells: [{ department: "ROADS", day: "2026-11-20", state: "sent" }] });
     expect(idx.get("ROADS").get("2026-11-20").state).toBe("sent");
+  });
+});
+
+describe("the day's plans, unit by unit", () => {
+  const plans = [
+    { id: "a", planCode: "WP-1-CIV", department: "CIVIL", status: "APPROVED", lines: [{ id: 1, machine: "EX-20", operator: "WILLIAM CORNEL KAFIPA", shiftNo: 1 }, { id: 2, machine: "EX-20", shiftNo: 2 }] },
+    { id: "b", planCode: "WP-1-ROA", department: "ROADS", status: "DRAFT", lines: [{ id: 3, machine: "GR-04", operator: "george heneriko" }] },
+    { id: "c", planCode: "WP-1-IRR", department: "IRRIGATION", status: "SUBMITTED", lines: [{ id: 4, machine: "EX-16" }] },
+    { id: "d", planCode: "WP-2-IRR", department: "IRRIGATION", status: "REJECTED", lines: [{ id: 5, machine: "EX-08" }] },
+    { id: "e", planCode: "WP-3-IRR", department: "IRRIGATION", status: "CANCELLED", lines: [{ id: 6, machine: "EX-09" }] },
+  ];
+  it("counts the four figures", () => {
+    expect(planStats(plans)).toEqual({ approved: 1, waiting: 1, changes: 1, machines: 1, plans: 5 });
+  });
+  it("lists every line, by department then status", () => {
+    const rows = unitRows(plans, { name: (s) => s.toUpperCase() });
+    expect(rows.map((r) => `${r.department} ${r.machine} ${r.status}`)).toEqual([
+      "CIVIL EX-20 APPROVED", "CIVIL EX-20 APPROVED", "IRRIGATION EX-16 SUBMITTED", "IRRIGATION EX-08 REJECTED", "IRRIGATION EX-09 CANCELLED", "ROADS GR-04 DRAFT",
+    ]);
+    expect(rows.at(-1).operators).toEqual(["GEORGE HENERIKO"]);
+  });
+  it("filters by department, status and words", () => {
+    const rows = unitRows(plans);
+    expect(filterUnitRows(rows, { departments: ["IRRIGATION"] })).toHaveLength(3);
+    expect(filterUnitRows(rows, { statuses: ["DRAFT", "CANCELLED"] }).map((r) => r.machine)).toEqual(["EX-09", "GR-04"]);
+    expect(filterUnitRows(rows, { q: "heneriko" }).map((r) => r.machine)).toEqual(["GR-04"]);
+  });
+  it("names a status it does not know as it comes", () => {
+    expect(planStatus("cancelled").label).toBe("Cancelled");
+    expect(planStatus("ON_HOLD").label).toBe("On hold");
   });
 });

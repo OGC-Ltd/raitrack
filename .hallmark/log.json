@@ -3,6 +3,45 @@
     "mode": "redesign",
     "depth": "full",
     "scope": "app",
+    "shape": "Drivers page grammar (strip, filter row, grid, pager)",
+    "theme": "project (DriversScreen.css via .dr-tones)",
+    "entry": "Maintenance › Plan › stat cards + units table",
+    "signature": "four plan figures in the Drivers strip over every unit on the day's plans",
+    "sections": [
+      "strip",
+      "filters: status, department, search",
+      "grid",
+      "pager"
+    ],
+    "waived": [
+      "26b"
+    ],
+    "date": "2026-11-20",
+    "prompt": "plan stat cards and units table in the drivers page design"
+  },
+  {
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "shape": "app screen",
+    "theme": "brand (sp4 token values, both themes)",
+    "entry": "Maintenance › Plan (was Plan submissions)",
+    "signature": "one sheet: a row a department, the picked day spelled out beside the name, 14 days as squares",
+    "sections": [
+      "head: day, sent figure, updated, date",
+      "sheet",
+      "key"
+    ],
+    "waived": [
+      "26b"
+    ],
+    "date": "2026-11-20",
+    "prompt": "plan submissions calendar on the Maintenance page, views as Movements-style chips on the right"
+  },
+  {
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
     "shape": "Operators tab grammar (strip, ranked grid, side panel)",
     "theme": "project (DriversScreen.css)",
     "prompt": "Scorecard Supervisors view in the Operators page design",

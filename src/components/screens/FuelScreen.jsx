@@ -17,6 +17,7 @@ import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, per
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
+import { nameCase } from "../../lib/factorySupervisors";
 import { useAppSelector, useCompanies } from "../../context/AppContext";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -945,7 +946,7 @@ function MachinePanel({ m, from, to, onClose }) {
                       {[l.workLocation && `At ${l.workLocation}`,
                         l.plannedKm != null ? `${fmt(l.plannedKm)} km` : l.plannedHours != null ? `${fmt(l.plannedHours)} h` : null,
                         l.needLitres != null ? `needs about ${fmt(l.needLitres)} L` : null,
-                        l.operator].filter(Boolean).join(", ")}
+                        l.operator && nameCase(l.operator)].filter(Boolean).join(", ")}
                     </span>
                     <span className="dr-case__sub fuel-case__plan">
                       {l.planCode}, {planStage(l.planStatus) === "PENDING" ? "pending approval" : sentence(l.planStatus)}
@@ -978,7 +979,7 @@ function MachinePanel({ m, from, to, onClose }) {
                       <span className="dr-case__time">{clock(i.at)}</span>
                     </span>
                     <span className="dr-case__sub">
-                      {[i.activity, i.operator,
+                      {[i.activity, i.operator && nameCase(i.operator),
                         i.readings?.physical != null ? `${odometerUnit(m.basis) === "h" ? "hour meter" : "odometer"} ${odometerText(i.readings.physical, m.basis)}${i.readings.estimated != null ? ` (expected ${odometerText(i.readings.estimated, m.basis)})` : ""}` : null,
                         i.minutes != null ? `${fmt(i.minutes)} min` : null].filter(Boolean).join(", ")}
                     </span>

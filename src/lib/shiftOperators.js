@@ -6,12 +6,17 @@
 // Pure. The same "on shift" as the map's work plans layer (workPlanMap lineNow).
 
 import { lineNow, planStage, shiftText } from './workPlanMap';
+import { nameCase } from './factorySupervisors';
 
 /** Plans that do not put anyone to work: awaiting approval, or taken back. */
 const OFF = /CANCEL|REJECT|WITHDRAW|SENT_BACK|RETURN|DECLIN/;
 
-/** "EMMANUEL VICENT MTULO - EXCAVATOR OPERATOR" → EMMANUEL VICENT MTULO. */
-export const operatorName = (s) => String(s ?? '').split(/\s+-\s+/)[0].replace(/\s+/g, ' ').trim();
+/**
+ * "EMMANUEL VICENT MTULO - EXCAVATOR OPERATOR" → "Emmanuel Vicent Mtulo", and
+ * "george heneriko" → "George Heneriko": cased like the Operators and
+ * Supervisors pages (operator, 2026-11-20: "capitalized across all").
+ */
+export const operatorName = (s) => nameCase(String(s ?? '').split(/\s+-\s+/)[0].replace(/\s+/g, ' ').trim());
 
 /**
  * The unit's operators on its approved plan line covering `now`, or null when
