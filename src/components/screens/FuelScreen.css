@@ -90,19 +90,17 @@
   .fuel-grid thead th.dr-num:not(:last-child) .dr-grid__sort { padding-inline: 8px; }
 }
 
-/* Probe consumed, hidden (operator 2026-11-20); FuelScreen PROBE_CONSUMED_SHOWN */
-.fuel-grid .fuel-col--hidden { display: none; }
 
 /* ── Phones (operator 2026-11-18: "the fuel tab … on mobile … responsive") ──
    The Drivers page turns its rows into cards at 700px with ten placed cells;
    a machine row has more, so the extra cells fell into whatever slot was left.
    The machine card places all fifteen (the refill columns joined 2026-11-19,
-   Probe consumed 2026-11-20):
+   Probe used 2026-11-20):
      machine                        status
      department · job               period
      shifts        planned          fuel before
      issued        probe filled     fuel after
-     fuel now      consumed         probe consumed
+     fuel now      consumed         probe used
      odometer before  odometer after
    In the table's order (reordered 2026-11-19: before, issued, probe, after, now).
    Same specificity as the Drivers rules, later in the cascade, so these win. */
