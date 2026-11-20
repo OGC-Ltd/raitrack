@@ -140,6 +140,14 @@ export const WORK_KINDS_AT = {
   remote_fix: TECH_REPAIR, fixing: TECH_REPAIR, spare_outsourced: ["repair", "note"],
   completed: ["verification"],
 };
+/**
+ * The Workshop is view-only in every org (operator, 2026-11-21): a `can` that
+ * keeps the person's read verbs and refuses every other one, so no step,
+ * form, claim, log entry or save is drawn. Takes a verb or a list (any of).
+ */
+export const viewOnly = (can) => (perm) =>
+  [].concat(perm).some((p) => typeof p === "string" && p.endsWith(":read") && can(p));
+
 /** The kinds this person may log on this job now: the job's own technician, or the Control Room at verification. */
 export function workKindsFor(job, can, userId) {
   if (!job || job.resolvedAt) return [];

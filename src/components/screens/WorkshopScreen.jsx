@@ -28,7 +28,7 @@ import { useAuth } from "../../context/AuthContext";
 import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
 import {
   listWorkflowJobs, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
-  claimJob, updateInvestigation, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
+  claimJob, updateInvestigation, viewOnly, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
   takeWorkshopHandoff, WORKSHOP_OPEN, shortCard,
 } from "../../api/repairWorkflow";
 import FactoryWorkshopTab from "./FactoryWorkshopTab";
@@ -253,7 +253,7 @@ const MINE_EMPTY = {
  * button: the queue is no longer a tab of its own (operator, 2026-10-27).
  * Jobs another technician has claimed are theirs, not shown here.
  */
-export function MyJobsTab({ orgId, userId, onOpen, openId, onToast }) {
+export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = true }) {
   const jobs = useLive(() => Promise.all([fetchMyJobs(orgId), fetchQueue(orgId)]).then(([mine, queue]) => {
     const own = new Set(mine.map((j) => j.id));
     return [...queue.filter((r) => !r.assignedToId && !own.has(r.id)), ...mine];
@@ -366,10 +366,10 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast }) {
                     </td>
                     <td className="sp4-td--left">
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
-                        : !j.assignedToId && !j.workshopTechnicianId ? (
+                        : !j.assignedToId && !j.workshopTechnicianId ? (!canClaim ? <span className="sp4-muted">Unclaimed</span> : (
                           <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
                                   onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Claiming…" : "Claim"}</button>
-                        ) : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
+                        )) : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
                     </td>
                     <td className="sp4-td--right sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.forwardedAt ?? j.createdAt)}</td>
                   </tr>
@@ -695,6 +695,8 @@ export default function WorkshopScreen() {
   // sees only My jobs, which holds the ControlTech queue's unclaimed jobs too
   // (operator, 2026-10-26 and 2026-10-27).
   const board = can("repair:read") && can(BOARD_VERBS);
+  // Tabs follow the person's own verbs; everything inside them is view-only.
+  const look = useMemo(() => viewOnly(can), [can]);
   const tabs = useMemo(() => [
     { key: "jobs",     label: "Jobs",          allow: board },
     { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
@@ -747,8 +749,8 @@ export default function WorkshopScreen() {
       </div>
 
       <div className="sp4-body">
-        {active === "jobs" && <JobsTab orgId={orgId} can={can} onOpen={setOpenId} openId={openId} onToast={setToast} />}
-        {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} />}
+        {active === "jobs" && <JobsTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} />}
+        {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
         {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
         {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
         {active === "factory" && <FactoryWorkshopTab orgId={orgId} onOpen={setOpenId} openId={openId} />}
@@ -756,13 +758,13 @@ export default function WorkshopScreen() {
 
       {openId && (
         <DetailSidebar title="Repair job" label="Repair job" itemKey={openId} onClose={() => setOpenId(null)} wide>
-          <RepairWorkflowJob orgId={orgId} itemId={openId} can={can} userId={userId} onToast={setToast} />
+          <RepairWorkflowJob orgId={orgId} itemId={openId} can={look} userId={userId} onToast={setToast} />
         </DetailSidebar>
       )}
       {openCase && (
         <DetailSidebar title="Security investigation" itemKey={openCase.id} onClose={() => setOpenCase(null)}>
           <CaseDetail key={openCase.id + (openCase.updatedAt ?? "")} orgId={orgId} c={openCase}
-                      canUpdate={can("security_case:update")} onToast={setToast}
+                      canUpdate={look("security_case:update")} onToast={setToast}
                       onSaved={(saved) => setOpenCase((prev) => ({ ...prev, ...saved }))} />
         </DetailSidebar>
       )}

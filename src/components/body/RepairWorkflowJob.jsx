@@ -509,12 +509,12 @@ function WorkHint({ children }) {
  * one, and the job stays where it stands; an entry of the stage the job
  * stands at may also be deleted, which opens its kind to be logged again.
  */
-function WorkEntryRow({ orgId, job, e, act, busy, userId }) {
+function WorkEntryRow({ orgId, job, e, act, busy, userId, locked = false }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [text, setText] = useState(e.text);
   const [mins, setMins] = useState(e.labourMinutes ?? "");
-  const mine = !job.resolvedAt && !!e.byId && e.byId === userId;
+  const mine = !locked && !job.resolvedAt && !!e.byId && e.byId === userId;
   const deletable = mine && (WORK_KINDS_AT[job.stage] ?? []).includes(e.kind) && loggedThisStage(job, e);
   const key = `entry-${e.id}`;
 
@@ -613,7 +613,7 @@ function StageSlots({ stageKinds, loggedHere, kinds, kind, onPick }) {
   );
 }
 
-function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
+function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId, locked = false }) {
   const [picked, setKind] = useState(null);
   const [text, setText] = useState("");
   const [mins, setMins] = useState("");
@@ -666,7 +666,7 @@ function WorkLog({ orgId, job, act, busy, kinds: stageKinds, userId }) {
           {earlier.length > 0 && <h4 className="wf-log__h">{title}</h4>}
           <ol className="wf-log">
             {list.map((e) => (
-              <WorkEntryRow key={e.id} orgId={orgId} job={job} e={e} act={act} busy={busy} userId={userId} />
+              <WorkEntryRow key={e.id} orgId={orgId} job={job} e={e} act={act} busy={busy} userId={userId} locked={locked} />
             ))}
           </ol>
         </div>
@@ -1110,7 +1110,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
                stores={(job.fsJobCards?.length ?? 0) > 0 || job.report?.source === "factorysuite"} />
       )}
 
-      <WorkLog orgId={orgId} job={job} act={act} busy={busy} kinds={workKindsFor(job, can, userId)} userId={userId} />
+      <WorkLog orgId={orgId} job={job} act={act} busy={busy} kinds={workKindsFor(job, can, userId)} userId={userId}
+               locked={!can("repair:resolve") && !can("repair:verify")} />
       <Trail job={job} />
 
       {((action && staged) || canMove) && !closed && (
