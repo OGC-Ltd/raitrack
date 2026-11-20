@@ -1,35 +1,205 @@
-/* Hallmark · redesign · full · scope: app · design-system: DriversScreen.css (the Operators tab's strip, grid and panel) · built: the project
- * critique: P5 H4 E5 S4 R5 V4 · the screen takes the Operators tab's grammar whole; nothing here draws a part of its own beyond two panel rules
- */
-/* Hallmark · waive 26b · every control is a shared DriversScreen.css class (dr-chip, dr-pager__btn, dr-grid__sort) · that file draws their pressed and disabled states for the whole Staffs page */
-/*
- *
- * Scorecard › Supervisors is drawn from DriversScreen.css and FuelScreen.css,
- * exactly as Staffs › Operators is: the four-cell `dr-strip`, the
- * `dr-filters` with Rank by chips, the ranked `dr-grid` and the `dr-panel` a
- * row opens. Only the panel's outcome counts and its wrapping are its own,
- * on tokens those files declare. */
+/* Hallmark · redesign · component: Staffs › Scorecard › Supervisors (the supervisor side panel's cards, and the grid's Did not run and Late starts bars) · genre: modern-minimal · theme: in-project tokens, preserved (DriversScreen.css, both themes) · scope: component · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E5 S5 R4 V5 · weakest: P, on purpose: the panel keeps the app's one side-panel frame; the signature is the outcome bar, every line of the period in one strip */
+/* Hallmark · waive 26b · every control here is a shared DriversScreen.css class (dr-chip, dr-pager__btn, dr-grid__sort, dr-panel__x) · that file draws their pressed and disabled states for the whole Staffs page */
+/* Hallmark · answered: loading, error and empty are the tab's (StaffLoading, LoadError, TabEmptyState); the panel opens on a loaded row only and says plainly when a supervisor names no operator. Section heads are sentence case here, not the shared panel's tracked capitals; shift labels drop the middle dot for a comma. */
 
-/* The panel's outcome counts, two to a row under the headline figures. */
-.sv-outcomes {
-  margin: 12px 0 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 16px;
-  font-size: 12px; color: var(--text-2);
+/* ── Tokens: the page's own, named for what they do in this panel ───────── */
+.sv-panel,
+.dr-grid {
+  --sv-line: var(--dg-line, var(--border));
+  --sv-ink: var(--ink);
+  --sv-text-2: var(--text-2);
+  --sv-card: var(--card);
+  --sv-raise: color-mix(in srgb, var(--ink) 4%, transparent);
+  --sv-ok: var(--tone-tonnes);
+  --sv-bad: var(--tone-theft);
+  --sv-warn: var(--tone-speed);
+  --sv-quiet: color-mix(in srgb, var(--ink) 34%, transparent);
+  --sv-faint: color-mix(in srgb, var(--ink) 14%, transparent);
+  --sv-bad-wash: color-mix(in srgb, var(--tone-theft) 6%, transparent);
+  --sv-warn-wash: color-mix(in srgb, var(--tone-speed) 7%, transparent);
+  --sv-bad-line: color-mix(in srgb, var(--tone-theft) 28%, transparent);
+  --sv-warn-line: color-mix(in srgb, var(--tone-speed) 30%, transparent);
+  --sv-focus: var(--accent);
+  --sv-small: 12px;
+  --sv-body: 13px;
 }
-.sv-outcomes > div { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
-.sv-outcomes dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 
-/* The panel never scrolls sideways (operator 2026-11-19): rows without a date
- * block take the whole width, and long machine names, activities, places and
- * operator lists wrap instead of running off the edge. */
+/* ── Grid: Did not run and Late starts carry a bar in their own colour ──── */
+.dr-grid .dr-incident .dr-metric { align-items: flex-end; }
+.dr-metric__fill.sv-fill--theft { background: var(--sv-bad); }
+.dr-metric__fill.sv-fill--speed { background: var(--sv-warn); }
+
+/* ── Section heads: sentence case, the count beside ─────────────────────── */
+.sv-sec { padding: 16px 0; border-top: 1px solid var(--sv-line); }
+.sv-h {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 12px;
+  font-size: var(--sv-body); font-weight: 700;
+  color: var(--sv-ink);
+}
+.sv-count {
+  min-width: 24px; padding: 0 8px; border-radius: 999px;
+  background: var(--sv-raise); color: var(--sv-text-2);
+  font-size: var(--sv-small); font-weight: 600; line-height: 20px;
+  text-align: center; font-variant-numeric: tabular-nums;
+}
+
+/* ── The ID card ────────────────────────────────────────────────────────── */
+.sv-id {
+  margin: 12px 0 16px;
+  border: 1px solid var(--sv-line);
+  border-radius: 12px;
+  background: var(--sv-card);
+  overflow: hidden;
+}
+.sv-id__who { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.sv-id__avatar {
+  flex: none;
+  display: grid; place-items: center;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--sv-raise); color: var(--sv-text-2);
+  font-size: 16px; font-weight: 700;
+}
+.sv-id__ident { display: grid; gap: 2px; min-width: 0; }
+.sv-id__name {
+  font-size: 18px; font-weight: 700; line-height: 1.2; color: var(--sv-ink);
+  overflow-wrap: break-word; min-width: 0;
+}
+.sv-id__meta { font-size: var(--sv-small); color: var(--sv-text-2); }
+.sv-id__facts {
+  margin: 0; padding: 12px 16px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-id__facts dt { font-size: 11px; font-weight: 600; color: var(--sv-text-2); margin-bottom: 4px; }
+.sv-id__facts dd { margin: 0; font-size: 15px; font-weight: 700; color: var(--sv-ink); font-variant-numeric: tabular-nums; }
+.sv-id__note {
+  margin: 0; padding: 12px 16px;
+  border-top: 1px solid var(--sv-line);
+  background: var(--sv-raise);
+  font-size: var(--sv-small); line-height: 1.45; color: var(--sv-text-2);
+}
+
+/* ── The period: four figures, the outcome bar, its key ─────────────────── */
+.sv-lead { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.sv-lead dt { font-size: 11px; font-weight: 600; color: var(--sv-text-2); margin-bottom: 4px; }
+.sv-lead dd {
+  margin: 0; font-size: 22px; font-weight: 700; line-height: 1.1; color: var(--sv-ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sv-lead__unit { font-size: var(--sv-small); font-weight: 600; color: var(--sv-text-2); }
+
+.sv-split {
+  display: flex; gap: 2px;
+  height: 8px; margin: 16px 0 12px;
+  border-radius: 999px; overflow: hidden;
+}
+.sv-split__part { flex: 1 1 0; min-width: 4px; }
+.sv-tone--ok { background: var(--sv-ok); }
+.sv-tone--bad { background: var(--sv-bad); }
+.sv-tone--warn { background: var(--sv-warn); }
+.sv-tone--quiet { background: var(--sv-quiet); }
+.sv-tone--faint { background: var(--sv-faint); }
+
+.sv-outcomes {
+  margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 24px;
+  font-size: var(--sv-small); color: var(--sv-text-2);
+}
+.sv-outcomes > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
+.sv-outcomes dt { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sv-outcomes dd { margin: 0; font-weight: 700; color: var(--sv-ink); font-variant-numeric: tabular-nums; }
+.sv-outcomes .is-zero dd { color: var(--sv-text-2); font-weight: 600; }
+.sv-key { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.sv-outcomes__late { grid-column: 1 / -1; padding-top: 8px; border-top: 1px dashed var(--sv-line); }
+.sv-outcomes__late:not(.is-zero) dd { color: var(--sv-warn); }
+
+/* ── Machines and shifts: key, what it is, how many lines ───────────────── */
+.sv-list { list-style: none; margin: 0; padding: 0; }
+.sv-list li {
+  display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: baseline; gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-list li:first-child { border-top: 0; padding-top: 0; }
+.sv-list__key { font-size: var(--sv-body); font-weight: 700; color: var(--sv-ink); overflow-wrap: anywhere; }
+.sv-list__key--wide { grid-column: 1 / 3; }
+.sv-list__what { font-size: var(--sv-small); color: var(--sv-text-2); overflow-wrap: anywhere; }
+.sv-list__n { font-size: var(--sv-small); color: var(--sv-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── Operators: names as tags, not a comma run ──────────────────────────── */
+.sv-names { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.sv-names li {
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--sv-raise); color: var(--sv-ink);
+  font-size: var(--sv-small); font-weight: 500;
+}
+.sv-none { margin: 0; font-size: var(--sv-small); color: var(--sv-text-2); }
+
+/* ── Plan lines: the day, what was planned, how it ended ────────────────── */
+.sv-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sv-line {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--sv-line); border-radius: 10px;
+  background: var(--sv-card);
+}
+/* A missed or late line: a wash and a tinted hairline, no edge bar (operator
+   2026-11-20: "remove the heavy box shadow"). */
+.sv-line--bad { background: var(--sv-bad-wash); border-color: var(--sv-bad-line); }
+.sv-line--warn { background: var(--sv-warn-wash); border-color: var(--sv-warn-line); }
+.sv-line .dr-dayblock { align-self: start; }
+.sv-line__body { display: grid; gap: 4px; min-width: 0; }
+.sv-line__top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sv-line__what { font-size: var(--sv-body); color: var(--sv-ink); overflow-wrap: anywhere; min-width: 0; }
+.sv-line__what b { font-weight: 700; margin-right: 4px; }
+.sv-line__shift { flex: none; font-size: var(--sv-small); color: var(--sv-text-2); font-variant-numeric: tabular-nums; }
+.sv-line__sub { margin: 0; font-size: var(--sv-small); color: var(--sv-text-2); overflow-wrap: anywhere; }
+.sv-line__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+/* No signal and Not tracked: the same pill as the others, in grey, so every
+   line ends on a tag of one shape (the shared grid draws them bare). */
+.sv-line__tags .dr-grid__badge--unknown {
+  background: var(--sv-raise);
+  border: 1px solid var(--sv-line);
+  color: var(--sv-text-2);
+}
+.sv-line__tags .dr-grid__badge--unknown .dr-grid__dot { background: var(--sv-quiet); }
+
+/* Plan lines folds (operator 2026-11-20: "we should be able to collapse the
+   plan lines"): the head is the button, the chevron turns. */
+.sv-fold {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; padding: 4px 0;
+  border: 0; background: none;
+  color: var(--sv-ink); font: inherit; font-size: var(--sv-body); font-weight: 700; text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 120ms ease;
+}
+.sv-fold:hover, .sv-fold.is-hover { color: var(--sv-text-2); }
+.sv-fold:active, .sv-fold.is-active { color: var(--sv-ink); }
+.sv-fold:focus-visible, .sv-fold.is-focus { outline: 2px solid var(--sv-focus); outline-offset: 2px; transition: none; }
+.sv-fold:disabled { opacity: 0.45; cursor: default; }
+.sv-fold__chev {
+  margin-left: auto;
+  width: 16px; height: 16px;
+  color: var(--sv-text-2);
+  transition: transform 160ms ease;
+}
+.sv-fold[aria-expanded="false"] .sv-fold__chev { transform: rotate(-90deg); }
+.sv-fold + .sv-lines { margin-top: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .sv-fold, .sv-fold__chev { transition: none; }
+}
+
+/* The panel never scrolls sideways (operator 2026-11-19). */
 .sv-panel .dr-panel__body { overflow-x: clip; }
-.sv-panel .dr-case--nodate { grid-template-columns: minmax(0, 1fr); }
-.sv-panel .dr-case__line { flex-wrap: wrap; row-gap: 2px; }
-.sv-panel .dr-case__plate { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
-.sv-panel .dr-case__sub { white-space: normal; overflow-wrap: anywhere; }
-.sv-panel .dr-panel__note { overflow-wrap: anywhere; }
 
-/* Focus, instant, on what this view adds to the shared grammar: the grid's
- * rows, the panel's close, the CSV and the Who chips already carry
- * DriversScreen.css's ring; restated here so the view stands on its own. */
+/* Focus, instant, on what this view adds to the shared grammar. */
 .drivers-page .dr-grid tbody tr:focus-visible,
 .sv-panel .dr-panel__x:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; transition: none; }
+
+@media (max-width: 767px) {
+  .sv-id__facts, .sv-lead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

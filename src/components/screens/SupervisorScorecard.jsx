@@ -233,6 +233,9 @@ function SupervisorsSection({ rows, selected, onSelect, lead, rangePicker, deptP
   const filtered = rows.filter((s) => !q || [s.name, machineWords(s), ...s.departments, ...s.operators]
     .some((v) => String(v ?? "").toLowerCase().includes(q)));
   const barMax = Math.max(1, ...rows.map((s) => s[sortKey] ?? 0));
+  // The two problem counts always draw their bar (operator 2026-11-20: "the did
+  // not run have a red line ... also under late starts"), against the worst row.
+  const worst = { notRun: Math.max(1, ...rows.map((s) => s.notRun ?? 0)), lateStarts: Math.max(1, ...rows.map((s) => s.lateStarts ?? 0)) };
   const sorted = [...filtered].sort((a, b) => {
     let cmp;
     if (sortKey === "name") cmp = a.name.localeCompare(b.name);
@@ -347,8 +350,8 @@ function SupervisorsSection({ rows, selected, onSelect, lead, rangePicker, deptP
                     <MetricCell label="Hours run" k="runHours" value={s.judged ? s.runHours : null} sortKey={sortKey} max={barMax} dp={1}
                       title={`${hrs(s.runHours)} of ${hrs(s.judgedPlannedHours)} planned on ${plural(s.judged, "tracked line")}`} />
                     <MetricCell label="Delivered" k="deliveredPct" value={s.deliveredPct} sortKey={sortKey} max={100} suffix="%" />
-                    <CountCell n={s.notRun} label="Did not run" tone="theft" />
-                    <CountCell n={s.lateStarts} label="Late starts" tone="speed" />
+                    <CountCell n={s.notRun} label="Did not run" tone="theft" max={worst.notRun} />
+                    <CountCell n={s.lateStarts} label="Late starts" tone="speed" max={worst.lateStarts} />
                   </tr>
                 );
               })}
@@ -400,12 +403,17 @@ function MetricCell({ label, k, value, sortKey, max, dp = 0, suffix = "", title 
   );
 }
 
-/** The roster's incident cell: a dot as well as the colour. */
-function CountCell({ n, label, tone }) {
+/** The roster's incident cell: the count, with a bar in its colour against the worst row. */
+function CountCell({ n, label, tone, max }) {
   if (!n) return <td className="dr-num dr-num--zero" data-label={label}>-</td>;
   return (
     <td className={`dr-num dr-incident dr-incident--${tone}`} data-label={label}>
-      <span className="dr-incident__dot" aria-hidden="true" />{fmt(n)}
+      <span className="dr-metric">
+        <span className="dr-metric__num">{fmt(n)}</span>
+        <span className="dr-metric__track" aria-hidden="true">
+          <span className={`dr-metric__fill sv-fill--${tone}`} style={{ "--share": Math.max(0, Math.min(n / max, 1)) }} />
+        </span>
+      </span>
     </td>
   );
 }
@@ -421,6 +429,15 @@ function DayBlock({ day }) {
 }
 
 /** One supervisor down the right of the page: their machines, shifts, operators and every plan line. */
+/** Whether the panel's Plan lines list is open: remembered for the visit, so
+ *  folding it once keeps it folded as you go from one supervisor to the next. */
+let linesOpenMemo = true;
+function useLinesOpen() {
+  const [open, setOpen] = useState(linesOpenMemo);
+  const set = (v) => setOpen((was) => { const next = typeof v === "function" ? v(was) : v; linesOpenMemo = next; return next; });
+  return [open, set];
+}
+
 function SupervisorPanel({ s, late, from, to, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -441,11 +458,20 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
     { label: "Run", value: s.judged ? fmt(s.runHours, 1) : "-", unit: s.judged ? "h" : null },
     { label: "Delivered", value: pct(s.deliveredPct) },
   ];
+  // Every line ends in exactly one of these; late starts are a part of Ran,
+  // so they are said under the bar, not drawn as a sixth piece of it.
   const outcomes = [
-    ["Ran", s.ran], ["Did not run", s.notRun], [`Over ${late} min late`, s.lateStarts],
-    ["No signal", s.silent], ["Not tracked", s.untracked], ["Shift not over", s.open],
+    { key: "ran", label: "Ran", n: s.ran, tone: "ok" },
+    { key: "not-run", label: "Did not run", n: s.notRun, tone: "bad" },
+    { key: "silent", label: "No signal", n: s.silent, tone: "quiet" },
+    { key: "untracked", label: "Not tracked", n: s.untracked, tone: "faint" },
+    { key: "open", label: "Shift not over", n: s.open, tone: "warn" },
   ];
+  const ended = outcomes.reduce((n, o) => n + (o.n ?? 0), 0);
   const lines = linesByDay(s.history).flatMap((d) => d.lines);
+  const shiftWords = (no, at) => shiftLabel(no, at).replace(" · ", ", ");
+  // Plan lines folds away (operator 2026-11-20); open by default, kept across supervisors.
+  const [linesOpen, setLinesOpen] = useLinesOpen();
 
   return (
     <aside className="dr-panel sv-panel" role="dialog" aria-label={`${name}, supervisor details`}>
@@ -455,106 +481,126 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
       </header>
 
       <div className="dr-panel__body">
-        <section className="dr-idcard" aria-label="Supervisor">
-          <div className="dr-idcard__who">
-            <span className="dr-profile__avatar dr-idcard__avatar">{initialsOf(name)}</span>
-            <div className="dr-panel__ident">
-              <div className="dr-profile__namerow"><span className="dr-panel__name">{name}</span></div>
-              <div className="dr-profile__meta">{s.departments.map(sentence).join(", ") || "Supervisor"}</div>
+        <section className="sv-id" aria-label="Supervisor">
+          <div className="sv-id__who">
+            <span className="sv-id__avatar" aria-hidden="true">{initialsOf(name)}</span>
+            <div className="sv-id__ident">
+              <span className="sv-id__name">{name}</span>
+              <span className="sv-id__meta">{s.departments.map(sentence).join(", ") || "Supervisor"}</span>
             </div>
           </div>
-          <dl className="dr-idcard__facts">
+          <dl className="sv-id__facts">
             <div><dt>Machines</dt><dd>{fmt(s.machines.length)}</dd></div>
             <div><dt>Operators</dt><dd>{fmt(s.operators.length)}</dd></div>
             <div><dt>Days on plans</dt><dd>{fmt(s.days)}</dd></div>
             <div><dt>Last on a plan</dt><dd>{shortDay(s.lastDay)}</dd></div>
           </dl>
-          <p className="dr-panel__note">From FactorySuite work plans. Hours run are each machine&rsquo;s engine hours inside the line&rsquo;s shift.</p>
+          <p className="sv-id__note">From FactorySuite work plans. Hours run are each machine&rsquo;s engine hours inside the line&rsquo;s shift.</p>
         </section>
 
-        <section className="dr-panel__sec">
-          <h3 className="dr-panel__h">{shortDay(from)} to {shortDay(to)}</h3>
-          <dl className="dr-window__lead">
+        <section className="sv-sec">
+          <h3 className="sv-h">{shortDay(from)} to {shortDay(to)}</h3>
+          <dl className="sv-lead">
             {headline.map((x) => (
-              <div key={x.label}><dt>{x.label}</dt><dd>{x.value}{x.unit && <span className="dr-window__unit"> {x.unit}</span>}</dd></div>
+              <div key={x.label}><dt>{x.label}</dt><dd>{x.value}{x.unit && <span className="sv-lead__unit"> {x.unit}</span>}</dd></div>
             ))}
           </dl>
+          {ended > 0 && (
+            <div className="sv-split" role="img"
+              aria-label={outcomes.filter((o) => o.n).map((o) => `${o.label} ${fmt(o.n)}`).join(", ")}>
+              {outcomes.filter((o) => o.n).map((o) => (
+                <span key={o.key} className={`sv-split__part sv-tone--${o.tone}`} style={{ flexGrow: o.n }} />
+              ))}
+            </div>
+          )}
           <dl className="sv-outcomes">
-            {outcomes.map(([k, n]) => <div key={k}><dt>{k}</dt><dd>{fmt(n)}</dd></div>)}
+            {outcomes.map((o) => (
+              <div key={o.key} className={o.n ? undefined : "is-zero"}>
+                <dt><span className={`sv-key sv-tone--${o.tone}`} aria-hidden="true" />{o.label}</dt>
+                <dd>{fmt(o.n)}</dd>
+              </div>
+            ))}
+            <div className={`sv-outcomes__late${s.lateStarts ? "" : " is-zero"}`}>
+              <dt>Of those that ran, over {late} min late</dt>
+              <dd>{fmt(s.lateStarts)}</dd>
+            </div>
           </dl>
         </section>
 
-        <section className="dr-panel__sec dr-cases-sec">
-          <h3 className="dr-panel__h">Machines<span className="dr-panel__count">{fmt(s.machines.length)}</span></h3>
-          <ul className="dr-cases">
+        <section className="sv-sec">
+          <h3 className="sv-h">Machines<span className="sv-count">{fmt(s.machines.length)}</span></h3>
+          <ul className="sv-list">
             {s.machines.map((m) => (
-              <li key={m.reference} className="dr-case dr-case--nodate">
-                <span className="dr-case__body">
-                  <span className="dr-case__line">
-                    <b className="dr-case__qty">{m.reference}</b>
-                    <span className="dr-case__plate">{[m.name, m.plate].filter(Boolean).join(", ") || "Not one of our units"}</span>
-                    <span className="dr-case__time">{m.lines} line{m.lines === 1 ? "" : "s"}</span>
-                  </span>
-                </span>
+              <li key={m.reference}>
+                <b className="sv-list__key">{m.reference}</b>
+                <span className="sv-list__what">{[m.name, m.plate].filter(Boolean).join(", ") || "Not one of our units"}</span>
+                <span className="sv-list__n">{plural(m.lines, "line")}</span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="dr-panel__sec dr-cases-sec">
-          <h3 className="dr-panel__h">Shifts<span className="dr-panel__count">{fmt(s.shifts.length)}</span></h3>
-          <ul className="dr-cases">
+        <section className="sv-sec">
+          <h3 className="sv-h">Shifts<span className="sv-count">{fmt(s.shifts.length)}</span></h3>
+          <ul className="sv-list">
             {s.shifts.map((x) => (
-              <li key={`${x.shiftNo}@${x.shiftStart}`} className="dr-case dr-case--nodate">
-                <span className="dr-case__body">
-                  <span className="dr-case__line">
-                    <b className="dr-case__qty">{shiftLabel(x.shiftNo, x.shiftStart)}</b>
-                    <span className="dr-case__time">{x.lines} line{x.lines === 1 ? "" : "s"}</span>
-                  </span>
-                </span>
+              <li key={`${x.shiftNo}@${x.shiftStart}`}>
+                <b className="sv-list__key sv-list__key--wide">{shiftWords(x.shiftNo, x.shiftStart)}</b>
+                <span className="sv-list__n">{plural(x.lines, "line")}</span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="dr-panel__sec">
-          <h3 className="dr-panel__h">Operators<span className="dr-panel__count">{fmt(s.operators.length)}</span></h3>
-          <p className="dr-panel__note">{s.operators.length ? s.operators.map(operatorName).join(", ") : "No operator named on these lines."}</p>
+        <section className="sv-sec">
+          <h3 className="sv-h">Operators<span className="sv-count">{fmt(s.operators.length)}</span></h3>
+          {s.operators.length ? (
+            <ul className="sv-names">
+              {s.operators.map((o) => <li key={o}>{operatorName(o)}</li>)}
+            </ul>
+          ) : <p className="sv-none">No operator named on these lines.</p>}
         </section>
 
-        <section className="dr-panel__sec dr-cases-sec">
-          <h3 className="dr-panel__h">Plan lines<span className="dr-panel__count">{fmt(lines.length)}</span></h3>
-          <ul className="dr-cases">
+        <section className="sv-sec">
+          <h3 className="sv-h sv-h--fold">
+            <button type="button" className="sv-fold" aria-expanded={linesOpen} aria-controls="sv-plan-lines"
+              onClick={() => setLinesOpen((v) => !v)}>
+              Plan lines<span className="sv-count">{fmt(lines.length)}</span>
+              <svg className="sv-fold__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+          </h3>
+          {linesOpen && <ul className="sv-lines" id="sv-plan-lines">
             {lines.map((l) => {
               const st = LINE_STATE[l.state] ?? LINE_STATE.untracked;
               const isLate = l.lateMinutes != null && l.lateMinutes > late;
+              const flag = l.state === "not-run" ? "bad" : isLate ? "warn" : null;
               return (
-                <li key={`${l.lineId}|${l.day}`} className={`dr-case${l.state === "not-run" || isLate ? " dr-case--on" : ""}`}>
+                <li key={`${l.lineId}|${l.day}`} className={`sv-line${flag ? ` sv-line--${flag}` : ""}`}>
                   <DayBlock day={l.day} />
-                  <span className="dr-case__body">
-                    <span className="dr-case__line">
-                      <b className="dr-case__qty">{l.machine}</b>
-                      <span className="dr-case__plate">{l.activity}</span>
-                      <span className="dr-case__time">{shiftLabel(l.shiftNo, l.shiftStart)}</span>
-                    </span>
-                    <span className="dr-case__sub">
+                  <div className="sv-line__body">
+                    <div className="sv-line__top">
+                      <span className="sv-line__what"><b>{l.machine}</b> {l.activity}</span>
+                      <span className="sv-line__shift">{shiftWords(l.shiftNo, l.shiftStart)}</span>
+                    </div>
+                    <p className="sv-line__sub">
                       {[l.workLocation && `At ${l.workLocation}`,
                         l.runHours != null ? `${hrs(l.runHours)} run of ${hrs(l.plannedHours)}` : `${hrs(l.plannedHours)} planned`,
-                        l.state === "ran" && l.firstWorkAt && `first worked ${hhmm(l.firstWorkAt)}${isLate ? `, ${l.lateMinutes} min late` : ""}`]
+                        l.state === "ran" && l.firstWorkAt && `first worked ${hhmm(l.firstWorkAt)}`]
                         .filter(Boolean).join(", ")}
-                    </span>
-                    {l.operators.length > 0 && <span className="dr-case__sub">{l.operators.map(operatorName).join(", ")}</span>}
-                    <span className="dr-case__sub">
+                    </p>
+                    {l.operators.length > 0 && <p className="sv-line__sub">{l.operators.map(operatorName).join(", ")}</p>}
+                    <div className="sv-line__tags">
                       <span className={`dr-grid__badge dr-grid__badge--${st.tone}`}><span className="dr-grid__dot" aria-hidden="true" />{st.label}</span>
-                    </span>
-                  </span>
+                      {isLate && <span className="dr-grid__badge dr-grid__badge--suspended">{l.lateMinutes} min late</span>}
+                    </div>
+                  </div>
                 </li>
               );
             })}
-          </ul>
+          </ul>}
         </section>
       </div>
     </aside>
   );
 }
-
