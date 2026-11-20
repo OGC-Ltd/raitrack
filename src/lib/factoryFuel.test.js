@@ -603,19 +603,24 @@ describe("withFuelBeforeWaiting", () => {
   });
 });
 
-describe("withProbeUsed (operator 2026-11-20: fuel used per the probe)", () => {
-  const rows = [{ reference: "EX-21" }, { reference: "DG-22" }];
-  const read = { machines: [
-    { machine: "ex-21", tracked: true, shifts: 2, measured: 1, open: true, usedL: 7.4, hours: 1.47, km: null, perHour: 5, kmPerL: null, windows: [] },
-  ] };
-  it("puts each machine's figures on its row, the litres apart for sorting", () => {
-    const [ex21, dg22] = withProbeUsed(rows, read);
-    expect(ex21).toMatchObject({ probeUsed: 7.4, probeUse: { usedL: 7.4, hours: 1.47, perHour: 5 } });
-    expect(dg22).toMatchObject({ probeUsed: null, probeUse: null });
+describe("withProbeUsed (operator 2026-11-20: standard rate × hours worked since the refill)", () => {
+  const refill = (before, after, source = "now") => ({ odometerBefore: { value: before, unit: "h" }, meterAfter: after == null ? null : { value: after, unit: "h", source } });
+  it("is the rated L/h times the hours between Odometer before and after", () => {
+    const [ex01] = withProbeUsed([{ reference: "EX-01", basis: "HOUR", rate: 12, lastRefill: refill(1000, 1003.6) }]);
+    expect(ex01).toMatchObject({ probeUsed: 43.2, probeUse: { run: 3.6, unit: "h", rate: 12, litres: 43.2, open: true } });
   });
-  it("leaves the rows alone when the read failed, so the cell can say so", () => {
-    const out = withProbeUsed(rows, null);
-    expect(out).toBe(rows);
-    expect(out[0].probeUse).toBeUndefined();
+  it("divides the km run by the km/L standard on a km-rated machine", () => {
+    const [ft] = withProbeUsed([{ reference: "FT-06", basis: "KM", rate: 2.5, lastRefill: { odometerBefore: { value: 1800, unit: "km" }, meterAfter: { value: 1900, unit: "km", source: "next-refill" } } }]);
+    expect(ft).toMatchObject({ probeUsed: 40, probeUse: { run: 100, unit: "km", open: false } });
+  });
+  it("is blank with no refill, no after reading or no standard", () => {
+    const out = withProbeUsed([
+      { reference: "A", basis: "HOUR", rate: 12 },
+      { reference: "B", basis: "HOUR", rate: 12, lastRefill: refill(1000, null) },
+      { reference: "C", basis: "HOUR", rate: null, lastRefill: refill(1000, 1002) },
+    ]);
+    expect(out.map((r) => r.probeUsed)).toEqual([null, null, null]);
+    expect(out[0].probeUse).toMatchObject({ run: null, litres: null });
+    expect(out[2].probeUse).toMatchObject({ run: 2, rate: null, litres: null });
   });
 });

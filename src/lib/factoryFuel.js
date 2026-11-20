@@ -625,19 +625,30 @@ export function withFuelBeforeWaiting(rows, tankDays, today) {
 }
 
 /**
- * The Probe used column (operator 2026-11-20: "add the column for probe
- * calculated fuel", fuel used per the probe): each row's fuel over its planned
- * shifts, from fleet-server planner/factory-fuel/shifts. `probeUsed` is the
- * litres, for sorting; `probeUse` the whole read (hours, km, the rates, each
- * shift). `shifts` null (the read failed) leaves both undefined, so the cell can
- * say it could not be read; a machine the read does not list gets null.
+ * The Probe used column (operator 2026-11-20: "make the probe used the
+ * standard burn rate * the hours worked so far (odometer reading after fill
+ * and before fill)"): the fuel the machine should have burnt since its latest
+ * refill, at the register's standard rate.
+ *
+ *   hour-rated:  probeUsed = rate (L/h) × (Odometer after − Odometer before)
+ *   km-rated:    probeUsed = (Odometer after − Odometer before) ÷ rate (km/L)
+ *
+ * Odometer before is the meter at the refill, Odometer after the meter now (or
+ * at the next refill), both from the refill itself (refillFigures), never the
+ * live reading a waiting row borrows. `probeUse` keeps the run and the rate for
+ * the hover; it is null, and the cell "-", with no refill, no after reading,
+ * or no standard rate.
  */
-export function withProbeUsed(rows, shifts) {
-  if (!shifts) return rows;
-  const byRef = new Map((shifts.machines ?? []).map((m) => [fold(m.machine), m]));
-  return rows.map((r) => {
-    const m = byRef.get(fold(r.reference)) ?? null;
-    return { ...r, probeUse: m, probeUsed: m?.usedL ?? null };
+export function withProbeUsed(rows) {
+  return (rows ?? []).map((r) => {
+    const before = r.lastRefill?.odometerBefore?.value;
+    const after = r.lastRefill?.meterAfter?.value;
+    const byKm = refillMeterUnit(r.basis) === "km";
+    const rate = r.rate != null && r.rate > 0 ? r.rate : null;
+    const run = before != null && after != null && after >= before ? Math.round((after - before) * 100) / 100 : null;
+    const litres = run == null || rate == null ? null : Math.round((byKm ? run / rate : run * rate) * 100) / 100;
+    const probeUse = run == null && rate == null ? null : { run, unit: byKm ? "km" : "h", rate, litres, open: r.lastRefill?.meterAfter?.source?.startsWith("now") ?? false };
+    return { ...r, probeUse, probeUsed: litres };
   });
 }
 
