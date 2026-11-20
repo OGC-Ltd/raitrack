@@ -9,7 +9,8 @@
 
 import { useMemo, useState } from "react";
 import { usePlanSubmissions } from "../../hooks/usePlanSubmissions";
-import { STATES, LEGEND, cellDetail, cellIndex, cellTitle, dayOfMonth, isWeekend, longDay, weekday, planStats, unitRows, filterUnitRows, planStatus } from "../../lib/planSubmissions";
+import { STATES, LEGEND, cellDetail, cellIndex, cellTitle, dayOfMonth, isWeekend, longDay, weekday, planStats, unitRows, filterUnitRows, planStatus, dailySent } from "../../lib/planSubmissions";
+import TrendStat from "../screens/TrendStat";
 import { useWorkPlans } from "../../hooks/useWorkPlans";
 import { shiftText } from "../../lib/workPlanMap";
 import { nameCase } from "../../lib/factorySupervisors";
@@ -72,7 +73,7 @@ export default function PlanSubmissions({ orgId }) {
 
   return (
     <div className="psb dr-tones">
-      <PlanStats plans={dayPlans.data?.plans} loading={dayPlans.loading} isTomorrow={isTomorrow} day={selected} />
+      <PlanStats plans={dayPlans.data?.plans} loading={dayPlans.loading} board={data} day={selected} />
 
       <section className="psb-sheet" aria-labelledby="psb-title">
         <header className="psb-head">
@@ -189,35 +190,107 @@ export default function PlanSubmissions({ orgId }) {
 }
 
 /**
- * The four figures for the picked day, in the Drivers page's strip: one band,
- * a cell a figure, each a label, the number and what it counts.
+ * The picked day's plans in the Operators page's strip (operator 2026-11-20):
+ * a lead cell with its facts and the plans' status mix, the departments that
+ * sent and those on time across the two weeks as charts, and what was sent back.
  */
-function PlanStats({ plans, loading, isTomorrow, day }) {
+const fmtN = (n, d = 0) => Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const shortDay = (day) => longDay(day).split(" ").slice(1).join(" ");
+const plural = (n, one, many = `${one}s`) => `${fmtN(n)} ${n === 1 ? one : many}`;
+
+function PlanStats({ plans, loading, board, day }) {
   const st = planStats(plans ?? []);
   const busy = loading && !plans;
-  const cells = [
-    { key: "approved", label: "Plans approved", n: st.approved, caption: <>of {st.plans} {st.plans === 1 ? "plan" : "plans"}<br />for the day</> },
-    { key: "waiting", label: "Waiting for approval", n: st.waiting, caption: <>sent, not<br />decided yet</> },
-    { key: "changes", label: "Changes asked for", n: st.changes, caption: <>sent back to<br />the department</> },
-    { key: "machines", label: isTomorrow ? "Machines tomorrow" : `Machines on ${day ? longDay(day).split(" ").slice(1).join(" ") : "the day"}`, n: st.machines, caption: <>from approved<br />plans</> },
-  ];
+  const series = dailySent(board);
+  const deptCount = board?.departments?.length ?? 0;
+  const at = series.find((d) => d.day === day);
   return (
     <div className="dr-layout psb-strip">
       <section className="dr-strip" aria-label="The day's plans">
-        {cells.map((c) => (
-          <div key={c.key} className={`dr-cell dr-summary psb-strip__cell psb-strip__cell--${c.key}`}>
-            <div className="dr-statchart__head"><span className="dr-statchart__label">{c.label}</span></div>
-            {busy ? (
-              <div className="dr-cell__empty" aria-busy="true">Loading…</div>
-            ) : (
-              <div className="dr-summary__lead">
-                <span className="dr-summary__figure">{c.n}</span>
-                <span className="dr-summary__caption">{c.caption}</span>
-              </div>
-            )}
+        <PlansCell st={st} busy={busy} day={day} />
+        <TrendStat title="Departments sent" series={series} valueKey="sent" unit={`of ${deptCount}`} tone="tonnes" type="bar"
+          value={at ? fmtN(at.sent) : "-"} sub={day ? `for ${shortDay(day)}` : ""} loading={!board}
+          pointWords={(d) => `${shortDay(d.day)}: ${plural(d.sent, "department")} sent`} />
+        <TrendStat title="Sent on time" series={series} valueKey="onTime" unit={`of ${deptCount}`} tone="mileage" type="line"
+          value={at ? fmtN(at.onTime) : "-"} sub={`by ${String(board?.dueHour ?? 16).padStart(2, "0")}:00 the day before`} loading={!board}
+          pointWords={(d) => `${shortDay(d.day)}: ${plural(d.onTime, "department")} on time`} />
+        <ChangesCell st={st} busy={busy} />
+      </section>
+    </div>
+  );
+}
+
+/** The lead cell: approved plans, what they put to work, and the status mix. */
+function PlansCell({ st, busy, day }) {
+  if (busy) return <div className="dr-cell dr-fleet"><div className="dr-cell__empty" aria-busy="true">Loading plans…</div></div>;
+  const facts = [
+    { label: "Machines", value: fmtN(st.machines) },
+    { label: "Hours planned", value: fmtN(st.hours) },
+    { label: "Plan lines", value: fmtN(st.lines) },
+  ];
+  const mix = [
+    { key: "good", label: "Approved", n: st.approved },
+    { key: "fair", label: "Draft", n: st.drafts },
+    { key: "new", label: "Other", n: st.plans - st.approved - st.drafts },
+  ];
+  return (
+    <div className="dr-cell dr-fleet">
+      <div className="dr-statchart__head"><span className="dr-statchart__label">Plans approved</span></div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{fmtN(st.approved)}</span>
+        <span className="dr-summary__caption">of {plural(st.plans, "plan")} for {day ? shortDay(day) : "the day"},<br />{plural(st.departments, "department")}</span>
+      </div>
+      <dl className="dr-fleet__facts">
+        {facts.map((f) => (
+          <div key={f.label} className="dr-fleet__fact"><dt>{f.label}</dt><dd>{f.value}</dd></div>
+        ))}
+      </dl>
+      <div className="dr-fleet__mix">
+        <span className="dr-fleet__mixlabel">Plan status</span>
+        <span className="dr-fleet__bar" role="img" aria-label={mix.map((m) => `${m.n} ${m.label.toLowerCase()}`).join(", ")}>
+          {mix.map((m) => m.n > 0 && (
+            <span key={m.key} className={`dr-fleet__seg dr-fleet__seg--${m.key}`} style={{ flexGrow: m.n }} title={`${m.label}: ${plural(m.n, "plan")}`} />
+          ))}
+        </span>
+        <ul className="dr-fleet__legend">
+          {mix.map((m) => (
+            <li key={m.key} className={`dr-fleet__key dr-fleet__key--${m.key}`}>
+              <span className="dr-fleet__swatch" aria-hidden="true" />{m.label}<b>{fmtN(m.n)}</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/** The summary cell: plans sent back, and the ones still waiting or called off. */
+function ChangesCell({ st, busy }) {
+  if (busy) return <div className="dr-cell dr-summary"><div className="dr-cell__empty" aria-busy="true">Loading…</div></div>;
+  const clean = st.plans > 0 && !st.changes;
+  const rows = [
+    { key: "waiting", name: "Waiting for approval", n: st.waiting, tone: "speed" },
+    { key: "cancelled", name: "Cancelled", n: st.cancelled, tone: "theft" },
+  ];
+  return (
+    <div className="dr-cell dr-summary">
+      <div className="dr-statchart__head">
+        <span className="dr-statchart__label">Changes asked for</span>
+        {clean && <span className="dr-summary__clean">Clean</span>}
+      </div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{fmtN(st.changes)}</span>
+        <span className="dr-summary__caption">{st.changes === 1 ? "plan" : "plans"} sent back<br />to the department</span>
+      </div>
+      <div className="dr-summary__incidents">
+        {rows.map((r) => (
+          <div key={r.key} className={`dr-summary__incident${r.n ? ` dr-summary__incident--${r.tone}` : ""}`}>
+            <span className="dr-summary__dot" aria-hidden="true" />
+            <span className="dr-summary__name">{r.name}</span>
+            <span className="dr-summary__count">{fmtN(r.n)}</span>
           </div>
         ))}
-      </section>
+      </div>
     </div>
   );
 }

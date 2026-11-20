@@ -99,13 +99,32 @@ export function planStats(plans = []) {
   const is = (...s) => plans.filter((p) => s.includes(String(p.status).toUpperCase()));
   const approved = is("APPROVED");
   const machines = new Set(approved.flatMap((p) => (p.lines ?? []).map((l) => l.machine).filter(Boolean)));
+  const lines = approved.flatMap((p) => p.lines ?? []);
   return {
     approved: approved.length,
     waiting: is("SUBMITTED").length,
     changes: is("REJECTED", "WITHDRAWN").length,
+    drafts: is("DRAFT").length,
+    cancelled: is("CANCELLED").length,
     machines: machines.size,
+    lines: lines.length,
+    hours: lines.reduce((h, l) => h + (Number(l.plannedHours) || 0), 0),
+    departments: new Set(plans.map((p) => p.department).filter(Boolean)).size,
     plans: plans.length,
   };
+}
+
+/** The board's 14 days as the strip's chart series: departments sent, and sent on time. */
+export function dailySent(board) {
+  const idx = cellIndex(board);
+  return (board?.days ?? []).map((day) => {
+    let onTime = 0;
+    for (const dept of board?.departments ?? []) {
+      const st = idx.get(dept)?.get(day)?.state;
+      if (st === "approved" || st === "sent") onTime += 1;
+    }
+    return { day, sent: board?.sent?.[day] ?? 0, onTime };
+  });
 }
 
 /**

@@ -242,15 +242,7 @@ td.psb-grid__pick { color: var(--tone-text); font-weight: 500; }
    tokens .dr-tones carries (operator 2026-11-20: "the same design as the
    drivers page"). Only what differs here is below. */
 
-/* Four equal cells, where the Drivers strip leads with a wider profile cell. */
 .psb-strip { margin-bottom: 16px; }
-.psb-strip .dr-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@container drstrip (max-width: 1149px) {
-  .psb-strip .dr-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@container drstrip (max-width: 720px) {
-  .psb-strip .dr-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 
 /* Every unit on the day's plans */
 .psb-units { margin-top: 24px; }

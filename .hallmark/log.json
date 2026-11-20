@@ -3,6 +3,26 @@
     "mode": "redesign",
     "depth": "full",
     "scope": "app",
+    "shape": "Operators strip grammar (lead cell with facts and mix bar, two TrendStat charts, summary cell)",
+    "theme": "project (DriversScreen.css via .dr-tones)",
+    "entry": "Maintenance › Plan › stat strip",
+    "signature": "plans approved with what they put to work, over two weeks of departments sent and on time",
+    "sections": [
+      "plans approved",
+      "departments sent (bars)",
+      "sent on time (line)",
+      "changes asked for"
+    ],
+    "waived": [
+      "26b"
+    ],
+    "date": "2026-11-20",
+    "prompt": "plan stats strip like the operators page strip"
+  },
+  {
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
     "shape": "Drivers page grammar (strip, filter row, grid, pager)",
     "theme": "project (DriversScreen.css via .dr-tones)",
     "entry": "Maintenance › Plan › stat cards + units table",
