@@ -856,18 +856,22 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
         )}
 
         {/* On a work plan shift (Mufindi): the shift in place of the trip
-            (operator, 2026-11-19), in the same two lines. lib/shiftOperators */}
+            (operator, 2026-11-19), and its work location as the destination
+            (operator, 2026-11-20: "destination is the place he is allocated to
+            work on according to the plan on that hour"). lib/shiftOperators */}
         {vehicle.planShift ? (
           <ol className="vh-route vh-route--shift" aria-label="Shift">
             <li className="vh-stop vh-stop--from">
-              <span className="vh-stop-lbl">Shift</span>
-              <span className="vh-stop-val" title={vehicle.planShift.planCode ? `Work plan ${vehicle.planShift.planCode}` : ''}>
-                {[vehicle.planShift.shift, vehicle.planShift.workLocation].filter(Boolean).join(' · ') || 'On shift'}
+              <span className="vh-stop-lbl">{{ next: 'Next shift', last: 'Last shift' }[vehicle.planShift.when] ?? 'Shift'}</span>
+              <span className="vh-stop-val" title={[vehicle.planShift.planCode && `Work plan ${vehicle.planShift.planCode}`, vehicle.planShift.activity].filter(Boolean).join(' · ')}>
+                {[vehicle.planShift.shift, vehicle.planShift.activity].filter(Boolean).join(' · ') || 'On shift'}
               </span>
             </li>
-            <li className={`vh-stop vh-stop--to${vehicle.planShift.activity ? '' : ' vh-stop--none'}`}>
-              <span className="vh-stop-lbl">Activity</span>
-              <span className="vh-stop-val" title={vehicle.planShift.activity ?? ''}>{vehicle.planShift.activity ?? 'Not on the plan'}</span>
+            <li className={`vh-stop vh-stop--to${vehicle.planShift.workLocation ? '' : ' vh-stop--none'}`}>
+              <span className="vh-stop-lbl">Destination</span>
+              <span className="vh-stop-val" title={vehicle.planShift.workLocation ? `Work location on ${vehicle.planShift.planCode ?? 'the work plan'}` : ''}>
+                {vehicle.planShift.workLocation ?? 'No work location on the plan'}
+              </span>
             </li>
           </ol>
         ) : (

@@ -38,15 +38,34 @@ export function linesByVehicle(data) {
   return out;
 }
 
-/** The line on shift now; `anyone`: kept even when it names no operator (for the shift itself). */
-function crewOf(lines, now, { anyone = false } = {}) {
+/** How long after a unit's last shift it keeps that shift's crew. */
+const LAST_SHIFT_HOLD_MS = 12 * 3_600_000;
+
+/**
+ * The line on shift now; `anyone`: kept even when it names no operator (for
+ * the shift itself). `between`: off shift, the next shift's line, or after the
+ * day's last shift that one for LAST_SHIFT_HOLD_MS (operator, 2026-11-20: "we
+ * cannot get the vehicle unassigned"); `when` says which.
+ */
+function crewOf(lines, now, { anyone = false, between = false } = {}) {
   if (!lines?.length) return null;
   const { line, onShift } = lineNow(lines, now);
-  if (!onShift) return null;
+  let when = 'now';
+  if (!onShift) {
+    if (!between || !line) return null;
+    const from = Date.parse(line.shiftFrom);
+    const to = Date.parse(line.shiftTo);
+    if (from > now) when = 'next';
+    else if (Number.isFinite(to) && now - to <= LAST_SHIFT_HOLD_MS) when = 'last';
+    else return null;
+  }
   const names = [...new Set([line.operator, line.secondOperator, line.thirdOperator].map(operatorName).filter(Boolean))];
   if (!names.length && !anyone) return null;
-  return { names, shift: shiftText(line), activity: line.activity ?? null, workLocation: line.workLocation ?? null, planCode: line.planCode ?? null };
+  return { names, shift: shiftText(line), activity: line.activity ?? null, workLocation: line.workLocation ?? null, planCode: line.planCode ?? null, when };
 }
+
+/** Yesterday in East Africa time (YYYY-MM-DD): its night shifts run into today. */
+export const eatYesterday = (now = Date.now()) => new Date(now + 3 * 3_600_000 - 86_400_000).toISOString().slice(0, 10);
 
 /** A unit with no driver of its own (the tracker's). */
 export const hasOwnDriver = (v) => Boolean(v?.driver && v.driver !== 'Unassigned');
@@ -55,14 +74,15 @@ export const hasOwnDriver = (v) => Boolean(v?.driver && v.driver !== 'Unassigned
  * The live fleet with each unit's driver filled in from the work plan where it
  * has none and is on shift: `driver` as any driver reads (so search, cards and
  * lists show it alike), `driverSource: 'work-plan'`, and the shift in `planShift`.
- * Units keep their own driver; nothing changes off shift. Returns the same
+ * Between shifts it is the next shift's crew (`planShift.when` 'next'), or the
+ * last one's for 12 h after the day's last shift ('last'). Units keep their own driver. Returns the same
  * array when nothing changes.
  */
 export function withPlanDrivers(vehicles, byVehicle, now = Date.now()) {
   if (!vehicles?.length || !byVehicle?.size) return vehicles;
   let changed = false;
   const out = vehicles.map((v) => {
-    const crew = crewOf(byVehicle.get(v.vehicleId), now, { anyone: true });
+    const crew = crewOf(byVehicle.get(v.vehicleId), now, { anyone: true, between: true });
     if (!crew) return v;
     changed = true;
     // A driver of its own stays, as does a line that names nobody; the shift is

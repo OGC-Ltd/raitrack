@@ -14,10 +14,11 @@ import { fetchWorkPlans, WORK_PLANS_CHANGED } from "../api/workPlans";
 
 const RETRY_MS = 60_000;
 
-export function useWorkPlans(orgId, enabled) {
+/** `day` (YYYY-MM-DD, EAT): another day's plans; today's when left out. */
+export function useWorkPlans(orgId, enabled, day) {
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["work-plans", orgId],
-    queryFn: ({ signal }) => fetchWorkPlans(orgId, undefined, { signal }),
+    queryKey: day ? ["work-plans", orgId, day] : ["work-plans", orgId],
+    queryFn: ({ signal }) => fetchWorkPlans(orgId, day, { signal }),
     enabled: Boolean(orgId && enabled),
     staleTime: 30_000,
     refetchInterval: (query) => (query.state.status === "error" ? RETRY_MS : false),

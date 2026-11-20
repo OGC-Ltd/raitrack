@@ -8,7 +8,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useFleetLive } from "../hooks/useFleetLive";
 import { useWorkPlans } from "../hooks/useWorkPlans";
-import { linesByVehicle, withPlanDrivers } from "../lib/shiftOperators";
+import { linesByVehicle, withPlanDrivers, eatYesterday } from "../lib/shiftOperators";
 
 /** The one company whose FactorySuite keeps work plans: Mufindi, our Kasulu. */
 const PLAN_COMPANY = "kasulu";
@@ -52,9 +52,17 @@ export function FleetLiveProvider({ children }) {
   // where the tracker has none (operator, 2026-11-19: "the drivers name to
   // appear even when searching", alike everywhere). lib/shiftOperators.
   const planDrivers = activeCompanyId === PLAN_COMPANY;
+  // Yesterday's plans too: a night shift (18:00 to 04:00) is on yesterday's
+  // plan until 04:00 today (operator, 2026-11-20: EX 16 read Unassigned at 02:53
+  // on its 19 Nov night shift).
+  const minute = useMinute(planDrivers);
+  const yesterday = eatYesterday(minute);
   const workPlans = useWorkPlans(live.orgId, planDrivers);
-  const byVehicle = useMemo(() => (planDrivers ? linesByVehicle(workPlans.data) : null), [planDrivers, workPlans.data]);
-  const minute = useMinute(Boolean(byVehicle?.size));
+  const lastNight = useWorkPlans(live.orgId, planDrivers, yesterday);
+  const byVehicle = useMemo(
+    () => (planDrivers ? linesByVehicle({ plans: [...(lastNight.data?.plans ?? []), ...(workPlans.data?.plans ?? [])] }) : null),
+    [planDrivers, workPlans.data, lastNight.data],
+  );
   const vehicles = useMemo(() => {
     const kept = withoutDismissed(live.vehicles, dismissed, deriveStatus);
     const mine = flagged && kept ? kept.filter((v) => flagged.has(v.vehicleId)) : kept;
