@@ -577,29 +577,6 @@ export function withConsumedSinceRefill(rows, tankDays, today) {
 }
 
 /**
- * Consumed on the table is the machine panel's own figure (operator
- * 2026-11-20: "we need the one populated on the side panel to reflect on the
- * row"): the fuel burned in the shift the latest refill was for, with the
- * engine hours run (refillFigures, fleet-server fuel-refills), up to now while
- * the shift runs. EX-01 had read 1.8 L on the row (317.6 L after the refill
- * less 315.8 L now) against 42.6 L, 3.6 h run, in the panel.
- *
- * The since-refill balance stays on the row as `consumedSinceRefill`. Null
- * ("-") where the panel shows none: no refill, no plan shift, the shift not
- * started, or no probe level at one end of it. `consumedShift` keeps the
- * panel's whole figure (hours, open) for the hover.
- *
- * @param {object[]} rows  withConsumedSinceRefill rows
- */
-export function withShiftConsumed(rows) {
-  return (rows ?? []).map((row) => {
-    const shift = row.lastRefill?.consumed ?? null;
-    const litres = shift && !shift.ahead ? shift.litres ?? null : null;
-    return { ...row, consumedSinceRefill: row.consumed ?? null, consumed: litres, consumedShift: shift };
-  });
-}
-
-/**
  * Fuel before and Odometer before while a machine waits for its refill
  * (operator 2026-11-20: "fuel before it should be their closing fuel level
  * that continuously updates until their first refill for the day which will

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getFuelShifts, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withShiftConsumed, withFuelBeforeWaiting, withProbeUsed, varianceBand } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed, varianceBand } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -139,13 +139,12 @@ export default function FuelScreen() {
   const shiftUse = shiftRead.error ? null : shiftRead.data ?? null;
   const today = fleetDay(Date.now());
   const checked = useMemo(
-    // Consumed is the machine panel's figure, the shift the latest refill was
-    // for (withShiftConsumed, operator 2026-11-20); the since-refill and period
-    // balances stay beside it.
-    () => withProbeUsed(withFuelBeforeWaiting(withShiftConsumed(withConsumedSinceRefill(
+    // Consumed runs from the latest refill (operator 2026-11-20), the period
+    // balance kept beside it as consumedPeriod.
+    () => withProbeUsed(withFuelBeforeWaiting(withConsumedSinceRefill(
       withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
       tankDays, today,
-    )), tankDays, today), shiftUse),
+    ), tankDays, today), shiftUse),
     [roster, vehicles, fillings, tankDays, today, meters, shiftUse],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
@@ -466,10 +465,9 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
                       {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
                     </td>
-                    {/* The machine panel's Consumed: burnt in the shift the latest
-                        refill was for (lib/factoryFuel withShiftConsumed, operator
-                        2026-11-20). Pump flags were here (operator 2026-11-18); they
-                        stay in the machine panel. */}
+                    {/* Burnt since the latest refill, from the probe (lib/factoryFuel
+                        withConsumedSinceRefill, operator 2026-11-20). Pump flags were
+                        here (operator 2026-11-18); they stay in the machine panel. */}
                     <td className={r.consumed != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Consumed"
                         title={consumedTitle(r)}>
                       {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
@@ -506,17 +504,14 @@ const refillTitle = (r, source) => [
   r.refillCount > 1 ? `the latest of ${r.refillCount}; the machine panel lists each` : null,
 ].filter(Boolean).join(", ");
 
-/** Consumed's hover: the panel's shift figure with its hours, or why it is blank. */
+/** Consumed's hover: where the running figure starts and ends, or why it is blank. */
 function consumedTitle(r) {
   const since = r.lastRefill?.at ? fmtFillWhen.format(r.lastRefill.at) : null;
-  const c = r.consumedShift;
   if (r.consumed != null) {
-    const hours = c?.engineHours != null ? `, ${fmt(c.engineHours, 1)} h run` : "";
-    return `Fuel used in the shift the refill on ${since} was for, from the fuel probe${c?.open ? ", so far" : ""}${hours}.`;
+    return `Fuel used since the refill on ${since}, from the fuel probe: tank after the refill + later fills − drains − tank ${r.consumedEnd === "now" ? "now" : `at the end of ${fmtDay(r.consumedEnd)}`}.`;
   }
   if (!r.lastRefill) return "No refill in the period, so nothing to count from.";
-  if (c?.ahead) return `The shift the refill on ${since} was for has not started.`;
-  return `No shift figure for the refill on ${since}.`;
+  return `No probe reading after the refill on ${since} or at the end of the period.`;
 }
 
 /**
