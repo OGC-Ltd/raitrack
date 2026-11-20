@@ -454,11 +454,12 @@ function RunAgainstPlan({ t, small = false }) {
   );
 }
 
-/** Which of the panel's lists are open: remembered for the visit, so folding
- *  one keeps it folded as you go from one supervisor to the next. */
-const foldMemo = { machines: true, operators: true, lines: true };
+/** Which of the panel's lists are open: folded to start (operator 2026-11-20:
+ *  "by default they should be collapsed"), and remembered for the visit, so
+ *  opening one keeps it open as you go from one supervisor to the next. */
+const foldMemo = { machines: false, operators: false, lines: false };
 function useFold(key) {
-  const [open, setOpen] = useState(foldMemo[key] ?? true);
+  const [open, setOpen] = useState(foldMemo[key] ?? false);
   const toggle = () => setOpen((was) => { foldMemo[key] = !was; return !was; });
   return [open, toggle];
 }
