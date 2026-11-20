@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withShiftConsumed, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -543,6 +543,21 @@ describe("withRefillColumns", () => {
     const refilled = fills(base, "b", "2026-11-19T06:00:00Z", 77.66, 641.92);
     expect(withConsumedSinceRefill(withRefillColumns([{ ...refilled, fuelNow: null }], null), [], "2026-11-20")[0].consumed).toBeNull();
     expect(withConsumedSinceRefill(withRefillColumns([{ ...refilled, fuelNow: 700 }], null), [], "2026-11-20")[0].consumed).toBeNull();
+  });
+
+  it("puts the machine panel's shift Consumed on the row, keeping the since-refill balance beside it", () => {
+    // EX-01 on 20 Nov: 1.8 L since the refill on the row, 42.6 L, 3.6 h run, in the panel
+    let row = { reference: "EX-01", vehicleId: "v01", basis: "HOUR", lines: [], pumpIssues: [], fills: [], lastDay: "2026-11-20", fuelNow: 315.8 };
+    row = fills(row, "a", "2026-11-20T07:12:00Z", 194.08, 317.6);
+    const shift = (s) => ({ refills: [{ issueId: "a", tracked: true, meterBefore: null, meterAfter: null, meterNow: null, shift: s }] });
+    const run = (s) => withShiftConsumed(withConsumedSinceRefill(withRefillColumns([row], shift(s)), [], "2026-11-20"))[0];
+    const open = run({ consumedL: 42.6, engineHours: 3.6, open: true, ahead: false });
+    expect(open).toMatchObject({ consumed: 42.6, consumedSinceRefill: 1.8, consumedShift: { litres: 42.6, engineHours: 3.6, open: true } });
+    expect(open.consumed).toBe(open.lastRefill.consumed.litres);
+    expect(run({ consumedL: 50, engineHours: 0, open: false, ahead: true }).consumed).toBeNull();
+    expect(run({ consumedL: null, engineHours: 2, open: true, ahead: false }).consumed).toBeNull();
+    expect(run(null).consumed).toBeNull();
+    expect(withShiftConsumed([{ reference: "EX-02", consumed: 12 }])[0]).toMatchObject({ consumed: null, consumedSinceRefill: 12 });
   });
 
   it("leaves the columns empty for a machine the pump has not fuelled, or while the meters are unread", () => {
