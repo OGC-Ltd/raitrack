@@ -23,7 +23,7 @@ import { restoreChoice, restoreOverlay } from "../lib/navMemory";
 export const DESKTOP_TABS = ["fleet", "dashcam", "alerts", "drivers", "weighbridges", "fuel", "planner", "maintenance", "workshop", "analytics", "reports", "audit", "fuelReport", "usageReview"];
 export const MOBILE_TABS  = ["home", "map", "search", "drivers"];
 // "users" is deliberately gone: User Accounts moved to the avatar menu.
-export const MAINT_VIEWS  = ["service", "sensors"];
+export const MAINT_VIEWS  = ["service", "sensors", "plans"];
 
 export const DESKTOP_TAB_KEY = "ft-desktop-tab";
 export const MOBILE_TAB_KEY  = "ft-mobile-tab";
