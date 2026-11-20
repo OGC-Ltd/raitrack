@@ -38,6 +38,7 @@ import UserAdminPanel from "../body/UserAdminPanel";
 import UserGroupsPanel from "../body/UserGroupsPanel";
 import UserLoginActivityPanel from "../body/UserLoginActivityPanel";
 import UserIamPanel from "../body/UserIamPanel";
+import UserDeactivatedUnitsPanel from "../body/UserDeactivatedUnitsPanel";
 import "./UserAdminScreen.css";
 
 // IAM's own tabs: [id, tab, name for the error boundary].
@@ -46,7 +47,11 @@ const IAM_VIEWS = [
   ["users", "Users", "Users"],
   ["groups", "Groups", "User groups"],
   ["login-activity", "Login Activity", "Login activity"],
+  // The units Wialon has deactivated, to confirm with the sites (operator, 2026-11-20)
+  ["deactivated-units", "Deactivated Units", "Deactivated units"],
 ];
+/** The System Administrator's alone, as the server's routes are. */
+const ADMIN_ONLY = new Set(["rights", "deactivated-units"]);
 
 export default function UserAdminScreen() {
   const { setUserAdminOpen } = useAppActions();
@@ -60,7 +65,7 @@ export default function UserAdminScreen() {
   // One row of tabs: Users, Groups and Login Activity for everybody who can
   // read users, and Rights in front of them for the System Administrator.
   // Nobody who cannot read users sees tabs, only the Users panel.
-  const iamViews = IAM_VIEWS.filter(([id]) => id !== "rights" || canRights);
+  const iamViews = IAM_VIEWS.filter(([id]) => !ADMIN_ONLY.has(id) || canRights);
   const [chosenView, setIamView] = useState(null);
   const iamView = iamViews.some(([id]) => id === chosenView) ? chosenView : iamViews[0][0];
 
@@ -134,6 +139,7 @@ export default function UserAdminScreen() {
             : iamView === "groups" ? <UserGroupsPanel />
             : iamView === "login-activity" ? <UserLoginActivityPanel />
             : iamView === "rights" && canRights ? <UserIamPanel />
+            : iamView === "deactivated-units" && canRights ? <UserDeactivatedUnitsPanel />
             : <UserAdminPanel />}
         </ErrorBoundary>
       </div>
