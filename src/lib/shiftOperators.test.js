@@ -49,8 +49,9 @@ describe('withPlanDrivers', () => {
     const own = withPlanDrivers([{ vehicleId: 'v1', driver: 'JANE DOE' }], linesByVehicle(data), NOW);
     expect(own[0]).toMatchObject({ driver: 'JANE DOE', planShift: { shift: '06:00–16:00', workLocation: 'Zone 4' } });
     expect(own[0].driverSource).toBeUndefined();
+    // 12 h after its only shift ended (13:00Z), the plan lets go of it
     const offShift = [{ vehicleId: 'v1', driver: null }];
-    expect(withPlanDrivers(offShift, linesByVehicle(data), Date.parse('2026-11-19T20:00:00Z'))).toBe(offShift);
+    expect(withPlanDrivers(offShift, linesByVehicle(data), Date.parse('2026-11-20T01:30:00Z'))).toBe(offShift);
     expect(withPlanDrivers(offShift, null, NOW)).toBe(offShift);
   });
 
@@ -59,5 +60,52 @@ describe('withPlanDrivers', () => {
     const nobody = plans('APPROVED', [line({ operator: '' })]);
     const out = withPlanDrivers([{ vehicleId: 'v1', driver: 'Unassigned' }], linesByVehicle(nobody), NOW);
     expect(out[0]).toMatchObject({ driver: 'Unassigned', planShift: { names: [], activity: 'Cane haulage' } });
+  });
+});
+
+describe('night shift past midnight', () => {
+  it("yesterday's 18:00 shift still names its operator and location at 02:53 (EX 16, 20 Nov)", async () => {
+    const { withPlanDrivers, linesByVehicle, eatYesterday } = await import('./shiftOperators');
+    const at = Date.parse('2026-11-19T23:53:00Z'); // 02:53 on 20 Nov in Nairobi
+    expect(eatYesterday(at)).toBe('2026-11-19');
+    const yesterday = { plans: [{ planCode: 'WP-261119-IRR', status: 'APPROVED', lines: [line({
+      machine: 'EX-16', workLocation: 'Reservoir', activity: 'Irrigation - Drainage Desilting',
+      operator: 'FATMA HAMADI HASSAN - EXCAVATOR OPERATOR',
+      shiftFrom: '2026-11-19T15:00:00Z', shiftTo: '2026-11-20T01:00:00Z',
+    })] }] };
+    const today = { plans: [{ planCode: 'WP-261120-IRR', status: 'APPROVED', lines: [line({
+      machine: 'EX-16', workLocation: 'Reservoir', operator: 'EMMANUEL DANIEL',
+      shiftFrom: '2026-11-20T03:00:00Z', shiftTo: '2026-11-20T12:00:00Z',
+    })] }] };
+    const byVehicle = linesByVehicle({ plans: [...yesterday.plans, ...today.plans] });
+    const [v] = withPlanDrivers([{ vehicleId: 'v1', driver: 'Unassigned' }], byVehicle, at);
+    expect(v).toMatchObject({ driver: 'FATMA HAMADI HASSAN', planShift: { workLocation: 'Reservoir', shift: '18:00–04:00', planCode: 'WP-261119-IRR' } });
+    // today's plan alone (what the app read before) misses the night shift:
+    // it can only offer the 06:00 shift as next
+    expect(withPlanDrivers([{ vehicleId: 'v1', driver: 'Unassigned' }], linesByVehicle(today), at)[0].planShift.when).toBe('next');
+  });
+});
+
+describe('between shifts (operator 2026-11-20: never Unassigned)', () => {
+  const lines = { plans: [{ planCode: 'WP-261120-IRR', status: 'APPROVED', lines: [
+    line({ operator: 'EMMANUEL DANIEL', workLocation: 'Reservoir', shiftFrom: '2026-11-20T03:00:00Z', shiftTo: '2026-11-20T12:00:00Z' }),
+    line({ operator: 'FATMA HAMADI HASSAN - EXCAVATOR OPERATOR', workLocation: 'Reservoir', shiftFrom: '2026-11-20T15:00:00Z', shiftTo: '2026-11-21T01:00:00Z' }),
+  ] }] };
+  const at = async (iso) => {
+    const { withPlanDrivers, linesByVehicle } = await import('./shiftOperators');
+    return withPlanDrivers([{ vehicleId: 'v1', driver: 'Unassigned' }], linesByVehicle(lines), Date.parse(iso))[0];
+  };
+  it('before the first shift: the next shift', async () => {
+    expect(await at('2026-11-20T01:30:00Z')).toMatchObject({ driver: 'EMMANUEL DANIEL', planShift: { when: 'next', shift: '06:00–15:00' } });
+  });
+  it('on shift', async () => {
+    expect(await at('2026-11-20T05:00:00Z')).toMatchObject({ driver: 'EMMANUEL DANIEL', planShift: { when: 'now' } });
+  });
+  it('between shifts: the next one', async () => {
+    expect(await at('2026-11-20T13:00:00Z')).toMatchObject({ driver: 'FATMA HAMADI HASSAN', planShift: { when: 'next', workLocation: 'Reservoir' } });
+  });
+  it('after the last shift: that one for 12 h, then nobody', async () => {
+    expect(await at('2026-11-21T05:00:00Z')).toMatchObject({ driver: 'FATMA HAMADI HASSAN', planShift: { when: 'last' } });
+    expect((await at('2026-11-21T14:00:00Z')).driver).toBe('Unassigned');
   });
 });
