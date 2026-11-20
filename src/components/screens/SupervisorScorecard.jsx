@@ -33,7 +33,7 @@ import { DriversIcon } from "../footer/NavIcons";
 import { downloadTableCsv } from "../../utils/tableExport";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 import {
-  LINE_STATE, linesByDay, nameCase, operatorName, shiftLabel,
+  LINE_STATE, linesByDay, shiftsWithDays, nameCase, operatorName, shiftLabel,
   supervisorDepartments, supervisorsByDay, supervisorTotals,
 } from "../../lib/factorySupervisors";
 
@@ -429,6 +429,34 @@ function DayBlock({ day }) {
 }
 
 /** One supervisor down the right of the page: their machines, shifts, operators and every plan line. */
+/** "Fri 21 Nov". */
+const dayWords = (day) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+/**
+ * Hours run against hours planned, on the lines whose hours were read. Where
+ * some lines were not (not tracked, no signal, shift not over), all the hours
+ * planned are said beside it, so the two figures are never set against lines
+ * that could not be read.
+ */
+function RunAgainstPlan({ t, small = false }) {
+  const share = t.judgedPlanned > 0 ? Math.min(t.runHours / t.judgedPlanned, 1) : 0;
+  const part = t.judgedPlanned < t.plannedHours;
+  const words = t.judged === 0
+    ? `${hrs(t.plannedHours)} planned, no hours read yet`
+    : small
+      ? `${fmt(t.runHours, 1)} of ${hrs(t.judgedPlanned)}${part ? `, ${hrs(t.plannedHours)} in all` : ""}`
+      : `${hrs(t.runHours)} run of ${hrs(t.judgedPlanned)} planned${part ? ` on tracked lines, ${hrs(t.plannedHours)} in all` : ""}`;
+  return (
+    <span className={`sv-run${small ? " sv-run--small" : ""}${t.judged === 0 ? " is-unread" : ""}`}>
+      <span className="sv-run__words">{words}</span>
+      <span className="sv-run__track" aria-hidden="true">
+        <span className="sv-run__fill" style={{ "--share": share }} />
+      </span>
+      {t.judged > 0 && <span className="sv-run__pct">{fmt(Math.round((100 * t.runHours) / t.judgedPlanned))}%</span>}
+    </span>
+  );
+}
+
 /** Whether the panel's Plan lines list is open: remembered for the visit, so
  *  folding it once keeps it folded as you go from one supervisor to the next. */
 let linesOpenMemo = true;
@@ -470,6 +498,7 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
   const ended = outcomes.reduce((n, o) => n + (o.n ?? 0), 0);
   const lines = linesByDay(s.history).flatMap((d) => d.lines);
   const shiftWords = (no, at) => shiftLabel(no, at).replace(" · ", ", ");
+  const shifts = shiftsWithDays(s.history);
   // Plan lines folds away (operator 2026-11-20); open by default, kept across supervisors.
   const [linesOpen, setLinesOpen] = useLinesOpen();
 
@@ -540,13 +569,28 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
           </ul>
         </section>
 
+        {/* Each shift's hours run against its hours planned, then each date it was
+            planned for (operator 2026-11-20: "show their actual dates and hours
+            done on each shift against the planned hours"). */}
         <section className="sv-sec">
-          <h3 className="sv-h">Shifts<span className="sv-count">{fmt(s.shifts.length)}</span></h3>
-          <ul className="sv-list">
-            {s.shifts.map((x) => (
-              <li key={`${x.shiftNo}@${x.shiftStart}`}>
-                <b className="sv-list__key sv-list__key--wide">{shiftWords(x.shiftNo, x.shiftStart)}</b>
-                <span className="sv-list__n">{plural(x.lines, "line")}</span>
+          <h3 className="sv-h">Shifts<span className="sv-count">{fmt(shifts.length)}</span></h3>
+          <ul className="sv-shifts">
+            {shifts.map((x) => (
+              <li key={x.key} className="sv-shift">
+                <div className="sv-shift__head">
+                  <b>{shiftWords(x.shiftNo, x.shiftStart)}</b>
+                  <span className="sv-list__n">{plural(x.days.length, "day")}, {plural(x.lines, "line")}</span>
+                </div>
+                <RunAgainstPlan t={x} />
+                <ul className="sv-shift__days">
+                  {x.days.map((d) => (
+                    <li key={d.day}>
+                      <span className="sv-shift__day">{dayWords(d.day)}</span>
+                      <span className="sv-shift__n">{plural(d.lines, "line")}</span>
+                      <RunAgainstPlan t={d} small />
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>

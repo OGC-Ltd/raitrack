@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { linesByDay, operatorName, shiftLabel, supervisorPeriods, supervisorsByDay, supervisorTotals } from "./factorySupervisors";
+import { linesByDay, shiftsWithDays, operatorName, shiftLabel, supervisorPeriods, supervisorsByDay, supervisorTotals } from "./factorySupervisors";
 
 const sup = (name, extra = {}) => ({
   key: name.toLowerCase(), name, lines: 2, plannedHours: 18, judged: 2, judgedPlannedHours: 18, runHours: 9,
@@ -45,4 +45,23 @@ describe("factorySupervisors", () => {
     expect(p.find((x) => x.key === "14d")).toMatchObject({ from: "2026-11-06", to: "2026-11-19" });
     expect(p.find((x) => x.key === "last")).toMatchObject({ from: "2026-11-09", to: "2026-11-15" });
   });
+});
+
+describe("shiftsWithDays", () => {
+  const l = (day, shiftNo, shiftStart, plannedHours, runHours = null) => ({ day, shiftNo, shiftStart, plannedHours, runHours });
+  const out = shiftsWithDays([
+    l("2026-11-20", 1, "07:00", 8, 5),
+    l("2026-11-20", 1, "07:00", 8, null),
+    l("2026-11-21", 1, "07:00", 8, 7.5),
+    l("2026-11-21", 2, "14:00", 6, 6),
+  ]);
+  it("groups by shift, most lines first", () => {
+    expect(out.map((s) => s.key)).toEqual(["1@07:00", "2@14:00"]);
+    expect(out[0]).toMatchObject({ lines: 3, plannedHours: 24, judged: 2, judgedPlanned: 16, runHours: 12.5 });
+  });
+  it("splits each shift by day, newest first, run set against tracked lines only", () => {
+    expect(out[0].days.map((d) => d.day)).toEqual(["2026-11-21", "2026-11-20"]);
+    expect(out[0].days[1]).toMatchObject({ lines: 2, plannedHours: 16, judged: 1, judgedPlanned: 8, runHours: 5 });
+  });
+  it("is empty with no history", () => { expect(shiftsWithDays()).toEqual([]); });
 });

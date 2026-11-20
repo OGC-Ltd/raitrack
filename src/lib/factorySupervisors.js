@@ -110,6 +110,40 @@ export function linesByDay(history = []) {
   return [...days.values()].sort((a, b) => b.day.localeCompare(a.day));
 }
 
+/**
+ * A supervisor's lines by shift, and each shift by day (operator 2026-11-20:
+ * "show their actual dates and hours done on each shift against the planned
+ * hours"). Hours run are only known on a tracked line, so each shift and day
+ * carries the planned hours of those lines (`judgedPlanned`) to set the run
+ * against, beside all the hours planned. Shifts in the order of most lines,
+ * days newest first.
+ */
+export function shiftsWithDays(history = []) {
+  const shifts = new Map();
+  const add = (t, l) => {
+    t.lines += 1;
+    t.plannedHours += l.plannedHours ?? 0;
+    if (l.runHours != null) {
+      t.judged += 1;
+      t.judgedPlanned += l.plannedHours ?? 0;
+      t.runHours += l.runHours;
+    }
+  };
+  const blank = () => ({ lines: 0, plannedHours: 0, judged: 0, judgedPlanned: 0, runHours: 0 });
+  for (const l of history) {
+    const key = `${l.shiftNo ?? ""}@${l.shiftStart ?? ""}`;
+    const s = shifts.get(key) ?? { key, shiftNo: l.shiftNo ?? null, shiftStart: l.shiftStart ?? null, days: new Map(), ...blank() };
+    const d = s.days.get(l.day) ?? { day: l.day, ...blank() };
+    add(s, l);
+    add(d, l);
+    s.days.set(l.day, d);
+    shifts.set(key, s);
+  }
+  return [...shifts.values()]
+    .map((s) => ({ ...s, days: [...s.days.values()].sort((a, b) => b.day.localeCompare(a.day)) }))
+    .sort((a, b) => b.lines - a.lines || String(a.shiftStart).localeCompare(String(b.shiftStart)));
+}
+
 /** "Sarah Mbago" from "sarah mbago"; mixed case is left alone. */
 export const nameCase = (name = "") =>
   String(name).replace(/[^\s'’-]+/g, (w) =>

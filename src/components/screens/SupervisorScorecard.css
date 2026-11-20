@@ -127,6 +127,40 @@
 .sv-list__what { font-size: var(--sv-small); color: var(--sv-text-2); overflow-wrap: anywhere; }
 .sv-list__n { font-size: var(--sv-small); color: var(--sv-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* ── Shifts: run against planned, then each date ───────────────────────── */
+.sv-shifts { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.sv-shift {
+  padding: 12px;
+  border: 1px solid var(--sv-line); border-radius: 10px;
+  background: var(--sv-card);
+}
+.sv-shift__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sv-shift__head b { font-size: var(--sv-body); font-weight: 700; color: var(--sv-ink); }
+.sv-shift__days { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--sv-line); }
+.sv-shift__days li {
+  display: grid; grid-template-columns: 88px 56px minmax(0, 1fr); align-items: center; gap: 8px;
+  padding: 8px 0 0;
+}
+.sv-shift__day { font-size: var(--sv-small); font-weight: 600; color: var(--sv-ink); font-variant-numeric: tabular-nums; }
+.sv-shift__n { font-size: var(--sv-small); color: var(--sv-text-2); font-variant-numeric: tabular-nums; }
+
+.sv-run {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
+  margin-top: 8px;
+}
+.sv-run__words { grid-column: 1 / -1; font-size: var(--sv-small); color: var(--sv-text-2); font-variant-numeric: tabular-nums; }
+.sv-run__track { height: 6px; border-radius: 999px; background: var(--sv-raise); overflow: hidden; }
+.sv-run__fill {
+  display: block; height: 100%;
+  background: var(--sv-ok);
+  transform: scaleX(var(--share, 0)); transform-origin: left center;
+}
+.sv-run__pct { font-size: var(--sv-small); font-weight: 700; color: var(--sv-ink); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+.sv-run--small { margin-top: 0; gap: 2px 8px; }
+.sv-run--small .sv-run__track { height: 4px; }
+.sv-run--small .sv-run__pct { font-weight: 600; }
+.sv-run.is-unread .sv-run__track { display: none; }
+
 /* ── Operators: names as tags, not a comma run ──────────────────────────── */
 .sv-names { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .sv-names li {
