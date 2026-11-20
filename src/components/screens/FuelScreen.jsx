@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
-import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, varianceBand } from "../../lib/factoryFuel";
+import { getFactoryFuel, getFuelRefills, getFuelShifts, getProbeFillings, getTankDays } from "../../api/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed, varianceBand } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
@@ -128,15 +128,24 @@ export default function FuelScreen() {
     { cacheKey: `ft-factory-fuel-meters:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
   );
   const meters = meterRead.error ? null : meterRead.data ?? null;
+  // Each machine's fuel over its planned shifts, by its probe, with the hours
+  // run (lib/factoryFuel withProbeUsed). Apart too: when it fails, Probe used
+  // reads "-" and nothing else moves.
+  const shiftRead = useApiData(
+    () => getFuelShifts({ companyId: activeCompanyId, from, to }),
+    [activeCompanyId, from, to],
+    { cacheKey: `ft-factory-fuel-shifts:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
+  );
+  const shiftUse = shiftRead.error ? null : shiftRead.data ?? null;
   const today = fleetDay(Date.now());
   const checked = useMemo(
     // Consumed runs from the latest refill (operator 2026-11-20), the period
     // balance kept beside it as consumedPeriod.
-    () => withFuelBeforeWaiting(withConsumedSinceRefill(
+    () => withProbeUsed(withFuelBeforeWaiting(withConsumedSinceRefill(
       withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
       tankDays, today,
-    ), tankDays, today),
-    [roster, vehicles, fillings, tankDays, today, meters],
+    ), tankDays, today), shiftUse),
+    [roster, vehicles, fillings, tankDays, today, meters, shiftUse],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
 
@@ -395,9 +404,10 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Fuel after", "fuelAfter", true)}
                 {th("Fuel now", "fuelNow", true)}
                 {th("Consumed", "consumed", true)}
-                {/* Hidden, not removed (operator 2026-11-20: the values "are not making sense at all"):
-                    kept in place so the phone card's cell positions do not move. PROBE_CONSUMED_SHOWN */}
-                {PROBE_CONSUMED_SHOWN ? th("Probe consumed", "consumedPeriod", true) : <th className="fuel-col--hidden" aria-hidden="true" />}
+                {/* Fuel used over the planned shifts, by the probe, with the hours run
+                    (operator 2026-11-20). In the place the hidden Probe consumed held,
+                    so the phone card's cell positions do not move. */}
+                {th("Probe used", "probeUsed", true)}
                 {th("Odometer before", "odometerBefore", true)}
                 {th("Odometer after", "odometerAfter", true)}
               </tr>
@@ -462,14 +472,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title={consumedTitle(r)}>
                       {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
                     </td>
-                    {/* The probe's own balance over the whole Period (lib/factoryFuel
-                        withConsumed, kept as consumedPeriod), operator 2026-11-20. */}
-                    {PROBE_CONSUMED_SHOWN ? (
-                      <td className={r.consumedPeriod != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Probe consumed"
-                          title={probeConsumedTitle(r)}>
-                        {r.consumedPeriod != null ? `${fmt(r.consumedPeriod)} L` : "-"}
-                      </td>
-                    ) : <td className="fuel-col--hidden" aria-hidden="true" />}
+                    <ProbeUsedCell r={r} />
                     <OdometerBeforeCell r={r} />
                     <OdometerAfterRefillCell r={r} />
                   </tr>
@@ -504,29 +507,50 @@ const refillTitle = (r, source) => [
 /** Consumed's hover: where the running figure starts and ends, or why it is blank. */
 function consumedTitle(r) {
   const since = r.lastRefill?.at ? fmtFillWhen.format(r.lastRefill.at) : null;
-  const period = PROBE_CONSUMED_SHOWN && r.consumedPeriod != null ? ` Over the whole period: ${fmt(r.consumedPeriod)} L.` : "";
   if (r.consumed != null) {
-    return `Fuel used since the refill on ${since}, from the fuel probe: tank after the refill + later fills − drains − tank ${r.consumedEnd === "now" ? "now" : `at the end of ${fmtDay(r.consumedEnd)}`}.${period}`;
+    return `Fuel used since the refill on ${since}, from the fuel probe: tank after the refill + later fills − drains − tank ${r.consumedEnd === "now" ? "now" : `at the end of ${fmtDay(r.consumedEnd)}`}.`;
   }
-  if (!r.lastRefill) return `No refill in the period, so nothing to count from.${period}`;
-  return `No probe reading after the refill on ${since} or at the end of the period.${period}`;
+  if (!r.lastRefill) return "No refill in the period, so nothing to count from.";
+  return `No probe reading after the refill on ${since} or at the end of the period.`;
 }
 
 /**
- * The Probe consumed column (operator 2026-11-20: hidden, its values "are not making
- * sense at all"). Its cells stay in the row, hidden, so the phone card keeps its places.
+ * Probe used (operator 2026-11-20: "add the column for probe calculated fuel",
+ * fuel used per the probe): over the row's planned shifts, the tank at each
+ * shift's start + the probe's fills − drains − the tank at its end, up to now
+ * while a shift runs (fleet-server planner/factory-fuel/shifts). The litres
+ * alone; the hover adds the engine hours run and the litres an hour, or for a
+ * machine rated by distance the kilometres and the kilometres a litre.
  */
-const PROBE_CONSUMED_SHOWN = false;
-
-/** Probe consumed: the fuel probe's balance over the row's whole Period, refills or not. */
-function probeConsumedTitle(r) {
-  const span = !r.firstDay ? null : r.firstDay === r.lastDay ? fmtDay(r.firstDay) : `${fmtDay(r.firstDay)} to ${fmtDay(r.lastDay)}`;
-  if (r.consumedPeriod != null) {
-    return `Fuel used over the period${span ? ` (${span})` : ""}, from the fuel probe alone: tank at the start + fills − drains − tank at the end (now, when the period runs to today).`;
+function ProbeUsedCell({ r }) {
+  const u = r.probeUse;
+  if (u === undefined) return <td className="dr-num dr-num--zero" data-label="Probe used" title="The probe's figures could not be read">-</td>;
+  if (!u) return <td className="dr-num dr-num--zero" data-label="Probe used" title="No planned shift for this machine in the period">-</td>;
+  if (u.usedL == null) {
+    const why = !u.tracked ? "Not one of our tracked units"
+      : u.measured === 0 && u.windows?.every((w) => w.ahead) ? "No planned shift has started yet"
+      : "The fuel probe gave no tank level at one end of the shift, or the tank rose with no fill on record";
+    return <td className="dr-num dr-num--zero" data-label="Probe used" title={why}>-</td>;
   }
-  if (!r.firstDay) return "No plan period for this machine";
-  if (r.fuelNow == null && !r.vehicleId) return "No fuel probe on this machine";
-  return "The fuel probe gave no tank level at the start or the end of the period";
+  // One value in the cell (operator 2026-11-20: "just a single value"); the
+  // hours run and the rate stay in the hover.
+  return (
+    <td className="dr-num" data-label="Probe used" title={probeUsedTitle(r, u)}>
+      {fmt(u.usedL)} L
+    </td>
+  );
+}
+
+/** Probe used's hover: what it adds up, over which shifts, and the standard beside the rate. */
+function probeUsedTitle(r, u) {
+  const shifts = `${u.measured} of ${u.shifts} planned shift${u.shifts === 1 ? "" : "s"}${u.open ? ", one still running and counted up to now" : ""}`;
+  const parts = [`Fuel used by the probe over ${shifts}: tank at the shift's start + fills − drains − tank at its end.`];
+  if (u.filledL) parts.push(`Fills counted: ${fmt(u.filledL)} L.`);
+  if (u.theftL) parts.push(`Drains counted: ${fmt(u.theftL)} L.`);
+  const byKm = odometerUnit(r.basis) === "km";
+  if (!byKm && u.hours != null) parts.push(`Engine hours run: ${fmt(u.hours, 1)} h${u.perHour != null ? `, ${fmt(u.perHour, 1)} L/h` : ""}${r.rate != null ? ` against a standard of ${fmt(r.rate, 1)} L/h` : ""}.`);
+  if (byKm && u.km != null) parts.push(`Distance: ${fmt(u.km)} km${u.kmPerL != null ? `, ${fmt(u.kmPerL, 2)} km/L` : ""}${r.rate != null ? ` against a standard of ${fmt(r.rate, 1)} km/L` : ""}.`);
+  return parts.join(" ");
 }
 
 /** Fuel before's hover while the machine waits for its refill. */

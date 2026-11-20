@@ -625,6 +625,23 @@ export function withFuelBeforeWaiting(rows, tankDays, today) {
 }
 
 /**
+ * The Probe used column (operator 2026-11-20: "add the column for probe
+ * calculated fuel", fuel used per the probe): each row's fuel over its planned
+ * shifts, from fleet-server planner/factory-fuel/shifts. `probeUsed` is the
+ * litres, for sorting; `probeUse` the whole read (hours, km, the rates, each
+ * shift). `shifts` null (the read failed) leaves both undefined, so the cell can
+ * say it could not be read; a machine the read does not list gets null.
+ */
+export function withProbeUsed(rows, shifts) {
+  if (!shifts) return rows;
+  const byRef = new Map((shifts.machines ?? []).map((m) => [fold(m.machine), m]));
+  return rows.map((r) => {
+    const m = byRef.get(fold(r.reference)) ?? null;
+    return { ...r, probeUse: m, probeUsed: m?.usedL ?? null };
+  });
+}
+
+/**
  * @param {object[]} rows      fuelRoster rows (with vehicleId, plate, pumpIssues, lines, tankLitres)
  * @param {object[]} fillings  fuel/fillings rows for the period, or null when they could not be read
  * @returns rows with `fills` (one per fuelling or unclaimed probe fill, newest first) and

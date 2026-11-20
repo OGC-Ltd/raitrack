@@ -50,6 +50,21 @@ export async function getFuelRefills({ companyId, from, to, machine = null }) {
   return res.data ?? { refills: [] }
 }
 
+/**
+ * Each machine's fuel over its planned shifts from..to, by its probe, with the
+ * engine hours and kilometres it ran in them (fleet-server
+ * planner/factory-fuel/shifts; the Probe used column, lib/factoryFuel
+ * withProbeUsed). A shift still running counts up to now.
+ * `{ machines: [{ machine, tracked, shifts, measured, open, usedL, hours, km, perHour, kmPerL, windows }] }`.
+ */
+export async function getFuelShifts({ companyId, from, to }) {
+  const orgId = await resolveOrgId(companyId)
+  if (!orgId) return { machines: [] }
+  const q = new URLSearchParams({ from, to })
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/planner/factory-fuel/shifts?${q}`)
+  return res.data ?? { machines: [] }
+}
+
 /** Pages of fillings read at most: 200 a page, so up to 6,000 in a period. */
 const MAX_FILL_PAGES = 30
 

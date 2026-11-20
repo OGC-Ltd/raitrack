@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -600,5 +600,22 @@ describe("withFuelBeforeWaiting", () => {
     const [row] = withFuelBeforeWaiting([{ ...base, fuelNow: null, lastDay: "2026-11-20" }], days, "2026-11-20");
     expect(row.fuelBefore).toBeNull();
     expect(row.fuelBeforeWaiting).toBeUndefined();
+  });
+});
+
+describe("withProbeUsed (operator 2026-11-20: fuel used per the probe)", () => {
+  const rows = [{ reference: "EX-21" }, { reference: "DG-22" }];
+  const read = { machines: [
+    { machine: "ex-21", tracked: true, shifts: 2, measured: 1, open: true, usedL: 7.4, hours: 1.47, km: null, perHour: 5, kmPerL: null, windows: [] },
+  ] };
+  it("puts each machine's figures on its row, the litres apart for sorting", () => {
+    const [ex21, dg22] = withProbeUsed(rows, read);
+    expect(ex21).toMatchObject({ probeUsed: 7.4, probeUse: { usedL: 7.4, hours: 1.47, perHour: 5 } });
+    expect(dg22).toMatchObject({ probeUsed: null, probeUse: null });
+  });
+  it("leaves the rows alone when the read failed, so the cell can say so", () => {
+    const out = withProbeUsed(rows, null);
+    expect(out).toBe(rows);
+    expect(out[0].probeUse).toBeUndefined();
   });
 });
