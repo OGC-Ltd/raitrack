@@ -13,9 +13,14 @@ export async function getDeliveryDay(orgId, day) {
   return res.data
 }
 
-/** Save the whole list for the day; returns it as stored. */
-export async function saveDeliveryDay(orgId, day, vehicles) {
-  const res = await apiFetch(`${base(orgId)}/days/${day}`, { method: 'PUT', body: JSON.stringify({ vehicles }) })
+/**
+ * Save the whole list for the day; returns it as stored. `clear`: the operator
+ * confirmed emptying the day; without it the server answers 409 rather than
+ * replace a list that has vehicles with an empty one.
+ */
+export async function saveDeliveryDay(orgId, day, vehicles, { clear = false } = {}) {
+  const body = clear ? { vehicles, clear: true } : { vehicles }
+  const res = await apiFetch(`${base(orgId)}/days/${day}`, { method: 'PUT', body: JSON.stringify(body) })
   return res.data
 }
 

@@ -172,3 +172,23 @@ export function forgetLegacyOrders(orgCode) {
   ordersMemory.delete(k);
   try { localStorage.removeItem(k); } catch { /* storage unavailable */ }
 }
+
+/**
+ * The day new vehicles go on while a range is open and no day is picked:
+ * today when the range holds it, else the range's first day. Never its last
+ * by default (operator, 20 Nov 2026), so a list keyed for the first day of a
+ * past range does not land on another day unseen.
+ */
+export function editDayOf(rangeDays, today) {
+  if (!rangeDays?.length) return today;
+  return rangeDays.includes(today) ? today : rangeDays[0];
+}
+
+/**
+ * Whether a save takes a day that had vehicles down to none: it asks first,
+ * and the server refuses it unless confirmed (operator, 20 Nov 2026: 18 and
+ * 19 Nov were emptied from the range view and lost).
+ */
+export function emptiesDay(hadCount, nextCount) {
+  return hadCount > 0 && nextCount === 0;
+}

@@ -30,7 +30,7 @@ import { LAST_HOURS, MAX_MOVEMENT_DAYS, windowsProblem } from '../../lib/movemen
 import {
   COLUMNS, stamp, LOOKBACK_DAYS, readOrders, MAX_LOOKBACK_DAYS, STOP_MS, STAND_KMH, PASS_COUNTS, PASS_RADIUS_M, middleOf, storageAt, tripOf, dayRuns, daysFrom, findStorages, customersIn, deliveryRow, rowCells, periodDays, spansDays, stopWords, csvTable, deliveriesPdfBody, backShort, matchGeofences, sheetStops, pinCode, fencedPinNames,
 } from '../../lib/deliveriesReport';
-import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, mergePins, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
+import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehicle, editDayOf, emptiesDay, setCustomers, setPins, setVehicleGroup, emptyPlan, loadOrders, mergePins, PIN_RADIUS_MIN_M, PIN_RADIUS_MAX_M } from '../../lib/deliveryPlan';
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL, NOT_GEOFENCED } from '../../lib/finishedGoodsReport';
@@ -289,9 +289,10 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [draft, setDraft] = useState({ fromDay: today, toDay: today, start: 0, end: 24 });
   const [daysOpen, setDaysOpen] = useState(true);
   const rangeDays = useMemo(() => (daysOpen ? daysFrom(draft.fromDay, draft.toDay) : [today]), [daysOpen, draft.fromDay, draft.toDay, today]);
-  // The day whose list is open for editing: one of the range's, the first until another is picked
+  // The day new vehicles go on: one of the range's, picked on the "Add new vehicles to" chips; until
+  // then today when the range holds it, else its first day (never silently its last: operator, 20 Nov 2026)
   const [pickDay, setPickDay] = useState(null);
-  const day = daysOpen ? (rangeDays.includes(pickDay) ? pickDay : rangeDays[rangeDays.length - 1]) : today;
+  const day = daysOpen ? (rangeDays.includes(pickDay) ? pickDay : editDayOf(rangeDays, today)) : today;
   const [group, setGroup] = useState(() => TAB_GROUP[fixedTemplate] ?? null);   // one group of the fleet list, or all
   // Van Sales (the report as it was) or Finished Goods (operator, 11 Nov 2026), kept in this browser
   const [pickedTemplate, setTemplate] = useState(() => loadTemplate(orgCode));
@@ -358,11 +359,19 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   };
   const change = (next, forDay = day) => changeOn(forDay, next);
   const saveFull = (next) => saveFullOn(day, next);
-  const saveFullOn = (forDay, next) => {
+  // A change that would leave a day with no vehicles asks first, and only then is saved with `clear`
+  // (operator, 20 Nov 2026: 18 and 19 Nov were emptied from the range view, a ✕ at a time, and lost)
+  const saveFullOn = (forDay, next, { clear = false } = {}) => {
     const key = ['deliveries', 'day', orgId, forDay];
+    const had = (qc.getQueryData(key)?.vehicles ?? []).length;
+    if (!clear && emptiesDay(had, next.vehicles.length)) {
+      setAssign({ icon: 'ti-alert-triangle', words: `This leaves ${dayWords(forDay)}’s list with no vehicles. Empty the list for ${dayWords(forDay)}?`,
+        yes: 'Empty the list', go: () => saveFullOn(forDay, next, { clear: true }) });
+      return;
+    }
     qc.setQueryData(key, next);
     setSaveState((s) => ({ busy: s.busy + 1, error: null, failedDay: null }));
-    saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles))
+    saving.current = saving.current.then(() => saveDeliveryDay(orgId, forDay, next.vehicles, { clear }))
       .then((stored) => {
         // The list's saved time, from the server: the header's "Saved 09:41" follows each save
         const at = stored?.updatedAt ?? new Date().toISOString();
@@ -371,7 +380,15 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         // The server keeps each listed vehicle as its Planner plan for the day: the Planner reads it afresh
         qc.invalidateQueries({ queryKey: ['planner', 'plans', orgId] });
       })
-      .catch((err) => setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err), failedDay: forDay })));
+      .catch((err) => {
+        // 409: the server kept a list this page thought was already empty. Show the server's list, no Try again
+        if (err?.status === 409) {
+          qc.invalidateQueries({ queryKey: key });
+          setSaveState((s) => ({ busy: s.busy - 1, error: `${dayWords(forDay)}’s list was not emptied: ${err.message}`, failedDay: null }));
+          return;
+        }
+        setSaveState((s) => ({ busy: s.busy - 1, error: err?.message ?? String(err), failedDay: forDay }));
+      });
   };
   const retrySave = () => {
     const d = saveState.failedDay;
@@ -1095,15 +1112,24 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
               <span>Vehicle</span><span>Group</span><span>Stops</span><span /><span className="dlv-roster__count">Picked</span><span />
             </div>
             <ul className="dlv-plan__list dlv-roster">
-              {listRows.map((v) => {
+              {listRows.map((v, i) => {
                 const rk = `${v.day}|${v.key}`;
+                // On a range, each day's vehicles under that day's own heading: a unit listed on two days is
+                // two lists, not a duplicate (operator, 20 Nov 2026)
+                const dayHead = multiDay && (i === 0 || listRows[i - 1].day !== v.day) && (
+                  <li key={`day|${v.day}`} className="dlv-roster__dayhead">
+                    <span>{dayWords(v.day)}</span>
+                    <span className="rpt-sub">{listRows.filter((x) => x.day === v.day).length} vehicle{listRows.filter((x) => x.day === v.day).length === 1 ? '' : 's'} on this day’s list</span>
+                  </li>
+                );
                 const plan = planOn(v.day);
                 const change = (next) => changeOn(v.day, next);
                 const picked = v.customers.length + (v.pins?.length ?? 0);
                 const isPasting = pasting.has(rk);
                 const near = v.customers.filter((n) => customers.find((c) => c.name === n)?.nearStorage).length;
                 return (
-                  <li key={rk} className="dlv-plan__veh dlv-roster__row">
+                  <Fragment key={rk}>{dayHead}
+                  <li className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{v.plate}{multiDay && <span className="dlv-plan__day">{dayWords(v.day)}</span>}</span>
                     <span className="dlv-roster__group">
                     <select className="rpt-select dlv-plan__group" value={groupOfV(v) ?? ''} aria-label={`Group ${v.plate} is reported under`}
@@ -1168,6 +1194,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                     {isPasting && <div className="dlv-roster__wide"><PinPaste orgId={orgId} vehicle={v} customers={customers}
                       onAdd={(pins, names) => fenceStops(v.key, pins, names, v.day)} onRemovePins={(pins) => removePins(v.key, pins, v.day)} /></div>}
                   </li>
+                  </Fragment>
                 );
               })}
             </ul>
