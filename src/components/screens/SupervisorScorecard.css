@@ -222,7 +222,9 @@
   transition: transform 160ms ease;
 }
 .sv-fold[aria-expanded="false"] .sv-fold__chev { transform: rotate(-90deg); }
-.sv-fold + .sv-lines { margin-top: 12px; }
+/* A folding head sits on its own margin; the list under it keeps the gap. */
+.sv-h--fold { margin-bottom: 0; }
+.sv-h--fold + .sv-folded { margin-top: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .sv-fold, .sv-fold__chev { transition: none; }
 }

@@ -26,6 +26,7 @@ import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { DriversIcon } from "../footer/NavIcons";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
+import TablePager from "../body/TablePager";
 
 const fmt = (n, d = 0) =>
   Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -364,14 +365,10 @@ function OperatorsSection({ rows, selected, onSelect, rangePicker, deptPicker, e
           </table>
         </div>
         {pageCount > 1 && (
-          <nav className="dr-pager" aria-label="Operator pages">
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>← Prev</button>
-            <span className="dr-pager__info" aria-live="polite">
-              Page {at + 1} of {pageCount}
-              <span className="dr-pager__range">{" · "}{fmt(at * step + 1)}–{fmt(at * step + pageRows.length)} of {fmt(sorted.length)}</span>
-            </span>
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>Next →</button>
-          </nav>
+          <TablePager label="Operator pages" pager={{
+            page: at, pageCount, total: sorted.length,
+            from: sorted.length ? at * step + 1 : 0, to: at * step + pageRows.length, setPage,
+          }} />
         )}
       </div>
     </>

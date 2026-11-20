@@ -27,6 +27,7 @@ import ErrorBoundary from "../shared/ErrorBoundary";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
+import TablePager from "../body/TablePager";
 
 // Figures as they come, not rounded to whole litres (operator 2026-11-20: the
 // probe's 77.66 L showed as 78 L beside FactorySuite's 77 L — "let us not round
@@ -481,14 +482,10 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
           </table>
         </div>
         {pageCount > 1 && (
-          <nav className="dr-pager" aria-label="Machine pages">
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>← Prev</button>
-            <span className="dr-pager__info" aria-live="polite">
-              Page {at + 1} of {pageCount}
-              <span className="dr-pager__range">{" · "}{fmt(at * step + 1)}–{fmt(at * step + pageRows.length)} of {fmt(sorted.length)}</span>
-            </span>
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>Next →</button>
-          </nav>
+          <TablePager label="Machine pages" pager={{
+            page: at, pageCount, total: sorted.length,
+            from: sorted.length ? at * step + 1 : 0, to: at * step + pageRows.length, setPage,
+          }} />
         )}
       </div>
     </>

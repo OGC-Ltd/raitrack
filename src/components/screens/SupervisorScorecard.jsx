@@ -36,6 +36,7 @@ import {
   LINE_STATE, linesByDay, shiftsWithDays, nameCase, operatorName, shiftLabel,
   supervisorDepartments, supervisorsByDay, supervisorTotals,
 } from "../../lib/factorySupervisors";
+import TablePager from "../body/TablePager";
 
 const ALL = "__all";
 const GRID_CARDS_QUERY = "(max-width: 700px)";
@@ -360,14 +361,10 @@ function SupervisorsSection({ rows, selected, onSelect, lead, rangePicker, deptP
           </table>
         </div>
         {pageCount > 1 && (
-          <nav className="dr-pager" aria-label="Supervisor pages">
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>Previous</button>
-            <span className="dr-pager__info" aria-live="polite">
-              Page {at + 1} of {pageCount}
-              <span className="dr-pager__range">{", "}{fmt(at * step + 1)} to {fmt(at * step + pageRows.length)} of {fmt(sorted.length)}</span>
-            </span>
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>Next</button>
-          </nav>
+          <TablePager label="Supervisor pages" pager={{
+            page: at, pageCount, total: sorted.length,
+            from: sorted.length ? at * step + 1 : 0, to: at * step + pageRows.length, setPage,
+          }} />
         )}
       </div>
     </>
@@ -457,13 +454,27 @@ function RunAgainstPlan({ t, small = false }) {
   );
 }
 
-/** Whether the panel's Plan lines list is open: remembered for the visit, so
- *  folding it once keeps it folded as you go from one supervisor to the next. */
-let linesOpenMemo = true;
-function useLinesOpen() {
-  const [open, setOpen] = useState(linesOpenMemo);
-  const set = (v) => setOpen((was) => { const next = typeof v === "function" ? v(was) : v; linesOpenMemo = next; return next; });
-  return [open, set];
+/** Which of the panel's lists are open: remembered for the visit, so folding
+ *  one keeps it folded as you go from one supervisor to the next. */
+const foldMemo = { machines: true, operators: true, lines: true };
+function useFold(key) {
+  const [open, setOpen] = useState(foldMemo[key] ?? true);
+  const toggle = () => setOpen((was) => { foldMemo[key] = !was; return !was; });
+  return [open, toggle];
+}
+
+/** A section head that folds its list away (operator 2026-11-20: Plan lines,
+ *  then "machines and operators should also be collapsible"). */
+function FoldHead({ id, open, onToggle, label, count }) {
+  return (
+    <h3 className="sv-h sv-h--fold">
+      <button type="button" className="sv-fold" aria-expanded={open} aria-controls={id} onClick={onToggle}>
+        {label}<span className="sv-count">{fmt(count)}</span>
+        <svg className="sv-fold__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+    </h3>
+  );
 }
 
 function SupervisorPanel({ s, late, from, to, onClose }) {
@@ -500,7 +511,9 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
   const shiftWords = (no, at) => shiftLabel(no, at).replace(" · ", ", ");
   const shifts = shiftsWithDays(s.history);
   // Plan lines folds away (operator 2026-11-20); open by default, kept across supervisors.
-  const [linesOpen, setLinesOpen] = useLinesOpen();
+  const [machinesOpen, toggleMachines] = useFold("machines");
+  const [operatorsOpen, toggleOperators] = useFold("operators");
+  const [linesOpen, toggleLines] = useFold("lines");
 
   return (
     <aside className="dr-panel sv-panel" role="dialog" aria-label={`${name}, supervisor details`}>
@@ -557,8 +570,8 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
         </section>
 
         <section className="sv-sec">
-          <h3 className="sv-h">Machines<span className="sv-count">{fmt(s.machines.length)}</span></h3>
-          <ul className="sv-list">
+          <FoldHead id="sv-machines" open={machinesOpen} onToggle={toggleMachines} label="Machines" count={s.machines.length} />
+          {machinesOpen && <ul className="sv-list sv-folded" id="sv-machines">
             {s.machines.map((m) => (
               <li key={m.reference}>
                 <b className="sv-list__key">{m.reference}</b>
@@ -566,7 +579,7 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
                 <span className="sv-list__n">{plural(m.lines, "line")}</span>
               </li>
             ))}
-          </ul>
+          </ul>}
         </section>
 
         {/* Each shift's hours run against its hours planned, then each date it was
@@ -597,24 +610,17 @@ function SupervisorPanel({ s, late, from, to, onClose }) {
         </section>
 
         <section className="sv-sec">
-          <h3 className="sv-h">Operators<span className="sv-count">{fmt(s.operators.length)}</span></h3>
-          {s.operators.length ? (
-            <ul className="sv-names">
+          <FoldHead id="sv-operators" open={operatorsOpen} onToggle={toggleOperators} label="Operators" count={s.operators.length} />
+          {operatorsOpen && (s.operators.length ? (
+            <ul className="sv-names sv-folded" id="sv-operators">
               {s.operators.map((o) => <li key={o}>{operatorName(o)}</li>)}
             </ul>
-          ) : <p className="sv-none">No operator named on these lines.</p>}
+          ) : <p className="sv-none sv-folded" id="sv-operators">No operator named on these lines.</p>)}
         </section>
 
         <section className="sv-sec">
-          <h3 className="sv-h sv-h--fold">
-            <button type="button" className="sv-fold" aria-expanded={linesOpen} aria-controls="sv-plan-lines"
-              onClick={() => setLinesOpen((v) => !v)}>
-              Plan lines<span className="sv-count">{fmt(lines.length)}</span>
-              <svg className="sv-fold__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
-            </button>
-          </h3>
-          {linesOpen && <ul className="sv-lines" id="sv-plan-lines">
+          <FoldHead id="sv-plan-lines" open={linesOpen} onToggle={toggleLines} label="Plan lines" count={lines.length} />
+          {linesOpen && <ul className="sv-lines sv-folded" id="sv-plan-lines">
             {lines.map((l) => {
               const st = LINE_STATE[l.state] ?? LINE_STATE.untracked;
               const isLate = l.lateMinutes != null && l.lateMinutes > late;

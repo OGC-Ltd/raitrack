@@ -23,6 +23,7 @@ import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import LoadError from "../shared/LoadError";
 import { downloadTableCsv } from "../../utils/tableExport";
+import TablePager from "../body/TablePager";
 
 const DAY = 86_400_000;
 /** A fleet day (EAT) as YYYY-MM-DD. */
@@ -418,20 +419,10 @@ export default function DriverScorecard({ lead = null }) {
           </table>
         </div>
         {pageCount > 1 && (
-          <nav className="dr-pager" aria-label="Scorecard pages">
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.max(0, at - 1))} disabled={at === 0}>
-              ← Prev
-            </button>
-            <span className="dr-pager__info" aria-live="polite">
-              Page {at + 1} of {pageCount}
-              <span className="dr-pager__range">
-                {" · "}{fmt(at * step + 1)}–{fmt(at * step + pageRows.length)} of {fmt(sorted.length)}
-              </span>
-            </span>
-            <button type="button" className="dr-pager__btn" onClick={() => setPage(Math.min(pageCount - 1, at + 1))} disabled={at >= pageCount - 1}>
-              Next →
-            </button>
-          </nav>
+          <TablePager label="Scorecard pages" pager={{
+            page: at, pageCount, total: sorted.length,
+            from: sorted.length ? at * step + 1 : 0, to: at * step + pageRows.length, setPage,
+          }} />
         )}
       </div>
     </section>

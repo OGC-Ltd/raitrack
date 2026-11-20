@@ -34,6 +34,7 @@ import { DriversIcon } from "../footer/NavIcons";
 import { navLabel, peopleWords } from "../../lib/orgLabels";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
 import { fleetType, fleetTypeLabel } from "../../lib/vehicleMap";
+import TablePager from "../body/TablePager";
 
 // Vehicle-type filter. A driver's type is the class of the unit on their row
 // (last driven, else posted), resolved by the same fleetType the map's Fleets
@@ -1548,30 +1549,10 @@ function AllDriversSection({
             vanishing, so the pair never shifts under a pointer that is
             clicking through pages. */}
         {pageCount > 1 && (
-          <nav className="dr-pager" aria-label="Driver pages">
-            <button
-              type="button"
-              className="dr-pager__btn"
-              onClick={() => setPage(Math.max(0, at - 1))}
-              disabled={at === 0}
-            >
-              ← Prev
-            </button>
-            <span className="dr-pager__info" aria-live="polite">
-              Page {at + 1} of {pageCount}
-              <span className="dr-pager__range">
-                {" · "}{fmt(at * step + 1)}–{fmt(at * step + pageRows.length)} of {fmt(sorted.length)}
-              </span>
-            </span>
-            <button
-              type="button"
-              className="dr-pager__btn"
-              onClick={() => setPage(Math.min(pageCount - 1, at + 1))}
-              disabled={at >= pageCount - 1}
-            >
-              Next →
-            </button>
-          </nav>
+          <TablePager label="Driver pages" pager={{
+            page: at, pageCount, total: sorted.length,
+            from: sorted.length ? at * step + 1 : 0, to: at * step + pageRows.length, setPage,
+          }} />
         )}
       </div>
     </>
