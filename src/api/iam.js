@@ -55,3 +55,13 @@ export async function saveIamFleet(userId, { organisationId, allVehicles, vehicl
   });
   return res.data;
 }
+
+/**
+ * The units Wialon has deactivated, and those already gone from it, per
+ * organisation (fleet-server iam/wialon-deactivated). Read-only.
+ * `{ checkedAt, fieldsSeen, companies: [{ orgCode, orgName, units, deactivated, removed, error }] }`
+ */
+export async function fetchDeactivatedUnits() {
+  const res = await apiFetch(`${base}/wialon/deactivated-units`);
+  return res.data ?? { checkedAt: null, fieldsSeen: [], companies: [] };
+}
