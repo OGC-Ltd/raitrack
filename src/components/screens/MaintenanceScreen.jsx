@@ -18,6 +18,8 @@ import { useAppFields, useAppActions } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import MaintenancePage from "../body/MaintenancePage";
 import SensorPanel from "../body/SensorPanel";
+import PlanSubmissions from "../body/PlanSubmissions";
+import { usePermissions, FACTORY_FUEL_ORGS } from "../../hooks/usePermissions";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
 import { MaintenanceIcon } from "../footer/NavIcons";
@@ -44,6 +46,10 @@ export default function MaintenanceScreen() {
   // Held in AppContext so it survives a refresh — see the restore helpers there.
   const { maintenanceView: savedView } = useAppFields("maintenanceView");
   const { setMaintenanceView: setActiveTab } = useAppActions();
+  // FactorySuite's Plan submissions board: only where FactorySuite keeps work
+  // plans (KASULU), the same orgs as the Fuel page.
+  const { orgCode } = usePermissions();
+  const plansOn = FACTORY_FUEL_ORGS.includes(orgCode ?? "");
 
   /**
    * The sub-views, and which of them this person can actually open.
@@ -63,6 +69,7 @@ export default function MaintenanceScreen() {
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
     { key: "sensors", label: "Sensor Monitor", enabled: true },
+    { key: "plans", label: "Plan submissions", enabled: plansOn },
   ];
   const available = VIEWS.filter((v) => v.enabled);
   const activeTab = available.some((v) => v.key === savedView) ? savedView : available[0].key;
@@ -72,8 +79,10 @@ export default function MaintenanceScreen() {
   // desktop tab, and for the same reason: a permission set can change under a
   // stored choice.
   useEffect(() => {
-    if (activeTab !== savedView) setActiveTab(activeTab);
-  }, [activeTab, savedView, setActiveTab]);
+    // Not before the org is known: a saved "plans" would read as unavailable
+    // for that moment and be lost on every refresh.
+    if (orgCode && activeTab !== savedView) setActiveTab(activeTab);
+  }, [activeTab, savedView, setActiveTab, orgCode]);
 
   // A lookup, not a ternary: the old `=== "service" ? … : "Sensor Monitor"`
   // labelled every view that was not Service Status as Sensor Monitor.
@@ -138,6 +147,11 @@ export default function MaintenanceScreen() {
 
       {activeTab === "sensors" && (
         <SensorPanel />
+      )}
+
+      {/* Scrolls itself, like SensorPanel: a direct flex child. */}
+      {activeTab === "plans" && (
+        <PlanSubmissions orgId={orgId} />
       )}
     </div>
   );
