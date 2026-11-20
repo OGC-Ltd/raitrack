@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withShiftConsumed, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -545,21 +545,6 @@ describe("withRefillColumns", () => {
     expect(withConsumedSinceRefill(withRefillColumns([{ ...refilled, fuelNow: 700 }], null), [], "2026-11-20")[0].consumed).toBeNull();
   });
 
-  it("puts the machine panel's shift Consumed on the row, keeping the since-refill balance beside it", () => {
-    // EX-01 on 20 Nov: 1.8 L since the refill on the row, 42.6 L, 3.6 h run, in the panel
-    let row = { reference: "EX-01", vehicleId: "v01", basis: "HOUR", lines: [], pumpIssues: [], fills: [], lastDay: "2026-11-20", fuelNow: 315.8 };
-    row = fills(row, "a", "2026-11-20T07:12:00Z", 194.08, 317.6);
-    const shift = (s) => ({ refills: [{ issueId: "a", tracked: true, meterBefore: null, meterAfter: null, meterNow: null, shift: s }] });
-    const run = (s) => withShiftConsumed(withConsumedSinceRefill(withRefillColumns([row], shift(s)), [], "2026-11-20"))[0];
-    const open = run({ consumedL: 42.6, engineHours: 3.6, open: true, ahead: false });
-    expect(open).toMatchObject({ consumed: 42.6, consumedSinceRefill: 1.8, consumedShift: { litres: 42.6, engineHours: 3.6, open: true } });
-    expect(open.consumed).toBe(open.lastRefill.consumed.litres);
-    expect(run({ consumedL: 50, engineHours: 0, open: false, ahead: true }).consumed).toBeNull();
-    expect(run({ consumedL: null, engineHours: 2, open: true, ahead: false }).consumed).toBeNull();
-    expect(run(null).consumed).toBeNull();
-    expect(withShiftConsumed([{ reference: "EX-02", consumed: 12 }])[0]).toMatchObject({ consumed: null, consumedSinceRefill: 12 });
-  });
-
   it("leaves the columns empty for a machine the pump has not fuelled, or while the meters are unread", () => {
     const [none] = withRefillColumns([{ reference: "EX-02", lines: [], pumpIssues: [], fills: [] }], null);
     expect(none).toMatchObject({ lastRefill: null, refillCount: 0, fuelBefore: null, fuelAfter: null, odometerBefore: null });
@@ -618,19 +603,24 @@ describe("withFuelBeforeWaiting", () => {
   });
 });
 
-describe("withProbeUsed (operator 2026-11-20: fuel used per the probe)", () => {
-  const rows = [{ reference: "EX-21" }, { reference: "DG-22" }];
-  const read = { machines: [
-    { machine: "ex-21", tracked: true, shifts: 2, measured: 1, open: true, usedL: 7.4, hours: 1.47, km: null, perHour: 5, kmPerL: null, windows: [] },
-  ] };
-  it("puts each machine's figures on its row, the litres apart for sorting", () => {
-    const [ex21, dg22] = withProbeUsed(rows, read);
-    expect(ex21).toMatchObject({ probeUsed: 7.4, probeUse: { usedL: 7.4, hours: 1.47, perHour: 5 } });
-    expect(dg22).toMatchObject({ probeUsed: null, probeUse: null });
+describe("withProbeUsed (operator 2026-11-20: standard rate × hours worked since the refill)", () => {
+  const refill = (before, after, source = "now") => ({ odometerBefore: { value: before, unit: "h" }, meterAfter: after == null ? null : { value: after, unit: "h", source } });
+  it("is the rated L/h times the hours between Odometer before and after", () => {
+    const [ex01] = withProbeUsed([{ reference: "EX-01", basis: "HOUR", rate: 12, lastRefill: refill(1000, 1003.6) }]);
+    expect(ex01).toMatchObject({ probeUsed: 43.2, probeUse: { run: 3.6, unit: "h", rate: 12, litres: 43.2, open: true } });
   });
-  it("leaves the rows alone when the read failed, so the cell can say so", () => {
-    const out = withProbeUsed(rows, null);
-    expect(out).toBe(rows);
-    expect(out[0].probeUse).toBeUndefined();
+  it("divides the km run by the km/L standard on a km-rated machine", () => {
+    const [ft] = withProbeUsed([{ reference: "FT-06", basis: "KM", rate: 2.5, lastRefill: { odometerBefore: { value: 1800, unit: "km" }, meterAfter: { value: 1900, unit: "km", source: "next-refill" } } }]);
+    expect(ft).toMatchObject({ probeUsed: 40, probeUse: { run: 100, unit: "km", open: false } });
+  });
+  it("is blank with no refill, no after reading or no standard", () => {
+    const out = withProbeUsed([
+      { reference: "A", basis: "HOUR", rate: 12 },
+      { reference: "B", basis: "HOUR", rate: 12, lastRefill: refill(1000, null) },
+      { reference: "C", basis: "HOUR", rate: null, lastRefill: refill(1000, 1002) },
+    ]);
+    expect(out.map((r) => r.probeUsed)).toEqual([null, null, null]);
+    expect(out[0].probeUse).toMatchObject({ run: null, litres: null });
+    expect(out[2].probeUse).toMatchObject({ run: 2, rate: null, litres: null });
   });
 });
