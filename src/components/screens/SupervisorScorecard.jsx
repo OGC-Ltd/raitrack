@@ -23,6 +23,7 @@ import { periodRange } from "../../lib/factoryFuel";
 import { useApiData } from "../../hooks/useApiData";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import StaffLoading from "./StaffLoading";
+import "./StaffFilters.css";
 import TrendStat from "./TrendStat";
 import FuelPeriodPicker from "./FuelPeriodPicker";
 import ErrorBoundary from "../shared/ErrorBoundary";
@@ -276,18 +277,23 @@ function SupervisorsSection({ rows, selected, onSelect, lead, rangePicker, deptP
           </span>
         </div>
         {rangePicker}
-        {deptPicker}
-        <button type="button" className="dr-pager__btn" disabled={!sorted.length} onClick={downloadCsv}
-                title="The supervisors in the list as a CSV (opens in Excel)">CSV</button>
-        <div className="dr-searchwrap">
-          <svg className="dr-searchwrap__icon" width="13" height="13" viewBox="0 0 24 24"
-               fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-          </svg>
-          <input className="dr-search" value={query} aria-label="Search supervisors"
-            onChange={(e) => { setQuery(e.target.value); setPage(0); }}
-            placeholder="Search supervisor, machine, operator…" />
+        {/* Department, search and CSV as one group (operator 2026-11-20: "we cant
+            have the wrapped"): it takes the row's right-hand end, or a line of its
+            own, whole, when the row is too narrow (StaffFilters.css). */}
+        <div className="dr-filters__tools stf-tools">
+          {deptPicker}
+          <div className="dr-searchwrap">
+            <svg className="dr-searchwrap__icon" width="13" height="13" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+            </svg>
+            <input className="dr-search" value={query} aria-label="Search supervisors"
+              onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+              placeholder="Search supervisor, machine, operator…" />
+          </div>
+          <button type="button" className="dr-pager__btn" disabled={!sorted.length} onClick={downloadCsv}
+                  title="The supervisors in the list as a CSV (opens in Excel)">CSV</button>
         </div>
       </div>
 

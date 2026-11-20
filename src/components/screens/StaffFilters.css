@@ -1,0 +1,31 @@
+/* Hallmark · component: Staffs › Operators and Supervisors filter row (the Department picker, search and CSV as one group, .stf-tools) · genre: modern-minimal · theme: in-project tokens, preserved (both themes) · scope: component · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E5 S5 R5 V4 · weakest: H, on purpose: a toolbar, its job is to sit level and get out of the way */
+/* Hallmark · answered: no new control and no new colour; the picker, field and button keep the page's own eight states. The fix is layout only: each of the three used to take `margin-left: auto` on its own, so the row broke between them and two ends hung right-aligned on separate lines. */
+
+/* One group at the row's right-hand end. It grows to fill whatever the
+   chips and the period leave, so when it is pushed onto a line of its own it
+   spans that line and its three controls stay together on it, right-aligned. */
+.stf-tools {
+  margin-left: auto;
+  /* Basis 0, held at the min-width: the group asks the line for 520px, not
+     its natural ~615px, so it stays beside the period whenever 520 is free
+     and the search field gives up the difference. */
+  flex: 1 1 0;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 12px;
+  min-width: min(100%, 520px);
+}
+/* The group places them now; their own push to the right would split it. */
+.stf-tools .dr-typepick,
+.stf-tools .dr-searchwrap { margin-left: 0; }
+.stf-tools .dr-searchwrap { flex: 0 1 280px; min-width: 160px; }
+
+/* Phones: the row is a column (DriversScreen.css). Search across the top, as
+   on the other tabs; the picker takes the rest of the line beside the button. */
+@media (max-width: 767px) {
+  .stf-tools { flex-wrap: wrap; min-width: 0; gap: 8px; }
+  .stf-tools > * { flex: 0 0 auto; }
+  .stf-tools .dr-searchwrap { order: -1; flex: 1 1 100%; }
+  .stf-tools .dr-typepick { flex: 1 1 0; min-width: 0; }
+}
