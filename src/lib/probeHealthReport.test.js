@@ -11,14 +11,20 @@ const unit = (plate, over = {}) => ({
 });
 
 describe('probe & sensor health report', () => {
-  it('has one column a part, Working or Not working, and no Action', () => {
+  it("shows each part's last reading in East Africa Time, and no Action", () => {
     expect(HEADS).toEqual(['Plate', 'Unit', 'GPS tracker', 'Ignition', 'Odometer', 'Fuel probe']);
-    expect(rowCells(unit('KCA 918P'))).toEqual(['KCA 918P', 'wialon:8', 'Working', 'Working', 'Working', 'Working']);
-    expect(rowCells(unit('A', { trackerSilent: true })).slice(2)).toEqual(['Not working', 'No data', 'No data', 'No data']);
-    expect(rowCells(unit('A', { channels: { ...ch, ignition: { state: 'NOT_REPORTING' } }, fuelProbe: { state: 'DIED' } })).slice(2))
-      .toEqual(['Working', 'Not working', 'Working', 'Not working']);
-    expect(rowCells(unit('A', { channels: { ...ch, gps: { state: 'NOT_REPORTING' }, odometer: { state: 'NOT_FITTED' } }, fuelProbe: { state: 'SILENT' } })).slice(2))
-      .toEqual(['Not working', 'Working', 'Not fitted', 'Not working']);
+    // The fixture's fuel probe last read a level 31 Oct 10:49 UTC = 13:49 EAT
+    expect(rowCells(unit('KCA 918P', { channels: { gps: { state: 'REPORTING', lastSeenAt: '2026-11-20T15:32:00Z' }, ignition: { state: 'REPORTING', lastSeenAt: '2026-11-20T15:30:00Z' }, odometer: { state: 'REPORTING', lastSeenAt: '2026-11-20T15:32:00Z' } } })))
+      .toEqual(['KCA 918P', 'wialon:8', '20/11/26 18:32', '20/11/26 18:30', '20/11/26 18:32', '31/10/26 13:49']);
+    // A silent tracker: the GPS falls back to the last time it spoke at all
+    expect(rowCells(unit('A', { trackerSilent: true, lastReportedAt: '2026-07-21T08:20:12Z', fuelProbe: { state: 'OK' } })).slice(2))
+      .toEqual(['21/07/26 11:20', '-', '-', '-']);
+  });
+
+  it('says Never for a stopped part with no reading, and keeps Not set up and Not fitted', () => {
+    expect(rowCells(unit('A', { channels: { ...ch, ignition: { state: 'NOT_REPORTING' } }, fuelProbe: { state: 'SILENT' } })).slice(3))
+      .toEqual(['Never', '-', 'Never']);
+    expect(rowCells(unit('A', { channels: { ...ch, odometer: { state: 'NOT_FITTED' } } }))[4]).toBe('Not fitted');
     expect(rowCells(unit('A', { fuelProbe: { state: 'NOT_FITTED' }, fuelSensor: { fitted: true, uncalibrated: true } }))[5]).toBe('Not set up');
     expect(rowCells(unit('A', { fuelProbe: { state: 'NOT_FITTED' }, fuelSensor: { fitted: false } }))[5]).toBe('Not fitted');
   });
@@ -29,15 +35,17 @@ describe('probe & sensor health report', () => {
       ['Units in report 4', 'GPS tracker not working 1', 'Ignition not working 1', 'Odometer not working 0', 'Fuel probe not working 1', 'All working 1']);
   });
 
-  it('highlights Not working, on the template', () => {
+  it('highlights a stopped part in red, its time as the text, on the template', () => {
     const now = Date.UTC(2026, 10, 7, 5, 22);
-    const d = probeHealthDoc([unit('KCA 918P', { fuelProbe: { state: 'DIED' } })], { note: 'All · not working · 1 units', fleet: 'Menengai', groups: null, now });
+    const d = probeHealthDoc([unit('KCA 918P', { fuelProbe: { state: 'DIED', lastAliveAt: '2026-10-31T10:49:00Z' } })], { note: 'All · not working · 1 units', fleet: 'Menengai', groups: null, now });
     expect(d.title).toBe('PROBE & SENSOR HEALTH');
     const table = d.blocks.find((b) => b.kind === 'table');
     // KCA 918P is on the tanker list: Driver and Status come after the unit (13 Nov 2026)
     expect(table.head).toEqual(['Plate', 'Unit', 'Driver', 'Status', ...HEADS.slice(2)]);
-    expect(table.rows[0][7]).toMatchObject({ text: 'Not working', bold: true, tone: 'flag' });
-    expect(table.rows[0][4]).toEqual({ text: 'Working' });
+    // DIED, with its last real level 31 Oct: the date, in red
+    expect(table.rows[0][7]).toMatchObject({ text: '31/10/26 13:49', bold: true, tone: 'flag' });
+    // Working, no time in the fixture: a plain dash
+    expect(table.rows[0][4]).toEqual({ text: '-' });
     expect(JSON.stringify(d)).not.toMatch(/Action|check the device/);
     expect(probeHealthDoc([], { fleet: 'M', trucks: true, now }).title).toBe('TRUCKS PROBE & SENSOR HEALTH');
     expect(probeHealthDoc([], { fleet: 'M', now }).blocks.find((b) => b.kind === 'none').text).toBe('Nothing matched the current filters.');
