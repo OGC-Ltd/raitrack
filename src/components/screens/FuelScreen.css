@@ -90,6 +90,9 @@
   .fuel-grid thead th.dr-num:not(:last-child) .dr-grid__sort { padding-inline: 8px; }
 }
 
+/* Probe consumed, hidden (operator 2026-11-20); FuelScreen PROBE_CONSUMED_SHOWN */
+.fuel-grid .fuel-col--hidden { display: none; }
+
 /* ── Phones (operator 2026-11-18: "the fuel tab … on mobile … responsive") ──
    The Drivers page turns its rows into cards at 700px with ten placed cells;
    a machine row has more, so the extra cells fell into whatever slot was left.

@@ -395,7 +395,9 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Fuel after", "fuelAfter", true)}
                 {th("Fuel now", "fuelNow", true)}
                 {th("Consumed", "consumed", true)}
-                {th("Probe consumed", "consumedPeriod", true)}
+                {/* Hidden, not removed (operator 2026-11-20: the values "are not making sense at all"):
+                    kept in place so the phone card's cell positions do not move. PROBE_CONSUMED_SHOWN */}
+                {PROBE_CONSUMED_SHOWN ? th("Probe consumed", "consumedPeriod", true) : <th className="fuel-col--hidden" aria-hidden="true" />}
                 {th("Odometer before", "odometerBefore", true)}
                 {th("Odometer after", "odometerAfter", true)}
               </tr>
@@ -462,10 +464,12 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                     </td>
                     {/* The probe's own balance over the whole Period (lib/factoryFuel
                         withConsumed, kept as consumedPeriod), operator 2026-11-20. */}
-                    <td className={r.consumedPeriod != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Probe consumed"
-                        title={probeConsumedTitle(r)}>
-                      {r.consumedPeriod != null ? `${fmt(r.consumedPeriod)} L` : "-"}
-                    </td>
+                    {PROBE_CONSUMED_SHOWN ? (
+                      <td className={r.consumedPeriod != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Probe consumed"
+                          title={probeConsumedTitle(r)}>
+                        {r.consumedPeriod != null ? `${fmt(r.consumedPeriod)} L` : "-"}
+                      </td>
+                    ) : <td className="fuel-col--hidden" aria-hidden="true" />}
                     <OdometerBeforeCell r={r} />
                     <OdometerAfterRefillCell r={r} />
                   </tr>
@@ -500,13 +504,19 @@ const refillTitle = (r, source) => [
 /** Consumed's hover: where the running figure starts and ends, or why it is blank. */
 function consumedTitle(r) {
   const since = r.lastRefill?.at ? fmtFillWhen.format(r.lastRefill.at) : null;
-  const period = r.consumedPeriod != null ? ` Over the whole period: ${fmt(r.consumedPeriod)} L.` : "";
+  const period = PROBE_CONSUMED_SHOWN && r.consumedPeriod != null ? ` Over the whole period: ${fmt(r.consumedPeriod)} L.` : "";
   if (r.consumed != null) {
     return `Fuel used since the refill on ${since}, from the fuel probe: tank after the refill + later fills − drains − tank ${r.consumedEnd === "now" ? "now" : `at the end of ${fmtDay(r.consumedEnd)}`}.${period}`;
   }
   if (!r.lastRefill) return `No refill in the period, so nothing to count from.${period}`;
   return `No probe reading after the refill on ${since} or at the end of the period.${period}`;
 }
+
+/**
+ * The Probe consumed column (operator 2026-11-20: hidden, its values "are not making
+ * sense at all"). Its cells stay in the row, hidden, so the phone card keeps its places.
+ */
+const PROBE_CONSUMED_SHOWN = false;
 
 /** Probe consumed: the fuel probe's balance over the row's whole Period, refills or not. */
 function probeConsumedTitle(r) {
