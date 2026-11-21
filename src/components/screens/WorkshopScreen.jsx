@@ -60,6 +60,8 @@ const VIEW_HEAD = {
 };
 /** Any one of these opens the Jobs and Workshop Day tabs. */
 const BOARD_VERBS = ["repair:flag", "repair:assess", "repair:book", "repair:verify", "repair:work_any"];
+/** ControlTech's verbs, live on the ControlTech and My jobs tabs: accept a job, and work it. */
+const CT_VERBS = ["repair:claim", "repair:resolve"];
 const bucketOf = (stage) => BUCKETS.find(([, , list]) => list.includes(stage))?.[0] ?? null;
 
 /** Re-read on mount, on demand, and whenever any repair changes (SSE or a write here). */
@@ -243,10 +245,10 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
     setBusy(r.id);
     try {
       await claimJob(orgId, r.id);
-      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} is yours.` });
+      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} accepted: it is yours. Decide remote or physical.` });
       onOpen(r.id);
     } catch (e) {
-      onToast({ tone: "crit", text: e?.message || "Could not claim the job." });
+      onToast({ tone: "crit", text: e?.message || "Could not accept the job." });
     } finally {
       setBusy(null);
     }
@@ -301,9 +303,9 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
                     </td>
                     <td>
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
-                        : !j.assignedToId && !j.workshopTechnicianId ? (!canClaim ? <span className="sp4-muted">Unclaimed</span> : (
+                        : !j.assignedToId && !j.workshopTechnicianId ? (!canClaim ? <span className="sp4-muted">Not accepted</span> : (
                           <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
-                                  onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Claiming…" : "Claim"}</button>
+                                  onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Accepting…" : "Accept"}</button>
                         )) : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
                     </td>
                     <td className="dr-num sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.forwardedAt ?? j.createdAt)}</td>
@@ -353,10 +355,10 @@ function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim }) {
     setBusy(r.id);
     try {
       await claimJob(orgId, r.id);
-      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} is yours.` });
+      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} accepted: it is yours. Decide remote or physical.` });
       onOpen(r.id);
     } catch (e) {
-      onToast({ tone: "crit", text: e?.message || "Could not claim the job." });
+      onToast({ tone: "crit", text: e?.message || "Could not accept the job." });
     } finally {
       setBusy(null);
     }
@@ -433,9 +435,9 @@ function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim }) {
                       {by && <span className="wf-cell-sub">{by}</span>}
                     </td>
                     <td>
-                      {j.assignedTo?.fullName ?? (j.resolvedAt || !canClaim ? <span className="sp4-muted">Unclaimed</span> : (
+                      {j.assignedTo?.fullName ?? (j.resolvedAt || !canClaim ? <span className="sp4-muted">Not accepted</span> : (
                         <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
-                                onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Claiming…" : "Claim"}</button>
+                                onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Accepting…" : "Accept"}</button>
                       ))}
                     </td>
                     <td>{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
@@ -826,6 +828,12 @@ export default function WorkshopScreen() {
   const board = can("repair:read") && can(BOARD_VERBS);
   // Tabs follow the person's own verbs; everything inside them is view-only.
   const look = useMemo(() => viewOnly(can), [can]);
+  // ControlTech's own steps work on its own pages (operator, 2026-11-21: "the
+  // technicians [can] accept the job and proceed with the assessment stage"):
+  // accept, then fix remotely or send it for a physical inspection, which
+  // takes the job to assessment, and log a remote fix. Everything else in the
+  // panel stays view-only, and the server still checks every step.
+  const ctCan = useMemo(() => (perm) => look(perm) || [].concat(perm).some((p) => CT_VERBS.includes(p) && can(p)), [look, can]);
   const tabs = useMemo(() => [
     // Auto Workshop leads where the org has it (operator, 2026-11-21).
     { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) },
@@ -893,8 +901,8 @@ export default function WorkshopScreen() {
 
           <div className="dr-layout wf-layout">
             {active === "jobs" && <JobsTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} />}
-            {active === "controltech" && <ControlTechTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
-            {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
+            {active === "controltech" && <ControlTechTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={ctCan("repair:claim")} />}
+            {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={ctCan("repair:claim")} />}
             {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
             {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
             {active === "factory" && <FactoryWorkshopTab orgId={orgId} onOpen={setOpenId} openId={openId} />}
@@ -905,7 +913,7 @@ export default function WorkshopScreen() {
       {openId && (
         <DetailSidebar title="Repair job" label="Repair job" itemKey={openId} onClose={() => setOpenId(null)} wide>
           {/* View-only, but for one field: when the unit is supposed to be back (operator, 21 Nov). */}
-          <RepairWorkflowJob orgId={orgId} itemId={openId} can={look} userId={userId} onToast={setToast} />
+          <RepairWorkflowJob orgId={orgId} itemId={openId} can={active === "controltech" || active === "mine" ? ctCan : look} userId={userId} onToast={setToast} />
         </DetailSidebar>
       )}
       {openCase && (

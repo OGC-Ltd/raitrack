@@ -438,3 +438,7 @@ button.wf-slot:focus-visible { outline: 2px solid var(--wf-accent); outline-offs
 .fsw-note { margin: var(--sp4-sm) var(--sp4-gutter); }
 .sp4-table td.fsw-low { color: var(--sp4-crit); font-weight: 600; }
 
+
+/* Who acts next, as a plain label: sentence case, untracked (operator,
+   2026-11-21). It read "NEXT · CONTROLTECH". */
+.wf-next__who { text-transform: none; letter-spacing: 0; font-size: var(--sp4-body); font-weight: 500; }

@@ -254,7 +254,7 @@ function useAct(onToast, onDone) {
 
 /** What a staged step does, in the words the Save bar uses. */
 const PENDING_LABEL = {
-  fwd: "Forward the job", claim: "Claim this job", remote: "Fix remotely",
+  fwd: "Forward the job", claim: "Accept this job", remote: "Fix remotely",
   physical: "Send for a physical inspection", assess: "Record the assessment", book: "Book a workshop day",
   cancel: "Cancel the booking", arrive: "Check the unit in and issue the ticket",
   damage: "Record the damage and start the repair", complete: "Complete the repair",
@@ -281,7 +281,7 @@ function PathStep({ orgId, job, act, busy, from }) {
                 onClick={() => act("physical", () => decidePath(orgId, job.id, "physical", note),
                   job.ticketNo ? "Sent to the Control Room for a physical inspection." : "Sent for a physical inspection. Ticket issued.",
                   job.ticketNo ? undefined : "Send for a physical inspection and issue the ticket")}>
-          {busy === "physical" ? "Saving…" : "Needs physical inspection"}
+          {busy === "physical" ? "Saving…" : "Needs physical inspection: to assessment"}
         </button>
       </div>
     </div>
@@ -958,8 +958,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
     action = (
       <div className="wf-actions">
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => choose("claim", () => claimJob(orgId, job.id), "Claimed. It is yours.")}>
-          {busy === "claim" ? "Claiming…" : "Claim this job"}
+                onClick={() => choose("claim", () => claimJob(orgId, job.id), "Accepted. It is yours: decide remote or physical.")}>
+          {busy === "claim" ? "Accepting…" : "Accept this job"}
         </button>
       </div>
     );
@@ -1052,7 +1052,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       <section className={"wf-next" + (closed ? " wf-next--closed" : "")} aria-label="Next step">
           <div className="wf-next__head">
             <span className={`sp4-pill sp4-pill--${stagePillOf(job) ?? "none"}`}>{stageLabelOf(job)}</span>
-            {!closed && nextWho && <span className="wf-next__who">Next · {nextWho}</span>}
+            {!closed && nextWho && <span className="wf-next__who">Next: {nextWho}</span>}
           </div>
           <p className="wf-next__what">{closed ? (s === "fixed" ? "Verified fixed and available" : next.what) : nextWhat}</p>
           {s === "void" && job.voidReason && <p className="wf-muted">{job.voidReason}</p>}

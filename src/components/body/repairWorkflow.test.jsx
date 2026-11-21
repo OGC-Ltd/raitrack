@@ -32,7 +32,7 @@ describe('routing a flag', () => {
 describe('the job panel shows the one next step, to whoever may take it', () => {
   it('offers ControlTech the claim on an unclaimed queue job', () => {
     const html = render(job({ queue: 'controltech', faultCategory: 'tracker' }), grants('repair:claim', 'repair:resolve'));
-    expect(html).toContain('Claim this job');
+    expect(html).toContain('Accept this job');
   });
 
   it('holds a step until Save, which starts disabled', () => {

@@ -116,7 +116,7 @@ export const PHASE_OF_STAGE = {
 /** Who acts next, and what, for each stage: the head of the job panel. */
 export const NEXT_STEP = {
   pending:             { who: "Control Room", what: "Forward the job" },
-  forwarded:           { who: "ControlTech",  what: "Claim the job and decide remote or physical" },
+  forwarded:           { who: "ControlTech",  what: "Accept the job, then fix it remotely or send it to assessment" },
   remote_fix:          { who: "ControlTech",  what: "Fix it remotely, then test and complete" },
   awaiting_assessment: { who: "Control Room", what: "Assess whether it can reach the workshop" },
   booked:              { who: "Workshop",     what: "Check the unit in when it arrives" },

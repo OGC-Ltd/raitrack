@@ -1581,7 +1581,17 @@ export default function SensorPanel() {
   const { orgId, vehicles } = useFleetLiveShared();
   const { user } = useAuth();
   const { anomalies, loading } = useSensorHealth();
-  const probeHealth = useProbeHealth();
+  // flaggedOnly: a technician, limited to units with an open repair job. They
+  // see Probes for those units only, and no Malfunction tab (operator,
+  // 2026-11-21). The server sends them only those units' probes as well.
+  const { flaggedOnly, vehicleIds } = usePermissions();
+  const probeHealthAll = useProbeHealth();
+  const probeHealth = useMemo(() => {
+    if (!flaggedOnly || !vehicleIds || !probeHealthAll.data) return probeHealthAll;
+    const mine = new Set(vehicleIds);
+    const rows = (probeHealthAll.data.rows ?? []).filter((r) => mine.has(r.vehicleId));
+    return { ...probeHealthAll, data: { ...probeHealthAll.data, rows, summary: { ...probeHealthAll.data.summary, total: rows.length } } };
+  }, [probeHealthAll, flaggedOnly, vehicleIds]);
 
   /* Which of these four resources this account may see at all.
      The screen itself is already behind `sensor:read` — FooterNav grades the
@@ -1836,7 +1846,7 @@ export default function SensorPanel() {
     { key: "speed",       allow: can("analytics:read"),
       label: "Speed",       count: speedInsights ? speedInsights.incidents : pending,
       hint: "Click any unit to see every overspeeding case in the window" },
-    { key: "malfunction", allow: true,
+    { key: "malfunction", allow: !flaggedOnly,
       label: "Malfunction", count: loading     ? pending : maltCount,
       hint: "Click any unit to see every fault episode in the window" },
     /* The outstanding work, and where "Resolved" lives. It is a tab rather
@@ -2178,7 +2188,7 @@ export default function SensorPanel() {
                 emptyLabel="No overspeeding recorded on this day."
               />
             )}
-            {activeTab === "malfunction" && (
+            {activeTab === "malfunction" && !flaggedOnly && (
               <IncidentReport
                 orgId={orgId}
                 range={incidentRange}
