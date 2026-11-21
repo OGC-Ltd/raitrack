@@ -68,14 +68,19 @@ export const PROBE_STATE_LABEL = {
   // What we can actually see. Whether hardware exists is a separate question,
   // answered by the sensor column beside it.
   NOT_FITTED: "No level reported",
-  UNKNOWN:    "Too few readings",
+  // Under 200 reports in the 30 days read (server MIN_PINGS): too few to
+  // judge. "Too few readings" read as a fault (operator, 2026-11-21).
+  UNKNOWN:    "Not enough data",
 };
+
+/** Why "Not enough data", for a tooltip. */
+export const UNKNOWN_WHY = "The unit sent under 200 reports in the last 30 days, too few to tell whether this works";
 
 export const CHANNEL_STATE_LABEL = {
   REPORTING:     "Working",
   NOT_REPORTING: "Stopped reporting",
   NOT_FITTED:    "Not fitted",
-  UNKNOWN:       "Too few readings",
+  UNKNOWN:       "Not enough data",
 };
 
 /** Which states mean somebody should go and look. NOT_FITTED is not one of

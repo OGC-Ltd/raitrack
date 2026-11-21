@@ -38,9 +38,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import TablePager, { usePager } from "./TablePager";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
-import { vehicleReadings } from "../../lib/vehicleReadings";
 import {
-  PROBE_STATE_LABEL, CHANNEL_STATE_LABEL, faultAction,
+  PROBE_STATE_LABEL, CHANNEL_STATE_LABEL, UNKNOWN_WHY,
 } from "../../api/probeHealth";
 import { downloadProbeCsv } from "../../utils/probeReport";
 import { probeHealthDoc } from "../../lib/reportDocs";
@@ -95,7 +94,30 @@ const ago = (iso) => {
   return `${(h / 24).toFixed(0)}d ago`;
 };
 
-const litres = (ml) => (ml == null ? "-" : `${(ml / 1000).toFixed(1)} L`);
+/*
+ * Last worked and Last report as lines (operator, 2026-11-21: "last worked
+ * we can use line for visuals", "add a line on the last report"). The
+ * "Last reading" column was taken off the same day. The line is the 30 days the server reads, now at its right
+ * end; the coloured stretch runs from the last time to now, so a long red run is
+ * a long-dead probe or tracker. Green under an hour, amber under a day,
+ * red past that; nothing in the window is red end to end. The words stay beside it.
+ */
+const SINCE_WINDOW_MS = 30 * 24 * 3600000;
+function SinceLine({ at }) {
+  const ms = at ? Date.now() - new Date(at).getTime() : Infinity;
+  const tone = !Number.isFinite(ms) ? "crit" : ms < 3600000 ? "ok" : ms < 24 * 3600000 ? "warn" : "crit";
+  // At least a sliver, so a probe that worked a minute ago still shows its mark.
+  const gap = Number.isFinite(ms) ? Math.min(100, Math.max(3, (ms / SINCE_WINDOW_MS) * 100)) : 100;
+  return (
+    <span className={`sp4-ph-since sp4-ph-since--${tone}`}>
+      <span className="sp4-ph-since__line" aria-hidden="true">
+        <span className="sp4-ph-since__gap" style={{ inlineSize: `${gap}%` }} />
+      </span>
+      <span className="sp4-ph-since__words">{ago(at)}</span>
+    </span>
+  );
+}
+
 
 /**
  * State to pill modifier, in the panel's own vocabulary.
@@ -110,7 +132,38 @@ const PILL = {
 };
 
 const Pill = ({ state, label }) => (
-  <span className={`sp4-pill sp4-pill--${PILL[state] ?? "none"}`}>{label ?? state ?? "-"}</span>
+  <span className={`sp4-pill sp4-pill--${PILL[state] ?? "none"}`} title={state === "UNKNOWN" ? UNKNOWN_WHY : undefined}>{label ?? state ?? "-"}</span>
+);
+
+/*
+ * One form per status column (operator, 2026-11-21: "status chips of
+ * different types across columns to avoid duplication"). Four filled pills
+ * side by side read as one run of chips, so the colour keeps its meaning
+ * (green working, amber warning, red fault, grey unknown) and the form tells
+ * the columns apart: Fuel probe keeps the filled pill (the column the table
+ * is for), Fuel sensor an icon and a short word, GPS a satellite and word, Ignition a word
+ * on a short bar.
+ */
+const TONE = { con: "ok", inc: "crit", warn: "warn", none: "none" };
+const Mark = ({ form, tone = "none", label, icon, title }) => (
+  <span className={`sp4-ph-st sp4-ph-st--${form} sp4-ph-st--${tone}`} title={title}>
+    {icon && <i className={`ti ${icon}`} aria-hidden="true" />}
+    {label}
+  </span>
+);
+// The icon in its tone with a short word beside it (operator, 2026-11-21:
+// "along the icon we can say OK or Warn"); the full state is the tooltip.
+const SensorIcon = ({ tone, icon, word, label, title }) => (
+  <span className={`sp4-ph-st sp4-ph-st--glyph sp4-ph-st--${tone}`} title={title ?? label}>
+    <i className={`ti ${icon}`} aria-hidden="true" />
+    <span aria-hidden="true">{word}</span>
+    <span className="sp4-ph-sr">{label}</span>
+  </span>
+);
+const channelMark = (form, icon, ch) => (
+  <Mark form={form} icon={icon} tone={TONE[PILL[ch?.state] ?? "none"]}
+        label={CHANNEL_STATE_LABEL[ch?.state] ?? ch?.state ?? "-"}
+        title={ch?.state === "UNKNOWN" ? UNKNOWN_WHY : undefined} />
 );
 
 /**
@@ -144,7 +197,7 @@ const Pill = ({ state, label }) => (
  * actually renders instead of trusting identity.
  */
 const ProbeRow = memo(
-  function ProbeRow({ r, live, reported, isSelected, onOpen }) {
+  function ProbeRow({ r, reported, isSelected, onOpen, tickable, ticked, onTick }) {
     return (
       <tr
         className={"sp4-tr sp4-tr--probe" + (isSelected ? " sp4-tr--selected" : "")}
@@ -155,64 +208,53 @@ const ProbeRow = memo(
         onClick={() => onOpen(r)}
       >
         <td className="sp4-td--left sp4-td--pin">
-          <span className="sp4-reg">{r.plate}</span>
-          <div className="sp4-muted">{r.deviceId ?? "-"}</div>
+          <span className="sp4-ph-unit">
+            {/* Ticks the unit for the selection bar; the row itself still
+                opens the unit, so the box keeps its click to itself. */}
+            {tickable && (
+              <input
+                type="checkbox" className="sp4-ph-tick"
+                checked={ticked}
+                onChange={() => onTick(r.vehicleId)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Select ${r.plate}`}
+              />
+            )}
+            <span>
+              <span className="sp4-reg">{r.plate}</span>
+              <div className="sp4-muted">{r.deviceId ?? "-"}</div>
+              {/* A repair already open on the unit. It sat in the Action
+                  column, taken off on 2026-11-21 (operator: "remove the
+                  column for action"), so it moved under the plate. */}
+              {reported && <div className="sp4-ph-reported">Reported</div>}
+            </span>
+          </span>
         </td>
-        <td className="sp4-td--left sp4-td--action">
-          {/* The server's partial unique index is the real
-              guard against two reports on one probe. This only
-              stops the technician filling in a form that was
-              going to be refused. */}
-          {reported && (
-            <div><span className="sp4-pill sp4-pill--warn">Reported</span></div>
-          )}
-          {faultAction(r) || <span className="sp4-muted">-</span>}
-        </td>
-        <td className={"sp4-td--right" + (r.trackerSilent ? " sp4-probe--fault" : "")}>
-          {ago(r.lastReportedAt)}
-        </td>
-        <td className="sp4-td--right">
-          {live?.fuelLitres != null
-            ? `${live.fuelLitres.toFixed(0)} L${live.fuelPct != null ? ` · ${live.fuelPct}%` : ""}`
-            : <span className="sp4-muted">-</span>}
-        </td>
+        {/* The same 30-day line as Last worked (operator, 2026-11-21: "add a
+            line on the last report"): the coloured stretch is the time since
+            the tracker last reported. */}
+        <td className="sp4-td--right"><SinceLine at={r.lastReportedAt} /></td>
         <td className="sp4-td--left">
           <Pill state={r.fuelProbe?.state} label={PROBE_STATE_LABEL[r.fuelProbe?.state]} />
         </td>
-        <td className="sp4-td--right">{ago(r.fuelProbe?.lastAliveAt)}</td>
-        <td className="sp4-td--right">{litres(r.fuelProbe?.lastValueMl)}</td>
+        <td className="sp4-td--right"><SinceLine at={r.fuelProbe?.lastAliveAt} /></td>
         <td className="sp4-td--left">
+          {/* An icon alone, coloured, in place of a chip (operator,
+              2026-11-21), with OK, Warn or None beside it. A shape per state
+              as well as a colour; the full state is the tooltip and label.
+              The calibrated count stays in the tooltip and the CSV. */}
           {!r.fuelSensor?.fitted
-            ? <span className="sp4-pill sp4-pill--none">Not configured</span>
+            ? <SensorIcon tone="none" icon="ti-circle-dashed" word="None" label="Not configured" />
             : r.fuelSensor.uncalibrated
-              ? <span className="sp4-pill sp4-pill--warn">Uncalibrated</span>
-              : <span
-                  className="sp4-pill sp4-pill--con"
-                  // The count is real detail — a finer table
-                  // converts the raw reading more accurately —
-                  // but "30 pts" is jargon on a screen whose
-                  // whole job is telling somebody what to do.
-                  // The pill answers the question (is this
-                  // sensor set up), the tooltip and the CSV
-                  // carry the number.
-                  title={`${r.fuelSensor.calibrationPoints}-point calibration table${r.fuelSensor.parameter ? ` on ${r.fuelSensor.parameter}` : ""}`}
-                >Calibrated</span>}
+              ? <SensorIcon tone="warn" icon="ti-alert-triangle" word="Warn" label="Uncalibrated" />
+              : <SensorIcon tone="ok" icon="ti-circle-check" word="OK" label="Calibrated"
+                  title={`Calibrated: ${r.fuelSensor.calibrationPoints}-point calibration table${r.fuelSensor.parameter ? ` on ${r.fuelSensor.parameter}` : ""}`} />}
         </td>
         <td className="sp4-td--left">
-          <Pill state={r.channels?.gps?.state} label={CHANNEL_STATE_LABEL[r.channels?.gps?.state]} />
+          {channelMark("icon", "ti-satellite", r.channels?.gps)}
         </td>
         <td className="sp4-td--left">
-          <Pill state={r.channels?.ignition?.state} label={CHANNEL_STATE_LABEL[r.channels?.ignition?.state]} />
-        </td>
-        <td className="sp4-td--right">
-          {r.channels?.odometer?.lastValue != null
-            ? `${Math.round(r.channels.odometer.lastValue).toLocaleString()} km`
-            : <span className="sp4-muted">-</span>}
-        </td>
-        <td className="sp4-td--right">
-          {r.channels?.engineHours?.lastValue != null
-            ? `${Math.round(r.channels.engineHours.lastValue).toLocaleString()} h`
-            : <span className="sp4-muted">-</span>}
+          {channelMark("rule", null, r.channels?.ignition)}
         </td>
       </tr>
     );
@@ -231,8 +273,9 @@ const ProbeRow = memo(
     a.reported === b.reported &&
     a.isSelected === b.isSelected &&
     a.onOpen === b.onOpen &&
-    a.live?.fuelLitres === b.live?.fuelLitres &&
-    a.live?.fuelPct === b.live?.fuelPct,
+    a.tickable === b.tickable &&
+    a.ticked === b.ticked &&
+    a.onTick === b.onTick,
 );
 
 export default function ProbeHealthPanel({
@@ -241,29 +284,10 @@ export default function ProbeHealthPanel({
   // happens in the unit's sidebar (ProbeReportActions, below).
   openByVehicle,
 }) {
-  // The live snapshot, merged in per row. Health answers "is it working"; the
-  // snapshot answers "what does it read right now", and the merged tab has to
-  // carry both or it is not a merge — it is a replacement that lost half the
-  // screen it replaced.
-  const { vehicles, orgId } = useFleetLiveShared();
-  // Keyed by PLATE, and read through vehicleReadings.
-  //
-  // Both were wrong first time round and both are worth naming. The snapshot's
-  // vehicles carry the plate in `.id` — the grid this replaced did `plate: v.id`
-  // — so keying on a cuid matched nothing. And the raw object has no
-  // `fuelLevelMl`: vehicleReadings.js says the snapshot's `fuelLevelMl` /
-  // `tankCapacityLitres` become `fuelLitres` / `tankCapacityL` on the way
-  // through, and that helper is also where the plausibility check on the
-  // percentage lives. Reading raw fields skipped it and rendered "—" on every
-  // row, healthy ones included.
-  const liveByPlate = useMemo(() => {
-    const m = new Map();
-    for (const v of vehicles ?? []) {
-      const plate = v?.id ?? v?.plate ?? v?.registrationPlate;
-      if (plate) m.set(String(plate), vehicleReadings(v));
-    }
-    return m;
-  }, [vehicles]);
+  // The "Fuel now" column, the one live reading merged in per row, was taken
+  // off on 2026-11-21 (operator: "remove the column for fuel now"), so the
+  // table reads probe health alone and no longer re-renders on each frame.
+  const { orgId } = useFleetLiveShared();
   const [channel, setChannel] = useState("all");
   // Opens on the fault list. A list somebody has to filter to reach is a list
   // they stop reaching for.
@@ -302,6 +326,56 @@ export default function ProbeHealthPanel({
     });
   }, [onSelect]);
 
+  /*
+   * Several units at once (operator, 2026-11-21: "select multiple probes").
+   * Kept by vehicle id across pages and filters, like the Alerts selection,
+   * and pruned to the units the latest read still lists. What it does: flag
+   * every picked unit for repair in one go, through the same dialog one unit
+   * uses. Only for a role that may flag.
+   */
+  const { can } = usePermissions();
+  const mayFlag = can("repair:flag");
+  const [picked, setPicked] = useState(() => new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkNote, setBulkNote] = useState(null);
+  const tick = useCallback((id) => {
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    const live = new Set((data?.rows ?? []).map((r) => r.vehicleId));
+    setPicked((cur) => {
+      const kept = [...cur].filter((id) => live.has(id));
+      return kept.length === cur.size ? cur : new Set(kept);
+    });
+  }, [data]);
+  useEffect(() => {
+    if (!bulkNote) return undefined;
+    const t = setTimeout(() => setBulkNote(null), 6000);
+    return () => clearTimeout(t);
+  }, [bulkNote]);
+  const pageIds = pager.pageRows.map((r) => r.vehicleId);
+  const pageAll = pageIds.length > 0 && pageIds.every((id) => picked.has(id));
+  const pageSome = pageIds.some((id) => picked.has(id));
+  const togglePage = () => setPicked((cur) => {
+    const next = new Set(cur);
+    if (pageAll) pageIds.forEach((id) => next.delete(id)); else pageIds.forEach((id) => next.add(id));
+    return next;
+  });
+  const shownIds = new Set(rows.map((r) => r.vehicleId));
+  const offView = [...picked].filter((id) => !shownIds.has(id)).length;
+  // A unit with a repair already open is refused by the server; it stays
+  // picked but is left out of the flag, and the bar says so.
+  const flaggable = [...picked].filter((id) => !openByVehicle?.has(id));
+  const alreadyOpen = picked.size - flaggable.length;
+  const bulkCategories = (() => {
+    const c = [...new Set((data?.rows ?? []).filter((r) => flaggable.includes(r.vehicleId)).flatMap(categoriesForProbeRow))];
+    return c.length ? c : ["fuel_probe"];
+  })();
+
   const filterNote = useMemo(() => {
     const chan = CHANNELS.find(c => c.id === channel)?.label ?? "All";
     const st = status === "faulty" ? "not working" : status === "working" ? "working" : "all states";
@@ -327,7 +401,6 @@ export default function ProbeHealthPanel({
   const fleet = activeCompany?.name ?? orgCode ?? "Fleet";
   // Drivers and statuses: the fleet Excel uploaded for the organisation, kept by the server for every
   // user (operator, 13 Nov 2026), else the list built in
-  const { can } = usePermissions();
   const mayUpload = can("vehicle:update");
   const shared = useFleetList(orgId);
   const uploaded = shared.data?.current ?? null;
@@ -580,22 +653,66 @@ export default function ProbeHealthPanel({
             </div>
           ) : (
             <>
+              {mayFlag && picked.size > 0 && (
+                <div className="sp4-ph-selbar" role="region" aria-label="Selected units">
+                  <span className="sp4-ph-selbar__n">
+                    <b>{picked.size}</b> selected
+                    {offView > 0 && <span className="sp4-muted">, {offView} hidden by the filter</span>}
+                    {alreadyOpen > 0 && <span className="sp4-muted">, {alreadyOpen} already reported</span>}
+                  </span>
+                  <span className="sp4-ph-selbar__acts">
+                    <button type="button" className="sp4-act-btn sp4-act-btn--warn"
+                            disabled={!flaggable.length} onClick={() => setBulkOpen(true)}
+                            title={flaggable.length ? `Flag ${flaggable.length} for repair in one go` : "Every selected unit already has a repair open"}>
+                      Flag {flaggable.length} for repair
+                    </button>
+                    <button type="button" className="sp4-ghost-btn" onClick={() => setPicked(new Set())}>Clear</button>
+                  </span>
+                </div>
+              )}
+              {bulkNote && (
+                <div className="sp4-toast sp4-toast--ok" role="status" aria-live="polite">
+                  <span className="sp4-toast-text">{bulkNote}</span>
+                  <button type="button" className="sp4-toast-x" aria-label="Dismiss" onClick={() => setBulkNote(null)}>×</button>
+                </div>
+              )}
+              {bulkOpen && (
+                <FlagRepairDialog
+                  orgId={orgId}
+                  open
+                  presetVehicleIds={flaggable}
+                  presetCategories={bulkCategories}
+                  onClose={() => setBulkOpen(false)}
+                  onFlagged={(_, route) => {
+                    setBulkNote(`${flaggable.length} unit${flaggable.length === 1 ? "" : "s"} flagged and sent to ${route === "workshop" ? "the workshop" : route === "both" ? "ControlTech and the workshop" : "ControlTech"}.`);
+                    setPicked(new Set());
+                    onReload?.();
+                  }}
+                />
+              )}
               <div className="sp4-table-scroll sp4-ph-scroll sp4-keep-table">
                 <table className="sp4-table sp4-probe-table sp4-probe-table--comfortable">
                   <thead>
                     <tr>
-                      <th className="sp4-th--left sp4-th--pin">Unit Reg</th>
-                      <th className="sp4-th--left sp4-td--action">Action</th>
+                      <th className="sp4-th--left sp4-th--pin">
+                        {mayFlag ? (
+                          <label className="sp4-ph-unit">
+                            <input
+                              type="checkbox" className="sp4-ph-tick"
+                              checked={pageAll} onChange={togglePage}
+                              ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll; }}
+                              aria-label="Select every unit on this page"
+                            />
+                            <span>Unit Reg</span>
+                          </label>
+                        ) : "Unit Reg"}
+                      </th>
                       <th className="sp4-th--right">Last report</th>
-                      <th className="sp4-th--right">Fuel now</th>
                       <th className="sp4-th--left">Fuel probe</th>
                       <th className="sp4-th--right">Last worked</th>
-                      <th className="sp4-th--right">Last reading</th>
                       <th className="sp4-th--left">Fuel sensor</th>
                       <th className="sp4-th--left">GPS</th>
                       <th className="sp4-th--left">Ignition</th>
-                      <th className="sp4-th--right">Odometer</th>
-                      <th className="sp4-th--right">Engine hrs</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -603,10 +720,12 @@ export default function ProbeHealthPanel({
                       <ProbeRow
                         key={r.vehicleId}
                         r={r}
-                        live={liveByPlate.get(r.plate)}
                         reported={openByVehicle?.has(r.vehicleId) ?? false}
                         isSelected={selectedId === r.vehicleId}
                         onOpen={openRow}
+                        tickable={mayFlag}
+                        ticked={picked.has(r.vehicleId)}
+                        onTick={tick}
                       />
                     ))}
                   </tbody>

@@ -35,7 +35,8 @@ import FilterBar from "./FilterBar";
 import ProbeHealthPanel, { ProbeReportActions } from "./ProbeHealthPanel";
 import RepairJobsPanel from "./RepairJobsPanel";
 import RepairTrackingLine from "./RepairTrackingLine";
-import { latestRepairForVehicle, mayWorkJob } from "../../api/repairs";
+import { listRepairItems, mayWorkJob, stageLabelOf, stagePillOf } from "../../api/repairs";
+import { faultsLabel } from "../../api/repairWorkflow";
 import { faultAction } from "../../api/probeHealth";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useOpenRepairs } from "../../hooks/useOpenRepairs";
@@ -49,6 +50,8 @@ import "./SensorPanel.css";
    what stops a key written by an older build — or one since renamed — from
    reaching a `find` that returns undefined. */
 const SENSOR_TABS   = ["probes", "fuel", "speed", "malfunction", "repairs"];
+/** The Repairs tab, hidden on 2026-11-21: Workshop holds the repair jobs. */
+const SHOW_REPAIRS_TAB = false;
 const SENSOR_TAB_KEY = "ft-sensor-tab";
 
 // ── Sensor columns ─────────────────────────────────────────────────────────────
@@ -1277,6 +1280,94 @@ function lastHeard(iso) {
   return `${Math.round(h / 24)} days ago`;
 }
 
+/*
+ * Times a unit was reported for repair, and its repair history (operator,
+ * 2026-11-21). A job's date is when it was really reported: the FactorySuite
+ * job card's check-in, else the report's date, else when the row was made.
+ * The row date alone lies for imports: MUFINDI: FT 09's five FactorySuite
+ * jobs from 10-17 Nov were all made on 18 Nov.
+ *
+ * One flag files a job per fault type with the same fault text, so jobs with
+ * the same text filed within a minute of each other are one report; anything
+ * else is a report of its own. FT 09 reads 7 reports from 7 jobs.
+ */
+const REPORT_COUNT_LIMIT = 200;
+const SAME_REPORT_MS = 60000;
+const HISTORY_FIRST = 5;
+const jobReportedAt = (j) => {
+  const t = new Date(j.fsJobCards?.[0]?.checkedInAt ?? j.report?.reportedAt ?? j.createdAt).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+const jobFixedAt = (j) => {
+  const t = new Date(j.verifiedAt ?? j.resolvedAt ?? j.fsJobCards?.[0]?.releasedAt ?? NaN).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+const shortDate = (t) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+function countReports(rows) {
+  const jobs = rows
+    .map((r) => ({ at: jobReportedAt(r), fault: (r.suspectedFault ?? "").trim().toLowerCase() }))
+    .filter((j) => j.at !== null)
+    .sort((a, b) => b.at - a.at);
+  const reports = [];
+  for (const j of jobs) {
+    const same = reports.find((r) => r.fault === j.fault && Math.abs(r.at - j.at) <= SAME_REPORT_MS);
+    if (!same) reports.push(j);
+  }
+  return {
+    times: reports.length,
+    jobs: rows.length,
+    full: rows.length < REPORT_COUNT_LIMIT,
+    last: jobs.length ? shortDate(jobs[0].at) : null,
+  };
+}
+
+/** Every repair on the unit, newest first: what was wrong, what was found,
+ *  where it stands and when it was fixed. Five at first, the rest on asking. */
+function RepairHistory({ rows }) {
+  const [all, setAll] = useState(false);
+  const jobs = useMemo(
+    () => [...rows].sort((a, b) => (jobReportedAt(b) ?? 0) - (jobReportedAt(a) ?? 0)),
+    [rows],
+  );
+  if (!jobs.length) return null;
+  const shown = all ? jobs : jobs.slice(0, HISTORY_FIRST);
+  return (
+    <section className="sp4-ph-hist" aria-label="Repair history">
+      <h3 className="sp4-ph-hist__title">Repair history</h3>
+      <ol className="sp4-ph-hist__list">
+        {shown.map((j) => {
+          const reported = jobReportedAt(j);
+          const fixed = jobFixedAt(j);
+          const found = j.diagnosis || j.fixNote;
+          const ticket = j.ticketNo ?? j.fsJobCards?.[0]?.cardNumber?.replace(/^.*-(JC-)/, "$1");
+          return (
+            <li key={j.id} className="sp4-ph-hist__item">
+              <div className="sp4-ph-hist__head">
+                <span className="sp4-ph-hist__cat">{faultsLabel(j) ?? j.faultCategory ?? "Repair"}</span>
+                <span className={`sp4-pill sp4-pill--${stagePillOf(j) ?? "none"}`}>{stageLabelOf(j)}</span>
+              </div>
+              {j.suspectedFault && <p className="sp4-ph-hist__fault">{j.suspectedFault}</p>}
+              {found && found.trim().toLowerCase() !== (j.suspectedFault ?? "").trim().toLowerCase() && (
+                <p className="sp4-ph-hist__found">Found: {found}</p>
+              )}
+              <dl className="sp4-ph-hist__meta">
+                {reported !== null && (<div><dt>Reported</dt><dd>{shortDate(reported)}</dd></div>)}
+                {fixed !== null && (<div><dt>{j.stage === "failed" ? "Closed" : "Fixed"}</dt><dd>{shortDate(fixed)}</dd></div>)}
+                {ticket && (<div><dt>Job card</dt><dd>{ticket}</dd></div>)}
+              </dl>
+            </li>
+          );
+        })}
+      </ol>
+      {jobs.length > HISTORY_FIRST && (
+        <button type="button" className="sp4-ghost-btn sp4-ph-hist__more" onClick={() => setAll((v) => !v)}>
+          {all ? "Show fewer" : `Show all ${jobs.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 function SensorDetail({
   vehicleId, vehicleName, orgId, onClose,
   canSeeRepairs = false, canResolveRepairs = false, faulty = false, repairNonce = 0, inPanel = false,
@@ -1286,7 +1377,8 @@ function SensorDetail({
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
-  const { pings, loading, error } = useVehicleTelemetry(vehicleId, orgId, 50);
+  // Read only where the table is drawn: the side panel no longer shows it.
+  const { pings, loading, error } = useVehicleTelemetry(inPanel ? null : vehicleId, orgId, 50);
   const { setDesktopActiveTab, setPendingFocusId } = useAppActions();
   const [page, setPage] = useState(0);
 
@@ -1301,18 +1393,28 @@ function SensorDetail({
    * stage moves, and this re-asks. Nothing else can make the answer stale.
    */
   const [repair, setRepair] = useState(null);
+  // How many times the unit was reported (operator, 2026-11-21: "display the
+  // number of times it was reported"). Read from the same list as the
+  // newest repair. null while unknown.
+  const [reportCount, setReportCount] = useState(null);
+  const [history, setHistory] = useState([]);
   // Bumped by the sign-off below, so closing a job re-reads it and the ladder
   // lands on Fixed without a page reload.
   const [repairTick, setRepairTick] = useState(0);
   useEffect(() => {
-    if (!canSeeRepairs || !orgId || !vehicleId) { setRepair(null); return undefined; }
+    if (!canSeeRepairs || !orgId || !vehicleId) { setRepair(null); setReportCount(null); setHistory([]); return undefined; }
     let cancelled = false;
-    void latestRepairForVehicle({ orgId, vehicleId })
-      .then((r) => { if (!cancelled) setRepair(r); })
+    void listRepairItems({ orgId, vehicleId, status: "all", limit: REPORT_COUNT_LIMIT })
+      .then((rows) => {
+        if (cancelled) return;
+        setRepair(rows?.[0] ?? null);
+        setReportCount(countReports(rows ?? []));
+        setHistory(rows ?? []);
+      })
       // Silent: a missing tracking line is a panel with one fewer card on it,
       // and an error banner over the telemetry table — which loaded fine —
       // would be about the wrong thing.
-      .catch(() => { if (!cancelled) setRepair(null); });
+      .catch(() => { if (!cancelled) { setRepair(null); setReportCount(null); setHistory([]); } });
     return () => { cancelled = true; };
   }, [orgId, vehicleId, canSeeRepairs, repairNonce, repairTick]);
 
@@ -1340,12 +1442,10 @@ function SensorDetail({
       {inPanel ? (
         /* In the detail sidebar: the unit heads the panel, its × closes it and
            View on Map sits in the panel's foot (SensorPanel). */
-        <DetailSidebarIdent name={vehicleName} sub={`Sensor readings, past 1 hour · ${pings.length} pings`}>
-          <span className="sp4-detail-panel-actions">
-            <button className="sp4-ghost-btn" onClick={handlePDF} title="Download as text file">Export</button>
-            <button className="sp4-ghost-btn" onClick={handlePrint} title="Print this table">Print</button>
-          </span>
-        </DetailSidebarIdent>
+        <DetailSidebarIdent
+          name={vehicleName}
+          sub={lastReportedAt ? `Last report ${lastHeard(lastReportedAt)}` : lastReportedAt === "" ? "No report on record" : null}
+        />
       ) : (
       <div className="sp4-detail-head">
         {/* Classed so the stylesheet can give it a floor. As a bare <div> it
@@ -1379,6 +1479,19 @@ function SensorDetail({
           answer. Absent entirely when the unit has never been reported. */}
       {/* Rendered for a FAULTY unit even with no repair against it: that is
           the first rung, not an absence. A healthy unit still gets nothing. */}
+      {inPanel && reportCount && (
+        <section className="sp4-ph-count" aria-label="Times reported">
+          <span className="sp4-ph-count__n">{reportCount.full ? reportCount.times.toLocaleString() : `${reportCount.times.toLocaleString()}+`}</span>
+          <span className="sp4-ph-count__words">
+            <span className="sp4-ph-count__label">{reportCount.times === 1 ? "Time reported" : "Times reported"}</span>
+            <span className="sp4-ph-count__sub">
+              {reportCount.times === 0
+                ? "Never reported for repair"
+                : `${reportCount.jobs.toLocaleString()} repair ${reportCount.jobs === 1 ? "job" : "jobs"}, last on ${reportCount.last}`}
+            </span>
+          </span>
+        </section>
+      )}
       {(repair || faulty) && (
         <RepairTrackingLine
           item={repair}
@@ -1395,8 +1508,12 @@ function SensorDetail({
           {reportActions}
         </section>
       )}
+      {inPanel && <RepairHistory rows={history} />}
 
-      {loading ? (
+      {/* The readings table stays out of the side panel (operator,
+          2026-11-21: "remove the card"): the panel is the unit's repair line
+          and its report actions. */}
+      {inPanel ? null : loading ? (
         <div className="sp4-loading"><div className="sp4-spinner" />Loading sensor readings…</div>
       ) : error ? (
         <div className="sp4-error">⚠ {error}</div>
@@ -1726,7 +1843,9 @@ export default function SensorPanel() {
        than a button on the probe row because a job is signed off days after it
        is raised, by which time the unit's HEALTH has moved and the row that
        raised it may no longer be under the filter that found it. */
-    { key: "repairs",     allow: canRepairRead,
+    // Hidden 2026-11-21 (operator: "hide the repairs page in maintenance").
+    // Repair jobs are worked in Workshop; the panel code stays for a return.
+    { key: "repairs",     allow: SHOW_REPAIRS_TAB && canRepairRead,
       label: "Repairs",     count: openRepairs.loading ? pending : openRepairs.openCount,
       hint: "Open repair jobs, sign one off once the fix has held" },
   ];
@@ -1990,8 +2109,8 @@ export default function SensorPanel() {
             that the readings table is four columns. */}
         {sensorOpen && (
           <DetailSidebar
-            title="Sensor readings"
-            label={`Sensor readings, ${selectedAnomaly.vehicleName}`}
+            title="Probe and repair"
+            label={`Probe and repair, ${selectedAnomaly.vehicleName}`}
             itemKey={selectedAnomaly.vehicleId}
             onClose={closeSelected}
             footer={can("map:read") ? (
@@ -2086,7 +2205,7 @@ export default function SensorPanel() {
                 or "Unresolved" searched a list that could not contain them.
                 `onReload` stays: a sign-off releases the unit, and the Probes
                 table's badge has to clear with it. */}
-            {activeTab === "repairs" && (
+            {SHOW_REPAIRS_TAB && activeTab === "repairs" && (
               <RepairJobsPanel
                 orgId={orgId}
                 onReload={openRepairs.reload}

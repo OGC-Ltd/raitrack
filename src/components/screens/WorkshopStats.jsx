@@ -221,6 +221,69 @@ export function JobsStrip({ open, history, bucketOf, loading }) {
   );
 }
 
+// ── ControlTech ─────────────────────────────────────────────────────────────
+
+const CT_MIX = [
+  { key: "waiting", label: "Waiting", mix: "new" },
+  { key: "working", label: "With a technician", mix: "fair" },
+  { key: "held", label: "Not forwarded", mix: "good" },
+];
+
+/**
+ * The Jobs strip, read for ControlTech's jobs alone (operator, 2026-11-21):
+ * open now and the oldest, flagged against fixed over the window, and the
+ * median time from the flag to the fix. groupOf: ctGroup.
+ */
+export function ControlTechStrip({ open, history, groupOf, loading }) {
+  const days = windowDays();
+  const hist = history ?? [];
+  // When the fault was really raised: a FactorySuite import's row is made
+  // when it is imported, sometimes after the job closed.
+  const startOf = (j) => j.fsJobCards?.[0]?.checkedInAt ?? j.report?.reportedAt ?? j.createdAt;
+  const rows = series(days, [
+    ["flagged", hist, startOf],
+    ["fixed", hist.filter((j) => j.stage === "fixed"), (j) => j.resolvedAt],
+  ]);
+  const ages = open.map((j) => hoursSince(startOf(j))).filter((h) => h != null);
+  const longest = ages.length ? Math.max(...ages) : null;
+  const closedIn = hist.filter((j) => j.resolvedAt && inWindow(days, j.resolvedAt));
+  const fixedIn = closedIn.filter((j) => j.stage === "fixed");
+  const failed = closedIn.filter((j) => j.stage === "failed").length;
+  // Sent on by a ControlTech technician, not imported already in the workshop.
+  const toWorkshop = hist.filter((j) => j.path === "physical" && j.pathDecidedById && inWindow(days, j.pathDecidedAt)).length;
+  return (
+    <Frame label="ControlTech jobs">
+      <LeadCell
+        label="Open jobs" loading={loading} busy="Reading the jobs…"
+        figure={fmt(open.length)}
+        caption={<>{plural(open.length, "job")} open now,<br />{longest == null ? "none waiting" : `oldest ${stay(longest)}`}</>}
+        facts={[
+          { label: "Open over 3 days", value: ages.filter((h) => h > 72).length },
+          { label: "Units", value: new Set(open.map((j) => j.vehicleId)).size },
+          { label: "Unclaimed", value: open.filter((j) => !j.assignedToId).length },
+        ]}
+        mixLabel="Stands"
+        mix={CT_MIX.map((m) => ({ ...m, n: open.filter((j) => groupOf(j) === m.key).length }))}
+      />
+      <Trends rows={rows} days={days} loading={!history}
+              bar={{ title: "Jobs flagged", key: "flagged", unit: "job", what: "ControlTech jobs flagged", words: "flagged", upIsBad: true }}
+              line={{ title: "Fixed", key: "fixed", unit: "job", words: "fixed" }} />
+      <WatchCell
+        loading={!history}
+        figure={stay(median(fixedIn.map((j) => hoursBetween(startOf(j), j.resolvedAt)).filter((h) => h != null && h >= 0)))}
+        caption={<>median time,<br />flagged to fixed</>}
+        title="ControlTech jobs fixed in the period, from the flag to the close"
+        clean={!failed}
+        rows={[
+          { name: "Closed not fixed", n: failed, tone: "theft" },
+          { name: "Voided", n: closedIn.filter((j) => j.stage === "void").length, tone: "speed" },
+          { name: "Sent on to the workshop", n: toWorkshop, tone: null, hint: "Jobs a technician decided need a physical visit" },
+        ]}
+      />
+    </Frame>
+  );
+}
+
 // ── My jobs ──────────────────────────────────────────────────────────────────
 
 const MINE_MIX = [

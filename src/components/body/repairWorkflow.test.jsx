@@ -138,7 +138,7 @@ describe('the flag dialog', () => {
       orgId: 'o', open: true, onClose() {}, presetVehicleId: 'v1', presetCategories: ['gps', 'brakes'],
     }));
     expect(html.match(/aria-checked="true"/g)).toHaveLength(2);
-    expect(html).toContain('GPS to ControlTech, Brakes to the workshop: one job each.');
+    expect(html).toContain('GPS to ControlTech as one job, Brakes to the workshop.');
   });
 });
 

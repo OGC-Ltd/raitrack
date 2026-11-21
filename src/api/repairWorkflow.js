@@ -41,6 +41,17 @@ export const CATEGORY_GROUPS = [
 export const CATEGORY_LABEL = Object.fromEntries(CATEGORY_GROUPS.flatMap(([, list]) => list));
 export const TELEMATICS = new Set(["fuel_probe", "tracker", "gps", "ignition", "sensor"]);
 
+/**
+ * A job's faults by name. A flag's telematics faults on one unit are one
+ * ControlTech job (operator, 2026-11-21), listed in `faultCategories`, so it
+ * reads "Fuel probe, GPS". Older jobs cover their `faultCategory` alone.
+ */
+export function faultsLabel(job) {
+  const cats = job?.faultCategories?.length > 1 ? job.faultCategories : null;
+  if (cats) return cats.map((c) => CATEGORY_LABEL[c] ?? c).join(", ");
+  return CATEGORY_LABEL[job?.faultCategory] ?? (job?.targetKind === "probe" ? "Fuel probe" : null);
+}
+
 /** Where a flag goes, said before it is sent. */
 export function routeOf(category, chosenQueue) {
   if (TELEMATICS.has(category)) return "controltech";

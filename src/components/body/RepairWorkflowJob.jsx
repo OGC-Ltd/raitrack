@@ -28,10 +28,9 @@ import {
   fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, decidePath, assessJob,
   bookJob, cancelBooking, arriveJob, assignWorkshop, voidWarranty, clearWarranty, addWork,
   voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
-  CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
+  PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
   INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, WORK_KINDS_AT, workKindsFor, loggedThisStage, editWork, deleteWork, componentLabel, routeOf,
-  fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard,
-} from "../../api/repairWorkflow";
+  fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard, faultsLabel } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
 const WHEN = new Intl.DateTimeFormat("en-GB", {
@@ -44,7 +43,7 @@ export const at = (iso) => (iso ? WHEN.format(new Date(iso)) : "-");
 const dayLabel = (iso) => (iso ? DAY.format(new Date(`${String(iso).slice(0, 10)}T00:00:00Z`)) : "-");
 
 export function jobLabel(job) {
-  return CATEGORY_LABEL[job?.faultCategory] ?? (job?.targetKind === "probe" ? "Fuel probe" : "Fault");
+  return faultsLabel(job) ?? "Fault";
 }
 
 /**

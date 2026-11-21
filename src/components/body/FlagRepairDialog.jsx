@@ -18,14 +18,16 @@ import useFocusTrap from "../../hooks/useFocusTrap";
 import { CATEGORY_GROUPS, CATEGORY_LABEL, fetchFlaggableUnits, flagUnits, routeOf, routeOfAll } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
-export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, presetVehicleId = null, presetCategories = [] }) {
+// presetVehicleIds: several units at once, from the Probes tab's selection
+// (operator, 2026-11-21: "select multiple probes").
+export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, presetVehicleId = null, presetVehicleIds = null, presetCategories = [] }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   useFocusTrap(dialogRef, open);
 
   const [units, setUnits] = useState(null);
   const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState(() => (presetVehicleId ? [presetVehicleId] : []));
+  const [picked, setPicked] = useState(() => (presetVehicleIds?.length ? [...presetVehicleIds] : presetVehicleId ? [presetVehicleId] : []));
   const [categories, setCategories] = useState(presetCategories);
   const toggle = (id) => setCategories((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]));
   const [fault, setFault] = useState("");
@@ -57,7 +59,10 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
   const route = routeOfAll(categories, queue);
   const ok = picked.length > 0 && categories.length > 0 && fault.trim().length > 0;
   const listOf = (to) => categories.filter((c) => routeOf(c, queue) === to).map((c) => CATEGORY_LABEL[c]).join(", ");
-  const jobs = picked.length * categories.length;
+  // Every ControlTech fault on a unit is one job with one ticket (operator,
+  // 2026-11-21); each workshop fault is a job of its own.
+  const ctCount = categories.filter((c) => routeOf(c, queue) === "controltech").length;
+  const jobs = picked.length * ((ctCount > 0 ? 1 : 0) + (categories.length - ctCount));
 
   const send = async () => {
     if (!ok || busy) return;
@@ -158,10 +163,10 @@ export default function FlagRepairDialog({ orgId, open, onClose, onFlagged, pres
               <i className={`ti ${route === "controltech" ? "ti-router" : "ti-tool"}`} aria-hidden="true" />
               {!forward ? "Recorded as pending; forward it from the job later."
                 : route === "controltech"
-                  ? `${listOf("controltech")} ${categories.length > 1 ? "go" : "goes"} to the ControlTech queue. A technician claims it and decides remote or physical.`
+                  ? `${listOf("controltech")} ${categories.length > 1 ? "go to the ControlTech queue as one job, with one ticket" : "goes to the ControlTech queue"}. A technician claims it and decides remote or physical.`
                   : route === "workshop"
                     ? `${listOf("workshop")} ${categories.length > 1 ? "go" : "goes"} straight to the workshop. The Control Room assesses whether it can be driven there.`
-                    : `${listOf("controltech")} to ControlTech, ${listOf("workshop")} to the workshop: one job each.`}
+                    : `${listOf("controltech")} to ControlTech as one job, ${listOf("workshop")} to the workshop${categories.length - ctCount > 1 ? ", one job each" : ""}.`}
             </p>
           )}
         </div>

@@ -31,10 +31,10 @@ import { REPAIRS_CHANGED, STAGE_LABEL, stageLabelOf, stagePillOf } from "../../a
 import {
   listWorkflowJobs, listWorkflowJobsSince, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, viewOnly, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
-  takeWorkshopHandoff, WORKSHOP_OPEN, shortCard,
+  takeWorkshopHandoff, WORKSHOP_OPEN, shortCard, TELEMATICS,
 } from "../../api/repairWorkflow";
 import FactoryWorkshopTab, { StateLine } from "./FactoryWorkshopTab";
-import { JobsStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay, dayCounts, dayStay, dayHasRecords } from "./WorkshopStats";
+import { JobsStrip, ControlTechStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay, dayCounts, dayStay, dayHasRecords } from "./WorkshopStats";
 import RepairWorkflowJob, { PhaseLadder, TrailList, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
 import { usePager } from "../body/TablePager";
@@ -52,6 +52,7 @@ const BUCKETS = [
 /** Each view's title and the line under it, as the Staffs page heads its views. */
 const VIEW_HEAD = {
   jobs:     ["Repair jobs", "Every repair job, where it stands and who acts next"],
+  controltech: ["ControlTech", "Units flagged with a telematics fault, for ControlTech to fix"],
   mine:     ["My jobs", "Jobs assigned to you, open and closed"],
   day:      ["Workshop day", "Each workshop's bookings, one day at a time"],
   security: ["Security cases", "Suspected malicious damage found in repairs"],
@@ -311,6 +312,151 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
               })}
         </WfGrid>
       )}
+    </>
+  );
+}
+
+// ── ControlTech ─────────────────────────────────────────────────────────────
+
+/** Where an open ControlTech job stands: not forwarded yet, waiting to be claimed, or with a technician. */
+export const ctGroup = (j) => (j.stage === "pending" ? "held" : !j.assignedToId ? "waiting" : "working");
+const CT_GROUPS = [["waiting", "Waiting"], ["working", "With a technician"], ["held", "Not forwarded"]];
+/**
+ * A job of ControlTech's. Open: on its queue, or a telematics flag the Control
+ * Room has not forwarded yet. Closed: it was on the queue, or was a telematics
+ * fault, wherever it ended.
+ */
+export const isControlTech = (j) => (j.resolvedAt
+  ? j.queue === "controltech" || TELEMATICS.has(j.faultCategory)
+  : j.queue === "controltech" || (j.stage === "pending" && TELEMATICS.has(j.faultCategory)));
+
+/**
+ * ControlTech's page (operator, 2026-11-21: "when a unit or units are flagged
+ * for repair they will be displayed on the control tech page in workshop"),
+ * laid out as the Jobs tab (operator, same day: "design the controltech page
+ * to match that of jobs"): the same strip, Open and Closed, the same columns,
+ * with Flagged and Technician where Jobs has the workshop's day and times,
+ * which a remote fix never has. Oldest first, as the queue is worked;
+ * unclaimed jobs carry the Claim button for whoever may claim.
+ */
+function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim }) {
+  const [state, setState] = useState("open");
+  const [group, setGroup] = useState("all");
+  const [flagging, setFlagging] = useState(false);
+  const [search, setSearch] = useState("");
+  const jobs = useLive(() => listWorkflowJobs(orgId, { status: state === "closed" ? "all" : "open" }).then((r) => r.filter(isControlTech)), [orgId, state]);
+  const openRead = useLive(() => (state === "open" ? null : listWorkflowJobs(orgId, { status: "open" }).then((r) => r.filter(isControlTech))), [orgId, state]);
+  const openJobs = state === "open" ? jobs : openRead;
+  const history = useLive(() => listWorkflowJobsSince(orgId, Date.now() - (STAT_DAYS + 31) * 86_400_000).then((r) => r.filter(isControlTech)), [orgId]);
+  const [busy, setBusy] = useState(null);
+  const claim = async (r) => {
+    setBusy(r.id);
+    try {
+      await claimJob(orgId, r.id);
+      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} is yours.` });
+      onOpen(r.id);
+    } catch (e) {
+      onToast({ tone: "crit", text: e?.message || "Could not claim the job." });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const q = search.trim().toLowerCase();
+  const all = (jobs.data ?? [])
+    .filter((j) => (state === "closed" ? !!j.resolvedAt : true))
+    .filter((j) => !q || jobText(j).includes(q))
+    .sort((a, b) => (state === "closed"
+      ? new Date(b.resolvedAt) - new Date(a.resolvedAt)
+      : new Date(a.forwardedAt ?? a.createdAt) - new Date(b.forwardedAt ?? b.createdAt)));
+  const counts = Object.fromEntries(CT_GROUPS.map(([k]) => [k, all.filter((j) => ctGroup(j) === k).length]));
+  const rows = state === "closed" || group === "all" ? all : all.filter((j) => ctGroup(j) === group);
+  const pager = usePager(rows, `${state}|${group}|${q}`);
+
+  return (
+    <>
+      <ControlTechStrip open={(openJobs.data ?? []).filter((j) => !j.resolvedAt)} history={history.data}
+                        groupOf={ctGroup} loading={openJobs.loading && !openJobs.data} />
+      <WfFilters
+        label="Search ControlTech jobs" placeholder="Search reg, ticket or fault…" search={search} onSearch={setSearch}
+        groups={[
+          { label: "Jobs", value: state, onPick: (id) => { setState(id); setGroup("all"); }, options: [["open", "Open"], ["closed", "Closed"]] },
+          ...(state === "open" ? [{ label: "Stands", value: group, onPick: setGroup,
+            options: [["all", "Everyone", all.length], ...CT_GROUPS.map(([id, label]) => [id, label, counts[id]])] }] : []),
+        ]}
+        tools={<>
+          {can("repair:flag") && (
+            <button type="button" className="sp4-submit-btn wf-flag-btn" onClick={() => setFlagging(true)}>
+              <i className="ti ti-flag" aria-hidden="true" /> Flag for repair
+            </button>
+          )}
+          <Reload loading={jobs.loading} onReload={jobs.read} />
+        </>}
+      />
+
+      {rows.length === 0 && jobs.loading ? (
+        <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the ControlTech Jobs">Units flagged with a telematics fault.</EmptyNote>
+      ) : rows.length === 0 && jobs.error ? (
+        <EmptyNote icon="ti-alert-triangle" tone="error" title="ControlTech Jobs Could Not Be Loaded" action={{ label: "Try again", onClick: jobs.read }}>{jobs.error}</EmptyNote>
+      ) : rows.length === 0 && q ? (
+        <EmptyNote icon="ti-search" title="No Jobs Match" action={{ label: "Clear search", onClick: () => setSearch("") }}>
+          Nothing {state === "open" ? "open" : "closed"} matches “{search.trim()}”. The search reads the reg, ticket, fault, stage and who is next.
+        </EmptyNote>
+      ) : rows.length === 0 ? (
+        <EmptyNote icon="ti-circle-check" title={state === "open" ? "Nothing With ControlTech" : "No Closed ControlTech Jobs Yet"}
+                   action={state === "open" && can("repair:flag") ? { label: "Flag for repair", onClick: () => setFlagging(true) } : null}>
+          {state === "open"
+            ? "No unit is flagged with a telematics fault. A flag for a fuel probe, tracker, GPS, ignition or sensor lands here."
+            : "No telematics job has been verified, signed off or voided yet."}
+        </EmptyNote>
+      ) : (
+        <WfGrid label="ControlTech job pages" pager={pager}
+                head={[["Unit reg"], ["Fault"], ["Status"], ["Stage"], ["Ticket"], ["Flagged"], ["Technician"], ["Next"], [state === "closed" ? "Closed" : "In stage", true]]}>
+              {pager.pageRows.map((j) => {
+                const next = NEXT_STEP[j.stage];
+                const open = () => onOpen(j.id);
+                const by = j.report?.reportedBy?.fullName;
+                return (
+                  <tr key={j.id} data-job={j.id} {...rowProps(openId === j.id, open)}>
+                    <td><Ident name={j.vehicle?.registrationPlate ?? "-"} sub={j.vehicle?.name !== j.vehicle?.registrationPlate ? j.vehicle?.name : null} /></td>
+                    <td>
+                      <span className="wf-cell-fault">{jobLabel(j)}</span>
+                      {(j.suspectedFault ?? j.problemNote) && <span className="wf-cell-sub">{j.suspectedFault ?? j.problemNote}</span>}
+                    </td>
+                    <td><Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge></td>
+                    <td><PhaseLadder stage={j.stage} compact /></td>
+                    <td>
+                      <span className="dr-veh">{j.ticketNo ?? "-"}</span>
+                      {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="dr-veh">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
+                    </td>
+                    <td className="sys-num">
+                      {at(j.report?.reportedAt ?? j.createdAt)}
+                      {by && <span className="wf-cell-sub">{by}</span>}
+                    </td>
+                    <td>
+                      {j.assignedTo?.fullName ?? (j.resolvedAt || !canClaim ? <span className="sp4-muted">Unclaimed</span> : (
+                        <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
+                                onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Claiming…" : "Claim"}</button>
+                      ))}
+                    </td>
+                    <td>{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
+                    <td className="dr-num sys-num">{j.resolvedAt ? at(j.resolvedAt) : since(j.stageChangedAt ?? j.forwardedAt ?? j.createdAt)}</td>
+                  </tr>
+                );
+              })}
+        </WfGrid>
+      )}
+
+      <FlagRepairDialog
+        orgId={orgId}
+        open={flagging}
+        onClose={() => setFlagging(false)}
+        presetCategories={["fuel_probe"]}
+        onFlagged={(made, route) => {
+          const units = new Set(made.map((j) => j?.vehicleId ?? j?.id)).size;
+          onToast({ tone: "ok", text: `${units} unit${units === 1 ? "" : "s"} flagged${route === "controltech" ? " and sent to ControlTech" : route === "workshop" ? " and sent to the workshop" : route === "both" ? " and sent to ControlTech and the workshop" : ""}.` });
+          if (made.length === 1 && made[0]?.id) onOpen(made[0].id);
+        }}
+      />
     </>
   );
 }
@@ -684,6 +830,8 @@ export default function WorkshopScreen() {
     // Auto Workshop leads where the org has it (operator, 2026-11-21).
     { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) },
     { key: "jobs",     label: "Jobs",          allow: board },
+    // Flagged units for ControlTech to see (operator, 2026-11-21).
+    { key: "controltech", label: "ControlTech", allow: board || can("repair:claim") },
     { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
     { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
@@ -745,6 +893,7 @@ export default function WorkshopScreen() {
 
           <div className="dr-layout wf-layout">
             {active === "jobs" && <JobsTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} />}
+            {active === "controltech" && <ControlTechTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
             {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={look("repair:claim")} />}
             {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
             {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}

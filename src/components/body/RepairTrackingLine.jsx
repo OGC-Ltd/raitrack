@@ -36,7 +36,6 @@ import { useMemo, useState } from "react";
 import {
   trackingLine, STAGE_LABEL, SETTABLE_STAGES, estimateState, setRepairStage, stageChipState, STAGE_CHIP_CLASS,
 } from "../../api/repairs";
-import RepairSignOffDialog from "./RepairSignOffDialog";
 import OpenInWorkshop from "./OpenInWorkshop";
 
 /** `16 Sep · 14:02`. Local, because the technician reading it is standing in
@@ -74,11 +73,9 @@ export default function RepairTrackingLine({
     item?.stageHistory?.at?.(-1)?.at ?? "",
   ].join(":");
 
-  /* null = closed; "fixed" | "failed" = the dialog, seeded with that verdict.
-     The two buttons only CHOOSE which end the dialog opens on — it stays
-     changeable in there, because "unsuccessful" is a thing people click and
-     then reconsider once they have to write down why. */
-  const [marking, setMarking] = useState(null);
+  /* Mark unsuccessful, and the sign-off dialog it opened, were taken off
+     this card on 2026-11-21 (operator: "the option to mark unsuccessful
+     should be removed"). A job is closed in Workshop. */
 
   /* The one-click stage move, and the one place it can fail out loud. The
      Repairs tab has a toast for this; here the ladder is the whole component,
@@ -248,22 +245,9 @@ export default function RepairTrackingLine({
           <span className="sp4-track-mark-label">Close this job</span>
           {/* Fixed is the Control Room's to say after verification, in Workshop. */}
           <OpenInWorkshop itemId={item.id} />
-          <button type="button" className="sp4-ghost-btn sp4-ghost-btn--crit"
-                  onClick={() => setMarking("failed")}>
-            Mark unsuccessful
-          </button>
         </div>
       )}
 
-      <RepairSignOffDialog
-        open={marking !== null}
-        item={item}
-        orgId={orgId}
-        initialVerdict={marking ?? "fixed"}
-        onClose={() => setMarking(null)}
-        onDone={onChanged}
-        onError={onError}
-      />
     </section>
   );
 }

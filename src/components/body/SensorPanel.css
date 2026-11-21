@@ -4430,3 +4430,180 @@
 /* The Excel button when its file could not be made (body/TableToolbar); the reason is in its title */
 .sp4-ghost-btn.sp4-ghost-btn--error { color: #b42318; border-color: #f1b5ae; }
 
+
+/* Probes: several units at once (operator, 2026-11-21). A native tick in the
+   pinned unit cell, so the held column stays one column, and a bar over the
+   table that says what is picked and flags it, as the Alerts selection does. */
+.sp4-ph-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp4-xs);
+}
+.sp4-ph-tick {
+  inline-size: 16px;
+  block-size: 16px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--sp4-accent);
+  cursor: pointer;
+}
+.sp4-ph-tick:focus-visible {
+  outline: 2px solid var(--sp4-accent);
+  outline-offset: 2px;
+}
+.sp4-ph-selbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp4-xs) var(--sp4-sm);
+  margin: var(--sp4-sm) var(--sp4-gutter) 0;
+  padding: var(--sp4-xs) var(--sp4-sm);
+  border: 1px solid color-mix(in srgb, var(--sp4-accent) 35%, var(--sp4-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sp4-accent) 6%, var(--sp4-surface));
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+}
+.sp4-ph-selbar__n b { color: var(--sp4-text-1); }
+.sp4-ph-selbar__acts { display: inline-flex; flex-wrap: wrap; gap: var(--sp4-xs); margin-inline-start: auto; }
+.sp4-ph-selbar .sp4-act-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 767px) {
+  .sp4-ph-selbar { margin-block-end: var(--sp4-sm); }
+}
+
+/* Probes: one status form per column (operator, 2026-11-21). The tone sets
+   the colour, the form sets the column: outline (Fuel sensor), icon and word
+   (GPS), word on a bar (Ignition). Fuel probe keeps .sp4-pill. Sentence case
+   and untracked, so the filled pill stays the loudest mark in the row. */
+.sp4-ph-st {
+  --st: var(--sp4-text-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp4-2xs);
+  font-family: var(--font-body);
+  font-size: var(--sp4-body);
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--st);
+}
+.sp4-ph-st--ok   { --st: var(--sp4-ok); }
+.sp4-ph-st--warn { --st: var(--sp4-warn); }
+.sp4-ph-st--crit { --st: var(--sp4-crit); }
+.sp4-ph-st--none { --st: var(--sp4-text-4); }
+.sp4-ph-st--outline {
+  padding: 2px 8px;
+  border: 1px solid var(--st);
+  border-radius: 999px;
+}
+.sp4-ph-st--icon .ti { font-size: 15px; }
+.sp4-ph-st--rule {
+  padding-inline-start: var(--sp4-xs);
+  border-inline-start: 3px solid var(--st);
+}
+
+/* Probes: Last worked as a line over the 30-day window (operator,
+   2026-11-21). Now is the right end; the coloured stretch is the time since
+   the probe last worked. Drawn at rest, nothing animates. */
+.sp4-ph-since {
+  --st: var(--sp4-text-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp4-xs);
+  white-space: nowrap;
+}
+.sp4-ph-since--ok   { --st: var(--sp4-ok); }
+.sp4-ph-since--warn { --st: var(--sp4-warn); }
+.sp4-ph-since--crit { --st: var(--sp4-crit); }
+.sp4-ph-since__line {
+  position: relative;
+  inline-size: 64px;
+  block-size: 4px;
+  border-radius: 2px;
+  background: var(--sp4-line-hi);
+  overflow: hidden;
+  flex: none;
+}
+.sp4-ph-since__gap {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  border-radius: 2px;
+  background: var(--st);
+}
+.sp4-ph-since__words { min-inline-size: 5.5ch; text-align: end; }
+
+/* Fuel sensor: the icon alone, in its tone (operator, 2026-11-21). */
+.sp4-ph-st--glyph .ti { font-size: 18px; }
+/* The full sensor state for screen readers; OK / Warn / None is what shows. */
+.sp4-ph-sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Probes: a repair already open, under the plate since the Action column
+   left (operator, 2026-11-21). */
+.sp4-ph-reported {
+  margin-block-start: var(--sp4-3xs);
+  font-size: var(--sp4-label);
+  font-weight: 700;
+  color: var(--sp4-warn);
+}
+
+/* Side panel: how many times the unit was reported (operator, 2026-11-21).
+   The number large, its meaning beside it. */
+.sp4-ph-count {
+  display: flex;
+  align-items: center;
+  gap: var(--sp4-sm);
+  padding: var(--sp4-sm) 0;
+  border-block-end: 1px solid var(--sp4-line-hi);
+}
+.sp4-ph-count__n {
+  font-size: var(--sp4-num);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--sp4-text-1);
+  font-variant-numeric: tabular-nums;
+}
+.sp4-ph-count__words { display: flex; flex-direction: column; gap: var(--sp4-3xs); min-inline-size: 0; }
+.sp4-ph-count__label { font-size: var(--sp4-strong); font-weight: 600; color: var(--sp4-text-1); }
+.sp4-ph-count__sub { font-size: var(--sp4-body); color: var(--sp4-text-3); }
+
+/* Side panel: every repair on the unit, newest first (operator,
+   2026-11-21). One entry per job, split by hairlines, the dates as a small
+   label-and-value row rather than a joined string. */
+.sp4-ph-hist { padding: var(--sp4-sm) 0; border-block-start: 1px solid var(--sp4-line-hi); }
+.sp4-ph-hist__title {
+  margin: 0 0 var(--sp4-xs);
+  font-size: var(--sp4-strong);
+  font-weight: 600;
+  color: var(--sp4-text-1);
+}
+.sp4-ph-hist__list { list-style: none; margin: 0; padding: 0; }
+.sp4-ph-hist__item { padding: var(--sp4-xs) 0; border-block-end: 1px solid var(--sp4-line-hi); }
+.sp4-ph-hist__item:last-child { border-block-end: 0; }
+.sp4-ph-hist__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp4-xs); }
+.sp4-ph-hist__cat { font-size: var(--sp4-body); font-weight: 600; color: var(--sp4-text-1); }
+.sp4-ph-hist__fault,
+.sp4-ph-hist__found {
+  margin: var(--sp4-2xs) 0 0;
+  font-size: var(--sp4-body);
+  color: var(--sp4-text-2);
+  overflow-wrap: break-word;
+  min-inline-size: 0;
+}
+.sp4-ph-hist__found { color: var(--sp4-text-3); }
+.sp4-ph-hist__meta { display: flex; flex-wrap: wrap; gap: var(--sp4-2xs) var(--sp4-md); margin: var(--sp4-xs) 0 0; }
+.sp4-ph-hist__meta div { display: flex; gap: var(--sp4-2xs); }
+.sp4-ph-hist__meta dt { font-size: var(--sp4-body); color: var(--sp4-text-3); }
+.sp4-ph-hist__meta dd { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-2); font-variant-numeric: tabular-nums; }
+.sp4-ph-hist__more { margin-block-start: var(--sp4-xs); }
