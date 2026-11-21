@@ -56,7 +56,7 @@ describe('the job panel shows the one next step, to whoever may take it', () => 
     expect(render(j, grants('repair:assess', 'repair:book'))).toContain('Can it safely reach the Auto Workshop?');
     const op = render(j, grants('repair:book', 'repair:flag'));
     expect(op).not.toContain('Record assessment');
-    expect(op).toContain('Nothing for you to do here');
+    expect(op).not.toContain('Nothing for you to do here');
   });
 
   it('opens the booking strip once a unit is assessed roadworthy', () => {

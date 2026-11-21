@@ -90,15 +90,12 @@ function liveCard(job) {
   const open = (job.fsJobCards ?? []).filter((c) => c.status !== "RELEASED" && c.status !== "CANCELLED");
   return open.at(-1) ?? null;
 }
-const CARD_AT = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-const cardAt = (iso) => (iso ? CARD_AT.format(new Date(iso)) : null);
 /** What the card says is happening to the machine, in one line. */
 function cardStory(c) {
-  const since = (iso) => (iso ? ` since ${cardAt(iso)}` : "");
-  if (c.status === "COMPLETED" || c.workCompletedAt) return `Work done${c.workCompletedAt ? ` ${cardAt(c.workCompletedAt)}` : ""}. Waiting to be released in FactorySuite`;
-  if (c.status === "AWAITING_PARTS" || (c.partsRequestedAt && !c.partsReceivedAt)) return `Waiting on parts in the Auto Workshop${since(c.partsRequestedAt ?? c.checkedInAt)}`;
-  if (c.repairStartedAt) return `Being repaired in the Auto Workshop${since(c.repairStartedAt)}`;
-  return `Checked into the Auto Workshop${since(c.checkedInAt)}. Repair not started`;
+  if (c.status === "COMPLETED" || c.workCompletedAt) return "Work done. Waiting to be released in FactorySuite";
+  if (c.status === "AWAITING_PARTS" || (c.partsRequestedAt && !c.partsReceivedAt)) return "Waiting on parts in the Auto Workshop";
+  if (c.repairStartedAt) return "Being repaired in the Auto Workshop";
+  return "Checked into the Auto Workshop. Repair not started";
 }
 
 function Fact({ label, children }) {
@@ -1075,12 +1072,10 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
             </button>
           </div>
         )}
-        {!action && !closed && (
+        {!action && !closed && !card && (s === "spare_outsourced" || (s === "forwarded" && job.assignedToId)) && (
           <p className="wf-muted">
-            {s === "forwarded" && job.assignedToId ? `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`
-              : s === "spare_outsourced" ? "Waiting on spare parts. Each part's progress is under Spare parts below."
-                : card ? "FactorySuite moves this job. It completes when the machine is released there."
-                  : "Waiting on the people above. Nothing for you to do here."}
+            {s === "spare_outsourced" ? "Waiting on spare parts. Each part's progress is under Spare parts below."
+              : `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`}
           </p>
         )}
       </section>
