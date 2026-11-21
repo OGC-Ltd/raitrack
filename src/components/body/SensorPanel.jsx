@@ -1586,17 +1586,11 @@ export default function SensorPanel() {
   const { orgId, vehicles } = useFleetLiveShared();
   const { user } = useAuth();
   const { anomalies, loading } = useSensorHealth();
-  // flaggedOnly: a technician, limited to units with an open repair job. They
-  // see Probes for those units only, and no Malfunction tab (operator,
-  // 2026-11-21). The server sends them only those units' probes as well.
-  const { flaggedOnly, vehicleIds } = usePermissions();
-  const probeHealthAll = useProbeHealth();
-  const probeHealth = useMemo(() => {
-    if (!flaggedOnly || !vehicleIds || !probeHealthAll.data) return probeHealthAll;
-    const mine = new Set(vehicleIds);
-    const rows = (probeHealthAll.data.rows ?? []).filter((r) => mine.has(r.vehicleId));
-    return { ...probeHealthAll, data: { ...probeHealthAll.data, rows, summary: { ...probeHealthAll.data.summary, total: rows.length } } };
-  }, [probeHealthAll, flaggedOnly, vehicleIds]);
+  // flaggedOnly: a technician. They see Probes for every unit, on the Not
+  // working state alone, and no other tab (operator, 2026-11-21: "it should
+  // pull all data not limited to the reported one").
+  const { flaggedOnly } = usePermissions();
+  const probeHealth = useProbeHealth();
 
   /* Which of these four resources this account may see at all.
      The screen itself is already behind `sensor:read` — FooterNav grades the
