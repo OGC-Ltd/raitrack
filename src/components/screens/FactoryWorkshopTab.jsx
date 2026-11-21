@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { REPAIRS_CHANGED, stageLabelOf, stagePillOf } from "../../api/repairs";
+import { REPAIRS_CHANGED } from "../../api/repairs";
 import { fetchFactoryBoard, fetchStoresParts, CARD_STATUS, shortCard } from "../../api/repairWorkflow";
 import { usePager } from "../body/TablePager";
 import { WfFilters, WfGrid, Reload, rowProps, Badge, Ident } from "./WorkshopParts";
@@ -74,7 +74,7 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
   const pager = usePager(rows, resetKey);
   return (
     <WfGrid label="Machine pages" pager={pager}
-            head={[["Machine"], ["Fault"], ["Repair"], ["Card"], ["Repair job"], ["In for", true], ["ETA"]]}>
+            head={[["Machine"], ["Fault"], ["Repair"], ["Card"], ["In for", true], ["ETA"]]}>
           {pager.pageRows.map((c) => {
             const [label, pill] = CARD_STATUS[c.status] ?? [c.status, "none"];
             const job = c.repairItem;
@@ -94,11 +94,6 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                     <Badge tone={pill}>{label}</Badge>
                     <span className="wf-cell-sub"><span className="dr-veh">{shortCard(c.cardNumber)}</span>{c.priority === "Urgent" ? ", urgent" : ""}</span>
                   </span>
-                </td>
-                <td>
-                  {job
-                    ? <span className="wf-cell-stage"><Badge tone={stagePillOf({ ...job, fsJobCards: [c] })}>{stageLabelOf({ ...job, fsJobCards: [c] })}</Badge>{job.ticketNo && job.ticketNo !== shortCard(c.cardNumber) && <span className="wf-cell-sub dr-veh">{job.ticketNo}</span>}</span>
-                    : <span className="sp4-muted" title="The machine on this card is not one of our tracked units">Not tracked</span>}
                 </td>
                 <td className="dr-num sys-num">
                   <span className="wf-cell-stage wf-cell-stage--end">
