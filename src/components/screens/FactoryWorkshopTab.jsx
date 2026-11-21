@@ -45,15 +45,27 @@ const BACK_DATE = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi",
 function BackBy({ card }) {
   const b = backByOf(card);
   if (!b) return <span className="sp4-muted">-</span>;
-  const h = (b.at.getTime() - Date.now()) / 3_600_000;
+  const now = Date.now();
+  const h = (b.at.getTime() - now) / 3_600_000;
+  const late = h < 0;
+  // The line: how much of the time allowed, check-in to ETA, has gone. Full, and red, once past it.
+  const start = card.checkedInAt ? new Date(card.checkedInAt).getTime() : now;
+  const used = late ? 1 : Math.min(1, Math.max(0, (now - start) / Math.max(1, b.at.getTime() - start)));
   const when = b.set ? BACK_DATE.format(b.at) : BACK_DAY.format(b.at);
   const kind = (REPAIR_KIND[card.category]?.[0] ?? "minor").toLowerCase();
   return (
-    <span className="wf-cell-stage" title={b.set ? "The date set on the repair job" : `No date set: the usual stay for a ${kind} repair`}>
-      {h < 0 ? <Badge tone="inc">Overdue {span(-h)}</Badge> : <Badge tone="none">Due in {span(h)}</Badge>}
+    <span className={"fsw-eta" + (late ? " fsw-eta--late" : "")}
+          title={b.set ? "The date set on the repair job" : `No date set: the usual stay for a ${kind} repair`}>
+      <span className="fsw-eta__words">{late ? `Overdue ${span(-h)}` : `Due in ${span(h)}`}</span>
+      <span className="fsw-eta__track" aria-hidden="true"><span className="fsw-eta__used" style={{ "--used": used }} /></span>
       <span className="wf-cell-sub">{when}{b.set ? "" : ", usual"}</span>
     </span>
   );
+}
+
+/** A state as words after a short line in its tone: the floor bar's colours, no pill. */
+function StateLine({ tone, children }) {
+  return <span className={`fsw-state fsw-state--${tone}`}>{children}</span>;
 }
 const span = (h) => (h == null ? "-" : h < 1 ? `${Math.max(0, Math.round(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`);
 /** 14 days: the strip's charts compare the last week with the one before. */
@@ -76,7 +88,7 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
     <WfGrid label="Machine pages" pager={pager}
             head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ["ETA"]]}>
           {pager.pageRows.map((c) => {
-            const [label, pill] = CARD_STATUS[c.status] ?? [c.status, "none"];
+            const floor = STATES.find((x) => x.key === stateOf(c)) ?? STATES[0];
             const job = c.repairItem;
             const go = () => job && onOpen(job.id);
             return (
@@ -89,9 +101,9 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                   {c.diagnosis && <span className="wf-cell-sub wf-cell-fault--short">{c.diagnosis}</span>}
                 </td>
                 <td>{c.category ? <Badge tone={REPAIR_KIND[c.category]?.[1] ?? "none"}>{REPAIR_KIND[c.category]?.[0] ?? c.category}</Badge> : <span className="sp4-muted">-</span>}</td>
-                <td>{c.priority === "Urgent" ? <Badge tone="inc">Urgent</Badge> : <span className="sp4-muted">{c.priority ? c.priority.charAt(0) + c.priority.slice(1).toLowerCase() : "-"}</span>}</td>
+                <td>{c.priority === "Urgent" ? <span className="fsw-urgent">Urgent</span> : <span className="sp4-muted">{c.priority ? c.priority.charAt(0) + c.priority.slice(1).toLowerCase() : "-"}</span>}</td>
                 <td><span className="dr-veh" title={c.cardNumber}>{shortCard(c.cardNumber)}</span></td>
-                <td><Badge tone={pill}>{label}</Badge></td>
+                <td><StateLine tone={floor.key}>{floor.label}</StateLine></td>
                 <td className="dr-num sys-num">
                   <span className="wf-cell-stage wf-cell-stage--end">
                     <span>{span(hoursSince(c.checkedInAt))}</span>
@@ -133,11 +145,11 @@ function MovesTable({ rows, resetKey }) {
           {pager.pageRows.map((m) => {
             const booked = m.kind === "booked";
             const out = !!m.releasedAt;
-            const [label, pill] = CARD_STATUS[m.status] ?? [m.status, "none"];
+            const [label] = CARD_STATUS[m.status] ?? [m.status];
             return (
               <tr key={`${m.kind}-${m.cardId}`} className="wf-row--still">
                 <td className="sys-num">{at(m.at)}</td>
-                <td><Badge tone={booked ? "warn" : "con"}>{booked ? "Booked in" : "Released"}</Badge></td>
+                <td><StateLine tone={booked ? "waiting" : "out"}>{booked ? "Booked in" : "Released"}</StateLine></td>
                 <td>
                   <Ident name={m.machine} sub={m.vehicle?.registrationPlate && m.vehicle.registrationPlate !== m.machine ? m.vehicle.registrationPlate : null} />
                 </td>
@@ -146,7 +158,7 @@ function MovesTable({ rows, resetKey }) {
                 <td>
                   {out
                     ? <span className="wf-cell-stage"><span>Out</span><span className="wf-cell-sub">after {span(hoursBetween(m.checkedInAt, m.releasedAt))} in</span></span>
-                    : <span className="wf-cell-stage"><Badge tone={pill}>{label}</Badge><span className="wf-cell-sub">in for {span(hoursSince(m.checkedInAt))}</span></span>}
+                    : <span className="wf-cell-stage"><StateLine tone={m.status === "COMPLETED" ? "done" : m.status === "AWAITING_PARTS" ? "parts" : "repair"}>{label}</StateLine><span className="wf-cell-sub">in for {span(hoursSince(m.checkedInAt))}</span></span>}
                 </td>
               </tr>
             );
