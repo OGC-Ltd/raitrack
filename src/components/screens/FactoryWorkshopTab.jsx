@@ -74,7 +74,7 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
   const pager = usePager(rows, resetKey);
   return (
     <WfGrid label="Machine pages" pager={pager}
-            head={[["Machine"], ["Fault"], ["Repair"], ["Ticket"], ["Status"], ["In for", true], ["ETA"]]}>
+            head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ["ETA"]]}>
           {pager.pageRows.map((c) => {
             const [label, pill] = CARD_STATUS[c.status] ?? [c.status, "none"];
             const job = c.repairItem;
@@ -89,12 +89,8 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                   {c.diagnosis && <span className="wf-cell-sub wf-cell-fault--short">{c.diagnosis}</span>}
                 </td>
                 <td>{c.category ? <Badge tone={REPAIR_KIND[c.category]?.[1] ?? "none"}>{REPAIR_KIND[c.category]?.[0] ?? c.category}</Badge> : <span className="sp4-muted">-</span>}</td>
-                <td>
-                  <span className="wf-cell-stage">
-                    <span className="dr-veh" title={c.cardNumber}>{shortCard(c.cardNumber)}</span>
-                    {c.priority === "Urgent" && <span className="wf-cell-sub">Urgent</span>}
-                  </span>
-                </td>
+                <td>{c.priority === "Urgent" ? <Badge tone="inc">Urgent</Badge> : <span className="sp4-muted">{c.priority ? c.priority.charAt(0) + c.priority.slice(1).toLowerCase() : "-"}</span>}</td>
+                <td><span className="dr-veh" title={c.cardNumber}>{shortCard(c.cardNumber)}</span></td>
                 <td><Badge tone={pill}>{label}</Badge></td>
                 <td className="dr-num sys-num">
                   <span className="wf-cell-stage wf-cell-stage--end">
