@@ -90,14 +90,6 @@ function liveCard(job) {
   const open = (job.fsJobCards ?? []).filter((c) => c.status !== "RELEASED" && c.status !== "CANCELLED");
   return open.at(-1) ?? null;
 }
-/** What the card says is happening to the machine, in one line. */
-function cardStory(c) {
-  if (c.status === "COMPLETED" || c.workCompletedAt) return "Work done. Waiting to be released in FactorySuite";
-  if (c.status === "AWAITING_PARTS" || (c.partsRequestedAt && !c.partsReceivedAt)) return "Waiting on parts in the Auto Workshop";
-  if (c.repairStartedAt) return "Being repaired in the Auto Workshop";
-  return "Checked into the Auto Workshop. Repair not started";
-}
-
 function Fact({ label, children }) {
   if (children == null || children === "" || children === "-") return null;
   return <div className="wf-fact"><dt>{label}</dt><dd>{children}</dd></div>;
@@ -124,8 +116,9 @@ export function FactoryCards({ cards }) {
             <div className="wf-fscard__head">
               <span className="wf-mono" title={c.cardNumber}>{shortCard(c.cardNumber)}</span>
               <span className={`sp4-pill sp4-pill--${pill}`}>{label}</span>
-              {c.priority && <span className={"wf-fscard__tag" + (c.priority === "Urgent" ? " wf-fscard__tag--urgent" : "")}>{c.priority}</span>}
-              {c.category && <span className="wf-fscard__tag">{c.category.charAt(0) + c.category.slice(1).toLowerCase()}</span>}
+              {/* The board's colours: Urgent and Major red, Normal and Minor grey. */}
+              {c.priority && <span className={`sp4-pill sp4-pill--${c.priority === "Urgent" ? "inc" : "none"}`}>{c.priority.charAt(0) + c.priority.slice(1).toLowerCase()}</span>}
+              {c.category && <span className={`sp4-pill sp4-pill--${c.category === "MAJOR" ? "inc" : "none"}`}>{c.category.charAt(0) + c.category.slice(1).toLowerCase()}</span>}
             </div>
             <dl className="wf-facts wf-facts--tight">
               <Fact label="Raised by">{CARD_SOURCE[c.source] ?? c.source}</Fact>
@@ -1023,8 +1016,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
   const closed = !!job.resolvedAt;
   // A job FactorySuite is carrying: say what its card says, not the workflow's generic next step.
   const card = closed ? null : liveCard(job);
-  const nextWhat = card ? cardStory(card) : needsBooking ? "Book a workshop day" : next.what;
-  const nextWho = card ? null : needsBooking ? "Control Room" : next.who;
+  const nextWhat = needsBooking ? "Book a workshop day" : next.what;
+  const nextWho = needsBooking ? "Control Room" : next.who;
 
   return (
     <div className="wf-job">
@@ -1055,30 +1048,32 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
         </div>
       )}
 
+      {/* A job a FactorySuite card is carrying has no box: the card moves it (operator, 21 Nov). */}
+      {!card && (
       <section className={"wf-next" + (closed ? " wf-next--closed" : "")} aria-label="Next step">
-        <div className="wf-next__head">
-          <span className={`sp4-pill sp4-pill--${stagePillOf(job) ?? "none"}`}>{stageLabelOf(job)}</span>
-          {card ? <span className="wf-next__who" title={card.cardNumber}>FactorySuite card {shortCard(card.cardNumber)}</span>
-            : !closed && nextWho && <span className="wf-next__who">Next · {nextWho}</span>}
-        </div>
-        <p className="wf-next__what">{closed ? (s === "fixed" ? "Verified fixed and available" : next.what) : nextWhat}</p>
-        {s === "void" && job.voidReason && <p className="wf-muted">{job.voidReason}</p>}
-        {action && <div className="wf-next__step" hidden={!!pending}>{action}</div>}
-        {pending && (
-          <div className="wf-pending" role="status">
-            <span className="wf-pending__text">Chosen, not saved: <b>{pending.label}</b></span>
-            <button type="button" className="sp4-ghost-btn" disabled={!!busy} onClick={() => setPending(null)}>
-              <i className="ti ti-arrow-back-up" aria-hidden="true" /> Back
-            </button>
+          <div className="wf-next__head">
+            <span className={`sp4-pill sp4-pill--${stagePillOf(job) ?? "none"}`}>{stageLabelOf(job)}</span>
+            {!closed && nextWho && <span className="wf-next__who">Next · {nextWho}</span>}
           </div>
-        )}
-        {!action && !closed && !card && (s === "spare_outsourced" || (s === "forwarded" && job.assignedToId)) && (
-          <p className="wf-muted">
-            {s === "spare_outsourced" ? "Waiting on spare parts. Each part's progress is under Spare parts below."
-              : `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`}
-          </p>
-        )}
+          <p className="wf-next__what">{closed ? (s === "fixed" ? "Verified fixed and available" : next.what) : nextWhat}</p>
+          {s === "void" && job.voidReason && <p className="wf-muted">{job.voidReason}</p>}
+          {action && <div className="wf-next__step" hidden={!!pending}>{action}</div>}
+          {pending && (
+            <div className="wf-pending" role="status">
+              <span className="wf-pending__text">Chosen, not saved: <b>{pending.label}</b></span>
+              <button type="button" className="sp4-ghost-btn" disabled={!!busy} onClick={() => setPending(null)}>
+                <i className="ti ti-arrow-back-up" aria-hidden="true" /> Back
+              </button>
+            </div>
+          )}
+          {!action && !closed && !card && (s === "spare_outsourced" || (s === "forwarded" && job.assignedToId)) && (
+            <p className="wf-muted">
+              {s === "spare_outsourced" ? "Waiting on spare parts. Each part's progress is under Spare parts below."
+                : `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`}
+            </p>
+          )}
       </section>
+      )}
 
       <Section title="The fault">
         <dl className="wf-facts">
