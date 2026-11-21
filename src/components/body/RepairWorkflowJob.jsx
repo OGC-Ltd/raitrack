@@ -85,6 +85,22 @@ export function PhaseLadder({ stage, compact = false, onPick = null, picked = nu
   );
 }
 
+/** The open FactorySuite card behind a job, the latest one, or null. */
+function liveCard(job) {
+  const open = (job.fsJobCards ?? []).filter((c) => c.status !== "RELEASED" && c.status !== "CANCELLED");
+  return open.at(-1) ?? null;
+}
+const CARD_AT = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const cardAt = (iso) => (iso ? CARD_AT.format(new Date(iso)) : null);
+/** What the card says is happening to the machine, in one line. */
+function cardStory(c) {
+  const since = (iso) => (iso ? ` since ${cardAt(iso)}` : "");
+  if (c.status === "COMPLETED" || c.workCompletedAt) return `Work done${c.workCompletedAt ? ` ${cardAt(c.workCompletedAt)}` : ""}. Waiting to be released in FactorySuite`;
+  if (c.status === "AWAITING_PARTS" || (c.partsRequestedAt && !c.partsReceivedAt)) return `Waiting on parts in the Auto Workshop${since(c.partsRequestedAt ?? c.checkedInAt)}`;
+  if (c.repairStartedAt) return `Being repaired in the Auto Workshop${since(c.repairStartedAt)}`;
+  return `Checked into the Auto Workshop${since(c.checkedInAt)}. Repair not started`;
+}
+
 function Fact({ label, children }) {
   if (children == null || children === "" || children === "-") return null;
   return <div className="wf-fact"><dt>{label}</dt><dd>{children}</dd></div>;
@@ -1008,8 +1024,10 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
   }
 
   const closed = !!job.resolvedAt;
-  const nextWhat = needsBooking ? "Book a workshop day" : next.what;
-  const nextWho = needsBooking ? "Control Room" : next.who;
+  // A job FactorySuite is carrying: say what its card says, not the workflow's generic next step.
+  const card = closed ? null : liveCard(job);
+  const nextWhat = card ? cardStory(card) : needsBooking ? "Book a workshop day" : next.what;
+  const nextWho = card ? null : needsBooking ? "Control Room" : next.who;
 
   return (
     <div className="wf-job">
@@ -1043,7 +1061,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       <section className={"wf-next" + (closed ? " wf-next--closed" : "")} aria-label="Next step">
         <div className="wf-next__head">
           <span className={`sp4-pill sp4-pill--${stagePillOf(job) ?? "none"}`}>{stageLabelOf(job)}</span>
-          {!closed && nextWho && <span className="wf-next__who">Next · {nextWho}</span>}
+          {card ? <span className="wf-next__who" title={card.cardNumber}>FactorySuite card {shortCard(card.cardNumber)}</span>
+            : !closed && nextWho && <span className="wf-next__who">Next · {nextWho}</span>}
         </div>
         <p className="wf-next__what">{closed ? (s === "fixed" ? "Verified fixed and available" : next.what) : nextWhat}</p>
         {s === "void" && job.voidReason && <p className="wf-muted">{job.voidReason}</p>}
@@ -1060,7 +1079,8 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
           <p className="wf-muted">
             {s === "forwarded" && job.assignedToId ? `Claimed by ${job.assignedTo?.fullName ?? "a technician"}.`
               : s === "spare_outsourced" ? "Waiting on spare parts. Each part's progress is under Spare parts below."
-                : "Waiting on the people above. Nothing for you to do here."}
+                : card ? "FactorySuite moves this job. It completes when the machine is released there."
+                  : "Waiting on the people above. Nothing for you to do here."}
           </p>
         )}
       </section>
