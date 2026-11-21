@@ -104,6 +104,10 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
   const jobs = useLive(() => listWorkflowJobs(orgId, { status: state === "closed" ? "all" : state }), [orgId, state]);
   // The strip's history: every job raised in the window and a month before it,
   // so a job closed in the window counts though it was flagged earlier.
+  // On Closed the strip still counts the open jobs, from the open read: the
+  // all-jobs read under Closed is capped and leaves some open ones out.
+  const openRead = useLive(() => (state === "open" ? null : listWorkflowJobs(orgId, { status: "open" })), [orgId, state]);
+  const openJobs = state === "open" ? jobs : openRead;
   const history = useLive(() => listWorkflowJobsSince(orgId, Date.now() - (STAT_DAYS + 31) * 86_400_000), [orgId]);
   // The search narrows before the counts, so each chip says how many match.
   const q = search.trim().toLowerCase();
@@ -116,10 +120,9 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
 
   return (
     <>
-      {state === "open" && (
-        <JobsStrip open={(jobs.data ?? []).filter((j) => !j.resolvedAt)} history={history.data}
-                   bucketOf={bucketOf} loading={jobs.loading && !jobs.data} />
-      )}
+      {/* The same strip on Open and Closed. */}
+      <JobsStrip open={(openJobs.data ?? []).filter((j) => !j.resolvedAt)} history={history.data}
+                 bucketOf={bucketOf} loading={openJobs.loading && !openJobs.data} />
       <WfFilters
         label="Search jobs" placeholder="Search reg, ticket or fault…" search={search} onSearch={setSearch}
         groups={[
@@ -172,7 +175,7 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
                     </td>
                     <td className="sys-num">{booking ? isoDay(booking.bookingDate) : "-"}</td>
                     <td className="sys-num">{inOut(j).in ? at(inOut(j).in) : <span className="sp4-muted">-</span>}</td>
-                    <td className="sys-num">{inOut(j).out ? at(inOut(j).out) : inOut(j).in ? <span className="sp4-muted">Still in</span> : <span className="sp4-muted">-</span>}</td>
+                    <td className="sys-num">{inOut(j).out ? at(inOut(j).out) : <span className="sp4-muted">-</span>}</td>
                     <td>{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
                     <td className="dr-num sys-num">{since(j.stageChangedAt ?? j.createdAt)}</td>
                   </tr>
@@ -198,7 +201,7 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
 /**
  * When the unit checked into the workshop and out of it, from its FactorySuite
  * card(s): the first card's check-in, and the latest card's release once it has
- * one. A job with no card has neither.
+ * one, a dash until then. A job with no card has neither.
  */
 const inOut = (j) => {
   const cards = j.fsJobCards ?? [];
