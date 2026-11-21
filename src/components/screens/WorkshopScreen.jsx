@@ -506,7 +506,7 @@ function DayTab({ orgId, onOpen }) {
       ) : (
         <WfGrid label="Day pages" pager={dayPager}
                 head={[["Unit reg"], ["Fault"], ["Ticket"], ["Technician"], ["Arrived"], ["Left"], ["Status"]]}>
-          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} booking={r.booking} onOpen={onOpen} kind={r.kind} />)}
+          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} booking={r.booking} day={date} onOpen={onOpen} kind={r.kind} />)}
         </WfGrid>
       )}
     </div>
@@ -522,9 +522,9 @@ const DAY_KINDS = [
   ["no_show", "No show", "late"],
 ];
 
-function BoardRow({ job, booking, onOpen, kind }) {
+function BoardRow({ job, booking, day, onOpen, kind }) {
   const tech = job.workshopTechnician?.fullName ?? job.workshopTechnicianName;
-  const stay = kind === "no_show" ? { in: null, out: null } : dayStay(job, booking);
+  const stay = kind === "no_show" ? { in: null, out: null } : dayStay(job, booking, day);
   const [, text, tone] = DAY_KINDS.find(([k]) => k === kind) ?? [kind, kind, "waiting"];
   return (
     <tr {...rowProps(false, () => onOpen(job.id))}>

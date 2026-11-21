@@ -30,6 +30,14 @@ describe("dayStay", () => {
     expect(dayStay(day.bookings[0].repairItem, day.bookings[0])).toEqual({ in: "2026-11-20T06:00:00Z", out: "2026-11-20T12:00:00Z" });
     expect(dayStay(day.unbookedArrivals[2])).toEqual({ in: "2026-11-20T10:00:00Z", out: null });
   });
+  it("takes the card checked in on the day shown when a job has several", () => {
+    const hst = { fsJobCards: [
+      { checkedInAt: "2026-11-18T05:01:30Z", releasedAt: "2026-11-20T04:44:16Z" },
+      { checkedInAt: "2026-11-20T09:11:30Z", releasedAt: "2026-11-20T16:34:52Z" },
+    ] };
+    expect(dayStay(hst, null, "2026-11-18")).toEqual({ in: "2026-11-18T05:01:30Z", out: "2026-11-20T04:44:16Z" });
+    expect(dayStay(hst, null, "2026-11-20")).toEqual({ in: "2026-11-20T09:11:30Z", out: "2026-11-20T16:34:52Z" });
+  });
   it("knows an empty day", () => {
     expect(dayHasRecords({ bookings: [], unbookedArrivals: [] })).toBe(false);
     expect(dayHasRecords(day)).toBe(true);

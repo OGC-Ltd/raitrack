@@ -283,16 +283,18 @@ const workshopStep = (job) => (Array.isArray(job?.stageHistory) ? job.stageHisto
 
 /**
  * When a unit on the day arrived and left. A FactorySuite card says both: its
- * check-in and its release. Without one, the booking's arrival (or the trail's
- * step into the workshop) and the job's close.
+ * check-in and its release. One job can carry several cards (HST-02: JC-0250
+ * in 18 Nov, out 20 Nov, then JC-0323 in and out on 20 Nov), so the card is
+ * the one checked in on the day shown, else the job's first. Without a card,
+ * the booking's arrival (or the trail's step into the workshop) and the job's close.
  */
-export function dayStay(job, booking = null) {
+export function dayStay(job, booking = null, day = null) {
   const cards = job?.fsJobCards ?? [];
-  const last = cards[cards.length - 1];
-  return {
-    in: cards[0]?.checkedInAt ?? booking?.arrivedAt ?? workshopStep(job),
-    out: cards.length ? last?.releasedAt ?? null : job?.resolvedAt ?? null,
-  };
+  if (cards.length) {
+    const card = (day && cards.find((c) => eatDay(c.checkedInAt) === day)) || cards[0];
+    return { in: card.checkedInAt ?? null, out: card.releasedAt ?? null };
+  }
+  return { in: booking?.arrivedAt ?? workshopStep(job), out: job?.resolvedAt ?? null };
 }
 
 /**
@@ -308,7 +310,7 @@ export function dayCounts(d) {
   const fsIns = fsIn.length;
   const walkIns = unbooked.length - fsIns;
   const day = d?.date ?? null;
-  const outSameDay = (job, b) => { const o = dayStay(job, b).out; return !!o && !!day && eatDay(o) === day; };
+  const outSameDay = (job, b) => { const o = dayStay(job, b, day).out; return !!o && !!day && eatDay(o) === day; };
   return {
     capacity: d?.capacity ?? 0,
     // The slots our own bookings take, against the workshop's daily capacity.
