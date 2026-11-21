@@ -128,7 +128,7 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
         groups={[
           { label: "Jobs", value: state, onPick: (id) => { setState(id); setBucket("all"); }, options: [["open", "Open"], ["closed", "Closed"]] },
           ...(state === "open" ? [{ label: "Next", value: bucket, onPick: setBucket,
-            options: [["all", "Everyone", all.length], ...BUCKETS.map(([id, label]) => [id, label, counts[id]])] }] : []),
+            options: [["all", "Everyone", all.length], ...BUCKETS.filter(([id]) => id !== "control_room").map(([id, label]) => [id, label, counts[id]])] }] : []),
         ]}
         tools={<>
           {can("repair:flag") && (
