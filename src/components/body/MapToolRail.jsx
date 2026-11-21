@@ -1,8 +1,11 @@
 /**
  * The map's left tool rail, beside the sidebar.
  *
- * Tools in three groups — finding (search, names, layers, fit), measuring
- * (ruler, traffic, weather, geofences, halted, fuel alerts, dashcam alarms) and the rail's own expander.
+ * Tools in three groups — finding (search, names, layers, fit), the map's
+ * tools (Tools, geofences, work plans, alerts, arrivals) and the rail's own
+ * expander. Since 2026-11-21 (operator) two buttons open menus like the
+ * Geofences one: Tools (a toolbox: Measure, Live traffic, Weather) and Alerts
+ * (Halted, Fuel alerts, Dashcam alarms).
  * Route covered left the rail on 2026-10-28 (operator): the route opens from
  * the unit itself. Geofences came back on 2026-11-04 (operator); their row in
  * the Maps panel stays, since it carries the colour key. Desktop only:
@@ -33,10 +36,12 @@ const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 const RIPPLE_FROM = 30;
 
 // `tour`: the first-time tour's mark for this button (lib/productTour).
-function RailButton({ icon, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn", tour, menuOpen, btnRef }) {
+function RailButton({ icon, glyph = null, label, title, on = false, disabled = false, expanded, onClick, count = null, tone = "warn", tour, menuOpen, btnRef }) {
   // A button that opens a menu says so, and whether it is open, rather than
   // being pressed.
   const menu = menuOpen !== undefined;
+  // `glyph` is a drawn icon, for one the icon font does not have.
+  const mark = glyph ?? <i className={`ti ${icon}`} aria-hidden="true" />;
   return (
     <button
       ref={btnRef}
@@ -54,13 +59,13 @@ function RailButton({ icon, label, title, on = false, disabled = false, expanded
       {count > 0 ? (
         // The count rides the icon's corner, as on the Maps button.
         <span className="mtr-btn__icon">
-          <i className={`ti ${icon}`} aria-hidden="true" />
+          {mark}
           {count >= RIPPLE_FROM
             ? <span className={`mtr-btn__dot mtr-btn__dot--${tone}`} aria-hidden="true" />
             : <span className={`mtr-btn__count mtr-btn__count--${tone}`} data-digits={String(count).length}>{count}</span>}
         </span>
       ) : (
-        <i className={`ti ${icon}`} aria-hidden="true" />
+        mark
       )}
       {expanded && <span className="mtr-btn__label">{label}</span>}
     </button>
@@ -129,6 +134,167 @@ function FencesMenu({ top, zones, drawFence, onDone }) {
           <span className="mtr-fences__sub">{drawFence.on ? "Close the drawing panel" : "Polygon, rectangle, circle or road"}</span>
         </span>
       </button>}
+    </div>
+  );
+}
+
+/**
+ * A toolbox (operator, 2026-11-21: "use a toolbox icon"). Drawn, because the
+ * app's icon font (Tabler 3.19) has none; on its 24-unit grid at its 2px
+ * stroke, so it sits among the font's icons as one of them.
+ */
+function ToolboxGlyph() {
+  return (
+    <svg className="mtr-btn__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+      <rect x="3" y="8" width="18" height="12" rx="2" />
+      <path d="M3 13h18" />
+      <path d="M8 12v2M16 12v2" />
+    </svg>
+  );
+}
+
+/** Up and Down move between a menu's rows, as in any menu. */
+function menuKeys(e) {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  const items = [...e.currentTarget.querySelectorAll("[role^=menuitem]:not(:disabled)")];
+  const i = items.indexOf(document.activeElement);
+  items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+}
+
+/**
+ * The Tools menu, beside its toolbox button (operator, 2026-11-21: "group
+ * together weather, traffic and measure"): Measure, Live traffic and Weather,
+ * each a switch, in the Geofences menu's rows, and the Planner (operator,
+ * 2026-11-21: "move planner into tools"), which opens its page. Measure and
+ * Planner close the menu, since the next thing happens elsewhere; the two
+ * layers keep it open, as the Geofences switches do. Traffic, Weather and
+ * Planner are rights of their own (map:traffic, map:weather, planner:read,
+ * which only Menengai holds): a row this person does not hold is left out.
+ */
+function ToolsMenu({ top, measuring, onToggleMeasure, traffic, weather, showTraffic, showWeather, onPlanner, onDone }) {
+  const first = useRef(null);
+  useEffect(() => { first.current?.focus(); }, []);
+  return (
+    <div className="mtr-pop mtr-fences" role="menu" aria-label="Tools" style={{ marginTop: top }} onKeyDown={menuKeys}>
+      <button
+        ref={first} type="button" role="menuitemcheckbox" className="mtr-fences__item"
+        aria-checked={Boolean(measuring)}
+        onClick={() => { onToggleMeasure(); onDone(); }}
+      >
+        <i className="ti ti-ruler-measure" aria-hidden="true" />
+        <span className="mtr-fences__text">
+          Measure
+          <span className="mtr-fences__sub">{measuring ? "Measuring now: Esc ends" : "Click points on the map"}</span>
+        </span>
+        <span className="mtr-fences__switch" aria-hidden="true" />
+      </button>
+      {showTraffic && (
+        <button
+          type="button" role="menuitemcheckbox" className="mtr-fences__item"
+          aria-checked={Boolean(traffic?.on)} disabled={!traffic}
+          onClick={() => traffic?.onToggle()}
+        >
+          <i className="ti ti-traffic-lights" aria-hidden="true" />
+          <span className="mtr-fences__text">
+            Live traffic
+            <span className="mtr-fences__sub">{traffic ? "Congestion on the roads, live" : "Not available"}</span>
+          </span>
+          <span className="mtr-fences__switch" aria-hidden="true" />
+        </button>
+      )}
+      {showWeather && (
+        <button
+          type="button" role="menuitemcheckbox" className="mtr-fences__item"
+          aria-checked={Boolean(weather?.on)} disabled={!weather}
+          onClick={() => weather?.onToggle()}
+        >
+          <i className="ti ti-cloud-rain" aria-hidden="true" />
+          <span className="mtr-fences__text">
+            Weather
+            <span className="mtr-fences__sub">
+              {!weather ? "Not available" : weather.on && weather.note ? weather.note : "Wind, rain and storms, live"}
+            </span>
+          </span>
+          <span className="mtr-fences__switch" aria-hidden="true" />
+        </button>
+      )}
+      {onPlanner && (
+        <button
+          type="button" role="menuitem" className="mtr-fences__item"
+          onClick={() => { onPlanner(); onDone(); }}
+        >
+          <i className="ti ti-calendar-time" aria-hidden="true" />
+          <span className="mtr-fences__text">
+            Planner
+            <span className="mtr-fences__sub">Delivery sheets, plan against actual</span>
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** "3 units" / "1 unit". */
+const unitCount = (n) => `${n.toLocaleString()} ${n === 1 ? "unit" : "units"}`;
+
+/**
+ * The Alerts menu, beside its button (operator, 2026-11-21: "group alerts
+ * together to one alert icon ... a modal like that for the geofence"): Halted,
+ * Fuel alerts and Dashcam alarms, each with what is waiting in it. A row opens
+ * its list or page, as its own rail button used to, and the menu closes. Each
+ * row is a right of its own, so a row this person does not hold is left out.
+ * Drawn in the Geofences menu's rows (MapToolFences.css).
+ */
+function AlertsMenu({ top, halted, fuelAlerts, dashcam, onDone }) {
+  const first = useRef(null);
+  useEffect(() => { first.current?.focus(); }, []);
+  const rows = [
+    halted && {
+      key: "halted", icon: "ti-alert-triangle", label: "Halted", tone: "warn",
+      count: halted.count, open: halted.open, onOpen: halted.onOpen,
+      sub: halted.count ? `${unitCount(halted.count)} stopped mid-journey` : "No unit stopped mid-journey",
+      title: "Units that stopped mid-journey, on the highway or outside their geofences",
+    },
+    fuelAlerts && {
+      key: "fuel", icon: "ti-gas-station", label: "Fuel alerts", tone: "alert",
+      count: fuelAlerts.count, open: fuelAlerts.open, onOpen: fuelAlerts.onOpen,
+      sub: fuelAlerts.count ? `${unitCount(fuelAlerts.count)} with an open theft alert` : "No open fuel theft alert",
+      title: "Units with an open fuel theft alert",
+    },
+    dashcam && {
+      key: "dashcam", icon: "ti-video", label: "Dashcam alarms", tone: dashcam.critical ? "alert" : "warn",
+      count: dashcam.count, open: false, onOpen: dashcam.onOpen,
+      sub: dashcam.count
+        ? `${dashcam.count.toLocaleString()} today not yet reviewed${dashcam.critical ? `, ${dashcam.critical.toLocaleString()} critical` : ""}`
+        : "Nothing waiting today",
+      title: "The Alarms page, each alarm with its clip",
+    },
+  ].filter(Boolean);
+  return (
+    <div className="mtr-pop mtr-fences mtr-alerts" role="menu" aria-label="Alerts" style={{ marginTop: top }} onKeyDown={menuKeys}>
+      {rows.map((r, i) => (
+        <button
+          key={r.key} ref={i === 0 ? first : undefined}
+          type="button" role="menuitem"
+          className={`mtr-fences__item${r.open ? " mtr-alerts__item--open" : ""}`}
+          title={r.open ? `${r.label}: close the list` : r.title}
+          onClick={() => { r.onOpen(); onDone(); }}
+        >
+          <i className={`ti ${r.icon}`} aria-hidden="true" />
+          <span className="mtr-fences__text">
+            {r.label}
+            <span className="mtr-fences__sub">{r.sub}</span>
+          </span>
+          {r.count > 0 && (
+            <span className={`mtr-alerts__count mtr-alerts__count--${r.tone}`} aria-hidden="true">
+              {r.count > 99 ? "99+" : r.count}
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 }
@@ -346,6 +512,30 @@ function SearchPanel({ vehicles, fences, getBias, onPickVehicle, onPickFence, on
   );
 }
 
+/**
+ * A rail menu closes as the Geofences one does: a press outside the rail,
+ * Escape (caught first, so it closes only the menu, focus back to its button),
+ * or another map window opening (lib/sidePanels).
+ */
+function useRailMenu(name, open, setOpen, btnRef, wrapRef) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      btnRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("pointerdown", onDown); window.removeEventListener("keydown", onKey, true); };
+  }, [open, setOpen, btnRef, wrapRef]);
+  useEffect(() => { if (open) claimMapWindow(name); }, [open, name]);
+  useEffect(() => onMapWindowClaim(name, () => setOpen(false)), [name, setOpen]);
+}
+
 export default function MapToolRail({
   expanded, onToggleExpanded,
   vehicles, getBias, onPickVehicle, onPickPlace,
@@ -370,6 +560,12 @@ export default function MapToolRail({
   // The Geofences menu: show them all, the custom ones, or draw one.
   const [fencesOpen, setFencesOpen] = useState(false);
   const fencesBtn = useRef(null);
+  // The Alerts menu: Halted, Fuel alerts and Dashcam alarms.
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const alertsBtn = useRef(null);
+  // The Tools menu: Measure, Live traffic, Weather.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsBtn = useRef(null);
   const wrapRef = useRef(null);
   // Each tool is a right of its own since 2026-11-14 (map:traffic,
   // map:weather, map:geofences / map:custom_geos, map:arrivals): a tool the
@@ -408,6 +604,34 @@ export default function MapToolRail({
   // the rest, and another window opening closes the menu.
   useEffect(() => { if (fencesOpen) claimMapWindow("geofence-menu"); }, [fencesOpen]);
   useEffect(() => onMapWindowClaim(["geofence-menu", "geofence"], () => setFencesOpen(false)), []);
+
+  useRailMenu("alerts-menu", alertsOpen, setAlertsOpen, alertsBtn, wrapRef);
+  useRailMenu("tools-menu", toolsOpen, setToolsOpen, toolsBtn, wrapRef);
+  // One rail pop at a time: opening one closes the others.
+  const only = (which) => {
+    setSearchOpen((v) => (which === "search" ? !v : false));
+    setFencesOpen((v) => (which === "fences" ? !v : false));
+    setAlertsOpen((v) => (which === "alerts" ? !v : false));
+    setToolsOpen((v) => (which === "tools" ? !v : false));
+  };
+  const showTraffic = can("map:traffic");
+  const showWeather = can("map:weather");
+  // The Planner page, from the Tools menu (it left the sidebar 2026-11-21).
+  const { setDesktopActiveTab } = useAppActions();
+  const onPlanner = can("planner:read") ? () => setDesktopActiveTab("planner") : null;
+  // What the one button carries: every alert waiting, red while a fuel alert
+  // or a critical dashcam alarm is among them; lit while Halted or Fuel
+  // alerts is open.
+  const alertsAny = Boolean(halted || fuelAlerts || dashcam);
+  const alertsCount = (halted?.count ?? 0) + (fuelAlerts?.count ?? 0) + (dashcam?.count ?? 0);
+  const alertsTone = fuelAlerts?.count || dashcam?.critical ? "alert" : "warn";
+  const alertsTitle = alertsCount
+    ? "Alerts: " + [
+        halted?.count ? `${halted.count} halted` : null,
+        fuelAlerts?.count ? `${fuelAlerts.count} fuel` : null,
+        dashcam?.count ? `${dashcam.count} dashcam` : null,
+      ].filter(Boolean).join(", ")
+    : "Alerts: halted units, fuel alerts and dashcam alarms";
   const canDrawFence = Boolean(drawFence);
   // The menu wherever there is something in it: the layer's two switches, and
   // Draw a geofence where that is allowed.
@@ -421,7 +645,7 @@ export default function MapToolRail({
         <div className="mtr-group">
           <RailButton
             icon="ti-search" label="Search" title={fences?.length ? "Search for a plate, driver, geofence, place or road" : "Search for a plate, driver, place or road"} tour="map-search"
-            on={searchOpen} expanded={expanded} onClick={() => { setFencesOpen(false); setSearchOpen((v) => !v); }}
+            on={searchOpen} expanded={expanded} onClick={() => only("search")}
           />
           <RailButton
             icon={namesOn ? "ti-eye" : "ti-eye-off"} label={namesOn ? "Hide names" : "Show names"}
@@ -439,31 +663,21 @@ export default function MapToolRail({
         </div>
 
         <div className="mtr-group">
+          {/* Tools (operator, 2026-11-21): Measure, Live traffic and Weather,
+              three buttons here until then, as one toolbox that opens a menu
+              like Geofences. Lit while any of the three is on. */}
           <RailButton
-            icon="ti-ruler-measure" label="Measure"
-            title={measuring ? "Stop measuring (Esc)" : "Measure a distance: click points on the map"}
-            on={measuring} expanded={expanded} onClick={onToggleMeasure}
+            btnRef={toolsBtn}
+            glyph={<ToolboxGlyph />} label="Tools" tour="map-toolbox"
+            title={measuring ? "Tools: measuring now (Esc ends)"
+              : [showTraffic && traffic?.on && "traffic on", showWeather && weather?.on && "weather on"].filter(Boolean).length
+                ? `Tools: ${[showTraffic && traffic?.on && "traffic on", showWeather && weather?.on && "weather on"].filter(Boolean).join(", ")}`
+                : onPlanner ? "Tools: measure a distance, live traffic, weather, the Planner" : "Tools: measure a distance, live traffic, weather"}
+            on={Boolean(measuring) || Boolean(showTraffic && traffic?.on) || Boolean(showWeather && weather?.on)}
+            expanded={expanded}
+            menuOpen={toolsOpen}
+            onClick={() => only("tools")}
           />
-          {/* Live traffic: its own tool rather than a row in the Maps panel. */}
-          {can("map:traffic") && (
-          <RailButton
-            icon="ti-traffic-lights" label={traffic?.on ? "Hide traffic" : "Live traffic"}
-            title={traffic
-              ? `${traffic.on ? "Hide" : "Show"} live traffic on the map`
-              : "Live traffic is not available"}
-            on={Boolean(traffic?.on)} disabled={!traffic} expanded={expanded} onClick={traffic?.onToggle}
-          />
-          )}
-          {/* Weather, the same kind of switch (operator, 2026-10-27). */}
-          {can("map:weather") && (
-          <RailButton
-            icon="ti-cloud-rain" label={weather?.on ? "Hide weather" : "Weather"}
-            title={weather
-              ? (weather.on && weather.note ? `Weather: ${weather.note}` : `${weather.on ? "Hide" : "Show"} live weather on the map`)
-              : "Weather is not available"}
-            on={Boolean(weather?.on)} disabled={!weather} expanded={expanded} onClick={weather?.onToggle}
-          />
-          )}
           {/* Geofences: one button (operator, 2026-11-10: not two on one
               strip). It opens a menu: Show on the map, Custom geos and,
               where geofences can be drawn, Draw a geofence. Drawn for every
@@ -477,7 +691,7 @@ export default function MapToolRail({
                 : canDrawFence ? "Geofences: show them, or draw one" : "Geofences: show all, or the custom ones"}
               on={Boolean(zones?.on) || Boolean(zones?.ownOnly) || Boolean(drawFence?.on)} expanded={expanded}
               menuOpen={fencesOpen}
-              onClick={() => { setSearchOpen(false); setFencesOpen((v) => !v); }}
+              onClick={() => only("fences")}
             />
           ) : (
             <RailButton
@@ -499,41 +713,19 @@ export default function MapToolRail({
               on={Boolean(workPlans.on)} expanded={expanded} onClick={workPlans.onToggle}
             />
           )}
-          {/* Halted (operator, 2026-10-07: "right below geofences"): units
-              that stopped mid-journey — on the highway or outside their
-              geofences. Opens the same window the sidebar row used to. */}
-          {halted && (
+          {/* Alerts (operator, 2026-11-21): Halted, Fuel alerts and Dashcam
+              alarms, three buttons here until then, as one that opens a menu
+              like Geofences. Halted stays first in it (operator, 2026-10-07:
+              "right below geofences"), then Fuel alerts, then Dashcam alarms. */}
+          {alertsAny && (
             <RailButton
-              icon="ti-alert-triangle" label="Halted" tour="map-halted"
-              title={halted.count
-                ? `Halted: ${halted.count} ${halted.count === 1 ? "unit" : "units"} stopped mid-journey, on the highway or outside their geofences`
-                : "Halted: no unit has stopped mid-journey, open the list anyway"}
-              on={halted.open} count={halted.count} expanded={expanded} onClick={halted.onOpen}
-            />
-          )}
-          {/* Fuel alerts, below Halted: open theft cases, in the alert red. */}
-          {fuelAlerts && (
-            <RailButton
-              icon="ti-gas-station" label="Fuel alerts" tour="map-fuel"
-              title={fuelAlerts.count
-                ? `Fuel alerts: ${fuelAlerts.count} ${fuelAlerts.count === 1 ? "unit" : "units"} with an open fuel theft alert`
-                : "Fuel alerts: none open, open the list anyway"}
-              on={fuelAlerts.open} count={fuelAlerts.count} tone="alert" expanded={expanded} onClick={fuelAlerts.onOpen}
-            />
-          )}
-          {/* Dashcam alarms, below Fuel alerts (operator, 2026-10-27): opens
-              the Alarms page with each alarm's clip. Only where the
-              organisation's vehicles carry VSS cameras. The count is today's
-              warning and critical alarms not yet reviewed, red while one of
-              them is critical. */}
-          {dashcam && (
-            <RailButton
-              icon="ti-video" label="Dashcam alarms" tour="map-dashcam"
-              title={dashcam.count
-                ? `Dashcam alarms: ${dashcam.count} today not yet reviewed${dashcam.critical ? `, ${dashcam.critical} critical` : ""}`
-                : "Dashcam alarms: nothing waiting today, open the list anyway"}
-              count={dashcam.count} tone={dashcam.critical ? "alert" : "warn"}
-              expanded={expanded} onClick={dashcam.onOpen}
+              btnRef={alertsBtn}
+              icon="ti-bell-ringing" label="Alerts" tour="map-alerts"
+              title={alertsTitle}
+              on={Boolean(halted?.open) || Boolean(fuelAlerts?.open)}
+              count={alertsCount} tone={alertsTone} expanded={expanded}
+              menuOpen={alertsOpen}
+              onClick={() => only("alerts")}
             />
           )}
           {/* Arrivals at a hub: every unit's live drive time in. */}
@@ -573,6 +765,30 @@ export default function MapToolRail({
           zones={zones}
           drawFence={drawFence}
           onDone={() => setFencesOpen(false)}
+        />
+      )}
+
+      {toolsOpen && (
+        <ToolsMenu
+          top={toolsBtn.current?.offsetTop ?? 0}
+          measuring={measuring}
+          onToggleMeasure={onToggleMeasure}
+          traffic={traffic}
+          weather={weather}
+          showTraffic={showTraffic}
+          showWeather={showWeather}
+          onPlanner={onPlanner}
+          onDone={() => setToolsOpen(false)}
+        />
+      )}
+
+      {alertsOpen && alertsAny && (
+        <AlertsMenu
+          top={alertsBtn.current?.offsetTop ?? 0}
+          halted={halted}
+          fuelAlerts={fuelAlerts}
+          dashcam={dashcam}
+          onDone={() => setAlertsOpen(false)}
         />
       )}
 

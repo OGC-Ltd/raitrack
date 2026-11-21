@@ -80,3 +80,24 @@
 @media (prefers-reduced-motion: reduce) {
   .mtr-fences__switch::after { transition: none; }
 }
+
+/* The Alerts menu (MapToolRail AlertsMenu, operator 2026-11-21): the same rows,
+ * each with what is waiting in it as a count on the right, in the rail
+ * badges' amber and red (.mtr-btn__count). A row whose list is open now is
+ * lit, as its rail button was. */
+.mtr-alerts { width: 272px; }
+.mtr-alerts__count {
+  flex: none;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.mtr-alerts__count--warn  { background: #f59e0b; color: #3a2400; }
+.mtr-alerts__count--alert { background: #ef4444; color: #ffffff; }
+.mtr-alerts__item--open { background: #eff6ff; }
+.mtr-alerts__item--open > .ti { color: var(--mtrf-accent); }
