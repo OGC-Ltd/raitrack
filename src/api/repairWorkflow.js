@@ -220,6 +220,7 @@ export const fetchVehicleJobCards = (orgId, vehicleId) => get(`${base(orgId)}/fa
 export const CARD_STATUS = {
   IN_PROGRESS: ["In progress", "warn"], AWAITING_PARTS: ["Awaiting parts", "inc"],
   RELEASED: ["Released", "con"], CANCELLED: ["Cancelled", "none"],
+  OPEN: ["Open", "warn"], COMPLETED: ["Work done", "con"],
 };
 export const CARD_SOURCE = {
   WORKSHOP_RAISED: "Raised in the workshop", DEPARTMENT_REPORT: "Department report",

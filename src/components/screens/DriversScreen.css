@@ -1025,6 +1025,7 @@
   --mix-fair: var(--tone-speed);
   --mix-low:  var(--tone-theft);
   --mix-new:  color-mix(in srgb, var(--text-2) 35%, transparent);
+  --mix-done: var(--accent);
 }
 .dr-fleet__facts {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
@@ -1057,6 +1058,7 @@
 .dr-fleet__seg--fair, .dr-fleet__key--fair { --seg: var(--mix-fair); }
 .dr-fleet__seg--low,  .dr-fleet__key--low  { --seg: var(--mix-low); }
 .dr-fleet__seg--new,  .dr-fleet__key--new  { --seg: var(--mix-new); }
+.dr-fleet__seg--done, .dr-fleet__key--done { --seg: var(--mix-done); }
 .dr-fleet__legend {
   display: flex; flex-wrap: wrap; gap: 4px 12px;
   margin: 6px 0 0; padding: 0; list-style: none;

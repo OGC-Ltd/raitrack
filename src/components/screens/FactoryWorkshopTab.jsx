@@ -91,6 +91,55 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
   );
 }
 
+/** East Africa day of a time, for grouping the moves: "2026-11-21". */
+const EAT_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit" });
+const eatDay = (iso) => (iso ? EAT_DAY.format(new Date(iso)) : "");
+const hoursBetween = (a, b) => (a && b ? (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000 : null);
+
+/** A move against the search: machine, plate, card number or fault. */
+const moveMatches = (m, term) => {
+  if (!term) return true;
+  const t = term.toLowerCase();
+  return [m.machine, m.vehicle?.registrationPlate, m.vehicle?.name, m.cardNumber, m.reportedFault]
+    .some((v) => v && String(v).toLowerCase().includes(t));
+};
+
+/**
+ * Every booking into the workshop and every release, newest first, as
+ * FactorySuite's webhook reports them (the server re-reads the cards on each
+ * jobcard event). A booked row says whether that machine is out yet; a
+ * released row says how long it was in.
+ */
+function MovesTable({ rows, resetKey }) {
+  const pager = usePager(rows, resetKey);
+  return (
+    <WfGrid label="Move pages" pager={pager}
+            head={[["When"], ["Move"], ["Machine"], ["Fault"], ["Card"], ["Now"]]}>
+          {pager.pageRows.map((m) => {
+            const booked = m.kind === "booked";
+            const out = !!m.releasedAt;
+            const [label, pill] = CARD_STATUS[m.status] ?? [m.status, "none"];
+            return (
+              <tr key={`${m.kind}-${m.cardId}`} className="wf-row--still">
+                <td className="sys-num">{at(m.at)}</td>
+                <td><Badge tone={booked ? "warn" : "con"}>{booked ? "Booked in" : "Released"}</Badge></td>
+                <td>
+                  <Ident name={m.machine} sub={m.vehicle?.registrationPlate && m.vehicle.registrationPlate !== m.machine ? m.vehicle.registrationPlate : null} />
+                </td>
+                <td title={m.reportedFault || undefined}><span className="wf-cell-fault wf-cell-fault--short">{m.reportedFault ?? "-"}</span></td>
+                <td><span className="dr-veh">{shortCard(m.cardNumber)}</span></td>
+                <td>
+                  {out
+                    ? <span className="wf-cell-stage"><span>Out</span><span className="wf-cell-sub">after {span(hoursBetween(m.checkedInAt, m.releasedAt))} in</span></span>
+                    : <span className="wf-cell-stage"><Badge tone={pill}>{label}</Badge><span className="wf-cell-sub">in for {span(hoursSince(m.checkedInAt))}</span></span>}
+                </td>
+              </tr>
+            );
+          })}
+    </WfGrid>
+  );
+}
+
 /** Where a part's stock stands: none, under its minimum, or enough. */
 const stockOf = (r) => ((r.quantityOnHand ?? 0) <= 0 ? ["Out of stock", "inc"]
   : r.belowMinimum ? ["Below minimum", "warn"] : ["In stock", "con"]);
@@ -141,6 +190,9 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
   const [partsQ, setPartsQ] = useState("");
   const [partsTerm, setPartsTerm] = useState("");
   const [low, setLow] = useState(false);
+  const [movesQ, setMovesQ] = useState("");
+  const [moveKind, setMoveKind] = useState("all");
+  const [movePeriod, setMovePeriod] = useState("today");
   useEffect(() => { const t = setTimeout(() => setPartsTerm(partsQ), 250); return () => clearTimeout(t); }, [partsQ]);
 
   const board = useRead(() => fetchFactoryBoard(orgId, BOARD_DAYS), [orgId]);
@@ -160,6 +212,17 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
 
   const narrowed = !!boardQ.trim() || state !== "all" || urgentOnly;
 
+  // Booked and released: today (East Africa) or the board's whole window.
+  const isMoves = view === "moves";
+  const today = eatDay(new Date().toISOString());
+  const periodMoves = useMemo(() => (board.data?.moves ?? []).filter((m) => movePeriod !== "today" || eatDay(m.at) === today), [board.data, movePeriod, today]);
+  const movesSearched = periodMoves.filter((m) => moveMatches(m, movesQ.trim()));
+  const moveRows = movesSearched.filter((m) => moveKind === "all" || m.kind === moveKind);
+  const nKind = (k) => movesSearched.filter((m) => k === "all" || m.kind === k).length;
+  const bookedHere = periodMoves.filter((m) => m.kind === "booked");
+  const bookedOut = bookedHere.filter((m) => m.releasedAt).length;
+  const periodWords = movePeriod === "today" ? "today" : `in the last ${BOARD_DAYS} days`;
+
   return (
     <div className="fsw-tab">
       <WorkshopStrip open={open} summary={summary} loading={board.loading && !board.data} />
@@ -167,10 +230,15 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
       <WfFilters
         label={isStores ? "Search parts" : "Search the workshop"}
         placeholder={isStores ? "Search a part number or description…" : "Search a machine, card or fault…"}
-        search={isStores ? partsQ : boardQ} onSearch={isStores ? setPartsQ : setBoardQ}
+        search={isStores ? partsQ : isMoves ? movesQ : boardQ} onSearch={isStores ? setPartsQ : isMoves ? setMovesQ : setBoardQ}
         groups={[
-          { label: "View", value: view, onPick: setView, options: [["board", "In the workshop", open.length], ["stores", "Stores"]] },
-          ...(isStores
+          { label: "View", value: view, onPick: setView, options: [["board", "In the workshop", open.length], ["moves", "Booked and released"], ["stores", "Stores"]] },
+          ...(isMoves
+            ? [
+              { label: "Period", value: movePeriod, onPick: setMovePeriod, options: [["today", "Today"], ["window", `${BOARD_DAYS} days`]] },
+              { label: "Move", value: moveKind, onPick: setMoveKind, options: [["all", "All", nKind("all")], ["booked", "Booked in", nKind("booked")], ["released", "Released", nKind("released")]] },
+            ]
+            : isStores
             ? [{ label: "Stock", value: low ? "low" : "all", onPick: (id) => setLow(id === "low"), options: [["all", "All"], ["low", "Below minimum"]] }]
             : [
               { label: "State", value: state, onPick: setState, options: [["all", "All", nState("all")], ...STATES.map((x) => [x.key, x.label, nState(x.key)])] },
@@ -179,7 +247,9 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
         ]}
         tools={<Reload loading={isStores ? parts.loading : board.loading} onReload={() => { board.read(); if (isStores) parts.read(); }} />}
       />
-      <p className="wf-count">{isStores ? (
+      <p className="wf-count">{isMoves ? (
+        <><b>{bookedHere.length}</b> {plural(bookedHere.length, "machine")} booked in {periodWords}{bookedHere.length ? <>, <b>{bookedOut} / {bookedHere.length}</b> fixed and out</> : null}, <b>{periodMoves.length - bookedHere.length}</b> released</>
+      ) : isStores ? (
         <><b>{partRows.length}</b> {plural(partRows.length, "part")}{partsTerm ? <> matching “{partsTerm}”</> : null}{low ? " below minimum" : ""}{partRows.length >= STORES_LIMIT ? `, the first ${STORES_LIMIT.toLocaleString()}` : ""}</>
       ) : narrowed ? (
         <><b>{rows.length}</b> of {open.length} {plural(open.length, "machine")} in the workshop</>
@@ -187,7 +257,19 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
         <><b>{open.length}</b> {plural(open.length, "machine")} in the workshop{waiting ? <>, <b>{waiting}</b> awaiting parts</> : null}</>
       )}</p>
 
-      {isStores ? (
+      {isMoves ? (
+        moveRows.length === 0 && board.loading ? (
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Workshop">Bookings and releases from FactorySuite.</EmptyNote>
+        ) : moveRows.length === 0 && board.error ? (
+          <EmptyNote icon="ti-alert-triangle" tone="error" title="The Workshop Could Not Be Loaded" action={{ label: "Try again", onClick: board.read }}>{board.error}</EmptyNote>
+        ) : moveRows.length === 0 ? (
+          <EmptyNote icon="ti-calendar-event" title={movesQ.trim() || moveKind !== "all" ? "No Moves Match" : "No Bookings or Releases"}>
+            {movesQ.trim() || moveKind !== "all" ? "Nothing matches the search and filters picked." : `FactorySuite has booked in or released no machine ${periodWords}.`}
+          </EmptyNote>
+        ) : (
+          <MovesTable rows={moveRows} resetKey={`${movesQ}|${moveKind}|${movePeriod}`} />
+        )
+      ) : isStores ? (
         <>
           {partRows.length === 0 && parts.loading ? (
             <EmptyNote icon="ti-loader-2" tone="busy" title="Reading the Stores">Parts and stock from FactorySuite.</EmptyNote>

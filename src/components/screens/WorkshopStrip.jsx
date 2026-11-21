@@ -24,12 +24,15 @@ const hoursSince = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3_60
 
 /** A card's state on the floor; the same order the server moves the repair job in. */
 export const stateOf = (c) =>
-  c.status === "AWAITING_PARTS" || (c.partsRequestedAt && !c.partsReceivedAt) ? "parts"
+  // COMPLETED: the work is done and the machine waits to be released (9 of 23 open on 21 Nov).
+  c.status === "COMPLETED" || c.workCompletedAt ? "done"
+    : c.status === "AWAITING_PARTS" || (c.partsRequestedAt && !c.partsReceivedAt) ? "parts"
     : c.repairStartedAt ? "repair" : "waiting";
 
-// In the Ratings bar's tones: being repaired is green, waiting on parts amber, not yet started grey.
+// In the Ratings bar's tones: being repaired is green, work done (awaiting release) blue, waiting on parts amber, not yet started grey.
 export const STATES = [
   { key: "repair", label: "Repairing", mix: "good" },
+  { key: "done", label: "Work done", mix: "done" },
   { key: "waiting", label: "Not started", mix: "new" },
   { key: "parts", label: "Awaiting parts", mix: "fair" },
 ];
@@ -58,15 +61,19 @@ export default function WorkshopStrip({ open, summary, loading }) {
           pointWords={(at) => `${fmtDay(at.day)} · ${fmt(at.opened)} ${plural(at.opened, "card")} opened`}
           loading={loading && !summary}
         />
+        {/* Of the period's bookings, how many have left: "16 / 17 fixed". The
+            line is still the machines released each day. */}
         <TrendStat
-          title="Released"
+          title="Booked, now fixed"
           series={series}
           valueKey="released"
-          value={summary ? fmt(summary.released) : "-"}
-          unit={plural(summary?.released, "machine")}
+          value={summary?.booked != null ? `${fmt(summary.bookedFixed)} / ${fmt(summary.booked)}` : summary ? fmt(summary.released) : "-"}
+          unit={summary?.booked != null ? "fixed" : plural(summary?.released, "machine")}
           tone="tonnes"
           type="line"
-          sub={sub}
+          sub={summary?.booked != null
+            ? (summary.bookedStillIn ? `${fmt(summary.bookedStillIn)} of those still in, last ${fmt(summary.days)} days` : `all out, last ${fmt(summary.days)} days`)
+            : sub}
           pointWords={(at) => `${fmtDay(at.day)} · ${fmt(at.released)} released`}
           loading={loading && !summary}
         />
