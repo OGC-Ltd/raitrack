@@ -10,10 +10,12 @@
 // dark card.
 
 import { useEffect, useRef, useState } from "react";
+// The shared map card parts (the work plan card's), before this card's own.
+import "../body/WorkPlansOnMap.css";
 import "./VehicleStatsCard.css";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import { copyText, formatCoords } from "../../lib/copyText";
-import { vehicleActivity, isInTransit, isOnline, equipmentLabel, carriesCargo, maxPayloadTonnes, menengaiGroup, fleetTypeLabel, ACTIVITY_LABELS, ACTIVITY_COLORS, ONLINE_COLORS } from "../../lib/vehicleMap";
+import { vehicleActivity, isInTransit, isOnline, equipmentLabel, carriesCargo, maxPayloadTonnes, menengaiGroup, fleetTypeLabel, ACTIVITY_LABELS, ACTIVITY_COLORS } from "../../lib/vehicleMap";
 import { liveTrip, roundTripKm, LEG_LABEL } from "../../lib/tripProgress";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useJourneySoFar } from "../../hooks/useJourneySoFar";
@@ -23,20 +25,9 @@ import TripReportButton from "../shared/TripReportButton";
 import { useAppSelector } from "../../context/AppContext";
 import { ORG_CODE_BY_COMPANY } from "../../api/org";
 import { unitSite } from "../../lib/siteLists";
+import { useWorkshopUnits } from "../../hooks/useWorkshopUnits";
+import OpenInWorkshop from "../body/OpenInWorkshop";
 
-const STATUS_COLORS = {
-  ok:       ONLINE_COLORS.transit,
-  speeding: "#f59e0b",
-  theft:    "#ef4444",
-  // OFFLINE. The one slate left on this card, now that the online states have
-  // all moved into the green — see ONLINE_COLORS.
-  parked:   "#94a3b8",
-  // Was MISSING, so an idling vehicle fell back to the healthy green — the bug
-  // that made the old idling badge render green. It is a green again now, but
-  // a DIFFERENT one, which is the distinction that was missing in the first
-  // place.
-  idling:   ONLINE_COLORS.idling,
-};
 
 // Provider classes → the words an operator uses. Anything unmapped falls back
 // to the raw class, so a new type still shows rather than disappearing.
@@ -255,19 +246,54 @@ function RunRow({ vehicle }) {
   // 'resting' rather than guessing — engine-on would otherwise just be a
   // restatement of "moving". See lib/movement-state.
   const RUN = {
-    moving:  { cls: "vt-run-row--transit", glyph: "road",  label: "On the road for " },
-    idling:  { cls: "vt-run-row--idle",    glyph: "idle",  label: "Idling for " },
-    resting: { cls: "vt-run-row--rest",    glyph: "clock", label: "Resting for " },
-  }[state] ?? { cls: "vt-run-row--rest", glyph: "clock", label: "Resting for " };
+    moving:  { cls: "mapcard__run--transit", glyph: "road",  label: "On the road for " },
+    idling:  { cls: "mapcard__run--idle",    glyph: "idle",  label: "Idling for " },
+    resting: { cls: "mapcard__run--rest",    glyph: "clock", label: "Resting for " },
+  }[state] ?? { cls: "mapcard__run--rest", glyph: "clock", label: "Resting for " };
 
+  // One line of the card's job block (the work plan card's shape, operator
+  // 2026-11-21): the glyph, how long, and since when.
   return (
-    <div className={`vt-run-row ${RUN.cls}`}>
+    <p className={`mapcard__line mapcard__run ${RUN.cls}`}>
       <RunGlyph kind={RUN.glyph} />
-      <span className="vt-run-text">
+      <span>
         {RUN.label}
         <b>{approx ? "≥ " : ""}{duration}</b>
-        <span className="vt-run-since"> · since {fmtClock(sinceMs)}</span>
+        <span className="mapcard__quiet"> · since {fmtClock(sinceMs)}</span>
       </span>
+    </p>
+  );
+}
+
+/** One row of the card: its label in the left column, its lines on the right
+ *  (the work plan card's `Part`, WorkPlanHoverCard). */
+function Part({ label, children }) {
+  return (
+    <div className="mapcard__part">
+      <dt className="mapcard__partk">{label}</dt>
+      <dd className="mapcard__partv">{children}</dd>
+    </div>
+  );
+}
+
+/** A line of a part. `main` is the line you read first; the rest are quiet. */
+const Line = ({ children, main = false, mono = false, title }) => (children == null || children === false ? null
+  : <p className={"mapcard__line" + (main ? " mapcard__line--main" : "") + (mono ? " mapcard__line--mono" : "")} title={title}>{children}</p>);
+
+/** One cell of the figures strip: what, how much, and a word on it. */
+function Figure({ label, value, unit, note, valColor, noteColor, meter }) {
+  return (
+    <div className="mapcard__fuelcell">
+      <dt className="mapcard__fuelk">{label}</dt>
+      <dd className="mapcard__fuelv" style={valColor ? { color: valColor } : undefined}>
+        {value}{unit && <span className="mapcard__unit">{unit}</span>}
+      </dd>
+      {note && <dd className="mapcard__fueln" style={noteColor ? { color: noteColor } : undefined}>{note}</dd>}
+      {meter && (
+        <dd className="mapcard__meter" aria-hidden="true">
+          <i style={{ width: `${Math.max(0, Math.min(100, meter.pct))}%`, background: meter.color }} />
+        </dd>
+      )}
     </div>
   );
 }
@@ -293,17 +319,10 @@ function RunRow({ vehicle }) {
  * leaves it off and shows the start only where the day is already held.
  */
 export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClick }) {
-  const color = STATUS_COLORS[vehicle.status] ?? STATUS_COLORS.ok;
-
   // ── Derived colour values (same thresholds as fleetdash) ──────────────────
+  // The alert pills and the speed figure take their colours from the
+  // stylesheet's tokens (VehicleStatsCard.css), which follow the theme.
   const engineOn    = vehicle.engine === "on";
-  const OFF_COLOR   = "var(--accent-off)"; // uniform "sensor inactive" colour
-  const engineColor = engineOn ? "#22c55e" : "#94a3b8";
-
-  const speedColor = !engineOn ? OFF_COLOR
-                   : vehicle.speed > 100                        ? "#ef4444"
-                   : vehicle.speed > (vehicle.speedLimit ?? 80) ? "#f59e0b"
-                   : "#22c55e";
 
   // Engine-temperature and oil-level grading used to be computed here for two
   // of the vitals tiles. The trackers report neither channel — the Wialon
@@ -456,92 +475,168 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
   const activeCompanyId = useAppSelector((a) => a.activeCompanyId);
   const site = unitSite(vehicle, ORG_CODE_BY_COMPANY[activeCompanyId]);
 
+  // Where the unit stands with the workshop (operator, 2026-11-21): booked in,
+  // in, being fixed, waiting on parts, work done — from its open repair job and
+  // FactorySuite card. The same shared read as the units list and the unit
+  // panel (hooks/useWorkshopUnits), so the three never disagree; empty for a
+  // role without repair:read.
+  const ws = useWorkshopUnits().get(vehicle.vehicleId) ?? null;
+  const wsSince = ws?.since
+    ? new Date(ws.since).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi" })
+    : null;
+
   // Alerts only. Activity belongs to the one chip below, so it is stated once.
   const stateLabel = STATE_LABELS[vehicle.status];
 
+  // The figures strip: fuel, speed, burn rate — the three numbers a glance at
+  // a unit is for, framed the way the work plan card frames its fuel.
+  const fuelValue = vehicle.fuelLitres != null ? Math.round(vehicle.fuelLitres).toLocaleString()
+    : vehicle.fuelLevel != null ? `${fuel}` : "-";
+  const fuelUnit = vehicle.fuelLitres != null ? " L" : vehicle.fuelLevel != null ? "%" : "";
+  // Litres out of tank capacity makes the percentage meaningful — 50% of a
+  // 20 L saloon tank is not 50% of a 400 L tractor.
+  const fuelNote = vehicle.fuelLitres != null && vehicle.tankCapacityL != null
+    ? `${fuel}% of ${Math.round(vehicle.tankCapacityL).toLocaleString()} L`
+    : vehicle.fuelLitres != null && vehicle.fuelLevel != null ? `${fuel}%`
+    : vehicle.fuelLevel == null && vehicle.fuelLitres == null ? "no reading" : null;
+
+  const limit = vehicle.speedLimit ?? 80;
+  const over = engineOn && vehicle.speed > limit;
+  const speedNote = !engineOn ? "sensor off"
+    : vehicle.speedLimit != null ? (over ? <><WarnGlyph />{` limit ${vehicle.speedLimit}`}</> : `limit ${vehicle.speedLimit}`)
+    : null;
+
+  // A unit the FactorySuite register rates shows its standard burn rate only
+  // (operator 2026-11-20). Any other unit: litres per engine hour today, with
+  // litres per km once it has driven far enough to say (lib/vehicleDay burnRate).
+  const burnFig = vsStd
+    ? { value: vsStd.std.toFixed(vsStd.digits), unit: ` ${vsStd.unit}`, note: "standard" }
+    : {
+        value: burn?.lPerH != null ? burn.lPerH.toFixed(1) : burn?.lPerKm != null ? burn.lPerKm.toFixed(2) : "-",
+        unit: burn?.lPerH != null ? " L/h" : burn?.lPerKm != null ? " L/km" : "",
+        note: burn?.lPerH != null && burn.lPerKm != null ? `${burn.lPerKm.toFixed(2)} L/km`
+          : burn ? "today"
+          : dayPending ? "reading…" : "not enough today",
+      };
+
+  const startPlace = start ? startName ?? formatCoords(start.lat, start.lng) ?? "the start" : null;
+
   return (
-    <>
-      {/* ── Header ── */}
-      <div className="vt-header">
-        <div className="vt-header-left">
-          <span className="vt-reg" title={vehicle.name || vehicle.id}>{displayPlate(vehicle)}</span>
-          <span className="vt-driver-sub">{vehicle.driver}</span>
+    <article className="mapcard mapcard--unit">
+      {/* ── Head: the unit, what it is, and whether its tracker is talking ── */}
+      <header className="mapcard__head">
+        <h3 className="mapcard__title" title={vehicle.name || vehicle.id}>
+          {displayPlate(vehicle)}
           {/* What this machine actually is. KASULU units take the name off
               RaiFactorySuite's machine register ("CASE PUMA", "Bull Dozer");
-              otherwise the SPECIFIC equipment name off the unit's code — an
-              EX is an "Excavator", not the
-              "Plant" its class says, which every dozer and grader also shows.
-              Falls back to the class when the code is not one we can name. */}
-          {typeLabel && <span className="vt-type-badge">{typeLabel}</span>}
-          {group && (
-            <span className={`vt-group-badge${group === "mg:" ? " vt-group-badge--none" : ""}`} title="Group on the fleet list">
-              {fleetTypeLabel(group)}
-            </span>
-          )}
-          {site && <span className="vt-group-badge" title="Site">{site}</span>}
-        </div>
-        <div className="vt-header-right">
-          {/* CONNECTION — always rendered, independent of everything else.
-              This is the provider's own verdict (Wialon's netconn, carried by
-              the server), not "has pinged recently". A unit can be online and
-              idling, online and speeding, or offline mid-journey; each of
-              those is two facts and needs two slots. */}
-          <span className={`vt-conn ${online ? "vt-conn--on" : "vt-conn--off"}`}>
-            <span className="vt-conn-dot" aria-hidden="true" />
-            {online ? "ONLINE" : "OFFLINE"}
-          </span>
-
-          {/* ALERT — only when something is wrong. Activity lives on the chip
-              below; a badge here repeating it stated the same fact twice. */}
-          {/* The theft badge opens the unit's fuel theft window when the
-              card's owner offers a way to (a clicked map card does; a hover
-              card and the window's own copy do not). */}
+              otherwise the SPECIFIC equipment name off the unit's code — an EX
+              is an "Excavator", not the "Plant" its class says. */}
+          {typeLabel && <span className="mapcard__titlesub">{typeLabel}</span>}
+        </h3>
+        <div className="mapcard__states">
+          {/* ALERT — only when something is wrong (STATE_LABELS). The theft
+              pill opens the unit's fuel theft window when the card's owner
+              offers a way to (a clicked map card does; a hover card and the
+              window's own copy do not). */}
           {stateLabel && (onAlertClick && vehicle.status === "theft" ? (
             <button
               type="button"
-              className="vt-status-badge vt-status-badge--action"
-              style={{ background: color + "22", color, border: `1px solid ${color}55` }}
+              className={`mapcard__state mapcard__state--${vehicle.status} mapcard__state--action`}
               onClick={onAlertClick}
               title="Open the fuel theft alert"
             >
               {stateLabel}
             </button>
           ) : (
-            <span className="vt-status-badge" style={{
-              background: color + "22", color,
-              border: `1px solid ${color}55`,
-            }}>
-              {stateLabel}
-            </span>
+            <span className={`mapcard__state mapcard__state--${vehicle.status}`}>{stateLabel}</span>
           ))}
+          {/* CONNECTION — always shown, the provider's own verdict (Wialon's
+              netconn), independent of what the unit is doing. */}
+          <span className={`mapcard__state mapcard__state--${online ? "online" : "offline"}`}>
+            {online ? "Online" : "Offline"}
+          </span>
         </div>
+      </header>
+
+      {/* ── What it is doing, and for how long ── */}
+      <div className="mapcard__job">
+        {/* The SAME classification the marker and the filter counts use
+            (vehicleActivity), gated on the connection: an offline unit's last
+            frame could still carry engine-on. */}
+        <p className="mapcard__line mapcard__line--main mapcard__activity" style={{ "--vt-transit-color": driverColor }}>
+          {inTransit
+            ? <span className="vt-transit-dot" aria-hidden="true" />
+            : <span className="vt-dot" style={{ background: driverColor }} aria-hidden="true" />}
+          <span style={{ color: driverColor }}>{activityLabel}</span>
+          <span className="mapcard__activity-engine">· engine {engineOn ? "on" : "off"}</span>
+        </p>
+        <RunRow vehicle={vehicle} />
       </div>
 
-      <div className="vt-info">
+      {/* ── Figures ── */}
+      <dl className="mapcard__fuel">
+        <Figure
+          label="Fuel"
+          value={fuelValue}
+          unit={fuelUnit}
+          note={fuelNote}
+          valColor={vehicle.fuelLevel != null || vehicle.fuelLitres != null ? fuelColor : undefined}
+          meter={vehicle.fuelLevel != null ? { pct: fuel, color: fuelColor } : null}
+        />
+        <Figure
+          label="Speed"
+          value={engineOn ? vehicle.speed : "-"}
+          unit={engineOn ? " km/h" : ""}
+          note={speedNote}
+          valColor={!engineOn ? undefined : vehicle.speed > 100 ? "var(--accent-crit)" : over ? "var(--accent-warn)" : undefined}
+          noteColor={over ? "var(--accent-warn)" : undefined}
+        />
+        <Figure label="Burn rate" value={burnFig.value} unit={burnFig.unit} note={burnFig.note} />
+      </dl>
 
-        {/* Driver status + location */}
-        <div className="vt-person-row">
-          <div className="vt-person-chip" style={{
-            color: driverColor,
-            background: driverColor + "1a",
-            border: `1px solid ${driverColor}44`,
-            "--vt-transit-color": driverColor,
-          }}>
-            {/* The rippling dot moved here with the label. It echoes the map
-                marker's in-transit ring, so the card and the marker say the
-                same thing about the same vehicle. */}
-            {inTransit
-              ? <span className="vt-transit-dot" aria-hidden="true" />
-              : <span className="vt-dot" style={{ background: driverColor }} />}
-            {activityLabel}
-          </div>
-          {/* The location icon copies the pair. It is a real button, not the
-              static 📍 it replaced — but only where it can be reached: the
-              HOVER card is pointer-events:none and chases the cursor, so this
-              is a live control on the pinned card, the search row and the fuel
-              incident window, and inert decoration on hover. That is why the
-              coordinates are also in the title attribute. */}
-          <span className="vt-loc-text" title={locTitle}>
+      {/* ── The rest, as a two-column list ── */}
+      <dl className="mapcard__parts">
+        {/* First of the parts: a unit in the workshop is not out working,
+            whatever its tracker says, and that is the first thing to know. */}
+        {ws && (
+          <Part label="Workshop">
+            <p className={`mapcard__line mapcard__line--main mapcard__ws mapcard__ws--${ws.tone}`}>
+              <span className="mapcard__ws-dot" aria-hidden="true" />
+              {ws.label}{ws.fix ? `: ${ws.fix}` : ""}
+            </p>
+            {ws.detail && <Line>{ws.detail}</Line>}
+            <Line>{[ws.card, ws.major ? "major repair" : null, wsSince ? `since ${wsSince}` : null].filter(Boolean).join(" · ") || null}</Line>
+            {/* The job, from a clicked card only: the hover card takes no pointer. */}
+            {withDay && (
+              <span className="mapcard__ws-open-row">
+                <OpenInWorkshop itemId={ws.jobId} className={`mapcard__ws-open mapcard__ws--${ws.tone}`}>Open job</OpenInWorkshop>
+              </span>
+            )}
+          </Part>
+        )}
+
+        <Part label="Driver">
+          <Line main>{vehicle.driver || "Unassigned"}</Line>
+          {/* Menengai's fleet-list group (Tankers, Van Sales, …), highlighted
+              (operator, 2 Nov 2026), and West Kenya's site (Naitiri, Olepito,
+              …) the same way (13 Nov 2026); null elsewhere. */}
+          {(group || site) && (
+            <p className="mapcard__tags">
+              {group && (
+                <span className={`mapcard__tag${group === "mg:" ? " mapcard__tag--none" : ""}`} title="Group on the fleet list">
+                  {fleetTypeLabel(group)}
+                </span>
+              )}
+              {site && <span className="mapcard__tag" title="Site">{site}</span>}
+            </p>
+          )}
+        </Part>
+
+        <Part label="Where">
+          {/* The pin copies the pair. A live control on the clicked card and
+              the incident window; on the hover card (pointer-events:none) it is
+              decoration, which is why the coordinates are also in the title. */}
+          <p className="mapcard__line mapcard__line--main mapcard__where" title={locTitle}>
             <button
               type="button"
               className={"vt-loc-icon-btn"
@@ -552,8 +647,6 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
               disabled={!coords}
               aria-label={coords ? "Copy vehicle coordinates to clipboard" : "No coordinates to copy"}
             >
-              {/* The mark swaps to a tick or a warning for the flash, so the
-                  result is visible without hovering for the tooltip. */}
               <svg className="vt-loc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 {copyState === "copied" ? (
                   <path d="M20 6L9 17l-5-5" />
@@ -570,200 +663,91 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
                 )}
               </svg>
             </button>
-            {/* Screen readers get the outcome; the icon swap is visual only. */}
             <span className="vt-sr-only" role="status" aria-live="polite">
               {copyState === "copied" ? `Copied ${coords}`
                 : copyState === "failed" ? "Could not copy the coordinates"
                 : ""}
             </span>
-            {placeName ?? vehicle.location}
-          </span>
-        </div>
+            <span>{place || coords || "-"}</span>
+          </p>
+        </Part>
 
-        <RunRow vehicle={vehicle} />
-
-        <div className="vt-divider" />
-
-        {/* ── vitals ledger ── */}
-        <div className="vt-tiles">
-          {/* No consumption figure. This read `${fuelConsumption} L/h`, which
-              was 0 on EVERY vehicle: the Wialon adapter sets fuelUsedMl to null
-              on every frame (the position payload has no consumption channel),
-              and the mapper turned that null into 0. So an idling engine — one
-              that is by definition burning fuel — reported burning none.
-
-              It was also the wrong quantity: fuelUsedMl is documented as a
-              VOLUME delta between pings, not a rate, so even once populated it
-              could not be printed as L/h without dividing by the interval.
-
-              ON / OFF says everything we actually measure here. A real rate
-              needs fuel-level deltas over engine hours, computed server side —
-              see the note in lib/vehicleMap. */}
-          <Tile
-            label="ENGINE"
-            value={engineOn ? "ON" : "OFF"}
-            valColor={engineColor}
-          />
-          <Tile
-            label="SPEED"
-            value={engineOn ? vehicle.speed : "-"}
-            unit={engineOn ? " km/h" : ""}
-            sub={engineOn
-              ? (vehicle.speed > (vehicle.speedLimit ?? 80)
-                  ? <><WarnGlyph />{` lim ${vehicle.speedLimit}`}</>
-                  : `lim ${vehicle.speedLimit}`)
-              : "sensor off"}
-            valColor={speedColor}
-            subColor={engineOn && vehicle.speed > (vehicle.speedLimit ?? 80)
-              ? "var(--accent-warn)" : undefined}
-          />
-          <Tile
-            label="MILEAGE"
-            value={vehicle.odometerKm != null ? Math.round(vehicle.odometerKm).toLocaleString() : "-"}
-            unit={vehicle.odometerKm != null ? " km" : ""}
-            sub="total distance"
-          />
-          <Tile
-            label="ENGINE HRS"
-            value={vehicle.engineHours != null ? Math.round(vehicle.engineHours).toLocaleString() : "-"}
-            unit={vehicle.engineHours != null ? " h" : ""}
-            sub="total run time"
-          />
-          {/* A unit the FactorySuite register rates shows its standard burn
-              rate only (operator 2026-11-20). Any other unit: litres per
-              engine hour today, with litres per km once it has driven far
-              enough to say (lib/vehicleDay burnRate). */}
-          {vsStd ? (
-            <Tile
-              label="BURN RATE"
-              value={vsStd.std.toFixed(vsStd.digits)}
-              unit={` ${vsStd.unit}`}
-              sub="standard"
-            />
-          ) : (
-            <Tile
-              label="BURN RATE"
-              value={burn?.lPerH != null ? burn.lPerH.toFixed(1)
-                : burn?.lPerKm != null ? burn.lPerKm.toFixed(2) : "-"}
-              unit={burn?.lPerKm != null && burn.lPerH == null ? " L/km" : " L/h"}
-              sub={burn?.lPerH != null && burn.lPerKm != null ? `${burn.lPerKm.toFixed(2)} L/km today`
-                : burn ? "today"
-                : dayPending ? "reading today…" : "not enough today"}
-            />
-          )}
-          {/* Only once RaiFactorySuite has sent a serial for the unit
-              (operator, 28 Sep: "remove the seal serial, this is to be
-              dynamically populated when a webhook from FactorySuite sends us a
-              serial number for the unit"). The webhook's serial lands on the
-              unit's dispatch — the server's eventSerial reads five spellings
-              of it — and reaches the card as trip.serialNumber. Until one
-              arrives the row is not drawn; it was a permanent "—". */}
-          {serial && (
-            <Tile
-              label="SEAL SERIAL"
-              value={serial}
-            />
-          )}
-        </div>
-
-        {/* ── Fuel bar ── */}
-        <div className="vt-bar-section">
-          <div className="vt-bar-hdr">
-            <span className="vt-bar-lbl">FUEL LEVEL</span>
-            <span className="vt-bar-amt" style={{ color: fuelColor }}>
-              {/* Litres out of tank capacity makes the percentage meaningful —
-                  50% of a 20 L saloon tank is not 50% of a 400 L tractor. */}
-              {vehicle.fuelLitres != null && vehicle.tankCapacityL != null
-                ? `${Math.round(vehicle.fuelLitres)}/${Math.round(vehicle.tankCapacityL)} L · ${fuel}%`
-                : vehicle.fuelLevel != null ? `${fuel}%`
-                : vehicle.fuelLitres != null ? `${Math.round(vehicle.fuelLitres)} L`
-                : "-"}
-            </span>
-          </div>
-          <Bar pct={vehicle.fuelLevel != null ? fuel : 0} color={fuelColor} />
-        </div>
-
-        {/* ── Payload bar (carriers only) ── */}
-        {hasPayload && (
-          <>
-            <div className="vt-divider" />
-            <div className="vt-bar-section">
-              <div className="vt-bar-hdr">
-                <span className="vt-bar-lbl">{vehicle.cargo}</span>
-                <span className="vt-bar-amt" style={{ color: loadColor }}>
-                  {vehicle.weight} / {maxPay} t
-                </span>
-              </div>
-              <Bar pct={loadPct} color={loadColor} />
-              <span className="vt-bar-sub">{loadPct}% of payload capacity</span>
-            </div>
-          </>
-        )}
-
-        {/* ── Journey: where it set off today, and where it is now ── */}
+        {/* START → NOW (operator, 28 Sep): where and when the unit set off
+            today, off its own readings, and the ground covered since. Departed
+            only on a FactorySuite dispatch; otherwise it simply started work
+            (operator, 2026-10-27). */}
         {showJourney && (
-          <>
-            <div className="vt-divider" />
-            <div className="vt-journey-row">
-              <span className="vt-jdot dep" />
-              <span className="vt-jplace" title={start ? formatCoords(start.lat, start.lng) ?? undefined : undefined}>
-                {start ? startName ?? formatCoords(start.lat, start.lng) ?? "Start"
-                  : dayPending ? "…" : "Not moved today"}
-              </span>
-              <span className="vt-jarrow">→</span>
-              <span className="vt-jdot dest" />
-              <span className="vt-jplace" title={locTitle}>{place || coords || "-"}</span>
-            </div>
-            <div className="vt-journey-times">
-              <span className="vt-jtime">
-                {/* Departed only on a FactorySuite dispatch (every open trip is
-                    one); otherwise the unit simply started work (operator,
-                    2026-10-27). */}
-                <span className="vt-jtime-lbl">{hasLeg ? "DEPARTED" : "STARTED"}</span>{" "}
-                {start ? fmtClock(start.t) : dayPending ? "…" : "-"}
-              </span>
-            </div>
-            <div className="vt-bar-section" style={{ marginBottom: 8 }}>
-              <div className="vt-bar-hdr">
-                <span className="vt-bar-lbl">OUTBOUND</span>
-                {/* Explicit bright colour — with no colour this span inherited
-                    the muted secondary text and the km figure was barely
-                    legible. */}
-                <span className="vt-bar-amt" style={{ color: "var(--accent-info)" }}>
-                  {journey && !start ? "0 km"
-                    : outboundKm != null ? `${(+outboundKm).toFixed(1)} km since start`
-                    : dayPending ? "…" : "distance not measured"}
-                </span>
-              </div>
-              {/* An open dispatch keeps its round trip: the bar is a position
-                  along it, and the line under it says where the run is going.
-                  No bar without a measured destination: 58 of Sukari's 152
-                  destination names have too few completed trips to place, and
-                  an empty bar would read as "nowhere yet" rather than
-                  "unmeasurable". */}
-              {hasLeg && trip.percent != null && <Bar pct={distPct} color="#38bdf8" />}
-              {hasLeg && trip.destination && (
-                <span className="vt-bar-sub">
-                  {[LEG_LABEL[trip.leg],
-                    trip.percent != null && total != null ? `${trip.percent}% of the ${total} km round trip to ${trip.destination}` : `trip to ${trip.destination}`,
-                  ].filter(Boolean).join(" · ")}
-                </span>
-              )}
-            </div>
-            {/* The printable report for this run, or the unit's last one when
-                it is not out on a dispatch. Pinned panel only. */}
-            {withDay && orgId && vehicle.vehicleId && (
-              <div className="vt-report-row">
-                <TripReportButton
-                  report={{ orgId, vehicleId: vehicle.vehicleId, dispatch: vehicle.trip?.externalId ?? null }}
-                  label={hasLeg ? "Trip report" : "Last trip report"}
-                />
-              </div>
+          <Part label="Today">
+            <Line main title={start ? formatCoords(start.lat, start.lng) ?? undefined : undefined}>
+              {start ? `${hasLeg ? "Departed" : "Started"} ${fmtClock(start.t)} from ${startPlace}`
+                : dayPending ? "…" : "Not moved today"}
+            </Line>
+            <Line>
+              {journey && !start ? "0 km outbound"
+                : outboundKm != null ? `${(+outboundKm).toFixed(1)} km since start`
+                : dayPending ? "…" : "Distance not measured"}
+            </Line>
+            {/* An open dispatch keeps its round trip. No position without a
+                measured destination: an empty figure would read as "nowhere
+                yet" rather than "unmeasurable". */}
+            {hasLeg && trip.destination && (
+              <Line>
+                {[LEG_LABEL[trip.leg],
+                  trip.percent != null && total != null ? `${trip.percent}% of the ${total} km round trip to ${trip.destination}` : `trip to ${trip.destination}`,
+                ].filter(Boolean).join(" · ")}
+              </Line>
             )}
-          </>
+            {hasLeg && trip.percent != null && (
+              <span className="mapcard__meter mapcard__meter--trip" aria-hidden="true">
+                <i style={{ width: `${Math.max(0, Math.min(100, distPct))}%` }} />
+              </span>
+            )}
+          </Part>
         )}
 
-      </div>
-    </>
+        {/* Generators, motorbikes, plant and light vehicles never carry a
+            load, so they get no load row at all. A full truck is the goal,
+            not an alarm: only a load OVER the legal payload shouts. */}
+        {hasPayload && (
+          <Part label="Load">
+            <Line main>
+              <span>{vehicle.cargo}</span>
+              <span style={{ color: loadColor }}>{` · ${vehicle.weight} / ${maxPay} t`}</span>
+            </Line>
+            <Line>{loadPct}% of payload capacity</Line>
+          </Part>
+        )}
+
+        <Part label="Meters">
+          <Line main>
+            {vehicle.odometerKm != null ? `${Math.round(vehicle.odometerKm).toLocaleString()} km` : "-"}
+            <span className="mapcard__quiet"> total distance</span>
+          </Line>
+          <Line main>
+            {vehicle.engineHours != null ? `${Math.round(vehicle.engineHours).toLocaleString()} h` : "-"}
+            <span className="mapcard__quiet"> engine run time</span>
+          </Line>
+        </Part>
+
+        {/* Only once RaiFactorySuite has sent a serial for the unit's open
+            dispatch (operator, 28 Sep); until then the row is not drawn. */}
+        {serial && (
+          <Part label="Seal">
+            <Line mono>{serial}</Line>
+          </Part>
+        )}
+      </dl>
+
+      {/* The printable report for this run, or the unit's last one when it is
+          not out on a dispatch. Clicked card only. */}
+      {withDay && orgId && vehicle.vehicleId && (
+        <footer className="mapcard__foot mapcard__foot--report">
+          <TripReportButton
+            report={{ orgId, vehicleId: vehicle.vehicleId, dispatch: vehicle.trip?.externalId ?? null }}
+            label={hasLeg ? "Trip report" : "Last trip report"}
+          />
+        </footer>
+      )}
+    </article>
   );
 }

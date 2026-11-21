@@ -304,9 +304,14 @@ const DRAG_SLOP = 3;
  * @param {object}   [opts.initial] `{x, y}` to open at instead of the dock —
  *   for a window about a THING the operator just clicked, which should appear
  *   near it rather than at a fixed edge. A remembered position still wins: a
- *   window someone deliberately placed stays placed.
+ *   window someone deliberately placed stays placed. May be a function of the
+ *   node, `(el) => {x, y}`, for a window that places itself by its own
+ *   measured size (the vehicle card hangs centred under the unit).
+ * @param {boolean}  [opts.preferInitial] open at `initial` every time, over a
+ *   remembered position — for a window that points at what was clicked, where
+ *   a remembered place would leave its pointer aimed at nothing.
  */
-export function useFloatingWindow({ id, dock = "bottom-center", enabled = true, initial } = {}) {
+export function useFloatingWindow({ id, dock = "bottom-center", enabled = true, initial, preferInitial = false } = {}) {
   const ref = useRef(null);
   const dragRef = useRef(null);
   const placedRef = useRef(false);
@@ -339,14 +344,15 @@ export function useFloatingWindow({ id, dock = "bottom-center", enabled = true, 
     placedRef.current = true;
 
     const w = el.offsetWidth, h = el.offsetHeight;
-    const saved = readWindowPos(id);
+    const at = typeof initial === "function" ? initial(el) : initial;
+    const saved = preferInitial && at ? null : readWindowPos(id);
     if (saved) { place(saved.x, saved.y); return; }
-    if (initial) { place(initial.x, initial.y); return; }
+    if (at) { place(at.x, at.y); return; }
 
     const fn = DOCKS[dock] ?? DOCKS["bottom-center"];
     const p = fn(safeArea(), w, h);
     place(p.x, p.y);
-  }, [enabled, id, dock, initial, place]);
+  }, [enabled, id, dock, initial, preferInitial, place]);
 
   // A shrinking window can strand a fixed panel off-screen, and off-screen
   // means unreachable — the only way back is the drag handle it took with it.

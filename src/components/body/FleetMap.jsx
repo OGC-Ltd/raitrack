@@ -1607,8 +1607,22 @@ function placeHangingCard(node, mouseX, mouseY) {
   node.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
 }
 
-/** Place whichever hover card is up: the plan card hangs, the unit card sits
- *  beside the cursor. */
+/** Where the CLICKED unit card opens: hanging centred under the unit, its
+ *  pointer on the unit, turned over above it when there is no room below — the
+ *  hover card's shape, kept when clicked (operator, 2026-11-21). The top-left
+ *  for useFloatingWindow, which clamps it to the screen; layout px. */
+function hangingCardAt(node, mouseX, mouseY) {
+  const { height: vh } = layoutViewport();
+  const w = node.offsetWidth || 304;
+  const h = node.offsetHeight || TOOLTIP_H;
+  const roomBelow = vh - mouseY - HANG_GAP - TOOLTIP_PAD;
+  const roomAbove = mouseY - HANG_GAP - TOOLTIP_PAD;
+  const above = h > roomBelow && roomAbove > roomBelow;
+  node.dataset.side = above ? "above" : "below";
+  return { x: mouseX - w / 2, y: above ? mouseY - HANG_GAP - h : mouseY + HANG_GAP };
+}
+
+/** Place whichever hover card is up. Both hang from the unit by a pointer. */
 function placeHoverCard(node, mouseX, mouseY) {
   if (node.dataset.place === "hang") { placeHangingCard(node, mouseX, mouseY); return; }
   const { left, top } = tooltipOffset(mouseX, mouseY);
@@ -1691,6 +1705,16 @@ const VehicleTooltip = memo(function VehicleTooltip({
   onToggleCamera, cameraOn = false,
   onZoomTo, onZoomBack, zoomedIn = false, onOpenTheft,
 }) {
+  // The hover card hangs from the unit by a pointer at its top centre, the
+  // work plan card's shape (operator, 2026-11-21): placeHoverCard reads
+  // `data-place` and hangs it. The card draws its own surface (.mapcard).
+  if (!pinned) {
+    return (
+      <div ref={nodeRef} className="vt-hover" data-place="hang" data-side="below" role="tooltip">
+        <VehicleStatsCard vehicle={vehicle} withDay={false} />
+      </div>
+    );
+  }
   return (
     <div
       ref={nodeRef}
@@ -2904,17 +2928,26 @@ export default function FleetMap() {
    *
    * It opens at the pointer rather than at a dock: this card is about the
    * marker that was just clicked, so appearing beside it is the whole point.
-   * A position the operator has dragged to still wins over that, because
-   * moving a window is a statement about where they want it.
+   * Since 2026-11-21 it hangs from the unit by a pointer, so a new click opens
+   * it there even after it was dragged elsewhere; the drag still holds for
+   * as long as that card stays open.
    *
    * `enabled` is the pin: while merely hovering, the node is positioned by the
    * pointer effect below instead, and the hook must not fight it for the same
    * inline styles.
    */
+  // It hangs from the clicked unit by its pointer, every time: a remembered
+  // place would leave the pointer aimed at nothing (operator, 2026-11-21). It
+  // still drags.
+  const pinnedCardAt = useCallback(
+    (el) => hangingCardAt(el, lastPointerRef.current.x, lastPointerRef.current.y),
+    [],
+  );
   const { ref: pinnedCardRef, onPointerDown: onCardPointerDown } = useFloatingWindow({
     id: "vehicle-card",
     enabled: Boolean(pinnedId),
-    initial: lastPointerRef.current,
+    initial: pinnedCardAt,
+    preferInitial: true,
   });
 
   // A newly pinned unit gets an expanded card: the minimised state belongs to

@@ -987,8 +987,10 @@ html[data-theme="light"] #root {
 
 /* ─── Rich hover card (ported from fleetdash's VehicleCard) ──────────────── */
 
+/* The clicked card: 300px, the hover card's width (both border-box), so a unit
+   reads the same hovered and clicked. */
 .vehicle-tooltip--rich {
-  width: 264px;
+  width: 300px;
   max-height: calc(calc(var(--vh) * 100) - 24px);
   overflow-y: auto;
 }
