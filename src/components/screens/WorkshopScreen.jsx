@@ -303,7 +303,7 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
                     </td>
                     <td>
                       {group === "workshop" ? (where || <span className="sp4-muted">Not booked yet</span>)
-                        : !j.assignedToId && !j.workshopTechnicianId ? (!canClaim ? <span className="sp4-muted">Not accepted</span> : (
+                        : !j.assignedToId && !j.workshopTechnicianId ? (!canClaim || j.resolvedAt || j.stage !== "forwarded" ? <span className="sp4-muted">Not accepted</span> : (
                           <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
                                   onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Accepting…" : "Accept"}</button>
                         )) : j.workshopTechnicianId === userId ? "Workshop technician" : "Assigned to you"}
@@ -321,16 +321,18 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
 // ── ControlTech ─────────────────────────────────────────────────────────────
 
 /** Where an open ControlTech job stands: not forwarded yet, waiting to be claimed, or with a technician. */
-export const ctGroup = (j) => (j.stage === "pending" ? "held" : !j.assignedToId ? "waiting" : "working");
-const CT_GROUPS = [["waiting", "Waiting"], ["working", "With a technician"], ["held", "Not forwarded"]];
+export const ctGroup = (j) => (j.queue === "workshop" ? "workshop" : j.stage === "pending" ? "held" : !j.assignedToId ? "waiting" : "working");
+const CT_GROUPS = [["waiting", "Waiting"], ["working", "With a technician"], ["held", "Not forwarded"], ["workshop", "In the workshop"]];
+/** A FactorySuite workshop job for a telematics fault: ControlTech sees it too (operator, 2026-11-21). */
+const fsTelematics = (j) => TELEMATICS.has(j.faultCategory) && (j.fsJobCards?.length ?? 0) > 0;
 /**
  * A job of ControlTech's. Open: on its queue, or a telematics flag the Control
- * Room has not forwarded yet. Closed: it was on the queue, or was a telematics
- * fault, wherever it ended.
+ * Room has not forwarded yet, or a FactorySuite workshop job for a telematics
+ * fault. Closed: it was on the queue, or was a telematics fault.
  */
 export const isControlTech = (j) => (j.resolvedAt
   ? j.queue === "controltech" || TELEMATICS.has(j.faultCategory)
-  : j.queue === "controltech" || (j.stage === "pending" && TELEMATICS.has(j.faultCategory) && j.assignmentStatus !== "declined"));
+  : j.queue === "controltech" || fsTelematics(j) || (j.stage === "pending" && TELEMATICS.has(j.faultCategory) && j.assignmentStatus !== "declined"));
 
 /**
  * ControlTech's page (operator, 2026-11-21: "when a unit or units are flagged
@@ -435,7 +437,10 @@ function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim, onAccep
                       {by && <span className="wf-cell-sub">{by}</span>}
                     </td>
                     <td>
-                      {j.assignedTo?.fullName ?? (j.resolvedAt || !canClaim ? <span className="sp4-muted">Not accepted</span> : (
+                      {/* Accept only on a job waiting for ControlTech, and only for a technician
+                          (canClaim); a fixed or workshop job never offers it (operator, 2026-11-21). */}
+                      {j.assignedTo?.fullName ?? j.workshopTechnician?.fullName ?? (j.queue === "workshop" ? <span className="sp4-muted">Workshop</span>
+                        : j.resolvedAt || j.stage !== "forwarded" || !canClaim ? <span className="sp4-muted">Not accepted</span> : (
                         <button type="button" className="sp4-submit-btn wf-row-btn" disabled={busy === j.id}
                                 onClick={(e) => { e.stopPropagation(); claim(j); }}>{busy === j.id ? "Accepting…" : "Accept"}</button>
                       ))}
