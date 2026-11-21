@@ -432,10 +432,11 @@ function DayTab({ orgId, onOpen }) {
   const other = (d?.bookings ?? []).filter((b) => b.status === "no_show");
   const today = isoDay(Date.now());
   const dayWords = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${date}T00:00:00Z`));
-  // One row a unit on the day, booked first, then the unbooked arrivals, then the no-shows.
+  // One row a unit on the day: booked first, then FactorySuite check-ins (the
+  // card is their booking), then true walk-ins, then the no-shows.
   const dayRows = [
     ...live.map((b) => ({ key: b.id, job: b.repairItem, kind: b.status === "arrived" ? "arrived" : "booked" })),
-    ...(d?.unbookedArrivals ?? []).map((j) => ({ key: j.id, job: j, kind: "unbooked" })),
+    ...(d?.unbookedArrivals ?? []).map((j) => ({ key: j.id, job: j, kind: j.fsJobCards?.length ? "factorysuite" : "unbooked" })),
     ...other.map((b) => ({ key: b.id, job: b.repairItem, kind: "no_show" })),
   ];
   const [show, setShow] = useState("all");
@@ -446,7 +447,8 @@ function DayTab({ orgId, onOpen }) {
   const nKind = (k) => found.filter((r) => k === "all" || r.kind === k).length;
   const rows = found.filter((r) => show === "all" || r.kind === show);
   const dayPager = usePager(rows, `${wid}|${date}|${show}|${q}`);
-  const nUnbooked = d?.unbookedArrivals?.length ?? 0;
+  const nFs = dayRows.filter((r) => r.kind === "factorysuite").length;
+  const nUnbooked = dayRows.filter((r) => r.kind === "unbooked").length;
 
   return (
     <div className="fsw-tab">
@@ -474,6 +476,7 @@ function DayTab({ orgId, onOpen }) {
       {d && (
         <p className="wf-count">
           <b>{d.booked} / {d.capacity}</b> booked into {d.workshop?.name ?? "the workshop"} on {dayWords}
+          {nFs ? <>, <b>{nFs}</b> checked in on FactorySuite</> : null}
           {nUnbooked ? <>, <b>{nUnbooked}</b> arrived without a booking</> : null}
           {other.length ? <>, <b>{other.length}</b> {other.length === 1 ? "no-show" : "no-shows"}</> : null}
         </p>
@@ -505,6 +508,7 @@ function DayTab({ orgId, onOpen }) {
 const DAY_KINDS = [
   ["booked", "Booked", "waiting"],
   ["arrived", "Arrived", "repair"],
+  ["factorysuite", "Checked in (FactorySuite)", "repair"],
   ["unbooked", "Arrived, unbooked", "parts"],
   ["no_show", "No show", "late"],
 ];

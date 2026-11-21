@@ -282,11 +282,14 @@ export function MineStrip({ rows: all, groupOf, loading }) {
 export function dayCounts(d) {
   const bookings = d?.bookings ?? [];
   const arrived = bookings.filter((b) => b.status === "arrived").length;
-  const walkIns = d?.unbookedArrivals?.length ?? 0;
+  // A FactorySuite check-in is booked by its card; a walk-in had no booking at all.
+  const unbooked = d?.unbookedArrivals ?? [];
+  const fsIns = unbooked.filter((j) => j.fsJobCards?.length).length;
+  const walkIns = unbooked.length - fsIns;
   return {
     capacity: d?.capacity ?? 0,
     booked: d?.booked ?? 0,
-    arrived, walkIns,
+    arrived, walkIns, fsIns,
     toCome: bookings.filter((b) => b.status === "booked").length,
     noShows: bookings.filter((b) => b.status === "no_show").length,
   };
@@ -297,7 +300,7 @@ export function DayStrip({ current, week, date, loading }) {
   const c = dayCounts(current);
   const read = week.every((w) => w.data);
   const counts = week.map((w) => ({ day: w.day, ...dayCounts(w.data) }));
-  const rows = counts.map((x) => ({ day: x.day, booked: x.booked, arrived: x.arrived + x.walkIns }));
+  const rows = counts.map((x) => ({ day: x.day, booked: x.booked, arrived: x.arrived + x.walkIns + x.fsIns }));
   const days = week.map((w) => w.day);
   const booked = counts.reduce((s, x) => s + x.booked, 0);
   const cameIn = counts.reduce((s, x) => s + x.arrived, 0);
@@ -333,6 +336,8 @@ export function DayStrip({ current, week, date, loading }) {
         rows={[
           { name: "No-shows", n: noShows, tone: "theft", hint: "Booked units that did not arrive on their day" },
           { name: "Arrived without a booking", n: counts.reduce((s, x) => s + x.walkIns, 0), tone: "speed" },
+          { name: "Checked in on FactorySuite", n: counts.reduce((s, x) => s + x.fsIns, 0), tone: null,
+            hint: "Machines checked into the workshop on a FactorySuite job card: the card is their booking" },
           { name: "Full days", n: counts.filter((x) => x.capacity && x.booked >= x.capacity).length, tone: null },
           { name: "Free slots", n: counts.reduce((s, x) => s + Math.max(0, x.capacity - x.booked), 0), tone: null },
         ]}
