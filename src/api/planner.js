@@ -38,6 +38,17 @@ export async function getPlan(orgId, id) {
   return res.data
 }
 
+/**
+ * Which Deliveries report a sheet is read on (operator, 2026-11-21): 'vs',
+ * 'fg', or null for its truck's fleet group. Answers `{ id, list }`.
+ */
+export async function setPlanList(orgId, planId, list) {
+  const res = await apiFetch(`${base(orgId)}/plans/${planId}/list`, { method: 'PATCH', body: JSON.stringify({ list }) })
+  return res.data
+}
+/** Told to both Deliveries reports when a sheet moves, so the other one picks it up at once. */
+export const PLAN_LIST_MOVED = 'planner:plan-list-moved'
+
 /** `{ outcome?: 'FULL'|'PARTLY'|'REJECTED'|null, remarks?: string }` */
 export async function updateStop(orgId, planId, stopId, body) {
   const res = await apiFetch(`${base(orgId)}/plans/${planId}/stops/${stopId}`, { method: 'PATCH', body: JSON.stringify(body) })

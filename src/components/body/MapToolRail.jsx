@@ -4,8 +4,8 @@
  * Tools in three groups — finding (search, names, layers, fit), the map's
  * tools (Tools, geofences, alerts, arrivals) and the rail's own
  * expander. Since 2026-11-21 (operator) two buttons open menus like the
- * Geofences one: Tools (a toolbox: Measure, Live traffic, Weather, Work plans,
- * Planner) and Alerts
+ * Geofences one: Tools (a toolbox: Measure, Live traffic, Weather, Work plans)
+ * and Alerts
  * (Halted, Fuel alerts, Dashcam alarms).
  * Route covered left the rail on 2026-10-28 (operator): the route opens from
  * the unit itself. Geofences came back on 2026-11-04 (operator); their row in
@@ -168,17 +168,16 @@ function menuKeys(e) {
 /**
  * The Tools menu, beside its toolbox button (operator, 2026-11-21: "group
  * together weather, traffic and measure"): Measure, Live traffic and Weather,
- * each a switch, in the Geofences menu's rows, and the Planner (operator,
- * 2026-11-21: "move planner into tools"), which opens its page. Measure and
- * Planner close the menu, since the next thing happens elsewhere; the
- * layers keep it open, as the Geofences switches do. Work plans (operator,
+ * each a switch, in the Geofences menu's rows. The Planner sat here for a few
+ * hours on 2026-11-21 and went back to the sidebar (operator). Measure closes
+ * the menu, since the next thing happens elsewhere; the layers keep it open,
+ * as the Geofences switches do. Work plans (operator,
  * 2026-11-21: "add the factorysuite plan on the rail into the toolbox") is
  * the FactorySuite plans layer, only where the organisation keeps work plans
- * (Kasulu), as its rail switch was. Traffic, Weather and
- * Planner are rights of their own (map:traffic, map:weather, planner:read,
- * which only Menengai holds): a row this person does not hold is left out.
+ * (Kasulu), as its rail switch was. Traffic and Weather are rights of their
+ * own (map:traffic, map:weather): a row this person does not hold is left out.
  */
-function ToolsMenu({ top, measuring, onToggleMeasure, traffic, weather, showTraffic, showWeather, workPlans, onPlanner, onDone }) {
+function ToolsMenu({ top, measuring, onToggleMeasure, traffic, weather, showTraffic, showWeather, workPlans, onDone }) {
   const first = useRef(null);
   useEffect(() => { first.current?.focus(); }, []);
   return (
@@ -237,18 +236,6 @@ function ToolsMenu({ top, measuring, onToggleMeasure, traffic, weather, showTraf
             <span className="mtr-fences__sub">Today&rsquo;s FactorySuite plans, each machine against its place</span>
           </span>
           <span className="mtr-fences__switch" aria-hidden="true" />
-        </button>
-      )}
-      {onPlanner && (
-        <button
-          type="button" role="menuitem" className="mtr-fences__item"
-          onClick={() => { onPlanner(); onDone(); }}
-        >
-          <i className="ti ti-calendar-time" aria-hidden="true" />
-          <span className="mtr-fences__text">
-            Planner
-            <span className="mtr-fences__sub">Delivery sheets, plan against actual</span>
-          </span>
         </button>
       )}
     </div>
@@ -634,9 +621,6 @@ export default function MapToolRail({
   };
   const showTraffic = can("map:traffic");
   const showWeather = can("map:weather");
-  // The Planner page, from the Tools menu (it left the sidebar 2026-11-21).
-  const { setDesktopActiveTab } = useAppActions();
-  const onPlanner = can("planner:read") ? () => setDesktopActiveTab("planner") : null;
   // The toolbox is lit while any of its layers is on, and says which.
   const toolsOn = [
     showTraffic && traffic?.on && "traffic on",
@@ -645,7 +629,7 @@ export default function MapToolRail({
   ].filter(Boolean);
   const toolsTitle = "Tools: " + [
     "measure a distance", showTraffic && "live traffic", showWeather && "weather",
-    workPlans && "work plans", onPlanner && "the Planner",
+    workPlans && "work plans",
   ].filter(Boolean).join(", ");
   // What the one button carries: every alert waiting, red while a fuel alert
   // or a critical dashcam alarm is among them; lit while Halted or Fuel
@@ -793,7 +777,6 @@ export default function MapToolRail({
           showTraffic={showTraffic}
           showWeather={showWeather}
           workPlans={workPlans}
-          onPlanner={onPlanner}
           onDone={() => setToolsOpen(false)}
         />
       )}

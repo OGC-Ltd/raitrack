@@ -31,7 +31,7 @@ import { REPAIRS_CHANGED, STAGE_LABEL, stageLabelOf, stagePillOf } from "../../a
 import {
   listWorkflowJobs, listWorkflowJobsSince, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, viewOnly, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
-  takeWorkshopHandoff, WORKSHOP_OPEN, shortCard, TELEMATICS,
+  takeWorkshopHandoff, WORKSHOP_OPEN, shortCard, TELEMATICS, fetchFactoryBoard,
 } from "../../api/repairWorkflow";
 import FactoryWorkshopTab, { StateLine } from "./FactoryWorkshopTab";
 import { JobsStrip, ControlTechStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay, dayCounts, dayStay, dayHasRecords } from "./WorkshopStats";
@@ -330,7 +330,7 @@ const CT_GROUPS = [["waiting", "Waiting"], ["working", "With a technician"], ["h
  */
 export const isControlTech = (j) => (j.resolvedAt
   ? j.queue === "controltech" || TELEMATICS.has(j.faultCategory)
-  : j.queue === "controltech" || (j.stage === "pending" && TELEMATICS.has(j.faultCategory)));
+  : j.queue === "controltech" || (j.stage === "pending" && TELEMATICS.has(j.faultCategory) && j.assignmentStatus !== "declined"));
 
 /**
  * ControlTech's page (operator, 2026-11-21: "when a unit or units are flagged
@@ -341,7 +341,7 @@ export const isControlTech = (j) => (j.resolvedAt
  * which a remote fix never has. Oldest first, as the queue is worked;
  * unclaimed jobs carry the Claim button for whoever may claim.
  */
-function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim }) {
+function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim, onAccepted }) {
   const [state, setState] = useState("open");
   const [group, setGroup] = useState("all");
   const [flagging, setFlagging] = useState(false);
@@ -355,8 +355,8 @@ function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim }) {
     setBusy(r.id);
     try {
       await claimJob(orgId, r.id);
-      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} accepted: it is yours. Decide remote or physical.` });
-      onOpen(r.id);
+      onToast({ tone: "ok", text: `${r.vehicle?.registrationPlate ?? "The job"} accepted: it is in My jobs. Decide remote or physical.` });
+      onAccepted(r.id);
     } catch (e) {
       onToast({ tone: "crit", text: e?.message || "Could not accept the job." });
     } finally {
@@ -814,7 +814,7 @@ function CaseDetail({ orgId, c, canUpdate, onToast, onSaved }) {
 // ── The screen ──────────────────────────────────────────────────────────────
 
 export default function WorkshopScreen() {
-  const { orgId, orgCode, can } = usePermissions();
+  const { orgId, orgCode, can, holdsOwn, flaggedOnly } = usePermissions();
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [toast, setToast] = useState(null);
@@ -826,6 +826,11 @@ export default function WorkshopScreen() {
   // sees only My jobs, which holds the ControlTech queue's unclaimed jobs too
   // (operator, 2026-10-26 and 2026-10-27).
   const board = can("repair:read") && can(BOARD_VERBS);
+  // A technician gets Auto Workshop only while one of their ControlTech or My
+  // jobs units is in it (operator, 2026-11-21); the server sends them those
+  // cards alone, so any card at all means one of theirs is in.
+  const techBoard = useLive(() => (flaggedOnly && FACTORY_WORKSHOP_ORGS.includes(orgCode) ? fetchFactoryBoard(orgId, 1) : null), [orgId, orgCode, flaggedOnly]);
+  const techInWorkshop = (techBoard.data?.open?.length ?? 0) > 0;
   // Tabs follow the person's own verbs; everything inside them is view-only.
   const look = useMemo(() => viewOnly(can), [can]);
   // ControlTech's own steps work on its own pages (operator, 2026-11-21: "the
@@ -833,17 +838,23 @@ export default function WorkshopScreen() {
   // accept, then fix remotely or send it for a physical inspection, which
   // takes the job to assessment, and log a remote fix. Everything else in the
   // panel stays view-only, and the server still checks every step.
-  const ctCan = useMemo(() => (perm) => look(perm) || [].concat(perm).some((p) => CT_VERBS.includes(p) && can(p)), [look, can]);
+  // Accepting is a technician's alone: the server lets only a holder of
+  // repair:take_jobs claim, and so does this (operator, 2026-11-21).
+  const technician = holdsOwn("repair:take_jobs");
+  // An accepted job is the technician's: it opens on My jobs (operator, 2026-11-21).
+  const toMyJobs = useCallback((id) => { setTab("mine"); setOpenCase(null); setOpenId(id); }, []);
+  const ctCan = useMemo(() => (perm) => look(perm) || [].concat(perm).some((p) => CT_VERBS.includes(p) && can(p)
+    && (p !== "repair:claim" || technician)), [look, can, technician]);
   const tabs = useMemo(() => [
     // Auto Workshop leads where the org has it (operator, 2026-11-21).
-    { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) },
+    { key: "factory",  label: "Auto Workshop", allow: can("repair:read") && FACTORY_WORKSHOP_ORGS.includes(orgCode) && (!flaggedOnly || techInWorkshop) },
     { key: "jobs",     label: "Jobs",          allow: board },
     // Flagged units for ControlTech to see (operator, 2026-11-21).
     { key: "controltech", label: "ControlTech", allow: board || can("repair:claim") },
     { key: "mine",     label: "My jobs",       allow: can("repair:claim") },
     { key: "day",      label: "Workshop Day",  allow: board },
     { key: "security", label: "Security Cases", allow: can("security_case:read") },
-  ].filter((t) => t.allow), [can, board, orgCode]);
+  ].filter((t) => t.allow), [can, board, orgCode, flaggedOnly, techInWorkshop]);
   // No pick yet: the first view this role can open, Auto Workshop where there is one.
   const [tab, setTab] = useState(null);
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
@@ -901,7 +912,7 @@ export default function WorkshopScreen() {
 
           <div className="dr-layout wf-layout">
             {active === "jobs" && <JobsTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} />}
-            {active === "controltech" && <ControlTechTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={ctCan("repair:claim")} />}
+            {active === "controltech" && <ControlTechTab orgId={orgId} can={look} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={ctCan("repair:claim")} onAccepted={toMyJobs} />}
             {active === "mine" && <MyJobsTab orgId={orgId} userId={userId} onOpen={setOpenId} openId={openId} onToast={setToast} canClaim={ctCan("repair:claim")} />}
             {active === "day" && <DayTab orgId={orgId} onOpen={setOpenId} />}
             {active === "security" && <SecurityTab orgId={orgId} openCase={openCase} setOpenCase={setOpenCase} />}
@@ -913,7 +924,8 @@ export default function WorkshopScreen() {
       {openId && (
         <DetailSidebar title="Repair job" label="Repair job" itemKey={openId} onClose={() => setOpenId(null)} wide>
           {/* View-only, but for one field: when the unit is supposed to be back (operator, 21 Nov). */}
-          <RepairWorkflowJob orgId={orgId} itemId={openId} can={active === "controltech" || active === "mine" ? ctCan : look} userId={userId} onToast={setToast} />
+          <RepairWorkflowJob orgId={orgId} itemId={openId} can={active === "controltech" || active === "mine" ? ctCan : look} userId={userId} onToast={setToast}
+                             onAccepted={active === "controltech" ? toMyJobs : null} />
         </DetailSidebar>
       )}
       {openCase && (

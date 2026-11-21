@@ -10,7 +10,7 @@
 // that hides the bug from whoever is most likely to be looking.
 
 import { describe, it, expect } from "vitest";
-import { accessIn, canInOrg } from "./usePermissions";
+import { accessIn, canInOrg, slugsFor } from "./usePermissions";
 
 /** The shape /auth/me returns, trimmed to what the grader reads. */
 const org = (code, permissions) => ({ id: `id-${code}`, code, permissions, vehicleIds: null });
@@ -131,5 +131,19 @@ describe("canInOrg", () => {
     expect(canInOrg(admin, "id-C", "user:delete")).toBe(false);
     // Never added to D at all.
     expect(canInOrg(admin, "id-D", "user:delete")).toBe(false);
+  });
+});
+
+describe("what a technician is never shown (2026-11-21)", () => {
+  it("withholds the feed beyond their cases, dashcam alarms, the status counts and the load cards", () => {
+    for (const s of ["notification:all_events", "vss:alarms", "fleet:status_counts", "fleet:load_status"]) {
+      expect(slugsFor(s, true)).toEqual([]);
+      expect(slugsFor(s, false)).toEqual([s]);
+    }
+  });
+
+  it("leaves their other rights, and a list's other slugs, alone", () => {
+    expect(slugsFor("sensor:read", true)).toEqual(["sensor:read"]);
+    expect(slugsFor(["vss:alarms", "repair:claim"], true)).toEqual(["repair:claim"]);
   });
 });

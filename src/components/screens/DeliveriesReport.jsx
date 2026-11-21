@@ -34,7 +34,7 @@ import { loadPlan, forgetLegacyPlan, forgetLegacyOrders, addVehicle, removeVehic
 import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL, NOT_GEOFENCED } from '../../lib/finishedGoodsReport';
-import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers } from '../../api/planner';
+import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers, setPlanList, PLAN_LIST_MOVED } from '../../api/planner';
 import { sheetDaysFor, sheetsForReport, sheetOnDays, sheetListed, sheetRunDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { openPlanNext } from '../../lib/planOverlay';
@@ -423,9 +423,35 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     return sheetsForReport((await listPlans(orgId, d.from, d.to)).filter((p) => !isKeyed(p)), from, to, dayStart);
   };
   const [sheetsRead, setSheets] = useState({ status: 'idle', list: [] });
-  // On a tab, the Planner's sheets of its own units: Van Sales units' on VS, the rest on FG
-  const sheetTab = (g) => !tabList || (g === TAB_GROUP.vanSales ? 'vs' : 'fg') === tabList;
-  const sheets = useMemo(() => (tabList ? { ...sheetsRead, list: sheetsRead.list.filter((p) => sheetTab(units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group ?? null)) } : sheetsRead), [sheetsRead, tabList, units]); // eslint-disable-line react-hooks/exhaustive-deps
+  // On a tab, the Planner's sheets of its own units: Van Sales units' on VS, the rest on FG, unless the
+  // sheet was moved to the other report (operator, 2026-11-21: "swap a planner from FG to VS and vice versa")
+  const groupList = (p) => (units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group === TAB_GROUP.vanSales ? 'vs' : 'fg');
+  const sheetListOf = (p) => p.list ?? groupList(p);
+  // A report row read from a sheet: the sheet's own list, else its unit's group
+  const sheetTab = (g, list = null) => !tabList || (list ?? (g === TAB_GROUP.vanSales ? 'vs' : 'fg')) === tabList;
+  const sheets = useMemo(() => (tabList ? { ...sheetsRead, list: sheetsRead.list.filter((p) => sheetListOf(p) === tabList) } : sheetsRead), [sheetsRead, tabList, units]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A sheet moved here or on the other report: both lists follow at once
+  useEffect(() => {
+    const on = (e) => setSheets((x) => ({ ...x, list: x.list.map((p) => (p.id === e.detail.id ? { ...p, list: e.detail.list } : p)) }));
+    window.addEventListener(PLAN_LIST_MOVED, on);
+    return () => window.removeEventListener(PLAN_LIST_MOVED, on);
+  }, []);
+  const canMoveSheet = can('planner:write');
+  const [movingSheet, setMovingSheet] = useState(null);
+  const moveSheet = async (p) => {
+    const to = tabList === 'vs' ? 'fg' : 'vs';
+    // Back to its truck's own group: no override is kept
+    const list = to === groupList(p) ? null : to;
+    setMovingSheet(p.id);
+    try {
+      await setPlanList(orgId, p.id, list);
+      window.dispatchEvent(new CustomEvent(PLAN_LIST_MOVED, { detail: { id: p.id, list } }));
+    } catch (err) {
+      setSheets((x) => ({ ...x, message: err?.message ?? String(err) }));
+    } finally {
+      setMovingSheet(null);
+    }
+  };
   const sheetSpanKey = daysOpen ? `days:${draft.fromDay}:${draft.toDay}` : `last:${sel.mode === 'last' ? sel.hours : ''}`;
   useEffect(() => {
     if (!orgId || !canSheets) { setSheets({ status: 'idle', list: [] }); return undefined; }
@@ -740,7 +766,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       // Only a sheet this report shows, and on a range only on the sheet's own day: KDM 138L's 13 Nov Van Sales
       // itinerary neither replaces nor hides its 11 Nov Finished Goods line (operator, 13 Nov 2026)
       const planned = runs.flatMap((run) => {
-        const onSheets = new Set(sheetRows.filter((r) => (r.listed || sheetTab(r.group))
+        const onSheets = new Set(sheetRows.filter((r) => (r.listed || sheetTab(r.group, r.remake.plan?.list))
           && (!multi || sheetRunDays(r, r.remake.plan, marksOf(r.remake.plan), fleetDay).has(run.day))).map((r) => plateKey(r.plate)));
         return run.vehicles.filter((v) => !onSheets.has(plateKey(v.plate)))
           .map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds, run }));
@@ -800,7 +826,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // On a tab every vehicle on its list is reported, whatever its group (operator, 12 Nov 2026: "all
   // should appear in the report"); its Planner sheets by their units' group
   // A sheet whose unit is on this tab's list stands in for it here, so the unit is never lost
-  const keepRow = (r) => (r.remake ? (r.listed || sheetTab(r.group)) : true)
+  const keepRow = (r) => (r.remake ? (r.listed || sheetTab(r.group, r.remake.plan?.list)) : true)
     && (group == null || r.group === group || (tabList != null && group === TAB_GROUP[fixedTemplate]));
   const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter(keepRow).map((r) => {
     const t = readOrders(typed[r.plate]);
@@ -1095,10 +1121,19 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                 {sheets.list.map((p) => (
                   <li key={p.id} className="dlv-plan__veh dlv-roster__row">
                     <span className="dlv-plan__plate">{p.plate}</span>
-                    <span className="rpt-sub">{sheetWords({ sheet: { planDate: p.planDate, driverName: p.driverName } }, kmWords)}, {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}</span>
-                    <button type="button" className="sp4-ghost-btn" onClick={() => openInPlanner(p.id)}>
-                      <i className="ti ti-calendar-time" aria-hidden="true" /> Open in Planner
-                    </button>
+                    <span className="rpt-sub dlv-sheets__words">{sheetWords({ sheet: { planDate: p.planDate, driverName: p.driverName } }, kmWords)}, {p.stopCount} stop{p.stopCount === 1 ? '' : 's'}</span>
+                    <span className="dlv-sheets__acts">
+                      {tabList && canMoveSheet && (
+                        <button type="button" className="sp4-ghost-btn" disabled={movingSheet === p.id} onClick={() => moveSheet(p)}
+                                title={`Read this sheet on ${tabList === 'vs' ? 'Finished Goods' : 'Van Sales'} instead`}>
+                          <i className="ti ti-arrows-exchange" aria-hidden="true" />
+                          {movingSheet === p.id ? ' Moving…' : ` Move to ${tabList === 'vs' ? 'FG' : 'VS'}`}
+                        </button>
+                      )}
+                      <button type="button" className="sp4-ghost-btn" onClick={() => openInPlanner(p.id)}>
+                        <i className="ti ti-calendar-time" aria-hidden="true" /> Open in Planner
+                      </button>
+                    </span>
                   </li>
                 ))}
               </ul>

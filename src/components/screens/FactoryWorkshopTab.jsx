@@ -18,6 +18,7 @@ import { usePager } from "../body/TablePager";
 import { WfFilters, WfGrid, Reload, rowProps, Badge, Ident } from "./WorkshopParts";
 import EmptyNote from "../shared/EmptyNote";
 import { at } from "../body/RepairWorkflowJob";
+import { usePermissions } from "../../hooks/usePermissions";
 import WorkshopStrip, { STATES, stateOf, backByOf, pastEta, anyEta, REPAIR_KIND } from "./WorkshopStrip";
 
 function useRead(fn, deps) {
@@ -221,7 +222,12 @@ function StoresTable({ rows, resetKey }) {
 }
 
 export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
-  const [view, setView] = useState("board");
+  // A technician sees only their ControlTech jobs that went on to the
+  // workshop: In the workshop alone, no figures, no history, no Stores
+  // (operator, 2026-11-21). The server sends them only those cards.
+  const { flaggedOnly } = usePermissions();
+  const [viewPicked, setView] = useState("board");
+  const view = flaggedOnly ? "board" : viewPicked;
   // Each view keeps its own search: a part number typed in Stores is no machine.
   const [boardQ, setBoardQ] = useState("");
   const [state, setState] = useState("all");
@@ -272,14 +278,14 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
 
   return (
     <div className="fsw-tab">
-      <WorkshopStrip open={open} summary={summary} loading={board.loading && !board.data} />
+      {!flaggedOnly && <WorkshopStrip open={open} summary={summary} loading={board.loading && !board.data} />}
 
       <WfFilters
         label={isStores ? "Search parts" : "Search the workshop"}
         placeholder={isStores ? "Search a part number or description…" : "Search a machine, card or fault…"}
         search={isStores ? partsQ : isMoves ? movesQ : boardQ} onSearch={isStores ? setPartsQ : isMoves ? setMovesQ : setBoardQ}
         groups={[
-          { label: "View", value: view, onPick: setView, options: [["board", "In the workshop", open.length], ["moves", "Booked and released"], ["stores", "Stores"]] },
+          { label: "View", value: view, onPick: setView, options: flaggedOnly ? [["board", "In the workshop", open.length]] : [["board", "In the workshop", open.length], ["moves", "Booked and released"], ["stores", "Stores"]] },
           ...(isMoves
             ? [
               { label: "Period", value: movePeriod, onPick: setMovePeriod, options: [["today", "Today"], ["window", `${BOARD_DAYS} days`]] },

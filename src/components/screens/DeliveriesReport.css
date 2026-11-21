@@ -363,3 +363,16 @@
   .dlv-visit__use, .dlv-visit__picked { grid-column: 2; justify-self: start; }
 }
 @media (prefers-reduced-motion: reduce) { .dlv-visit { transition: none; } }
+
+/* The Planner's sheets (operator, 2026-11-21: the plate ran into the sheet's
+   line, "Menengai - KDE 144E" on 110px). The plate column is as wide as its
+   longest plate, the line takes what is left and wraps, and the buttons
+   (Move to FG/VS, Open in Planner) sit together at the end. */
+.dlv-sheets .dlv-roster__row { grid-template-columns: max-content minmax(0, 1fr) auto; }
+.dlv-sheets__words { min-width: 0; overflow-wrap: anywhere; }
+.dlv-sheets__acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+@media (max-width: 720px) {
+  .dlv-sheets .dlv-roster__row { grid-template-columns: minmax(0, 1fr); }
+  .dlv-sheets .dlv-plan__plate { white-space: normal; overflow-wrap: anywhere; }
+  .dlv-sheets__acts { justify-content: flex-start; }
+}

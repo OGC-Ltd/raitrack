@@ -55,10 +55,10 @@ export const NAV_ITEMS = [
   { key: 'weighbridges', label: 'Weighbridges', icon: 'scale',     permission: 'weighbridge:read' },
   // Planner: a truck's delivery sheet for a day, its customers' geofences,
   // and plan against actual (operator, 2026-11-11). Menengai only, by
-  // usePermissions' PLANNER_ORGS. Opened from the map rail's Tools menu, not
-  // the sidebar, since 2026-11-21 (operator: "move planner into tools"):
-  // section 'rail', as Alarms.
-  { key: 'planner',      label: 'Planner',      icon: 'calendar-time', permission: 'planner:read', section: 'rail' },
+  // usePermissions' PLANNER_ORGS. In the map's Tools menu for a few hours on
+  // 2026-11-21, then back in the sidebar (operator: "return the planner to
+  // the side panel").
+  { key: 'planner',      label: 'Planner',      icon: 'calendar-time', permission: 'planner:read'     },
   // Pinned to the foot of the sidebar, and not drawn at all without its
   // permission. The Cases page that sat here is gone (operator, 2026-09-30):
   // a deleted alert is removed from the UI for good, and the case work that

@@ -2531,7 +2531,7 @@ export default function FleetMap() {
   // Read HERE rather than beside the layer menu that consumes it, because the
   // guest-survey sweep below is gated on the same permission and runs long
   // before the menu is built.
-  const { can: canDo, orgId: permOrgId, orgCode } = usePermissions();
+  const { can: canDo, orgId: permOrgId, orgCode, flaggedOnly: techOnly } = usePermissions();
   // The Geofences menu's two switches, each a right of its own (operator,
   // 2026-11-13): "Show on the map" is map:geofences, "Custom geos" is
   // map:custom_geos. A switch the person may not use counts as off.
@@ -7560,7 +7560,8 @@ export default function FleetMap() {
             just emptied" rather than "here is the one you asked about". */}
         {/* The tool rail, beside the sidebar — desktop only, where the sidebar
             exists. Below 1024 the map keeps its own camera rail and no more. */}
-        {!isCompact && (
+        {/* No tool rail for a technician (operator, 2026-11-21). */}
+        {!isCompact && !techOnly && (
           <MapToolRail
             expanded={toolsExpanded}
             onToggleExpanded={toggleToolsExpanded}

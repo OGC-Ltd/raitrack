@@ -44,6 +44,15 @@ export function accessIn(orgs, companyId) {
  * analytics:read for its overspeeding) names them all in NAV_ITEMS, and every
  * place that grades a NAV_ITEMS permission gets the either-or for free.
  */
+/**
+ * What a technician (vehicle:flagged_only) is never shown (operator,
+ * 2026-11-21): the live feed beyond their own repair cases, dashcam alarms,
+ * the Idling/Warning/Critical counts and the In transit/Plant/Empty cards.
+ * The server limits their feed to repair notices too (authz feedSourcesFor).
+ */
+export const TECH_WITHHELD = new Set(["notification:all_events", "fleet:status_counts", "fleet:load_status", "vss:alarms"]);
+/** The slugs a check may be answered by: all of them, less TECH_WITHHELD for a technician. */
+export const slugsFor = (slug, flaggedOnly) => (flaggedOnly ? anyOf(slug).filter((s) => !TECH_WITHHELD.has(s)) : anyOf(slug));
 const anyOf = (slug) => (Array.isArray(slug) ? slug : [slug]);
 
 /** The Alarms tab: granted by dashcams, not by a role (see usePermissions). */
@@ -127,7 +136,12 @@ export function usePermissions() {
   });
   const vssOn = (vssCameras.data ?? 0) > 0;
   const can = useMemo(() => (slug) => {
-    const list = anyOf(slug);
+    // A technician (limited to flagged units) never gets these, whatever IAM
+    // says: they were rights every role got on 2026-11-14 (operator,
+    // 2026-11-21: no alerts but their cases, no Idling/Warning/Critical, no
+    // In transit/Plant/Empty).
+    const list = slugsFor(slug, flaggedOnly);
+    if (list.length === 0) return false;
     if (vssOn && list.includes(VSS_ALARMS)) return true;
     const code = String(org?.code ?? "").toUpperCase();
     if (list.includes(FACTORY_FUEL) && FACTORY_FUEL_ORGS.includes(code) && canHere(["fuel_filling:read"])) return true;
@@ -135,7 +149,7 @@ export function usePermissions() {
     const plannerOn = PLANNER_ORGS.includes(code);
     const rest = list.filter((s) => s !== VSS_ALARMS && s !== FACTORY_FUEL && s !== WORK_PLANS && (plannerOn || !PLANNER_SLUGS.includes(s)));
     return rest.length > 0 && canHere(rest);
-  }, [canHere, vssOn, org?.code]);
+  }, [canHere, vssOn, org?.code, flaggedOnly]);
 
   return useMemo(() => ({
     orgId: org?.id ?? null,
@@ -150,11 +164,18 @@ export function usePermissions() {
      * AND without notification:all_events (a right in IAM since 2026-11-14,
      * held by every role to start with). The server applies the same rule.
      */
-    repairFeedOnly: flaggedOnly && !can("notification:all_events"),
+    repairFeedOnly: flaggedOnly,
     /** True only if EVERY slug is held — for controls that need a pair. */
     canAll: (...slugs) => slugs.every(can),
     /** True if ANY slug is held — for a screen reachable several ways. */
     canAny: (...slugs) => slugs.some(can),
+    /**
+     * Held by the person themselves in this organisation, not through the
+     * platform:admin wildcard: the server's holdsOwn. "Take repair jobs" is
+     * read this way, so only a technician is offered Accept (operator,
+     * 2026-11-21: "it's only a technician who can accept a job").
+     */
+    holdsOwn: (slug) => (org?.permissions ?? []).includes(slug),
     /**
      * Grade against a NAMED organisation rather than the one on screen.
      *

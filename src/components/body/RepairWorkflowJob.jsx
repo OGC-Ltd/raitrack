@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { REPAIRS_CHANGED, STAGE_LABEL, PART_STATUS, workDone, stageLabelOf, stagePillOf } from "../../api/repairs";
 import {
-  fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, decidePath, assessJob,
+  fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, rejectJob, decidePath, assessJob,
   bookJob, cancelBooking, arriveJob, assignWorkshop, voidWarranty, clearWarranty, addWork,
   voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
@@ -884,7 +884,7 @@ table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:3px 10px
 
 // ── The panel ───────────────────────────────────────────────────────────────
 
-export default function RepairWorkflowJob({ orgId, itemId, can, userId, onToast }) {
+export default function RepairWorkflowJob({ orgId, itemId, can, userId, onToast, onAccepted = null }) {
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
   const [assignees, setAssignees] = useState(null);
@@ -901,7 +901,7 @@ export default function RepairWorkflowJob({ orgId, itemId, can, userId, onToast 
   if (error) return <p className="wf-muted">{error}</p>;
   if (!job) return <p className="wf-muted">Reading the job…</p>;
   return <JobView orgId={orgId} job={job} can={can} userId={userId} onToast={onToast} onChanged={read}
-                  assignees={assignees} setAssignees={setAssignees} />;
+                  assignees={assignees} setAssignees={setAssignees} onAccepted={onAccepted} />;
 }
 
 /** May this person work this job? The server's requireWorkableJob, restated to decide what to draw. */
@@ -913,7 +913,7 @@ export function mayWork(job, can, userId) {
 }
 
 /** The panel for a job already read. Pure of fetching, so it renders in a test. */
-export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees = null, setAssignees = () => {} }) {
+export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees = null, setAssignees = () => {}, onAccepted = null }) {
   const [busy, act] = useAct(onToast, onChanged);
   const canWork = useMemo(() => mayWork(job, can, userId), [job, can, userId]);
 
@@ -955,16 +955,32 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
       </div>
     );
   } else if (s === "forwarded" && !job.assignedToId && can("repair:claim")) {
+    // Accepted, the job is the technician's and opens on My jobs (operator,
+    // 2026-11-21); rejected, it goes back to the Control Room with the reason.
     action = (
       <div className="wf-actions">
+        <ReasonButton label="Reject" busyLabel="Rejecting…" placeholder="Not a telematics fault: the probe reads, the gauge is broken"
+                      busy={busy === "reject"} onSend={(r) => act("reject", () => rejectJob(orgId, job.id, r), "Rejected: back to the Control Room.")} />
         <button type="button" className="sp4-submit-btn" disabled={!!busy}
-                onClick={() => choose("claim", () => claimJob(orgId, job.id), "Accepted. It is yours: decide remote or physical.")}>
+                onClick={() => choose("claim", () => claimJob(orgId, job.id), () => { onAccepted?.(job.id); return "Accepted. It is in My jobs: decide remote or physical."; })}>
           {busy === "claim" ? "Accepting…" : "Accept this job"}
         </button>
       </div>
     );
   } else if ((s === "forwarded" || s === "pending") && canWork) {
-    action = <PathStep orgId={orgId} job={job} act={choose} busy={busy} from={s} />;
+    action = (
+      <>
+        <PathStep orgId={orgId} job={job} act={choose} busy={busy} from={s} />
+        {s === "forwarded" && can("repair:claim") && (
+          <details className="wf-alt"><summary>This is not ours to fix: reject it</summary>
+            <div className="wf-actions">
+              <ReasonButton label="Reject" busyLabel="Rejecting…" placeholder="Not a telematics fault: the probe reads, the gauge is broken"
+                            busy={busy === "reject"} onSend={(r) => act("reject", () => rejectJob(orgId, job.id, r), "Rejected: back to the Control Room.")} />
+            </div>
+          </details>
+        )}
+      </>
+    );
   } else if (s === "remote_fix" && canWork) {
     action = (
       <>

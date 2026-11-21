@@ -92,7 +92,7 @@ export default function AppHeader() {
   useEffect(() => { refreshPush(activeCompanyId); }, [activeCompanyId]);
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
-  const { can, orgsWhere, repairFeedOnly } = usePermissions();
+  const { can, orgsWhere, repairFeedOnly, flaggedOnly } = usePermissions();
   const { user, logout } = useAuth();
 
   /* The server's field is `fullName`. This header asked for `user.name`, which
@@ -215,7 +215,8 @@ export default function AppHeader() {
   // The In transit and Empty cards are fleet:load_status (a right since
   // 2026-11-14; technicians lost them by a fixed rule before, 2026-10-27).
   const statButtons = statMeta(liveSummary, activeProducts)
-    .filter(({ key }) => can("fleet:load_status") || !(key === "inTransit" || key === "empty"))
+    // Plant goes with them for a technician (operator, 2026-11-21).
+    .filter(({ key }) => can("fleet:load_status") || !(key === "inTransit" || key === "empty" || (flaggedOnly && key === "plant")))
     .map(({ key, label, color, icon }) => {
     const { value, unit, sub } = statValues(key, liveSummary, cargoWord, products);
     return (

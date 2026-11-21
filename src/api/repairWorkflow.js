@@ -249,6 +249,8 @@ export const flagUnits = (orgId, { vehicleIds, faultCategories, suspectedFault, 
   post(`${base(orgId)}/flags`, clean({ vehicleIds, faultCategories, suspectedFault, queue, forward }));
 export const forwardJob     = (orgId, id, queue) => post(item(orgId, id, "forward"), clean({ queue }));
 export const claimJob       = (orgId, id) => post(item(orgId, id, "claim"));
+/** A technician turns a ControlTech job down: back to the Control Room, with the reason (operator, 2026-11-21). */
+export const rejectJob      = (orgId, id, reason) => post(item(orgId, id, "reject"), { reason: reason.trim() });
 export const decidePath     = (orgId, id, path, note) => post(item(orgId, id, "path"), clean({ path, note }));
 export const assessJob      = (orgId, id, a) => post(item(orgId, id, "assessment"), clean({
   roadworthy: a.roadworthy, intervention: a.intervention, reason: a.reason,

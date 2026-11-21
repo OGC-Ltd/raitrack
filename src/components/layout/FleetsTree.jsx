@@ -77,7 +77,7 @@ export default function FleetsTree({ audit = null, report = null, review = null 
   const { setFleetTypes, setInTransitOnly } = useAppActions();
   const { vehicles = [] } = useFleetLiveShared();
   const { setUnitsOpen, revealMap } = useMapLayers() ?? {};
-  const { can } = usePermissions();
+  const { can, flaggedOnly } = usePermissions();
   const masked = useContext(TreeCountsMasked);
   const [allTypes, setAllTypes] = useState(false);
   const options  = useMemo(() => fleetTypeOptions(vehicles), [vehicles]);
@@ -191,13 +191,16 @@ export default function FleetsTree({ audit = null, report = null, review = null 
       <nav className="fleets__list" aria-label="Fleet lists">
         {/* The map's units panel (search, sort, recency, route toggle) — the
             same panel the map's own Units button opens below 1024px. */}
-        <OpenRow
-          icon="list-details"
-          label="Units"
-          count={vehicles.length}
-          onClick={() => { revealMap?.(); setUnitsOpen?.(true); }}
-          title="Every unit, pick which ones the map is about"
-        />
+        {/* Not for a technician (operator, 2026-11-21: "hide the units"). */}
+        {!flaggedOnly && (
+          <OpenRow
+            icon="list-details"
+            label="Units"
+            count={vehicles.length}
+            onClick={() => { revealMap?.(); setUnitsOpen?.(true); }}
+            title="Every unit, pick which ones the map is about"
+          />
+        )}
         {/* One vehicle over a chosen period — not a fuel page, so it sits
             above the Fuel group rather than after it (operator, 2026-10-07). */}
         {review && (
