@@ -438,6 +438,3 @@ button.wf-slot:focus-visible { outline: 2px solid var(--wf-accent); outline-offs
 .fsw-note { margin: var(--sp4-sm) var(--sp4-gutter); }
 .sp4-table td.fsw-low { color: var(--sp4-crit); font-weight: 600; }
 
-/* Expected back: the date, its save, and whether it has passed, on one line. */
-.wf-back { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.wf-back__day { width: auto; min-width: 0; }

@@ -23,19 +23,14 @@ const stay = (h) => (h == null ? "-" : h < 48 ? `${fmt(Math.round(h))} h` : `${f
 const hoursSince = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : null);
 
 /**
- * When a machine on the floor is supposed to be back. The date someone set on
- * its repair job (Expected back, end of that East Africa day) when there is
- * one; otherwise the usual stay for its kind of repair, from FactorySuite's
- * own history (released cards to 21 Nov 2026: 80% of minor repairs out
- * within 21 h, of major ones within 67 h).
+ * When a machine on the floor is expected back, as FactorySuite gives it on
+ * the card (expectedBackAt). Nothing else: no date of ours and no usual stay.
+ * Until FactorySuite sends one there is no ETA, and the board shows none
+ * (operator, 21 Nov 2026).
  */
-export const USUAL_HOURS = { MAJOR: 72, MINOR: 24 };
-export const backByOf = (c) => {
-  const day = c.repairItem?.expectedResolutionAt;
-  if (day) return { at: new Date(new Date(day).getTime() + 21 * 3_600_000), set: true };
-  if (!c.checkedInAt) return null;
-  return { at: new Date(new Date(c.checkedInAt).getTime() + (USUAL_HOURS[c.category] ?? USUAL_HOURS.MINOR) * 3_600_000), set: false };
-};
+export const backByOf = (c) => (c.expectedBackAt ? { at: new Date(c.expectedBackAt) } : null);
+/** Whether any card on the board carries an ETA: the ETA column, filter and count show only then. */
+export const anyEta = (cards) => (cards ?? []).some((c) => c.expectedBackAt);
 export const pastEta = (c, now = Date.now()) => {
   const b = backByOf(c);
   return !!b && b.at.getTime() < now;
@@ -117,7 +112,7 @@ function FloorCell({ open, loading }) {
   const longest = hours.length ? Math.max(...hours) : null;
   const facts = [
     { label: "Urgent", value: open.filter((c) => c.priority === "Urgent").length },
-    { label: "Past ETA", value: open.filter((c) => pastEta(c)).length },
+    ...(anyEta(open) ? [{ label: "Past ETA", value: open.filter((c) => pastEta(c)).length }] : []),
     { label: "Not tracked by us", value: open.filter((c) => !c.vehicleId).length },
   ];
   const mix = STATES.map((s) => ({ ...s, n: open.filter((c) => stateOf(c) === s.key).length }));

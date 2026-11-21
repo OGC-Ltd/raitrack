@@ -714,7 +714,7 @@ export default function WorkshopScreen() {
       {openId && (
         <DetailSidebar title="Repair job" label="Repair job" itemKey={openId} onClose={() => setOpenId(null)} wide>
           {/* View-only, but for one field: when the unit is supposed to be back (operator, 21 Nov). */}
-          <RepairWorkflowJob orgId={orgId} itemId={openId} can={look} backCan={can} userId={userId} onToast={setToast} />
+          <RepairWorkflowJob orgId={orgId} itemId={openId} can={look} userId={userId} onToast={setToast} />
         </DetailSidebar>
       )}
       {openCase && (

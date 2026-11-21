@@ -30,7 +30,7 @@ import {
   voidJob, movePhase, requestPart, sourcePart, issuePart, fitPart, receivePart,
   CATEGORY_LABEL, PHASES, PHASE_OF_STAGE, NEXT_STEP, PATH_LABEL, INTERVENTION_LABEL, DAMAGE_LABEL,
   INVESTIGATION_LABEL, INVESTIGATION_PILL, WORK_KIND_LABEL, WORK_KINDS_AT, workKindsFor, loggedThisStage, editWork, deleteWork, componentLabel, routeOf,
-  fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard, setExpectedBack,
+  fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard,
 } from "../../api/repairWorkflow";
 import "./RepairWorkflow.css";
 
@@ -82,38 +82,6 @@ export function PhaseLadder({ stage, compact = false, onPick = null, picked = nu
         );
       })}
     </ol>
-  );
-}
-
-/**
- * When the unit is supposed to be back in service: the date the workshop
- * promises. The Auto Workshop board counts a machine past it as past its ETA,
- * and the overdue escalation reads the same date.
- */
-function ExpectedBack({ job, canSet, busy, onSave }) {
-  const stored = job.expectedResolutionAt ? String(job.expectedResolutionAt).slice(0, 10) : "";
-  const [day, setDay] = useState(stored);
-  useEffect(() => { setDay(stored); }, [stored]);
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
-  const late = stored && stored < today && !job.resolvedAt;
-  if (!canSet && !stored) return null;
-  return (
-    <Section title="Expected back">
-      <div className="wf-back">
-        {canSet ? (
-          <>
-            <input type="date" className="sp4-input wf-back__day" value={day} aria-label="Expected back in service"
-                   onChange={(e) => setDay(e.target.value)} disabled={!!busy} />
-            <button type="button" className="sp4-submit-btn" disabled={!!busy || day === stored} onClick={() => onSave(day)}>Save</button>
-            {stored && <button type="button" className="sp4-ghost-btn" disabled={!!busy} onClick={() => onSave("")}>Clear</button>}
-          </>
-        ) : (
-          <span>{stored}</span>
-        )}
-        {late && <span className="sp4-pill sp4-pill--inc">Past the date</span>}
-        {!stored && <span className="wf-muted">Not set. Until it is, the board counts the usual stay for a major or minor repair.</span>}
-      </div>
-    </Section>
   );
 }
 
@@ -838,7 +806,7 @@ export function Trail({ job, title = "Trail", lead = null }) {
     at: e.at,
     label: e.stage ? STAGE_LABEL[e.stage] ?? e.stage
       : e.kind === "assignment" ? "Assigned" : e.kind === "assignment_response" ? (e.status === "accepted" ? "Accepted" : "Declined")
-        : e.kind === "escalation" ? "Escalated" : e.kind === "work_log" ? "Work log" : e.kind === "expected_back" ? "Expected back" : e.kind,
+        : e.kind === "escalation" ? "Escalated" : e.kind === "work_log" ? "Work log" : e.kind,
     note: e.note ?? (e.assignedToName ? `to ${e.assignedToName}` : ""),
     by: e.byName ?? (e.auto ? "Automatic" : ""),
   }));
@@ -911,8 +879,7 @@ table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:3px 10px
 
 // ── The panel ───────────────────────────────────────────────────────────────
 
-/** `backCan`: the rights the Expected back date is set under, where `can` is view-only (the Workshop). */
-export default function RepairWorkflowJob({ orgId, itemId, can, backCan, userId, onToast }) {
+export default function RepairWorkflowJob({ orgId, itemId, can, userId, onToast }) {
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
   const [assignees, setAssignees] = useState(null);
@@ -928,7 +895,7 @@ export default function RepairWorkflowJob({ orgId, itemId, can, backCan, userId,
 
   if (error) return <p className="wf-muted">{error}</p>;
   if (!job) return <p className="wf-muted">Reading the job…</p>;
-  return <JobView orgId={orgId} job={job} can={can} backCan={backCan} userId={userId} onToast={onToast} onChanged={read}
+  return <JobView orgId={orgId} job={job} can={can} userId={userId} onToast={onToast} onChanged={read}
                   assignees={assignees} setAssignees={setAssignees} />;
 }
 
@@ -941,7 +908,7 @@ export function mayWork(job, can, userId) {
 }
 
 /** The panel for a job already read. Pure of fetching, so it renders in a test. */
-export function JobView({ orgId, job, can, backCan, userId, onToast, onChanged, assignees = null, setAssignees = () => {} }) {
+export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees = null, setAssignees = () => {} }) {
   const [busy, act] = useAct(onToast, onChanged);
   const canWork = useMemo(() => mayWork(job, can, userId), [job, can, userId]);
 
@@ -1097,9 +1064,6 @@ export function JobView({ orgId, job, can, backCan, userId, onToast, onChanged, 
           </p>
         )}
       </section>
-
-      <ExpectedBack job={job} canSet={!job.resolvedAt && (backCan ?? can)("repair:resolve")} busy={busy}
-                    onSave={(day) => act("expected-back", () => setExpectedBack(orgId, job.id, day), day ? "Expected back date saved" : "Expected back date cleared")} />
 
       <Section title="The fault">
         <dl className="wf-facts">

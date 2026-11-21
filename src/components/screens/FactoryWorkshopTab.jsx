@@ -18,7 +18,7 @@ import { usePager } from "../body/TablePager";
 import { WfFilters, WfGrid, Reload, rowProps, Badge, Ident } from "./WorkshopParts";
 import EmptyNote from "../shared/EmptyNote";
 import { at } from "../body/RepairWorkflowJob";
-import WorkshopStrip, { STATES, stateOf, backByOf, pastEta, REPAIR_KIND } from "./WorkshopStrip";
+import WorkshopStrip, { STATES, stateOf, backByOf, pastEta, anyEta, REPAIR_KIND } from "./WorkshopStrip";
 
 function useRead(fn, deps) {
   const [s, setS] = useState({ data: null, loading: true, error: null });
@@ -41,24 +41,21 @@ const hoursSince = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3_60
 const BACK_DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const BACK_DATE = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short" });
 
-/** The ETA cell: past it by how long, or due in how long; and where the date came from. */
+/** The ETA cell, from FactorySuite's date: past it by how long, or due in how long. Empty without one. */
 function BackBy({ card }) {
   const b = backByOf(card);
-  if (!b) return <span className="sp4-muted">-</span>;
+  if (!b) return null;
   const now = Date.now();
   const h = (b.at.getTime() - now) / 3_600_000;
   const late = h < 0;
   // The line: how much of the time allowed, check-in to ETA, has gone. Full, and red, once past it.
   const start = card.checkedInAt ? new Date(card.checkedInAt).getTime() : now;
   const used = late ? 1 : Math.min(1, Math.max(0, (now - start) / Math.max(1, b.at.getTime() - start)));
-  const when = b.set ? BACK_DATE.format(b.at) : BACK_DAY.format(b.at);
-  const kind = (REPAIR_KIND[card.category]?.[0] ?? "minor").toLowerCase();
   return (
-    <span className={"fsw-eta" + (late ? " fsw-eta--late" : "")}
-          title={b.set ? "The date set on the repair job" : `No date set: the usual stay for a ${kind} repair`}>
+    <span className={"fsw-eta" + (late ? " fsw-eta--late" : "")} title="Expected back, from FactorySuite">
       <span className="fsw-eta__words">{late ? `Overdue ${span(-h)}` : `Due in ${span(h)}`}</span>
       <span className="fsw-eta__track" aria-hidden="true"><span className="fsw-eta__used" style={{ "--used": used }} /></span>
-      <span className="wf-cell-sub">{when}{b.set ? "" : ", usual"}</span>
+      <span className="wf-cell-sub">{BACK_DAY.format(b.at)}</span>
     </span>
   );
 }
@@ -82,11 +79,11 @@ const cardMatches = (c, term) => {
     .some((v) => v && String(v).toLowerCase().includes(t));
 };
 
-function BoardTable({ rows, onOpen, openId, resetKey }) {
+function BoardTable({ rows, onOpen, openId, resetKey, showEta }) {
   const pager = usePager(rows, resetKey);
   return (
     <WfGrid label="Machine pages" pager={pager}
-            head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ["ETA"]]}>
+            head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ...(showEta ? [["ETA"]] : [])]}>
           {pager.pageRows.map((c) => {
             const floor = STATES.find((x) => x.key === stateOf(c)) ?? STATES[0];
             const job = c.repairItem;
@@ -110,7 +107,7 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                     <span className="wf-cell-sub" title={at(c.checkedInAt)}>since {c.checkedInAt ? BACK_DATE.format(new Date(c.checkedInAt)) : "-"}</span>
                   </span>
                 </td>
-                <td><BackBy card={c} /></td>
+                {showEta && <td><BackBy card={c} /></td>}
               </tr>
             );
           })}
@@ -241,6 +238,7 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
   const nLate = searched.filter((c) => stateOk(c) && pastEta(c) && (!urgentOnly || c.priority === "Urgent") && kindOk(c)).length;
   const nRepair = (k) => searched.filter((c) => stateOk(c) && (!urgentOnly || c.priority === "Urgent") && (!lateOnly || pastEta(c)) && c.category === k).length;
   const late = open.filter((c) => pastEta(c)).length;
+  const showEta = anyEta(open);
   const waiting = open.filter((c) => stateOf(c) === "parts").length;
   const partRows = parts.data ?? [];
 
@@ -277,7 +275,7 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
             : [
               { label: "State", value: state, onPick: setState, options: [["all", "All", nState("all")], ...STATES.map((x) => [x.key, x.label, nState(x.key)])] },
               { label: "Repair", value: kind, onPick: setKind, options: [["any", "Any"], ["MAJOR", "Major", nRepair("MAJOR")], ["MINOR", "Minor", nRepair("MINOR")]] },
-              { label: "ETA", value: lateOnly ? "late" : "any", onPick: (id) => setLateOnly(id === "late"), options: [["any", "Any"], ["late", "Past ETA", nLate]] },
+              ...(showEta ? [{ label: "ETA", value: lateOnly ? "late" : "any", onPick: (id) => setLateOnly(id === "late"), options: [["any", "Any"], ["late", "Past ETA", nLate]] }] : []),
               { label: "Priority", value: urgentOnly ? "urgent" : "any", onPick: (id) => setUrgentOnly(id === "urgent"), options: [["any", "Any"], ["urgent", "Urgent", nUrgent]] },
             ]),
         ]}
@@ -329,7 +327,7 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
           Nothing in the workshop matches the search and filters picked.
         </EmptyNote>
       ) : (
-        <BoardTable rows={rows} onOpen={onOpen} openId={openId} resetKey={`${boardQ}|${state}|${urgentOnly}|${lateOnly}|${kind}`} />
+        <BoardTable rows={rows} onOpen={onOpen} openId={openId} resetKey={`${boardQ}|${state}|${urgentOnly}|${lateOnly}|${kind}`} showEta={showEta} />
       )}
     </div>
   );
