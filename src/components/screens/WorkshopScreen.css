@@ -28,14 +28,6 @@
 .wf-spin { display: inline-block; animation: wf-turn 900ms linear infinite; }
 @keyframes wf-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .wf-spin { animation: none; } }
-/* Reload sits at the end of the FIRST row, whatever wraps under it: pinned to
-   the bar's top-right corner, with the row's right edge kept clear for it
-   (operator, 21 Nov). Phones keep the stacked bar. */
-@media (min-width: 768px) {
-  .wf-filters:has(> .dr-filters__tools) { position: relative; padding-right: 48px; }
-  /* 29px: a chip group's height, so the button centres on the row it ends. */
-  .wf-filters > .dr-filters__tools { position: absolute; top: 0; right: 0; height: 29px; }
-}
 .wf-count { margin: 0; font-size: 12px; color: var(--text-2); }
 .wf-count b { color: var(--ink); font-weight: 700; }
 
