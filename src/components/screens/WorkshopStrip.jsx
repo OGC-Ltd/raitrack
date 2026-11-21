@@ -22,6 +22,27 @@ const fmtDay = (day) =>
 const stay = (h) => (h == null ? "-" : h < 48 ? `${fmt(Math.round(h))} h` : `${fmt(Math.round(h / 24))} days`);
 const hoursSince = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : null);
 
+/**
+ * When a machine on the floor is supposed to be back. The date someone set on
+ * its repair job (Expected back, end of that East Africa day) when there is
+ * one; otherwise the usual stay for its kind of repair, from FactorySuite's
+ * own history (released cards to 21 Nov 2026: 80% of minor repairs out
+ * within 21 h, of major ones within 67 h).
+ */
+export const USUAL_HOURS = { MAJOR: 72, MINOR: 24 };
+export const backByOf = (c) => {
+  const day = c.repairItem?.expectedResolutionAt;
+  if (day) return { at: new Date(new Date(day).getTime() + 21 * 3_600_000), set: true };
+  if (!c.checkedInAt) return null;
+  return { at: new Date(new Date(c.checkedInAt).getTime() + (USUAL_HOURS[c.category] ?? USUAL_HOURS.MINOR) * 3_600_000), set: false };
+};
+export const pastEta = (c, now = Date.now()) => {
+  const b = backByOf(c);
+  return !!b && b.at.getTime() < now;
+};
+/** Major / Minor, as FactorySuite classes the card. */
+export const REPAIR_KIND = { MAJOR: ["Major", "inc"], MINOR: ["Minor", "none"], OTHER: ["Other", "none"] };
+
 /** A card's state on the floor; the same order the server moves the repair job in. */
 export const stateOf = (c) =>
   // COMPLETED: the work is done and the machine waits to be released (9 of 23 open on 21 Nov).
@@ -96,7 +117,7 @@ function FloorCell({ open, loading }) {
   const longest = hours.length ? Math.max(...hours) : null;
   const facts = [
     { label: "Urgent", value: open.filter((c) => c.priority === "Urgent").length },
-    { label: "In over 3 days", value: hours.filter((h) => h > 72).length },
+    { label: "Past ETA", value: open.filter((c) => pastEta(c)).length },
     { label: "Not tracked by us", value: open.filter((c) => !c.vehicleId).length },
   ];
   const mix = STATES.map((s) => ({ ...s, n: open.filter((c) => stateOf(c) === s.key).length }));

@@ -58,6 +58,7 @@
 .wf-grid .wf-cell-fault--short { max-width: 180px; }
 .wf-grid .wf-cell-sub { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
 .wf-grid .wf-cell-stage { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.wf-grid .wf-cell-stage--end { align-items: flex-end; }
 .wf-grid td.wf-cell-wrap { white-space: normal; min-width: 220px; }
 
 /* Auto Workshop's strip and note sit in the page's own gutter now. */

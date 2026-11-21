@@ -248,6 +248,8 @@ export const cancelBooking  = (orgId, id, reason) => post(item(orgId, id, "booki
 export const arriveJob      = (orgId, id) => post(item(orgId, id, "arrive"));
 export const assignWorkshop = (orgId, id, { technicianId, name }) => post(item(orgId, id, "workshop-assign"), clean({ technicianId, name }));
 export const classifyDamage = (orgId, id, d) => post(item(orgId, id, "damage"), clean(d));
+/** When the unit is supposed to be back: "YYYY-MM-DD", or "" / null to clear. */
+export const setExpectedBack = (orgId, id, day) => post(item(orgId, id, "expected-back"), { expectedBack: day || null });
 export const voidWarranty   = (orgId, id, note, components) => post(item(orgId, id, "warranty-void"), { note: note.trim(), components });
 export const clearWarranty  = (orgId, id, note) => post(item(orgId, id, "warranty-void/clear"), { note: note.trim() });
 export const addWork        = (orgId, id, w) => post(item(orgId, id, "work"), clean(w));

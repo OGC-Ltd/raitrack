@@ -13,12 +13,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { REPAIRS_CHANGED, stageLabelOf, stagePillOf } from "../../api/repairs";
-import { fetchFactoryBoard, fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard } from "../../api/repairWorkflow";
+import { fetchFactoryBoard, fetchStoresParts, CARD_STATUS, shortCard } from "../../api/repairWorkflow";
 import { usePager } from "../body/TablePager";
 import { WfFilters, WfGrid, Reload, rowProps, Badge, Ident } from "./WorkshopParts";
 import EmptyNote from "../shared/EmptyNote";
 import { at } from "../body/RepairWorkflowJob";
-import WorkshopStrip, { STATES, stateOf } from "./WorkshopStrip";
+import WorkshopStrip, { STATES, stateOf, backByOf, pastEta, REPAIR_KIND } from "./WorkshopStrip";
 
 function useRead(fn, deps) {
   const [s, setS] = useState({ data: null, loading: true, error: null });
@@ -38,6 +38,23 @@ function useRead(fn, deps) {
 }
 
 const hoursSince = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : null);
+const BACK_DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const BACK_DATE = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "short" });
+
+/** The ETA cell: past it by how long, or due in how long; and where the date came from. */
+function BackBy({ card }) {
+  const b = backByOf(card);
+  if (!b) return <span className="sp4-muted">-</span>;
+  const h = (b.at.getTime() - Date.now()) / 3_600_000;
+  const when = b.set ? BACK_DATE.format(b.at) : BACK_DAY.format(b.at);
+  const kind = (REPAIR_KIND[card.category]?.[0] ?? "minor").toLowerCase();
+  return (
+    <span className="wf-cell-stage" title={b.set ? "The date set on the repair job" : `No date set: the usual stay for a ${kind} repair`}>
+      {h < 0 ? <Badge tone="inc">Overdue {span(-h)}</Badge> : <Badge tone="none">Due in {span(h)}</Badge>}
+      <span className="wf-cell-sub">{when}{b.set ? "" : ", usual"}</span>
+    </span>
+  );
+}
 const span = (h) => (h == null ? "-" : h < 1 ? `${Math.max(0, Math.round(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`);
 /** 14 days: the strip's charts compare the last week with the one before. */
 const BOARD_DAYS = 14;
@@ -57,7 +74,7 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
   const pager = usePager(rows, resetKey);
   return (
     <WfGrid label="Machine pages" pager={pager}
-            head={[["Machine"], ["Fault"], ["Card"], ["Repair job"], ["Checked in"], ["In for", true]]}>
+            head={[["Machine"], ["Fault"], ["Repair"], ["Card"], ["Repair job"], ["In for", true], ["ETA"]]}>
           {pager.pageRows.map((c) => {
             const [label, pill] = CARD_STATUS[c.status] ?? [c.status, "none"];
             const job = c.repairItem;
@@ -67,14 +84,15 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                 <td>
                   <Ident name={c.machine} sub={c.vehicle?.registrationPlate && c.vehicle.registrationPlate !== c.machine ? c.vehicle.registrationPlate : null} />
                 </td>
-                <td>
-                  <span className="wf-cell-fault">{c.reportedFault ?? "-"}</span>
-                  {c.diagnosis && <span className="wf-cell-sub">{c.diagnosis}</span>}
+                <td title={[c.reportedFault, c.diagnosis].filter(Boolean).join("\n") || undefined}>
+                  <span className="wf-cell-fault wf-cell-fault--short">{c.reportedFault ?? "-"}</span>
+                  {c.diagnosis && <span className="wf-cell-sub wf-cell-fault--short">{c.diagnosis}</span>}
                 </td>
+                <td>{c.category ? <Badge tone={REPAIR_KIND[c.category]?.[1] ?? "none"}>{REPAIR_KIND[c.category]?.[0] ?? c.category}</Badge> : <span className="sp4-muted">-</span>}</td>
                 <td>
                   <span className="wf-cell-stage">
                     <Badge tone={pill}>{label}</Badge>
-                    <span className="wf-cell-sub"><span className="dr-veh">{shortCard(c.cardNumber)}</span>{c.priority === "Urgent" ? ", urgent" : ""}{c.source ? `, ${(CARD_SOURCE[c.source] ?? c.source).toLowerCase()}` : ""}</span>
+                    <span className="wf-cell-sub"><span className="dr-veh">{shortCard(c.cardNumber)}</span>{c.priority === "Urgent" ? ", urgent" : ""}</span>
                   </span>
                 </td>
                 <td>
@@ -82,8 +100,13 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                     ? <span className="wf-cell-stage"><Badge tone={stagePillOf({ ...job, fsJobCards: [c] })}>{stageLabelOf({ ...job, fsJobCards: [c] })}</Badge>{job.ticketNo && job.ticketNo !== shortCard(c.cardNumber) && <span className="wf-cell-sub dr-veh">{job.ticketNo}</span>}</span>
                     : <span className="sp4-muted" title="The machine on this card is not one of our tracked units">Not tracked</span>}
                 </td>
-                <td className="sys-num">{at(c.checkedInAt)}</td>
-                <td className="dr-num sys-num">{span(hoursSince(c.checkedInAt))}</td>
+                <td className="dr-num sys-num">
+                  <span className="wf-cell-stage wf-cell-stage--end">
+                    <span>{span(hoursSince(c.checkedInAt))}</span>
+                    <span className="wf-cell-sub" title={at(c.checkedInAt)}>since {c.checkedInAt ? BACK_DATE.format(new Date(c.checkedInAt)) : "-"}</span>
+                  </span>
+                </td>
+                <td><BackBy card={c} /></td>
               </tr>
             );
           })}
@@ -187,6 +210,8 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
   const [boardQ, setBoardQ] = useState("");
   const [state, setState] = useState("all");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [lateOnly, setLateOnly] = useState(false);
+  const [kind, setKind] = useState("any");
   const [partsQ, setPartsQ] = useState("");
   const [partsTerm, setPartsTerm] = useState("");
   const [low, setLow] = useState(false);
@@ -203,14 +228,19 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
   const open = useMemo(() => board.data?.open ?? [], [board.data]);
   const summary = board.data?.summary;
   const searched = useMemo(() => open.filter((c) => cardMatches(c, boardQ.trim())), [open, boardQ]);
-  const urgentPicked = searched.filter((c) => !urgentOnly || c.priority === "Urgent");
+  const kindOk = (c) => kind === "any" || c.category === kind;
+  const urgentPicked = searched.filter((c) => (!urgentOnly || c.priority === "Urgent") && (!lateOnly || pastEta(c)) && kindOk(c));
   const rows = urgentPicked.filter((c) => state === "all" || stateOf(c) === state);
   const nState = (key) => urgentPicked.filter((c) => key === "all" || stateOf(c) === key).length;
-  const nUrgent = searched.filter((c) => (state === "all" || stateOf(c) === state) && c.priority === "Urgent").length;
+  const stateOk = (c) => state === "all" || stateOf(c) === state;
+  const nUrgent = searched.filter((c) => stateOk(c) && c.priority === "Urgent" && (!lateOnly || pastEta(c)) && kindOk(c)).length;
+  const nLate = searched.filter((c) => stateOk(c) && pastEta(c) && (!urgentOnly || c.priority === "Urgent") && kindOk(c)).length;
+  const nRepair = (k) => searched.filter((c) => stateOk(c) && (!urgentOnly || c.priority === "Urgent") && (!lateOnly || pastEta(c)) && c.category === k).length;
+  const late = open.filter((c) => pastEta(c)).length;
   const waiting = open.filter((c) => stateOf(c) === "parts").length;
   const partRows = parts.data ?? [];
 
-  const narrowed = !!boardQ.trim() || state !== "all" || urgentOnly;
+  const narrowed = !!boardQ.trim() || state !== "all" || urgentOnly || lateOnly || kind !== "any";
 
   // Booked and released: today (East Africa) or the board's whole window.
   const isMoves = view === "moves";
@@ -242,6 +272,8 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
             ? [{ label: "Stock", value: low ? "low" : "all", onPick: (id) => setLow(id === "low"), options: [["all", "All"], ["low", "Below minimum"]] }]
             : [
               { label: "State", value: state, onPick: setState, options: [["all", "All", nState("all")], ...STATES.map((x) => [x.key, x.label, nState(x.key)])] },
+              { label: "Repair", value: kind, onPick: setKind, options: [["any", "Any"], ["MAJOR", "Major", nRepair("MAJOR")], ["MINOR", "Minor", nRepair("MINOR")]] },
+              { label: "ETA", value: lateOnly ? "late" : "any", onPick: (id) => setLateOnly(id === "late"), options: [["any", "Any"], ["late", "Past ETA", nLate]] },
               { label: "Priority", value: urgentOnly ? "urgent" : "any", onPick: (id) => setUrgentOnly(id === "urgent"), options: [["any", "Any"], ["urgent", "Urgent", nUrgent]] },
             ]),
         ]}
@@ -254,7 +286,7 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
       ) : narrowed ? (
         <><b>{rows.length}</b> of {open.length} {plural(open.length, "machine")} in the workshop</>
       ) : (
-        <><b>{open.length}</b> {plural(open.length, "machine")} in the workshop{waiting ? <>, <b>{waiting}</b> awaiting parts</> : null}</>
+        <><b>{open.length}</b> {plural(open.length, "machine")} in the workshop{late ? <>, <b>{late}</b> past their ETA</> : null}{waiting ? <>, <b>{waiting}</b> awaiting parts</> : null}</>
       )}</p>
 
       {isMoves ? (
@@ -289,11 +321,11 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
         <EmptyNote icon="ti-circle-check" title="Nothing in the Workshop">No job card is open in FactorySuite.</EmptyNote>
       ) : rows.length === 0 ? (
         <EmptyNote icon="ti-search" title="No Machines Match"
-                   action={{ label: "Clear the filters", onClick: () => { setBoardQ(""); setState("all"); setUrgentOnly(false); } }}>
+                   action={{ label: "Clear the filters", onClick: () => { setBoardQ(""); setState("all"); setUrgentOnly(false); setLateOnly(false); setKind("any"); } }}>
           Nothing in the workshop matches the search and filters picked.
         </EmptyNote>
       ) : (
-        <BoardTable rows={rows} onOpen={onOpen} openId={openId} resetKey={`${boardQ}|${state}|${urgentOnly}`} />
+        <BoardTable rows={rows} onOpen={onOpen} openId={openId} resetKey={`${boardQ}|${state}|${urgentOnly}|${lateOnly}|${kind}`} />
       )}
     </div>
   );
