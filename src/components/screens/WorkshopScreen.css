@@ -11,7 +11,10 @@
 .wf-layout > .fsw-tab { display: flex; flex-direction: column; gap: 12px; }
 
 /* ── Stats strips (WorkshopStats.jsx): the Auto Workshop strip on every view ── */
-.wf-day-board > .fsw-stats { margin-bottom: 12px; }
+/* Workshop day sits in .fsw-tab like Auto Workshop: strip, filters, count, grid.
+   Its day stepper is a chip group at the filter row's end. */
+.wf-day-step .dr-chip { display: inline-flex; align-items: center; gap: 4px; }
+.wf-day-step .dr-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; transition: none; }
 
 /* ── Filter row ───────────────────────────────────────────────────────── */
 .wf-chip-n {
@@ -81,19 +84,13 @@
    time allowed that has gone. The tones are the floor bar's
    (DriversScreen.css .dr-fleet), declared here because the board sits outside
    .dr-tones. */
-.fsw-tab {
+:root {
   --fsw-repair: #15803d;
   --fsw-done:   #2a78d6;
   --fsw-parts:  #c98500;
   --fsw-late:   #c42b2b;
   --fsw-quiet:  color-mix(in srgb, var(--text-2) 55%, transparent);
   --fsw-track:  color-mix(in srgb, var(--text-2) 22%, transparent);
-}
-.app--dark .fsw-tab {
-  --fsw-repair: #22c55e;
-  --fsw-done:   #3987e5;
-  --fsw-parts:  #eda100;
-  --fsw-late:   #e66767;
 }
 .fsw-state { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); white-space: nowrap; }
 .fsw-state::before { content: ""; width: 3px; height: 14px; border-radius: 2px; background: var(--fsw-line, var(--fsw-quiet)); flex: none; }
@@ -102,6 +99,7 @@
 .fsw-state--parts  { --fsw-line: var(--fsw-parts); }
 .fsw-state--waiting { --fsw-line: var(--fsw-quiet); }
 .fsw-state--out    { --fsw-line: var(--fsw-repair); }
+.fsw-state--late   { --fsw-line: var(--fsw-late); }
 .fsw-urgent { color: var(--fsw-late); font-weight: 600; }
 .fsw-eta { display: inline-flex; flex-direction: column; gap: 4px; min-width: 96px; }
 .fsw-eta__words { color: var(--ink); white-space: nowrap; }

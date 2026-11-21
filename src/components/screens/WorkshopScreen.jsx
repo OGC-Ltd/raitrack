@@ -33,7 +33,7 @@ import {
   claimJob, updateInvestigation, viewOnly, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
   takeWorkshopHandoff, WORKSHOP_OPEN, shortCard,
 } from "../../api/repairWorkflow";
-import FactoryWorkshopTab from "./FactoryWorkshopTab";
+import FactoryWorkshopTab, { StateLine } from "./FactoryWorkshopTab";
 import { JobsStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay } from "./WorkshopStats";
 import RepairWorkflowJob, { PhaseLadder, TrailList, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
@@ -367,16 +367,11 @@ function useWorkshopDay(orgId, wid, date) {
   };
 }
 
-/** The day's shape while it loads: capacity line and three rows, so the page
+/** The day's shape while it loads: three rows, so the page
  *  holds its height and nothing jumps when the bookings arrive. */
 function DaySkeleton() {
   return (
     <div aria-busy="true" aria-label="Reading the day">
-      <div className="wf-capacity" aria-hidden="true">
-        <span className="sp4-skel-cell wf-skel wf-skel--n" />
-        <span className="sp4-skel-cell wf-skel wf-skel--bar" />
-        <span className="sp4-skel-cell wf-skel wf-skel--txt" />
-      </div>
       <ol className="wf-board wf-board--skel" aria-hidden="true">
         {[0, 1, 2].map((i) => (
           <li key={i} className="wf-board__row">
@@ -435,42 +430,52 @@ function DayTab({ orgId, onOpen }) {
   const d = day.data;
   const live = (d?.bookings ?? []).filter((b) => b.status === "booked" || b.status === "arrived");
   const other = (d?.bookings ?? []).filter((b) => b.status === "no_show");
-  const label = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }).format(new Date(`${date}T00:00:00Z`));
+  const today = isoDay(Date.now());
+  const dayWords = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${date}T00:00:00Z`));
   // One row a unit on the day, booked first, then the unbooked arrivals, then the no-shows.
   const dayRows = [
-    ...live.map((b) => ({ key: b.id, job: b.repairItem, tag: b.status === "arrived" ? "Arrived" : "Booked", tone: b.status === "arrived" ? "con" : "info" })),
-    ...(d?.unbookedArrivals ?? []).map((j) => ({ key: j.id, job: j, tag: "Arrived, unbooked", tone: "warn" })),
-    ...other.map((b) => ({ key: b.id, job: b.repairItem, tag: "No show", tone: "inc" })),
+    ...live.map((b) => ({ key: b.id, job: b.repairItem, kind: b.status === "arrived" ? "arrived" : "booked" })),
+    ...(d?.unbookedArrivals ?? []).map((j) => ({ key: j.id, job: j, kind: "unbooked" })),
+    ...other.map((b) => ({ key: b.id, job: b.repairItem, kind: "no_show" })),
   ];
-  const dayPager = usePager(dayRows, `${wid}|${date}`);
+  const [show, setShow] = useState("all");
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const found = dayRows.filter((r) => !q || [r.job?.vehicle?.registrationPlate, r.job?.vehicle?.name, r.job?.ticketNo, jobLabel(r.job),
+    r.job?.workshopTechnician?.fullName ?? r.job?.workshopTechnicianName].filter(Boolean).join(" ").toLowerCase().includes(q));
+  const nKind = (k) => found.filter((r) => k === "all" || r.kind === k).length;
+  const rows = found.filter((r) => show === "all" || r.kind === show);
+  const dayPager = usePager(rows, `${wid}|${date}|${show}|${q}`);
+  const nUnbooked = d?.unbookedArrivals?.length ?? 0;
 
   return (
-    <div className="wf-day-board">
+    <div className="fsw-tab">
       <DayStrip current={day.data} week={week} date={date} loading={workshops === null || (day.loading && !day.data)} />
-      <div className="wf-day-board__head">
-        <div className="wf-day-board__nav">
-          <button type="button" className="sp4-ghost-btn" onClick={() => shift(-1)} aria-label="Previous day"><i className="ti ti-chevron-left" aria-hidden="true" /></button>
-          <h2 className="wf-day-board__date">{label}</h2>
-          <button type="button" className="sp4-ghost-btn" onClick={() => shift(1)} aria-label="Next day"><i className="ti ti-chevron-right" aria-hidden="true" /></button>
-          {date !== isoDay(Date.now()) && <button type="button" className="sp4-ghost-btn" onClick={() => setDate(isoDay(Date.now()))}>Today</button>}
-        </div>
-        {(workshops?.length ?? 0) > 1 && (
-          <select className="sp4-input wf-ws-pick" value={wid ?? ""} onChange={(e) => setWid(e.target.value)} aria-label="Workshop">
-            {workshops.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        )}
-      </div>
 
+      <WfFilters
+        label="Search the day" placeholder="Search reg, ticket, fault or technician…" search={search} onSearch={setSearch}
+        groups={[{ label: "Show", value: show, onPick: setShow,
+          options: [["all", "All", nKind("all")], ...DAY_KINDS.map(([k, text]) => [k, text, nKind(k)])] }]}
+        tools={<>
+          <span className="dr-seg wf-day-step" role="group" aria-label="Day">
+            <button type="button" className="dr-chip" onClick={() => shift(-1)} aria-label="Previous day"><i className="ti ti-chevron-left" aria-hidden="true" /></button>
+            <button type="button" className={`dr-chip${date === today ? " dr-chip--active" : ""}`} onClick={() => setDate(today)}
+                    title={date === today ? "Today" : "Back to today"} aria-pressed={date === today}>{date === today ? "Today" : dayWords}</button>
+            <button type="button" className="dr-chip" onClick={() => shift(1)} aria-label="Next day"><i className="ti ti-chevron-right" aria-hidden="true" /></button>
+          </span>
+          {(workshops?.length ?? 0) > 1 && (
+            <select className="sp4-input wf-ws-pick" value={wid ?? ""} onChange={(e) => setWid(e.target.value)} aria-label="Workshop">
+              {workshops.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          )}
+          <Reload loading={day.loading} onReload={day.retry} />
+        </>}
+      />
       {d && (
-        <p className="wf-capacity" aria-label={`${d.booked} of ${d.capacity} booked`}>
-          <span className="wf-capacity__n">{d.booked}<span>/{d.capacity}</span></span>
-          <span className="wf-capacity__bar" aria-hidden="true">
-            {Array.from({ length: d.capacity }, (_, i) => <i key={i} className={i < d.booked ? "is-taken" : ""} />)}
-          </span>
-          <span className="wf-capacity__txt">
-            {d.workshop?.name} · booked vehicles
-            {d.unbookedArrivals.length ? ` · ${d.unbookedArrivals.length} arrived without a booking` : ""}
-          </span>
+        <p className="wf-count">
+          <b>{d.booked} / {d.capacity}</b> booked into {d.workshop?.name ?? "the workshop"} on {dayWords}
+          {nUnbooked ? <>, <b>{nUnbooked}</b> arrived without a booking</> : null}
+          {other.length ? <>, <b>{other.length}</b> {other.length === 1 ? "no-show" : "no-shows"}</> : null}
         </p>
       )}
 
@@ -480,27 +485,40 @@ function DayTab({ orgId, onOpen }) {
         <EmptyNote icon="ti-building-warehouse" title="No Workshop Yet">This organisation has no workshop set up, so there is no day board.</EmptyNote>
       ) : day.error ? (
         <EmptyNote icon="ti-alert-triangle" tone="error" title="The Day Could Not Be Loaded" action={{ label: "Try again", onClick: day.retry }}>{day.error}</EmptyNote>
-      ) : live.length === 0 && (d?.unbookedArrivals?.length ?? 0) === 0 ? (
+      ) : dayRows.length === 0 ? (
         <EmptyNote icon="ti-calendar" title="Nothing Booked">No unit is booked into the workshop on this day.</EmptyNote>
+      ) : rows.length === 0 ? (
+        <EmptyNote icon="ti-search" title="No Units Match" action={{ label: "Clear the filters", onClick: () => { setSearch(""); setShow("all"); } }}>
+          Nothing on this day matches the search and filters picked.
+        </EmptyNote>
       ) : (
         <WfGrid label="Day pages" pager={dayPager}
                 head={[["Unit reg"], ["Fault"], ["Ticket"], ["Technician"], ["Status"]]}>
-          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} onOpen={onOpen} tag={r.tag} tagTone={r.tone} />)}
+          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} onOpen={onOpen} kind={r.kind} />)}
         </WfGrid>
       )}
     </div>
   );
 }
 
-function BoardRow({ job, onOpen, tag, tagTone }) {
+/** A unit's place on the day, as the Show filter names it, and its line's tone (the Auto Workshop board's). */
+const DAY_KINDS = [
+  ["booked", "Booked", "waiting"],
+  ["arrived", "Arrived", "repair"],
+  ["unbooked", "Arrived, unbooked", "parts"],
+  ["no_show", "No show", "late"],
+];
+
+function BoardRow({ job, onOpen, kind }) {
   const tech = job.workshopTechnician?.fullName ?? job.workshopTechnicianName;
+  const [, text, tone] = DAY_KINDS.find(([k]) => k === kind) ?? [kind, kind, "waiting"];
   return (
     <tr {...rowProps(false, () => onOpen(job.id))}>
       <td><Ident name={job.vehicle?.registrationPlate ?? "-"} sub={job.vehicle?.name !== job.vehicle?.registrationPlate ? job.vehicle?.name : null} /></td>
       <td><span className="wf-cell-fault">{jobLabel(job)}</span></td>
       <td><span className="dr-veh">{job.ticketNo ?? "No ticket yet"}</span></td>
       <td>{tech ?? <span className="sp4-muted">No technician</span>}</td>
-      <td><Badge tone={tagTone}>{tag}</Badge></td>
+      <td><StateLine tone={tone}>{text}</StateLine></td>
     </tr>
   );
 }

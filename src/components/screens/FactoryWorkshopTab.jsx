@@ -61,7 +61,7 @@ function BackBy({ card }) {
 }
 
 /** A state as words after a short line in its tone: the floor bar's colours, no pill. */
-function StateLine({ tone, children }) {
+export function StateLine({ tone, children }) {
   return <span className={`fsw-state fsw-state--${tone}`}>{children}</span>;
 }
 const span = (h) => (h == null ? "-" : h < 1 ? `${Math.max(0, Math.round(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`);
