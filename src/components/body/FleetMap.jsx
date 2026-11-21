@@ -2634,7 +2634,8 @@ export default function FleetMap() {
   // The CAD planting plan belongs to one estate only.
   const planAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
   // So do FactorySuite's work plans: only Mufindi (our Kasulu) keeps them.
-  const workPlansAllowed = activeCompanyId === ESTATE_PLAN_COMPANY;
+  // Not for a technician (operator, 2026-11-21: no work plans)
+  const workPlansAllowed = activeCompanyId === ESTATE_PLAN_COMPANY && !techOnly;
   const workPlans = useWorkPlans(orgId, workPlansAllowed && showWorkPlans);
   areaHoverQuietRef.current = workPlansAllowed && showWorkPlans;
   // What the rail's search can find: the fences this layer can draw.

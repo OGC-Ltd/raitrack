@@ -47,10 +47,12 @@ export function accessIn(orgs, companyId) {
 /**
  * What a technician (vehicle:flagged_only) is never shown (operator,
  * 2026-11-21): the live feed beyond their own repair cases, dashcam alarms,
- * the Idling/Warning/Critical counts and the In transit/Plant/Empty cards.
+ * the Idling/Warning/Critical counts and the In transit/Plant/Empty cards,
+ * and the Work Plan page (operator, 2026-11-21: "technicians do not need
+ * access to workplan").
  * The server limits their feed to repair notices too (authz feedSourcesFor).
  */
-export const TECH_WITHHELD = new Set(["notification:all_events", "fleet:status_counts", "fleet:load_status", "vss:alarms"]);
+export const TECH_WITHHELD = new Set(["notification:all_events", "fleet:status_counts", "fleet:load_status", "vss:alarms", "work_plans:read"]);
 /** The slugs a check may be answered by: all of them, less TECH_WITHHELD for a technician. */
 export const slugsFor = (slug, flaggedOnly) => (flaggedOnly ? anyOf(slug).filter((s) => !TECH_WITHHELD.has(s)) : anyOf(slug));
 const anyOf = (slug) => (Array.isArray(slug) ? slug : [slug]);
