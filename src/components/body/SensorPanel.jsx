@@ -1374,6 +1374,9 @@ function SensorDetail({
   // In the sidebar: the Fixing / Needs a spare part / Cannot be fixed buttons
   // (ProbeReportActions), and when the unit last reported, for the empty state.
   reportActions = null, lastReportedAt = null,
+  // The unit's open job from the Probes list: shown when this panel's own read
+  // fails, so a reported unit never reads "Not reported yet".
+  openItem = null,
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -1417,6 +1420,8 @@ function SensorDetail({
       .catch(() => { if (!cancelled) { setRepair(null); setReportCount(null); setHistory([]); } });
     return () => { cancelled = true; };
   }, [orgId, vehicleId, canSeeRepairs, repairNonce, repairTick]);
+
+  const shownRepair = repair ?? openItem;
 
   const totalPages = Math.ceil((pings.length || 0) / PAGE_SIZE);
   const pagePings  = pings.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -1492,12 +1497,12 @@ function SensorDetail({
           </span>
         </section>
       )}
-      {(repair || faulty) && (
+      {(shownRepair || faulty) && (
         <RepairTrackingLine
-          item={repair}
+          item={shownRepair}
           faulty={faulty}
           orgId={orgId}
-          canResolve={mayWorkJob(repair, { canResolve: canResolveRepairs, canWorkAny: can("repair:work_any"), userId: user?.id ?? null })}
+          canResolve={mayWorkJob(shownRepair, { canResolve: canResolveRepairs, canWorkAny: can("repair:work_any"), userId: user?.id ?? null })}
           onChanged={() => setRepairTick((n) => n + 1)}
         />
       )}
@@ -2139,6 +2144,7 @@ export default function SensorPanel() {
               canResolveRepairs={can("repair:resolve")}
               faulty={selectedIsFaulty}
               repairNonce={openRepairs.rows.length}
+              openItem={openRepairs.byVehicle?.get(selectedAnomaly.vehicleId) ?? null}
               onClose={closeSelected}
               inPanel
               lastReportedAt={selectedProbeRow ? selectedProbeRow.lastReportedAt ?? "" : null}

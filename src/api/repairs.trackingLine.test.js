@@ -123,3 +123,29 @@ describe("mayWorkJob, a technician works only an accepted job of their own", () 
     expect(mayWorkJob(job({ resolvedAt: "2026-10-01T00:00:00Z" }), mgr)).toBe(false);
   });
 });
+
+describe("trackingLine, a Workshop job", () => {
+  it("reads Reported, With ControlTech, then Fixed for a flagged unit", () => {
+    const n = trackingLine({
+      stage: "forwarded", queue: "controltech", createdAt: "2026-11-21T06:18:47.000Z",
+      report: { reportedAt: "2026-11-21T06:18:47.000Z", reportedBy: { fullName: "Control Room" } },
+      stageHistory: [{ stage: "forwarded", at: "2026-11-21T06:18:48.000Z", byName: "Control Room" }],
+    });
+    expect(n.map((x) => [x.label, x.state])).toEqual([["Reported", "done"], ["With ControlTech", "current"], ["Fixed", "todo"]]);
+    expect(n[0].at).toBe("2026-11-21T06:18:47.000Z");
+    expect(n[0].unreported).toBe(false);
+    expect(n[1].at).toBe("2026-11-21T06:18:48.000Z");
+  });
+
+  it("ends a void job on Void", () => {
+    expect(trackingLine({ stage: "void", stageHistory: [] }).map((x) => x.key)).toEqual(["reported", "void"]);
+  });
+
+  it("says a job still pending has been reported", () => {
+    const [p] = trackingLine({ stage: "pending", createdAt: "2026-11-21T06:00:00.000Z", stageHistory: [] });
+    expect(p.state).toBe("current");
+    expect(p.blurb).toMatch(/^Reported/);
+    expect(p.at).toBe("2026-11-21T06:00:00.000Z");
+    expect(p.unreported).toBe(false);
+  });
+});

@@ -424,6 +424,10 @@ export async function setRepairStage({ orgId, itemId, stage, note } = {}) {
  */
 export function trackingLine(item) {
   const history = Array.isArray(item?.stageHistory) ? item.stageHistory : [];
+  // A Workshop job (flagged, With ControlTech, in the workshop...) has its own
+  // road: it reads as Reported, where it is now, then Fixed (operator,
+  // 2026-11-21: "the unit has been reported, it should state the status").
+  if (item && WORKFLOW_BLURB[item.stage]) return workflowLine(item, history);
   /*
    * No item means no repair has been filed, which is not "no information":
    * it is the FIRST rung. A probe the fleet can see is broken and nobody has
@@ -475,6 +479,9 @@ export function trackingLine(item) {
       note:  event?.note ?? null,
       auto:  event?.auto === true,
       implied: impliedPending,
+      ...(stage === "pending" && item != null && state === "current"
+        ? { blurb: "Reported. Waiting to be sent to a technician.", at: event?.at ?? item.report?.reportedAt ?? item.createdAt ?? null, by: event?.byName ?? item.report?.reportedBy?.fullName ?? null, implied: false }
+        : {}),
       /* The pending rung of a unit with no report at all. */
       unreported: stage === "pending" && item == null,
       /* Passed without anybody standing on it, e.g. no part was needed, so
@@ -485,6 +492,36 @@ export function trackingLine(item) {
   }).map((n) => (n.passedWithout
     ? { ...n, blurb: n.key === "spare_outsourced" ? "Skipped: no spare part was outsourced." : "Passed without a record." }
     : n));
+}
+
+/** What each Workshop-workflow stage means, on the unit's progress card. */
+export const WORKFLOW_BLURB = {
+  forwarded:           "Reported. With ControlTech: fix it remotely or send it for inspection.",
+  remote_fix:          "Reported. ControlTech is fixing it remotely.",
+  awaiting_assessment: "Reported. Waiting for the workshop to assess it.",
+  booked:              "Reported. Booked into the workshop.",
+  towing:              "Reported. Being towed to the workshop.",
+  field_inspection:    "Reported. Being inspected in the field.",
+  in_workshop:         "Reported. In the workshop, being worked on.",
+  completed:           "Work done. Waiting for the Control Room to verify it.",
+  void:                "Closed without a repair.",
+};
+
+/** Reported -> where the Workshop job is now -> Fixed. */
+function workflowLine(item, history) {
+  const lastAt = new Map();
+  for (const e of history) if (e?.stage) lastAt.set(e.stage, e);
+  const reportedAt = item.report?.reportedAt ?? item.createdAt ?? history[0]?.at ?? null;
+  const reportedBy = item.report?.reportedBy?.fullName ?? history[0]?.byName ?? null;
+  const now = lastAt.get(item.stage);
+  const base = { auto: false, implied: false, unreported: false, passedWithout: false, note: null };
+  const nodes = [
+    { ...base, key: "reported", label: "Reported", blurb: "Flagged for repair.", state: "done", tone: "mid", at: reportedAt, by: reportedBy },
+    { ...base, key: item.stage, label: STAGE_LABEL[item.stage] ?? item.stage, blurb: WORKFLOW_BLURB[item.stage],
+      state: "current", tone: item.stage === "void" ? "crit" : "mid", at: now?.at ?? null, by: now?.byName ?? null, note: now?.note ?? null, auto: now?.auto === true },
+  ];
+  if (item.stage !== "void") nodes.push({ ...base, key: "fixed", label: STAGE_LABEL.fixed, blurb: STAGE_BLURB.fixed, state: "todo", tone: "ok", at: null, by: null });
+  return nodes;
 }
 
 /**
