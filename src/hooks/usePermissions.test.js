@@ -136,7 +136,7 @@ describe("canInOrg", () => {
 
 describe("what a technician is never shown (2026-11-21)", () => {
   it("withholds the feed beyond their cases, dashcam alarms, the status counts and the load cards", () => {
-    for (const s of ["notification:all_events", "vss:alarms", "fleet:status_counts", "fleet:load_status", "work_plans:read"]) {
+    for (const s of ["notification:all_events", "vss:alarms", "fleet:status_counts", "fleet:load_status", "work_plans:read", "map:read"]) {
       expect(slugsFor(s, true)).toEqual([]);
       expect(slugsFor(s, false)).toEqual([s]);
     }

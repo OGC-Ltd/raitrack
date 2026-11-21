@@ -57,7 +57,7 @@ function AppShell() {
   const { setActiveCompanyId, setDesktopActiveTab, setSelectedVehicleId } = useAppActions();
   const { activeCompany, companies } = useCompanies();
 
-  const { can } = usePermissions();
+  const { can, flaggedOnly } = usePermissions();
   const { vehicles: _liveVehicles = [] } = useFleetLiveShared();
   const [mobileFeedOpen,    setMobileFeedOpen]    = useState(false);
   // The phone's notifications sheet closes when anything else opens (lib/sidePanels).
@@ -351,7 +351,7 @@ function AppShell() {
       {/* Mobile bottom tab bar */}
       <MobileTabBar />
       {/* Mobile live feed sheet */}
-      {can('map:read') && <MobileLiveFeedSheet open={mobileFeedOpen} onClose={() => setMobileFeedOpen(false)} />}
+      {(can('map:read') || flaggedOnly) && <MobileLiveFeedSheet open={mobileFeedOpen} onClose={() => setMobileFeedOpen(false)} />}
       {/* Mobile company profile sheet */}
       <MobileCompanyProfile open={mobileProfileOpen} onClose={() => setMobileProfileOpen(false)} />
       {/* The first-time tour: starts once per person, again from the account menu. */}

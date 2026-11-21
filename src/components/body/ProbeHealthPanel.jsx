@@ -291,7 +291,11 @@ export default function ProbeHealthPanel({
   const [channel, setChannel] = useState("all");
   // Opens on the fault list. A list somebody has to filter to reach is a list
   // they stop reaching for.
-  const [status,  setStatus]  = useState("faulty");
+  const [statusPick, setStatus] = useState("faulty");
+  // A technician sees the Not working state alone (operator, 2026-11-21).
+  const { flaggedOnly: techOnly } = usePermissions();
+  const status = techOnly ? "faulty" : statusPick;
+  const statuses = techOnly ? STATUSES.filter(([v]) => v === "faulty") : STATUSES;
   // Trucks only, as West Kenya's sheet (WSK TRUCKS FAULTY PROBE REPORT). Shown
   // once the server marks trucks on the rows.
   const [kind,    setKind]    = useState("all");
@@ -613,7 +617,7 @@ export default function ProbeHealthPanel({
         <div className="sp4-filter-divider" />
         <div className="sp4-filter-group">
           <span className="sp4-filter-label">State</span>
-          {STATUSES.map(([v, label]) => (
+          {statuses.map(([v, label]) => (
             <button
               key={v}
               type="button"

@@ -19,7 +19,9 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   const { setActiveCompanyId, setAccountOpen, setUserAdminOpen } = useAppActions();
   const { activeCompany, companies } = useCompanies();
   const { user, logout } = useAuth();
-  const { can, orgsWhere } = usePermissions();
+  const { can, orgsWhere, flaggedOnly } = usePermissions();
+  // A technician has no map but keeps the bell (operator, 2026-11-21).
+  const bell = can('map:read') || flaggedOnly;
   // Alerts, its count, the pages and the account all live in the ☰ (MapMoreMenu).
   const { vehicles = [] } = useFleetLiveShared();
   const { focusVehicle, layers, revealMap } = useMapLayers();
@@ -37,7 +39,7 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
   const dropRef = useRef(null);
 
   // Limited access (no map:read): the bell counts 0, as on the desktop header.
-  const unreadCount = !can('map:read') ? 0 : vehicles.filter(v =>
+  const unreadCount = !bell ? 0 : vehicles.filter(v =>
     v.status === 'speeding' || v.status === 'theft'
   ).length;
 
@@ -141,14 +143,14 @@ export default function MobileHeader({ onSearchOpen, onFeedOpen, onProfileOpen }
           <i className="ti ti-search" aria-hidden="true" />
         </button>
         {/* No bell without rights to the fleet (no map:read), as on the desktop. */}
-        {can('map:read') && (
+        {bell && (
           <button className="mobile-header__icon-btn" onClick={onFeedOpen} aria-label="Alerts" data-tour="m-alerts">
             <i className="ti ti-bell" aria-hidden="true" />
             {unreadCount > 0 && <span className="mobile-header__alert-dot" />}
           </button>
         )}
         {/* Holds the bell's place so the ☰ does not move. */}
-        {!can('map:read') && <span className="mobile-header__icon-btn" aria-hidden="true" style={{ visibility: 'hidden', pointerEvents: 'none' }} />}
+        {!bell && <span className="mobile-header__icon-btn" aria-hidden="true" style={{ visibility: 'hidden', pointerEvents: 'none' }} />}
         {/* The ☰ closes the row (operator, 19 Nov 2026): the pages the five
             tabs have no room for, and the account the avatar used to open,
             in one menu (MapMoreMenu). */}

@@ -242,7 +242,9 @@ export default function AppHeader() {
   // No rights to the fleet (no map:read, operator 2026-10-01): no bell and no
   // feed at all. The feed is the fleet's events, which such an account is not
   // shown anywhere else (the sidebar dashes its counts).
-  const limited = !can('map:read');
+  // A technician has no map (operator, 2026-11-21) but keeps the bell: their
+  // feed is their flagged cases.
+  const limited = !can('map:read') && !flaggedOnly;
   const { unreadCount } = limited ? { unreadCount: 0 } : summariseUnread(feed, feedReads.reads, user?.id);
   // The bell swings once when the count goes up — news arrived — and not when
   // it falls (lines read) or on a re-render with the same count.

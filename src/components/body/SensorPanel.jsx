@@ -1837,7 +1837,8 @@ export default function SensorPanel() {
          inspect that unit's live sensor readings"). */
       hint: null },
     // The tab reads /fuel/tank-state and /fuel/fillings, both on this slug.
-    { key: "fuel",        allow: can("fuel_filling:read"),
+    // A technician gets Probes alone on Maintenance (operator, 2026-11-21).
+    { key: "fuel",        allow: can("fuel_filling:read") && !flaggedOnly,
       label: "Fuel FSL",    count: fuelPending ? pending : fuelFlagged.length,
       hint: "Click any row to trace the day's fuel level and its events" },
     /* The badge counts the events the SERVER emitted over the window on screen,
@@ -1848,7 +1849,7 @@ export default function SensorPanel() {
        export derives its own speed rows from `anomalies` and is unaffected. */
     // Speeding is driver-conduct analytics, and /incidents/speeding guards it
     // with the same slug that opens the Analytics screen.
-    { key: "speed",       allow: can("analytics:read"),
+    { key: "speed",       allow: can("analytics:read") && !flaggedOnly,
       label: "Speed",       count: speedInsights ? speedInsights.incidents : pending,
       hint: "Click any unit to see every overspeeding case in the window" },
     { key: "malfunction", allow: !flaggedOnly,

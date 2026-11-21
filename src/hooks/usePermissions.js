@@ -52,7 +52,7 @@ export function accessIn(orgs, companyId) {
  * access to workplan").
  * The server limits their feed to repair notices too (authz feedSourcesFor).
  */
-export const TECH_WITHHELD = new Set(["notification:all_events", "fleet:status_counts", "fleet:load_status", "vss:alarms", "work_plans:read"]);
+export const TECH_WITHHELD = new Set(["notification:all_events", "fleet:status_counts", "fleet:load_status", "vss:alarms", "work_plans:read", "map:read"]);
 /** The slugs a check may be answered by: all of them, less TECH_WITHHELD for a technician. */
 export const slugsFor = (slug, flaggedOnly) => (flaggedOnly ? anyOf(slug).filter((s) => !TECH_WITHHELD.has(s)) : anyOf(slug));
 const anyOf = (slug) => (Array.isArray(slug) ? slug : [slug]);
