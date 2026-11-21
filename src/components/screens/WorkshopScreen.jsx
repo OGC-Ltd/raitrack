@@ -152,7 +152,7 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
         </EmptyNote>
       ) : (
         <WfGrid label="Job pages" pager={pager}
-                head={[["Unit reg"], ["Fault"], ["Stage"], ["Ticket"], ["Workshop day"], ["Next"], ["In stage", true]]}>
+                head={[["Unit reg"], ["Fault"], ["Status"], ["Stage"], ["Ticket"], ["Workshop day"], ["Checked in"], ["Checked out"], ["Next"], ["In stage", true]]}>
               {pager.pageRows.map((j) => {
                 const booking = j.bookings?.[0];
                 const next = NEXT_STEP[j.stage];
@@ -164,17 +164,15 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
                       <span className="wf-cell-fault">{jobLabel(j)}</span>
                       {(j.suspectedFault ?? j.problemNote) && <span className="wf-cell-sub">{j.suspectedFault ?? j.problemNote}</span>}
                     </td>
-                    <td>
-                      <span className="wf-cell-stage">
-                        <Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge>
-                        <PhaseLadder stage={j.stage} compact />
-                      </span>
-                    </td>
+                    <td><Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge></td>
+                    <td><PhaseLadder stage={j.stage} compact /></td>
                     <td>
                       <span className="dr-veh">{j.ticketNo ?? "-"}</span>
                       {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="dr-veh">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
                     </td>
                     <td className="sys-num">{booking ? isoDay(booking.bookingDate) : "-"}</td>
+                    <td className="sys-num">{inOut(j).in ? at(inOut(j).in) : <span className="sp4-muted">-</span>}</td>
+                    <td className="sys-num">{inOut(j).out ? at(inOut(j).out) : inOut(j).in ? <span className="sp4-muted">Still in</span> : <span className="sp4-muted">-</span>}</td>
                     <td>{j.resolvedAt ? <span className="sp4-muted">Closed</span> : next?.who ?? "-"}</td>
                     <td className="dr-num sys-num">{since(j.stageChangedAt ?? j.createdAt)}</td>
                   </tr>
@@ -196,6 +194,17 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
     </>
   );
 }
+
+/**
+ * When the unit checked into the workshop and out of it, from its FactorySuite
+ * card(s): the first card's check-in, and the latest card's release once it has
+ * one. A job with no card has neither.
+ */
+const inOut = (j) => {
+  const cards = j.fsJobCards ?? [];
+  const last = cards[cards.length - 1];
+  return { in: cards[0]?.checkedInAt ?? null, out: last?.releasedAt ?? null };
+};
 
 // ── My jobs ─────────────────────────────────────────────────────────────────
 
@@ -267,7 +276,7 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
         <EmptyNote icon="ti-circle-check" title={MINE_EMPTY[group][0]}>{MINE_EMPTY[group][1]}</EmptyNote>
       ) : (
         <WfGrid label="Job pages" pager={pager}
-                head={[["Unit reg"], ["Fault"], ["Stage"], ["Ticket"], [group === "workshop" ? "Workshop" : "Your part"], [group === "closed" ? "Closed" : "In stage", true]]}>
+                head={[["Unit reg"], ["Fault"], ["Status"], ["Stage"], ["Ticket"], [group === "workshop" ? "Workshop" : "Your part"], [group === "closed" ? "Closed" : "In stage", true]]}>
               {pager.pageRows.map((j) => {
                 const booking = j.bookings?.[0];
                 const open = () => onOpen(j.id);
@@ -280,12 +289,8 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
                       <span className="wf-cell-fault">{jobLabel(j)}</span>
                       {(j.suspectedFault ?? j.problemNote) && <span className="wf-cell-sub">{j.suspectedFault ?? j.problemNote}</span>}
                     </td>
-                    <td>
-                      <span className="wf-cell-stage">
-                        <Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge>
-                        <PhaseLadder stage={j.stage} compact />
-                      </span>
-                    </td>
+                    <td><Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge></td>
+                    <td><PhaseLadder stage={j.stage} compact /></td>
                     <td>
                       <span className="dr-veh">{j.ticketNo ?? "-"}</span>
                       {j.fsJobCards?.length > 0 && shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber) !== j.ticketNo && <span className="wf-cell-sub" title="FactorySuite job card">FactorySuite <span className="dr-veh">{shortCard(j.fsJobCards[j.fsJobCards.length - 1].cardNumber)}</span></span>}
