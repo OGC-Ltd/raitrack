@@ -50,6 +50,8 @@ import './VehicleHeader.css';
 import './AlertsFeed.css';
 import './VehicleDetailPanel.css';
 import { displayPlate } from '../../lib/plate';
+import { useWorkshopUnits } from '../../hooks/useWorkshopUnits';
+import OpenInWorkshop from '../body/OpenInWorkshop';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 // KSh per litre, for the cost estimate: EPRA's Nairobi pump price as the
@@ -642,6 +644,8 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
   const { focusVehicle, startPlayback } = useMapLayers() ?? {};
   const { can } = usePermissions();
   const [reporting, setReporting] = useState(false);
+  // In the workshop now: booked in, in, being fixed, waiting on parts, done.
+  const ws = useWorkshopUnits().get(vehicle?.vehicleId) ?? null;
 
   // Tracked list — only units that still exist in the live fleet, in the order added
   const trackedList = useMemo(() => {
@@ -841,6 +845,22 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           <div className="vh-where" title={place ?? vehicle.location}>
             <i className="ti ti-map-pin" aria-hidden="true" />
             <span>{place ?? vehicle.location}</span>
+          </div>
+        )}
+
+        {/* Where the unit stands with the workshop, and what is being fixed
+            (operator, 2026-11-21). From its open repair job and FactorySuite card. */}
+        {ws && (
+          <div className={`vdp-ws vdp-ws--${ws.tone}`} role="note">
+            <i className="ti ti-car-garage" aria-hidden="true" />
+            <span className="vdp-ws__body">
+              <strong>{ws.label}{ws.fix ? `: ${ws.fix}` : ''}</strong>
+              {ws.detail && <span className="vdp-ws__detail">{ws.detail}</span>}
+              <span className="vdp-ws__meta">
+                {[ws.card, ws.major ? 'major repair' : null, ws.since ? `since ${new Date(ws.since).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' })}` : null].filter(Boolean).join(', ')}
+              </span>
+            </span>
+            <OpenInWorkshop itemId={ws.jobId} className="vdp-ws__open">Open job</OpenInWorkshop>
           </div>
         )}
 

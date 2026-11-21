@@ -60,6 +60,7 @@ import { useFloatingWindow } from "../../hooks/useFloatingWindow";
 import { usePlaceName } from "../../hooks/usePlaceName";
 import "./UnitsMenu.css";
 import { displayPlate } from "../../lib/plate";
+import { useWorkshopUnits } from "../../hooks/useWorkshopUnits";
 
 /* ── header glyphs ──────────────────────────────────────────────────────────
  * Drawn at the app's 1.9 stroke, sized to the 12px header row. Each is
@@ -278,6 +279,8 @@ export default function UnitsMenu({
   tabs = null,
 }) {
   const [openLocal, setOpenLocal] = useState(false);
+  // Units in the workshop: booked in, in, being fixed, waiting on parts, done.
+  const workshop = useWorkshopUnits();
   const controlled = typeof openProp === "boolean";
   const open = controlled ? openProp : openLocal;
   /* Worked out before any setState, not inside an updater: `onOpenChange` is a
@@ -564,6 +567,7 @@ export default function UnitsMenu({
                 const age = sortClock - (v.capturedAtMs ?? NaN);
                 const band = ageBand(age);
                 const kind = spriteKind(v);
+                const ws = workshop.get(v.vehicleId);
                 return (
                   <div
                     key={v.id}
@@ -599,6 +603,12 @@ export default function UnitsMenu({
                       {v.probeHold && (
                         <span className="units-menu__hold"
                               title="Reported for a fuel probe repair. Its fuel alerts still come, marked as reported.">Reported</span>
+                      )}
+                      {ws && (
+                        <span className={`units-menu__ws units-menu__ws--${ws.tone}`}
+                              title={[`${ws.label}${ws.fix ? `: ${ws.fix}` : ""}`, ws.detail, ws.card].filter(Boolean).join(". ")}>
+                          {ws.state === "fixing" && ws.fix && ws.fix !== "Other" ? `Fixing ${ws.fix.toLowerCase()}` : ws.label}
+                        </span>
                       )}
                     </span>
 

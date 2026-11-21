@@ -778,3 +778,29 @@
 @media (prefers-reduced-motion: reduce) {
   .units-menu__winbtn { transition: none; }
 }
+
+/* In the workshop (operator, 2026-11-21): the Auto Workshop board's tones.
+   Booked in and in the workshop are quiet; being fixed green; awaiting parts
+   amber; work done blue. */
+:root {
+  --ws-fixing: #15803d;
+  --ws-parts:  #b45309;
+  --ws-done:   #2a78d6;
+  --ws-quiet:  #5d6878;
+}
+.units-menu__ws {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--ws-tone, var(--ws-quiet)) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ws-tone, var(--ws-quiet)) 10%, transparent);
+  color: var(--ws-tone, var(--ws-quiet));
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+}
+.units-menu__ws--fixing { --ws-tone: var(--ws-fixing); }
+.units-menu__ws--parts  { --ws-tone: var(--ws-parts); }
+.units-menu__ws--done   { --ws-tone: var(--ws-done); }

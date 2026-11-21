@@ -661,3 +661,38 @@
 @media (max-width: 767px) {
   .vdp .vdp-action { height: 38px; font-size: 13px; }
 }
+
+/* In the workshop (operator, 2026-11-21): a note in the board's tones. Tokens from UnitsMenu.css (:root --ws-*). */
+.vdp-ws {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--ws-tone, var(--ws-quiet)) 30%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ws-tone, var(--ws-quiet)) 7%, transparent);
+  font-size: 12px;
+}
+.vdp-ws--fixing { --ws-tone: var(--ws-fixing); }
+.vdp-ws--parts  { --ws-tone: var(--ws-parts); }
+.vdp-ws--done   { --ws-tone: var(--ws-done); }
+.vdp-ws .ti { font-size: 15px; margin-top: 1px; color: var(--ws-tone, var(--ws-quiet)); }
+.vdp-ws__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.vdp-ws__body strong { color: var(--ws-tone, var(--ws-quiet)); }
+.vdp-ws__detail { overflow-wrap: anywhere; }
+.vdp-ws__meta { font-size: 11px; opacity: 0.75; }
+.vdp-ws__open {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--ws-tone, var(--ws-quiet)) 40%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ws-tone, var(--ws-quiet));
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vdp-ws__open:hover { background: color-mix(in srgb, var(--ws-tone, var(--ws-quiet)) 12%, transparent); }
+.vdp-ws__open:focus-visible { outline: 2px solid var(--ws-tone, var(--ws-quiet)); outline-offset: 1px; transition: none; }
