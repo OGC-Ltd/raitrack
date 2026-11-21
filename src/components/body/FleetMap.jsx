@@ -4104,7 +4104,7 @@ export default function FleetMap() {
         });
       }
     };
-    // Work plans: a rail switch of its own, like Geofences, for anyone on the
+    // Work plans: a switch in the rail's Tools menu (2026-11-21), for anyone on the
     // map (the route asks map:read), not only roles that hold map:layers.
     const pushWorkPlans = () => {
       if (!workPlansAllowed) return;
@@ -7608,7 +7608,7 @@ export default function FleetMap() {
               : null}
           />
         )}
-        {/* FactorySuite work plans, while the rail's Work plans switch is on */}
+        {/* FactorySuite work plans, while the Tools menu's Work plans switch is on */}
         {workPlansAllowed && showWorkPlans && mapReady && mapRef.current && (
           <WorkPlansOnMap
             map={mapRef.current} maps={mapsLibRef.current} DomMarker={DomMarkerRef.current}
