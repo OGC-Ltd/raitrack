@@ -112,7 +112,7 @@ function FloorCell({ open, loading }) {
   const longest = hours.length ? Math.max(...hours) : null;
   const facts = [
     { label: "Urgent", value: open.filter((c) => c.priority === "Urgent").length },
-    ...(anyEta(open) ? [{ label: "Past ETA", value: open.filter((c) => pastEta(c)).length }] : []),
+    ...(anyEta(open) ? [{ label: "Overdue to be operational", value: open.filter((c) => pastEta(c)).length }] : []),
     { label: "Not tracked by us", value: open.filter((c) => !c.vehicleId).length },
   ];
   const mix = STATES.map((s) => ({ ...s, n: open.filter((c) => stateOf(c) === s.key).length }));

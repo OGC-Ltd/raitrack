@@ -52,7 +52,7 @@ function BackBy({ card }) {
   const start = card.checkedInAt ? new Date(card.checkedInAt).getTime() : now;
   const used = late ? 1 : Math.min(1, Math.max(0, (now - start) / Math.max(1, b.at.getTime() - start)));
   return (
-    <span className={"fsw-eta" + (late ? " fsw-eta--late" : "")} title="Expected back, from FactorySuite">
+    <span className={"fsw-eta" + (late ? " fsw-eta--late" : "")} title="Expected operational, from FactorySuite">
       <span className="fsw-eta__words">{late ? `Overdue ${span(-h)}` : `Due in ${span(h)}`}</span>
       <span className="fsw-eta__track" aria-hidden="true"><span className="fsw-eta__used" style={{ "--used": used }} /></span>
       <span className="wf-cell-sub">{BACK_DAY.format(b.at)}</span>
@@ -83,7 +83,7 @@ function BoardTable({ rows, onOpen, openId, resetKey, showEta }) {
   const pager = usePager(rows, resetKey);
   return (
     <WfGrid label="Machine pages" pager={pager}
-            head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ...(showEta ? [["ETA"]] : [])]}>
+            head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ...(showEta ? [["Operational"]] : [])]}>
           {pager.pageRows.map((c) => {
             const floor = STATES.find((x) => x.key === stateOf(c)) ?? STATES[0];
             const job = c.repairItem;
@@ -275,7 +275,7 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
             : [
               { label: "State", value: state, onPick: setState, options: [["all", "All", nState("all")], ...STATES.map((x) => [x.key, x.label, nState(x.key)])] },
               { label: "Repair", value: kind, onPick: setKind, options: [["any", "Any"], ["MAJOR", "Major", nRepair("MAJOR")], ["MINOR", "Minor", nRepair("MINOR")]] },
-              ...(showEta ? [{ label: "ETA", value: lateOnly ? "late" : "any", onPick: (id) => setLateOnly(id === "late"), options: [["any", "Any"], ["late", "Past ETA", nLate]] }] : []),
+              ...(showEta ? [{ label: "Operational", value: lateOnly ? "late" : "any", onPick: (id) => setLateOnly(id === "late"), options: [["any", "Any"], ["late", "Overdue", nLate]] }] : []),
               { label: "Priority", value: urgentOnly ? "urgent" : "any", onPick: (id) => setUrgentOnly(id === "urgent"), options: [["any", "Any"], ["urgent", "Urgent", nUrgent]] },
             ]),
         ]}
@@ -288,7 +288,7 @@ export default function FactoryWorkshopTab({ orgId, onOpen, openId }) {
       ) : narrowed ? (
         <><b>{rows.length}</b> of {open.length} {plural(open.length, "machine")} in the workshop</>
       ) : (
-        <><b>{open.length}</b> {plural(open.length, "machine")} in the workshop{late ? <>, <b>{late}</b> past their ETA</> : null}{waiting ? <>, <b>{waiting}</b> awaiting parts</> : null}</>
+        <><b>{open.length}</b> {plural(open.length, "machine")} in the workshop{late ? <>, <b>{late}</b> overdue to be operational</> : null}{waiting ? <>, <b>{waiting}</b> awaiting parts</> : null}</>
       )}</p>
 
       {isMoves ? (
