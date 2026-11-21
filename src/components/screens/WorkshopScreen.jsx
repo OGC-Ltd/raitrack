@@ -34,7 +34,7 @@ import {
   takeWorkshopHandoff, WORKSHOP_OPEN, shortCard,
 } from "../../api/repairWorkflow";
 import FactoryWorkshopTab, { StateLine } from "./FactoryWorkshopTab";
-import { JobsStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay } from "./WorkshopStats";
+import { JobsStrip, MineStrip, DayStrip, SecurityStrip, STAT_DAYS, windowDays, eatDay, dayCounts, dayStay, dayHasRecords } from "./WorkshopStats";
 import RepairWorkflowJob, { PhaseLadder, TrailList, jobLabel, at } from "../body/RepairWorkflowJob";
 import FlagRepairDialog from "../body/FlagRepairDialog";
 import { usePager } from "../body/TablePager";
@@ -426,7 +426,17 @@ function DayTab({ orgId, onOpen }) {
   }, [orgId]);
   const day = useWorkshopDay(orgId, wid, date);
   const week = useDayWindow(orgId, wid, date);
-  const shift = (n) => setDate(dayShift(date, n));
+  // The board opens on the last day with records in the strip's window, not
+  // on an empty today; once someone moves the day it is theirs.
+  const moved = useRef(false);
+  useEffect(() => {
+    if (moved.current || !week.length || !week.every((w) => w.data)) return;
+    moved.current = true;
+    const last = [...week].reverse().find((w) => dayHasRecords(w.data));
+    if (last && last.day !== date) setDate(last.day);
+  }, [week, date]);
+  const pick = (next) => { moved.current = true; setDate(next); };
+  const shift = (n) => pick(dayShift(date, n));
   const d = day.data;
   const live = (d?.bookings ?? []).filter((b) => b.status === "booked" || b.status === "arrived");
   const other = (d?.bookings ?? []).filter((b) => b.status === "no_show");
@@ -435,9 +445,9 @@ function DayTab({ orgId, onOpen }) {
   // One row a unit on the day: booked first, then FactorySuite check-ins (the
   // card is their booking), then true walk-ins, then the no-shows.
   const dayRows = [
-    ...live.map((b) => ({ key: b.id, job: b.repairItem, kind: b.status === "arrived" ? "arrived" : "booked" })),
+    ...live.map((b) => ({ key: b.id, job: b.repairItem, booking: b, kind: b.status === "arrived" ? "arrived" : "booked" })),
     ...(d?.unbookedArrivals ?? []).map((j) => ({ key: j.id, job: j, kind: j.fsJobCards?.length ? "factorysuite" : "unbooked" })),
-    ...other.map((b) => ({ key: b.id, job: b.repairItem, kind: "no_show" })),
+    ...other.map((b) => ({ key: b.id, job: b.repairItem, booking: b, kind: "no_show" })),
   ];
   const [show, setShow] = useState("all");
   const [search, setSearch] = useState("");
@@ -447,7 +457,7 @@ function DayTab({ orgId, onOpen }) {
   const nKind = (k) => found.filter((r) => k === "all" || r.kind === k).length;
   const rows = found.filter((r) => show === "all" || r.kind === show);
   const dayPager = usePager(rows, `${wid}|${date}|${show}|${q}`);
-  const nFs = dayRows.filter((r) => r.kind === "factorysuite").length;
+  const counted = dayCounts(d);
   const nUnbooked = dayRows.filter((r) => r.kind === "unbooked").length;
 
   return (
@@ -461,12 +471,12 @@ function DayTab({ orgId, onOpen }) {
         tools={<>
           <span className="dr-seg wf-day-step" role="group" aria-label="Day">
             <button type="button" className="dr-chip" onClick={() => shift(-1)} aria-label="Previous day"><i className="ti ti-chevron-left" aria-hidden="true" /></button>
-            <button type="button" className={`dr-chip${date === today ? " dr-chip--active" : ""}`} onClick={() => setDate(today)}
+            <button type="button" className={`dr-chip${date === today ? " dr-chip--active" : ""}`} onClick={() => pick(today)}
                     title={date === today ? "Today" : "Back to today"} aria-pressed={date === today}>{date === today ? "Today" : dayWords}</button>
             <button type="button" className="dr-chip" onClick={() => shift(1)} aria-label="Next day"><i className="ti ti-chevron-right" aria-hidden="true" /></button>
           </span>
           {(workshops?.length ?? 0) > 1 && (
-            <select className="sp4-input wf-ws-pick" value={wid ?? ""} onChange={(e) => setWid(e.target.value)} aria-label="Workshop">
+            <select className="sp4-input wf-ws-pick" value={wid ?? ""} onChange={(e) => { moved.current = true; setWid(e.target.value); }} aria-label="Workshop">
               {workshops.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           )}
@@ -475,8 +485,7 @@ function DayTab({ orgId, onOpen }) {
       />
       {d && (
         <p className="wf-count">
-          <b>{d.booked} / {d.capacity}</b> booked into {d.workshop?.name ?? "the workshop"} on {dayWords}
-          {nFs ? <>, <b>{nFs}</b> checked in on FactorySuite</> : null}
+          <b>{counted.booked}</b> booked into {d.workshop?.name ?? "the workshop"} on {dayWords}, <b>{counted.checkedOut}</b> checked out the same day
           {nUnbooked ? <>, <b>{nUnbooked}</b> arrived without a booking</> : null}
           {other.length ? <>, <b>{other.length}</b> {other.length === 1 ? "no-show" : "no-shows"}</> : null}
         </p>
@@ -496,8 +505,8 @@ function DayTab({ orgId, onOpen }) {
         </EmptyNote>
       ) : (
         <WfGrid label="Day pages" pager={dayPager}
-                head={[["Unit reg"], ["Fault"], ["Ticket"], ["Technician"], ["Status"]]}>
-          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} onOpen={onOpen} kind={r.kind} />)}
+                head={[["Unit reg"], ["Fault"], ["Ticket"], ["Technician"], ["Arrived"], ["Left"], ["Status"]]}>
+          {dayPager.pageRows.map((r) => <BoardRow key={r.key} job={r.job} booking={r.booking} onOpen={onOpen} kind={r.kind} />)}
         </WfGrid>
       )}
     </div>
@@ -508,13 +517,14 @@ function DayTab({ orgId, onOpen }) {
 const DAY_KINDS = [
   ["booked", "Booked", "waiting"],
   ["arrived", "Arrived", "repair"],
-  ["factorysuite", "Checked in (FactorySuite)", "repair"],
+  ["factorysuite", "Checked in", "repair"],
   ["unbooked", "Arrived, unbooked", "parts"],
   ["no_show", "No show", "late"],
 ];
 
-function BoardRow({ job, onOpen, kind }) {
+function BoardRow({ job, booking, onOpen, kind }) {
   const tech = job.workshopTechnician?.fullName ?? job.workshopTechnicianName;
+  const stay = kind === "no_show" ? { in: null, out: null } : dayStay(job, booking);
   const [, text, tone] = DAY_KINDS.find(([k]) => k === kind) ?? [kind, kind, "waiting"];
   return (
     <tr {...rowProps(false, () => onOpen(job.id))}>
@@ -522,6 +532,8 @@ function BoardRow({ job, onOpen, kind }) {
       <td><span className="wf-cell-fault">{jobLabel(job)}</span></td>
       <td><span className="dr-veh">{job.ticketNo ?? "No ticket yet"}</span></td>
       <td>{tech ?? <span className="sp4-muted">No technician</span>}</td>
+      <td className="sys-num">{stay.in ? at(stay.in) : <span className="sp4-muted">-</span>}</td>
+      <td className="sys-num">{stay.out ? at(stay.out) : <span className="sp4-muted">-</span>}</td>
       <td><StateLine tone={tone}>{text}</StateLine></td>
     </tr>
   );

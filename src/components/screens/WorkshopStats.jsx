@@ -278,29 +278,59 @@ export function MineStrip({ rows: all, groupOf, loading }) {
 
 // ── Workshop day ─────────────────────────────────────────────────────────────
 
-/** One day's answer, counted. */
+/** The first in_workshop step on a job's trail, the time it arrived without a card or a booking time. */
+const workshopStep = (job) => (Array.isArray(job?.stageHistory) ? job.stageHistory.find((e) => e?.stage === "in_workshop")?.at ?? null : null);
+
+/**
+ * When a unit on the day arrived and left. A FactorySuite card says both: its
+ * check-in and its release. Without one, the booking's arrival (or the trail's
+ * step into the workshop) and the job's close.
+ */
+export function dayStay(job, booking = null) {
+  const cards = job?.fsJobCards ?? [];
+  const last = cards[cards.length - 1];
+  return {
+    in: cards[0]?.checkedInAt ?? booking?.arrivedAt ?? workshopStep(job),
+    out: cards.length ? last?.releasedAt ?? null : job?.resolvedAt ?? null,
+  };
+}
+
+/**
+ * One day's answer, counted. A FactorySuite check-in is a booking: the card
+ * is how the workshop books a machine in (operator, 21 Nov). Checked out: of
+ * the day's bookings, those that left on the same day.
+ */
 export function dayCounts(d) {
   const bookings = d?.bookings ?? [];
-  const arrived = bookings.filter((b) => b.status === "arrived").length;
-  // A FactorySuite check-in is booked by its card; a walk-in had no booking at all.
+  const live = bookings.filter((b) => b.status === "booked" || b.status === "arrived");
   const unbooked = d?.unbookedArrivals ?? [];
-  const fsIns = unbooked.filter((j) => j.fsJobCards?.length).length;
+  const fsIn = unbooked.filter((j) => j.fsJobCards?.length);
+  const fsIns = fsIn.length;
   const walkIns = unbooked.length - fsIns;
+  const day = d?.date ?? null;
+  const outSameDay = (job, b) => { const o = dayStay(job, b).out; return !!o && !!day && eatDay(o) === day; };
   return {
     capacity: d?.capacity ?? 0,
-    booked: d?.booked ?? 0,
-    arrived, walkIns, fsIns,
+    // The slots our own bookings take, against the workshop's daily capacity.
+    slotsTaken: d?.booked ?? 0,
+    booked: (d?.booked ?? 0) + fsIns,
+    checkedOut: live.filter((b) => outSameDay(b.repairItem, b)).length + fsIn.filter((j) => outSameDay(j)).length,
+    arrived: bookings.filter((b) => b.status === "arrived").length + fsIns,
+    walkIns, fsIns,
     toCome: bookings.filter((b) => b.status === "booked").length,
     noShows: bookings.filter((b) => b.status === "no_show").length,
   };
 }
+
+/** Whether a day has anything on its board: a booking, a no-show or an arrival. */
+export const dayHasRecords = (d) => (d?.bookings?.length ?? 0) + (d?.unbookedArrivals?.length ?? 0) > 0;
 
 /** current: the day on screen. week: the window's days, oldest first, each { day, data } (data null while read). */
 export function DayStrip({ current, week, date, loading }) {
   const c = dayCounts(current);
   const read = week.every((w) => w.data);
   const counts = week.map((w) => ({ day: w.day, ...dayCounts(w.data) }));
-  const rows = counts.map((x) => ({ day: x.day, booked: x.booked, arrived: x.arrived + x.walkIns + x.fsIns }));
+  const rows = counts.map((x) => ({ day: x.day, booked: x.booked, arrived: x.arrived + x.walkIns }));
   const days = week.map((w) => w.day);
   const booked = counts.reduce((s, x) => s + x.booked, 0);
   const cameIn = counts.reduce((s, x) => s + x.arrived, 0);
@@ -310,8 +340,8 @@ export function DayStrip({ current, week, date, loading }) {
     <Frame label="Workshop day">
       <LeadCell
         label="Booked" loading={loading} busy="Reading the day…"
-        figure={`${fmt(c.booked)} / ${fmt(c.capacity)}`}
-        caption={<>booked on {label},<br />{fmt(Math.max(0, c.capacity - c.booked))} {plural(Math.max(0, c.capacity - c.booked), "slot")} free</>}
+        figure={`${fmt(c.booked)} / ${fmt(c.checkedOut)}`}
+        caption={<>booked on {label},<br />{fmt(c.checkedOut)} checked out the same day</>}
         facts={[
           { label: "Arrived", value: c.arrived },
           { label: "Still to come", value: c.toCome },
@@ -336,10 +366,10 @@ export function DayStrip({ current, week, date, loading }) {
         rows={[
           { name: "No-shows", n: noShows, tone: "theft", hint: "Booked units that did not arrive on their day" },
           { name: "Arrived without a booking", n: counts.reduce((s, x) => s + x.walkIns, 0), tone: "speed" },
-          { name: "Checked in on FactorySuite", n: counts.reduce((s, x) => s + x.fsIns, 0), tone: null,
+          { name: "Checked in", n: counts.reduce((s, x) => s + x.fsIns, 0), tone: null,
             hint: "Machines checked into the workshop on a FactorySuite job card: the card is their booking" },
-          { name: "Full days", n: counts.filter((x) => x.capacity && x.booked >= x.capacity).length, tone: null },
-          { name: "Free slots", n: counts.reduce((s, x) => s + Math.max(0, x.capacity - x.booked), 0), tone: null },
+          { name: "Full days", n: counts.filter((x) => x.capacity && x.slotsTaken >= x.capacity).length, tone: null },
+          { name: "Free slots", n: counts.reduce((s, x) => s + Math.max(0, x.capacity - x.slotsTaken), 0), tone: null },
         ]}
       />
     </Frame>
