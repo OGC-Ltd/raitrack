@@ -89,6 +89,9 @@
   --fsw-done:   #2a78d6;
   --fsw-parts:  #c98500;
   --fsw-late:   #c42b2b;
+}
+/* Mixed from --text-2, which is set on the page, not at :root. */
+.fsw-tab {
   --fsw-quiet:  color-mix(in srgb, var(--text-2) 55%, transparent);
   --fsw-track:  color-mix(in srgb, var(--text-2) 22%, transparent);
 }
@@ -110,3 +113,5 @@
   transform: scaleX(var(--used, 0)); transform-origin: left center;
 }
 .fsw-eta--late .fsw-eta__used { background: var(--fsw-late); }
+/* In for: the ETA cell's words and hairline, set to the column's right edge. */
+.fsw-infor { align-items: flex-end; margin-left: auto; }

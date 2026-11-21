@@ -60,6 +60,24 @@ function BackBy({ card }) {
   );
 }
 
+/**
+ * How long a machine has been in, as the ETA cell draws its time: the words
+ * over a hairline, here filled to its share of the longest stay on the board,
+ * so the long stays read down the column at a glance.
+ */
+function InFor({ card, longest }) {
+  const h = hoursSince(card.checkedInAt);
+  if (h == null) return <span className="sp4-muted">-</span>;
+  const share = longest > 0 ? Math.min(1, h / longest) : 0;
+  return (
+    <span className="fsw-eta fsw-infor" title={`Checked in ${at(card.checkedInAt)}`}>
+      <span className="fsw-eta__words">{span(h)}</span>
+      <span className="fsw-eta__track" aria-hidden="true"><span className="fsw-eta__used" style={{ "--used": share }} /></span>
+      <span className="wf-cell-sub">since {BACK_DATE.format(new Date(card.checkedInAt))}</span>
+    </span>
+  );
+}
+
 /** A state as words after a short line in its tone: the floor bar's colours, no pill. */
 export function StateLine({ tone, children }) {
   return <span className={`fsw-state fsw-state--${tone}`}>{children}</span>;
@@ -81,6 +99,8 @@ const cardMatches = (c, term) => {
 
 function BoardTable({ rows, onOpen, openId, resetKey, showEta }) {
   const pager = usePager(rows, resetKey);
+  // The longest stay among the rows shown: each In for line is measured against it.
+  const longest = Math.max(0, ...rows.map((c) => hoursSince(c.checkedInAt) ?? 0));
   return (
     <WfGrid label="Machine pages" pager={pager}
             head={[["Machine"], ["Fault"], ["Repair"], ["Priority"], ["Ticket"], ["Status"], ["In for", true], ...(showEta ? [["Operational"]] : [])]}>
@@ -101,12 +121,7 @@ function BoardTable({ rows, onOpen, openId, resetKey, showEta }) {
                 <td>{c.priority === "Urgent" ? <span className="fsw-urgent">Urgent</span> : <span className="sp4-muted">{c.priority ? c.priority.charAt(0) + c.priority.slice(1).toLowerCase() : "-"}</span>}</td>
                 <td><span className="dr-veh" title={c.cardNumber}>{shortCard(c.cardNumber)}</span></td>
                 <td><StateLine tone={floor.key}>{floor.label}</StateLine></td>
-                <td className="dr-num sys-num">
-                  <span className="wf-cell-stage wf-cell-stage--end">
-                    <span>{span(hoursSince(c.checkedInAt))}</span>
-                    <span className="wf-cell-sub" title={at(c.checkedInAt)}>since {c.checkedInAt ? BACK_DATE.format(new Date(c.checkedInAt)) : "-"}</span>
-                  </span>
-                </td>
+                <td className="dr-num sys-num"><InFor card={c} longest={longest} /></td>
                 {showEta && <td><BackBy card={c} /></td>}
               </tr>
             );
