@@ -348,7 +348,9 @@ function ControlTechTab({ orgId, can, onOpen, openId, onToast, canClaim, onAccep
   const [group, setGroup] = useState("all");
   const [flagging, setFlagging] = useState(false);
   const [search, setSearch] = useState("");
-  const jobs = useLive(() => listWorkflowJobs(orgId, { status: state === "closed" ? "all" : "open" }).then((r) => r.filter(isControlTech)), [orgId, state]);
+  // Closed reads every job, not the newest 200: Mufindi's FactorySuite jobs
+  // fell past the first page (operator, 2026-11-21).
+  const jobs = useLive(() => (state === "closed" ? listWorkflowJobsSince(orgId, 0, 25) : listWorkflowJobs(orgId, { status: "open" })).then((r) => r.filter(isControlTech)), [orgId, state]);
   const openRead = useLive(() => (state === "open" ? null : listWorkflowJobs(orgId, { status: "open" }).then((r) => r.filter(isControlTech))), [orgId, state]);
   const openJobs = state === "open" ? jobs : openRead;
   const history = useLive(() => listWorkflowJobsSince(orgId, Date.now() - (STAT_DAYS + 31) * 86_400_000).then((r) => r.filter(isControlTech)), [orgId]);
