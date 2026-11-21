@@ -116,9 +116,9 @@ export function FactoryCards({ cards }) {
             <div className="wf-fscard__head">
               <span className="wf-mono" title={c.cardNumber}>{shortCard(c.cardNumber)}</span>
               <span className={`sp4-pill sp4-pill--${pill}`}>{label}</span>
-              {/* The board's colours: Urgent and Major red, Normal and Minor grey. */}
+              {/* The board's colours: Urgent red, Normal grey; the repair kind only when it is Major. */}
               {c.priority && <span className={`sp4-pill sp4-pill--${c.priority === "Urgent" ? "inc" : "none"}`}>{c.priority.charAt(0) + c.priority.slice(1).toLowerCase()}</span>}
-              {c.category && <span className={`sp4-pill sp4-pill--${c.category === "MAJOR" ? "inc" : "none"}`}>{c.category.charAt(0) + c.category.slice(1).toLowerCase()}</span>}
+              {c.category === "MAJOR" && <span className="sp4-pill sp4-pill--inc">Major</span>}
             </div>
             <dl className="wf-facts wf-facts--tight">
               <Fact label="Raised by">{CARD_SOURCE[c.source] ?? c.source}</Fact>
