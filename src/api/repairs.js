@@ -248,6 +248,21 @@ export const STAGE_BLURB = {
   failed:           "Signed off: the repair did not succeed.",
 };
 
+/**
+ * Work done, awaiting release: the job is still Fixing, but its FactorySuite
+ * card says COMPLETED (the mechanics are finished, the machine has not been
+ * released). The job stays open until the release, which completes it; until
+ * then it reads as work done rather than Fixing. No stage of its own, so no
+ * workflow rule changes (operator, 21 Nov 2026).
+ */
+export const workDone = (job) =>
+  job?.stage === "fixing" && (job.fsJobCards ?? []).some((c) => c.status === "COMPLETED");
+// Short: it sits in table badges. The job page says the rest (awaiting release).
+export const WORK_DONE_LABEL = "Work done";
+/** A job's stage as shown: its label and pill, work done included. */
+export const stageLabelOf = (job) => (workDone(job) ? WORK_DONE_LABEL : STAGE_LABEL[job?.stage] ?? job?.stage);
+export const stagePillOf = (job) => (workDone(job) ? "con" : STAGE_PILL[job?.stage]);
+
 export const STAGE_PILL = {
   pending:          "none",
   spare_outsourced: "warn",

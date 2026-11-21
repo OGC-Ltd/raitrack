@@ -23,7 +23,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL, PART_STATUS } from "../../api/repairs";
+import { REPAIRS_CHANGED, STAGE_LABEL, PART_STATUS, workDone, stageLabelOf, stagePillOf } from "../../api/repairs";
 import {
   fetchTicket, fetchAvailability, fetchWorkshops, fetchAssignees, forwardJob, claimJob, decidePath, assessJob,
   bookJob, cancelBooking, arriveJob, assignWorkshop, voidWarranty, clearWarranty, addWork,
@@ -927,7 +927,10 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
   };
 
   const s = job.stage;
-  const next = NEXT_STEP[s] ?? { who: null, what: STAGE_LABEL[s] ?? s };
+  const done = workDone(job);
+  const next = done
+    ? { who: "Workshop", what: "The work is finished. The machine waits to be released in FactorySuite, which completes this job." }
+    : NEXT_STEP[s] ?? { who: null, what: STAGE_LABEL[s] ?? s };
   const lastAssessment = job.assessments?.at(-1) ?? null;
   const needsBooking = s === "awaiting_assessment" && lastAssessment?.roadworthy;
   const booking = (job.bookings ?? []).filter((b) => b.status === "booked" || b.status === "arrived").at(-1) ?? null;
@@ -1039,7 +1042,7 @@ export function JobView({ orgId, job, can, userId, onToast, onChanged, assignees
 
       <section className={"wf-next" + (closed ? " wf-next--closed" : "")} aria-label="Next step">
         <div className="wf-next__head">
-          <span className={`sp4-pill sp4-pill--${STAGE_PILL[s] ?? "none"}`}>{STAGE_LABEL[s] ?? s}</span>
+          <span className={`sp4-pill sp4-pill--${stagePillOf(job) ?? "none"}`}>{stageLabelOf(job)}</span>
           {!closed && nextWho && <span className="wf-next__who">Next · {nextWho}</span>}
         </div>
         <p className="wf-next__what">{closed ? (s === "fixed" ? "Verified fixed and available" : next.what) : nextWhat}</p>

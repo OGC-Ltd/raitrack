@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
+import { REPAIRS_CHANGED, stageLabelOf, stagePillOf } from "../../api/repairs";
 import { fetchFactoryBoard, fetchStoresParts, CARD_STATUS, CARD_SOURCE, shortCard } from "../../api/repairWorkflow";
 import { usePager } from "../body/TablePager";
 import { WfFilters, WfGrid, Reload, rowProps, Badge, Ident } from "./WorkshopParts";
@@ -79,7 +79,7 @@ function BoardTable({ rows, onOpen, openId, resetKey }) {
                 </td>
                 <td>
                   {job
-                    ? <span className="wf-cell-stage"><Badge tone={STAGE_PILL[job.stage]}>{STAGE_LABEL[job.stage] ?? job.stage}</Badge>{job.ticketNo && job.ticketNo !== shortCard(c.cardNumber) && <span className="wf-cell-sub dr-veh">{job.ticketNo}</span>}</span>
+                    ? <span className="wf-cell-stage"><Badge tone={stagePillOf({ ...job, fsJobCards: [c] })}>{stageLabelOf({ ...job, fsJobCards: [c] })}</Badge>{job.ticketNo && job.ticketNo !== shortCard(c.cardNumber) && <span className="wf-cell-sub dr-veh">{job.ticketNo}</span>}</span>
                     : <span className="sp4-muted" title="The machine on this card is not one of our tracked units">Not tracked</span>}
                 </td>
                 <td className="sys-num">{at(c.checkedInAt)}</td>

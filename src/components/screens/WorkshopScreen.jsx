@@ -27,7 +27,7 @@ import "./WorkshopScreen.css";
 import "../body/RepairWorkflow.css";
 import { usePermissions, FACTORY_WORKSHOP_ORGS } from "../../hooks/usePermissions";
 import { useAuth } from "../../context/AuthContext";
-import { REPAIRS_CHANGED, STAGE_LABEL, STAGE_PILL } from "../../api/repairs";
+import { REPAIRS_CHANGED, STAGE_LABEL, stageLabelOf, stagePillOf } from "../../api/repairs";
 import {
   listWorkflowJobs, listWorkflowJobsSince, fetchQueue, fetchMyJobs, fetchWorkshops, fetchWorkshopDay, fetchInvestigations, fetchSecurityHolders,
   claimJob, updateInvestigation, viewOnly, NEXT_STEP, INVESTIGATION_LABEL, INVESTIGATION_PILL, isoDay,
@@ -91,7 +91,7 @@ const since = (iso) => {
 export function jobText(j) {
   return [
     j.vehicle?.registrationPlate, j.vehicle?.name, j.ticketNo, jobLabel(j), j.suspectedFault, j.problemNote,
-    STAGE_LABEL[j.stage] ?? j.stage, NEXT_STEP[j.stage]?.who,
+    stageLabelOf(j), NEXT_STEP[j.stage]?.who,
     ...(j.fsJobCards ?? []).map((c) => c.cardNumber),
   ].filter(Boolean).join(" ").toLowerCase();
 }
@@ -166,7 +166,7 @@ function JobsTab({ orgId, can, onOpen, openId, onToast }) {
                     </td>
                     <td>
                       <span className="wf-cell-stage">
-                        <Badge tone={STAGE_PILL[j.stage]}>{STAGE_LABEL[j.stage] ?? j.stage}</Badge>
+                        <Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge>
                         <PhaseLadder stage={j.stage} compact />
                       </span>
                     </td>
@@ -282,7 +282,7 @@ export function MyJobsTab({ orgId, userId, onOpen, openId, onToast, canClaim = t
                     </td>
                     <td>
                       <span className="wf-cell-stage">
-                        <Badge tone={STAGE_PILL[j.stage]}>{STAGE_LABEL[j.stage] ?? j.stage}</Badge>
+                        <Badge tone={stagePillOf(j)}>{stageLabelOf(j)}</Badge>
                         <PhaseLadder stage={j.stage} compact />
                       </span>
                     </td>
