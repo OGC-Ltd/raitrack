@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -352,11 +352,12 @@ describe("refillFigures", () => {
     }],
   };
 
-  it("gives each fuelling's seven figures: ours where the probe saw the fill, the plan, the pump and the tracker", () => {
+  it("gives each fuelling's seven figures: FactorySuite's fuel before, ours after where the probe saw the fill, the plan, the pump and the tracker", () => {
     const [row] = reconcileFills([ex17()], [probe]);
     expect(refillFigures(row, tracker)).toEqual([{
       key: "pump-i17", id: "i17", at: Date.parse("2026-11-19T06:07:33.754Z"), day: "2026-11-19", siv: "SIV-000027",
-      fuelBefore: { litres: 78.8, source: "probe" },
+      // FactorySuite's probe check wins over ours (78.8 L) for fuel before
+      fuelBefore: { litres: 77, source: "factorysuite" },
       fuelAfter: { litres: 641.9, source: "probe" },
       consumed: { litres: 100.4, engineHours: 4.6, open: false, ahead: false },
       planned: { full: true, litres: 650, need: 240, shiftNo: 1, shiftStart: "06:00:00", hours: 8, km: null },
@@ -399,6 +400,13 @@ describe("refillFigures", () => {
     expect(r.fuelBefore).toEqual({ litres: 77, source: "factorysuite" });
     expect(r.fuelAfter).toEqual({ litres: 641.9, source: "factorysuite" });
     expect(r).toMatchObject({ consumed: null, odometerBefore: { value: 4215.2, unit: "h", source: "pump" }, trackerBefore: null, trackerAfter: null, odometerAfter: 4215.2, issued: 543, tracked: null });
+  });
+
+  it("takes our probe's fuel before only where FactorySuite's check read none", () => {
+    const unread = ex17();
+    unread.pumpIssues = unread.pumpIssues.map((i) => ({ ...i, sensor: { ...i.sensor, beforeL: null } }));
+    const [r] = refillFigures(reconcileFills([unread], [probe])[0], null);
+    expect(r.fuelBefore).toEqual({ litres: 78.8, source: "probe" });
   });
 
   it("works a full tank's fuel before out from the pump where neither probe read it: the tank less what went in", () => {
@@ -572,15 +580,28 @@ describe("withFuelBeforeWaiting", () => {
   const days = [{ vehicleId: "v1", day: "2026-11-19", closingL: 42.4 }];
   const base = { vehicleId: "v1", fuelBefore: null, lastRefill: null, fuelNow: 59.2 };
 
-  it("shows the live tank on Today until the day's refill", () => {
-    const [row] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-20" }], days, "2026-11-20");
-    expect(row.fuelBefore).toBe(59.2);
-    expect(row.fuelBeforeWaiting).toEqual({ litres: 59.2, source: "live", day: "2026-11-20" });
+  it("shows the tank the day began with on Today until the day's refill: yesterday's closing (BH-01, 23 Nov)", () => {
+    // BH-01 closed 22 Nov at 103.8 L, worked its shift on 23 Nov unfuelled, 74.6 L now
+    const bh = [{ vehicleId: "v1", day: "2026-11-22", openingL: 104.3, closingL: 103.8 }];
+    const [row] = withFuelBeforeWaiting([{ ...base, fuelNow: 74.6, lastDay: "2026-11-23" }], bh, "2026-11-23");
+    expect(row.fuelBefore).toBe(103.8);
+    expect(row.fuelBeforeWaiting).toEqual({ litres: 103.8, source: "opening", day: "2026-11-23" });
   });
 
-  it("shows a past day's closing level when that day had no refill", () => {
-    const [row] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-19" }], days, "2026-11-20");
-    expect(row.fuelBeforeWaiting).toEqual({ litres: 42.4, source: "closing", day: "2026-11-19" });
+  it("shows a past day's opening level when that day had no refill", () => {
+    const past = [...days, { vehicleId: "v1", day: "2026-11-18", openingL: 60, closingL: 55.5 }];
+    const [row] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-19" }], [{ vehicleId: "v1", day: "2026-11-19", openingL: 55.5, closingL: 42.4 }], "2026-11-20");
+    expect(row.fuelBeforeWaiting).toEqual({ litres: 55.5, source: "opening", day: "2026-11-19" });
+    // no opening of its own: the day before's closing
+    const [prev] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-19" }], past, "2026-11-20");
+    expect(prev.fuelBeforeWaiting).toEqual({ litres: 55.5, source: "opening", day: "2026-11-19" });
+  });
+
+  it("falls back to the live tank on Today, or a past day's closing, when no opening is known", () => {
+    const [today] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-20" }], [], "2026-11-20");
+    expect(today.fuelBeforeWaiting).toEqual({ litres: 59.2, source: "live", day: "2026-11-20" });
+    const [past] = withFuelBeforeWaiting([{ ...base, lastDay: "2026-11-19" }], days, "2026-11-20");
+    expect(past.fuelBeforeWaiting).toEqual({ litres: 42.4, source: "closing", day: "2026-11-19" });
   });
 
   it("keeps the refill's own before, and never puts a post-refill level in its place", () => {
@@ -609,7 +630,7 @@ describe("withFuelBeforeWaiting", () => {
   });
 
   it("leaves a machine without a probe level blank", () => {
-    const [row] = withFuelBeforeWaiting([{ ...base, fuelNow: null, lastDay: "2026-11-20" }], days, "2026-11-20");
+    const [row] = withFuelBeforeWaiting([{ ...base, fuelNow: null, lastDay: "2026-11-20" }], [], "2026-11-20");
     expect(row.fuelBefore).toBeNull();
     expect(row.fuelBeforeWaiting).toBeUndefined();
   });
@@ -634,5 +655,127 @@ describe("withProbeUsed (operator 2026-11-20: standard rate × hours worked sinc
     expect(out.map((r) => r.probeUsed)).toEqual([null, null, null]);
     expect(out[0].probeUse).toMatchObject({ run: null, litres: null });
     expect(out[2].probeUse).toMatchObject({ run: 2, rate: null, litres: null });
+  });
+});
+
+describe("withFuelBeforeShift", () => {
+  // Operator 2026-11-23: Fuel before is the tank before the day's planned work.
+  // Live figures that day: EX-17 194.4 L at 06:00, fuelled 576 L at 16:10 (the
+  // pump's probe read 53.3 L); BH-01 104 L at 06:00, never fuelled.
+  const shifts = {
+    machines: [
+      { machine: "EX-17", windows: [
+        { start: "2026-11-23T11:00:00.000Z", ahead: false, startL: 52 },
+        { start: "2026-11-23T03:00:00.000Z", ahead: false, startL: 194.2, firstTenL: 194.4, firstTenAt: "2026-11-23T03:45:00.000Z", firstTenFrom: "engine" },
+      ] },
+      { machine: "BH-01", windows: [{ start: "2026-11-23T03:00:00.000Z", ahead: false, startL: 104 }] },
+      { machine: "EX-02", windows: [{ start: "2026-11-23T03:00:00.000Z", ahead: true, startL: null }] },
+    ],
+  };
+  const ex17 = {
+    reference: "EX-17", lastDay: "2026-11-23", fuelBefore: 53.3,
+    lastRefill: { day: "2026-11-23", at: Date.parse("2026-11-23T13:10:19Z"), fuelBefore: { litres: 53.3, source: "factorysuite" } },
+  };
+
+  it("takes the tank at the first planned shift's start, before the work and the refill (EX-17)", () => {
+    const [row] = withFuelBeforeShift([ex17], shifts, "2026-11-23");
+    expect(row.fuelBefore).toBe(194.4);
+    // the first 10 minutes after the engine came on at 06:45 EAT
+    expect(row.fuelBeforeShift).toEqual({ litres: 194.4, at: "2026-11-23T03:45:00.000Z", day: "2026-11-23", firstTen: true, from: "engine" });
+  });
+
+  it("takes the shift's opening readings from a server without the ten-minute figure", () => {
+    const old = { machines: [{ machine: "EX-17", windows: [{ start: "2026-11-23T03:00:00.000Z", ahead: false, startL: 194.2 }] }] };
+    expect(withFuelBeforeShift([ex17], old, "2026-11-23")[0].fuelBeforeShift).toMatchObject({ litres: 194.2, firstTen: false, from: "shift", at: "2026-11-23T03:00:00.000Z" });
+  });
+
+  it("does the same for a machine waiting for its refill (BH-01)", () => {
+    const [row] = withFuelBeforeShift([{ reference: "BH-01", lastDay: "2026-11-23", fuelBefore: 103.8, lastRefill: null }], shifts, "2026-11-23");
+    expect(row.fuelBefore).toBe(104);
+  });
+
+  it("keeps the pump's before when the refill came before the shift started", () => {
+    const early = { ...ex17, lastRefill: { ...ex17.lastRefill, at: Date.parse("2026-11-23T02:30:00Z") } };
+    expect(withFuelBeforeShift([early], shifts, "2026-11-23")[0]).toBe(early);
+  });
+
+  it("leaves the row as it was with no shift that day, one not started, or no shifts read", () => {
+    const other = { ...ex17, lastDay: "2026-11-22", lastRefill: { ...ex17.lastRefill, day: "2026-11-22" } };
+    expect(withFuelBeforeShift([other], shifts, "2026-11-23")[0]).toBe(other);
+    const ahead = { reference: "EX-02", lastDay: "2026-11-23", fuelBefore: 40, lastRefill: null };
+    expect(withFuelBeforeShift([ahead], shifts, "2026-11-23")[0]).toBe(ahead);
+    expect(withFuelBeforeShift([ex17], null, "2026-11-23")[0]).toBe(ex17);
+  });
+});
+
+describe("withWorkConsumption", () => {
+  // Operator 2026-11-23: Consumed = start − end + issued over the planned work;
+  // Probe used = the standard × the engine hours worked. EX-17 on 23 Nov: engine
+  // on 06:44 EAT at 191.8 L, 576 L issued 16:10–16:42, 619 L at the end of shift 2
+  // (22:00 EAT), engine hours 7.6 + 6.2, standard 30 L/h.
+  const today = "2026-11-23";
+  const shifts = {
+    machines: [{ machine: "EX-17", windows: [
+      { start: "2026-11-23T03:00:00.000Z", end: "2026-11-23T11:00:00.000Z", open: false, ahead: false, startL: 194.4, firstTenL: 191.8, firstTenAt: "2026-11-23T03:44:00.000Z", endL: 52, hours: 7.6, km: 3 },
+      { start: "2026-11-23T11:00:00.000Z", end: "2026-11-23T19:00:00.000Z", open: false, ahead: false, startL: 52, firstTenL: 52.4, firstTenAt: "2026-11-23T11:02:00.000Z", endL: 619, hours: 6.2, km: 2 },
+    ] }],
+  };
+  const pump = (id, startedAt, litres) => ({ id, done: true, litres, startedAt, at: startedAt });
+  const ex17 = (issues) => ({
+    reference: "EX-17", basis: "HOUR", rate: 30, firstDay: today, lastDay: today, consumed: 26.28, consumedEnd: "now",
+    pumpIssues: issues,
+  });
+
+  it("is the tank at the start of work less the tank at its end, plus the pump's litres in between", () => {
+    const [r] = withWorkConsumption([ex17([pump("a", "2026-11-23T16:10:19", 576)])], shifts, today, Date.parse("2026-11-23T20:00:00Z"));
+    expect(r.consumed).toBe(148.8); // 191.8 − 619 + 576
+    expect(r.consumedEnd).toBe("2026-11-23");
+    expect(r.consumedWork).toMatchObject({ startL: 191.8, endL: 619, issued: 576, fuellings: 1, open: false });
+    // the since-refill figure stays for the machine panel
+    expect(r).toMatchObject({ consumedSinceRefill: 26.28, consumedSinceRefillEnd: "now" });
+  });
+
+  it("leaves out a fuelling before the work began, or after it ended", () => {
+    const issues = [pump("early", "2026-11-23T05:30:00", 100), pump("a", "2026-11-23T16:10:19", 576), pump("late", "2026-11-23T22:30:00", 50)];
+    const [r] = withWorkConsumption([ex17(issues)], shifts, today, Date.parse("2026-11-23T20:00:00Z"));
+    expect(r.consumedWork).toMatchObject({ issued: 576, fuellings: 1 });
+  });
+
+  it("makes Probe used the standard times the engine hours worked in the shifts", () => {
+    const [r] = withWorkConsumption([ex17([])], shifts, today);
+    expect(r.probeUsed).toBe(414); // (7.6 + 6.2) h × 30 L/h
+    expect(r.probeUse).toMatchObject({ run: 13.8, unit: "h", rate: 30, source: "work", shifts: 2 });
+    const [km] = withWorkConsumption([{ ...ex17([]), basis: "KM_PER_LITRE", rate: 2.5 }], shifts, today);
+    expect(km.probeUsed).toBe(2); // 5 km ÷ 2.5 km/L
+  });
+
+  it("runs to now while the last shift is still going", () => {
+    const running = { machines: [{ machine: "EX-17", windows: [{ ...shifts.machines[0].windows[0], open: true, endL: 120 }] }] };
+    const [r] = withWorkConsumption([ex17([])], running, today, Date.parse("2026-11-23T08:00:00Z"));
+    expect(r).toMatchObject({ consumed: 71.8, consumedEnd: "now" });
+  });
+
+  it("gives nothing when the readings contradict, or no shift was measured, and leaves rows alone with no shifts read", () => {
+    const [neg] = withWorkConsumption([ex17([])], shifts, today); // 191.8 − 619 with nothing issued
+    expect(neg).toMatchObject({ consumed: null, workWhy: "negative" });
+    const [none] = withWorkConsumption([{ ...ex17([]), reference: "EX-99" }], shifts, today);
+    expect(none).toMatchObject({ consumed: null, workWhy: "no-shift", probeUsed: null });
+    const row = ex17([]);
+    expect(withWorkConsumption([row], null, today)[0]).toBe(row);
+  });
+});
+
+describe("withWorkConsumption after a tracker gap", () => {
+  it("ends at the tracker's first reading back, and counts a fuelling up to then", () => {
+    const shifts = { machines: [{ machine: "EX-17", windows: [
+      { start: "2026-11-23T03:00:00.000Z", end: "2026-11-23T11:00:00.000Z", open: false, ahead: false, firstTenL: 191.8, firstTenAt: "2026-11-23T03:44:00.000Z", endL: 52, hours: 7.6 },
+      { start: "2026-11-23T11:00:00.000Z", end: "2026-11-23T19:00:00.000Z", open: false, ahead: false, firstTenL: 52.4, firstTenAt: "2026-11-23T11:02:00.000Z", endL: 522.2, endAt: "2026-11-23T19:30:00.000Z", endGap: true, hours: 9.1 },
+    ] }] };
+    const row = { reference: "EX-17", basis: "HOUR", rate: 30, firstDay: "2026-11-23", lastDay: "2026-11-23",
+      pumpIssues: [{ id: "a", done: true, litres: 576, startedAt: "2026-11-23T16:10:19", at: "2026-11-23T16:42:00" }] };
+    const [r] = withWorkConsumption([row], shifts, "2026-11-23", Date.parse("2026-11-23T20:00:00Z"));
+    expect(r.consumed).toBe(245.6); // 191.8 − 522.2 + 576
+    expect(r.consumedWork).toMatchObject({ endL: 522.2, endAt: Date.parse("2026-11-23T19:30:00.000Z"), gap: true });
+    expect(r.probeUsed).toBe(501); // (7.6 + 9.1) h × 30
   });
 });

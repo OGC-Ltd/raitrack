@@ -12,9 +12,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
-import { getFactoryFuel, getFuelRefills, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withProbeUsed, varianceBand } from "../../lib/factoryFuel";
+import { getFactoryFuel, getFuelRefills, getFuelShifts, getProbeFillings, getTankDays } from "../../api/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, varianceBand } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
+import { addDays } from "../../lib/dayRange";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { planStage } from "../../lib/workPlanMap";
 import { nameCase } from "../../lib/factorySupervisors";
@@ -114,10 +115,14 @@ export default function FuelScreen() {
   const fillings = probe.error ? null : probe.data ?? null;
   // Each probed machine's tank day by day, for Consumed (lib/factoryFuel
   // withConsumed). Apart too: when it fails, Consumed reads "-" and nothing else moves.
+  // From the day before the period: its closing is the period's first opening,
+  // which today has no row for until tonight (withFuelBeforeWaiting). Not on a
+  // full 31 days: the server reads at most that many.
+  const tankFrom = from && to && (Date.parse(to) - Date.parse(from)) / 86_400_000 < 30 ? addDays(from, -1) : from;
   const tank = useApiData(
-    () => getTankDays({ companyId: activeCompanyId, from, to }),
-    [activeCompanyId, from, to],
-    { cacheKey: `ft-factory-fuel-tank:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
+    () => getTankDays({ companyId: activeCompanyId, from: tankFrom, to }),
+    [activeCompanyId, tankFrom, to],
+    { cacheKey: `ft-factory-fuel-tank:${activeCompanyId}:${tankFrom}:${to}`, keepPreviousData: true },
   );
   const tankDays = tank.error ? null : tank.data ?? null;
   // The tracker's meter either side of each fuelling, for the table's refill
@@ -129,16 +134,27 @@ export default function FuelScreen() {
     { cacheKey: `ft-factory-fuel-meters:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
   );
   const meters = meterRead.error ? null : meterRead.data ?? null;
+  // The tank at the start of each planned shift, by the probe, for Fuel before
+  // (lib/factoryFuel withFuelBeforeShift). Apart too: when it fails, Fuel
+  // before falls back to the refill's reading or the day's opening.
+  const shiftRead = useApiData(
+    () => getFuelShifts({ companyId: activeCompanyId, from, to }),
+    [activeCompanyId, from, to],
+    { cacheKey: `ft-factory-fuel-shifts:${activeCompanyId}:${from}:${to}`, keepPreviousData: true },
+  );
+  const shifts = shiftRead.error ? null : shiftRead.data ?? null;
   const today = fleetDay(Date.now());
   const checked = useMemo(
     // Consumed runs from the latest refill (operator 2026-11-20), the period
     // balance kept beside it as consumedPeriod. Probe used is the standard
-    // rate times the run since that refill (withProbeUsed).
-    () => withProbeUsed(withFuelBeforeWaiting(withConsumedSinceRefill(
+    // rate times the run since that refill (withProbeUsed). Fuel before is the
+    // tank before the day's planned work (withFuelBeforeShift, 2026-11-23);
+    // Consumed and Probe used then cover that work (withWorkConsumption).
+    () => withWorkConsumption(withProbeUsed(withFuelBeforeShift(withFuelBeforeWaiting(withConsumedSinceRefill(
       withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
       tankDays, today,
-    ), tankDays, today)),
-    [roster, vehicles, fillings, tankDays, today, meters],
+    ), tankDays, today), shifts, today)), shifts, today),
+    [roster, vehicles, fillings, tankDays, today, meters, shifts],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
 
@@ -464,9 +480,9 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
                       {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
                     </td>
-                    {/* Burnt since the latest refill, from the probe (lib/factoryFuel
-                        withConsumedSinceRefill, operator 2026-11-20). Pump flags were
-                        here (operator 2026-11-18); they stay in the machine panel. */}
+                    {/* Burnt over the planned work: start − end + issued (lib/factoryFuel
+                        withWorkConsumption, operator 2026-11-23); since the latest
+                        refill while the shifts are unread. */}
                     <td className={r.consumed != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Consumed"
                         title={consumedTitle(r)}>
                       {r.consumed != null ? `${fmt(r.consumed)} L` : "-"}
@@ -501,6 +517,18 @@ const refillTitle = (r, source) => [
 
 /** Consumed's hover: where the running figure starts and ends, or why it is blank. */
 function consumedTitle(r) {
+  const w = r.consumedWork;
+  if (w && r.consumed != null) {
+    const endWords = w.open ? "now"
+      : w.gap ? `when the tracker came back (${fmtFillWhen.format(w.endAt)}; it was silent as the last shift ended)`
+      : `at the end of the last shift (${fmtFillWhen.format(w.endAt)})`;
+    return `Fuel used over the planned work, from the fuel probe: ${fmt(w.startL)} L in the first 10 minutes of work (${fmtFillWhen.format(w.startAt)}) − ${fmt(w.endL)} L ${endWords} + ${fmt(w.issued)} L issued at the pump in between${w.fuellings ? ` (${w.fuellings} fuelling${w.fuellings === 1 ? "" : "s"})` : ""} = ${fmt(r.consumed)} L.`;
+  }
+  if (r.workWhy === "negative") {
+    return `The readings disagree: ${fmt(w.startL)} L at the start − ${fmt(w.endL)} L at the end + ${fmt(w.issued)} L issued comes out below nothing. Fuel probably went in that the pump did not record, or the probe misread.`;
+  }
+  if (r.workWhy === "no-shift") return "No planned shift has started in the period, so no work to count.";
+  if (r.workWhy === "no-probe") return "No fuel probe reading at the start or the end of the planned work.";
   const since = r.lastRefill?.at ? fmtFillWhen.format(r.lastRefill.at) : null;
   if (r.consumed != null) {
     return `Fuel used since the refill on ${since}, from the fuel probe: tank after the refill + later fills − drains − tank ${r.consumedEnd === "now" ? "now" : `at the end of ${fmtDay(r.consumedEnd)}`}.`;
@@ -518,7 +546,10 @@ function consumedTitle(r) {
 function ProbeUsedCell({ r }) {
   const u = r.probeUse;
   if (r.probeUsed == null) {
-    const why = !r.lastRefill ? "No refill in the period, so no hours to count"
+    const why = u?.source === "work"
+      ? (u.rate == null ? "No standard burn rate in the register for this machine" : "No engine hours (or km) reading in the planned shifts")
+      : r.workWhy === "no-shift" ? "No planned shift has started in the period, so no hours to count"
+      : !r.lastRefill ? "No refill in the period, so no hours to count"
       : u?.run == null ? "No odometer reading before or after the latest refill"
       : "No standard burn rate in the register for this machine";
     return <td className="dr-num dr-num--zero" data-label="Probe used" title={why}>-</td>;
@@ -536,16 +567,36 @@ function probeUsedTitle(u) {
   const sum = u.unit === "h"
     ? `${run} worked × standard ${fmt(u.rate, 1)} L/h`
     : `${run} run ÷ standard ${fmt(u.rate, 2)} km/L`;
+  if (u.source === "work") {
+    return `Fuel the standard rate allows for the planned work${u.open ? ", so far" : ""}: ${sum} = ${fmt(u.litres)} L. The ${u.unit === "h" ? "engine hours" : "kilometres"} are the tracker's, over the ${u.shifts} planned shift${u.shifts === 1 ? "" : "s"} in the period.`;
+  }
   return `Fuel the standard rate allows since the latest refill${u.open ? ", so far" : ""}: ${sum} = ${fmt(u.litres)} L. The run is the meter now (or after the refill) less Odometer before.`;
 }
 
 /** Fuel before's hover while the machine waits for its refill. */
-const waitingTitle = (w) => (w.source === "live"
+const waitingTitle = (w) => (w.source === "opening"
+  ? `No refill on ${fmtDay(w.day)}: the tank at the start of that day, from the fuel probe. The day's first refill then gives its own before reading`
+  : w.source === "live"
   ? "No refill yet today: the tank now, from the fuel probe. It follows the probe until the day's first refill, whose before reading then takes over"
   : `No refill on ${fmtDay(w.day)}: the tank's closing level that day, from the fuel probe`);
 
 /** The tank before or after the machine's latest refill in the period (lib/factoryFuel withRefillColumns). */
 function RefillLevelCell({ r, which, label }) {
+  // Before the day's planned work (lib/factoryFuel withFuelBeforeShift).
+  const shift = which === "fuelBefore" ? r.fuelBeforeShift : null;
+  if (shift) {
+    const at = new Date(Date.parse(shift.at) + 3 * 3_600_000).toISOString().slice(11, 16);
+    const pump = r.lastRefill?.day === shift.day ? r.lastRefill.fuelBefore : null;
+    const title = (shift.firstTen && shift.from === "engine"
+      ? `First 10 minutes of work: the tank from ${at} on ${fmtDay(shift.day)}, when the engine came on for its first planned shift, from the fuel probe`
+      : `Before work: the tank ${shift.firstTen ? "over the first 10 minutes" : "at the start"} of its first planned shift, from ${at} on ${fmtDay(shift.day)} (no ignition reading to time the engine), from the fuel probe`)
+      + (pump ? `. At the pump it read ${fmt(pump.litres)} L (${levelSource(pump)})` : "");
+    return (
+      <td className="dr-num" data-label={label} title={title}>
+        {fmt(shift.litres)} L
+      </td>
+    );
+  }
   const level = r.lastRefill?.[which];
   // Waiting for the day's refill: the tank from the probe (lib/factoryFuel withFuelBeforeWaiting).
   const waiting = which === "fuelBefore" && !level ? r.fuelBeforeWaiting : null;
@@ -830,8 +881,11 @@ const trackerWhy = (r, none) =>
  */
 function usedAfter(m, refills, k) {
   if (k === 0) {
-    if (m.lastRefill?.key !== refills[0]?.key || m.consumed == null) return null;
-    return { litres: m.consumed, end: m.consumedEnd };
+    // Since the refill, not the table's figure over the work (withWorkConsumption keeps it).
+    const litres = m.consumedSinceRefill !== undefined ? m.consumedSinceRefill : m.consumed;
+    const end = m.consumedSinceRefill !== undefined ? m.consumedSinceRefillEnd : m.consumedEnd;
+    if (m.lastRefill?.key !== refills[0]?.key || litres == null) return null;
+    return { litres, end };
   }
   const after = refills[k].fuelAfter?.litres;
   const next = refills[k - 1].fuelBefore?.litres;
