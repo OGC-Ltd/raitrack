@@ -11,6 +11,7 @@
 
 import { planStage } from "./workPlanMap";
 import { vehicleReadings } from "./vehicleReadings";
+import { addDays } from "./dayRange";
 
 /** A plate for matching: capitals, letters and digits only ("MUFINDI - EX 16" → "MUFINDIEX16"). */
 const plateKey = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -382,8 +383,9 @@ function probeFill(f) {
  * before and after, and issued. One per fuelling the pump finished, newest
  * first.
  *
- * - Fuel before and after: the probe fill matched to the fuelling
- *   (reconcileFills), else FactorySuite's own probe check of it.
+ * - Fuel before: FactorySuite's own probe check of the fuelling, else the
+ *   probe fill matched to it (reconcileFills).
+ * - Fuel after: the probe fill matched to the fuelling, else FactorySuite's.
  * - Consumed: fuel burned in the shift the fuelling was for, with the engine
  *   hours run (fleet-server fuel-refills); to now while the shift runs.
  * - Planned: the plan line the fuelling's request came from.
@@ -475,7 +477,13 @@ export function refillFigures(row, server) {
         at: f.at,
         day: f.day,
         siv: i.siv ?? null,
-        fuelBefore: level(f.probeFill?.before ?? f.before, s?.beforeL, fullFill ? Math.round((tank - issuedL) * 100) / 100 : null),
+        // FactorySuite's figure first (operator 2026-11-23: "the column for fuel
+        // before should come from factory suite"): the tank level its probe
+        // check read just before the nozzle (sensorBeforeLitres). Ours, then the
+        // pump's full-tank sum, only where FactorySuite read none.
+        fuelBefore: s?.beforeL != null
+          ? { litres: s.beforeL, source: "factorysuite" }
+          : level(f.probeFill?.before ?? f.before, null, fullFill ? Math.round((tank - issuedL) * 100) / 100 : null),
         fuelAfter: level(f.probeFill?.after, s?.afterL, fullFill ? tank : null),
         consumed: shift
           ? { litres: shift.consumedL ?? null, engineHours: shift.engineHours ?? null, open: Boolean(shift.open), ahead: Boolean(shift.ahead) }
@@ -593,8 +601,11 @@ export function withConsumedSinceRefill(rows, tankDays, today) {
  * to be empty, neither the odometer before"). For a row with no fuelling on
  * its period's last day:
  *
- *  - fuel: the tank from the fuel probe, live when the period runs to today
- *    (it moves with the probe), else that day's closing level;
+ *  - fuel: the tank at the START of that day, from the fuel probe (operator
+ *    2026-11-23: BH-01, unfuelled, "about 104 L of fuel before", the level it
+ *    began the day with, not the 74.6 L left after its shift): the day's
+ *    opening level, or the day before's closing (today's row is written only
+ *    at night). With neither, the live tank on today, else the day's closing;
  *  - meter: the live engine hours (withFuelNow) on an hour-rated machine,
  *    today only: the tank days carry no meter for a past day, and the live
  *    km counter runs on another base than the refills' (MTR-21: 37,488 km
@@ -606,23 +617,26 @@ export function withConsumedSinceRefill(rows, tankDays, today) {
  * the day had a refill whose before nobody read: the level now is after it.
  *
  * @param {object[]} rows      withConsumedSinceRefill rows
- * @param {object[]} tankDays  [{ vehicleId, day, closingL }], or null
+ * @param {object[]} tankDays  [{ vehicleId, day, openingL, closingL }], or null;
+ *                             from the day before the period, for today's opening
  * @param {string}   today     the fleet day today, YYYY-MM-DD
  */
 export function withFuelBeforeWaiting(rows, tankDays, today) {
-  const closing = new Map();
-  for (const d of tankDays ?? []) closing.set(`${d.vehicleId}|${d.day}`, d.closingL);
+  const byDay = new Map();
+  for (const d of tankDays ?? []) byDay.set(`${d.vehicleId}|${d.day}`, d);
   return (rows ?? []).map((row) => {
     const end = !row.lastDay || row.lastDay >= today ? today : row.lastDay;
     if (row.lastRefill?.day && row.lastRefill.day >= end) return row;
     const live = end === today;
     const out = { ...row };
     if (row.fuelBefore == null) {
-      const litres = live ? row.fuelNow ?? null
-        : row.vehicleId ? closing.get(`${row.vehicleId}|${end}`) ?? null : null;
+      const id = row.vehicleId ? String(row.vehicleId) : null;
+      const opening = id ? byDay.get(`${id}|${end}`)?.openingL ?? byDay.get(`${id}|${addDays(end, -1)}`)?.closingL ?? null : null;
+      const fallback = live ? row.fuelNow ?? null : id ? byDay.get(`${id}|${end}`)?.closingL ?? null : null;
+      const litres = opening ?? fallback;
       if (litres != null) {
         out.fuelBefore = litres;
-        out.fuelBeforeWaiting = { litres, source: live ? "live" : "closing", day: end };
+        out.fuelBeforeWaiting = { litres, source: opening != null ? "opening" : live ? "live" : "closing", day: end };
       }
     }
     if (row.odometerBefore == null && live && row.meterNow?.unit === "h" && row.meterNow.value != null) {
@@ -630,6 +644,130 @@ export function withFuelBeforeWaiting(rows, tankDays, today) {
       out.odometerBeforeWaiting = { ...row.meterNow, source: "live" };
     }
     return out;
+  });
+}
+
+/**
+ * Fuel before as the tank before the day's work (operator 2026-11-23: "the
+ * reading should be before it started working as per the work plan for
+ * instance ex 17, before 06:00 it was at +191L that is before work is done and
+ * before refuel was done"): the fuel probe's level over the first ten minutes
+ * of the machine's first planned shift that day, from the shifts read
+ * (fleet-server planner/factory-fuel/shifts, each window's `firstTenL`, else
+ * its `startL`).
+ *
+ * The day is the latest refill's, else the period's last day up to today. A
+ * refill that came before that shift started keeps its own before reading (the
+ * tank before the pump), since the shift's start is already after it. A shift
+ * not started yet, unmeasured, or a machine with no plan line that day, leaves
+ * the row's Fuel before as it was (refill, then the day's opening).
+ *
+ * @param {object[]} rows    withFuelBeforeWaiting rows
+ * @param {object}   shifts  getFuelShifts' answer, or null
+ * @param {string}   today   the fleet day today, YYYY-MM-DD
+ */
+const foldRef = (s) => String(s ?? "").trim().toUpperCase();
+/** The fleet day (EAT) an instant falls on. */
+const eatDay = (iso) => new Date(Date.parse(iso) + 3 * 3_600_000).toISOString().slice(0, 10);
+/** Each machine's shift windows from the shifts read, by folded reference. */
+const shiftWindowsOf = (shifts) => new Map((shifts?.machines ?? []).map((m) => [foldRef(m.machine), m.windows ?? []]));
+
+export function withFuelBeforeShift(rows, shifts, today) {
+  const windowsOf = shiftWindowsOf(shifts);
+  return (rows ?? []).map((row) => {
+    const windows = windowsOf.get(foldRef(row.reference));
+    if (!windows?.length) return row;
+    const end = !row.lastDay || row.lastDay >= today ? today : row.lastDay;
+    const day = row.lastRefill?.day ?? end;
+    const first = windows
+      .filter((w) => w.start && eatDay(w.start) === day)
+      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+    // Over the shift's first ten minutes (operator 2026-11-23: "we need to
+    // capture the fuel level first 10 minutes of work"), else the shift's
+    // opening readings from a server without that figure.
+    const litres = first?.firstTenL ?? first?.startL ?? null;
+    if (!first || first.ahead || litres == null) return row;
+    const refill = row.lastRefill?.day === day ? row.lastRefill : null;
+    if (refill?.at != null && refill.at < Date.parse(first.start)) return row;
+    return {
+      ...row,
+      fuelBefore: litres,
+      fuelBeforeShift: {
+        litres, at: first.firstTenAt ?? first.start, day, firstTen: first.firstTenL != null,
+        // where the ten minutes began: the engine coming on, or the planned start
+        from: first.firstTenL != null ? first.firstTenFrom ?? "shift" : "shift",
+      },
+    };
+  });
+}
+
+/**
+ * Consumed and Probe used over the planned work (operator 2026-11-23:
+ * "consumption then should be the start - end + issued (start we have
+ * determined is [the first ten] minutes of work), and for probe used it
+ * should also be covering the working hours"), from the shifts read:
+ *
+ *   Consumed   = start − end + issued
+ *     start    the tank over the first ten minutes of work in the period's
+ *              first measured shift (Fuel before's figure on a one-day period)
+ *     end      the tank at the end of the last measured shift, or now while it runs
+ *     issued   litres the pump put in between the two; a fuelling before the
+ *              work began is already in the start, one after it ended is not
+ *              in the end, so neither is added
+ *   Probe used = the register's standard × the engine hours worked in those
+ *              shifts (km ÷ km/L on a km-rated machine)
+ *
+ * The figure from the latest refill stays as `consumedSinceRefill` for the
+ * machine panel's refill card. With no shifts read (loading, or the read
+ * failed) the rows are left as they were; a machine with no measured shift in
+ * the period gets nothing, with `workWhy` saying why.
+ *
+ * @param {object[]} rows    withProbeUsed rows
+ * @param {object}   shifts  getFuelShifts' answer, or null
+ * @param {string}   today   the fleet day today, YYYY-MM-DD
+ * @param {number}   now     ms, for a shift still running
+ */
+export function withWorkConsumption(rows, shifts, today, now = Date.now()) {
+  if (!shifts) return rows ?? [];
+  const windowsOf = shiftWindowsOf(shifts);
+  const r2 = (v) => Math.round(v * 100) / 100;
+  return (rows ?? []).map((row) => {
+    const out = { ...row, consumedSinceRefill: row.consumed ?? null, consumedSinceRefillEnd: row.consumedEnd ?? null };
+    const end = !row.lastDay || row.lastDay >= today ? today : row.lastDay;
+    const first = row.firstDay && row.firstDay <= end ? row.firstDay : end;
+    const ws = (windowsOf.get(foldRef(row.reference)) ?? [])
+      .filter((w) => w.start && !w.ahead && eatDay(w.start) >= first && eatDay(w.start) <= end)
+      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    const startW = ws.find((w) => (w.firstTenL ?? w.startL) != null);
+    const endW = [...ws].reverse().find((w) => w.endL != null);
+    // Probe used: the hours (or km) the tracker counted in the shifts.
+    const byKm = refillMeterUnit(row.basis) === "km";
+    const runs = ws.map((w) => (byKm ? w.km : w.hours)).filter((v) => v != null);
+    const run = runs.length ? r2(runs.reduce((s, v) => s + v, 0)) : null;
+    const rate = row.rate != null && row.rate > 0 ? row.rate : null;
+    const usedL = run == null || rate == null ? null : r2(byKm ? run / rate : run * rate);
+    const open = ws.some((w) => w.open);
+    out.probeUsed = usedL;
+    out.probeUse = run == null && rate == null ? null : { run, unit: byKm ? "km" : "h", rate, litres: usedL, open, source: "work", shifts: ws.length };
+    if (!startW || !endW) {
+      return { ...out, consumed: null, consumedEnd: null, consumedWork: null, workWhy: ws.length ? "no-probe" : "no-shift" };
+    }
+    const startL = startW.firstTenL ?? startW.startL;
+    const startAt = Date.parse(startW.firstTenAt ?? startW.start);
+    // A shift that ended while the tracker was silent is read at its first
+    // reading back (fleet-server fuel-shifts endedInGap): endAt says when.
+    const endAt = endW.open ? now : Date.parse(endW.endAt ?? endW.end);
+    const issuedIn = (row.pumpIssues ?? [])
+      .filter((i) => i.done !== false)
+      .map((i) => ({ t: pumpTimeMs(i.startedAt ?? i.at), litres: i.litres ?? 0 }))
+      .filter((i) => i.t != null && i.t >= startAt && i.t <= endAt);
+    const issued = r2(issuedIn.reduce((s, i) => s + i.litres, 0));
+    const used = r2(startL - endW.endL + issued);
+    const work = { startL, startAt, endL: endW.endL, endAt, open: Boolean(endW.open), gap: Boolean(endW.endGap), issued, fuellings: issuedIn.length };
+    // Below nothing, the readings contradict each other (a fuelling the pump
+    // did not record, or a probe fault): no figure rather than a wrong one.
+    if (used < 0) return { ...out, consumed: null, consumedEnd: null, consumedWork: work, workWhy: "negative" };
+    return { ...out, consumed: used, consumedEnd: endW.open ? "now" : eatDay(endW.end), consumedWork: work, workWhy: null };
   });
 }
 
