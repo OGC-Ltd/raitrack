@@ -388,53 +388,115 @@ export const REPORTS = {
   },
 
   // Each machine on an approved work plan, its fuel over the shift (Mufindi,
-  // operator 23 Nov 2026): the work, the shift hours, the engine hours, what
-  // it should have used, what the probe says it used, and what was issued.
+  // operator 23 Nov 2026): the work, who ran it, the shift and engine hours,
+  // what it should have used, what was planned and issued, what the probe saw
+  // go in and get used, and each pump issue under it. Rows by department.
   shiftFuel: {
     key: 'shiftFuel',
-    num: 3,
+    /** Columns from this index on are figures: right-aligned. */
+    num: 5,
     label: 'Work plan fuel',
     title: 'Work Plan Fuel Report',
     preset: 'today',
-    maxDays: 1,
-    columns: () => ['Machine', 'Work', 'Shift', 'Shift hours', 'Engine hours', 'Expected, L', 'Probe used, L', 'Issued, L'],
-    cells: (r) => [
-      vehicleCell(r), clean(r.shift?.activity), shiftWhen(r.shift),
+    maxDays: 7,
+    columns: () => ['Machine', 'Work', 'Operator', 'Supervisor', 'Shift', 'Shift hours', 'Engine hours', 'Expected, L', 'Planned, L', 'Issued, L', 'Probe refill, L', 'Probe used, L', 'Issued − used, L', 'L/h used / rated'],
+    cells: (r, ctx) => [
+      vehicleCell(r),
+      [clean(r.shift?.activity), clean(r.shift?.workLocation)].filter(Boolean).join(' · '),
+      (r.shift?.operators ?? []).join(', '),
+      clean(r.shift?.supervisor),
+      ctx?.oneDay === false ? `${machineDay(r.shift.day)} ${shiftWhen(r.shift)}` : shiftWhen(r.shift),
       fixed(r.plannedHours, 1),
       r.state === 'untracked' ? 'Not tracked' : r.state === 'unread' ? 'Not read' : r.state === 'upcoming' ? 'Not started'
         : r.hours == null ? '-' : fixed(r.hours, 1) + (r.hoursFrom === 'ignition' ? '*' : ''),
-      r.expectedL != null ? km1(r.expectedL) : '-',
+      litres(r.expectedL),
+      litres(r.plannedL),
+      litres(r.issuedL),
+      litres(r.probeRefillL),
       r.usedL != null ? km1(r.usedL) : r.state === 'running' || r.state === 'ended' ? (r.fuelSensor ? '-' : 'No sensor') : '-',
-      r.issuedL != null ? km1(r.issuedL) : '-',
+      r.diffL != null ? `${r.diffL > 0 ? '+' : ''}${km1(r.diffL)}` : '-',
+      r.actualLph == null && r.ratedLph == null ? '-' : `${r.actualLph != null ? fixed(r.actualLph, 1) : '-'} / ${r.ratedLph != null ? fixed(r.ratedLph, 1) : '-'}`,
     ],
+    /** Green, amber or red on the probe's litres against the expected (lib/shiftHours fuelTone). */
+    rowTone: (r) => r.fuelTone,
     sum: (r) => r.usedL ?? 0,
     sumWords: (t) => `${km1(t)} L probe used`,
     countWords: (rows) => `${n(rows.length)} shift${rows.length === 1 ? '' : 's'}`,
     kpis: (rows) => {
       const total = (f) => rows.reduce((s, r) => s + (r[f] ?? 0), 0);
+      const red = rows.filter((r) => r.fuelTone === 'bad').length;
+      const diff = total('diffL');
       return [
         { label: 'Shifts', value: n(rows.length) },
         { label: 'Engine hours', value: `${fixed(total('hours'), 1)} h` },
         { label: 'Expected', value: `${km1(total('expectedL'))} L` },
-        { label: 'Probe used', value: `${km1(total('usedL'))} L` },
+        { label: 'Planned', value: `${km1(total('plannedL'))} L` },
         { label: 'Issued', value: `${km1(total('issuedL'))} L` },
+        { label: 'Probe used', value: `${km1(total('usedL'))} L` },
+        { label: 'Issued − used', value: `${diff > 0 ? '+' : ''}${km1(diff)} L` },
+        { label: 'Red, over 125%', value: n(red), tone: red ? 'speed' : undefined },
       ];
     },
-    empty: 'No machine on an approved work plan for this day.',
+    empty: 'No machine on an approved work plan for this period.',
+    /** Under the table: each pump issue for these machines (ctx.issues, lib/shiftHours shiftIssueRows). */
+    extra: (done) => {
+      const list = done.ctx?.issues ?? [];
+      if (!list.length) return null;
+      const dated = done.ctx?.oneDay === false;
+      return {
+        title: 'Fuel issues',
+        sub: `${n(list.length)} at the pump`,
+        head: ['Machine', 'Issued at', 'Voucher', 'Pump', 'Issued, L', 'Probe refill, L', 'FactorySuite probe', 'Pump flags', 'Shift'],
+        num: (i) => i === 4 || i === 5,
+        widths: [24, 26, 26, 30, 18, 20, 34, 40, 34],
+        rows: list.map((i) => [
+          i.machine,
+          i.startedAt == null ? '-' : dated ? `${machineDay(i.day)} ${shiftClock.format(i.startedAt)}` : shiftClock.format(i.startedAt),
+          i.siv ?? '-',
+          i.pump ?? '-',
+          i.litres != null ? km1(i.litres) + (i.done ? '' : ' (fuelling)') : '-',
+          litres(i.probeRiseL),
+          sensorWords(i.sensor),
+          i.flags.length ? i.flags.join(', ') : '-',
+          i.shift ? `${dated ? `${machineDay(i.shift.day)} ` : ''}${shiftWhen(i.shift)}` : 'Not on a plan line',
+        ]),
+      };
+    },
     legend: {
+      tones: [
+        ['good', 'Green', 'Probe used up to 110% of expected'],
+        ['warn', 'Amber', '111 to 125% of expected'],
+        ['bad', 'Red', 'Over 125% of expected'],
+        [null, 'No colour', 'No expected figure, no probe reading, or shift not started'],
+      ],
       columns: [
         ['Machine', 'The machine’s code in FactorySuite'],
-        ['Work', 'The activity on the approved work plan'],
+        ['Work', 'The activity on the approved work plan, and where'],
+        ['Operator', 'The operators on the work plan line'],
+        ['Supervisor', 'The supervisor on the work plan line'],
         ['Shift', 'Start and end of the shift on the work plan'],
         ['Shift hours', 'Hours planned for the shift'],
         ['Engine hours', 'Hours the engine ran in the shift so far, from the hour meter (* from the ignition signal)'],
         ['Expected, L', 'Engine hours × the machine’s litres per hour on the register; blank where the register has no hourly rate'],
-        ['Probe used, L', 'Litres used in the shift so far, from the fuel probe; No sensor where the machine has none'],
+        ['Planned, L', 'Litres on the shift’s fuel request (a full tank included), else the plan’s own figure'],
         ['Issued, L', 'Litres issued at the pump against the shift’s fuel request; blank where there is no request'],
+        ['Probe refill, L', 'The rise the fuel probe saw over those issues'],
+        ['Probe used, L', 'Litres used in the shift so far, from the fuel probe; No sensor where the machine has none'],
+        ['Issued − used, L', 'Issued less probe used; + is fuel issued that the probe did not see used in the shift'],
+        ['L/h used / rated', 'Probe used ÷ engine hours, against the register’s litres per hour'],
       ],
     },
   },
 };
+
+/** Litres to one decimal, or a dash. */
+const litres = (x) => (x != null && Number.isFinite(x) ? km1(x) : '-');
+/** FactorySuite's own probe check of a fuelling, in words: "Match, +118.0 L". */
+function sensorWords(s) {
+  if (!s?.check) return '-';
+  const word = { MATCH: 'Match', MISMATCH: 'Mismatch', NO_SENSOR: 'No sensor' }[s.check] ?? s.check.charAt(0) + s.check.slice(1).toLowerCase().replace(/_/g, ' ');
+  return s.riseL != null && s.check !== 'NO_SENSOR' ? `${word}, +${km1(s.riseL)} L` : word;
+}
 
 const shiftClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 /** "06:00 – 16:00". */
@@ -457,7 +519,7 @@ function machineWhen(r, ctx) {
 const machineHour = (r) => `${clockOnly.format(r.from)}–${r.to % 3_600_000 === 0 ? clockOnly.format(r.to).replace(/^00:/, '24:') : clockOnly.format(r.to)}`;
 
 /** Columns left out when no vehicle in the report has a value in them (operator, 1 Nov 2026). */
-const OPTIONAL = ['Type', 'Driver', 'Location', 'Hour', 'Day'];
+const OPTIONAL = ['Type', 'Driver', 'Location', 'Hour', 'Day', 'Operator', 'Supervisor'];
 
 /**
  * The indexes of the columns to show for these rows: every column, less a

@@ -81,7 +81,7 @@ import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
 import { REPORT_NODES, chooseReport, reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, hasShiftFuelTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
 // Shift hours: the day's approved shifts (FactorySuite) against the engine hours run in them
-import { dayShifts, shiftHoursRows } from '../../lib/shiftHours';
+import { dayShifts, shiftHoursRows, shiftIssueRows, withProbeRefills } from '../../lib/shiftHours';
 import { getFactoryFuel } from '../../api/factoryFuel';
 import { placeNameAt } from '../../hooks/usePlaceName';
 import { directionWords, byFleetList, splitsByType, statesFor, TINT, stamp, applyEdits, pdfRequests, isEdited, isMoving, isLoading, locationChanged, distanceText, fuelText, consumptionText, SHOW_CONSUMPTION, SHOW_FUEL_USED, withTrips, withPlaceSwaps, withEventPlaceSwaps, LAST_HOURS, MAX_MOVEMENT_DAYS, movementWindows, windowsProblem, vehicleTypes, defaultTypes, onlyTypes, bySiteKind } from '../../lib/movementReport';
@@ -105,6 +105,27 @@ function OverspeedEvents({ events, unit }) {
         <tbody>
           {t.rows.map((r) => (
             <tr key={r[0]} className="sp4-tr">
+              {r.map((c, i) => <td key={i} className={t.num(i) ? 'rpt-num' : undefined}>{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+/** A second table under a report (REPORTS[key].extra): Work Plan Fuel's pump issues. */
+function ExtraTable({ t }) {
+  return (
+    <section className="rpt-events" aria-label={t.title}>
+      <h3 className="rpt-events__title">{t.title} <span className="rpt-sub">· {t.sub}</span></h3>
+      <table className="sp4-table rpt-table">
+        <thead>
+          <tr>{t.head.map((h, i) => <th key={h} scope="col" className={t.num(i) ? 'rpt-num' : undefined}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {t.rows.map((r, k) => (
+            <tr key={k} className="sp4-tr">
               {r.map((c, i) => <td key={i} className={t.num(i) ? 'rpt-num' : undefined}>{c}</td>)}
             </tr>
           ))}
@@ -1651,25 +1672,38 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         rows = rows.map((row) => (placeOf.get(row) ? { ...row, peakPlace: placeOf.get(row) } : row));
       } else if (key === 'shiftHours' || key === 'shiftFuel') {
         // The day's approved shifts (lib/shiftHours), then each planned machine's readings over them
+        // Work Plans Updates is one day; Work Plan Fuel up to a week, its pump issues with it
+        const fuel = key === 'shiftFuel';
         const day = fleetDay(ctx.from);
-        step('Reading the day’s work plans')({ done: 0, total: 0 });
-        const plan = await getFactoryFuel({ companyId: activeCompany?.id, from: day, to: day });
+        const lastDay = fuel ? fleetDay(Math.max(ctx.from, ctx.to - 1)) : day;
+        step(day === lastDay ? 'Reading the day’s work plans' : 'Reading the work plans')({ done: 0, total: 0 });
+        const plan = await getFactoryFuel({ companyId: activeCompany?.id, from: day, to: lastDay });
         if (!live()) return;
         const shifts = dayShifts(plan, Date.now());
         const planned = shiftHoursRows(units, new Map(), shifts).filter((r) => r.unit.vehicles.length);
         const vs = [...new Map(planned.flatMap((r) => r.unit.vehicles).map((v) => [v.vehicleId, v])).values()];
         const started = shifts.filter((s) => s.upTo > s.start);
+        // The probe around each pump issue too: a machine is often fuelled before its shift begins
+        const issueTimes = fuel ? shiftIssueRows(plan, planned).flatMap((i) => [i.startedAt, i.at]).filter(Number.isFinite) : [];
         let pings = new Map();
         let unread = new Set();
-        if (vs.length && started.length) {
-          const from = Math.min(...started.map((s) => s.start)) - 15 * 60_000;
-          const to = Math.max(...started.map((s) => s.upTo));
+        if (vs.length && (started.length || issueTimes.length)) {
+          const from = Math.min(...started.map((s) => s.start), ...issueTimes) - (fuel ? 60 : 15) * 60_000;
+          const to = Math.min(Date.now(), Math.max(...started.map((s) => s.upTo), ...issueTimes.map((t) => t + 60 * 60_000)));
           const p = await loadPings({ orgId, vehicles: vs, from, to, onProgress: step('Reading each machine’s shift') });
           pings = p.pings;
           unread = p.failed;
         }
         rows = shiftHoursRows(units, pings, shifts, unread);
         failed = unread.size;
+        if (fuel) {
+          ctx.issues = shiftIssueRows(plan, rows, pings);
+          ctx.oneDay = day === lastDay;
+          // By department, in name order; the issues' probe rises on their shifts
+          rows = withProbeRefills(rows, ctx.issues)
+            .map((r) => ({ ...r, section: r.shift.department || 'No department' }))
+            .sort((a, b) => a.section.localeCompare(b.section) || a.shift.start - b.shift.start);
+        }
       } else if (key === 'machinery') {
         // The hours picked, on each day of the period, to the minute
         const windows = machineWindows(ctx.from, ctx.to, { ...ctx.hours, byDay: ctx.byDay });
@@ -2081,6 +2115,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                   <p className="rpt-key"><span className="rpt-key__swatch" aria-hidden="true" />{noDispatchKey(done.ctx)}</p>
                 )}
                 {done.ctx.events?.length > 0 && <OverspeedEvents events={done.ctx.events} unit={done.ctx.unit} />}
+                {def.extra?.(done) && <ExtraTable t={def.extra(done)} />}
                 {done.missing.length > 0 && (
                   <details className="rpt-missing">
                     <summary>{done.missing.length} unit{done.missing.length === 1 ? '' : 's'} on the list {done.missing.length === 1 ? 'is' : 'are'} not tracked on the platform</summary>

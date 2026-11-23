@@ -121,8 +121,9 @@ function columnsFor(def, ctx, keep, inner, cellRows = []) {
     machinery: [38, 20, 40, 22, 24, 24, 24],
     // Machine, Type, Shift, Shift hours, Elapsed, Engine hours, Fuel used
     shiftHours: [30, 30, 32, 22, 22, 26, 22],
-    // Machine, Work, Shift, Shift hours, Engine hours, Expected, Probe used, Issued
-    shiftFuel: [26, 40, 30, 20, 22, 22, 24, 20],
+    // Machine, Work, Operator, Supervisor, Shift, Shift hours, Engine hours, Expected,
+    // Planned, Issued, Probe refill, Probe used, Issued − used, L/h used / rated
+    shiftFuel: [22, 34, 28, 24, 26, 14, 15, 15, 15, 15, 16, 16, 17, 20],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
   const used = keep.reduce((s, i) => s + widths[i], 0);
   // Behaviour report: incident/total columns are centred, not right-aligned.
@@ -131,6 +132,8 @@ function columnsFor(def, ctx, keep, inner, cellRows = []) {
     h: heads[i],
     ...(centre(i) ? { c: true } : right(i) && !centre(i) ? { r: true } : {}),
     w: `${((widths[i] * inner) / used).toFixed(1)}mm`,
+    // Work Plan Fuel: the work, operators and supervisor wrap rather than run over
+    ...(def.key === 'shiftFuel' && ['Work', 'Operator', 'Supervisor', 'Shift'].includes(heads[i]) ? { wrap: true } : {}),
   }));
 }
 
@@ -268,6 +271,15 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
       events.rows.map((r) => r.map((c) => (c === '-' ? { html: c, cls: 'm' } : esc(c))))));
   }
 
+  // A second table under the report (def.extra): Work Plan Fuel's pump issues
+  const extra = def.extra?.(done) ?? null;
+  if (extra) {
+    flow.push(`<h2>${done.secs.length + 2 + (events ? 1 : 0)}. ${esc(extra.title)} <small>${esc(extra.sub)}</small></h2>`);
+    const used = extra.widths.reduce((a, b) => a + b, 0);
+    flow.push(table(extra.head.map((h, i) => ({ h: esc(h), w: `${((extra.widths[i] * inner) / used).toFixed(1)}mm`, r: extra.num(i) })),
+      extra.rows.map((r) => r.map((c) => (c === '-' ? { html: c, cls: 'm' } : { html: esc(c), cls: 'wrap' })))));
+  }
+
   const notes = [];
   if (def.key === 'overspeed') {
     notes.push(`Top speed at: the ${ctx.to - ctx.from <= 86_400_000 ? 'time' : 'date and time'} of the GPS reading on which each vehicle reached its top speed in the period, Nairobi time; Location: where that reading was.`);
@@ -302,7 +314,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   if (done.failed) notes.push(`${done.failed} could not be read and ${done.failed === 1 ? 'is' : 'are'} left out.`);
   if (notes.length) flow.push(...notes.map((t) => `<div class="note">${esc(t)}</div>`));
 
-  let next = done.secs.length + 2 + (events ? 1 : 0);
+  let next = done.secs.length + 2 + (events ? 1 : 0) + (extra ? 1 : 0);
   const fu = def.key === 'behaviour' && SHOW_FOLLOW_UP ? followUpFlow(done, ctx, now, next, inner) : null;
   if (fu) { flow.push(...fu.flow); next = fu.next; }
 
