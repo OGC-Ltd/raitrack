@@ -62,6 +62,11 @@ export function dayShifts(data, now = Date.now()) {
       start,
       end,
       plannedHours: l.plannedHours,
+      // Work Plan Fuel (Mufindi, 23 Nov 2026): the register's rate for the machine, and
+      // what the pump issued against the line's fuel request; none while it has no request
+      issuedL: l.requestId && Number.isFinite(l.issuedLitres) ? l.issuedLitres : null,
+      basis: m.basis ?? null,
+      rate: m.rate ?? null,
       // The shift judged so far: to now while it runs, to its end once it has ended
       upTo: Math.min(end, now),
     });
@@ -106,6 +111,8 @@ export function shiftHoursRows(units, pings, shifts, failed = new Set()) {
       usedL = row?.fuelSeen ? row.usedL : null;
       fuelSensor = Boolean(row?.fuelSensor);
     }
+    // Expected: the engine hours run × the register's litres per hour (Work Plan Fuel)
+    const expectedL = hours != null && /^HOURS?$/i.test(s.basis ?? '') && s.rate > 0 ? hours * s.rate : null;
     const share = hours != null && elapsed > 0 ? Math.min(1, hours / elapsed) : null;
     return {
       key: s.key,
@@ -121,6 +128,8 @@ export function shiftHoursRows(units, pings, shifts, failed = new Set()) {
       hoursFrom,
       usedL,
       fuelSensor,
+      expectedL,
+      issuedL: s.issuedL ?? null,
       share,
       tone: shiftTone(share),
     };

@@ -24,7 +24,7 @@ export function reportNumber(prefix, orgCode, now) {
 /** The closing line of every report. */
 export const CONTACT_LINE = 'This is a system-generated report. For any queries about its contents, please contact OGC Monitoring at operations@offgridconsultingltd.com.';
 
-const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU', machinery: 'MR', shiftHours: 'WP' };
+const PREFIX = { behaviour: 'DC', night: 'ND', overspeed: 'OS', utilisation: 'VU', machinery: 'MR', shiftHours: 'WP', shiftFuel: 'WF' };
 
 /** Driver conduct: the grey of a row with incidents and no driver on record. Dark enough to survive printing. */
 export const NO_DISPATCH_GREY = '#dcdcdc';
@@ -121,6 +121,8 @@ function columnsFor(def, ctx, keep, inner, cellRows = []) {
     machinery: [38, 20, 40, 22, 24, 24, 24],
     // Machine, Type, Shift, Shift hours, Elapsed, Engine hours, Fuel used
     shiftHours: [30, 30, 32, 22, 22, 26, 22],
+    // Machine, Work, Shift, Shift hours, Engine hours, Expected, Probe used, Issued
+    shiftFuel: [26, 40, 30, 20, 22, 22, 24, 20],
   }[def.key === 'utilisation' && ctx?.rated ? 'utilisationRated' : def.key];
   const used = keep.reduce((s, i) => s + widths[i], 0);
   // Behaviour report: incident/total columns are centred, not right-aligned.
@@ -293,7 +295,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     notes.push('Engine hours are from the machine’s hour meter; a figure marked * is from the ignition signal, where the meter sent nothing in that row.');
     if (ctx.idle?.length) notes.push(`Did not run in the period: ${ctx.idle.join(', ')}.`);
   }
-  if (def.key === 'shiftHours') {
+  if (def.key === 'shiftHours' || def.key === 'shiftFuel') {
     if (done.rows.some((r) => r.hoursFrom === 'ignition')) notes.push('* From the ignition signal, where the hour meter sent nothing.');
   }
   if (def.key === 'overspeed') notes.push(`Only overspeeding that lasted more than ${OVERSPEED_MIN_SEC} seconds without a break is counted.`);
@@ -343,7 +345,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     ...(ctx.unit ? [['Unit', esc(ctx.unit)]] : []),
     ...(def.key === 'utilisation' && ctx.rated ? [['Consumption', 'As rated on the register: L/h for machines, L/km for vehicles']] : []),
     ...(def.key === 'utilisation' && !ctx.rated ? [['Consumption', esc(`${(RATES[ctx.rate] ?? RATES[DEFAULT_RATE]).label} (${(RATES[ctx.rate] ?? RATES[DEFAULT_RATE]).unit})`)]] : []),
-    def.key === 'shiftHours' ? ['Shifts', esc(`${done.rows.length} on approved plans`)]
+    def.key === 'shiftHours' || def.key === 'shiftFuel' ? ['Shifts', esc(`${done.rows.length} on approved plans`)]
     : def.countWords ? ['Machines', esc(`${new Set(done.rows.map((r) => r.unit.key)).size} of ${done.units} ran`)]
       : ['Vehicles', `${done.rows.length} reported${def.key === 'utilisation' || def.key === 'night' ? ` of ${done.units}` : ''}`],
     ...(nightWords ? [['Night', esc(nightWords.replace(/^Night hours /, ''))]] : []),

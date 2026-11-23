@@ -92,6 +92,9 @@ export const hasMachineryTab = (can, orgCode) => can('telemetry:read') && MACHIN
 /** Shift hours, beside Machinery: where FactorySuite plans the machines' shifts (Mufindi, operator 17 Nov 2026). */
 export const hasShiftHoursTab = hasMachineryTab;
 
+/** Work Plan Fuel, under Fuel: the same work plans, their fuel (Mufindi, operator 23 Nov 2026). */
+export const hasShiftFuelTab = hasMachineryTab;
+
 /**
  * Movements' tabs under a few headings, a row of headings over a row of the
  * picked heading's tabs: Sukari's eleven no longer fit one row (operator,
@@ -102,7 +105,7 @@ export const MOVEMENTS_TAB_GROUPS = [
   { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'tatFuel', 'recovery'] },
   // Deliveries by itself (operator, 18 Nov 2026): it has its own Van Sales | Finished Goods trail inside
   { key: 'deliveries', label: 'Deliveries', tabs: ['deliveries'] },
-  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'probes'] },
+  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'shiftFuel', 'probes'] },
   { key: 'safety', label: 'Safety and conduct', tabs: ['speed', 'alarmDist', 'unauthorizedPassengers'] },
   { key: 'sites', label: 'Sites and machinery', tabs: ['geofences', 'dormant', 'machinery', 'shiftHours'] },
 ];

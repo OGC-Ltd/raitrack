@@ -386,6 +386,54 @@ export const REPORTS = {
       ],
     },
   },
+
+  // Each machine on an approved work plan, its fuel over the shift (Mufindi,
+  // operator 23 Nov 2026): the work, the shift hours, the engine hours, what
+  // it should have used, what the probe says it used, and what was issued.
+  shiftFuel: {
+    key: 'shiftFuel',
+    num: 3,
+    label: 'Work plan fuel',
+    title: 'Work Plan Fuel Report',
+    preset: 'today',
+    maxDays: 1,
+    columns: () => ['Machine', 'Work', 'Shift', 'Shift hours', 'Engine hours', 'Expected, L', 'Probe used, L', 'Issued, L'],
+    cells: (r) => [
+      vehicleCell(r), clean(r.shift?.activity), shiftWhen(r.shift),
+      fixed(r.plannedHours, 1),
+      r.state === 'untracked' ? 'Not tracked' : r.state === 'unread' ? 'Not read' : r.state === 'upcoming' ? 'Not started'
+        : r.hours == null ? '-' : fixed(r.hours, 1) + (r.hoursFrom === 'ignition' ? '*' : ''),
+      r.expectedL != null ? km1(r.expectedL) : '-',
+      r.usedL != null ? km1(r.usedL) : r.state === 'running' || r.state === 'ended' ? (r.fuelSensor ? '-' : 'No sensor') : '-',
+      r.issuedL != null ? km1(r.issuedL) : '-',
+    ],
+    sum: (r) => r.usedL ?? 0,
+    sumWords: (t) => `${km1(t)} L probe used`,
+    countWords: (rows) => `${n(rows.length)} shift${rows.length === 1 ? '' : 's'}`,
+    kpis: (rows) => {
+      const total = (f) => rows.reduce((s, r) => s + (r[f] ?? 0), 0);
+      return [
+        { label: 'Shifts', value: n(rows.length) },
+        { label: 'Engine hours', value: `${fixed(total('hours'), 1)} h` },
+        { label: 'Expected', value: `${km1(total('expectedL'))} L` },
+        { label: 'Probe used', value: `${km1(total('usedL'))} L` },
+        { label: 'Issued', value: `${km1(total('issuedL'))} L` },
+      ];
+    },
+    empty: 'No machine on an approved work plan for this day.',
+    legend: {
+      columns: [
+        ['Machine', 'The machine’s code in FactorySuite'],
+        ['Work', 'The activity on the approved work plan'],
+        ['Shift', 'Start and end of the shift on the work plan'],
+        ['Shift hours', 'Hours planned for the shift'],
+        ['Engine hours', 'Hours the engine ran in the shift so far, from the hour meter (* from the ignition signal)'],
+        ['Expected, L', 'Engine hours × the machine’s litres per hour on the register; blank where the register has no hourly rate'],
+        ['Probe used, L', 'Litres used in the shift so far, from the fuel probe; No sensor where the machine has none'],
+        ['Issued, L', 'Litres issued at the pump against the shift’s fuel request; blank where there is no request'],
+      ],
+    },
+  },
 };
 
 const shiftClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });

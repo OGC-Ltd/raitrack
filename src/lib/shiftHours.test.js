@@ -184,3 +184,58 @@ describe('shiftHoursRows, fuel used in the shift', () => {
     expect(REPORTS.shiftHours.cells(r).at(-1)).toBe('No sensor');
   });
 });
+
+describe('Work Plan Fuel: expected, probe and issued per shift', () => {
+  const at = (s) => Date.parse(`${s}+03:00`);
+  /** Engine on 06:30 to 09:30, 10 L an hour on the fuel counter. */
+  const pings = () => {
+    const out = [];
+    for (let t = at('2026-11-17T06:30:00'); t <= at('2026-11-17T09:30:00'); t += 600_000) {
+      const h = (t - at('2026-11-17T06:30:00')) / H;
+      out.push({ t, engineOn: true, speedKmh: 0, lat: -8.6, lng: 35.3, engineHoursMeter: 1000 + h, fuelUsedMl: 500_000 + h * 10_000 });
+    }
+    return new Map([['veh_ex16', out]]);
+  };
+  const rated = (o = {}) => ({ machines: [{ ...DATA.machines[0], basis: 'HOUR', rate: 18 }], lines: [line({ requestId: 'R1', issuedLitres: 180, ...o })] });
+
+  it('expects engine hours × the register’s litres per hour, and carries what was issued', () => {
+    const [r] = shiftHoursRows(UNITS, pings(), dayShifts(rated(), NOW));
+    expect(r.hours).toBeCloseTo(3, 1);
+    expect(r.expectedL).toBeCloseTo(54, 0);
+    expect(r.usedL).toBeGreaterThan(25);
+    expect(r.issuedL).toBe(180);
+  });
+
+  it('expects nothing where the register rates the machine by the km, or not at all', () => {
+    const km = { ...rated(), machines: [{ ...DATA.machines[0], basis: 'KM_PER_LITRE', rate: 3 }] };
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(km, NOW))[0].expectedL).toBeNull();
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(DATA, NOW))[0].expectedL).toBeNull();
+  });
+
+  it('issued is blank while the line has no fuel request, 0 when the request got nothing', () => {
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated({ requestId: null, issuedLitres: 0 }), NOW))[0].issuedL).toBeNull();
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated({ issuedLitres: 0 }), NOW))[0].issuedL).toBe(0);
+  });
+
+  it('reads as a table: work, shift, hours and the three fuel figures', async () => {
+    const { REPORTS } = await import('./reportTables');
+    const def = REPORTS.shiftFuel;
+    const [r] = shiftHoursRows(UNITS, pings(), dayShifts(rated(), NOW));
+    const cells = def.cells(r);
+    expect(def.columns()).toEqual(['Machine', 'Work', 'Shift', 'Shift hours', 'Engine hours', 'Expected, L', 'Probe used, L', 'Issued, L']);
+    expect(cells.slice(0, 4)).toEqual(['EX-16', 'Drainage Desilting', '06:00 – 16:00', '10.0']);
+    expect(cells[7]).toBe('180.0');
+    expect(def.legend.columns.map(([c]) => c)).toEqual(def.columns());
+  });
+
+  it('prints with the Work Plan Fuel title and a WF- number', async () => {
+    const { REPORTS } = await import('./reportTables');
+    const { reportHtml } = await import('./reportLetterhead');
+    const rows = shiftHoursRows(UNITS, pings(), dayShifts(rated(), NOW));
+    const done = { rows, secs: [{ name: null, rows, total: 0 }], missing: [], units: 1, failed: 0, ctx: { from: Date.parse('2026-11-17T00:00:00+03:00'), to: NOW } };
+    const { html } = reportHtml(REPORTS.shiftFuel, done, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', groupWords: 'Machines on approved work plans', periodWords: '17 Nov 2026', logos: { rai: 'r', ogc: 'o' }, now: NOW });
+    expect(html).toContain('WORK PLAN FUEL REPORT');
+    expect(html).toContain('WF-KASULU-');
+    expect(html).toContain('Probe used, L');
+  });
+});

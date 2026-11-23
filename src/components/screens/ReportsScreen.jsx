@@ -79,7 +79,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { REPORT_NODES, chooseReport, reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
+import { REPORT_NODES, chooseReport, reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasMachineryTab, hasShiftHoursTab, hasShiftFuelTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
 // Shift hours: the day's approved shifts (FactorySuite) against the engine hours run in them
 import { dayShifts, shiftHoursRows } from '../../lib/shiftHours';
 import { getFactoryFuel } from '../../api/factoryFuel';
@@ -711,10 +711,10 @@ function TypePicker({ types, picked, counts, onChange }) {
  * one survives a look at another.
  */
 function MovementsPage(props) {
-  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours } = props;
+  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, shiftFuel } = props;
   const [tab, setTab] = useState('hourly');
   const [lastTab, setLastTab] = useState({});
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery && !shiftHours) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery && !shiftHours && !shiftFuel) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -731,6 +731,8 @@ function MovementsPage(props) {
     fuelConsumption && { key: 'fuelConsumption', label: 'Fuel Consumption Rate' },
     // Each unit's fuel graph on a page, its figures under it (operator, 13 Nov 2026)
     fuelConsumption && { key: 'fuelGraphs', label: 'Fuel Graphs' },
+    // Each work-plan shift's fuel: expected, probe and issued (operator, 23 Nov 2026)
+    shiftFuel && { key: 'shiftFuel', label: 'Work Plan Fuel' },
     // Excavators and dozers against the burn rate, after Fuel Graphs (operator, 16 Nov 2026)
     machinery && { key: 'machinery', label: 'Machinery' },
     // Each machine's engine hours against its shift so far, after Machinery (operator, 17 Nov 2026)
@@ -781,7 +783,7 @@ function MovementsPage(props) {
 }
 
 /** Movements' panels, one a tab, every one mounted; MovementsPage shows the picked one. */
-function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, whoAmI }) {
+function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, shiftFuel, whoAmI }) {
   return (
     <>
       <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
@@ -855,6 +857,11 @@ function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, 
       {shiftHours && (
       <div className="mvt-panel" role="tabpanel" id="mvt-shiftHours-panel" aria-labelledby="mvt-shiftHours" hidden={tab !== 'shiftHours'}>
         <ReportsScreen only="shiftHours" active={tab === 'shiftHours'} />
+      </div>
+      )}
+      {shiftFuel && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-shiftFuel-panel" aria-labelledby="mvt-shiftFuel" hidden={tab !== 'shiftFuel'}>
+        <ReportsScreen only="shiftFuel" active={tab === 'shiftFuel'} />
       </div>
       )}
     </>
@@ -1642,7 +1649,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           .finally(() => onPlace({ done: ++placed, total: fixed.length }))));
         const placeOf = new Map(fixed.map((row, i) => [row, names[i]]));
         rows = rows.map((row) => (placeOf.get(row) ? { ...row, peakPlace: placeOf.get(row) } : row));
-      } else if (key === 'shiftHours') {
+      } else if (key === 'shiftHours' || key === 'shiftFuel') {
         // The day's approved shifts (lib/shiftHours), then each planned machine's readings over them
         const day = fleetDay(ctx.from);
         step('Reading the day’s work plans')({ done: 0, total: 0 });
@@ -1685,7 +1692,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         failed = r.failed;
       }
       if (!live()) return;
-      const secs = sections(rows, key === 'shiftHours' ? null : key === 'machinery' ? MACHINE_SECTIONS : ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum);
+      const secs = sections(rows, key === 'shiftHours' || key === 'shiftFuel' ? null : key === 'machinery' ? MACHINE_SECTIONS : ctx.rated ? RATED_SECTIONS : groups?.map((g) => g.name), def.sum);
       setRun({ status: 'done', rows, secs, ctx, missing, failed, units: units.length });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
@@ -1750,7 +1757,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // Type or Driver blank for every vehicle (e.g. all "UNSPECIFIED"): left out.
   const shown = done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i);
   // Machinery covers the excavators and dozers alone, so it says so (operator, 16 Nov 2026: "All vehicles" read as every unit)
-  const groupWords = done?.ctx.group ?? (key === 'shiftHours' ? 'Machines on approved work plans' : key === 'machinery' ? 'Excavators and dozers' : groups ? 'All groups' : 'All vehicles');
+  const groupWords = done?.ctx.group ?? (key === 'shiftHours' || key === 'shiftFuel' ? 'Machines on approved work plans' : key === 'machinery' ? 'Excavators and dozers' : groups ? 'All groups' : 'All vehicles');
   const periodWords = periodText(ctx.from, ctx.to);
   const nightWords = key === 'night' ? `Night hours ${hh((done?.ctx.night ?? night).start)}hrs – ${hh((done?.ctx.night ?? night).end || 24)}hrs` : null;
   const slugOf = (w) => `-${w.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -1848,7 +1855,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           <i className="ti ti-selector rpt-switch__i" aria-hidden="true" />
         </label>
       )}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} shiftFuel={hasShiftFuelTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
@@ -1867,7 +1874,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           minDay={def.reachDays ? addDays(today, -(def.reachDays - 1)) : null}
           label="Period" on
           // Shift hours: the day alone; the shifts on its plans set the hours
-          text={key === 'shiftHours' ? pickedText(days.fromDay, days.toDay, today) : isNight
+          text={key === 'shiftHours' || key === 'shiftFuel' ? pickedText(days.fromDay, days.toDay, today) : isNight
             ? `${pickedText(days.fromDay, days.toDay, today)} · nights ${hoursText(night.start, night.end || 24)}`
             : days.custom ? customText(span)
             : `${pickedText(days.fromDay, days.toDay, today)} · ${span.to >= Date.now() - 60_000 && days.toDay === today ? `${hh(days.start)}/now` : hoursText(days.start, days.end)}`}
@@ -1875,7 +1882,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         >
           {({ close }) => (
             <>
-              {key === 'shiftHours' ? null : key === 'machinery' ? (
+              {key === 'shiftHours' || key === 'shiftFuel' ? null : key === 'machinery' ? (
                 // Machinery takes the Shift's pickers (operator, 16 Nov 2026: "custom hours"): Day,
                 // Night or Whole day, start and end to the minute on each day, or one custom range
                 <>
