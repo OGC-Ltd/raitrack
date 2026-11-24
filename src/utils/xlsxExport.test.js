@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import ExcelJS from 'exceljs';
-import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH, numericColumn } from './xlsxExport';
+import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH, numericColumn, inputsAt } from './xlsxExport';
 import { exportExcelVia, exportLater, downloadTableCsv } from './tableExport';
 import { downloadProbeCsv } from './probeReport';
 
@@ -134,5 +134,63 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
     expect(ws.headerFooter.oddFooter).toContain('Sukari && Co');
     const buf = await wb.xlsx.writeBuffer();
     expect(buf.byteLength).toBeGreaterThan(3000);
+  });
+});
+
+describe('a column the reader fills in (Driver conduct, operator 24 Nov 2026)', () => {
+  const head = ['Vehicle', 'Harsh braking', 'Total', 'Follow-up'];
+  const body = [['KAU 374Y', 0, 26, 'Pending'], ['KBT 313D', 2, 2, 'No case']];
+  const list = ['Pending', 'Driver called', 'Verbal warning'];
+
+  it('finds the column by its heading', () => {
+    expect(inputsAt(head, { 'Follow-up': { list } })).toEqual({ 3: { list } });
+    expect(inputsAt(head, { Missing: { list } })).toBeNull();
+    expect(inputsAt(head, null)).toBeNull();
+  });
+
+  it('shades each Follow-up cell, unlocks it and gives it a pick list that still takes any words', async () => {
+    const wb = buildWorkbook(ExcelJS, { head, body, title: 'Behaviour Aquamist', inputs: { 'Follow-up': { list, prompt: 'Pick the action taken, or type the response' } } });
+    const ws = wb.worksheets[0];
+    const cells = [];
+    ws.eachRow((row) => row.eachCell((c) => { if (c.value === 'Pending' || c.value === 'No case') cells.push(c); }));
+    expect(cells).toHaveLength(2);
+    for (const c of cells) {
+      expect(c.dataValidation).toMatchObject({ type: 'list', allowBlank: true, formulae: ['"Pending,Driver called,Verbal warning"'], showErrorMessage: false });
+      expect(c.protection).toEqual({ locked: false });
+      expect(c.fill.fgColor.argb).toBe('FFFFF8DC');
+    }
+    // The other columns are as before: no list
+    ws.eachRow((row) => row.eachCell((c) => { if (c.value === 'KAU 374Y') expect(c.dataValidation).toBeUndefined(); }));
+    // And it survives the round trip through a real .xlsx
+    const back = new ExcelJS.Workbook();
+    await back.xlsx.load(await wb.xlsx.writeBuffer());
+    let found = 0;
+    back.worksheets[0].eachRow((row) => row.eachCell((c) => { if (c.value === 'Pending' && c.dataValidation?.type === 'list') found += 1; }));
+    expect(found).toBe(1);
+  });
+
+});
+
+describe('the details at the top of the Excel file (operator, 24 Nov 2026)', () => {
+  it('carries the period and the dashcam alarms’ stretch', () => {
+    const ws = buildWorkbook(ExcelJS, { head: ['Vehicle', 'Total'], body: [['KAU 374Y', 1]], title: 'Behaviour Aquamist', fleet: 'Aquamist Ltd',
+      meta: [['Period', '1 Nov 2026 – 24 Nov 2026'], ['Dashcam alarms', '10 Nov 2026 14:05 to 24 Nov 2026 14:12']] }).worksheets[0];
+    const pairs = [];
+    ws.eachRow((row) => { const a = row.getCell(1).value; const b = row.getCell(2).value; if (a && b) pairs.push([a, b]); });
+    expect(pairs).toEqual(expect.arrayContaining([['Period', '1 Nov 2026 – 24 Nov 2026'], ['Dashcam alarms', '10 Nov 2026 14:05 to 24 Nov 2026 14:12']]));
+  });
+});
+
+describe('the Follow-up column, room for the onsite team’s feedback (operator, 24 Nov 2026)', () => {
+  it('is wide and carries its own heading in the file; the other columns keep theirs', () => {
+    const head = ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'Harsh cornering', 'No seatbelt', 'On phone', 'Camera covered', 'Total', 'Follow-up'];
+    const ws = buildWorkbook(ExcelJS, { head, body: [['KAT 486Q', 'TRUCK', '', 0, 0, 0, 8, 2, 0, 10, 'Pending']], title: 'Behaviour Aquamist',
+      inputs: { 'Follow-up': { heading: 'Follow-up (Record your response)', width: 60, list: ['Pending'] } } }).worksheets[0];
+    const heads = [];
+    ws.eachRow((row) => { if (row.getCell(1).value === 'Vehicle') row.eachCell((c) => heads.push(c.value)); });
+    expect(heads).toEqual([...head.slice(0, -1), 'Follow-up (Record your response)']);
+    const widths = head.map((_, i) => ws.getColumn(i + 1).width);
+    expect(widths.at(-1)).toBeGreaterThanOrEqual(60);
+    expect(Math.max(...widths.slice(0, -1))).toBeLessThan(widths.at(-1));
   });
 });

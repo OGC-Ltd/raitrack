@@ -20,7 +20,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings, loadCornering, DASHCAM_DAYS } from '../../api/fleetReports';
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
@@ -28,7 +28,7 @@ import {
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey, dashcamFromWords, dashcamWindowWords } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -40,7 +40,7 @@ import { upsert, remove } from '../../lib/operatorLog';
 import * as conductApi from '../../api/driverConduct';
 import { moveBrowserFollowUp } from '../../lib/conductMove';
 import { ActionDialog, FollowUpPanel } from './FollowUp';
-import { casesFromRun, periodCases } from '../../lib/followUp';
+import { casesFromRun, periodCases, ACTIONS as FOLLOW_UP_ACTIONS } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } from '../../api/endOfShiftReport';
@@ -113,6 +113,16 @@ function OverspeedEvents({ events, unit }) {
     </section>
   );
 }
+
+/** Driver conduct's Follow-up in the Excel file: a pick list of the actions, any words taken too. */
+const FOLLOW_UP_INPUT = {
+  // Wide, with its own heading, for the onsite team's feedback (operator, 24 Nov 2026)
+  heading: 'Follow-up (Record your response)',
+  width: 60,
+  list: ['Pending', ...FOLLOW_UP_ACTIONS],
+  promptTitle: 'Follow-up',
+  prompt: 'Pick the action taken, or type the response',
+};
 
 /** The reports that can be made for one unit (operator, 2 Nov 2026: Overspeeding "by the unit"). */
 const UNIT_REPORTS = new Set(['overspeed']);
@@ -1564,7 +1574,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     : sp.from >= Date.now() ? 'These hours have not begun yet'
     : !(sp.to > sp.from) ? 'The period ends before it starts'
     : (sp.to - sp.from) / DAY > def.maxDays + (isNight ? 1 : 0) ? `${def.maxDays} days at most for this report`
-    : def.reachDays && sp.from < Date.now() - def.reachDays * DAY ? `The dashcam keeps its alarms ${def.reachDays} days: start the period within them`
+    : def.reachDays && sp.from < Date.now() - def.reachDays * DAY ? `Start the period within the last ${def.reachDays} days`
     : null);
   const problem = problemFor(span);
   const pickingProblem = problemFor(periodOf(shownDays));
@@ -1598,16 +1608,22 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       if (key === 'behaviour') {
         const [h, cam, turns, runs] = await Promise.all([
           loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
-          loadDashcamAlarms({ orgId, from: ctx.from }),
-          // Harsh cornering is not on the feed: read as the Movements report reads it
-          loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
+          loadDashcamAlarms({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading the dashcam alarms, day') }),
+          // Harsh cornering is not on the feed: the movement events, a day at a time
+          loadCornering({ orgId, from: ctx.from, to: ctx.to }).catch(() => null),
           // The dispatch runs over the period, to name the driver at the time of each incident
           loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
         ]);
         ctx.cornerFailed = turns == null;
+        ctx.cornerPartial = turns?.failed ?? 0;
+        // The dashcam reaches back DASHCAM_DAYS: the days before count only what operators logged
+        const camFrom = Date.now() - DASHCAM_DAYS * DAY;
+        ctx.dashcamFrom = ctx.from < camFrom ? camFrom : null;
         ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
+        ctx.dashcamDaysFailed = cam.failedDays ?? 0;
+        ctx.dashcamUntyped = cam.untyped ?? 0;
         if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
@@ -1828,7 +1844,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     if (!done) return;
     // One unit's overspeeds: each event, a row each
     const t = done.ctx.events?.length ? overspeedEventTable(done.ctx.events) : csvTable(def, done.secs, done.ctx);
-    downloadTableCsv({ head: t.head, body: t.body ?? t.rows, filenameSlug: slug });
+    // Driver conduct's Follow-up is the onsite team's to fill in, in the Excel file (operator, 24 Nov 2026)
+    const inputs = key === 'behaviour' ? { 'Follow-up': FOLLOW_UP_INPUT } : undefined;
+    // The period, and for Driver conduct the stretch its dashcam alarms cover, among the details at the top (operator, 24 Nov 2026)
+    const meta = [['Period', periodWords], ...(key === 'behaviour' ? [['Dashcam alarms', dashcamWindowWords(done.ctx)]] : [])];
+    downloadTableCsv({ head: t.head, body: t.body ?? t.rows, filenameSlug: slug, inputs, meta });
   };
 
   return (
@@ -1976,6 +1996,10 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
+                {key === 'behaviour' && !done.ctx.cornerFailed && done.ctx.cornerPartial > 0 && <span className="rpt-warn"> · harsh cornering could not be read for {done.ctx.cornerPartial} of the days</span>}
+                {key === 'behaviour' && done.ctx.dashcams && done.ctx.dashcamFrom && <span className="rpt-warn"> · {dashcamFromWords(done.ctx.dashcamFrom)}</span>}
+                {key === 'behaviour' && done.ctx.dashcamDaysFailed > 0 && <span className="rpt-warn"> · the dashcam alarms of {done.ctx.dashcamDaysFailed} day{done.ctx.dashcamDaysFailed === 1 ? '' : 's'} could not all be read</span>}
+                {key === 'behaviour' && done.ctx.dashcamUntyped > 0 && <span className="rpt-warn"> · {done.ctx.dashcamUntyped.toLocaleString('en-GB')} dashcam alarms had no type from the dashcam system and are not counted</span>}
                 {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}

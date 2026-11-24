@@ -141,8 +141,23 @@ export function tabNamer() {
   };
 }
 
+/** The shade and rule of a cell the reader fills in. */
+const INPUT = 'FFFFF8DC';
+const INPUT_LINE = 'FFD4B86A';
+
+/**
+ * `inputs` by column index, from { [heading]: { list, prompt } }: the columns
+ * a report's reader fills in (Driver conduct's Follow-up, operator 24 Nov 2026).
+ */
+export function inputsAt(head, inputs) {
+  if (!inputs) return null;
+  const out = {};
+  head.forEach((h, i) => { if (inputs[h]) out[i] = inputs[h]; });
+  return Object.keys(out).length ? out : null;
+}
+
 /** One sheet of the workbook: the letterhead, the details, the table or document, the footer. */
-function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, now = Date.now() }, logos, tabName) {
+function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, inputs = null, now = Date.now() }, logos, tabName) {
   const name = String(doc?.title ?? title ?? 'Report');
   const ws = wb.addWorksheet(tabName, {
     pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
@@ -155,6 +170,9 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
   // At least two columns, so the details have a label and a value
   const cols = Math.max(n, 2);
   const widths = widthsFor(lines, cols);
+  // A column the reader fills in takes the width it asks for: room to write (Driver conduct's Follow-up)
+  const filled = doc ? null : inputsAt(head, inputs);
+  for (const [i, input] of Object.entries(filled ?? {})) if (input.width) widths[Number(i)] = Math.max(widths[Number(i)], input.width);
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   const across = (r) => { if (cols > 1) ws.mergeCells(r, 1, r, cols); };
 
@@ -192,7 +210,7 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
   r += 1;
 
   // One table: a dark header row, then its rows
-  const tableAt = (t, { filter = false, rowFills = null } = {}) => {
+  const tableAt = (t, { filter = false, rowFills = null, inputs = null } = {}) => {
     const headRow = r;
     const rows = t.rows ?? [];
     // A column of figures is centred, its heading and its cells alike (operator,
@@ -202,7 +220,8 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
     const figure = t.head.map((_, i) => t.cols?.[i]?.align === 'right' || numericColumn(rows, i));
     t.head.forEach((h, i) => {
       const cell = ws.getCell(r, i + 1);
-      cell.value = String(h);
+      // A fill-in column's own heading in the file, "Follow-up (Record your response)"
+      cell.value = String(inputs?.[i]?.heading ?? h);
       // A head of the sheet's own colour (Menengai's fuel sheet, 13 Nov 2026): dark text on it, thin rules round it
       const own = t.headFills ? (t.headFills[i] ? argb(t.headFills[i]) : 'FFFFFFFF') : null;
       cell.font = { bold: true, color: { argb: own ? 'FF000000' : WHITE }, size: 10 };
@@ -224,6 +243,20 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
         cell.border = t.headFills ? { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } } : { bottom: { style: 'thin', color: { argb: LINE } } };
         const fill = (v?.fill && argb(v.fill)) || rowFill || (!t.headFills && i % 2 ? ZEBRA : null);
         if (fill) cell.fill = solid(fill);
+        // A column the reader fills in: shaded, with a pick list that still takes any words
+        const input = inputs?.[j];
+        if (input) {
+          cell.fill = solid(INPUT);
+          cell.border = { top: { style: 'thin', color: { argb: INPUT_LINE } }, left: { style: 'thin', color: { argb: INPUT_LINE } }, bottom: { style: 'thin', color: { argb: INPUT_LINE } }, right: { style: 'thin', color: { argb: INPUT_LINE } } };
+          cell.protection = { locked: false };
+          if (input.list?.length) {
+            cell.dataValidation = {
+              type: 'list', allowBlank: true, formulae: [`"${input.list.join(',')}"`],
+              showErrorMessage: false, showInputMessage: Boolean(input.prompt),
+              promptTitle: input.promptTitle ?? '', prompt: input.prompt ?? '',
+            };
+          }
+        }
       });
       r += 1;
     });
@@ -232,7 +265,7 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
   };
 
   if (!doc) {
-    const headRow = tableAt({ head, rows: body, headFills }, { filter: true, rowFills: fills });
+    const headRow = tableAt({ head, rows: body, headFills }, { filter: true, rowFills: fills, inputs: filled });
     ws.views = [{ state: 'frozen', ySplit: headRow, showGridLines: false }];
   } else {
     // Each section as the PDF has it
@@ -333,11 +366,11 @@ async function logoBuffer(url, extension) {
 }
 
 /** Make the .xlsx and download it. Same arguments as downloadTableCsv, plus optional doc, title, meta, fills, sheetName and sheets. */
-export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null, headFills = null, sheetName, sheets }) {
+export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null, headFills = null, sheetName, sheets, inputs = null }) {
   const { default: ExcelJS } = await import('exceljs');
   const [rai, ogc] = await Promise.all([logoBuffer(raiLogo, 'jpeg'), logoBuffer(ogcLogo, 'png')]);
   const wb = buildWorkbook(ExcelJS, {
-    head, body, doc, fills, headFills, meta, sheetName, sheets,
+    head, body, doc, fills, headFills, meta, sheetName, sheets, inputs,
     title: title ?? titleFromSlug(filenameSlug),
     fleet: fleetFromTitle(typeof document !== 'undefined' ? document.title : ''),
   }, { rai, ogc });
