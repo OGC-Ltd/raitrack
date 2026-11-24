@@ -31,6 +31,8 @@ import { addDays } from '../../lib/dayRange';
 import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey, dashcamFromWords, dashcamWindowWords, CORNER_SKIPPED_WORDS, CORNER_MAX_MS } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
+import FuelUsageReport from './FuelUsageReport';
+import { isPlantFleet } from '../../hooks/useMachineSummary';
 import { downloadTableCsv } from '../../utils/tableExport';
 import { docCsv, docSlug } from '../../lib/docCsv';
 import TableToolbar from '../body/TableToolbar';
@@ -721,10 +723,10 @@ function TypePicker({ types, picked, counts, onChange }) {
  * one survives a look at another.
  */
 function MovementsPage(props) {
-  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours } = props;
+  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, fuelUsage } = props;
   const [tab, setTab] = useState('hourly');
   const [lastTab, setLastTab] = useState({});
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery && !shiftHours) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !machinery && !shiftHours && !fuelUsage) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -741,6 +743,8 @@ function MovementsPage(props) {
     fuelConsumption && { key: 'fuelConsumption', label: 'Fuel Consumption Rate' },
     // Each unit's fuel graph on a page, its figures under it (operator, 13 Nov 2026)
     fuelConsumption && { key: 'fuelGraphs', label: 'Fuel Graphs' },
+    // Plans against fuel into tanks, and fuel with no pump record (Mufindi, operator 24 Nov 2026)
+    fuelUsage && { key: 'fuelUsage', label: 'Fuel Usage' },
     // Excavators and dozers against the burn rate, after Fuel Graphs (operator, 16 Nov 2026)
     machinery && { key: 'machinery', label: 'Machinery' },
     // Each machine's engine hours against its shift so far, after Machinery (operator, 17 Nov 2026)
@@ -791,7 +795,7 @@ function MovementsPage(props) {
 }
 
 /** Movements' panels, one a tab, every one mounted; MovementsPage shows the picked one. */
-function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, whoAmI }) {
+function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, machinery, shiftHours, fuelUsage, companyId, whoAmI }) {
   return (
     <>
       <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
@@ -845,6 +849,11 @@ function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, 
       {unauthorizedPassengers && (
       <div className="mvt-panel" role="tabpanel" id="mvt-unauthorizedPassengers-panel" aria-labelledby="mvt-unauthorizedPassengers" hidden={tab !== 'unauthorizedPassengers'}>
         <UnauthorizedPassengersReport orgId={orgId} orgCode={orgCode} vehicles={vehicles} companyName={companyName} whoAmI={whoAmI} active={tab === 'unauthorizedPassengers'} />
+      </div>
+      )}
+      {fuelUsage && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-fuelUsage-panel" aria-labelledby="mvt-fuelUsage" hidden={tab !== 'fuelUsage'}>
+        <FuelUsageReport companyId={companyId} orgCode={orgCode} companyName={companyName} />
       </div>
       )}
       {fuelConsumption && (
@@ -1872,7 +1881,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           <i className="ti ti-selector rpt-switch__i" aria-hidden="true" />
         </label>
       )}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} fuelUsage={can('fuel_filling:read') && isPlantFleet(activeCompany?.id)} companyId={activeCompany?.id} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>

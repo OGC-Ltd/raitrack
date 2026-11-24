@@ -102,7 +102,7 @@ export const MOVEMENTS_TAB_GROUPS = [
   { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'tatFuel', 'recovery'] },
   // Deliveries by itself (operator, 18 Nov 2026): it has its own Van Sales | Finished Goods trail inside
   { key: 'deliveries', label: 'Deliveries', tabs: ['deliveries'] },
-  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'probes'] },
+  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'fuelUsage', 'probes'] },
   { key: 'safety', label: 'Safety and conduct', tabs: ['speed', 'alarmDist', 'unauthorizedPassengers'] },
   { key: 'sites', label: 'Sites and machinery', tabs: ['geofences', 'dormant', 'machinery', 'shiftHours'] },
 ];
