@@ -40,7 +40,7 @@ import { upsert, remove } from '../../lib/operatorLog';
 import * as conductApi from '../../api/driverConduct';
 import { moveBrowserFollowUp } from '../../lib/conductMove';
 import { ActionDialog, FollowUpPanel } from './FollowUp';
-import { casesFromRun, periodCases } from '../../lib/followUp';
+import { casesFromRun, periodCases, ACTIONS as FOLLOW_UP_ACTIONS } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } from '../../api/endOfShiftReport';
@@ -113,6 +113,13 @@ function OverspeedEvents({ events, unit }) {
     </section>
   );
 }
+
+/** Driver conduct's Follow-up in the Excel file: a pick list of the actions, any words taken too. */
+const FOLLOW_UP_INPUT = {
+  list: ['Pending', ...FOLLOW_UP_ACTIONS],
+  promptTitle: 'Follow-up',
+  prompt: 'Pick the action taken, or type the response',
+};
 
 /** The reports that can be made for one unit (operator, 2 Nov 2026: Overspeeding "by the unit"). */
 const UNIT_REPORTS = new Set(['overspeed']);
@@ -1832,7 +1839,9 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     if (!done) return;
     // One unit's overspeeds: each event, a row each
     const t = done.ctx.events?.length ? overspeedEventTable(done.ctx.events) : csvTable(def, done.secs, done.ctx);
-    downloadTableCsv({ head: t.head, body: t.body ?? t.rows, filenameSlug: slug });
+    // Driver conduct's Follow-up is the onsite team's to fill in, in the Excel file (operator, 24 Nov 2026)
+    const inputs = key === 'behaviour' ? { 'Follow-up': FOLLOW_UP_INPUT } : undefined;
+    downloadTableCsv({ head: t.head, body: t.body ?? t.rows, filenameSlug: slug, inputs });
   };
 
   return (

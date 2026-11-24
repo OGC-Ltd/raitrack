@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import ExcelJS from 'exceljs';
-import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH, numericColumn } from './xlsxExport';
+import { buildWorkbook, titleFromSlug, fleetFromTitle, cellValue, argb, widthsFor, PAGE_WIDTH, numericColumn, inputsAt } from './xlsxExport';
 import { exportExcelVia, exportLater, downloadTableCsv } from './tableExport';
 import { downloadProbeCsv } from './probeReport';
 
@@ -135,4 +135,38 @@ describe('the Excel export (operator, 11 Nov 2026)', () => {
     const buf = await wb.xlsx.writeBuffer();
     expect(buf.byteLength).toBeGreaterThan(3000);
   });
+});
+
+describe('a column the reader fills in (Driver conduct, operator 24 Nov 2026)', () => {
+  const head = ['Vehicle', 'Harsh braking', 'Total', 'Follow-up'];
+  const body = [['KAU 374Y', 0, 26, 'Pending'], ['KBT 313D', 2, 2, 'No case']];
+  const list = ['Pending', 'Driver called', 'Verbal warning'];
+
+  it('finds the column by its heading', () => {
+    expect(inputsAt(head, { 'Follow-up': { list } })).toEqual({ 3: { list } });
+    expect(inputsAt(head, { Missing: { list } })).toBeNull();
+    expect(inputsAt(head, null)).toBeNull();
+  });
+
+  it('shades each Follow-up cell, unlocks it and gives it a pick list that still takes any words', async () => {
+    const wb = buildWorkbook(ExcelJS, { head, body, title: 'Behaviour Aquamist', inputs: { 'Follow-up': { list, prompt: 'Pick the action taken, or type the response' } } });
+    const ws = wb.worksheets[0];
+    const cells = [];
+    ws.eachRow((row) => row.eachCell((c) => { if (c.value === 'Pending' || c.value === 'No case') cells.push(c); }));
+    expect(cells).toHaveLength(2);
+    for (const c of cells) {
+      expect(c.dataValidation).toMatchObject({ type: 'list', allowBlank: true, formulae: ['"Pending,Driver called,Verbal warning"'], showErrorMessage: false });
+      expect(c.protection).toEqual({ locked: false });
+      expect(c.fill.fgColor.argb).toBe('FFFFF8DC');
+    }
+    // The other columns are as before: no list
+    ws.eachRow((row) => row.eachCell((c) => { if (c.value === 'KAU 374Y') expect(c.dataValidation).toBeUndefined(); }));
+    // And it survives the round trip through a real .xlsx
+    const back = new ExcelJS.Workbook();
+    await back.xlsx.load(await wb.xlsx.writeBuffer());
+    let found = 0;
+    back.worksheets[0].eachRow((row) => row.eachCell((c) => { if (c.value === 'Pending' && c.dataValidation?.type === 'list') found += 1; }));
+    expect(found).toBe(1);
+  });
+
 });
