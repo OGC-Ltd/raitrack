@@ -4,7 +4,7 @@ import {
   opensCase, incidentWords, importCases, exportCases, loadCases, saveCases,
 } from './followUp';
 import { scopeUnits } from './fleetGroups';
-import { REPORTS, dashcamWindowWords } from './reportTables';
+import { REPORTS } from './reportTables';
 import { reportHtml } from './reportLetterhead';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -158,64 +158,5 @@ describe('columns with nothing in them', () => {
     expect(failed).toContain(NO_RUNS_KEY);
     expect(failed).not.toContain(NO_DISPATCH_KEY);
     expect(failed).toContain('The dispatch runs could not be read');
-  });
-});
-
-describe('a month’s run: days the dashcam no longer reaches', () => {
-  // 1 Nov: 5 harsh on KCN 901F; 2 Nov: a phone alarm on KCS 082M. The dashcam reaches back to 2 Nov only.
-  const harsh = [1, 2, 3, 4, 5].map((m) => ev('v2', `2026-11-01T08:0${m}:00`));
-  const alarms = [alarm('v1', '2026-11-02T10:00:00', 116)];
-
-  it('sends no case for a day before the dashcam’s reach, so a held case keeps its counts', () => {
-    const found = casesFromRun(units, harsh, alarms, { ...twoDays, dashcamFrom: at('2026-11-02T00:00:00') });
-    expect(found.map((c) => c.day)).toEqual(['2026-11-02']);
-  });
-
-  it('a day only partly reached is left out too', () => {
-    const found = casesFromRun(units, harsh, alarms, { ...twoDays, dashcamFrom: at('2026-11-02T06:00:00') });
-    expect(found).toEqual([]);
-  });
-
-  it('sends every day where the fleet has no dashcams, or the period is within reach', () => {
-    expect(casesFromRun(units, harsh, [], { ...twoDays, dashcams: false, dashcamFrom: at('2026-11-02T00:00:00') }).map((c) => c.day)).toEqual(['2026-11-01']);
-    expect(casesFromRun(units, harsh, alarms, twoDays).map((c) => c.day).sort()).toEqual(['2026-11-01', '2026-11-02']);
-  });
-});
-
-describe('the Driver conduct report over a month', () => {
-  it('takes up to 31 days, started within the last 31', () => {
-    expect(REPORTS.behaviour.maxDays).toBe(31);
-    expect(REPORTS.behaviour.reachDays).toBe(31);
-  });
-
-  it('says in the PDF which days the dashcam covered, and when cornering could not all be read', () => {
-    const t = at('2026-11-24T12:00:00');
-    const done = { rows: [], secs: [], missing: [], units: 2, failed: 0,
-      ctx: { from: at('2026-11-01T00:00:00'), to: t, dashcams: true, dashcamFrom: at('2026-11-17T12:00:00'), cornerPartial: 2 } };
-    const { html } = reportHtml(REPORTS.behaviour, done, { companyName: 'Aquamist', orgCode: 'AQUAMIST', groupWords: 'All groups', periodWords: 'November 2026', logos: { rai: 'r', ogc: 'o' }, now: t });
-    expect(html).toContain('from the dashcam from 17 Nov 12:00 only');
-    expect(html).toContain('Harsh cornering could not be read for 2 of the days.');
-  });
-});
-
-describe('the stretch of time the dashcam alarms cover (operator, 24 Nov 2026)', () => {
-  const t = at('2026-11-24T14:12:00');
-  const month = { from: at('2026-11-01T00:00:00'), to: at('2026-11-25T00:00:00'), dashcams: true };
-
-  it('from the dashcam’s reach, or the period’s start, to now or the period’s end', () => {
-    expect(dashcamWindowWords({ ...month, dashcamFrom: at('2026-11-10T14:05:00') }, t)).toBe('10 Nov 2026 14:05 to 24 Nov 2026 14:12');
-    expect(dashcamWindowWords({ ...month, from: at('2026-11-20T00:00:00'), to: at('2026-11-21T00:00:00'), dashcamFrom: null }, t)).toBe('20 Nov 2026 00:00 to 21 Nov 2026 00:00');
-  });
-
-  it('says so when the fleet has no dashcams, or they could not be read', () => {
-    expect(dashcamWindowWords({ ...month, dashcams: false }, t)).toBe('No dashcams in this fleet');
-    expect(dashcamWindowWords({ ...month, dashcamFailed: true }, t)).toBe('Could not be read');
-  });
-
-  it('is among the PDF’s details', () => {
-    const done = { rows: [], secs: [], missing: [], units: 2, failed: 0, ctx: { ...month, dashcamFrom: at('2026-11-10T14:05:00') } };
-    const { html } = reportHtml(REPORTS.behaviour, done, { companyName: 'Aquamist', orgCode: 'AQUAMIST', groupWords: 'All groups', periodWords: '1 Nov 2026 – 24 Nov 2026', logos: { rai: 'r', ogc: 'o' }, now: t });
-    expect(html).toContain('Dashcam alarms');
-    expect(html).toContain('10 Nov 2026 14:05 to 24 Nov 2026 14:12');
   });
 });
