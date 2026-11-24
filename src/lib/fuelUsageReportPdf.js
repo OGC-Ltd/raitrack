@@ -49,7 +49,7 @@ const STYLE = `<style>
 .fu { color: ${INK}; font-variant-numeric: tabular-nums; }
 .fu h2 { font-size: 12pt; font-weight: 600; margin: 4mm 0 1.5mm; padding-bottom: 1mm; border-bottom: 0.5mm solid ${INK}; display: flex; justify-content: space-between; align-items: baseline; }
 .fu h2 small { font-size: 7.5pt; font-weight: 400; color: ${MUTED}; }
-.fu-band { display: grid; grid-template-columns: repeat(6, 1fr); background: ${INK}; color: #fff; margin: 2mm 0 3mm; }
+.fu-band { display: grid; grid-template-columns: repeat(5, 1fr); background: ${INK}; color: #fff; margin: 2mm 0 3mm; }
 .fu-band > div { padding: 3mm 3.5mm; border-left: 0.3mm solid #444; }
 .fu-band > div:first-child { border-left: 0; }
 .fu-band .k { font-size: 6.5pt; letter-spacing: 0.06em; text-transform: uppercase; color: #cfcfcf; }
@@ -130,7 +130,6 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
 <div class="red"><div class="k">No pump record</div><div class="v">${probe ? `${n0(t.unrecorded.litres)} L` : '–'}</div><div class="s">${probe ? `${n0(t.unrecorded.fills)} fills · ${n0(t.unrecorded.machines)} machines` : 'probe fills not read'}</div></div>
 <div><div class="k">Shifts planned</div><div class="v">${n0(t.shifts)}</div><div class="s">${n0(t.onPlans)} machines · ${n0(t.multiShiftDays)} days with 2+ shifts</div></div>
 <div><div class="k">Planned, nothing in</div><div class="v">${n0(t.plannedNotFuelled.machines)} machines</div><div class="s">${n0(t.plannedNotFuelled.need)} L of need · ${n0(t.down.machines)} down on plan</div></div>
-<div><div class="k">Cost</div><div class="v">${kes(probe ? t.intoTankCost : t.issuedCost)}</div><div class="s">${probe && rep.price ? `${kes(t.unrecorded.cost)} with no pump record` : rep.price ? `at KES ${n1(rep.price)}/L` : 'pump price not available'}</div></div>
 </div></div>`);
 
   // Chart and by site
@@ -153,7 +152,7 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
   const typeRows = rep.byType.slice(0, 14).map((x) => [esc(x.type), n0(x.units), n0(x.shifts), n0(x.need), `<b>${n0(x.intoTank)}</b>`, n0(x.issued), x.unrecorded > 0 ? `<span class="red">${n0(x.unrecorded)}</span>` : '–']);
   flow.push(`<div class="fu fu-grid">
 <div><h2>Fuel into tanks with no pump record <small>${probe ? `${n0(t.unrecorded.machines)} machines · top ${Math.min(14, un.length)}` : 'probe fills not read'}</small></h2>${
-  probe ? table(['Machine', 'Type', 'Site', 'Fills', 'Litres', 'Pump records'], unRows, { right: [3, 4], total: un.length ? ['Total', '', '', n0(t.unrecorded.fills), `<span class="red">${n0(t.unrecorded.litres)}</span>`, `${kes(t.unrecorded.cost)}`] : null }) : '<p class="fu-note">The probe fills could not be read.</p>'}
+  probe ? table(['Machine', 'Type', 'Site', 'Fills', 'Litres', 'Pump records'], unRows, { right: [3, 4], total: un.length ? ['Total', '', '', n0(t.unrecorded.fills), `<span class="red">${n0(t.unrecorded.litres)}</span>`, ''] : null }) : '<p class="fu-note">The probe fills could not be read.</p>'}
 <div class="fu-note">A fill the fuel probe saw that no pump issue in FactorySuite matches (same machine, from 30 minutes before to 2 hours after).${t.otherProbe?.fills ? ` A further ${n0(t.otherProbe.litres)} L in ${n0(t.otherProbe.fills)} fills went into ${n0(t.otherProbe.vehicles)} tracked vehicles that were on no plan and at no pump.` : ''}</div></div>
 <div><h2>By machine type <small>litres</small></h2>${table(['Type', 'Units', 'Shifts', 'Need', 'Into tanks', 'Pump', 'No record'], typeRows, { right: [1, 2, 3, 4, 5, 6] })}</div>
 </div>`);
@@ -190,7 +189,6 @@ ${pn.length > 16 ? `<div class="fu-note">And ${n0(pn.length - 16)} more in the r
 <li><b>Fuel into tanks</b>: every fill the machine's fuel probe recorded (fuel moving in the tank left out), and every pump fill the probe could not see. Machines without a probe count their pump fills alone.</li>
 <li><b>Pump</b>: fuel issues recorded in FactorySuite against each machine. <b>No pump record</b>: a probe fill that no pump issue matches, same machine, 30 minutes before to 2 hours after.</li>
 <li><b>Site</b>: each shift's work location; a pump issue counts at the site of the shift it was requested for. Fuel into tanks counts at the machine's main site for the period.</li>
-${rep.price ? `<li><b>Cost</b>: litres × KES ${n1(rep.price)} per litre, the pump price on the platform.</li>` : ''}
 </ul><div class="fu-note">${esc(CONTACT_LINE)}</div></div>`);
 
   // The machine register: one table, split across pages with its header repeated (class lst)

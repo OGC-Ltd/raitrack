@@ -6,10 +6,9 @@
 
 import { useMemo, useState } from 'react';
 import { getFactoryFuel, getProbeFillings } from '../../api/factoryFuel';
-import { getFuelCost } from '../../api/analytics';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import { buildFuelUsage, siteOptions, lastFullWeek } from '../../lib/fuelUsageReport';
-import { fuelUsageHtml, registerTable, unrecordedTable, periodWords, n0, kes } from '../../lib/fuelUsageReportPdf';
+import { fuelUsageHtml, registerTable, unrecordedTable, periodWords, n0 } from '../../lib/fuelUsageReportPdf';
 import { daysBetween } from '../../lib/dayRange';
 import { fleetDay } from '../../lib/fleetReports';
 
@@ -33,25 +32,24 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
   const execute = async () => {
     setRun({ status: 'loading' });
     try {
-      // The plans and pumps, the probes' fills, and the pump price, side by side.
-      // The fills and the price are optional: the report says when they could not be read.
-      const [data, fillings, cost] = await Promise.all([
+      // The plans and pumps, and the probes' fills, side by side.
+      // The fills are optional: the report says when they could not be read.
+      const [data, fillings] = await Promise.all([
         getFactoryFuel({ companyId, from, to }),
         getProbeFillings({ companyId, from, to }).catch(() => null),
-        getFuelCost({ companyId, days: 7 }).catch(() => null),
       ]);
       if (!data?.factory) {
         setRun({ status: 'error', message: 'This fleet does not fuel by FactorySuite work plans.' });
         return;
       }
       setSite((s) => (s && siteOptions(data).includes(s) ? s : ''));
-      setRun({ status: 'done', data, fillings, price: cost?.price?.pricePerLitre ?? null, at: Date.now() });
+      setRun({ status: 'done', data, fillings, at: Date.now() });
     } catch (err) {
       setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
 
-  const rep = useMemo(() => (run.status === 'done' ? buildFuelUsage(run.data, { site: site || null, price: run.price, fillings: run.fillings }) : null), [run, site]);
+  const rep = useMemo(() => (run.status === 'done' ? buildFuelUsage(run.data, { site: site || null, fillings: run.fillings }) : null), [run, site]);
   const sites = useMemo(() => (run.status === 'done' ? siteOptions(run.data) : []), [run]);
   const html = useMemo(() => (rep ? fuelUsageHtml(rep, {
     companyName: companyName ?? orgCode ?? 'Fleet', orgCode, siteWords: site || `All · ${sites.length} sites`, logos: letterheadLogos(), now: run.at,
@@ -116,7 +114,7 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
             <p className="rpt-sub">
               {periodWords(rep.from, rep.to)} · {site || 'all sites'} · into tanks <b>{n0(t.probeKnown ? t.intoTank : t.issued)} L</b> against
               {' '}{n0(t.need)} L of need · pump <b>{n0(t.issued)} L</b>
-              {t.probeKnown ? <> · no pump record <b style={{ color: '#a33030' }}>{n0(t.unrecorded.litres)} L</b> ({kes(t.unrecorded.cost)})</> : ' · the fuel probes could not be read'}
+              {t.probeKnown ? <> · no pump record <b style={{ color: '#a33030' }}>{n0(t.unrecorded.litres)} L</b></> : ' · the fuel probes could not be read'}
             </p>
             <iframe title="Fuel usage report preview" srcDoc={html}
                     style={{ width: '100%', height: '78vh', border: '1px solid #c8c8c8', background: '#f4f4f4' }} />

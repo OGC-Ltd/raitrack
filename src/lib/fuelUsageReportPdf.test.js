@@ -37,6 +37,11 @@ describe('the Fuel Usage Report PDF', () => {
     expect(html).toContain('Fuel into tanks with no pump record');
   });
 
+  it('carries no cost: five figures in the band, no KES anywhere (operator 2026-11-24)', () => {
+    expect(html).not.toMatch(/KES|>Cost</);
+    expect(html).toContain('grid-template-columns: repeat(5, 1fr)');
+  });
+
   it('shows a machine down on the plan, the register with its header to repeat, and the basis', () => {
     expect(html).toContain('Machines down, still on the plan');
     expect(html).toMatch(/DZ-05<\/b><span class="fu-down">down/);
