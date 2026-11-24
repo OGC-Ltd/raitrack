@@ -364,7 +364,7 @@ export const varianceFlagged = (actual, variance) =>
 const ml = (v) => (Number.isFinite(v) ? v / 1000 : null);
 
 /** A probe fill, in litres and milliseconds. Our verdict that it was no real fill marks it doubtful. */
-function probeFill(f) {
+export function probeFill(f) {
   return {
     id: f.id,
     at: Date.parse(f.filledAt),

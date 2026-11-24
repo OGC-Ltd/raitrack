@@ -1,14 +1,28 @@
 // Mufindi Fuel Usage Report (operator 2026-11-24): what the work plans needed,
-// what the pumps issued, and where fuel did not go into work, over a period
-// of up to 31 days. Version 1 is built from the plans and the pumps alone
-// (FactorySuite via planner/factory-fuel): engine hours from the trackers come
-// later, as 27 of Mufindi's 131 machines have no tracker.
+// what went into the tanks, and how much of it the pumps never recorded, over
+// a period of up to 31 days.
 //
-// Pure: no React, no network. The Fuel page's own sums (lib/factoryFuel
-// fuelRoster, fuelByDay, fuelTotals) are reused, so the report's need and
-// issued are the Fuel page's for the same days and the same site.
+// Two sources of fuel, compared machine by machine:
+//   - the PUMP: FactorySuite's fuel issues (planner/factory-fuel);
+//   - the PROBE: the fills our fuel probes saw (fuel/fillings), real fills only.
+// Measured on 16-22 Nov 2026: the pumps recorded 53 fills, 10,857 L; the probes
+// saw 330 fills, 40,322 L, on 115 machines. So the report leads with fuel that
+// went into a tank with no pump record, and compares the plans' need with what
+// went into the tanks, not with the pump records alone.
+//
+// A pump fill and a probe fill are one fuelling when the Fuel page says so:
+// lib/factoryFuel reconcileFills (same machine, 30 min before to 2 h after).
+//
+// Pure: no React, no network. The Fuel page's own sums (fuelRoster, fuelByDay,
+// fuelTotals) are reused, so need and pump-issued are the Fuel page's for the
+// same days and site. Engine hours from the trackers come in a later version.
 
-import { fuelRoster, fuelByDay, fuelTotals } from './factoryFuel';
+import { fuelRoster, fuelByDay, fuelTotals, reconcileFills, probeFill } from './factoryFuel';
+
+const plateKey = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const EAT_MS = 3 * 3_600_000;
+/** The fleet day (Nairobi) of a time in ms. */
+const dayOf = (ms) => new Date(ms + EAT_MS).toISOString().slice(0, 10);
 
 const fold = (s) => String(s ?? '').trim().toUpperCase();
 const sum = (xs, f) => xs.reduce((s, x) => s + (f(x) ?? 0), 0);
@@ -149,23 +163,77 @@ export function probeShortL(issue) {
 }
 
 /**
+ * Each machine's fuel into its tank: every real probe fill, plus each pump fill
+ * the probe did not see (a machine without a probe has only those). The probe
+ * fills no pump fill claims are `unrecorded`: fuel in with no pump record.
+ * With `fillings` null (they could not be read) the pump's figures stand alone.
+ *
+ * @returns Map(row reference → { probeL, unrecorded: probe fills[], unrecordedL, pumpOnlyL, intoTank, claimed: Set of probe fill ids })
+ */
+export function fuelIntoTanks(rows, fillings) {
+  const out = new Map();
+  if (!Array.isArray(fillings)) {
+    for (const r of rows) out.set(r.reference, { probeL: null, unrecorded: [], unrecordedL: null, pumpOnlyL: r.issued, intoTank: r.issued, claimed: new Set() });
+    return out;
+  }
+  const byId = new Map();
+  const byPlate = new Map();
+  for (const f of fillings) {
+    const p = probeFill(f);
+    if (!Number.isFinite(p.at) || p.doubtful) continue;
+    const push = (m, k) => { if (k) m.set(k, [...(m.get(k) ?? []), p]); };
+    push(byId, f.vehicleId && String(f.vehicleId));
+    push(byPlate, plateKey(f.vehicle?.registrationPlate));
+  }
+  for (const r of reconcileFills(rows, fillings)) {
+    const probes = (r.vehicleId && byId.get(String(r.vehicleId))) || (r.plate && byPlate.get(plateKey(r.plate))) || [];
+    const claimed = new Set(r.fills.map((f) => f.probeFill?.id).filter(Boolean));
+    const unrecorded = probes.filter((p) => !claimed.has(p.id)).sort((a, b) => a.at - b.at);
+    const probeL = sum(probes, (p) => p.litres);
+    const pumpOnlyL = sum(r.fills.filter((f) => f.state === 'no-probe'), (f) => f.actual);
+    out.set(r.reference, { probeL, unrecorded, unrecordedL: sum(unrecorded, (p) => p.litres), pumpOnlyL, intoTank: probeL + pumpOnlyL, claimed });
+  }
+  return out;
+}
+
+/**
  * The whole report for the period (and site, when one is picked).
  *
- * @param {object} data   planner/factory-fuel: { from, to, lines, issues, machines }
- * @param {object} [o]    { site, price } price per litre, or null when unknown
+ * @param {object} data      planner/factory-fuel: { from, to, lines, issues, machines }
+ * @param {object} [o]       { site, price, fillings }: price per litre or null;
+ *                           fillings = fuel/fillings for the period, or null when not read
  */
-export function buildFuelUsage(data, { site = null, price = null } = {}) {
+export function buildFuelUsage(data, { site = null, price = null, fillings = null } = {}) {
   const scoped = forSite(data, site);
   const rows = fuelRoster(scoped);
+  const tanks = fuelIntoTanks(rows, fillings);
+  const probeKnown = Array.isArray(fillings);
+  const tankOf = (ref) => tanks.get(ref) ?? { probeL: null, unrecorded: [], unrecordedL: null, pumpOnlyL: 0, intoTank: 0, claimed: new Set() };
   const totals = fuelTotals(rows);
   const days = fuelByDay(scoped, rows);
   const sites = issueSites(scoped);
   const main = mainSites(scoped);
 
+  // Fuel into tanks day by day: probe fills on their Nairobi day, pump-only fills on theirs
+  const intoByDay = new Map();
+  const addDay = (day, l) => { if (day) intoByDay.set(day, (intoByDay.get(day) ?? 0) + (l ?? 0)); };
+  if (!probeKnown) {
+    for (const r of rows) for (const i of r.pumpIssues) addDay(i.day, i.litres);
+  } else {
+    for (const r of reconcileFills(rows, fillings)) {
+      for (const f of r.fills) {
+        if (f.state === 'no-probe') addDay(f.day, f.actual);
+        else if (f.probeFill) addDay(dayOf(f.probeFill.at), f.probeFill.litres);
+      }
+      for (const p of tankOf(r.reference).unrecorded) addDay(dayOf(p.at), p.litres);
+    }
+  }
+
   // Running totals day by day, for the chart
   let needRun = 0;
   let issuedRun = 0;
-  const cumulative = days.map((d) => ({ day: d.day, need: (needRun += d.need), issued: (issuedRun += d.issued) }));
+  let intoRun = 0;
+  const cumulative = days.map((d) => ({ day: d.day, need: (needRun += d.need), issued: (issuedRun += d.issued), intoTank: (intoRun += intoByDay.get(d.day) ?? 0) }));
 
   // Shifts: how many, and how many machine-days carried two or more
   const perMachineDay = new Map();
@@ -178,7 +246,7 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
   // By site
   const siteMap = new Map();
   const siteRow = (s) => {
-    if (!siteMap.has(s)) siteMap.set(s, { site: s, machines: new Set(), fuelled: new Set(), shifts: 0, need: 0, issued: 0, fills: 0 });
+    if (!siteMap.has(s)) siteMap.set(s, { site: s, machines: new Set(), fuelled: new Set(), shifts: 0, need: 0, issued: 0, fills: 0, intoTank: 0, unrecorded: 0 });
     return siteMap.get(s);
   };
   for (const l of scoped?.lines ?? []) {
@@ -190,19 +258,29 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
     r.issued += i.litres ?? 0; r.fills += 1;
     if ((i.litres ?? 0) > 0) r.fuelled.add(fold(i.machine));
   }
+  // Fuel into tanks counts at the machine's main site (probe fills carry no site of their own)
+  for (const r of rows) {
+    const t = tankOf(r.reference);
+    const s = main.get(fold(r.reference)) ?? (r.pumpIssues[0] ? sites.get(r.pumpIssues[0]) : null) ?? r.department ?? 'No site';
+    const x = siteRow(s);
+    x.intoTank += t.intoTank ?? 0;
+    x.unrecorded += t.unrecordedL ?? 0;
+    if ((t.intoTank ?? 0) > 0) x.fuelled.add(fold(r.reference));
+  }
   const bySite = [...siteMap.values()]
-    .map((r) => ({ ...r, machines: r.machines.size, fuelled: r.fuelled.size, variance: r.issued - r.need }))
+    .map((r) => ({ ...r, machines: r.machines.size, fuelled: r.fuelled.size, variance: r.issued - r.need, intoVariance: r.intoTank - r.need }))
     .sort((a, b) => b.need - a.need || a.site.localeCompare(b.site));
 
   // By machine type
   const typeMap = new Map();
   for (const r of rows) {
     const t = machineType(r.category);
-    if (!typeMap.has(t)) typeMap.set(t, { type: t, units: 0, shifts: 0, need: 0, issued: 0, fills: 0 });
+    if (!typeMap.has(t)) typeMap.set(t, { type: t, units: 0, shifts: 0, need: 0, issued: 0, fills: 0, intoTank: 0, unrecorded: 0 });
     const x = typeMap.get(t);
     x.units += 1; x.shifts += r.shifts; x.need += r.need ?? 0; x.issued += r.issued; x.fills += r.issues;
+    x.intoTank += tankOf(r.reference).intoTank ?? 0; x.unrecorded += tankOf(r.reference).unrecordedL ?? 0;
   }
-  const byType = [...typeMap.values()].sort((a, b) => b.issued - a.issued || b.need - a.need || a.type.localeCompare(b.type));
+  const byType = [...typeMap.values()].sort((a, b) => b.intoTank - a.intoTank || b.need - a.need || a.type.localeCompare(b.type));
 
   // Exceptions
   const early = rows.flatMap(earlyRefills);
@@ -210,7 +288,14 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
   const probeShort = rows.flatMap((r) => r.pumpIssues.map((i) => ({ machine: r.reference, issue: i, shortL: probeShortL(i) })).filter((x) => x.shortL > 0));
   const flagged = rows.flatMap((r) => r.pumpIssues.filter((i) => pumpFlagsOf(i).length).map((i) => ({ machine: r.reference, issue: i, flags: pumpFlagsOf(i) })));
   const offPlanL = sum(flagged.filter((x) => x.flags.includes('Off plan')), (x) => x.issue.litres);
-  const plannedNotFuelled = rows.filter((r) => r.shifts > 0 && !(r.issued > 0))
+  const unrecorded = rows.map((r) => ({ r, t: tankOf(r.reference) })).filter(({ t }) => t.unrecorded.length)
+    .map(({ r, t }) => ({
+      machine: r.reference, type: machineType(r.category), site: main.get(fold(r.reference)) ?? r.department ?? '',
+      fills: t.unrecorded.length, litres: t.unrecordedL, pumpFills: r.issues, pumpL: r.issued,
+      first: t.unrecorded[0].at, last: t.unrecorded.at(-1).at, list: t.unrecorded,
+    }))
+    .sort((a, b) => b.litres - a.litres || a.machine.localeCompare(b.machine, undefined, { numeric: true }));
+  const plannedNotFuelled = rows.filter((r) => r.shifts > 0 && !((tankOf(r.reference).intoTank ?? 0) > 0))
     .map((r) => ({ machine: r.reference, type: machineType(r.category), site: main.get(fold(r.reference)) ?? r.department ?? '', days: r.days, shifts: r.shifts, need: r.need ?? 0, down: isDown(r.status) }))
     .sort((a, b) => b.need - a.need || a.machine.localeCompare(b.machine, undefined, { numeric: true }));
   const downOnPlan = rows.filter((r) => isDown(r.status) && (r.shifts > 0 || r.issued > 0))
@@ -242,7 +327,10 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
     need: r.need,
     issued: r.issued,
     fills: r.issues,
-    difference: r.need == null ? null : r.issued - r.need,
+    intoTank: tankOf(r.reference).intoTank,
+    unrecorded: tankOf(r.reference).unrecordedL,
+    unrecordedFills: tankOf(r.reference).unrecorded.length,
+    difference: r.need == null ? null : (tankOf(r.reference).intoTank ?? 0) - r.need,
     basis: r.basis,
     rate: r.rate,
     tracker: Boolean(r.vehicleId),
@@ -250,6 +338,20 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
   })).sort((a, b) => a.site.localeCompare(b.site) || a.machine.localeCompare(b.machine, undefined, { numeric: true }));
 
   const cost = (litres) => (price > 0 ? litres * price : null);
+  const intoTank = sum(rows, (r) => tankOf(r.reference).intoTank);
+  const unrecordedL = sum(unrecorded, (x) => x.litres);
+  // Probe fills on tracked vehicles that are on no plan and at no pump in the period (all sites only)
+  let otherProbe = null;
+  if (probeKnown && !site) {
+    const claimedIds = new Set();
+    for (const r of rows) {
+      const t = tankOf(r.reference);
+      for (const p of t.unrecorded) claimedIds.add(p.id);
+      for (const id of t.claimed) claimedIds.add(id);
+    }
+    const rest = fillings.map(probeFill).filter((p) => Number.isFinite(p.at) && !p.doubtful && !claimedIds.has(p.id));
+    otherProbe = { fills: rest.length, litres: sum(rest, (p) => p.litres), vehicles: new Set(fillings.filter((f) => rest.some((p) => p.id === f.id)).map((f) => f.vehicleId)).size };
+  }
   return {
     from: data?.from ?? null,
     to: data?.to ?? null,
@@ -262,6 +364,13 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
       sites: siteMap.size,
       issuedShare: totals.need > 0 ? totals.issued / totals.need : null,
       issuedCost: cost(totals.issued),
+      probeKnown,
+      intoTank,
+      intoTankShare: totals.need > 0 ? intoTank / totals.need : null,
+      intoTankCost: cost(intoTank),
+      recordedShare: intoTank > 0 ? totals.issued / intoTank : null,
+      unrecorded: { machines: unrecorded.length, fills: sum(unrecorded, (x) => x.fills), litres: unrecordedL, cost: cost(unrecordedL) },
+      otherProbe,
       early: { machines: new Set(early.map((x) => x.machine)).size, fills: early.length, litres: sum(early, (x) => x.fill.litres) },
       overTank: { fills: overTankFills.length, litres: sum(overTankFills, (x) => x.over.over) },
       probeShort: { fills: probeShort.length, litres: sum(probeShort, (x) => x.shortL), cost: cost(sum(probeShort, (x) => x.shortL)) },
@@ -272,7 +381,7 @@ export function buildFuelUsage(data, { site = null, price = null } = {}) {
     cumulative,
     bySite,
     byType,
-    exceptions: { early, overTank: overTankFills, probeShort, flagged, plannedNotFuelled, downOnPlan },
+    exceptions: { unrecorded, early, overTank: overTankFills, probeShort, flagged, plannedNotFuelled, downOnPlan },
     byOperator,
     register,
   };

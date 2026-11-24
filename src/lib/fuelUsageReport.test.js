@@ -229,3 +229,56 @@ describe('the default period', () => {
     expect(lastFullWeek('2026-11-22')).toEqual({ from: '2026-11-09', to: '2026-11-15' });   // a Sunday
   });
 });
+
+describe('fuel into tanks, and fuel with no pump record', () => {
+  const at = (s) => new Date(`${s}+03:00`).toISOString();
+  const fill = (o) => ({ id: o.id, vehicleId: o.vehicleId ?? 'v1', filledAt: at(o.at), filledMl: o.litres * 1000, initialFuelLevelMl: 50_000, finalFuelLevelMl: 50_000 + o.litres * 1000, observedRiseMl: null, verdict: o.verdict ?? 'REFILL', vehicle: { registrationPlate: o.plate ?? 'EX 01' } });
+  const data = week({
+    machines: [machine({}), machine({ reference: 'DG-04', category: 'DIESEL GENERATORS', rate: 11, vehicleId: null, plate: null })],
+    lines: [line({ machine: 'EX-01', day: '2026-11-16', needLitres: 128 }), line({ machine: 'EX-01', day: '2026-11-17', needLitres: 128 }), line({ machine: 'DG-04', day: '2026-11-16', needLitres: 88 })],
+    issues: [
+      issue({ machine: 'EX-01', day: '2026-11-16', at: '2026-11-16T06:30:00', litres: 200 }),          // the probe saw it at 06:40
+      issue({ machine: 'DG-04', day: '2026-11-16', at: '2026-11-16T07:00:00', litres: 90 }),           // no tracker: pump only
+    ],
+  });
+  const fillings = [
+    fill({ id: 'p1', at: '2026-11-16T06:40:00', litres: 195 }),                // the pump's fill
+    fill({ id: 'p2', at: '2026-11-17T18:10:00', litres: 150 }),                // no pump record
+    fill({ id: 'p3', at: '2026-11-18T09:00:00', litres: 40, verdict: 'REDISTRIBUTION' }),   // fuel moving in the tank: ignored
+    fill({ id: 'p4', vehicleId: 'v9', at: '2026-11-18T09:00:00', litres: 60, plate: 'LMV 9' }),   // a vehicle on no plan
+  ];
+  const r = buildFuelUsage(data, { fillings, price: 200 });
+
+  it('into the tank: every real probe fill, plus pump fills the probe could not see', () => {
+    expect(r.register.find((x) => x.machine === 'EX-01')).toMatchObject({ intoTank: 345, unrecorded: 150, unrecordedFills: 1, issued: 200, difference: 345 - 256 });
+    expect(r.register.find((x) => x.machine === 'DG-04')).toMatchObject({ intoTank: 90, unrecorded: 0, issued: 90 });
+    expect(r.totals.intoTank).toBe(435);
+    expect(r.totals.intoTankShare).toBeCloseTo(435 / 344, 5);
+    expect(r.totals.recordedShare).toBeCloseTo(290 / 435, 5);
+  });
+
+  it('fuel with no pump record: the probe fills no pump fill claims, with cost', () => {
+    expect(r.totals.unrecorded).toEqual({ machines: 1, fills: 1, litres: 150, cost: 30_000 });
+    expect(r.exceptions.unrecorded[0]).toMatchObject({ machine: 'EX-01', fills: 1, litres: 150, pumpFills: 1, pumpL: 200 });
+  });
+
+  it('a vehicle on no plan and at no pump is counted apart', () => {
+    expect(r.totals.otherProbe).toEqual({ fills: 1, litres: 60, vehicles: 1 });
+  });
+
+  it('the running total of fuel into tanks follows the fills’ days', () => {
+    expect(r.cumulative.map((d) => d.intoTank).slice(0, 3)).toEqual([285, 435, 435]);
+  });
+
+  it('a machine with fuel into its tank is not "planned but not fuelled"', () => {
+    expect(r.exceptions.plannedNotFuelled).toEqual([]);
+  });
+
+  it('without the probe fillings the pump stands alone', () => {
+    const p = buildFuelUsage(data);
+    expect(p.totals.probeKnown).toBe(false);
+    expect(p.totals.intoTank).toBe(290);
+    expect(p.totals.unrecorded).toMatchObject({ machines: 0, litres: 0 });
+    expect(p.totals.otherProbe).toBeNull();
+  });
+});
