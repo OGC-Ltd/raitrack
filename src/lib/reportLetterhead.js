@@ -278,6 +278,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     if (ctx.cornerFailed) notes.push('Harsh cornering could not be read and is not counted.');
     else if (ctx.cornerPartial) notes.push(`Harsh cornering could not be read for ${ctx.cornerPartial} of the days.`);
     if (ctx.dashcams && !ctx.dashcamFailed && ctx.dashcamFrom) notes.push(dashcamFromWords(ctx.dashcamFrom) + '.');
+    if (ctx.dashcamDaysFailed) notes.push(`The dashcam alarms of ${ctx.dashcamDaysFailed} day${ctx.dashcamDaysFailed === 1 ? '' : 's'} could not all be read.`);
+    if (ctx.dashcamUntyped) notes.push(`${ctx.dashcamUntyped.toLocaleString('en-GB')} dashcam alarms had no type from the dashcam system and are not counted.`);
     if (ctx.dashcamFailed) notes.push('The dashcam alarms could not be read: no seatbelt, on phone and camera covered count only what operators logged.');
     else if (!ctx.dashcams) notes.push('This fleet has no dashcams: no seatbelt, on phone and camera covered count only what operators logged.');
     else if (done.rows.some((r) => !r.dashcam)) notes.push('–: the vehicle has no dashcam and no operator logged one.');

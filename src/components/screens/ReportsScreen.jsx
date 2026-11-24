@@ -1605,7 +1605,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       if (key === 'behaviour') {
         const [h, cam, turns, runs] = await Promise.all([
           loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
-          loadDashcamAlarms({ orgId, from: ctx.from }),
+          loadDashcamAlarms({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading the dashcam alarms, day') }),
           // Harsh cornering is not on the feed: the movement events, a day at a time
           loadCornering({ orgId, from: ctx.from, to: ctx.to }).catch(() => null),
           // The dispatch runs over the period, to name the driver at the time of each incident
@@ -1619,6 +1619,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
+        ctx.dashcamDaysFailed = cam.failedDays ?? 0;
+        ctx.dashcamUntyped = cam.untyped ?? 0;
         if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
@@ -1991,6 +1993,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
                 {key === 'behaviour' && !done.ctx.cornerFailed && done.ctx.cornerPartial > 0 && <span className="rpt-warn"> · harsh cornering could not be read for {done.ctx.cornerPartial} of the days</span>}
                 {key === 'behaviour' && done.ctx.dashcams && done.ctx.dashcamFrom && <span className="rpt-warn"> · {dashcamFromWords(done.ctx.dashcamFrom)}</span>}
+                {key === 'behaviour' && done.ctx.dashcamDaysFailed > 0 && <span className="rpt-warn"> · the dashcam alarms of {done.ctx.dashcamDaysFailed} day{done.ctx.dashcamDaysFailed === 1 ? '' : 's'} could not all be read</span>}
+                {key === 'behaviour' && done.ctx.dashcamUntyped > 0 && <span className="rpt-warn"> · {done.ctx.dashcamUntyped.toLocaleString('en-GB')} dashcam alarms had no type from the dashcam system and are not counted</span>}
                 {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
