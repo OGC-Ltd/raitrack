@@ -16,8 +16,7 @@
 // request: a unit or day that cannot be read is counted in `failed`, not fatal.
 
 import { getNotifications } from './notifications';
-import { loadMovementEvents } from './reports';
-import { fetchVssIncidents, fetchVssCameraCount, fetchVssWindow } from './vssAlarms';
+import { fetchVssIncidents, fetchVssCameraCount } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
 import { apiFetch } from '../services/api';
 import { loadDay } from '../lib/vehicleDay';
@@ -60,79 +59,19 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
 }
 
 /**
- * The organisation's dashcam alarms over [from, to) as far back as the server
- * reaches (DASHCAM_DAYS), and whether it has dashcams at all. A period of up
- * to a day is one request; a longer one is read a day at a time, one after
- * another (VSS answers one search per 10 s, and the proxy waits 30 s), each
- * day with every alarm's type. Never throws: a day that cannot be read is
- * counted in `failedDays`, and none read at all is `failed`.
+ * The organisation's dashcam alarms since `from` (VSS keeps them 7 days), and
+ * whether it has dashcams at all. Never throws: a dashcam service that cannot
+ * be reached leaves the seatbelt and phone columns unread, not the report.
  */
-export async function loadDashcamAlarms({ orgId, from, to = Date.now(), onProgress = () => {} }) {
+export async function loadDashcamAlarms({ orgId, from }) {
   const cameras = await fetchVssCameraCount(orgId);
-  if (!cameras) return { alarms: [], cameras: 0, failed: false, failedDays: 0, untyped: 0 };
-  const start = Math.max(from, Date.now() - DASHCAM_DAYS * DAY_MS);
-  const end = Math.min(to, Date.now());
-  if (end - start <= DAY_MS) {
-    try {
-      const alarms = await fetchVssIncidents({ orgId, sinceIso: new Date(start).toISOString() });
-      return { alarms: alarms.filter((a) => !(a.occurredMs >= end)), cameras, failed: false, failedDays: 0, untyped: 0 };
-    } catch {
-      return { alarms: [], cameras, failed: true, failedDays: 0, untyped: 0 };
-    }
+  if (!cameras) return { alarms: [], cameras: 0, failed: false };
+  try {
+    const alarms = await fetchVssIncidents({ orgId, sinceIso: new Date(from).toISOString() });
+    return { alarms, cameras, failed: false };
+  } catch {
+    return { alarms: [], cameras, failed: true };
   }
-  const windows = [];
-  for (let a = start; a < end; a += DAY_MS) windows.push([a, Math.min(a + DAY_MS, end)]);
-  const seen = new Map();
-  let failedDays = 0;
-  let untyped = 0;
-  onProgress({ done: 0, total: windows.length });
-  for (const [i, [a, b]] of windows.entries()) {
-    try {
-      const got = await fetchVssWindow({ orgId, sinceIso: new Date(a).toISOString(), untilIso: new Date(b).toISOString() });
-      for (const x of got.alarms) seen.set(x.id, x);
-      untyped += got.untyped;
-      if (got.partial) failedDays += 1;
-    } catch {
-      failedDays += 1;
-    }
-    onProgress({ done: i + 1, total: windows.length });
-  }
-  const alarms = [...seen.values()].sort((x, y) => (y.occurredMs ?? 0) - (x.occurredMs ?? 0));
-  return { alarms, cameras, failed: failedDays === windows.length, failedDays: failedDays === windows.length ? 0 : failedDays, untyped };
-}
-
-const DAY_MS = 86_400_000;
-
-/** How far back the server reads the dashcam alarms (fleet-server dashcam.service MAX_DAYS; VSS keeps about two weeks). */
-export const DASHCAM_DAYS = 14;
-/** The server's longest movement-events window per request (fleet-server MOVEMENT_MAX_WINDOW_H). */
-const EVENTS_WINDOW_MS = 24 * 3_600_000;
-
-/**
- * Every harsh cornering in [from, to), read 24 hours at a time: the server
- * refuses a longer window, so a period of more than a day read in one request
- * came back with none (found 24 Nov 2026). Null when no window could be read;
- * `failed` counts the windows that could not.
- */
-export async function loadCornering({ orgId, from, to, onProgress = () => {} }) {
-  const end = Math.min(to, Date.now());
-  const windows = [];
-  for (let a = from; a < end; a += EVENTS_WINDOW_MS) windows.push([a, Math.min(a + EVENTS_WINDOW_MS, end)]);
-  let done = 0;
-  onProgress({ done, total: windows.length });
-  const parts = await settleLimited(windows, 3, async ([a, b]) => {
-    const r = await loadMovementEvents({ orgId, from: a, to: b, kinds: ['cornering'] });
-    onProgress({ done: ++done, total: windows.length });
-    return r?.events ?? [];
-  });
-  const ok = parts.filter((p) => p.status === 'fulfilled');
-  if (windows.length && !ok.length) return null;
-  const seen = new Set();
-  const events = ok.flatMap((p) => p.value).filter((e) => {
-    const k = `${e?.vehicleId}|${e?.at}`;
-    return !seen.has(k) && seen.add(k);
-  });
-  return { events, failed: parts.length - ok.length };
 }
 
 /** Every overspeed episode of the units in `vehicleIds`, in [from, to). */

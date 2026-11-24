@@ -63,18 +63,6 @@ export function toVssIncident(a) {
   }
 }
 
-/**
- * The organisation's alarms over one window of a day at most, with how many
- * VSS gave no type for (fleet-server dashcam.service `until`; Driver conduct
- * over a month reads a day at a time, operator 24 Nov 2026).
- */
-export async function fetchVssWindow({ orgId, sinceIso, untilIso }) {
-  const q = new URLSearchParams({ org: orgId, since: sinceIso, until: untilIso })
-  const res = await apiFetch(`${VSS_BASE}/alarms?${q}`)
-  const rows = Array.isArray(res?.data?.incidents) ? res.data.incidents : []
-  return { alarms: rows.map(toVssIncident), untyped: Number(res?.data?.untyped) || 0, partial: Boolean(res?.data?.partial) }
-}
-
 /** The organisation's alarms since `sinceIso`, newest first. */
 export async function fetchVssIncidents({ orgId, sinceIso, signal } = {}) {
   const res = await apiFetch(`${VSS_BASE}/alarms?org=${encodeURIComponent(orgId)}&since=${encodeURIComponent(sinceIso)}`,
