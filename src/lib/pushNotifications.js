@@ -8,6 +8,7 @@
  * browsers bury or block a prompt nobody asked for.
  */
 import { apiFetch } from "../services/api";
+import { resolveOrgId } from "../api/org";
 
 const SW_URL = "/push-sw.js";
 
@@ -38,9 +39,20 @@ async function subscription() {
   return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(data.publicKey) });
 }
 
-const send = (orgId, sub) => apiFetch(`/api/v1/organisations/${orgId}/notifications/subscribe`, {
-  method: "POST", body: JSON.stringify({ subscription: sub.toJSON() }),
-});
+/* The callers hold the fleettrack company slug ("kasulu"), not the server's
+ * organisation id, and the server answers a slug with 400 — so no device was
+ * ever registered from here (seen 2026-11-24). Resolve it, as every api/ read
+ * does. Null when the company has no organisation: nothing to register. */
+const subscribePath = async (companyId) => {
+  const orgId = await resolveOrgId(companyId);
+  return orgId ? `/api/v1/organisations/${orgId}/notifications/subscribe` : null;
+};
+
+const send = async (companyId, sub) => {
+  const path = await subscribePath(companyId);
+  if (!path) throw new Error(`No organisation for ${companyId}`);
+  return apiFetch(path, { method: "POST", body: JSON.stringify({ subscription: sub.toJSON() }) });
+};
 
 /** From a click: ask, subscribe, register with the server. Resolves to the new state. */
 export async function enablePush(orgId) {
@@ -55,9 +67,11 @@ export async function disablePush(orgId) {
   const reg = await navigator.serviceWorker.getRegistration(SW_URL);
   const sub = await reg?.pushManager.getSubscription();
   if (sub) {
-    await apiFetch(`/api/v1/organisations/${orgId}/notifications/subscribe`, {
-      method: "DELETE", body: JSON.stringify({ endpoint: sub.endpoint }),
-    }).catch(() => {});
+    await subscribePath(orgId)
+      .then((path) => path && apiFetch(path, {
+        method: "DELETE", body: JSON.stringify({ endpoint: sub.endpoint }),
+      }))
+      .catch(() => {});
     await sub.unsubscribe();
   }
   return "off";
