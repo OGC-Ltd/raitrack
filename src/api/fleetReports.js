@@ -16,6 +16,7 @@
 // request: a unit or day that cannot be read is counted in `failed`, not fatal.
 
 import { getNotifications } from './notifications';
+import { loadMovementEvents } from './reports';
 import { fetchVssIncidents, fetchVssCameraCount } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
 import { apiFetch } from '../services/api';
@@ -72,6 +73,38 @@ export async function loadDashcamAlarms({ orgId, from }) {
   } catch {
     return { alarms: [], cameras, failed: true };
   }
+}
+
+/** How far back the server reads the dashcam alarms (fleet-server dashcam.service MAX_DAYS). */
+export const DASHCAM_DAYS = 7;
+/** The server's longest movement-events window per request (fleet-server MOVEMENT_MAX_WINDOW_H). */
+const EVENTS_WINDOW_MS = 24 * 3_600_000;
+
+/**
+ * Every harsh cornering in [from, to), read 24 hours at a time: the server
+ * refuses a longer window, so a period of more than a day read in one request
+ * came back with none (found 24 Nov 2026). Null when no window could be read;
+ * `failed` counts the windows that could not.
+ */
+export async function loadCornering({ orgId, from, to, onProgress = () => {} }) {
+  const end = Math.min(to, Date.now());
+  const windows = [];
+  for (let a = from; a < end; a += EVENTS_WINDOW_MS) windows.push([a, Math.min(a + EVENTS_WINDOW_MS, end)]);
+  let done = 0;
+  onProgress({ done, total: windows.length });
+  const parts = await settleLimited(windows, 3, async ([a, b]) => {
+    const r = await loadMovementEvents({ orgId, from: a, to: b, kinds: ['cornering'] });
+    onProgress({ done: ++done, total: windows.length });
+    return r?.events ?? [];
+  });
+  const ok = parts.filter((p) => p.status === 'fulfilled');
+  if (windows.length && !ok.length) return null;
+  const seen = new Set();
+  const events = ok.flatMap((p) => p.value).filter((e) => {
+    const k = `${e?.vehicleId}|${e?.at}`;
+    return !seen.has(k) && seen.add(k);
+  });
+  return { events, failed: parts.length - ok.length };
 }
 
 /** Every overspeed episode of the units in `vehicleIds`, in [from, to). */

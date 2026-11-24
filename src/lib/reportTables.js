@@ -44,6 +44,13 @@ export function movingRange(r) {
   return `${span} Hrs${(r.movingNights ?? 1) > 1 ? `, ${r.movingNights} nights` : ''}`;
 }
 
+const dashDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/**
+ * Driver conduct over more than the dashcam's 7 days (operator, 24 Nov 2026):
+ * which days its alarms cover, so a blank is not read as none.
+ */
+export const dashcamFromWords = (ms) => `No seatbelt, on phone and camera covered are from the dashcam from ${dashDay.format(ms).replace(/,/g, '')} only; before that they count what operators logged`;
+
 /** Words that say there is no value: shown blank, and a column of nothing else is left out. */
 const NO_VALUE = new Set(['', '-', '–', 'unspecified', 'unknown', 'n/a', 'none']);
 export const isBlank = (v) => NO_VALUE.has(String(v ?? '').trim().toLowerCase());
@@ -133,9 +140,15 @@ export const REPORTS = {
     label: 'Driver conduct',
     title: 'Driver Conduct Report',
     preset: 'today',
-    maxDays: 7,
-    /** The dashcam keeps its alarms 7 days, so a period must start within them. */
-    reachDays: 7,
+    // A month (operator, 24 Nov 2026: "a drivers conduct report for the whole month")
+    maxDays: 31,
+    /**
+     * Harsh cornering is read off the movement events, which the server gives
+     * for the last 31 days only, so a period must start within them. The
+     * dashcam alarms reach back 7 days (DASHCAM_DAYS): older days count what
+     * operators logged, and the report says so.
+     */
+    reachDays: 31,
     columns: () => ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'Harsh cornering', 'No seatbelt', 'On phone', 'Camera covered', 'Total', ...(SHOW_FOLLOW_UP_COLUMN ? ['Follow-up'] : [])],
     /** Columns of words after the figures: left-aligned. */
     text: SHOW_FOLLOW_UP_COLUMN ? ['Follow-up'] : [],

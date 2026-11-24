@@ -20,7 +20,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings, loadCornering, DASHCAM_DAYS } from '../../api/fleetReports';
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
@@ -28,7 +28,7 @@ import {
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey, dashcamFromWords } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -1564,7 +1564,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     : sp.from >= Date.now() ? 'These hours have not begun yet'
     : !(sp.to > sp.from) ? 'The period ends before it starts'
     : (sp.to - sp.from) / DAY > def.maxDays + (isNight ? 1 : 0) ? `${def.maxDays} days at most for this report`
-    : def.reachDays && sp.from < Date.now() - def.reachDays * DAY ? `The dashcam keeps its alarms ${def.reachDays} days: start the period within them`
+    : def.reachDays && sp.from < Date.now() - def.reachDays * DAY ? `Start the period within the last ${def.reachDays} days`
     : null);
   const problem = problemFor(span);
   const pickingProblem = problemFor(periodOf(shownDays));
@@ -1599,12 +1599,16 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         const [h, cam, turns, runs] = await Promise.all([
           loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
           loadDashcamAlarms({ orgId, from: ctx.from }),
-          // Harsh cornering is not on the feed: read as the Movements report reads it
-          loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
+          // Harsh cornering is not on the feed: the movement events, a day at a time
+          loadCornering({ orgId, from: ctx.from, to: ctx.to }).catch(() => null),
           // The dispatch runs over the period, to name the driver at the time of each incident
           loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
         ]);
         ctx.cornerFailed = turns == null;
+        ctx.cornerPartial = turns?.failed ?? 0;
+        // The dashcam reaches back DASHCAM_DAYS: the days before count only what operators logged
+        const camFrom = Date.now() - DASHCAM_DAYS * DAY;
+        ctx.dashcamFrom = ctx.from < camFrom ? camFrom : null;
         ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
@@ -1976,6 +1980,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
+                {key === 'behaviour' && !done.ctx.cornerFailed && done.ctx.cornerPartial > 0 && <span className="rpt-warn"> · harsh cornering could not be read for {done.ctx.cornerPartial} of the days</span>}
+                {key === 'behaviour' && done.ctx.dashcams && done.ctx.dashcamFrom && <span className="rpt-warn"> · {dashcamFromWords(done.ctx.dashcamFrom)}</span>}
                 {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
                 {key === 'behaviour' && done.ctx.dashcamFailed && <span className="rpt-warn"> · the dashcam alarms could not be read; seatbelt and phone are not counted</span>}
                 {key === 'behaviour' && !done.ctx.dashcams && !done.ctx.dashcamFailed && <span className="rpt-sub"> · no dashcams in this fleet</span>}
