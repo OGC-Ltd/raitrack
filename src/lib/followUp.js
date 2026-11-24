@@ -68,14 +68,19 @@ export function opensCase(r) {
 
 /**
  * The cases a report run finds: one per vehicle per fleet day in the period
- * that opens one, worked out a day at a time from the same records.
+ * that opens one, worked out a day at a time from the same records. Days
+ * before `dashcamFrom`, where the fleet has dashcams, are left out.
  */
-export function casesFromRun(units, harsh, alarms, { from, to, dashcams, logged, runs }) {
+export function casesFromRun(units, harsh, alarms, { from, to, dashcams, logged, runs, dashcamFrom = null }) {
   const out = [];
   for (const day of daysCovering(from, to)) {
     const a = Math.max(from, dayStart(day));
     const b = Math.min(to, dayStart(day) + DAY);
     if (b <= a) continue;
+    // A day the dashcam no longer reaches is shown, not sent: the server takes a
+    // run's counts for a case it holds, and would lose its seatbelt, phone and
+    // camera-covered counts (operator, 24 Nov 2026: a month's report)
+    if (dashcams && dashcamFrom != null && dayStart(day) < dashcamFrom) continue;
     for (const r of behaviourRows(units, harsh, alarms, { from: a, to: b, dashcams, logged, runs })) {
       if (!opensCase(r)) continue;
       out.push({

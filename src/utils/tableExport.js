@@ -131,8 +131,9 @@ export async function exportExcelVia(exportCsv) {
  * @param {string} [o.sheetName]         Excel only: the first sheet's tab
  * @param {object[]} [o.sheets]          Excel only: more sheets after the first (utils/xlsxExport); the CSV is `body` alone
  */
-export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc, headFills, sheetName, sheets }) {
-  if (takenForExcel({ head, body, filenameSlug, title, meta, fills, doc, headFills, sheetName, sheets })) return;
+export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc, headFills, sheetName, sheets, inputs }) {
+  // `inputs`: columns the reader fills in, in the Excel file only (xlsxExport addSheet)
+  if (takenForExcel({ head, body, filenameSlug, title, meta, fills, doc, headFills, sheetName, sheets, inputs })) return;
   // The BOM is what makes Excel read this as UTF-8 rather than the local
   // codepage, which mangles the plates.
   const blob = new Blob(["﻿", buildCsv(head, body)], {
