@@ -170,3 +170,27 @@ describe('a column the reader fills in (Driver conduct, operator 24 Nov 2026)', 
   });
 
 });
+
+describe('the details at the top of the Excel file (operator, 24 Nov 2026)', () => {
+  it('carries the period and the dashcam alarms’ stretch', () => {
+    const ws = buildWorkbook(ExcelJS, { head: ['Vehicle', 'Total'], body: [['KAU 374Y', 1]], title: 'Behaviour Aquamist', fleet: 'Aquamist Ltd',
+      meta: [['Period', '1 Nov 2026 – 24 Nov 2026'], ['Dashcam alarms', '10 Nov 2026 14:05 to 24 Nov 2026 14:12']] }).worksheets[0];
+    const pairs = [];
+    ws.eachRow((row) => { const a = row.getCell(1).value; const b = row.getCell(2).value; if (a && b) pairs.push([a, b]); });
+    expect(pairs).toEqual(expect.arrayContaining([['Period', '1 Nov 2026 – 24 Nov 2026'], ['Dashcam alarms', '10 Nov 2026 14:05 to 24 Nov 2026 14:12']]));
+  });
+});
+
+describe('the Follow-up column, room for the onsite team’s feedback (operator, 24 Nov 2026)', () => {
+  it('is wide and carries its own heading in the file; the other columns keep theirs', () => {
+    const head = ['Vehicle', 'Type', 'Driver', 'Harsh acceleration', 'Harsh braking', 'Harsh cornering', 'No seatbelt', 'On phone', 'Camera covered', 'Total', 'Follow-up'];
+    const ws = buildWorkbook(ExcelJS, { head, body: [['KAT 486Q', 'TRUCK', '', 0, 0, 0, 8, 2, 0, 10, 'Pending']], title: 'Behaviour Aquamist',
+      inputs: { 'Follow-up': { heading: 'Follow-up (Record your response)', width: 60, list: ['Pending'] } } }).worksheets[0];
+    const heads = [];
+    ws.eachRow((row) => { if (row.getCell(1).value === 'Vehicle') row.eachCell((c) => heads.push(c.value)); });
+    expect(heads).toEqual([...head.slice(0, -1), 'Follow-up (Record your response)']);
+    const widths = head.map((_, i) => ws.getColumn(i + 1).width);
+    expect(widths.at(-1)).toBeGreaterThanOrEqual(60);
+    expect(Math.max(...widths.slice(0, -1))).toBeLessThan(widths.at(-1));
+  });
+});

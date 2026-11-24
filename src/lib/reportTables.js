@@ -51,6 +51,21 @@ const dashDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', d
  */
 export const dashcamFromWords = (ms) => `No seatbelt, on phone and camera covered are from the dashcam from ${dashDay.format(ms).replace(/,/g, '')} only; before that they count what operators logged`;
 
+const dashFull = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/**
+ * Driver conduct: the stretch of time the dashcam alarms in the report cover,
+ * "10 Nov 2026 14:05 to 24 Nov 2026 14:12" (operator, 24 Nov 2026: "a note on
+ * the report that the dashcam alarms captured are from this time to this time").
+ */
+export function dashcamWindowWords(ctx, now = Date.now()) {
+  if (!ctx) return null;
+  if (ctx.dashcamFailed) return 'Could not be read';
+  if (!ctx.dashcams) return 'No dashcams in this fleet';
+  const from = Math.max(ctx.from, ctx.dashcamFrom ?? ctx.from);
+  const to = Math.min(ctx.to, now);
+  return `${dashFull.format(from).replace(/,/g, '')} to ${dashFull.format(to).replace(/,/g, '')}`;
+}
+
 /** Words that say there is no value: shown blank, and a column of nothing else is left out. */
 const NO_VALUE = new Set(['', '-', '–', 'unspecified', 'unknown', 'n/a', 'none']);
 export const isBlank = (v) => NO_VALUE.has(String(v ?? '').trim().toLowerCase());

@@ -170,6 +170,9 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
   // At least two columns, so the details have a label and a value
   const cols = Math.max(n, 2);
   const widths = widthsFor(lines, cols);
+  // A column the reader fills in takes the width it asks for: room to write (Driver conduct's Follow-up)
+  const filled = doc ? null : inputsAt(head, inputs);
+  for (const [i, input] of Object.entries(filled ?? {})) if (input.width) widths[Number(i)] = Math.max(widths[Number(i)], input.width);
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   const across = (r) => { if (cols > 1) ws.mergeCells(r, 1, r, cols); };
 
@@ -217,7 +220,8 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
     const figure = t.head.map((_, i) => t.cols?.[i]?.align === 'right' || numericColumn(rows, i));
     t.head.forEach((h, i) => {
       const cell = ws.getCell(r, i + 1);
-      cell.value = String(h);
+      // A fill-in column's own heading in the file, "Follow-up (Record your response)"
+      cell.value = String(inputs?.[i]?.heading ?? h);
       // A head of the sheet's own colour (Menengai's fuel sheet, 13 Nov 2026): dark text on it, thin rules round it
       const own = t.headFills ? (t.headFills[i] ? argb(t.headFills[i]) : 'FFFFFFFF') : null;
       cell.font = { bold: true, color: { argb: own ? 'FF000000' : WHITE }, size: 10 };
@@ -261,7 +265,7 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
   };
 
   if (!doc) {
-    const headRow = tableAt({ head, rows: body, headFills }, { filter: true, rowFills: fills, inputs: inputsAt(head, inputs) });
+    const headRow = tableAt({ head, rows: body, headFills }, { filter: true, rowFills: fills, inputs: filled });
     ws.views = [{ state: 'frozen', ySplit: headRow, showGridLines: false }];
   } else {
     // Each section as the PDF has it

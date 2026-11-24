@@ -6,7 +6,7 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, noDispatchKey, dashcamFromWords } from './reportTables';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, noDispatchKey, dashcamFromWords, dashcamWindowWords } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 import { textMm } from './shiftDoc';
@@ -343,6 +343,8 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
   const info = [
     ['Fleet', esc(companyName)],
     ['Period', esc(periodWords)],
+    // Driver conduct: the stretch its dashcam alarms cover (operator, 24 Nov 2026)
+    ...(def.key === 'behaviour' ? [['Dashcam alarms', esc(dashcamWindowWords(ctx, now))]] : []),
     ['Group', esc(groupWords)],
     // One unit picked (operator, 2 Nov 2026: "generate by the unit")
     ...(ctx.unit ? [['Unit', esc(ctx.unit)]] : []),

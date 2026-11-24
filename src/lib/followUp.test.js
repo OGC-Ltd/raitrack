@@ -4,7 +4,7 @@ import {
   opensCase, incidentWords, importCases, exportCases, loadCases, saveCases,
 } from './followUp';
 import { scopeUnits } from './fleetGroups';
-import { REPORTS } from './reportTables';
+import { REPORTS, dashcamWindowWords } from './reportTables';
 import { reportHtml } from './reportLetterhead';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -195,5 +195,27 @@ describe('the Driver conduct report over a month', () => {
     const { html } = reportHtml(REPORTS.behaviour, done, { companyName: 'Aquamist', orgCode: 'AQUAMIST', groupWords: 'All groups', periodWords: 'November 2026', logos: { rai: 'r', ogc: 'o' }, now: t });
     expect(html).toContain('from the dashcam from 17 Nov 12:00 only');
     expect(html).toContain('Harsh cornering could not be read for 2 of the days.');
+  });
+});
+
+describe('the stretch of time the dashcam alarms cover (operator, 24 Nov 2026)', () => {
+  const t = at('2026-11-24T14:12:00');
+  const month = { from: at('2026-11-01T00:00:00'), to: at('2026-11-25T00:00:00'), dashcams: true };
+
+  it('from the dashcam’s reach, or the period’s start, to now or the period’s end', () => {
+    expect(dashcamWindowWords({ ...month, dashcamFrom: at('2026-11-10T14:05:00') }, t)).toBe('10 Nov 2026 14:05 to 24 Nov 2026 14:12');
+    expect(dashcamWindowWords({ ...month, from: at('2026-11-20T00:00:00'), to: at('2026-11-21T00:00:00'), dashcamFrom: null }, t)).toBe('20 Nov 2026 00:00 to 21 Nov 2026 00:00');
+  });
+
+  it('says so when the fleet has no dashcams, or they could not be read', () => {
+    expect(dashcamWindowWords({ ...month, dashcams: false }, t)).toBe('No dashcams in this fleet');
+    expect(dashcamWindowWords({ ...month, dashcamFailed: true }, t)).toBe('Could not be read');
+  });
+
+  it('is among the PDF’s details', () => {
+    const done = { rows: [], secs: [], missing: [], units: 2, failed: 0, ctx: { ...month, dashcamFrom: at('2026-11-10T14:05:00') } };
+    const { html } = reportHtml(REPORTS.behaviour, done, { companyName: 'Aquamist', orgCode: 'AQUAMIST', groupWords: 'All groups', periodWords: '1 Nov 2026 – 24 Nov 2026', logos: { rai: 'r', ogc: 'o' }, now: t });
+    expect(html).toContain('Dashcam alarms');
+    expect(html).toContain('10 Nov 2026 14:05 to 24 Nov 2026 14:12');
   });
 });
