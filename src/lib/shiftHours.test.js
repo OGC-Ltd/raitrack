@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dayShifts, shiftHoursRows, shiftTone } from './shiftHours';
+import { dayShifts, shiftHoursRows, shiftTone, shiftIssueRows, withProbeRefills } from './shiftHours';
 
 // 10:00 Nairobi, 17 Nov 2026
 const NOW = Date.parse('2026-11-17T10:00:00+03:00');
@@ -182,5 +182,130 @@ describe('shiftHoursRows, fuel used in the shift', () => {
     const [r] = shiftHoursRows(UNITS, pings, dayShifts(DATA, NOW));
     expect(r.usedL).toBeNull();
     expect(REPORTS.shiftHours.cells(r).at(-1)).toBe('No sensor');
+  });
+});
+
+describe('Work Plan Fuel: expected, probe and issued per shift', () => {
+  const at = (s) => Date.parse(`${s}+03:00`);
+  /** Engine on 06:30 to 09:30, 10 L an hour on the fuel counter. */
+  const pings = () => {
+    const out = [];
+    for (let t = at('2026-11-17T06:30:00'); t <= at('2026-11-17T09:30:00'); t += 600_000) {
+      const h = (t - at('2026-11-17T06:30:00')) / H;
+      out.push({ t, engineOn: true, speedKmh: 0, lat: -8.6, lng: 35.3, engineHoursMeter: 1000 + h, fuelUsedMl: 500_000 + h * 10_000 });
+    }
+    return new Map([['veh_ex16', out]]);
+  };
+  const rated = (o = {}, rate = 18) => ({
+    machines: [{ ...DATA.machines[0], basis: 'HOUR', rate }],
+    lines: [line({ requestId: 'R1', issuedLitres: 180, requestLitres: 200, operators: ['J. Mwita', 'A. Kim'], supervisor: 'P. Lema', workLocation: 'Ihefu', ...o })],
+  });
+
+  it('expects engine hours × the register’s litres per hour, and carries planned and issued', () => {
+    const [r] = shiftHoursRows(UNITS, pings(), dayShifts(rated(), NOW));
+    expect(r.hours).toBeCloseTo(3, 1);
+    expect(r.expectedL).toBeCloseTo(54, 0);
+    expect(r.usedL).toBeCloseTo(30, 0);
+    expect(r.plannedL).toBe(200);
+    expect(r.issuedL).toBe(180);
+    expect(r.diffL).toBeCloseTo(150, 0);
+    expect(r.actualLph).toBeCloseTo(10, 0);
+    expect(r.ratedLph).toBe(18);
+  });
+
+  it('colours on probe used against expected: green to 110%, amber to 125%, red over', () => {
+    // 30 L used: expected 54 L at 18 L/h is green; 26 L at about 8.7 L/h is amber; 21 L at 7 L/h is red
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated(), NOW))[0].fuelTone).toBe('good');
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated({}, 8.7), NOW))[0].fuelTone).toBe('warn');
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated({}, 7), NOW))[0].fuelTone).toBe('bad');
+  });
+
+  it('expects nothing where the register rates the machine by the km, or not at all', () => {
+    const km = { ...rated(), machines: [{ ...DATA.machines[0], basis: 'KM_PER_LITRE', rate: 3 }] };
+    const [r] = shiftHoursRows(UNITS, pings(), dayShifts(km, NOW));
+    expect(r.expectedL).toBeNull();
+    expect(r.fuelTone).toBeNull();
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(DATA, NOW))[0].expectedL).toBeNull();
+  });
+
+  it('issued is blank while the line has no fuel request, 0 when the request got nothing', () => {
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated({ requestId: null, issuedLitres: 0 }), NOW))[0].issuedL).toBeNull();
+    expect(shiftHoursRows(UNITS, pings(), dayShifts(rated({ issuedLitres: 0 }), NOW))[0].issuedL).toBe(0);
+  });
+
+  it('reads as a table: work and where, who, shift, hours and the fuel figures', async () => {
+    const { REPORTS } = await import('./reportTables');
+    const def = REPORTS.shiftFuel;
+    const [r] = shiftHoursRows(UNITS, pings(), dayShifts(rated(), NOW));
+    const cells = def.cells(r, { oneDay: true });
+    expect(cells.slice(0, 6)).toEqual(['EX-16', 'Drainage Desilting · Ihefu', 'J. Mwita, A. Kim', 'P. Lema', '06:00 – 16:00', '10.0']);
+    expect(cells[8]).toBe('200.0');
+    expect(cells[9]).toBe('180.0');
+    expect(cells[12]).toBe('+150.0');
+    expect(cells[13]).toBe('10.0 / 18.0');
+    expect(def.legend.columns.map(([c]) => c)).toEqual(def.columns());
+    // Over several days the shift carries its day
+    expect(def.cells(r, { oneDay: false })[4]).toBe('Tue 17 Nov 06:00 – 16:00');
+  });
+});
+
+describe('Work Plan Fuel: each pump issue', () => {
+  const at = (s) => Date.parse(`${s}+03:00`);
+  /** The tank level every 2 minutes: 100 L, filled to 280 L between 05:40 and 05:50, then steady. */
+  const levels = () => {
+    const out = [];
+    for (let t = at('2026-11-17T05:00:00'); t <= at('2026-11-17T06:40:00'); t += 120_000) {
+      const l = t < at('2026-11-17T05:40:00') ? 100 : t < at('2026-11-17T05:50:00') ? 100 + ((t - at('2026-11-17T05:40:00')) / 600_000) * 180 : 280;
+      out.push({ t, engineOn: false, speedKmh: 0, lat: -8.6, lng: 35.3, fuelLevelMl: l * 1000 });
+    }
+    return new Map([['veh_ex16', out]]);
+  };
+  const data = {
+    machines: [{ ...DATA.machines[0], basis: 'HOUR', rate: 18 }],
+    lines: [line({ requestId: 'R1', issuedLitres: 180 })],
+    issues: [
+      { id: 'I1', machine: 'EX-16', day: '2026-11-17', requestId: 'R1', startedAt: '2026-11-17T05:40:00', at: '2026-11-17T05:50:00', litres: 180, done: true, siv: 'SIV-000027', pump: 'Main pump', flags: ['Operator mismatch'], sensor: { check: 'MATCH', riseL: 176 } },
+      { id: 'I2', machine: 'EX-16', day: '2026-11-17', requestId: null, startedAt: '2026-11-17T12:00:00', at: '2026-11-17T12:05:00', litres: 40, done: true, siv: null, pump: null, flags: [], sensor: null },
+      { id: 'I3', machine: 'EX-99', day: '2026-11-17', requestId: null, startedAt: '2026-11-17T08:00:00', litres: 50, flags: [] },
+    ],
+  };
+
+  it('ties each issue to its shift, reads our probe’s rise over it, and leaves out other machines', () => {
+    const rows = shiftHoursRows(UNITS, levels(), dayShifts(data, NOW));
+    const issues = shiftIssueRows(data, rows, levels());
+    expect(issues.map((i) => i.key)).toEqual(['I1', 'I2']);
+    expect(issues[0].shift.key).toBe(rows[0].key);
+    expect(issues[0].probeRiseL).toBeGreaterThan(160);
+    expect(issues[0].probeRiseL).toBeLessThan(190);
+    expect(issues[1].shift).toBeNull();
+    const [r] = withProbeRefills(rows, issues);
+    expect(r.probeRefillL).toBeCloseTo(issues[0].probeRiseL, 5);
+  });
+
+  it('lists the issues under the report: voucher, pump, FactorySuite’s check and the flags', async () => {
+    const { REPORTS } = await import('./reportTables');
+    const rows = shiftHoursRows(UNITS, levels(), dayShifts(data, NOW));
+    const issues = shiftIssueRows(data, rows, levels());
+    const t = REPORTS.shiftFuel.extra({ rows, ctx: { issues, oneDay: true } });
+    expect(t.head).toHaveLength(t.widths.length);
+    expect(t.rows[0].slice(0, 5)).toEqual(['EX-16', '05:40', 'SIV-000027', 'Main pump', '180.0']);
+    expect(t.rows[0].slice(6)).toEqual(['Match, +176.0 L', 'Operator mismatch', '06:00 – 16:00']);
+    expect(t.rows[1].at(-1)).toBe('Not on a plan line');
+    expect(REPORTS.shiftFuel.extra({ rows, ctx: { issues: [] } })).toBeNull();
+  });
+
+  it('prints with the Work Plan Fuel title, a WF- number, department sections and the issues', async () => {
+    const { REPORTS } = await import('./reportTables');
+    const { reportHtml } = await import('./reportLetterhead');
+    const rows = withProbeRefills(shiftHoursRows(UNITS, levels(), dayShifts(data, NOW)), []).map((r) => ({ ...r, section: 'IRRIGATION' }));
+    const issues = shiftIssueRows(data, rows, levels());
+    const done = { rows, secs: [{ name: 'IRRIGATION', rows, total: 0 }], missing: [], units: 1, failed: 0, ctx: { from: Date.parse('2026-11-17T00:00:00+03:00'), to: NOW, issues, oneDay: true } };
+    const { html } = reportHtml(REPORTS.shiftFuel, done, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', groupWords: 'Machines on approved work plans', periodWords: '17 Nov 2026', logos: { rai: 'r', ogc: 'o' }, now: NOW, landscape: true });
+    expect(html).toContain('WORK PLAN FUEL REPORT');
+    expect(html).toContain('WF-KASULU-');
+    expect(html).toContain('IRRIGATION');
+    expect(html).toContain('Fuel issues');
+    expect(html).toContain('SIV-000027');
+    expect(html).toContain('. Key</h2>');
   });
 });
