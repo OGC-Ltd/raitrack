@@ -118,10 +118,9 @@ function backDays(n) {
   return fleetDayKey(new Date(Date.now() - n * 86_400_000));
 }
 
-/** The bridge the page opens on. The factory takes about three quarters of the
- *  traffic (570 of 729 tickets on 2026-09-09), so it is the tab most readers
- *  wanted anyway — and an empty first tab reads as a broken page. */
-const DEFAULT_CENTRE = 101;
+/** The bridge the page opens on: all of them (operator, 2026-11-25: "All
+ *  weighbridges should be the default"). It used to open on the factory (101). */
+const DEFAULT_CENTRE = null;
 
 /**
  * The two ways to read the same bridges.
@@ -354,9 +353,9 @@ const GRID_STEP = 15;
 export default function WeighbridgesScreen() {
   const { orgId } = useFleetLiveShared();
   const [view,     setView]     = useState(VIEWS[0].key);
-  /* The range, both ends inclusive. They start equal, which is one day — the
-     reading this screen opens on and the one most visits never leave. */
-  const [from,     setFrom]     = useState(fleetDayKey());
+  /* The range, both ends inclusive. It opens on the previous day through today
+     (operator, 2026-11-25: "the default from date is the previous date"). */
+  const [from,     setFrom]     = useState(() => backDays(1));
   const [to,       setTo]       = useState(fleetDayKey());
   const [centre,   setCentre]   = useState(DEFAULT_CENTRE);
   const [search,   setSearch]   = useState("");
