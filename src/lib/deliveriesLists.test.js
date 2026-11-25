@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { listOf, tagList, listView, withList, planList, plansOnList, judgedOnList } from './deliveriesLists';
 import { addVehicle, setCustomers } from './deliveryPlan';
+import { planStopChoices, stopsPicked } from './plannerReport';
 
 // A Van Sales truck of Menengai's fleet list, with two trackers
 const unit = { key: 'KDE268P', plate: 'KDE 268P', vehicles: [{ vehicleId: 'w1' }, { vehicleId: 'w2' }] };
@@ -91,6 +92,43 @@ describe('a unit on Van Sales, then added to Finished Goods (operator, 2026-11-2
   it('an itinerary moved to FG in the Planner is read on FG', () => {
     expect(planList({ ...itinerary, list: 'fg' }, groupOf)).toBe('fg');
     expect(planList(itinerary, groupOf)).toBe('vs');
+  });
+});
+
+describe('a Van Sales unit on Finished Goods, its FG routes picked from its VS itinerary (operator, 2026-11-25)', () => {
+  // The VS itinerary's 11 stops, each a VS geofence, in route order
+  const fc = { features: VS_STOPS.map((name, i) => ({ properties: { id: `g${i + 1}`, name } })) };
+  const full11 = { stops: VS_STOPS.map((name, i) => ({ sequence: i + 1, customer: { name, geofenceId: `g${i + 1}`, lat: -0.3, lng: 36 + i / 100 } })).reverse() };
+  const choices = planStopChoices(full11, fc, new Set(VS_STOPS));
+  const onVs = addOn({ vehicles: [] }, 'vs', unit, VS_STOPS);
+  const pick = [choices[2].key, choices[6].key];
+  const { names, pins } = stopsPicked(choices, pick);
+  const full = addOn(onVs, 'fg', unit, names);
+
+  it('offers all 11 VS stops in route order, none ticked', () => {
+    expect(choices.map((c) => c.label)).toEqual(VS_STOPS);
+    expect(stopsPicked(choices, []).names).toEqual([]);
+  });
+
+  it('FG gets only the 2 routes picked', () => {
+    expect(names).toEqual([VS_STOPS[2], VS_STOPS[6]]);
+    expect(pins).toEqual([]);
+    expect(listView(full, 'fg').vehicles[0].customers).toEqual([VS_STOPS[2], VS_STOPS[6]]);
+  });
+
+  it('VS keeps all 11 of its own, untouched', () => {
+    expect(listView(full, 'vs').vehicles[0].customers).toEqual(VS_STOPS);
+  });
+
+  it('a stop with no geofence is offered as a point, and a fence passed twice once', () => {
+    const plan = { stops: [
+      { sequence: 1, customer: { name: VS_STOPS[0], geofenceId: 'g1', lat: -0.3, lng: 36 } },
+      { sequence: 2, customer: { name: 'NEW DUKA', geofenceId: null, lat: -0.4, lng: 36.1 } },
+      { sequence: 3, customer: { name: VS_STOPS[0], geofenceId: 'g1', lat: -0.3, lng: 36 } },
+    ] };
+    const c = planStopChoices(plan, fc, new Set(VS_STOPS));
+    expect(c.map((x) => x.label)).toEqual([VS_STOPS[0], 'NEW DUKA']);
+    expect(stopsPicked(c, [c[1].key])).toEqual({ names: [], pins: [{ name: 'NEW DUKA', lat: -0.4, lng: 36.1, radiusM: 100 }] });
   });
 });
 
