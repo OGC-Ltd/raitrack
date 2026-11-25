@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, issuedByShift } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -755,17 +755,31 @@ describe("withWorkConsumption", () => {
 
   it("is the tank at the start of work less the tank at its end, plus the pump's litres in between", () => {
     const [r] = withWorkConsumption([ex17([pump("a", "2026-11-23T16:10:19", 576)])], shifts, today, Date.parse("2026-11-23T20:00:00Z"));
-    expect(r.consumed).toBe(148.8); // 191.8 − 619 + 576
+    // Shift by shift (operator 2026-11-26): (191.8 − 52) + (52.4 − 619 + 576)
+    expect(r.consumed).toBe(149.2);
     expect(r.consumedEnd).toBe("2026-11-23");
-    expect(r.consumedWork).toMatchObject({ startL: 191.8, endL: 619, issued: 576, fuellings: 1, open: false });
+    expect(r.consumedWork).toMatchObject({ startL: 191.8, endL: 619, issued: 576, fuellings: 1, open: false, shifts: 2, missing: 0 });
+    expect(r.consumedWork.perShift.map((x) => [x.used, x.issued])).toEqual([[139.8, 0], [9.4, 576]]);
     // the since-refill figure stays for the machine panel
     expect(r).toMatchObject({ consumedSinceRefill: 26.28, consumedSinceRefillEnd: "now" });
   });
 
-  it("leaves out a fuelling before the work began, or after it ended", () => {
+  it("puts each fuelling on the shift it happened in: running, else the next that day, else the last that day", () => {
     const issues = [pump("early", "2026-11-23T05:30:00", 100), pump("a", "2026-11-23T16:10:19", 576), pump("late", "2026-11-23T22:30:00", 50)];
     const [r] = withWorkConsumption([ex17(issues)], shifts, today, Date.parse("2026-11-23T20:00:00Z"));
-    expect(r.consumedWork).toMatchObject({ issued: 576, fuellings: 1 });
+    expect(r.consumedWork.perShift.map((x) => [x.issued, x.fuellings, x.used])).toEqual([[100, 1, 239.8], [626, 2, 59.4]]);
+    expect(r).toMatchObject({ consumed: 299.2, consumedWork: { issued: 726, fuellings: 3 } });
+  });
+
+  it("starts each shift at its Fuel before where the server read one", () => {
+    const before = { machines: [{ machine: "EX-17", windows: [
+      { ...shifts.machines[0].windows[0], beforeL: 194.4, beforeAt: "2026-11-23T02:50:00.000Z", beforeBy: "work", lineIds: ["l1"] },
+      { ...shifts.machines[0].windows[1], lineIds: ["l2"] },
+    ] }] };
+    const [r] = withWorkConsumption([ex17([pump("a", "2026-11-23T16:10:19", 576)])], before, today, Date.parse("2026-11-23T20:00:00Z"));
+    expect(r.consumedByLine.l1).toMatchObject({ startL: 194.4, startBy: "before", used: 142.4 });
+    expect(r.consumedByLine.l2).toMatchObject({ startL: 52.4, startBy: "first-ten", used: 9.4, issued: 576 });
+    expect(r.consumed).toBe(151.8);
   });
 
   it("makes Probe used the standard times the engine hours worked in the shifts", () => {
@@ -783,7 +797,10 @@ describe("withWorkConsumption", () => {
   });
 
   it("gives nothing when the readings contradict, or no shift was measured, and leaves rows alone with no shifts read", () => {
-    const [neg] = withWorkConsumption([ex17([])], shifts, today); // 191.8 − 619 with nothing issued
+    const [part] = withWorkConsumption([ex17([])], shifts, today); // shift 2: 52.4 − 619 with nothing issued
+    expect(part).toMatchObject({ consumed: 139.8, consumedWork: { shifts: 1, missing: 1 } });
+    const rising = { machines: [{ machine: "EX-17", windows: shifts.machines[0].windows.map((w) => ({ ...w, endL: 700 })) }] };
+    const [neg] = withWorkConsumption([ex17([])], rising, today);
     expect(neg).toMatchObject({ consumed: null, workWhy: "negative" });
     const [none] = withWorkConsumption([{ ...ex17([]), reference: "EX-99" }], shifts, today);
     expect(none).toMatchObject({ consumed: null, workWhy: "no-shift", probeUsed: null });
@@ -801,8 +818,87 @@ describe("withWorkConsumption after a tracker gap", () => {
     const row = { reference: "EX-17", basis: "HOUR", rate: 30, firstDay: "2026-11-23", lastDay: "2026-11-23",
       pumpIssues: [{ id: "a", done: true, litres: 576, startedAt: "2026-11-23T16:10:19", at: "2026-11-23T16:42:00" }] };
     const [r] = withWorkConsumption([row], shifts, "2026-11-23", Date.parse("2026-11-23T20:00:00Z"));
-    expect(r.consumed).toBe(245.6); // 191.8 − 522.2 + 576
+    expect(r.consumed).toBe(246); // (191.8 − 52) + (52.4 − 522.2 + 576)
     expect(r.consumedWork).toMatchObject({ endL: 522.2, endAt: Date.parse("2026-11-23T19:30:00.000Z"), gap: true });
     expect(r.probeUsed).toBe(501); // (7.6 + 9.1) h × 30
+  });
+});
+
+describe("issuedByShift", () => {
+  // EX-17 on 23 Nov: shift 1 06:00 8 h, shift 2 14:00 8 h; 576 L at 16:09 on shift 1's request.
+  const l1 = { lineId: "l1", day: "2026-11-23", shiftNo: 1, shiftStart: "06:00:00", plannedHours: 8, requestId: "r1" };
+  const l2 = { lineId: "l2", day: "2026-11-23", shiftNo: 2, shiftStart: "14:00:00", plannedHours: 8, requestId: "r2" };
+  const issue = (id, startedAt, litres, extra = {}) => ({ id, done: true, litres, startedAt, at: startedAt, requestId: "r1", siv: `SIV-${id}`, ...extra });
+
+  it("puts a fuelling on the shift running when the nozzle went in, not on its request's", () => {
+    const { byLine, unplaced } = issuedByShift({ lines: [l1, l2], pumpIssues: [issue("a", "2026-11-23T16:09:00", 576)], fills: [{ key: "pump-a", probe: 579.2 }] });
+    expect(byLine.get("l1|2026-11-23")).toBeUndefined();
+    expect(byLine.get("l2|2026-11-23")).toMatchObject({ litres: 576, probe: 579.2 });
+    expect(unplaced).toEqual([]);
+  });
+
+  it("before the first shift goes to the next, after the last to the last, a day with none to unplaced", () => {
+    const { byLine, unplaced } = issuedByShift({ lines: [l1, l2], pumpIssues: [
+      issue("early", "2026-11-23T05:20:00", 100), issue("late", "2026-11-23T23:10:00", 50), issue("other", "2026-11-24T09:00:00", 30),
+    ] });
+    expect(byLine.get("l1|2026-11-23").litres).toBe(100);
+    expect(byLine.get("l2|2026-11-23").litres).toBe(50);
+    expect(unplaced.map((f) => f.id)).toEqual(["other"]);
+  });
+
+  it("a night shift past midnight keeps a fuelling made before it ends", () => {
+    const night = { lineId: "n", day: "2026-11-23", shiftNo: 2, shiftStart: "18:00:00", plannedHours: 10 };
+    const { byLine } = issuedByShift({ lines: [night], pumpIssues: [issue("x", "2026-11-24T02:00:00", 80)] });
+    expect(byLine.get("n|2026-11-23").litres).toBe(80);
+  });
+});
+
+describe("reconcileFills with the tank 10 min either side", () => {
+  it("takes Probe filled from the server's tank figure over the ledger's fill", () => {
+    const row = { reference: "EX-17", vehicleId: "v1", tankLitres: 700, lines: [],
+      pumpIssues: [{ id: "a", done: true, litres: 576, at: "2026-11-23T16:42:00", day: "2026-11-23" }] };
+    const ledger = [{ id: "f1", vehicleId: "v1", filledAt: "2026-11-23T13:45:00Z", filledMl: 560000, initialFuelLevelMl: 53000, finalFuelLevelMl: 613000 }];
+    const meters = { refills: [{ issueId: "a", tank: { beforeL: 53.3, afterL: 632.5, filledL: 579.2, beforeAt: "2026-11-23T12:59:00.000Z", afterAt: "2026-11-23T13:52:00.000Z", fallback: false } }] };
+    const [r] = reconcileFills([row], ledger, meters);
+    expect(r.fills[0]).toMatchObject({ probe: 579.2, before: 53.3, variance: -3.2, probeFill: { source: "after-ten", after: 632.5 } });
+    expect(r.probeFilled).toBe(579.2);
+    const [old] = reconcileFills([row], ledger);
+    expect(old.fills[0].probe).toBe(560);
+    // with the ledger unread, the tank figure still gives a state
+    expect(reconcileFills([row], null, meters)[0].fills[0].state).toBe("ok");
+  });
+});
+
+describe("Probe used per shift", () => {
+  it("is each shift's own hours at the standard, adding up to the row's", () => {
+    const shifts = { machines: [{ machine: "EX-17", windows: [
+      { start: "2026-11-23T03:00:00.000Z", end: "2026-11-23T11:00:00.000Z", open: false, ahead: false, firstTenL: 191.8, endL: 52, hours: 7.6, lineIds: ["l1"] },
+      { start: "2026-11-23T11:00:00.000Z", end: "2026-11-23T19:00:00.000Z", open: false, ahead: false, firstTenL: 52.4, endL: 619, hours: 6.2, lineIds: ["l2"] },
+    ] }] };
+    const row = { reference: "EX-17", basis: "HOUR", rate: 30, firstDay: "2026-11-23", lastDay: "2026-11-23", pumpIssues: [] };
+    const [r] = withWorkConsumption([row], shifts, "2026-11-23");
+    expect(r.consumedByLine.l1).toMatchObject({ run: 7.6, runUnit: "h", rate: 30, probeUsed: 228 });
+    expect(r.consumedByLine.l2).toMatchObject({ run: 6.2, probeUsed: 186 });
+    expect(r.probeUsed).toBe(414);
+  });
+});
+
+describe("withWorkConsumption with the server's shift figures", () => {
+  it("takes each shift's kept figures as sent and adds them up", () => {
+    const shifts = { machines: [{ machine: "EX-17", windows: [
+      { start: "2026-11-23T03:00:00.000Z", end: "2026-11-23T11:00:00.000Z", open: false, ahead: false, lineIds: ["l1"], endL: 52, hours: 7.6,
+        shiftStartL: 194.4, shiftStartAt: "2026-11-23T02:50:00.000Z", shiftStartBy: "before", issuedL: 0, fuellings: [], probeFilledL: null,
+        consumedL: 142.4, consumedWhy: null, run: 7.6, runUnit: "h", rate: 30, probeUsedL: 228, fuelKept: true },
+      { start: "2026-11-23T11:00:00.000Z", end: "2026-11-23T19:00:00.000Z", open: false, ahead: false, lineIds: ["l2"], endL: 619, hours: 6.2,
+        shiftStartL: 52.4, shiftStartAt: "2026-11-23T11:00:00.000Z", shiftStartBy: "before", issuedL: 576,
+        fuellings: [{ issueId: "a", siv: "SIV-1", litres: 576, at: "2026-11-23T13:09:00.000Z", probeFilledL: 579.2 }], probeFilledL: 579.2,
+        consumedL: 9.4, consumedWhy: null, run: 6.2, runUnit: "h", rate: 30, probeUsedL: 186 },
+    ] }] };
+    const row = { reference: "EX-17", basis: "HOUR", rate: 30, firstDay: "2026-11-23", lastDay: "2026-11-23", pumpIssues: [] };
+    const [r] = withWorkConsumption([row], shifts, "2026-11-23");
+    expect(r.consumed).toBe(151.8);
+    expect(r.consumedByLine.l1).toMatchObject({ used: 142.4, kept: true, probeUsed: 228 });
+    expect(r.consumedByLine.l2).toMatchObject({ used: 9.4, issued: 576, probeFilled: 579.2, fuellings: 1 });
+    expect(r.probeUsed).toBe(414);
   });
 });
