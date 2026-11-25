@@ -4,8 +4,8 @@
  * Plain and professional, the same parts as the incident form (no icons).
  */
 
-import { useEffect, useId, useRef, useState } from 'react';
-import { ACTIONS, incidentWords, isOverdue, needsEscalation, exportCases, importCases } from '../../lib/followUp';
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ACTIONS, incidentWords, isOverdue, escalations, exportCases, importCases } from '../../lib/followUp';
 
 const fmtAt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 const fmtDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric' });
@@ -103,14 +103,21 @@ function saveFile(text, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** The cases, pending first and oldest first: the shift's follow-up list. */
-export function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, now = Date.now() }) {
+/**
+ * The cases, pending first and oldest first: the shift's follow-up list.
+ * Drawn again only when its cases, the minute or its callbacks change: a
+ * thousand pending rows took a tenth of a second on every tick of the live
+ * fleet the Reports page follows (25 Nov 2026).
+ */
+export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, now = Date.now() }) {
   const [show, setShow] = useState('pending');
   const [note, setNote] = useState(null);
   const fileRef = useRef(null);
   const pending = cases.filter((c) => c.status === 'pending');
   const overdue = pending.filter((c) => isOverdue(c, now)).length;
   const list = (show === 'pending' ? pending : show === 'done' ? cases.filter((c) => c.status === 'done').reverse() : [...cases].reverse());
+  // Worked out once per list, not every case against every case on each row
+  const escalate = useMemo(() => escalations(cases), [cases]);
 
   const doExport = () => {
     const stamp = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 16).replace(/[-:T]/g, '');
@@ -170,7 +177,7 @@ export function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, n
             <tbody>
               {list.map((c) => {
                 const late = isOverdue(c, now);
-                const esc = needsEscalation(c, cases);
+                const esc = escalate.has(c.id);
                 return (
                   <tr key={c.id} className="sp4-tr">
                     <td className="oi-nowrap">{fmtAt.format(c.openedAt)}</td>
@@ -199,4 +206,4 @@ export function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, n
       )}
     </section>
   );
-}
+});

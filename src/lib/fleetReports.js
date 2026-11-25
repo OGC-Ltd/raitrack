@@ -261,11 +261,39 @@ function spansOf(runs) {
   return out;
 }
 
-/** A unit's runs, by vehicle id or by plate, in sign-out order. */
+/**
+ * A list of runs indexed once, by vehicle id and by plate, and each unit's
+ * runs kept, so a month's report does not sift every run for every unit on
+ * every day (Sukari, 25 Nov 2026: 634 units by 5,764 runs took 2.4 s a call,
+ * 25 s for a month's follow-up cases, and froze the page).
+ */
+const runIndex = new WeakMap();
+function indexOf(runs) {
+  let ix = runIndex.get(runs);
+  if (ix) return ix;
+  const byId = new Map();
+  const byKey = new Map();
+  const add = (m, k, i) => { const l = m.get(k); if (l) l.push(i); else m.set(k, [i]); };
+  runs.forEach((r, i) => {
+    if (r.vehicleId) add(byId, r.vehicleId, i);
+    if (r.plate) add(byKey, unitKey(r.plate), i);
+  });
+  ix = { byId, byKey, units: new Map() };
+  runIndex.set(runs, ix);
+  return ix;
+}
+
+/** A unit's runs, by vehicle id or by plate, in sign-out order; the same array each time for one list. */
 function runsOfUnit(u, runs) {
-  const ids = new Set(u.vehicles.map((v) => v.vehicleId));
-  return runs.filter((r) => (r.vehicleId && ids.has(r.vehicleId)) || (r.plate && unitKey(r.plate) === u.key))
-    .sort((a, b) => Date.parse(a.dispatchedAt) - Date.parse(b.dispatchedAt));
+  const ix = indexOf(runs);
+  const kept = ix.units.get(u);
+  if (kept) return kept;
+  const at = new Set(ix.byKey.get(u.key) ?? []);
+  for (const v of u.vehicles) for (const i of ix.byId.get(v.vehicleId) ?? []) at.add(i);
+  const mine = [...at].sort((a, b) => a - b).map((i) => runs[i])
+    .map((r) => [Date.parse(r.dispatchedAt), r]).sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+  ix.units.set(u, mine);
+  return mine;
 }
 
 /**
@@ -282,6 +310,7 @@ function runsOfUnit(u, runs) {
  */
 export function driversAt(u, times, runs) {
   if (runs === undefined) return u.vehicles.map((v) => (v.driver && v.driver !== 'Unassigned' ? v.driver : null)).find(Boolean) ?? null;
+  if (!times.length) return null;
   const mine = runs ? runsOfUnit(u, runs) : null;
   const count = new Map();
   for (const t of times) {
@@ -320,7 +349,8 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     if (alarm) {
       const byKind = alarmTimes.get(hit.u.key) ?? new Map();
       alarmTimes.set(hit.u.key, byKind);
-      byKind.set(kind, [...(byKind.get(kind) ?? []), t]);
+      const list = byKind.get(kind);
+      if (list) list.push(t); else byKind.set(kind, [t]);
     }
   };
   for (const e of harsh ?? []) {
@@ -359,6 +389,7 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
   }
 
   const days = Math.max(1, (to - from) / DAY);
+  const loggedOn = new Set(inScope.map((e) => e.unit.key));
   const rows = [];
   for (const u of units) {
     const auto = { accel: 0, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0 };
@@ -381,7 +412,7 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     // The driver AT THE TIME of its incidents, not the one on the unit now
     r.driver = driversAt(u, times.get(u.key) ?? [], runs);
     r.firstAt = firstAt.get(u.key) ?? null;
-    if (r.total > 0 || inScope.some((e) => e.unit.key === u.key)) rows.push(r);
+    if (r.total > 0 || loggedOn.has(u.key)) rows.push(r);
   }
   rows.sort(unitOrder);
   return Object.assign(rows, { logged: inScope.sort((a, b) => a.at - b.at) });

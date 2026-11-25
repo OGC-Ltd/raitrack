@@ -13,6 +13,16 @@ const json = (method, body) => ({ method, headers: { 'Content-Type': 'applicatio
 export const CHANGED = 'ft-followup-changed';
 const changed = () => window.dispatchEvent(new Event(CHANGED));
 
+/**
+ * The fleet days built in advance (fleet-server reports/driver-conduct-days),
+ * `from` to `to` both included: { days: [{ day, captured, untyped }], rows:
+ * [{ day, vehicleId, plate, times: { accel, brake, seatbelt, phone, covered } }] }.
+ */
+export async function listDays(orgId, from, to, signal) {
+  const q = new URLSearchParams({ from, to });
+  return (await apiFetch(`${base(orgId)}/days?${q}`, signal ? { signal } : undefined)).data;
+}
+
 export async function listCases(orgId) {
   return (await apiFetch(`${base(orgId)}/cases`)).data;
 }

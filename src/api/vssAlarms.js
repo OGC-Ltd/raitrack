@@ -64,13 +64,15 @@ export function toVssIncident(a) {
 }
 
 /**
- * The organisation's alarms over one window of a day at most, with how many
- * VSS gave no type for (fleet-server dashcam.service `until`; Driver conduct
- * over a month reads a day at a time, operator 24 Nov 2026).
+ * The organisation's alarms since `sinceIso`, with how many VSS gave no type
+ * for and whether the search came back incomplete. With `untilIso`, over that
+ * window only, a day at most (fleet-server dashcam.service `until`; Driver
+ * conduct over a month reads a day at a time, operator 24 Nov 2026); without
+ * it, up to now, the search the Alarms tab shares.
  */
-export async function fetchVssWindow({ orgId, sinceIso, untilIso }) {
-  const q = new URLSearchParams({ org: orgId, since: sinceIso, until: untilIso })
-  const res = await apiFetch(`${VSS_BASE}/alarms?${q}`)
+export async function fetchVssWindow({ orgId, sinceIso, untilIso, signal }) {
+  const q = new URLSearchParams({ org: orgId, since: sinceIso, ...(untilIso ? { until: untilIso } : {}) })
+  const res = await apiFetch(`${VSS_BASE}/alarms?${q}`, signal ? { signal } : undefined)
   const rows = Array.isArray(res?.data?.incidents) ? res.data.incidents : []
   return { alarms: rows.map(toVssIncident), untyped: Number(res?.data?.untyped) || 0, partial: Boolean(res?.data?.partial) }
 }
