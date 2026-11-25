@@ -706,6 +706,33 @@ describe("withFuelBeforeShift", () => {
     expect(withFuelBeforeShift([ahead], shifts, "2026-11-23")[0]).toBe(ahead);
     expect(withFuelBeforeShift([ex17], null, "2026-11-23")[0]).toBe(ex17);
   });
+
+  // Operator 2026-11-25: Fuel before is the tank over the 10 minutes before the
+  // first shift, or before a refill that came first; the second shift reads
+  // the tank before its own start or its own refill.
+  const before = {
+    machines: [{ machine: "EX-17", windows: [
+      { start: "2026-11-23T03:00:00.000Z", ahead: false, lineIds: ["a1"], firstTenL: 191.8, beforeL: 195, beforeAt: "2026-11-23T02:40:00.000Z", beforeBy: "refill", beforeReadAt: null },
+      { start: "2026-11-23T11:00:00.000Z", ahead: false, lineIds: ["a2"], firstTenL: 52.4, beforeL: 53.1, beforeAt: "2026-11-23T10:58:00.000Z", beforeBy: "work", beforeReadAt: "2026-11-23T10:30:00.000Z" },
+    ] }],
+  };
+
+  it("takes the 10 minutes before the first shift's work or its refill, whichever came first", () => {
+    const [row] = withFuelBeforeShift([ex17], before, "2026-11-23");
+    expect(row.fuelBefore).toBe(195);
+    expect(row.fuelBeforeShift).toEqual({ litres: 195, at: "2026-11-23T02:40:00.000Z", by: "refill", readAt: null, day: "2026-11-23", before: true });
+  });
+
+  it("gives each shift its own, the first the same as the row", () => {
+    const [row] = withFuelBeforeShift([ex17], before, "2026-11-23");
+    expect(row.beforeByLine.a1.litres).toBe(row.fuelBefore);
+    expect(row.beforeByLine.a2).toMatchObject({ litres: 53.1, by: "work", readAt: "2026-11-23T10:30:00.000Z" });
+  });
+
+  it("never falls back to the first minutes of work when the server found no reading before", () => {
+    const none = { machines: [{ machine: "EX-17", windows: [{ start: "2026-11-23T03:00:00.000Z", ahead: false, lineIds: ["a1"], firstTenL: 191.8, beforeL: null }] }] };
+    expect(withFuelBeforeShift([ex17], none, "2026-11-23")[0].fuelBefore).toBe(53.3);
+  });
 });
 
 describe("withWorkConsumption", () => {
