@@ -764,8 +764,6 @@ export function withWorkConsumption(rows, shifts, today, now = Date.now()) {
     const ws = (windowsOf.get(foldRef(row.reference)) ?? [])
       .filter((w) => w.start && !w.ahead && eatDay(w.start) >= first && eatDay(w.start) <= end)
       .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-    const startW = ws.find((w) => (w.firstTenL ?? w.startL) != null);
-    const endW = [...ws].reverse().find((w) => w.endL != null);
     // Probe used: the hours (or km) the tracker counted in the shifts.
     const byKm = refillMeterUnit(row.basis) === "km";
     const runs = ws.map((w) => (byKm ? w.km : w.hours)).filter((v) => v != null);
@@ -775,26 +773,91 @@ export function withWorkConsumption(rows, shifts, today, now = Date.now()) {
     const open = ws.some((w) => w.open);
     out.probeUsed = usedL;
     out.probeUse = run == null && rate == null ? null : { run, unit: byKm ? "km" : "h", rate, litres: usedL, open, source: "work", shifts: ws.length };
-    if (!startW || !endW) {
-      return { ...out, consumed: null, consumedEnd: null, consumedWork: null, workWhy: ws.length ? "no-probe" : "no-shift" };
+    if (!ws.length) return { ...out, consumed: null, consumedEnd: null, consumedWork: null, consumedByLine: {}, workWhy: "no-shift" };
+    // Shift by shift (operator 2026-11-26: "consumption we calculate per shift
+    // and aggregate it for double shift (fuel start - fuel end) + issued on the
+    // individual shift"). Each fuelling is the shift's it happened in
+    // (placeFuelling, as the panel's issuedByShift), not its request's.
+    const spans = ws.map((w) => ({ w, s: { from: Date.parse(w.start), to: Date.parse(w.end) } }));
+    const placed = new Map();
+    for (const i of row.pumpIssues ?? []) {
+      if (i.done === false) continue;
+      const to = placeFuelling(spans, pumpTimeMs(i.startedAt) ?? pumpTimeMs(i.at));
+      if (to) placed.set(to.w, [...(placed.get(to.w) ?? []), i]);
     }
-    const startL = startW.firstTenL ?? startW.startL;
-    const startAt = Date.parse(startW.firstTenAt ?? startW.start);
-    // A shift that ended while the tracker was silent is read at its first
-    // reading back (fleet-server fuel-shifts endedInGap): endAt says when.
-    const endAt = endW.open ? now : Date.parse(endW.endAt ?? endW.end);
-    const issuedIn = (row.pumpIssues ?? [])
-      .filter((i) => i.done !== false)
-      .map((i) => ({ t: pumpTimeMs(i.startedAt ?? i.at), litres: i.litres ?? 0 }))
-      .filter((i) => i.t != null && i.t >= startAt && i.t <= endAt);
-    const issued = r2(issuedIn.reduce((s, i) => s + i.litres, 0));
-    const used = r2(startL - endW.endL + issued);
-    const work = { startL, startAt, endL: endW.endL, endAt, open: Boolean(endW.open), gap: Boolean(endW.endGap), issued, fuellings: issuedIn.length };
-    // Below nothing, the readings contradict each other (a fuelling the pump
-    // did not record, or a probe fault): no figure rather than a wrong one.
-    if (used < 0) return { ...out, consumed: null, consumedEnd: null, consumedWork: work, workWhy: "negative" };
-    return { ...out, consumed: used, consumedEnd: endW.open ? "now" : eatDay(endW.end), consumedWork: work, workWhy: null };
+    // Each shift's Probe used too (operator 2026-11-26: "the total hours worked
+    // * burn rate, then we handle the individual shift"): its own hours (or km) at the standard.
+    const perShift = ws.map((w) => {
+      // The server's own shift figures where it sends them (fleet-server
+      // shift-fuel, kept once a shift settles): the same rules, read once and stored.
+      if ("consumedL" in w) return serverShift(w, now);
+      const s = shiftConsumption(w, placed.get(w) ?? [], now);
+      const shiftRun = byKm ? w.km : w.hours;
+      const probeUsedL = shiftRun == null || rate == null ? null : r2(byKm ? shiftRun / rate : shiftRun * rate);
+      return { ...s, run: shiftRun ?? null, runUnit: byKm ? "km" : "h", rate, probeUsed: probeUsedL };
+    });
+    const consumedByLine = {};
+    for (const [k, s] of perShift.entries()) for (const id of ws[k].lineIds ?? []) consumedByLine[id] = s;
+    const measured = perShift.filter((s) => s.used != null);
+    if (!measured.length) {
+      const neg = perShift.find((s) => s.why === "negative") ?? null;
+      return { ...out, consumed: null, consumedEnd: null, consumedWork: neg ? { ...neg, perShift } : null, consumedByLine, workWhy: neg ? "negative" : "no-probe" };
+    }
+    const firstS = measured[0];
+    const lastS = measured.at(-1);
+    const work = {
+      perShift,
+      startL: firstS.startL, startAt: firstS.startAt, endL: lastS.endL, endAt: lastS.endAt, open: lastS.open, gap: lastS.gap,
+      issued: r2(measured.reduce((s, x) => s + x.issued, 0)),
+      fuellings: measured.reduce((s, x) => s + x.fuellings, 0),
+      shifts: measured.length,
+      missing: perShift.length - measured.length,
+    };
+    return {
+      ...out,
+      consumed: r2(measured.reduce((s, x) => s + x.used, 0)),
+      consumedEnd: lastS.open ? "now" : eatDay(ws[perShift.indexOf(lastS)].end),
+      consumedWork: work, consumedByLine, workWhy: null,
+    };
   });
+}
+
+/** A shift's figures as fleet-server shift-fuel sent them (kept or live). */
+function serverShift(w, now) {
+  const fuellings = Array.isArray(w.fuellings) ? w.fuellings : [];
+  return {
+    start: w.start, end: w.end, lineIds: w.lineIds ?? [],
+    startL: w.shiftStartL ?? null, startAt: Date.parse(w.shiftStartAt ?? w.start), startBy: w.shiftStartBy ?? null,
+    endL: w.endL ?? null, endAt: w.open ? now : Date.parse(w.endAt ?? w.end),
+    open: Boolean(w.open), gap: Boolean(w.endGap), issued: w.issuedL ?? 0, fuellings: fuellings.length,
+    used: w.consumedL ?? null, why: w.consumedL != null ? null : w.consumedWhy ?? "no-probe",
+    run: w.run ?? null, runUnit: w.runUnit ?? "h", rate: w.rate ?? null, probeUsed: w.probeUsedL ?? null,
+    probeFilled: w.probeFilledL ?? null, fuellingList: fuellings, kept: Boolean(w.fuelKept),
+  };
+}
+
+/**
+ * One shift's fuel used: its Fuel before (the tank over the 10 minutes before
+ * work began, or before a refill that came first), else the first 10 minutes
+ * of work, less the tank at its end (now while it runs; the first reading back
+ * when the tracker was silent as it ended), plus what the pump issued in it.
+ * Below nothing the readings contradict each other: no figure, why "negative".
+ */
+function shiftConsumption(w, issues, now) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const startL = w.beforeL ?? w.firstTenL ?? w.startL ?? null;
+  const startAt = Date.parse(w.beforeL != null ? w.beforeAt ?? w.start : w.firstTenAt ?? w.start);
+  const startBy = w.beforeL != null ? (w.beforeBy === "refill" ? "refill" : "before") : w.firstTenL != null ? "first-ten" : "start";
+  const endL = w.endL ?? null;
+  const endAt = w.open ? now : Date.parse(w.endAt ?? w.end);
+  const issued = r2(issues.reduce((s, i) => s + (i.litres ?? 0), 0));
+  const base = {
+    start: w.start, end: w.end, lineIds: w.lineIds ?? [], startL, startAt, startBy, endL, endAt,
+    open: Boolean(w.open), gap: Boolean(w.endGap), issued, fuellings: issues.length,
+  };
+  if (startL == null || endL == null) return { ...base, used: null, why: "no-probe" };
+  const used = r2(startL - endL + issued);
+  return used < 0 ? { ...base, used: null, why: "negative" } : { ...base, used, why: null };
 }
 
 /**
@@ -831,8 +894,14 @@ export function withProbeUsed(rows) {
  * @returns rows with `fills` (one per fuelling or unclaimed probe fill, newest first) and
  *   `probeFilled`, `variance`, `varianceFlags`, `probeKnown`
  */
-export function reconcileFills(rows, fillings) {
+export function reconcileFills(rows, fillings, meters = null) {
   const known = Array.isArray(fillings);
+  // Probe filled by the tank either side of each fuelling (fleet-server
+  // fuel-refills refillTank, operator 2026-11-26: "the amount of fuel filled
+  // into the tank and measured 10 minutes after refill either into work or
+  // not"): the middle reading of the 10 min after the nozzle less that of the
+  // 10 min before. It stands over the probe ledger's fill wherever it has a figure.
+  const tankOf = new Map((meters?.refills ?? []).filter((r) => r.tank?.filledL != null).map((r) => [r.issueId, r.tank]));
   const byId = new Map();
   const byPlate = new Map();
   for (const f of fillings ?? []) {
@@ -869,11 +938,19 @@ export function reconcileFills(rows, fillings) {
         if (!best || Math.abs(d) < Math.abs(best.at - t)) best = p;
       }
       if (best) used.add(best.id);
+      const tank = tankOf.get(i.id) ?? null;
+      if (tank) {
+        best = {
+          id: `tank-${i.id}`, at: t, litres: tank.filledL, before: tank.beforeL, after: tank.afterL,
+          observed: null, doubtful: false, verdict: null,
+          source: "after-ten", beforeAt: tank.beforeAt ?? null, afterAt: tank.afterAt ?? null, fallback: Boolean(tank.fallback),
+        };
+      }
       const line = i.requestId ? requestOf.get(i.requestId) : null;
       const before = best?.before ?? null;
       const actual = i.litres ?? null;
       const probe = best ? best.litres : null;
-      const variance = actual != null && probe != null ? actual - probe : null;
+      const variance = actual != null && probe != null ? Math.round((actual - probe) * 100) / 100 : null;
       return {
         key: `pump-${i.id}`,
         at: t, day: i.day,
@@ -881,7 +958,7 @@ export function reconcileFills(rows, fillings) {
         expected: line?.fullTank && row.tankLitres != null && before != null ? Math.max(0, row.tankLitres - before) : null,
         before, actual, probe, variance,
         probeFill: best,
-        state: !known ? "unknown"
+        state: !known && !tank ? "unknown"
           : !best ? "no-probe"
           : varianceFlagged(actual, variance) ? "over" : "ok",
       };
@@ -905,4 +982,71 @@ export function reconcileFills(rows, fillings) {
       varianceFlags: fills.filter((f) => f.state === "over" || f.state === "no-probe").length,
     };
   });
+}
+
+/** A plan line's shift as instants: its day's start time in East Africa, for its planned hours (none: a moment). */
+function lineSpan(l) {
+  if (!l?.day || !l.shiftStart) return null;
+  const from = Date.parse(`${l.day}T${String(l.shiftStart).slice(0, 5)}:00+03:00`);
+  if (!Number.isFinite(from)) return null;
+  return { from, to: from + Math.max(0, Number(l.plannedHours) || 0) * 3_600_000 };
+}
+const eatDayOf = (ms) => new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
+export const shiftLineKey = (l) => `${l.lineId}|${l.day}`;
+
+/**
+ * The pump's fuellings shift by shift (operator 2026-11-26: on a double shift
+ * "each shift should be allocated the amount of fuel issued" — "issued goes to
+ * the shift when the issued happened"). FactorySuite ties a day's one fuelling
+ * to one shift's request (EX-17, 23 Nov: 576 L at 16:09, during shift 2, on
+ * shift 1's request), so the request is not used: each fuelling goes, whole,
+ * by when the nozzle went in, to
+ *
+ *   1. the shift running then (the later one where two overlap); else
+ *   2. the next shift to start that day (East Africa); else
+ *   3. the last shift that day, already over.
+ *
+ * A fuelling on a day with no shift of the machine's is left in `unplaced`.
+ * `probe` is the row's fill for it (reconcileFills: Probe filled), when known.
+ *
+ * @param {object} row  a reconcileFills row (lines, pumpIssues, fills)
+ * @returns {{ byLine: Map<string, { litres: number, probe: number|null, fuellings: object[] }>, unplaced: object[] }}
+ */
+/**
+ * Which of `spans` ({ s: { from, to } }, in start order) a fuelling at `t`
+ * goes to: the one running (the later where two overlap), else the next to
+ * start that day, else the last of that day already over; null on a day with none.
+ */
+function placeFuelling(spans, t) {
+  if (t == null) return null;
+  const day = eatDayOf(t);
+  return spans.filter((x) => x.s.from <= t && t < x.s.to).at(-1)
+    ?? spans.find((x) => x.s.from > t && eatDayOf(x.s.from) === day)
+    ?? spans.filter((x) => x.s.from <= t && eatDayOf(x.s.from) === day).at(-1)
+    ?? null;
+}
+
+export function issuedByShift(row) {
+  const spans = (row?.lines ?? [])
+    .map((l) => ({ l, s: lineSpan(l) }))
+    .filter((x) => x.s)
+    .sort((a, b) => a.s.from - b.s.from);
+  const fillOf = new Map((row?.fills ?? []).map((f) => [f.key, f]));
+  const byLine = new Map();
+  const unplaced = [];
+  for (const i of row?.pumpIssues ?? []) {
+    const t = pumpTimeMs(i.startedAt) ?? pumpTimeMs(i.at);
+    const fill = fillOf.get(`pump-${i.id}`) ?? null;
+    const f = { id: i.id, litres: i.litres ?? null, done: Boolean(i.done), at: t, siv: i.siv ?? null, probe: fill?.probe ?? null, probeFill: fill?.probeFill ?? null };
+    const to = placeFuelling(spans, t);
+    if (!to) { unplaced.push(f); continue; }
+    const k = shiftLineKey(to.l);
+    const had = byLine.get(k) ?? { litres: 0, probe: null, fuellings: [] };
+    had.fuellings.push(f);
+    if (f.done && f.litres != null) had.litres = Math.round((had.litres + f.litres) * 100) / 100;
+    if (f.probe != null) had.probe = Math.round(((had.probe ?? 0) + f.probe) * 100) / 100;
+    byLine.set(k, had);
+  }
+  for (const v of byLine.values()) v.fuellings.sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  return { byLine, unplaced };
 }

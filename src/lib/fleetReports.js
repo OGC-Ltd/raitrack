@@ -10,6 +10,7 @@
 //
 // Times are fleet time, Africa/Nairobi (UTC+3 all year, no daylight saving).
 
+import { mapSliced } from './slices';
 import { summariseDay, MOVING_KMH } from './vehicleDay';
 import { unitKey } from './fleetGroups';
 
@@ -735,9 +736,21 @@ function firstFrom(list, t) {
  * @param windows  hourWindows(from, to) or dayWindows(from, to)
  */
 export function machineryRows(units, pings, windows) {
+  return machineryJoin(units, units.map((u) => machineryUnit(u, pings, windows)));
+}
+
+/**
+ * machineryRows a machine at a time, handing the page back between machines
+ * (lib/slices): a month of a whole site by the hour held the page for seconds.
+ */
+export async function machineryRowsSliced(units, pings, windows, { signal } = {}) {
+  return machineryJoin(units, await mapSliced(units, (u) => machineryUnit(u, pings, windows), { signal }));
+}
+
+/** One machine's rows, a row for each window it worked in. */
+function machineryUnit(u, pings, windows) {
   const rows = [];
-  const idle = [];
-  for (const u of units) {
+  {
     const kind = machineKind(u);
     // The register's burn rate, where it rates the machine by the hour
     const rated = ratedOf(u);
@@ -792,8 +805,16 @@ export function machineryRows(units, pings, windows) {
         section: kind,
       });
     }
-    if (!any) idle.push(u);
+    if (!any) return null;
   }
+  return rows;
+}
+
+/** The machines' rows in the report's order, and the machines that did not work. */
+function machineryJoin(units, parts) {
+  const rows = [];
+  const idle = [];
+  parts.forEach((p, i) => { if (p) for (const r of p) rows.push(r); else idle.push(units[i]); });
   // Greens first, the best of them at the top; then reds, the least over first and the
   // worst at the foot; then the rows with nothing to judge (operator, 16 Nov 2026)
   const rank = (r) => (r.vsStd === 'within' ? 0 : r.vsStd === 'above' ? 1 : 2);

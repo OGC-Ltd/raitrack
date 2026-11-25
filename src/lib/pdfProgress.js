@@ -42,11 +42,11 @@ export const paint = () => new Promise((resolve) => requestAnimationFrame(() => 
 
 /**
  * @param {string} title  what is being made, "Weighbridge Tickets: FACTORY"
- * @param {{ onCancel?: () => void }} [o]
+ * @param {{ onCancel?: () => void, kind?: string }} [o]  `kind`: the file's kind in the title, PDF by default
  * @returns {{ update: (share: number, words: string) => void, done: (words: string) => void,
  *   fail: (words: string) => void, close: () => void }}
  */
-export function showPdfProgress(title, { onCancel } = {}) {
+export function showPdfProgress(title, { onCancel, kind = 'PDF' } = {}) {
   if (!document.getElementById(STYLE_ID)) {
     const st = document.createElement('style');
     st.id = STYLE_ID;
@@ -60,7 +60,7 @@ export function showPdfProgress(title, { onCancel } = {}) {
   el.innerHTML = '<div class="pdfp__top"><p class="pdfp__title"></p><span class="pdfp__pct">0%</span></div>'
     + '<div class="pdfp__track"><div class="pdfp__bar"></div></div>'
     + '<div class="pdfp__foot"><span class="pdfp__words"></span><button type="button" class="pdfp__btn">Cancel</button></div>';
-  el.querySelector('.pdfp__title').textContent = `PDF: ${title}`;
+  el.querySelector('.pdfp__title').textContent = `${kind}: ${title}`;
   const pct = el.querySelector('.pdfp__pct');
   const bar = el.querySelector('.pdfp__bar');
   const words = el.querySelector('.pdfp__words');

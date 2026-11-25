@@ -16,7 +16,8 @@
  * large fleet, and a half-chosen period should not start that.
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDrawnRows } from '../../hooks/useDrawnRows';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
@@ -24,7 +25,7 @@ import { loadConductPeriod, loadOverspeeds, loadDistances, loadPeakTimes, loadDi
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  machineKind, machineryRows, machineWindows, MACHINE_SECTIONS,
+  machineKind, machineryRowsSliced, machineWindows, MACHINE_SECTIONS,
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
@@ -1454,6 +1455,69 @@ function ReportLegend({ legend }) {
  * tab is in view; a report on a tab not yet opened is not made, so opening
  * Movements does not read every machine's day behind it.
  */
+/**
+ * The report table's rows. Drawn again only when the report or its columns
+ * change, not on every live update of the page: re-drawing a fleet's 634 rows
+ * on each one held the page for ~200 ms every few seconds (25 Nov 2026).
+ * `upTo`: how many rows are drawn so far (hooks/useDrawnRows).
+ */
+const ReportRows = memo(function ReportRows({ secs, def, ctx, columns, shown, reportKey: key, conduct, upTo, onCase }) {
+  let drawn = 0;
+  return (
+    <>
+    {secs.map((s) => (
+      <Fragment key={s.name ?? 'all'}>
+        {s.name && (
+          <tr className="rpt-group">
+            <th colSpan={shown.length} scope="rowgroup">
+              <span className="rpt-group__name">{s.name}</span>
+              <span className="rpt-group__meta">{def.countWords ? def.countWords(s.rows) : `${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'}`} · {def.sumWords(s.total)}</span>
+            </th>
+          </tr>
+        )}
+        {s.rows.map((r) => {
+          if (drawn++ >= upTo) return null;
+          const cells = def.cells(r, ctx);
+          const noDriver = conduct && noDispatchDriver(r);
+          return (
+            <tr key={r.key ?? r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}${def.rowTone?.(r) ? ` rpt-row--${def.rowTone(r)}` : ''}`}
+                style={def.rowDepth ? { '--rpt-depth': def.rowDepth(r) } : undefined}>
+              {shown.map((i) => {
+                const c = cells[i];
+                if (i === 0) {
+                  return (
+                    <td key={i} className="rpt-unit">
+                      {r.unit.plate}
+                      {key === 'utilisation' && overStandard(r) && <span className="rpt-tag rpt-tag--warn" title="More than 15% over the standard on the register">Over standard</span>}
+                      {r.suspect && <span className="rpt-tag rpt-tag--warn" title="More than 100 harsh events a day, far more than a driver makes: most likely a faulty sensor">Check sensor</span>}
+                    </td>
+                  );
+                }
+                if (key === 'behaviour' && columns[i] === 'Follow-up') {
+                  return (
+                    <td key={i}>
+                      {c === 'No case' ? <span className="rpt-fu-none">No case</span> : (
+                        <button type="button" className={`rpt-fu rpt-fu--${c === 'Overdue' ? 'overdue' : c === 'Pending' ? 'pending' : 'done'}`}
+                                onClick={() => onCase(r.unit.key)}
+                                title={c === 'Action taken' ? 'See or change the action taken' : 'Record the action taken'}>{c}</button>
+                      )}
+                    </td>
+                  );
+                }
+                const cls = [isFigure(def, columns, i) && 'rpt-num',
+                  conduct && columns[i] === 'Driver' && 'rpt-driver',
+                  conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero'].filter(Boolean).join(' ');
+                return <td key={i} className={cls || undefined}>{c}</td>;
+              })}
+            </tr>
+          );
+        })}
+      </Fragment>
+    ))}
+    </>
+  );
+});
+
 export default function ReportsScreen({ only = null, active = true } = {}) {
   const { vehicles = [], orgId } = useFleetLiveShared();
   const { activeCompany } = useCompanies();
@@ -1725,7 +1789,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         const vs = units.flatMap((u) => u.vehicles);
         // From 15 minutes early, so the first hour's hour meter has a reading to count from
         const p = await loadPings({ orgId, vehicles: vs, from: ctx.from - 15 * 60_000, to: ctx.to, onProgress: step('Reading each machine’s day') });
-        const made = machineryRows(units, p.pings, windows);
+        if (!live()) return;
+        const made = await machineryRowsSliced(units, p.pings, windows);
         // What the period at the top already says need not be said on every row
         ctx.oneWindow = windows.length <= 1;
         ctx.oneDay = new Set(windows.map((w) => w.day)).size <= 1;
@@ -1798,6 +1863,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     const ctx = { ...run.ctx, followUp, cases: period, allCases: cases, now };
     return { ...run, ctx, rows, logged: rows.logged, secs: sections(rows, groups?.map((g) => g.name), REPORTS.behaviour.sum) };
   }, [run, entries, groups, cases, now]);
+  // A long table is drawn a batch of rows a turn (hooks/useDrawnRows), so the page answers while it is drawn
+  const drawnUpTo = useDrawnRows(done?.rows?.length ?? 0, run);
 
   // The case the report's Follow-up cell opens: the oldest pending, else the latest.
   const openCaseFor = (unitKey) => {
@@ -1812,9 +1879,13 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const kpis = conduct
     ? [...allKpis.filter((k) => k.label === 'Total incidents'), ...allKpis.filter((k) => k.label !== 'Total incidents' && k.label !== 'Vehicles')]
     : allKpis;
-  const columns = def.columns(ctx);
+  // Kept from one live update to the next while the report stays the same, so its rows are not drawn again (ReportRows)
+  const columns = useMemo(() => def.columns(ctx), [def, done, span.from, span.to]); // eslint-disable-line react-hooks/exhaustive-deps
   // Type or Driver blank for every vehicle (e.g. all "UNSPECIFIED"): left out.
-  const shown = done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i);
+  const shown = useMemo(() => (done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i)), [def, done, columns]);
+  const caseFor = useRef(openCaseFor);
+  caseFor.current = openCaseFor;
+  const onCase = useCallback((unitKey) => caseFor.current(unitKey), []);
   // Machinery covers the excavators and dozers alone, so it says so (operator, 16 Nov 2026: "All vehicles" read as every unit)
   const groupWords = done?.ctx.group ?? (key === 'shiftHours' ? 'Machines on approved work plans' : key === 'machinery' ? 'Excavators and dozers' : groups ? 'All groups' : 'All vehicles');
   const periodWords = periodText(ctx.from, ctx.to);
@@ -2092,54 +2163,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                     </tr>
                   </thead>
                   <tbody>
-                    {done.secs.map((s) => (
-                      <Fragment key={s.name ?? 'all'}>
-                        {s.name && (
-                          <tr className="rpt-group">
-                            <th colSpan={shown.length} scope="rowgroup">
-                              <span className="rpt-group__name">{s.name}</span>
-                              <span className="rpt-group__meta">{def.countWords ? def.countWords(s.rows) : `${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'}`} · {def.sumWords(s.total)}</span>
-                            </th>
-                          </tr>
-                        )}
-                        {s.rows.map((r) => {
-                          const cells = def.cells(r, done.ctx);
-                          const noDriver = conduct && noDispatchDriver(r);
-                          return (
-                            <tr key={r.key ?? r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}${def.rowTone?.(r) ? ` rpt-row--${def.rowTone(r)}` : ''}`}
-                                style={def.rowDepth ? { '--rpt-depth': def.rowDepth(r) } : undefined}>
-                              {shown.map((i) => {
-                                const c = cells[i];
-                                if (i === 0) {
-                                  return (
-                                    <td key={i} className="rpt-unit">
-                                      {r.unit.plate}
-                                      {key === 'utilisation' && overStandard(r) && <span className="rpt-tag rpt-tag--warn" title="More than 15% over the standard on the register">Over standard</span>}
-                                      {r.suspect && <span className="rpt-tag rpt-tag--warn" title="More than 100 harsh events a day, far more than a driver makes: most likely a faulty sensor">Check sensor</span>}
-                                    </td>
-                                  );
-                                }
-                                if (key === 'behaviour' && columns[i] === 'Follow-up') {
-                                  return (
-                                    <td key={i}>
-                                      {c === 'No case' ? <span className="rpt-fu-none">No case</span> : (
-                                        <button type="button" className={`rpt-fu rpt-fu--${c === 'Overdue' ? 'overdue' : c === 'Pending' ? 'pending' : 'done'}`}
-                                                onClick={() => openCaseFor(r.unit.key)}
-                                                title={c === 'Action taken' ? 'See or change the action taken' : 'Record the action taken'}>{c}</button>
-                                      )}
-                                    </td>
-                                  );
-                                }
-                                const cls = [isFigure(def, columns, i) && 'rpt-num',
-                                  conduct && columns[i] === 'Driver' && 'rpt-driver',
-                                  conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero'].filter(Boolean).join(' ');
-                                return <td key={i} className={cls || undefined}>{c}</td>;
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </Fragment>
-                    ))}
+                    <ReportRows secs={done.secs} def={def} ctx={done.ctx} columns={columns} shown={shown} reportKey={key}
+                                conduct={conduct} upTo={drawnUpTo} onCase={onCase} />
                   </tbody>
                 </table>
                 {def.legend && <ReportLegend legend={def.legend} />}

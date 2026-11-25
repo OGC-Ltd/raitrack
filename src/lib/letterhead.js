@@ -88,10 +88,19 @@ h2 small { float:right; text-transform:none; letter-spacing:0; font-weight:400; 
 
 const PAGER = `
 (function () {
+  // Dealt a few milliseconds at a time, handing the page back between slices,
+  // and rows placed several at once: a 1,200-row report held the page for
+  // 1.6 s here, a reflow per row (operator, 25 Nov 2026: "the UI must never
+  // freeze while a report is being built"). data-pages is set when it is done;
+  // whatever draws the pages waits for it (api/letterheadPdf).
   var flow = document.getElementById('flow');
   var tpl = document.getElementById('tpl-next').innerHTML;
   var pages = [document.querySelector('.page')];
   var body = pages[0].querySelector('.body');
+  var SLICE = 12, BATCH = 8;
+  var t0 = performance.now();
+  function due() { return performance.now() - t0 > SLICE; }
+  function later(fn) { setTimeout(function () { t0 = performance.now(); fn(); }, 0); }
   function room() { return body.scrollHeight <= body.clientHeight + 1; }
   // An empty copy of a list table: its columns and header, no rows. Copying
   // the whole table for each page made a long one cost rows x pages
@@ -107,34 +116,67 @@ const PAGER = `
     var p = document.createElement('div'); p.className = 'page'; p.innerHTML = tpl;
     document.body.insertBefore(p, flow); pages.push(p); body = p.querySelector('.body');
   }
-  function place(el) {
-    body.appendChild(el);
-    if (room()) return;
-    body.removeChild(el);
+  // A list table onto pages from row \`from\`: as many rows as fit here, the rest
+  // on the pages after. \`done\` once every row is placed.
+  function fillTable(tbl, rows, from, done) {
+    var part = shell(tbl); var pb = part.tBodies[0];
+    body.appendChild(part);
+    var i = from;
+    while (i < rows.length) {
+      var k = Math.min(BATCH, rows.length - i);
+      for (var b = 0; b < k; b++) pb.appendChild(rows[i + b]);
+      if (room()) { i += k; continue; }
+      // Too many: take them back off the end until the page has room
+      while (pb.lastChild && !room()) { pb.removeChild(pb.lastChild); k--; }
+      i += Math.max(0, k);
+      break;
+    }
+    if (i >= rows.length) { done(); return; }
+    var head = null;
+    if (i === from) {
+      body.removeChild(part);
+      head = body.lastElementChild && /^H[23]$/.test(body.lastElementChild.tagName) ? body.lastElementChild : null;
+      // Not one row fits on an empty page: it goes on its own page as it is
+      if (!body.children.length || (head && body.children.length === 1)) {
+        pb.appendChild(rows[i]); body.appendChild(part); i += 1;
+        if (i >= rows.length) { done(); return; }
+        head = null;
+      }
+    }
+    newPage(); if (head) body.appendChild(head);
+    var next = function () { fillTable(tbl, rows, i, done); };
+    if (due()) later(next); else next();
+  }
+  function place(el, done) {
     var tbl = el.tagName === 'TABLE' && el.classList.contains('lst') ? el : null;
     var rows = tbl ? Array.prototype.slice.call(tbl.tBodies[0].rows) : null;
-    if (tbl && rows.length > 1) {
-      var part = shell(tbl); var pb = part.tBodies[0];
-      body.appendChild(part);
-      var i = 0;
-      for (; i < rows.length; i++) { pb.appendChild(rows[i].cloneNode(true)); if (!room()) { pb.removeChild(pb.lastChild); break; } }
-      if (i === 0) { body.removeChild(part); } else if (i === rows.length) { return; }
-      var restT = shell(tbl); var rb = restT.tBodies[0];
-      for (var j = i; j < rows.length; j++) rb.appendChild(rows[j]);
-      var head = i === 0 && body.lastElementChild && /^H[23]$/.test(body.lastElementChild.tagName) ? body.lastElementChild : null;
-      newPage(); if (head) body.appendChild(head); place(restT); return;
-    }
+    // A long list is dealt row by row at once: laid out whole it would only overflow
+    if (tbl && rows.length > 40) { fillTable(tbl, rows, 0, done); return; }
+    body.appendChild(el);
+    if (room()) { done(); return; }
+    body.removeChild(el);
+    if (tbl && rows.length > 1) { fillTable(tbl, rows, 0, done); return; }
     var prev = body.lastElementChild;
     newPage();
     if (prev && /^H[23]$/.test(prev.tagName)) { body.appendChild(prev); }
     body.appendChild(el);
+    done();
   }
   var blocks = Array.prototype.slice.call(flow.children);
-  blocks.forEach(function (b) { flow.removeChild(b); place(b); });
-  flow.remove();
-  var n = pages.length;
-  pages.forEach(function (p, k) { var f = p.querySelector('.pn'); if (f) f.textContent = 'Page ' + (k + 1) + ' of ' + n; });
-  document.body.setAttribute('data-pages', String(n));
+  var at = 0;
+  function finish() {
+    flow.remove();
+    var n = pages.length;
+    pages.forEach(function (p, k) { var f = p.querySelector('.pn'); if (f) f.textContent = 'Page ' + (k + 1) + ' of ' + n; });
+    document.body.setAttribute('data-pages', String(n));
+  }
+  function step() {
+    if (at >= blocks.length) { finish(); return; }
+    var b = blocks[at++];
+    flow.removeChild(b);
+    place(b, function () { if (due()) later(step); else step(); });
+  }
+  step();
 })();
 `;
 
@@ -175,7 +217,7 @@ export function renderLetterheadHtml({ title, reportNo, date, companyName, info 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)} ${esc(companyName)} ${esc(date)}</title><style>${css(landscape)}</style></head><body>
 <div class="page">${first}</div>
 <template id="tpl-next">${next}</template>
-<div id="flow">${flow.filter(Boolean).join('\n')}</div>
+<div id="flow" style="display:none">${flow.filter(Boolean).join('\n')}</div>
 <script>${PAGER}</script>
 </body></html>`;
 }
