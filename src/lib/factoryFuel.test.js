@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, issuedByShift } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, issuedByShift, withFuelAfterSum } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -900,5 +900,24 @@ describe("withWorkConsumption with the server's shift figures", () => {
     expect(r.consumedByLine.l1).toMatchObject({ used: 142.4, kept: true, probeUsed: 228 });
     expect(r.consumedByLine.l2).toMatchObject({ used: 9.4, issued: 576, probeFilled: 579.2, fuellings: 1 });
     expect(r.probeUsed).toBe(414);
+  });
+});
+
+describe("withFuelAfterSum", () => {
+  it("is the row's Fuel before plus what was issued", () => {
+    const [shift, refill, waiting] = withFuelAfterSum([
+      { fuelBeforeShift: { litres: 120.4 }, lastRefill: { fuelBefore: { litres: 80 } }, issues: 2, issued: 500.25 },
+      { lastRefill: { fuelBefore: { litres: 78.8 } }, issues: 1, issued: 563.1 },
+      { fuelBeforeWaiting: { litres: 40 }, issues: 1, issued: 0 },
+    ]);
+    expect(shift.fuelAfter).toBeCloseTo(620.65);
+    expect(shift.fuelAfterSum).toEqual({ before: 120.4, issued: 500.25 });
+    expect(refill.fuelAfter).toBeCloseTo(641.9);
+    expect(waiting.fuelAfter).toBe(40);
+  });
+  it("is blank without a Fuel before or without issues", () => {
+    const [noBefore, noIssue] = withFuelAfterSum([{ issues: 1, issued: 300 }, { lastRefill: { fuelBefore: { litres: 50 } }, issues: 0, issued: 0 }]);
+    expect(noBefore).toMatchObject({ fuelAfter: null, fuelAfterSum: null });
+    expect(noIssue).toMatchObject({ fuelAfter: null, fuelAfterSum: null });
   });
 });

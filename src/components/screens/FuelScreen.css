@@ -104,15 +104,15 @@
 /* ── Phones (operator 2026-11-18: "the fuel tab … on mobile … responsive") ──
    The Drivers page turns its rows into cards at 700px with ten placed cells;
    a machine row has more, so the extra cells fell into whatever slot was left.
-   The machine card places all fifteen (the refill columns joined 2026-11-19,
-   Probe used 2026-11-20):
+   The machine card places all fourteen (the refill columns joined 2026-11-19,
+   Probe used 2026-11-20, Fuel now went 2026-11-26):
      machine                        status
      department · job               period
      shifts        planned          fuel before
      issued        probe filled     fuel after
-     fuel now      consumed         probe used
-     odometer before  odometer after
-   In the table's order (reordered 2026-11-19: before, issued, probe, after, now).
+     consumed      probe used       odometer before
+     burn rate
+   In the table's order (reordered 2026-11-19: before, issued, probe, after).
    Same specificity as the Drivers rules, later in the cascade, so these win. */
 @media (max-width: 700px) {
   .fuel-grid tbody tr {
@@ -123,7 +123,7 @@
       "m1   m2   m3"
       "m4   m5   m6"
       "m7   m8   m9"
-      "m10  m11  m11";
+      "m10  m10  m10";
   }
   .fuel-grid tbody td:nth-child(2) { grid-area: dept; white-space: normal; }
   .fuel-grid tbody td:nth-child(5) { grid-area: m1; }
@@ -136,7 +136,6 @@
   .fuel-grid tbody td:nth-child(12) { grid-area: m8; }
   .fuel-grid tbody td:nth-child(13) { grid-area: m9; }
   .fuel-grid tbody td:nth-child(14) { grid-area: m10; }
-  .fuel-grid tbody td:nth-child(15) { grid-area: m11; }
   /* The job under the department gets the card's two thirds, not the desk cap */
   .fuel-grid .fuel-job { max-width: none; }
 

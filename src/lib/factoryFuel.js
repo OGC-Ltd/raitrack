@@ -1050,3 +1050,25 @@ export function issuedByShift(row) {
   for (const v of byLine.values()) v.fuellings.sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
   return { byLine, unplaced };
 }
+
+/**
+ * Fuel after (operator 2026-11-26: "fuel after is issued + fuel before"): the
+ * row's Fuel before, as its column shows it (the tank before the day's planned
+ * work, else the latest refill's before, else the tank while it waits for the
+ * day's refill), plus what the pump issued over the period. Blank unless both
+ * are there, so the column always adds up across the row.
+ *
+ * @param {object[]} rows  rows after withFuelBeforeShift (and the rest of the chain)
+ */
+export function fuelBeforeShown(row) {
+  return row?.fuelBeforeShift?.litres ?? row?.lastRefill?.fuelBefore?.litres ?? row?.fuelBeforeWaiting?.litres ?? null;
+}
+
+export function withFuelAfterSum(rows) {
+  return (rows ?? []).map((row) => {
+    const before = fuelBeforeShown(row);
+    const issued = row.issues ? row.issued ?? null : null;
+    const sum = before != null && issued != null ? Math.round((before + issued) * 100) / 100 : null;
+    return { ...row, fuelAfter: sum, fuelAfterSum: sum != null ? { before, issued } : null };
+  });
+}

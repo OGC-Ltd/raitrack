@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getFuelShifts, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, varianceBand, issuedByShift, shiftLineKey } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withFuelAfterSum, fuelBeforeShown, withProbeUsed, varianceBand, issuedByShift, shiftLineKey } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { addDays } from "../../lib/dayRange";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -150,10 +150,10 @@ export default function FuelScreen() {
     // rate times the run since that refill (withProbeUsed). Fuel before is the
     // tank before the day's planned work (withFuelBeforeShift, 2026-11-23);
     // Consumed and Probe used then cover that work (withWorkConsumption).
-    () => withWorkConsumption(withProbeUsed(withFuelBeforeShift(withFuelBeforeWaiting(withConsumedSinceRefill(
+    () => withFuelAfterSum(withWorkConsumption(withProbeUsed(withFuelBeforeShift(withFuelBeforeWaiting(withConsumedSinceRefill(
       withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings, meters), tankDays, vehicles, today), meters),
       tankDays, today,
-    ), tankDays, today), shifts, today)), shifts, today),
+    ), tankDays, today), shifts, today)), shifts, today)),
     [roster, vehicles, fillings, tankDays, today, meters, shifts],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
@@ -414,7 +414,6 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
                 {th("Fuel after", "fuelAfter", true)}
-                {th("Fuel now", "fuelNow", true)}
                 {th("Consumed", "consumed", true)}
                 {/* Fuel used over the planned shifts, by the probe, with the hours run
                     (operator 2026-11-20). In the place the hidden Probe consumed held,
@@ -472,13 +471,13 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title="What the fuel probe recorded going in, for the fuellings the pump recorded">
                       {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
                     </td>
-                    <RefillLevelCell r={r} which="fuelAfter" label="Fuel after" />
-                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%".
-                        The Need column went 2026-11-19 (operator); after Fuel after
-                        since 2026-11-19 (operator). */}
-                    <td className={r.fuelNow != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel now"
-                        title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
-                      {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
+                    {/* Fuel before + Issued (lib/factoryFuel withFuelAfterSum, operator
+                        2026-11-26). The Fuel now column went the same day (operator). */}
+                    <td className={r.fuelAfter != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel after"
+                        title={r.fuelAfterSum
+                          ? `Fuel before ${fmt(r.fuelAfterSum.before)} L + issued ${fmt(r.fuelAfterSum.issued)} L`
+                          : fuelBeforeShown(r) == null ? "No Fuel before to add the issued fuel to" : "Nothing issued at the pump in this range"}>
+                      {r.fuelAfter != null ? `${fmt(r.fuelAfter)} L` : "-"}
                     </td>
                     {/* Burnt over the planned work: start − end + issued (lib/factoryFuel
                         withWorkConsumption, operator 2026-11-23); since the latest
@@ -493,7 +492,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={15} className="dr-grid__empty">No machines match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={14} className="dr-grid__empty">No machines match.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -839,7 +838,10 @@ function Refills({ m, from, to }) {
             </tr>
             <tr>
               <th scope="row">Fuel after refill</th>
-              <td className="r" title={levelSource(r.fuelAfter)}>{r.fuelAfter ? `${fmt(r.fuelAfter.litres)} L` : "-"}</td>
+              {/* Fuel before + issued (operator 2026-11-26), as the table's Fuel after */}
+              <td className="r" title={r.fuelBefore && r.issued != null ? `Fuel before ${fmt(r.fuelBefore.litres)} L + issued ${fmt(r.issued)} L` : "Needs both the fuel before and the issued figure"}>
+                {r.fuelBefore && r.issued != null ? `${fmt(Math.round((r.fuelBefore.litres + r.issued) * 100) / 100)} L` : "-"}
+              </td>
             </tr>
             <tr>
               <th scope="row">Consumed</th>
