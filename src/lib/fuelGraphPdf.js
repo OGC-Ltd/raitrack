@@ -7,6 +7,8 @@
 // Drawn in the browser from the unit's own readings (lib/vehicleDay), as the Fuel chart on its card is;
 // the figures are the report's row, so the page and the table always agree.
 
+import { nextTurn } from './slices';
+
 const OFFSET = 3 * 3_600_000;   // Nairobi
 const p2 = (n) => String(n).padStart(2, '0');
 const clock = (ms) => { const d = new Date(ms + OFFSET); return `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`; };
@@ -385,12 +387,14 @@ export function drawGraphPage(doc, { row, pings, events = null, from, to, fleet,
 export async function fuelGraphsPdf(units, { from, to, fleet, logos = {}, reportNo = '', now = Date.now() }) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
-  units.forEach((u, i) => {
-    if (i > 0) doc.addPage('a4', 'landscape');
-    drawGraphPage(doc, { ...u, from, to, fleet, logos, reportNo, now });
+  // A page at a time, handing the page back between them (lib/slices): a month of
+  // readings is thousands of points a page
+  for (let i = 0; i < units.length; i++) {
+    if (i > 0) { await nextTurn(); doc.addPage('a4', 'landscape'); }
+    drawGraphPage(doc, { ...units[i], from, to, fleet, logos, reportNo, now });
     doc.setFontSize(7);
     doc.setTextColor(...MUT);
     doc.text(`Page ${i + 1} of ${units.length}`, W - M, H - 12, { align: 'right' });
-  });
+  }
   return doc;
 }

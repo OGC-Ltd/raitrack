@@ -161,6 +161,12 @@ export function addTable(doc, { head, body }) {
 }
 
 export function downloadReport(doc, filename) {
+  finishReport(doc);
+  doc.save(filename);
+}
+
+/** Each page's foot: the confidential line, the page number and the green rule. No DOM: it runs in a worker too. */
+export function finishReport(doc) {
   const pageCount = doc.internal.getNumberOfPages();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -180,6 +186,4 @@ export function downloadReport(doc, filename) {
     doc.setFillColor(C.greenDeep);
     doc.rect(0, pageHeight - 4, pageWidth, 4, "F");
   }
-
-  doc.save(filename);
 }

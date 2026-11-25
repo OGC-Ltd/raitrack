@@ -194,3 +194,24 @@ describe('the Follow-up column, room for the onsite team’s feedback (operator,
     expect(Math.max(...widths.slice(0, -1))).toBeLessThan(widths.at(-1));
   });
 });
+
+describe('buildWorkbook progress', () => {
+  it('counts the rows of every sheet, and says how far it has got', async () => {
+    const { default: ExcelJS } = await import('exceljs');
+    const { workbookRows } = await import('./xlsxExport');
+    const body = Array.from({ length: 1200 }, (_, i) => [`KDA ${i}X`, i]);
+    const o = { head: ['Plate', 'N'], body, title: 'Bench', sheets: [{ name: 'Two', body: body.slice(0, 300) }] };
+    expect(workbookRows(o)).toBe(1500);
+    const seen = [];
+    const wb = buildWorkbook(ExcelJS, o, {}, (p) => seen.push(p));
+    expect(wb.worksheets).toHaveLength(2);
+    expect(seen.at(-1)).toEqual({ done: 1500, total: 1500 });
+    expect(seen.map((p) => p.done)).toEqual([...seen.map((p) => p.done)].sort((a, b) => a - b));
+  });
+
+  it('takes a table too long to spread into Math.max', async () => {
+    const { default: ExcelJS } = await import('exceljs');
+    const body = Array.from({ length: 150_000 }, () => ['a']);
+    expect(() => buildWorkbook(ExcelJS, { head: ['A'], body, title: 'Long' })).not.toThrow();
+  });
+});

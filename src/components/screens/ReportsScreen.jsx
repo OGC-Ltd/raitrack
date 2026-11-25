@@ -24,7 +24,7 @@ import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, load
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  machineKind, machineryRows, machineWindows, MACHINE_SECTIONS,
+  machineKind, machineryRowsSliced, machineWindows, MACHINE_SECTIONS,
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
@@ -1689,7 +1689,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         const vs = units.flatMap((u) => u.vehicles);
         // From 15 minutes early, so the first hour's hour meter has a reading to count from
         const p = await loadPings({ orgId, vehicles: vs, from: ctx.from - 15 * 60_000, to: ctx.to, onProgress: step('Reading each machine’s day') });
-        const made = machineryRows(units, p.pings, windows);
+        if (!live()) return;
+        const made = await machineryRowsSliced(units, p.pings, windows);
         // What the period at the top already says need not be said on every row
         ctx.oneWindow = windows.length <= 1;
         ctx.oneDay = new Set(windows.map((w) => w.day)).size <= 1;

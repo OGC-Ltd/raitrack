@@ -23,6 +23,27 @@ const LONG_SCALE = 1.6;
 /** Lets the browser paint between pages, so it stays responsive and the progress shows. */
 const breathe = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+/**
+ * Waits for the frame's pager to finish (it sets data-pages on the body). A page
+ * with no pager (continuous) has nothing to wait for.
+ */
+function pagesDealt(doc, limitMs = 120_000) {
+  if (!doc.getElementById('flow') || doc.body.hasAttribute('data-pages')) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const done = () => { mo.disconnect(); clearTimeout(timer); resolve(); };
+    const mo = new MutationObserver(() => { if (doc.body.hasAttribute('data-pages')) done(); });
+    mo.observe(doc.body, { attributes: true, attributeFilter: ['data-pages'] });
+    const timer = setTimeout(() => { mo.disconnect(); reject(new Error('The report page could not be laid out.')); }, limitMs);
+  });
+}
+
+/** A page's JPEG bytes, encoded off the page's thread (toBlob), not as a data URL. */
+function jpegBytes(canvas, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b
+    ? b.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)), reject)
+    : reject(new Error('The page could not be drawn.'))), 'image/jpeg', quality));
+}
+
 /** The tallest image a browser will draw, with room to spare. */
 const MAX_LONG_PX = 15_800;
 
@@ -43,6 +64,8 @@ async function drawPages(html, { landscape, scale, onProgress, continuous = fals
       document.body.appendChild(frame);
     });
     const doc = frame.contentDocument;
+    // The frame's own script deals the flow onto pages a slice at a time (lib/letterhead PAGER)
+    await pagesDealt(doc);
     await Promise.all([...doc.images].map((img) => (img.complete ? null : img.decode().catch(() => null))));
     await doc.fonts?.ready;
     const pages = [...doc.querySelectorAll('.page')];
@@ -57,7 +80,11 @@ async function drawPages(html, { landscape, scale, onProgress, continuous = fals
       // One long page stays one image: drawn smaller when it would pass what a
       // browser will draw (api/pdfJpeg MAX_HEIGHT), never cut
       const s = continuous ? Math.min(scale, MAX_LONG_PX / Math.max(1, pages[i].scrollHeight)) : base;
-      out.push(await html2canvas(pages[i], { scale: s, backgroundColor: '#ffffff', useCORS: true, logging: false,
+      // The other pages are left out of html2canvas's copy of the document: copying all of
+      // them for each page made a long report cost pages x pages (25 Nov 2026)
+      const own = pages[i];
+      out.push(await html2canvas(own, { scale: s, backgroundColor: '#ffffff', useCORS: true, logging: false,
+        ignoreElements: (el) => el !== own && el.classList?.contains('page'),
         ...(continuous ? { windowHeight: pages[i].scrollHeight + 50, height: pages[i].scrollHeight } : {}) }));
     }
     return out;
@@ -80,10 +107,10 @@ export async function saveLetterheadPdf(html, { filename, landscape = false, onP
   onProgress?.('Saving the PDF', { done: pages.length, total: pages.length });
   for (let i = 0; i < pages.length; i++) {
     if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
-    pdf.addImage(pages[i].toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h);
-    // Free each page once it is in the PDF, and let the screen update now and then
+    pdf.addImage(await jpegBytes(pages[i], 0.9), 'JPEG', 0, 0, w, h);
+    // Free each page once it is in the PDF, and let the screen update between pages
     pages[i].width = 0;
-    if (i % 10 === 9) await breathe();
+    await breathe();
   }
   if (keep) return { blob: pdf.output('blob'), filename };
   pdf.save(filename);
