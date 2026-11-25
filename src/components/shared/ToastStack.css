@@ -212,7 +212,7 @@
   .tst-stack.ops-sticky { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 }
 
-/* Gate and weighbridge pop-ups (OpsRoomAlerts, operator 2026-11-25): inside the
+/* Weighbridge pop-ups (OpsRoomAlerts, operator 2026-11-25): inside the
    page's own edge, the pages' gutter in from the right, not over it. */
 @media (min-width: 721px) {
   .tst-stack.tst-stack--page { right: calc(clamp(20px, 4vw, 64px) + 12px); }
