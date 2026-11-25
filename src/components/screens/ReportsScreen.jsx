@@ -20,7 +20,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
+import { loadConductPeriod, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
@@ -115,7 +115,7 @@ function OverspeedEvents({ events, unit }) {
 }
 
 /** "Reading harsh driving, day 4 of 31." for a step of a run, or what it is doing. */
-const stepWords = (l) => (l.total ? `${l.words} ${Math.min(l.done + 1, l.total)} of ${l.total}.` : `${l.words ?? 'Starting'}…`);
+const stepWords = (l) => (l.note ? `${l.note}.` : l.total ? `${l.words} ${Math.min(l.done + 1, l.total)} of ${l.total}.` : `${l.words ?? 'Starting'}…`);
 /** How far a run has got, across its lines. */
 function progressOf(run) {
   const ls = run.lines ? Object.values(run.lines) : [run];
@@ -1630,8 +1630,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     }
     const step = (words) => ({ done, total }) => { if (live()) setRun({ status: 'loading', words, done, total }); };
     // Driver conduct reads two things a day at a time: a line each, so neither count jumps back
-    const line = (name, words) => ({ done, total }) => {
-      if (live()) setRun((r) => ({ status: 'loading', lines: { ...(r.status === 'loading' ? r.lines : null), [name]: { words, done, total } } }));
+    const line = (name, words) => ({ done, total, note }) => {
+      if (live()) setRun((r) => ({ status: 'loading', lines: { ...(r.status === 'loading' ? r.lines : null), [name]: { words, done, total, note } } }));
     };
     setRun({ status: 'loading', words: 'Starting', done: 0, total: 0 });
     try {
@@ -1639,9 +1639,12 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       let failed = 0;
       if (key === 'behaviour') {
         const cornerSkipped = ctx.to - ctx.from > CORNER_MAX_MS;
-        const [h, cam, turns, runs] = await Promise.all([
-          loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, signal, onProgress: line('harsh', 'Reading harsh driving, day') }),
-          loadDashcamAlarms({ orgId, from: ctx.from, to: ctx.to, signal, onProgress: line('dashcam', 'Reading the dashcam alarms, day') }),
+        const [{ harsh: h, cam }, turns, runs] = await Promise.all([
+          // The days built on the server in one request, the rest live (api/fleetReports loadConductPeriod)
+          loadConductPeriod({ orgId, from: ctx.from, to: ctx.to, signal,
+            onBuilt: line('built', 'Reading the days already built'),
+            onHarsh: line('harsh', 'Reading harsh driving, day'),
+            onDashcam: line('dashcam', 'Reading the dashcam alarms, day') }),
           // Harsh cornering is not on the feed: the movement events, for a period of a day at most.
           // Over a day it is not asked for: a day at a time was a heavy query per day that used up the
           // server's database connections (#155, reverted 24 Nov 2026), until the server reads it cheaply.
@@ -2024,7 +2027,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report"
                      progress={progressOf(run)} action={{ label: 'Cancel', onClick: cancel }}>
             {run.lines
-              ? Object.values(run.lines).map((l, i) => <Fragment key={l.words}>{i > 0 && <br />}{stepWords(l)}</Fragment>)
+              ? Object.entries(run.lines).map(([name, l], i) => <Fragment key={name}>{i > 0 && <br />}{stepWords(l)}</Fragment>)
               : stepWords(run)}
           </EmptyNote>
         )}

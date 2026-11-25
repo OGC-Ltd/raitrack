@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('./vssAlarms', () => ({ fetchVssCameraCount: vi.fn(), fetchVssWindow: vi.fn() }));
 vi.mock('./notifications', () => ({ getNotifications: vi.fn() }));
+vi.mock('./driverConduct', () => ({ listDays: vi.fn() }));
 const vss = await import('./vssAlarms');
 const notes = await import('./notifications');
-const { loadDashcamAlarms, loadHarshEvents, DASHCAM_DAYS } = await import('./fleetReports');
+const conduct = await import('./driverConduct');
+const { loadDashcamAlarms, loadHarshEvents, loadConductPeriod, stretchesLeft, DASHCAM_DAYS } = await import('./fleetReports');
 
 const H = 3_600_000;
 const DAY = 24 * H;
@@ -135,5 +137,66 @@ describe('the harsh driving of a Driver conduct report', () => {
     await expect(loadHarshEvents({ orgId: 'o', from: NOW - 20 * DAY, to: NOW, signal: ctl.signal })).rejects.toThrow();
     // At most the three asked at once; none of the other 18 days
     expect(notes.getNotifications.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('a month of Driver conduct from the days built on the server (operator, 25 Nov 2026)', () => {
+  // Fleet days: 24 Nov 2026 is today; the period is 10 Nov 00:00 to now
+  const dayAt = (d) => Date.parse(`${d}T00:00:00+03:00`);
+  const from = dayAt('2026-11-10');
+  const built = (d, o = {}) => ({ day: d, captured: true, untyped: 0, ...o });
+  const days = ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23'];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+    for (const f of [...Object.values(vss), notes.getNotifications, conduct.listDays]) f.mockReset();
+    vss.fetchVssCameraCount.mockResolvedValue(55);
+    vss.fetchVssWindow.mockResolvedValue(answer([alarm('today', NOW - H)]));
+    notes.getNotifications.mockResolvedValue({ items: [{ id: 'n1', vehicleId: 'v1', alertType: 'HARSH_BRAKING', ts: new Date(NOW - 2 * H).toISOString() }], nextBefore: null });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('one request for the built days; only today is read live, its dashcam in the one search up to now', async () => {
+    conduct.listDays.mockResolvedValue({
+      days: days.map((d) => built(d, d === '2026-11-12' ? { captured: false } : { untyped: 1 })),
+      rows: [{ day: '2026-11-11', vehicleId: 'v1', plate: 'KCS 082M', times: { accel: [dayAt('2026-11-11') + H], brake: [], seatbelt: [dayAt('2026-11-11') + 2 * H], phone: [], covered: [] } }],
+    });
+    const r = await loadConductPeriod({ orgId: 'o', from, to: NOW, now: NOW });
+    expect(conduct.listDays).toHaveBeenCalledWith('o', '2026-11-10', '2026-11-24', undefined);
+    expect(notes.getNotifications.mock.calls.map(([q]) => q.day)).toEqual(['2026-11-24']);
+    expect(vss.fetchVssWindow).toHaveBeenCalledTimes(1);
+    expect(vss.fetchVssWindow.mock.calls[0][0].untilIso).toBeUndefined();
+    expect(r.builtDays).toBe(14);
+    expect(r.harsh.events.map((e) => e.alertType).sort()).toEqual(['HARSH_ACCELERATION', 'HARSH_BRAKING']);
+    expect(r.cam.alarms.find((a) => a.vehicleId === 'v1')).toMatchObject({ code: 125, occurredMs: dayAt('2026-11-11') + 2 * H });
+    // The built days reach back past VSS's two weeks
+    expect(r.cam.reach).toBe(from);
+    expect(r.cam.window).toEqual({ from, to: NOW });
+    // 12 Nov's capture was not whole: not read, and counted
+    expect(r.cam.failedDays).toBe(1);
+    expect(r.cam.untyped).toBe(13);
+    expect(r.cam.read.some(([a, b]) => a <= dayAt('2026-11-12') && b >= dayAt('2026-11-13'))).toBe(false);
+  });
+
+  it('every day live when the built days cannot be read (an older server)', async () => {
+    conduct.listDays.mockRejectedValue(new Error('404'));
+    const r = await loadConductPeriod({ orgId: 'o', from, to: NOW, now: NOW });
+    expect(notes.getNotifications).toHaveBeenCalledTimes(15);
+    expect(vss.fetchVssWindow).toHaveBeenCalledTimes(14);
+    expect(r.builtDays).toBe(0);
+  });
+
+  it('a day or less does not ask for built days; a day cut by the period’s hours is read live', async () => {
+    await loadConductPeriod({ orgId: 'o', from: NOW - 5 * H, to: NOW, now: NOW });
+    expect(conduct.listDays).not.toHaveBeenCalled();
+    notes.getNotifications.mockClear();
+    conduct.listDays.mockResolvedValue({ days: days.map((d) => built(d)), rows: [] });
+    await loadConductPeriod({ orgId: 'o', from: dayAt('2026-11-20') + 6 * H, to: NOW, now: NOW });
+    expect(notes.getNotifications.mock.calls.map(([q]) => q.day).sort()).toEqual(['2026-11-20', '2026-11-24']);
+  });
+
+  it('what is left of a period once the built days are taken out', () => {
+    expect(stretchesLeft(0, 10, [[2, 4], [4, 6], [8, 9]])).toEqual([[0, 2], [6, 8], [9, 10]]);
+    expect(stretchesLeft(0, 10, [[0, 10]])).toEqual([]);
   });
 });
