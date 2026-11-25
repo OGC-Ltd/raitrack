@@ -136,7 +136,9 @@ export function expectedFigures({ words, minusL, distanceKm, targetKmPerL }) {
   return { expectedL, expected: above ? ABOVE : WITHIN, possibleTheftL: above ? overL : null };
 }
 
-const rankOf = (r) => (r.words === PROBE_OK ? 0 : r.words === PROBE_ISSUE ? 1 : 2);
+/** A probe issue, ours or the server's with the tracker's reason ("PROBE ISSUE: Lost Contact with Tubes …"). */
+export const isProbeIssue = (words) => String(words ?? '').startsWith(PROBE_ISSUE);
+const rankOf = (r) => (r.words === PROBE_OK ? 0 : isProbeIssue(r.words) ? 1 : 2);
 
 /** A row's eighteen cells, as MORL_FCR_HEADS. */
 export function morlFcrCells(r) {

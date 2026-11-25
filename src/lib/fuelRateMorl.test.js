@@ -90,6 +90,15 @@ describe("Menengai's fuel consumption sheet (operator, 13 Nov 2026)", () => {
     expect(kbe[EXPECT_COL]).toEqual({ text: 'Above expected', fill: ABOVE_FILL });
     expect(kbe[THEFT_COL]).toEqual({ text: '15.06', fill: ABOVE_FILL });
   });
+  it('the server’s tracker fault comes through with its reason, sorted with the probe issues, no Expected', () => {
+    const lost = { ...row('KCX 001A', 300, 80, 0, 40), note: 'PROBE ISSUE: Lost Contact with Tubes Error - Needs Replacement' };
+    const none = { vehicleId: 'x', plate: 'KAA 001A', target: null, distanceKm: 0, startL: null, endL: null, filledL: 0, theftL: 0, consumedL: null, kmPerL: null, note: 'No fuel probe' };
+    const { list, body } = morlFcrTable([none, lost, KBE]);
+    expect(list.map((r) => r.plate)).toEqual(['KBE 726E', 'KCX 001A', 'KAA 001A']);
+    expect(body[1][COMMENT_COL].text).toBe('PROBE ISSUE: Lost Contact with Tubes Error - Needs Replacement');
+    expect(body[1][EXPECT_COL].text).toBe('');
+    expect(body[1][RATE_COL].fill).toBeUndefined();
+  });
   it('one rate alone is green', () => {
     expect(rateScale([4.2])(4.2)).toBe('#63be7b');
   });
