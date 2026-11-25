@@ -1052,23 +1052,32 @@ export function issuedByShift(row) {
 }
 
 /**
- * Fuel after (operator 2026-11-26: "fuel after is issued + fuel before"): the
- * row's Fuel before, as its column shows it (the tank before the day's planned
- * work, else the latest refill's before, else the tank while it waits for the
- * day's refill), plus what the pump issued over the period. Blank unless both
- * are there, so the column always adds up across the row.
- *
- * @param {object[]} rows  rows after withFuelBeforeShift (and the rest of the chain)
+ * Fuel after (operator 2026-11-26: "fuel after is issued + fuel before", "per
+ * day work plan, a work plan can have 2 shift"): the row's Fuel before, as its
+ * column shows it (the tank before the day's planned work, else the latest
+ * refill's before, else the tank while it waits for the day's refill), plus
+ * everything the pump issued on that same day, across both of its shifts.
+ * Issued over the rest of a longer range is left out, so a 7-day view never
+ * adds a week of fuellings to one morning's tank. Blank unless the day has a
+ * Fuel before and at least one fuelling.
  */
 export function fuelBeforeShown(row) {
-  return row?.fuelBeforeShift?.litres ?? row?.lastRefill?.fuelBefore?.litres ?? row?.fuelBeforeWaiting?.litres ?? null;
+  const shift = row?.fuelBeforeShift;
+  if (shift?.litres != null) return { litres: shift.litres, day: shift.day ?? null };
+  const refill = row?.lastRefill?.fuelBefore;
+  if (refill?.litres != null) return { litres: refill.litres, day: row.lastRefill.day ?? null };
+  const waiting = row?.fuelBeforeWaiting;
+  if (waiting?.litres != null) return { litres: waiting.litres, day: waiting.day ?? null };
+  return null;
 }
 
 export function withFuelAfterSum(rows) {
   return (rows ?? []).map((row) => {
     const before = fuelBeforeShown(row);
-    const issued = row.issues ? row.issued ?? null : null;
-    const sum = before != null && issued != null ? Math.round((before + issued) * 100) / 100 : null;
-    return { ...row, fuelAfter: sum, fuelAfterSum: sum != null ? { before, issued } : null };
+    const day = before?.day ?? null;
+    const issues = day ? (row.pumpIssues ?? []).filter((i) => i.day === day && i.litres != null) : [];
+    const issued = issues.length ? Math.round(issues.reduce((s, i) => s + i.litres, 0) * 100) / 100 : null;
+    const sum = before && issued != null ? Math.round((before.litres + issued) * 100) / 100 : null;
+    return { ...row, fuelAfter: sum, fuelAfterSum: sum != null ? { before: before.litres, issued, day, fuellings: issues.length } : null };
   });
 }

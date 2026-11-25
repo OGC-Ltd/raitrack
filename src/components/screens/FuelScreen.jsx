@@ -475,8 +475,9 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         2026-11-26). The Fuel now column went the same day (operator). */}
                     <td className={r.fuelAfter != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel after"
                         title={r.fuelAfterSum
-                          ? `Fuel before ${fmt(r.fuelAfterSum.before)} L + issued ${fmt(r.fuelAfterSum.issued)} L`
-                          : fuelBeforeShown(r) == null ? "No Fuel before to add the issued fuel to" : "Nothing issued at the pump in this range"}>
+                          ? `Fuel before ${fmt(r.fuelAfterSum.before)} L + issued ${fmt(r.fuelAfterSum.issued)} L on ${fmtDay(r.fuelAfterSum.day)} (${r.fuelAfterSum.fuellings} fuelling${r.fuelAfterSum.fuellings === 1 ? "" : "s"}, both shifts)`
+                          : fuelBeforeShown(r) == null ? "No Fuel before to add the issued fuel to"
+                          : `Nothing issued at the pump on ${fmtDay(fuelBeforeShown(r).day)}, the day of the Fuel before`}>
                       {r.fuelAfter != null ? `${fmt(r.fuelAfter)} L` : "-"}
                     </td>
                     {/* Burnt over the planned work: start − end + issued (lib/factoryFuel
