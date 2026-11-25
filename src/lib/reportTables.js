@@ -144,6 +144,35 @@ const n = (x) => (Number.isFinite(x) ? x.toLocaleString('en-GB') : '-');
  */
 export const SHOW_FOLLOW_UP = true;
 
+/** Letters and digits only, lower case: "KCB 715U" and "kcb715u" are one plate. */
+const squash = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+/**
+ * Driver conduct rows whose vehicle or driver matches `q` (operator, 25 Nov
+ * 2026: "a filter to filter by vehicle or driver"). The plate and the unit's
+ * name match with spaces and case ignored; the driver matches each word typed,
+ * so "otieno ismael" finds ISMAEL OTIENO ODERO. A blank query keeps every row.
+ */
+export function conductMatch(rows, q) {
+  const test = vehicleOrDriver(q);
+  return test ? rows.filter((r) => test(r.unit?.plate, r.driver, r.unit?.name)) : rows;
+}
+
+/**
+ * The same test for anything with a plate and a driver (a follow-up case, a
+ * logged incident): `(plate, driver, name?) → bool`, or null for a blank query.
+ */
+export function vehicleOrDriver(q) {
+  const words = String(q ?? '').toLowerCase().split(/\s+/).map(squash).filter(Boolean);
+  if (!words.length) return null;
+  const whole = words.join('');
+  return (plate, driver, name) => {
+    if (squash(plate).includes(whole) || squash(name).includes(whole)) return true;
+    const names = String(driver ?? '').toLowerCase().split(/\s+/).map(squash);
+    return words.every((w) => names.some((d) => d.includes(w)));
+  };
+}
+
 /**
  * The Follow-up column in the main vehicles table (Overdue / Pending / No case / Action taken badges).
  * Restored (operator, 9 Nov 2026: show inline on each row; pending cases page removed).

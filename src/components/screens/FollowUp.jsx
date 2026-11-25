@@ -6,6 +6,8 @@
 
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ACTIONS, incidentWords, isOverdue, escalations, exportCases, importCases } from '../../lib/followUp';
+import TablePager, { usePager } from '../body/TablePager';
+import { vehicleOrDriver } from '../../lib/reportTables';
 
 const fmtAt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 const fmtDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric' });
@@ -109,15 +111,22 @@ function saveFile(text, filename) {
  * thousand pending rows took a tenth of a second on every tick of the live
  * fleet the Reports page follows (25 Nov 2026).
  */
-export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, now = Date.now() }) {
+export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpen, onReplace, saveFailed, now = Date.now(), find = '' }) {
   const [show, setShow] = useState('pending');
   const [note, setNote] = useState(null);
   const fileRef = useRef(null);
-  const pending = cases.filter((c) => c.status === 'pending');
+  // The page's vehicle or driver search narrows what is listed; Export and Import keep every case
+  const shownCases = useMemo(() => {
+    const test = vehicleOrDriver(find);
+    return test ? cases.filter((c) => test(c.plate, c.driver)) : cases;
+  }, [cases, find]);
+  const pending = shownCases.filter((c) => c.status === 'pending');
   const overdue = pending.filter((c) => isOverdue(c, now)).length;
-  const list = (show === 'pending' ? pending : show === 'done' ? cases.filter((c) => c.status === 'done').reverse() : [...cases].reverse());
+  const list = (show === 'pending' ? pending : show === 'done' ? shownCases.filter((c) => c.status === 'done').reverse() : [...shownCases].reverse());
   // Worked out once per list, not every case against every case on each row
   const escalate = useMemo(() => escalations(cases), [cases]);
+  // A page at a time, the Drivers roster's pager: a month left ~1,000 rows on one screen (25 Nov 2026)
+  const pager = usePager(list, `${show}|${find}`);
 
   const doExport = () => {
     const stamp = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 16).replace(/[-:T]/g, '');
@@ -140,10 +149,11 @@ export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpe
     <section className="oi-panel" aria-label="Follow-up">
       <header className="oi-panel__head">
         <div>
-          <h3 className="oi-panel__title">
-            Follow-up <span className="oi-panel__n">{pending.length} pending</span>
-            {overdue > 0 && <span className="oi-panel__n fu-overdue">{overdue} overdue</span>}
-          </h3>
+          <div className="oi-panel__titlerow">
+            <h3 className="oi-panel__title">Follow-up</h3>
+            <span className="oi-panel__n">{pending.length} pending</span>
+            {overdue > 0 && <span className="conduct-badge conduct-badge--crit">{overdue} overdue</span>}
+          </div>
         </div>
         <div className="oi-panel__tools">
           <div className="oi-seg" role="radiogroup" aria-label="Show">
@@ -162,7 +172,8 @@ export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpe
 
       {list.length === 0 ? (
         <p className="oi-empty">
-          {show === 'pending' ? (cases.length ? 'Nothing pending. Every case has an action recorded.' : 'No cases yet. Run the report: vehicles that need follow-up appear here.')
+          {find.trim() && cases.length && !shownCases.length ? `No case for a vehicle or driver matching “${find.trim()}”.`
+            : show === 'pending' ? (cases.length ? 'Nothing pending. Every case has an action recorded.' : 'No cases yet. Run the report: vehicles that need follow-up appear here.')
             : 'Nothing to show.'}
         </p>
       ) : (
@@ -175,7 +186,7 @@ export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpe
               </tr>
             </thead>
             <tbody>
-              {list.map((c) => {
+              {pager.pageRows.map((c) => {
                 const late = isOverdue(c, now);
                 const esc = escalate.has(c.id);
                 return (
@@ -189,11 +200,11 @@ export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpe
                         : <span title={c.note || undefined}>{c.action}<span className="fu-by"> · {c.by || 'Operator'}, {fmtAt.format(c.actedAt)}</span></span>}
                     </td>
                     <td className="oi-nowrap">
-                      {late && <span className="fu-flag fu-flag--strong">Overdue</span>}
-                      {esc && <span className="fu-flag fu-flag--strong">Escalate</span>}
+                      {late && <span className="fu-flag fu-flag--overdue">Overdue</span>}
+                      {esc && <span className="fu-flag fu-flag--escalate">Escalate</span>}
                     </td>
                     <td className="oi-actions">
-                      <button type="button" className={c.status === 'pending' ? 'sp4-submit-btn fu-act' : 'sp4-ghost-btn'} onClick={() => onOpen(c)}>
+                      <button type="button" className={c.status === 'pending' ? 'sp4-ghost-btn fu-act' : 'sp4-ghost-btn'} onClick={() => onOpen(c)}>
                         {c.status === 'pending' ? 'Record action' : 'View'}
                       </button>
                     </td>
@@ -202,6 +213,7 @@ export const FollowUpPanel = memo(function FollowUpPanel({ cases, orgCode, onOpe
               })}
             </tbody>
           </table>
+          <TablePager label="Follow-up pages" pager={pager} />
         </div>
       )}
     </section>

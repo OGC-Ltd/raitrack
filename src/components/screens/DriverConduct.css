@@ -1,0 +1,401 @@
+/* Hallmark · redesign 2026-11-25 · depth: restyle · shape: app screen · scope: app · theme: brand (the project's own: the Drivers roster grid, DriversScreen.css) · tables: Driver conduct report, Follow-up, Logged by operators · stats: the Alerts strip (ConductStrip.jsx) · search: vehicle or driver · states: full, empty, loading/error by the page's EmptyNote · redesign: restyle */
+/* Critique: the three Driver conduct tables were the Sensor Monitor's full-bleed grid with right-set figures, 57px edge cells and black-filled pills, while the Drivers roster one screen over is a boxed grid with a head band, left-set figures, toned incident counts and washed status badges; they now read as one product. */
+/* Hallmark · answered · table heads are sentence case and untracked (Floor 9), where the Drivers roster still sets them in tracked capitals; size, weight, colour and band match */
+/* Hallmark · waive 24b · DriversScreen.css .dr-grid thead th 9px 14px, tbody td 10px 14px, .dr-grid__badge 3px 9px 3px 8px gap 6px, .dr-chip 4px 11px · the request is to match the Drivers roster's tables, so its measurements are kept */
+
+/* ── Tokens ─────────────────────────────────────────────────────────────────
+ * The Drivers grid's own values (DriversScreen.css `.dr-grid-card`), named
+ * once here and read through the Reports page's sp4 scale where the two
+ * already agree: --sp4-text-2 is the roster's #334155 cell tier,
+ * --sp4-text-3 its #52606f label tier, --sp4-raised its #f5f7fa head band.
+ * Two values the Reports page has no name for: the roster's lighter row rule
+ * (#e6e9ee, a step under --sp4-line, which is what keeps nine rules from
+ * arriving before the figures) and its card frame (#e2e8f0).
+ * The values live on :root; the names that point at the sp4 scale are set
+ * where that scale is, on the Reports page's own blocks. */
+:root {
+  --dc-line-v:  #e6e9ee;
+  --dc-frame-v: #e2e8f0;
+  --dc-focus-v: #2563eb;
+  --dc-warn-v:  #b45309;
+  --dc-crit-v:  #b91c1c;
+  --dc-ok-v:    #15803d;
+  --dc-shade-v: #000;
+}
+.conduct-grid,
+.oi-panel,
+.rpt-body--conduct {
+  --dc-ink:     var(--sp4-text-1);
+  --dc-cell:    var(--sp4-text-2);
+  --dc-label:   var(--sp4-text-3);
+  --dc-quiet:   var(--sp4-text-4);
+  --dc-head:    var(--sp4-raised);
+  --dc-surface: var(--sp4-surface);
+  --dc-line:    var(--dc-line-v);
+  --dc-frame:   var(--dc-frame-v);
+  --dc-focus:   var(--accent, var(--dc-focus-v));
+  --dc-warn:    var(--accent-warn, var(--dc-warn-v));
+  --dc-crit:    var(--accent-crit, var(--dc-crit-v));
+  --dc-ok:      var(--accent-ok, var(--dc-ok-v));
+  --dc-shade:   var(--dc-shade-v);
+  --dc-gutter:  16px;
+  --dc-ease:    cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── The box ────────────────────────────────────────────────────────────────
+ * The roster's grid sits in a hairline frame at 12px, inside the page's
+ * margins. The report table was full-bleed with its edge cells inset by the
+ * page gutter (57px at 1440), so its first column started further in than the
+ * toolbar above it. Where the columns do not fit, the box scrolls sideways
+ * inside its frame, as the roster's does, rather than the whole page. */
+.conduct-grid {
+  margin: 4px var(--sp4-gutter) 0;
+  border: 1px solid var(--dc-frame);
+  border-radius: 12px;
+  background: var(--dc-surface);
+  overflow-x: auto;
+}
+/* The count heads take two lines rather than a column each as wide as
+   "Harsh acceleration", so eleven columns fit at 1280. */
+.conduct-grid .sp4-table thead th.rpt-num {
+  width: 1%;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.25;
+  vertical-align: bottom;
+}
+/* Eleven columns want ~1,030px at the roster's 14px sides and the box has
+   989 at 1440: the counts take 8px sides and the words 12, the rows keep the
+   roster's 10px height padding. */
+.conduct-grid .sp4-table th:not(:first-child):not(:last-child),
+.conduct-grid .sp4-table td:not(:first-child):not(:last-child) { padding-left: 12px; padding-right: 12px; }
+.conduct-grid .sp4-table th:first-child,
+.conduct-grid .sp4-table td:first-child { padding-right: 12px; }
+.conduct-grid .sp4-table th:last-child,
+.conduct-grid .sp4-table td:last-child { padding-left: 12px; }
+.conduct-grid .sp4-table th.rpt-num:not(:first-child):not(:last-child),
+.conduct-grid .sp4-table td.rpt-num:not(:first-child):not(:last-child) { padding-left: 8px; padding-right: 8px; }
+
+/* The toolbar over the report reads as the roster's filter row: no rule
+   under it, the box's own frame does that job. */
+.rpt-body--conduct > .sp4-gridbar { border-bottom: 0; padding-bottom: 6px; }
+
+/* ── One grid voice for all three tables ──────────────────────────────────── */
+.conduct-grid .sp4-table,
+.oi-panel .oi-table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Heads: the roster's band, size, weight and label tier. Sentence case. */
+.conduct-grid .sp4-table thead th,
+.oi-panel .oi-table thead th {
+  padding: 9px 14px;
+  background: var(--dc-head);
+  color: var(--dc-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: bottom;
+  border-bottom: 1px solid var(--dc-line);
+}
+
+/* Cells: 10/14 at 12.5px, one step under full ink so the vehicle leads. */
+.conduct-grid .sp4-table tbody td,
+.oi-panel .oi-table tbody td {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--dc-cell);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--dc-line);
+}
+.conduct-grid .sp4-table .sp4-tr,
+.oi-panel .oi-table .sp4-tr { border-bottom: 0; }
+.conduct-grid .sp4-table tbody tr:last-child td,
+.oi-panel .oi-table tbody tr:last-child td { border-bottom: 0; }
+
+/* The box's own inset on the edge cells, not the page gutter. */
+.conduct-grid .sp4-table thead th:first-child,
+.conduct-grid .sp4-table tbody td:first-child,
+.conduct-grid .sp4-table .rpt-group th,
+.oi-panel .oi-table thead th:first-child,
+.oi-panel .oi-table tbody td:first-child { padding-left: var(--dc-gutter); }
+.conduct-grid .sp4-table thead th:last-child,
+.conduct-grid .sp4-table tbody td:last-child,
+.oi-panel .oi-table thead th:last-child,
+.oi-panel .oi-table tbody td:last-child { padding-right: var(--dc-gutter); }
+
+/* Rows: a wash of the ink under the pointer, never a solid fill. */
+.conduct-grid .sp4-tr,
+.oi-panel .sp4-tr {
+  cursor: default;
+  transition: background-color 120ms var(--dc-ease);
+}
+.conduct-grid .sp4-tr:hover,
+.oi-panel .sp4-tr:hover { background: color-mix(in srgb, var(--dc-ink) 2.5%, transparent); }
+
+/* The vehicle leads the row, the way the driver's name leads the roster's. */
+.conduct-grid td.rpt-unit,
+.oi-panel td.oi-plate { color: var(--dc-ink); font-weight: 700; }
+.conduct-grid td.rpt-driver { color: var(--dc-cell); }
+
+/* ── Figures ────────────────────────────────────────────────────────────────
+ * Left-set, the roster's rule: right-set figures under left-set heads left a
+ * ragged channel between each label and its numbers. Tabular numerals keep
+ * the digits stacked. A zero is quiet; a count carries the roster's incident
+ * treatment (the warn ink, bold, and a dot, so the cell says "something here"
+ * without asking the reader to name the hue); the total is the row's ink. */
+.conduct-grid .sp4-table th.rpt-num,
+.conduct-grid .sp4-table td.rpt-num { text-align: left; }
+.conduct-grid td.rpt-num { color: var(--dc-warn); font-weight: 700; }
+.conduct-grid td.rpt-num::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: currentColor;
+}
+.conduct-grid td.rpt-num.rpt-zero { color: var(--dc-quiet); font-weight: 400; }
+.conduct-grid td.rpt-num.rpt-zero::before,
+.conduct-grid td.rpt-num.conduct-total::before { content: none; }
+.conduct-grid td.rpt-num.conduct-total { color: var(--dc-ink); }
+.conduct-grid td.rpt-num.conduct-total.rpt-zero { color: var(--dc-quiet); }
+
+/* A row with no driver on record keeps its grey: it is keyed under the table. */
+.conduct-grid .rpt-row--nodriver > td { background: var(--rpt-nodriver); }
+
+/* Group rows inside the box. */
+.conduct-grid .rpt-group th {
+  background: var(--dc-surface);
+  border-bottom: 1px solid var(--dc-line);
+}
+
+/* ── Badges: the roster's status badge, dot and all ─────────────────────────
+ * Sentence case, a wash of the tone, the words driven darker so they clear
+ * 4.5:1 on their own wash, the dot left at the pure hue. Used for the report's
+ * Follow-up cell (a button), the case flags and the overdue count. */
+.conduct-badge,
+.rpt-fu,
+.fu-flag {
+  --tone: var(--dc-label);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--tone) 27%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  color: color-mix(in srgb, var(--tone) 78%, var(--dc-shade));
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.conduct-badge::before,
+.rpt-fu::before,
+.fu-flag::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+.rpt-fu--overdue, .fu-flag--overdue, .conduct-badge--crit { --tone: var(--dc-crit); }
+.rpt-fu--pending, .fu-flag--escalate, .conduct-badge--warn { --tone: var(--dc-warn); }
+.rpt-fu--done, .conduct-badge--ok { --tone: var(--dc-ok); }
+.fu-flag + .fu-flag { margin-left: 6px; }
+
+/* The report's Follow-up cell is a button: the badge, with every state. */
+.rpt-fu {
+  cursor: pointer;
+  transition: background-color 120ms var(--dc-ease), border-color 120ms var(--dc-ease);
+}
+.rpt-fu:hover {
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.rpt-fu:active { background: color-mix(in srgb, var(--tone) 24%, transparent); }
+.rpt-fu:focus-visible { outline: 2px solid var(--dc-focus); outline-offset: 1px; transition: none; }
+.rpt-fu:disabled { opacity: 0.45; cursor: not-allowed; }
+.rpt-fu-none { color: var(--dc-quiet); font-size: 12.5px; }
+.conduct-grid .rpt-fu { padding: 2px 8px 2px 7px; }
+
+/* ── The two panels under the report ────────────────────────────────────────
+ * The same box. The head is the roster's toolbar: the title and its count on
+ * the left, the controls that act on the table on the right. */
+.oi-panel {
+  margin: 20px var(--sp4-gutter) calc(var(--app-footer-h, 64px) + 16px);
+  border: 1px solid var(--dc-frame);
+  border-radius: 12px;
+  background: var(--dc-surface);
+  overflow: clip;
+}
+.oi-panel__head {
+  align-items: center;
+  padding: 12px var(--dc-gutter);
+  border-bottom: 1px solid var(--dc-line);
+}
+.oi-panel__titlerow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.oi-panel__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dc-ink);
+}
+.oi-panel__n {
+  margin-left: 0;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--dc-ink) 5%, transparent);
+  color: var(--dc-label);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.oi-panel__n.fu-overdue { border: 0; }
+.oi-panel__sub { color: var(--dc-label); font-size: 12.5px; }
+
+/* The Show switch: the roster's Rank by control, one track, the chosen
+   position lifted onto the card. */
+.oi-panel__head .oi-seg {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--dc-frame);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dc-ink) 4%, transparent);
+  overflow: visible;
+}
+.oi-panel__head .oi-seg__opt {
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dc-label);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 120ms var(--dc-ease), background-color 120ms var(--dc-ease);
+}
+.oi-panel__head .oi-seg__opt:hover { color: var(--dc-ink); background: color-mix(in srgb, var(--dc-ink) 5%, transparent); }
+.oi-panel__head .oi-seg__opt:active { background: color-mix(in srgb, var(--dc-ink) 9%, transparent); }
+.oi-panel__head .oi-seg__opt:focus-visible { outline: 2px solid var(--dc-focus); outline-offset: 1px; transition: none; }
+.oi-panel__head .oi-seg__opt--on,
+.oi-panel__head .oi-seg__opt--on:hover {
+  color: var(--dc-ink);
+  background: var(--dc-surface);
+  box-shadow: 0 0 0 1px var(--dc-frame), 0 1px 2px color-mix(in srgb, var(--dc-ink) 10%, transparent);
+}
+
+/* Empty: the roster's, centred in the box in the label tier. */
+.oi-empty {
+  padding: 32px var(--dc-gutter);
+  text-align: center;
+  color: var(--dc-label);
+  font-size: 12.5px;
+}
+.oi-warn, .oi-note { margin: 10px var(--dc-gutter) 0; }
+
+/* Rows in the panels: times and plates on one line, details wrap. */
+.oi-panel .oi-table { min-width: 860px; }
+.oi-panel .oi-table td { line-height: 1.4; }
+/* Eight columns in 989px: the inner cells take 12px sides and the incident
+   wraps after 140px, which leaves the driver and the details more room than
+   the three lines each they had. */
+.oi-panel .oi-table th:not(:first-child):not(:last-child),
+.oi-panel .oi-table td:not(:first-child):not(:last-child) { padding-left: 12px; padding-right: 12px; }
+.oi-panel .oi-kind { max-width: 140px; }
+.oi-panel .oi-details { color: var(--dc-cell); }
+.oi-panel .fu-by { color: var(--dc-label); }
+
+/* A row's action is a quiet button, not a filled one: the roster carries no
+   filled control in its rows, and fifteen blue fills down a page outshout the
+   badges that say which cases are late. */
+.oi-panel .oi-actions .sp4-ghost-btn { padding: 4px 10px; font-size: 12.5px; }
+.oi-panel .oi-actions .fu-act {
+  color: var(--dc-focus);
+  font-weight: 600;
+}
+
+/* The pager closes the box with the row rule, as it does under the roster. */
+.oi-panel .sp4-tpager { border-top: 1px solid var(--dc-line); }
+
+@media (prefers-reduced-motion: reduce) {
+  .conduct-grid .sp4-tr, .oi-panel .sp4-tr, .rpt-fu, .oi-panel__head .oi-seg__opt { transition: none; }
+}
+
+/* ── The stats: the Alerts page's strip (ConductStrip.jsx) ──────────────────
+ * Its cells, hairlines and tones are DriversScreen.css's own (.dr-strip,
+ * .dr-cell, .dr-tones), as the Alerts page uses them; this only seats it in
+ * the report's band and gives it the container its layouts are measured by,
+ * with the Alerts strip's breakpoints: four across, two by two, one column. */
+.rpt-conduct-stats {
+  flex-shrink: 0;
+  display: block;
+  padding: var(--sp4-md) var(--sp4-gutter);
+  border-bottom: 1px solid var(--sp4-line);
+  container: drstrip / inline-size;
+}
+.rpt-conduct-strip { font-family: inherit; }
+@container drstrip (min-width: 760px) {
+  /* The kinds card names six kinds and the vehicles behind each: it takes
+     the share the Alerts strip gives its four Waiting rows, and a little more. */
+  .rpt-conduct-stats .rpt-conduct-strip {
+    grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 0.9fr)) minmax(0, 1.25fr);
+  }
+  .rpt-conduct-stats .rpt-conduct-strip .dr-fleet { grid-column: auto; }
+}
+@container drstrip (min-width: 600px) and (max-width: 759px) {
+  .rpt-conduct-stats .rpt-conduct-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rpt-conduct-stats .rpt-conduct-strip .dr-fleet { grid-column: auto; }
+}
+
+/* ── Search vehicle or driver: the Drivers roster's field ───────────────────
+ * 8px radius, a translucent fill, the glyph inset on the left; sits in the
+ * filter bar beside Log incident. */
+.rpt-find {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+}
+.rpt-find__icon {
+  position: absolute;
+  left: 10px;
+  color: var(--sp4-text-3);
+  pointer-events: none;
+}
+.rpt-find__input {
+  width: 100%;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px 0 32px;
+  border: 1px solid var(--sp4-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sp4-text-1) 4%, transparent);
+  color: var(--sp4-text-1);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 150ms var(--dc-ease, ease), background-color 150ms var(--dc-ease, ease);
+}
+.rpt-find__input::placeholder { color: var(--sp4-text-3); }
+.rpt-find__input:hover { border-color: var(--sp4-line-hi); }
+.rpt-find__input:focus-visible {
+  outline: 2px solid var(--accent, var(--dc-focus-v));
+  outline-offset: 1px;
+  background: color-mix(in srgb, var(--accent, var(--dc-focus-v)) 5%, transparent);
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpt-find__input { transition: none; }
+}
+@media (max-width: 767px) {
+  .rpt-filterbar > .rpt-find { flex: 1 1 100%; min-width: 0; order: 4; }
+}

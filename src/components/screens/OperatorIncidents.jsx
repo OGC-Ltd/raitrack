@@ -12,6 +12,8 @@ import { OPERATOR_KINDS, KIND_LABEL, exportJson, importJson } from '../../lib/op
 import { displayOf } from '../../lib/fleetGroups';
 import { toLocalInput, fromLocalInput } from '../../lib/fleetReports';
 import { usePlaceName } from '../../hooks/usePlaceName';
+import TablePager, { usePager } from '../body/TablePager';
+import { vehicleOrDriver } from '../../lib/reportTables';
 
 const fmtAt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 const key = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -173,12 +175,18 @@ function saveFile(text, filename) {
 }
 
 /** The logged incidents, newest first, with edit, delete, export and import. */
-export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onReplace, saveFailed }) {
+export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onReplace, saveFailed, find = '' }) {
   const [confirm, setConfirm] = useState(null);
-  const [all, setAll] = useState(false);
   const [note, setNote] = useState(null);
   const fileRef = useRef(null);
-  const shown = all ? entries : entries.slice(0, 20);
+  // The page's vehicle or driver search narrows what is listed; Export and Import keep every entry
+  const shownEntries = useMemo(() => {
+    const test = vehicleOrDriver(find);
+    return test ? entries.filter((e) => test(e.plate, e.driver)) : entries;
+  }, [entries, find]);
+  // A page at a time, the Drivers roster's pager, in place of the latest 20 and Show all (25 Nov 2026)
+  const pager = usePager(shownEntries, find);
+  const shown = pager.pageRows;
 
   const doExport = () => {
     const stamp = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 16).replace(/[-:T]/g, '');
@@ -201,7 +209,10 @@ export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onR
     <section className="oi-panel" aria-label="Incidents logged by operators">
       <header className="oi-panel__head">
         <div>
-          <h3 className="oi-panel__title">Logged by operators <span className="oi-panel__n">{entries.length}</span></h3>
+          <div className="oi-panel__titlerow">
+            <h3 className="oi-panel__title">Logged by operators</h3>
+            <span className="oi-panel__n">{shownEntries.length === entries.length ? entries.length : `${shownEntries.length} of ${entries.length}`}</span>
+          </div>
           <p className="oi-panel__sub">
             Incidents seen on the live cameras.
           </p>
@@ -216,7 +227,9 @@ export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onR
       {saveFailed && <p className="oi-warn" role="alert">{saveFailed}</p>}
       {note && <p className="oi-note" role="status">{note}</p>}
 
-      {entries.length === 0 ? (
+      {entries.length > 0 && shownEntries.length === 0 ? (
+        <p className="oi-empty">Nothing logged for a vehicle or driver matching “{find.trim()}”.</p>
+      ) : entries.length === 0 ? (
         <p className="oi-empty">Nothing logged yet. Use Log incident when an operator sees a driver on the phone, without a seatbelt, or a covered camera.</p>
       ) : (
         <div className="oi-scroll">
@@ -229,7 +242,7 @@ export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onR
                 <tr key={e.id} className="sp4-tr">
                   <td className="oi-nowrap">{fmtAt.format(e.at)}</td>
                   <td className="oi-plate">{e.plate}</td>
-                  <td className="oi-nowrap">{e.kind === 'other' ? (e.other || 'Other') : KIND_LABEL[e.kind]}</td>
+                  <td className="oi-kind">{e.kind === 'other' ? (e.other || 'Other') : KIND_LABEL[e.kind]}</td>
                   <td>{e.driver || '-'}</td>
                   <td>{e.location || '-'}</td>
                   <td className="oi-details">{e.details || '-'}</td>
@@ -251,11 +264,7 @@ export function LoggedIncidents({ entries, orgCode, onLog, onEdit, onDelete, onR
               ))}
             </tbody>
           </table>
-          {entries.length > 20 && (
-            <button type="button" className="sp4-ghost-btn oi-more" onClick={() => setAll((a) => !a)}>
-              {all ? 'Show the latest 20' : `Show all ${entries.length}`}
-            </button>
-          )}
+          <TablePager label="Logged incident pages" pager={pager} />
         </div>
       )}
     </section>
