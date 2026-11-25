@@ -31,7 +31,7 @@ import PdfPreview from '../shared/PdfPreview';
 import TableToolbar from '../body/TableToolbar';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
-import { isMorlFcr, fcrMorlDoc, morlFcrSheet, morlFcrTable, MORL_FCR_COLUMNS, RATE_COL } from '../../lib/fuelRateMorl';
+import { isMorlFcr, fcrMorlDoc, morlFcrSheet, morlFcrTable, MORL_FCR_COLUMNS, RATE_COL, EXPECT_COL } from '../../lib/fuelRateMorl';
 
 const MAX_DAYS = 31;
 /** Which of their head colours a column's band is (lib/fuelRateMorl): blue, orange (with thefts) or green (minus thefts). */
@@ -244,14 +244,14 @@ export default function FuelConsumptionRateReport({ orgId, orgCode, companyName 
                 <caption id="fcr-morl-range" className="fcr-morl__range">{done.from === done.to ? done.from : `${done.from} to ${done.to}`}</caption>
                 <thead>
                   <tr>{MORL_FCR_COLUMNS.map((c, i) => (
-                    <th key={c.head} scope="col" className={`fcr-morl__th${c.fill ? ` fcr-morl__th--${bandOf(c.fill)}` : ''}${i > 0 && i < MORL_FCR_COLUMNS.length - 1 ? ' sp4-th--right' : ''}`}>{c.head}</th>
+                    <th key={c.head} scope="col" className={`fcr-morl__th${c.fill ? ` fcr-morl__th--${bandOf(c.fill)}` : ''}${i > 0 && i < EXPECT_COL ? ' sp4-th--right' : ''}`}>{c.head}</th>
                   ))}</tr>
                 </thead>
                 <tbody>
                   {morlFcrTable(rows).body.map((cells, ri) => (
                     <tr key={ri} className="sp4-tr">
                       {cells.map((c, i) => (
-                        <td key={i} className={i === 0 ? 'fcr-plate' : i < MORL_FCR_COLUMNS.length - 1 ? `fcr-morl__num${i === RATE_COL ? ' fcr-morl__rate' : ''}` : 'fcr-morl__words'}
+                        <td key={i} className={i === 0 ? 'fcr-plate' : i === EXPECT_COL ? `fcr-morl__expect${c.fill ? ' fcr-morl__expect--above' : ''}` : i < MORL_FCR_COLUMNS.length - 1 ? `fcr-morl__num${i === RATE_COL ? ' fcr-morl__rate' : ''}` : 'fcr-morl__words'}
                             style={i === RATE_COL && c.fill ? { '--fcr-scale': c.fill } : undefined}>{c.text}</td>
                       ))}
                     </tr>

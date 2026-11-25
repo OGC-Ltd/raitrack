@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
-import { isMorlFcr, morlFcrRows, morlFcrCells, morlFcrTable, rateScale, fcrMorlDoc, morlFcrSheet, MORL_FCR_HEADS, RATE_COL } from './fuelRateMorl';
+import { isMorlFcr, morlFcrRows, morlFcrCells, morlFcrTable, rateScale, fcrMorlDoc, morlFcrSheet, probeStatus, expectedStatus, MORL_FCR_HEADS, RATE_COL, EXPECT_COL, ABOVE_FILL } from './fuelRateMorl';
 import { buildWorkbook } from '../utils/xlsxExport';
 
 // As the server sends them (reports/fuel-consumption-rate), figures from Menengai's own sheet
@@ -20,14 +20,15 @@ describe("Menengai's fuel consumption sheet (operator, 13 Nov 2026)", () => {
     expect(isMorlFcr('menengai')).toBe(true);
     expect(isMorlFcr('SUKARI')).toBe(false);
   });
-  it('their fifteen columns, in their order', () => {
+  it('their columns, in their order, with Expected before the Comment (25 Nov 2026)', () => {
     expect(MORL_FCR_HEADS).toEqual(['Reg', 'Target Consumption', 'Missed Fillings', 'Missing (Recorded by MORL, Missing on Track3)',
       'Actual Theft', 'Return Pipe Theft', 'Total Distance Covered', 'Initial Level', 'Amount Filled', 'Final Level',
-      'Amnt Consumed (With Thefts)', 'Consumption Rate (With Thefts)', 'Amnt Consumed (Minus Thefts)', 'Consumption Rate (Minus Thefts)', 'Comment']);
+      'Amnt Consumed (With Thefts)', 'Consumption Rate (With Thefts)', 'Amnt Consumed (Minus Thefts)', 'Consumption Rate (Minus Thefts)', 'Expected', 'Comment']);
   });
   it('a row as their sheet has it: KBE 726E', () => {
     const [r] = morlFcrRows([KBE]);
-    expect(morlFcrCells(r)).toEqual(['KBE 726E', '6.5', '', '', '0', '', '546', '95.44', '37.03', '33.41', '99.06', '5.51', '99.06', '5.51', 'PROBE OK']);
+    // 5.51 km/L against a 6.5 target: more fuel than its standard
+    expect(morlFcrCells(r)).toEqual(['KBE 726E', '6.5', '', '', '0', '', '546', '95.44', '37.03', '33.41', '99.06', '5.51', '99.06', '5.51', 'Above expected', 'PROBE OK']);
   });
   it('with thefts counts the theft in, minus thefts leaves it out', () => {
     const [r] = morlFcrRows([THEFT]);
@@ -48,7 +49,39 @@ describe("Menengai's fuel consumption sheet (operator, 13 Nov 2026)", () => {
     const { list, body } = morlFcrTable([odd, KBE]);
     expect(list[1].plate).toBe('KAA 001A');
     expect(body[1][RATE_COL].fill).toBeUndefined();
-    expect(body[1][14].text).toBe('No fuel readings');
+    expect(body[1][15].text).toBe('No fuel readings');
+    expect(body[1][EXPECT_COL].text).toBe('');
+  });
+  it('the Comment is the probe\u2019s status: a rate that cannot be real is PROBE ISSUE, last of the measured, unshaded (25 Nov 2026)', () => {
+    // KDE 125E on 17-24 Nov: 48 km on 0.1 L = 480 km/L against a 6.5 target
+    const stuck = row('KDE 125E', 48, 36.8, 0, 36.7);
+    const { list, body } = morlFcrTable([stuck, KBE, KDA]);
+    expect(list.map((r) => r.plate)).toEqual(['KBE 726E', 'KDA 258J', 'KDE 125E']);
+    expect(list[2].words).toBe('PROBE ISSUE');
+    expect(body[2][RATE_COL].fill).toBeUndefined();
+    expect(body[2][EXPECT_COL].text).toBe('');
+    // the scale runs over believed rates only: the best of them is green, not the stuck one
+    expect(body[0][RATE_COL].fill).toBe('#63be7b');
+  });
+  it('probe status: the server\u2019s reason first; twice the target, 15 km/L without one, or moved and used none', () => {
+    expect(probeStatus({ note: 'No fuel probe', minusRate: 5 })).toBe('No fuel probe');
+    expect(probeStatus({ minusRate: 13, targetKmPerL: 6.5 })).toBe('PROBE OK');
+    expect(probeStatus({ minusRate: 13.1, targetKmPerL: 6.5 })).toBe('PROBE ISSUE');
+    expect(probeStatus({ minusRate: 63.27, targetKmPerL: 2.5 })).toBe('PROBE ISSUE');
+    expect(probeStatus({ minusRate: 14, targetKmPerL: null })).toBe('PROBE OK');
+    expect(probeStatus({ minusRate: 16, targetKmPerL: null })).toBe('PROBE ISSUE');
+    expect(probeStatus({ minusRate: null, minusL: 0, distanceKm: 120 })).toBe('PROBE ISSUE');
+    expect(probeStatus({ minusRate: null, minusL: null, distanceKm: 0 })).toBe('');
+  });
+  it('Expected: below the target\u2019s km/L is Above expected, in red; at or over it, Within; nothing without a believed rate or a target', () => {
+    expect(expectedStatus({ words: 'PROBE OK', minusRate: 5.33, targetKmPerL: 6.5 })).toBe('Above expected');
+    expect(expectedStatus({ words: 'PROBE OK', minusRate: 6.5, targetKmPerL: 6.5 })).toBe('Within expected');
+    expect(expectedStatus({ words: 'PROBE OK', minusRate: 7.09, targetKmPerL: 6.5 })).toBe('Within expected');
+    expect(expectedStatus({ words: 'PROBE ISSUE', minusRate: 480, targetKmPerL: 6.5 })).toBe('');
+    expect(expectedStatus({ words: 'PROBE OK', minusRate: 5, targetKmPerL: null })).toBe('');
+    const { body } = morlFcrTable([KBE, KDA]);
+    const kbe = body.find((c) => c[0].text === 'KBE 726E');
+    expect(kbe[EXPECT_COL]).toEqual({ text: 'Above expected', fill: ABOVE_FILL });
   });
   it('one rate alone is green', () => {
     expect(rateScale([4.2])(4.2)).toBe('#63be7b');
@@ -61,7 +94,8 @@ describe("Menengai's fuel consumption sheet (operator, 13 Nov 2026)", () => {
     expect(t.rows[0][0].fill).toBe('#9dc3e6');
     expect(t.rows[0][10].fill).toBe('#ffc000');
     expect(t.rows[0][12].fill).toBe('#00b050');
-    expect(t.rows[0][14].fill).toBeUndefined();
+    expect(t.rows[0][14].fill).toBe('#9dc3e6');
+    expect(t.rows[0][15].fill).toBeUndefined();
     expect(Math.round(t.cols.reduce((n, c) => n + c.w, 0))).toBe(271);
     expect(d.landscape).toBe(true);
   });
