@@ -114,6 +114,25 @@ describe('driver conduct', () => {
     expect(rows[0]).toMatchObject({ accel: 1, corner: 2, total: 3 });
   });
 
+  it('counts each fleet day, adding up to the row (the stats cards’ trends, 25 Nov 2026)', () => {
+    const two = { from: at('2026-11-01T00:00:00'), to: at('2026-11-03T00:00:00') };
+    const rows = behaviourRows(units, [
+      ev('v1', '2026-11-01T06:10:00'), ev('v1', '2026-11-02T00:30:00', 'HARSH_BRAKING'),
+      // one truck through two units: the day counts follow the unit the row takes
+      ev('v2', '2026-11-01T07:00:00'), ev('v3', '2026-11-01T07:00:00'), ev('v3', '2026-11-02T07:30:00'),
+    ], [alarm('v1', '2026-11-02T09:00:00', 116), alarm('v2', '2026-11-02T09:00:00', 116)], two);
+    const v1 = rows.find((r) => r.unit.plate === 'KCS 082M');
+    expect(v1.days).toEqual({ '2026-11-01': { harsh: 1, dashcam: 0 }, '2026-11-02': { harsh: 1, dashcam: 1 } });
+    const truck = rows.find((r) => r.unit.plate === 'KCN 901F');
+    // v2's phone alarm is not counted (no dashcam), nor in its days
+    expect(truck).toMatchObject({ accel: 2, total: 2 });
+    expect(truck.days).toEqual({ '2026-11-01': { harsh: 1, dashcam: 0 }, '2026-11-02': { harsh: 1, dashcam: 0 } });
+    for (const r of rows) {
+      const days = Object.values(r.days).reduce((t, d) => t + d.harsh + d.dashcam, 0);
+      expect(days).toBe(r.total);
+    }
+  });
+
   it('a truck reporting through two units is counted once', () => {
     const rows = behaviourRows(units, [ev('v2', '2026-11-01T07:00:00'), ev('v3', '2026-11-01T07:00:00'), ev('v3', '2026-11-01T07:30:00')], [], day);
     expect(rows.map((r) => [r.unit.plate, r.accel])).toEqual([['KCN 901F', 2]]);

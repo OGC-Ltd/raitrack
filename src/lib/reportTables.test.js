@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { REPORTS, isFigure, movingRange, noDispatchDriver, csvTable, shownColumns } from './reportTables';
+import { REPORTS, isFigure, movingRange, noDispatchDriver, csvTable, shownColumns, conductMatch, vehicleOrDriver } from './reportTables';
 
 const at = (s) => Date.parse(`${s}+03:00`);
 
@@ -61,5 +61,33 @@ describe('driver conduct: incidents with no driver on record', () => {
     const at = t.head.indexOf('Driver');
     expect(at).toBeGreaterThan(-1);
     expect(t.body.map((b) => b[at])).toEqual(['', 'Osero']);
+  });
+});
+
+describe('driver conduct: search by vehicle or driver (operator, 25 Nov 2026)', () => {
+  const rows = [
+    { unit: { plate: 'KBV 715U', name: 'Pickup 3' }, driver: 'ISMAEL OTIENO ODERO' },
+    { unit: { plate: 'KCW 318E' }, driver: 'KENNEDY ODHIAMBO OMBALO' },
+    { unit: { plate: 'KDX 131Y' }, driver: null },
+  ];
+  const plates = (q) => conductMatch(rows, q).map((r) => r.unit.plate);
+
+  it('a plate with spaces and case ignored, or the unit’s name', () => {
+    expect(plates('kbv715')).toEqual(['KBV 715U']);
+    expect(plates('KDX 131')).toEqual(['KDX 131Y']);
+    expect(plates('pickup')).toEqual(['KBV 715U']);
+  });
+
+  it('a driver by any of their names, in any order', () => {
+    expect(plates('otieno')).toEqual(['KBV 715U']);
+    expect(plates('ombalo kennedy')).toEqual(['KCW 318E']);
+    expect(plates('otieno kennedy')).toEqual([]);
+  });
+
+  it('a blank search keeps every row, and the same test serves the cases', () => {
+    expect(conductMatch(rows, '  ')).toBe(rows);
+    expect(vehicleOrDriver('')).toBeNull();
+    expect(vehicleOrDriver('odero')('KBV 715U', 'Ismael Otieno Odero')).toBe(true);
+    expect(vehicleOrDriver('kcw')('KCW 318E', null)).toBe(true);
   });
 });
