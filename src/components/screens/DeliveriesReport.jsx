@@ -35,7 +35,7 @@ import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL, NOT_GEOFENCED } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers, setPlanList, PLAN_LIST_MOVED } from '../../api/planner';
-import { sheetDaysFor, sheetsForReport, sheetOnDays, sheetRunDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, sheetOnDays, sheetRunDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList, planStopChoices, stopsPicked } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
 import { listOf, listView, withList, planList, plansOnList, judgedOnList } from '../../lib/deliveriesLists';
 import { openPlanNext } from '../../lib/planOverlay';
@@ -73,6 +73,7 @@ import ChoicePicker from './ChoicePicker';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import CheckPicker from './CheckPicker';
+import PlanStopPick from './PlanStopPick';
 
 const DAY = 86_400_000;
 const lastWords = (h) => (h === 1 ? 'Last hour' : `Last ${h} hours`);
@@ -608,19 +609,34 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // added point is. `fromPlanner`: what it did, by vehicle
   const [fromPlanner, setFromPlanner] = useState({});
   const tell = (key, words, warn = false) => setFromPlanner((m) => ({ ...m, [key]: words ? { words, warn } : null }));
+  // The other report's plan, its stops to pick some of for this list (PlanStopPick), by vehicle
+  const [picking, setPicking] = useState({});
+  const pickOn = (key, x) => setPicking((m) => ({ ...m, [key]: x }));
   const takePlannerStops = async (key, plate, forDay = day) => {
     if (!orgId || !canSheets) return;
     tell(key, 'Looking for its plan in the Planner…');
+    pickOn(key, null);
     try {
       const d = sheetDays(dayStart(forDay), dayStart(forDay) + DAY - 1, fleetDay);
       // Only a plan read on this report: a Van Sales itinerary never ticks its stops onto Finished Goods
       const all = await listPlans(orgId, d.from, d.to);
       const p = planForDay(tabList ? plansOnList(all, tabList, groupOfPlate) : all, plate, forDay, dayStart);
-      if (!p) { tell(key, `No ${tabList ? `${TAB_GROUP[fixedTemplate]} ` : ''}plan for ${plate} on ${dayWords(forDay)} in the Planner`); return; }
-      const [full, fc] = await Promise.all([getPlan(orgId, p.id), zones.fc ? Promise.resolve(zones.fc) : loadZones(orgId)]);
+      const other = tabList && !p ? planForDay(plansOnList(all, tabList === 'vs' ? 'fg' : 'vs', groupOfPlate), plate, forDay, dayStart) : null;
+      if (!p && !other) { tell(key, `No ${tabList ? `${TAB_GROUP[fixedTemplate]} ` : ''}plan for ${plate} on ${dayWords(forDay)} in the Planner`); return; }
+      const [full, fc] = await Promise.all([getPlan(orgId, (p ?? other).id), zones.fc ? Promise.resolve(zones.fc) : loadZones(orgId)]);
       const pickable = new Set(customersIn(fc, findStorages(fc)).map((c) => c.name));
-      const { names, pins } = planStopsForList(full, fc, pickable, FENCE_RADIUS_M);
       const what = full.source === 'itinerary' ? 'Wialon itinerary' : 'delivery sheet';
+      if (other) {
+        // Only the other report's plan (operator, 2026-11-25: a VS unit on FG for 2 of its 11 routes): its
+        // stops offered one by one, none ticked; the other list keeps its own whatever is picked here
+        const choices = planStopChoices(full, fc, pickable, FENCE_RADIUS_M);
+        const from = tabList === 'vs' ? TAB_GROUP.finishedGoods : TAB_GROUP.vanSales;
+        if (!choices.length) { tell(key, `No ${TAB_GROUP[fixedTemplate]} plan for ${plate} on ${dayWords(forDay)}, and its ${from} ${what} has no stops with a place`, true); return; }
+        tell(key, `No ${TAB_GROUP[fixedTemplate]} plan for ${plate} on ${dayWords(forDay)}: pick its stops from its ${from} ${what} below`);
+        pickOn(key, { day: forDay, from, what, planDay: dayWords(full.planDate), choices });
+        return;
+      }
+      const { names, pins } = planStopsForList(full, fc, pickable, FENCE_RADIUS_M);
       if (!names.length && !pins.length) { tell(key, `The Planner’s ${what} for ${plate} has no stops with a place`, true); return; }
       const r = await fenceStops(key, pins, names, forDay);
       const ticked = names.length + pins.length - r.kept - r.unnamed;
@@ -629,6 +645,24 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       tell(key, words.join('; '), Boolean(r.kept || r.unnamed));
     } catch (err) {
       tell(key, `The Planner’s stops could not be read: ${err?.message ?? err}`, true);
+    }
+  };
+  // The stops picked from the other report's plan, on this list's entry only
+  const addPicked = async (key, keys) => {
+    const x = picking[key];
+    if (!x) return;
+    const { names, pins } = stopsPicked(x.choices, keys);
+    pickOn(key, { ...x, busy: true });
+    try {
+      const r = await fenceStops(key, pins, names, x.day);
+      const added = names.length + pins.length - r.kept - r.unnamed;
+      const words = [`${added} stop${added === 1 ? '' : 's'} added from its ${x.from} ${x.what}; ${x.from} keeps all ${x.choices.length}`];
+      if (fencedWords(r)) words.push(fencedWords(r));
+      tell(key, words.join('; '), Boolean(r.kept || r.unnamed));
+      pickOn(key, null);
+    } catch (err) {
+      tell(key, `The stops could not be added: ${err?.message ?? err}`, true);
+      pickOn(key, { ...x, busy: false });
     }
   };
   const removePins = (key, pins, forDay = day) => {
@@ -1209,6 +1243,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                           <i className="ti ti-calendar-time" aria-hidden="true" /> From the Planner
                         </button>
                       </span>
+                    )}
+                    {picking[v.key] && picking[v.key].day === v.day && (
+                      <div className="dlv-roster__wide dlv-roster__note">
+                        <PlanStopPick plate={v.plate} from={picking[v.key].from} here={TAB_GROUP[fixedTemplate]} what={picking[v.key].what}
+                                      day={picking[v.key].planDay} choices={picking[v.key].choices} busy={Boolean(picking[v.key].busy)}
+                                      has={(c) => (c.name ? v.customers.includes(c.name) : (v.pins ?? []).some((p) => pinCode(p) === pinCode(c.pin)))}
+                                      onAdd={(keys) => addPicked(v.key, keys)} onClose={() => pickOn(v.key, null)} />
+                      </div>
                     )}
                     {v.pins?.length > 0 && (
                       // Points listed before stops were fenced, or whose fence could not be drawn

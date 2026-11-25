@@ -99,6 +99,20 @@
   margin-top: -2px; font-size: 12px; line-height: 1.4;
 }
 .dlv-roster__note .sp4-ghost-btn { height: 24px; padding: 0 8px; font-size: 12px; }
+/* Stops picked from the other report's plan (PlanStopPick): the row's width, its rows numbered in route order */
+.dlv-pick {
+  flex: 1 1 100%; max-width: 560px; padding: 10px 12px;
+  border: 1px solid var(--sp4-line); border-radius: 6px; background: var(--sp4-surface);
+}
+.dlv-pick__head { margin: 0 0 8px; color: var(--sp4-text-1); }
+.dlv-pick .drp-quick { margin-bottom: 6px; }
+.dlv-pick__list { max-height: 260px; }
+.dlv-pick .mvr-type { height: auto; min-height: 30px; padding: 5px 6px; align-items: flex-start; }
+.dlv-pick .mvr-type__name { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+.dlv-pick .mvr-type:disabled { cursor: default; opacity: 0.7; }
+.dlv-pick__seq { width: 18px; text-align: right; }
+.dlv-pick__foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.dlv-pick__foot .sp4-submit-btn { height: 28px; padding: 0 12px; font-size: 12.5px; }
 /* A point with no name: the customer's name typed beside it, then fenced */
 .dlv-paste__name { display: inline-flex; align-items: center; gap: 6px; }
 .dlv-paste__name input {

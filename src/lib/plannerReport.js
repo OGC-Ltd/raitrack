@@ -251,15 +251,38 @@ export function planForDay(plans, plate, day, dayStartOf, now = Date.now()) {
  * @returns {{ names: string[], pins: Array<{ name, lat, lng, radiusM }> }}
  */
 export function planStopsForList(plan, fc, pickable = null, radiusM = 100) {
+  return stopsPicked(planStopChoices(plan, fc, pickable, radiusM));
+}
+
+/**
+ * A plan's stops one by one, in route order, for picking some of them: each a
+ * geofence by the stops picker's name, else a point (as planStopsForList). A
+ * fence the route passes twice is offered once.
+ * @returns {Array<{ key: string, label: string, name?: string, pin?: { name, lat, lng, radiusM } }>}
+ */
+export function planStopChoices(plan, fc, pickable = null, radiusM = 100) {
   const nameOf = new Map((fc?.features ?? []).map((f) => [f.properties?.id, String(f.properties?.name ?? '').trim()]));
-  const names = [];
-  const pins = [];
+  const out = [];
+  const seen = new Set();
   const stops = [...(plan?.stops ?? [])].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-  for (const s of stops) {
+  stops.forEach((s, i) => {
     const c = s.customer ?? {};
     const name = c.geofenceId ? nameOf.get(c.geofenceId) : null;
-    if (name && (!pickable || pickable.has(name))) { names.push(name); continue; }
-    if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) pins.push({ name: String(c.name ?? '').trim() || String(c.code ?? '').replace(/^\w+:/, ''), lat: c.lat, lng: c.lng, radiusM });
-  }
-  return { names: [...new Set(names)], pins };
+    if (name && (!pickable || pickable.has(name))) {
+      if (!seen.has(name)) { seen.add(name); out.push({ key: `n:${name}`, label: name, name }); }
+      return;
+    }
+    if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
+      const pin = { name: String(c.name ?? '').trim() || String(c.code ?? '').replace(/^\w+:/, ''), lat: c.lat, lng: c.lng, radiusM };
+      out.push({ key: `p:${i}:${c.lat},${c.lng}`, label: pin.name || `${c.lat}, ${c.lng}`, pin });
+    }
+  });
+  return out;
+}
+
+/** The stops chosen from planStopChoices, as a Deliveries vehicle's (all of them when `keys` is not given). */
+export function stopsPicked(choices, keys = null) {
+  const want = keys ? new Set(keys) : null;
+  const got = (choices ?? []).filter((c) => !want || want.has(c.key));
+  return { names: got.filter((c) => c.name).map((c) => c.name), pins: got.filter((c) => c.pin).map((c) => c.pin) };
 }
