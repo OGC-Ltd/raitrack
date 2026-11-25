@@ -521,12 +521,14 @@ export default function WeighbridgesScreen() {
           The day across every bridge, then a card per bridge that also picks
           the bridge the tickets show (operator, 3 Nov 2026: "fix the
           weighbridges ui"). The day's figures cover EVERY bridge whatever
-          bridge is picked, so picking one never moves them. */}
+          bridge is picked, so picking one never moves them; a search for a
+          unit or a driver does narrow them (operator, 25 Nov 2026). */}
       <WeighbridgeTotals
         stats={stats}
         centres={centres}
         loading={loading || !data}
         periodLabel={spanLabel(from, to)}
+        search={view === "tickets" && !coverage ? search : ""}
         showBridges={view === "tickets"}
         centre={centre}
         onPickCentre={setCentre}
