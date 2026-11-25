@@ -34,6 +34,8 @@ import MaintenanceScreen from './components/screens/MaintenanceScreen';
 import AnalyticsScreen   from './components/screens/AnalyticsScreen';
 import ReportsScreen     from './components/screens/ReportsScreen';
 import WeighbridgesScreen from './components/screens/WeighbridgesScreen';
+import GateLogScreen from './components/screens/GateLogScreen';
+import OpsRoomAlerts from './components/shared/OpsRoomAlerts';
 import FuelScreen from './components/screens/FuelScreen';
 import PlannerScreen     from './components/screens/PlannerScreen';
 import PlansScreen       from './components/screens/PlansScreen';
@@ -126,6 +128,10 @@ function AppShell() {
       {/* Every toast, made by the server: newest in front, the rest unseen behind it, 8 s each */}
       <ErrorBoundary label="Toasts">
         <ToastStack />
+      </ErrorBoundary>
+      {/* The Ops Room Operator's weighbridge pop-ups (2026-11-25); nothing for anyone else */}
+      <ErrorBoundary label="Ops room alerts">
+        <OpsRoomAlerts />
       </ErrorBoundary>
 
       {/* Menengai idle alert corner badge */}
@@ -243,6 +249,14 @@ function AppShell() {
             </div>
           )}
 
+          {show('gateLog') && (
+            <div className="app-tab-panel app-tab-panel--screen">
+              <ErrorBoundary label="Gate log" fullSection>
+                <GateLogScreen />
+              </ErrorBoundary>
+            </div>
+          )}
+
           {show('weighbridges') && (
             <div className="app-tab-panel app-tab-panel--screen">
               <ErrorBoundary label="Weighbridges" fullSection>
@@ -331,7 +345,7 @@ function AppShell() {
           // the unit comes back when the list closes.
           // Drivers as well (operator, 2026-10-03: "do the same with the
           // drivers page") — so the panel now takes width on the map only.
-          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'reports', 'maintenance', 'plans', 'weighbridges', 'fuel', 'planner', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
+          const panelAllowed = !['alerts', 'dashcam', 'drivers', 'analytics', 'reports', 'maintenance', 'plans', 'gateLog', 'weighbridges', 'fuel', 'planner', 'workshop', 'audit', 'fuelReport', 'usageReview'].includes(desktopActiveTab)
             && !fuelAlertsOpen;
           const selectedVehicle = selectedVehicleId && panelAllowed
             ? _liveVehicles.find(v => v.id === selectedVehicleId) ?? { id: selectedVehicleId }
