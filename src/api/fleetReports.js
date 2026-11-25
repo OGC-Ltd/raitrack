@@ -22,6 +22,7 @@ import { apiFetch } from '../services/api';
 import { loadDay } from '../lib/vehicleDay';
 import { settleLimited } from '../lib/settleLimited';
 import { daysCovering, summariseWindows, peakFix } from '../lib/fleetReports';
+import { slicer, append } from '../lib/slices';
 
 const DAY_PAGE = 500;
 
@@ -148,7 +149,7 @@ export async function loadOverspeeds({ orgId, from, to, vehicleIds, onProgress =
  * Distance and time per unit inside `windows` ([[from, to], …]), from each
  * unit's readings over the fleet days the windows touch.
  */
-export async function loadDistances({ orgId, vehicles, windows, onProgress = () => {} }) {
+export async function loadDistances({ orgId, vehicles, windows, signal, onProgress = () => {} }) {
   if (!windows.length) return { perVehicle: new Map(), failed: 0 };
   const days = daysCovering(windows[0][0], windows[windows.length - 1][1]);
   const jobs = [];
@@ -163,17 +164,23 @@ export async function loadDistances({ orgId, vehicles, windows, onProgress = () 
     return r.pings;
   });
 
+  // A month of a whole fleet is millions of readings: gathered and summed a
+  // slice at a time, so the page keeps answering (lib/slices)
+  const slice = slicer({ signal });
   const pings = new Map();
   const failedUnits = new Set();
-  parts.forEach((p, i) => {
+  for (let i = 0; i < parts.length; i++) {
+    await slice();
+    const p = parts[i];
     const id = jobs[i].v.vehicleId;
-    if (p.status !== 'fulfilled') { failedUnits.add(id); return; }
+    if (p.status !== 'fulfilled') { failedUnits.add(id); continue; }
     if (!pings.has(id)) pings.set(id, []);
-    pings.get(id).push(...p.value);
-  });
+    append(pings.get(id), p.value);
+  }
 
   const perVehicle = new Map();
   for (const v of vehicles) {
+    await slice();
     const list = (pings.get(v.vehicleId) ?? []).sort((a, b) => a.t - b.t);
     perVehicle.set(v.vehicleId, summariseWindows(list, windows));
   }
@@ -185,7 +192,7 @@ export async function loadDistances({ orgId, vehicles, windows, onProgress = () 
  * telemetry (the Tankers Report reads a trip from them). `failed`: trackers
  * whose readings could not all be read.
  */
-export async function loadPings({ orgId, vehicles, from, to, onProgress = () => {} }) {
+export async function loadPings({ orgId, vehicles, from, to, signal, onProgress = () => {} }) {
   const days = daysCovering(from, to);
   const jobs = [];
   for (const v of vehicles) for (const day of days) jobs.push({ v, day });
@@ -197,15 +204,19 @@ export async function loadPings({ orgId, vehicles, from, to, onProgress = () => 
     if (done % 5 === 0 || done === jobs.length) onProgress({ done, total: jobs.length });
     return r.pings;
   });
+  const slice = slicer({ signal });
   const pings = new Map();
   const failed = new Set();
-  parts.forEach((p, i) => {
+  for (let i = 0; i < parts.length; i++) {
+    await slice();
+    const p = parts[i];
     const id = jobs[i].v.vehicleId;
     if (!pings.has(id)) pings.set(id, []);
-    if (p.status !== 'fulfilled') { failed.add(id); return; }
-    pings.get(id).push(...p.value.filter((x) => x.t >= from && x.t <= to));
-  });
-  for (const list of pings.values()) list.sort((a, b) => a.t - b.t);
+    if (p.status !== 'fulfilled') { failed.add(id); continue; }
+    const into = pings.get(id);
+    for (const x of p.value) if (x.t >= from && x.t <= to) into.push(x);
+  }
+  for (const list of pings.values()) { await slice(); list.sort((a, b) => a.t - b.t); }
   return { pings, failed };
 }
 

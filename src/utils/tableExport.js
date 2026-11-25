@@ -21,6 +21,7 @@
 // BOM'd CSV opens in Excel with the plates intact and sorts identically.
 
 import { buildSensorReport } from "./sensorReport";
+import { nextTurn } from "../lib/slices";
 
 /**
  * One CSV field.
@@ -134,15 +135,38 @@ export async function exportExcelVia(exportCsv) {
 export function downloadTableCsv({ head, body, filenameSlug = "report", title, meta, fills, doc, headFills, sheetName, sheets, inputs }) {
   // `inputs`: columns the reader fills in, in the Excel file only (xlsxExport addSheet)
   if (takenForExcel({ head, body, filenameSlug, title, meta, fills, doc, headFills, sheetName, sheets, inputs })) return;
+  const filename = `${filenameSlug}-${today()}.csv`;
+  // A very long table is written a slice at a time, so the page keeps answering
+  if (body.length > CSV_SLICE_ROWS) return csvSliced(head, body).then((parts) => saveCsv(parts, filename));
+  saveCsv([buildCsv(head, body)], filename);
+}
+
+/** Rows written between hand-backs to the page: about 50 ms of work. */
+const CSV_SLICE_ROWS = 20_000;
+
+/** buildCsv in pieces, the page handed back between them (lib/slices). */
+export async function csvSliced(head, body) {
+  const parts = [head.map(csvField).join(",")];
+  for (let i = 0; i < body.length; i += CSV_SLICE_ROWS) {
+    await nextTurn();
+    const end = Math.min(body.length, i + CSV_SLICE_ROWS);
+    let chunk = "";
+    for (let j = i; j < end; j++) chunk += `\r\n${body[j].map(csvField).join(",")}`;
+    parts.push(chunk);
+  }
+  return parts;
+}
+
+function saveCsv(parts, filename) {
   // The BOM is what makes Excel read this as UTF-8 rather than the local
   // codepage, which mangles the plates.
-  const blob = new Blob(["﻿", buildCsv(head, body)], {
+  const blob = new Blob(["﻿", ...parts], {
     type: "text/csv;charset=utf-8;",
   });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${filenameSlug}-${today()}.csv`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
