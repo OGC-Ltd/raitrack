@@ -46,24 +46,38 @@ export function movingRange(r) {
 
 const dashDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 /**
- * Driver conduct over more than the dashcam's 7 days (operator, 24 Nov 2026):
+ * Driver conduct over more than the dashcam's 14 days (operator, 24 Nov 2026):
  * which days its alarms cover, so a blank is not read as none.
  */
 export const dashcamFromWords = (ms) => `No seatbelt, on phone and camera covered are from the dashcam from ${dashDay.format(ms).replace(/,/g, '')} only; before that they count what operators logged`;
+/** Driver conduct over a period the dashcam no longer reaches at all. */
+export const DASHCAM_NONE_WORDS = 'The dashcam keeps its alarms 14 days and none of this period is within them: no seatbelt, on phone and camera covered count only what operators logged';
 
 const dashFull = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 /**
  * Driver conduct: the stretch of time the dashcam alarms in the report cover,
  * "10 Nov 2026 14:05 to 24 Nov 2026 14:12" (operator, 24 Nov 2026: "a note on
- * the report that the dashcam alarms captured are from this time to this time").
+ * the report that the dashcam alarms captured are from this time to this time"):
+ * the stretch they were asked for when the report was made (`dashcamWindow`,
+ * api/fleetReports loadDashcamAlarms), not when the file is saved. A run made
+ * before that was kept falls back to the period up to `now`.
  */
 export function dashcamWindowWords(ctx, now = Date.now()) {
   if (!ctx) return null;
   if (ctx.dashcamFailed) return 'Could not be read';
   if (!ctx.dashcams) return 'No dashcams in this fleet';
-  const from = Math.max(ctx.from, ctx.dashcamFrom ?? ctx.from);
-  const to = Math.min(ctx.to, now);
-  return `${dashFull.format(from).replace(/,/g, '')} to ${dashFull.format(to).replace(/,/g, '')}`;
+  const w = ctx.dashcamWindow !== undefined ? ctx.dashcamWindow
+    : { from: Math.max(ctx.from, ctx.dashcamFrom ?? ctx.from), to: Math.min(ctx.to, now) };
+  // A period that ends before the dashcam's reach: no stretch, not one that runs backwards
+  if (!w || !(w.to > w.from)) return 'None: the period is older than the 14 days the dashcam keeps';
+  return `${dashFull.format(w.from).replace(/,/g, '')} to ${dashFull.format(w.to).replace(/,/g, '')}`;
+}
+
+/** The note on how far the dashcam reached, for the screen and the PDF; null when it covered the whole period. */
+export function dashcamReachWords(ctx) {
+  if (!ctx?.dashcams || ctx.dashcamFailed) return null;
+  if (ctx.dashcamWindow === null) return DASHCAM_NONE_WORDS;
+  return ctx.dashcamFrom ? dashcamFromWords(ctx.dashcamFrom) : null;
 }
 
 /** Driver conduct over more than a day: harsh cornering is not counted (#155 reverted, 24 Nov 2026). */
@@ -165,7 +179,7 @@ export const REPORTS = {
     /**
      * Harsh cornering is read off the movement events, which the server gives
      * for the last 31 days only, so a period must start within them. The
-     * dashcam alarms reach back 7 days (DASHCAM_DAYS): older days count what
+     * dashcam alarms reach back 14 days (DASHCAM_DAYS): older days count what
      * operators logged, and the report says so.
      */
     reachDays: 31,

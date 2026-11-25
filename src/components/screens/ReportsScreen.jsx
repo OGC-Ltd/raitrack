@@ -16,11 +16,11 @@
  * large fleet, and a half-chosen period should not start that.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings, DASHCAM_DAYS } from '../../api/fleetReports';
+import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
@@ -28,7 +28,7 @@ import {
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey, dashcamFromWords, dashcamWindowWords, CORNER_SKIPPED_WORDS, CORNER_MAX_MS } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey, dashcamReachWords, dashcamWindowWords, CORNER_SKIPPED_WORDS, CORNER_MAX_MS } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -40,7 +40,7 @@ import { upsert, remove } from '../../lib/operatorLog';
 import * as conductApi from '../../api/driverConduct';
 import { moveBrowserFollowUp } from '../../lib/conductMove';
 import { ActionDialog, FollowUpPanel } from './FollowUp';
-import { casesFromRun, periodCases, ACTIONS as FOLLOW_UP_ACTIONS } from '../../lib/followUp';
+import { casesFromRun, periodCases, ACTIONS as FOLLOW_UP_ACTIONS, SERVER_CASES_MAX } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } from '../../api/endOfShiftReport';
@@ -112,6 +112,15 @@ function OverspeedEvents({ events, unit }) {
       </table>
     </section>
   );
+}
+
+/** "Reading harsh driving, day 4 of 31." for a step of a run, or what it is doing. */
+const stepWords = (l) => (l.total ? `${l.words} ${Math.min(l.done + 1, l.total)} of ${l.total}.` : `${l.words ?? 'Starting'}…`);
+/** How far a run has got, across its lines. */
+function progressOf(run) {
+  const ls = run.lines ? Object.values(run.lines) : [run];
+  const total = ls.reduce((n, l) => n + (l.total || 0), 0);
+  return total ? ls.reduce((n, l) => n + Math.min(l.done || 0, l.total || 0), 0) / total : null;
 }
 
 /** Driver conduct's Follow-up in the Excel file: a pick list of the actions, any words taken too. */
@@ -1476,6 +1485,12 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const [per, setPer] = useState('hour');
   const [run, setRun] = useState({ status: 'idle' });
   const runId = useRef(0);
+  // The run's requests: a new run, a cancel, another report or organisation, or
+  // leaving the page stops them, so a month's dashcam days do not keep going
+  // behind the next run (review of #157, 25 Nov 2026)
+  const runCtl = useRef(null);
+  const stopRun = () => { runCtl.current?.abort(); runCtl.current = null; };
+  useEffect(() => stopRun, []);
 
   // Incidents operators logged by hand (lib/operatorLog), kept in this browser.
   const me = useAuth().user;
@@ -1487,16 +1502,20 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // window comes back into view and every minute, for other machines' work.
   const [entries, setEntries] = useState([]);
   const [cases, setCases] = useState([]);
+  // The cases have been read from the server: until then a run's cases are not
+  // sent, since a day the dashcam did not reach takes its counts from them
+  const [casesRead, setCasesRead] = useState(false);
   const [storeError, setStoreError] = useState(null);
   const [dialog, setDialog] = useState(null);   // null | { entry? }
   const [acting, setActing] = useState(null);   // the case id in the action form
   const [now, setNow] = useState(() => Date.now());
   const failed = (what) => (err) => setStoreError(`${what}: ${err?.message ?? err}`);
   useEffect(() => {
+    setCasesRead(false);
     if (!orgId) { setEntries([]); setCases([]); return undefined; }
     let live = true;
     const read = () => Promise.all([conductApi.listCases(orgId), conductApi.listIncidents(orgId)])
-      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setStoreError(null); } })
+      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setCasesRead(true); setStoreError(null); } })
       .catch((err) => { if (live) failed('The follow-up could not be read')(err); });
     moveBrowserFollowUp(orgId).catch((err) => { if (live) failed('What this browser kept could not be moved to the server; it is kept here and tried again next time')(err); })
       .finally(read);
@@ -1517,9 +1536,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const importEntries = (list) => {
     conductApi.importIncidents(orgId, list).then((r) => setEntries(r.entries)).catch(failed('The incidents could not be imported'));
   };
-  const importCaseList = (list) => {
+  // Kept the same between renders, so the Follow-up table is not drawn again on every live tick
+  const importCaseList = useCallback((list) => {
     conductApi.importCases(orgId, list).then((r) => setCases(r.cases)).catch(failed('The follow-up could not be imported'));
-  };
+  }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openCase = useCallback((c) => setActing(c.id), []);
   const saveAction = (id, a) => {
     conductApi.recordAction(orgId, id, a)
       .then((c) => setCases((l) => l.map((x) => (x.id === c.id ? c : x))))
@@ -1529,12 +1550,15 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // A different organisation starts over: its groups and units differ.
   useEffect(() => {
     runId.current += 1;
+    stopRun();
     setRun({ status: 'idle' });
     setGroup(null);
     setUnit(null);
   }, [orgId]);
 
-  const reset = () => { runId.current += 1; setRun({ status: 'idle' }); };
+  const reset = () => { runId.current += 1; stopRun(); setRun({ status: 'idle' }); };
+  // Stopped by hand: not idle, which would make the report's default period again
+  const cancel = () => { runId.current += 1; stopRun(); setRun({ status: 'cancelled' }); };
   // Picked in the sidebar's Reports tree: the new report starts on its own period.
   // So does a newly loaded organisation, whose period may be its own.
   const showing = useRef(`${key}|${orgCode}`);
@@ -1586,7 +1610,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     const nt = over.night ?? night;
     if (problemFor(sp)) return;
     const id = ++runId.current;
-    const live = () => id === runId.current;
+    stopRun();
+    const ctl = new AbortController();
+    runCtl.current = ctl;
+    const { signal } = ctl;
+    const live = () => id === runId.current && !signal.aborted;
     const scoped0 = scopeUnits(siteVehicles, groups, group);
     // Machinery: the excavators and dozers alone
     const scoped = key === 'machinery' ? { ...scoped0, units: scoped0.units.filter(machineKind) } : scoped0;
@@ -1601,6 +1629,10 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       return;
     }
     const step = (words) => ({ done, total }) => { if (live()) setRun({ status: 'loading', words, done, total }); };
+    // Driver conduct reads two things a day at a time: a line each, so neither count jumps back
+    const line = (name, words) => ({ done, total }) => {
+      if (live()) setRun((r) => ({ status: 'loading', lines: { ...(r.status === 'loading' ? r.lines : null), [name]: { words, done, total } } }));
+    };
     setRun({ status: 'loading', words: 'Starting', done: 0, total: 0 });
     try {
       let rows;
@@ -1608,27 +1640,28 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       if (key === 'behaviour') {
         const cornerSkipped = ctx.to - ctx.from > CORNER_MAX_MS;
         const [h, cam, turns, runs] = await Promise.all([
-          loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
-          loadDashcamAlarms({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading the dashcam alarms, day') }),
-          // Harsh cornering is not on the feed: the movement events, a day at a time
+          loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, signal, onProgress: line('harsh', 'Reading harsh driving, day') }),
+          loadDashcamAlarms({ orgId, from: ctx.from, to: ctx.to, signal, onProgress: line('dashcam', 'Reading the dashcam alarms, day') }),
           // Harsh cornering is not on the feed: the movement events, for a period of a day at most.
           // Over a day it is not asked for: a day at a time was a heavy query per day that used up the
           // server's database connections (#155, reverted 24 Nov 2026), until the server reads it cheaply.
           cornerSkipped ? Promise.resolve(null) : loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
           // The dispatch runs over the period, to name the driver at the time of each incident
-          loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
+          loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to, signal }),
         ]);
+        if (!live()) return;
         ctx.cornerSkipped = cornerSkipped;
         ctx.cornerFailed = !cornerSkipped && turns == null;
-        // The dashcam reaches back DASHCAM_DAYS: the days before count only what operators logged
-        const camFrom = Date.now() - DASHCAM_DAYS * DAY;
-        ctx.dashcamFrom = ctx.from < camFrom ? camFrom : null;
+        // The dashcam reaches back DASHCAM_DAYS from when the reading began: the days before count only what operators logged
+        ctx.dashcamFrom = cam.cameras > 0 && ctx.from < cam.reach ? cam.reach : null;
+        // The stretch its alarms were asked for (null: none of the period), and the parts that came back whole
+        ctx.dashcamWindow = cam.window;
+        ctx.dashcamRead = cam.read;
         ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
         ctx.dashcamDaysFailed = cam.failedDays ?? 0;
         ctx.dashcamUntyped = cam.untyped ?? 0;
-        if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
         setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed, runs },
@@ -1709,6 +1742,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       setRun({ status: 'done', rows, secs, ctx, missing, failed, units: units.length });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
+    } finally {
+      if (runCtl.current === ctl) runCtl.current = null;
     }
   };
 
@@ -1730,16 +1765,24 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // what operators recorded on cases already there stays.
   // Sent only when what was found changes: the entries are read again every
   // minute, and the same cases need not go to the server each time.
+  // Not until the stored cases are in: a day whose dashcam alarms were not all
+  // read keeps the camera counts the server holds (lib/followUp casesFromRun).
   const sentFound = useRef('');
+  const found = useMemo(() => {
+    if (run.status !== 'done' || !run.raw || !casesRead) return null;
+    return casesFromRun(run.unitList, run.raw.events, run.raw.alarms, {
+      ...run.ctx, dashcams: run.ctx.dashcams, dashcamRead: run.ctx.dashcams ? run.ctx.dashcamRead ?? [] : null,
+      logged: entries, runs: run.raw.runs, stored: cases, storedAll: cases.length < SERVER_CASES_MAX,
+    });
+  }, [run, entries, cases, casesRead]);
   useEffect(() => {
-    if (run.status !== 'done' || !run.raw || !orgId) return;
-    const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
+    if (!found?.length || !orgId) return;
     const sig = `${orgId}:${JSON.stringify(found)}`;
-    if (sig === sentFound.current || !found.length) return;
+    if (sig === sentFound.current) return;
     sentFound.current = sig;
     // The server folds them in, keeping what operators recorded, and answers with every case
     conductApi.sendFound(orgId, found).then(setCases).catch((err) => { sentFound.current = ''; failed('The follow-up cases could not be saved')(err); });
-  }, [run, entries, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [found, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = useMemo(() => {
     if (run.status !== 'done') return null;
@@ -1918,10 +1961,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
               )}
               <div className="mvr-hours__foot">
                 {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
+                {/* A run in progress is stopped for the new period (review of #157, 25 Nov 2026) */}
                 <button type="button" className="sp4-submit-btn frp-run"
-                        disabled={run.status === 'loading' || Boolean(pickingProblem)}
+                        disabled={Boolean(pickingProblem)}
                         onClick={() => { close(); applyDays(shownDays); }}>
-                  {run.status === 'loading' ? 'Running…' : 'Run report'}
+                  Run report
                 </button>
               </div>
             </>
@@ -1978,8 +2022,16 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         )}
         {run.status === 'loading' && (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report"
-                     progress={run.total ? run.done / run.total : null}>
-            {run.total ? `${run.words} ${Math.min(run.done + 1, run.total)} of ${run.total}.` : `${run.words}…`}
+                     progress={progressOf(run)} action={{ label: 'Cancel', onClick: cancel }}>
+            {run.lines
+              ? Object.values(run.lines).map((l, i) => <Fragment key={l.words}>{i > 0 && <br />}{stepWords(l)}</Fragment>)
+              : stepWords(run)}
+          </EmptyNote>
+        )}
+        {run.status === 'cancelled' && (
+          <EmptyNote icon="ti-player-stop" title="Report Cancelled"
+                     action={{ label: 'Run report', onClick: () => execute() }}>
+            Nothing more is being read. Run the report again when you are ready.
           </EmptyNote>
         )}
         {run.status === 'error' && (
@@ -2001,7 +2053,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerSkipped && <span className="rpt-warn"> · {CORNER_SKIPPED_WORDS}</span>}
-                {key === 'behaviour' && done.ctx.dashcams && done.ctx.dashcamFrom && <span className="rpt-warn"> · {dashcamFromWords(done.ctx.dashcamFrom)}</span>}
+                {key === 'behaviour' && dashcamReachWords(done.ctx) && <span className="rpt-warn"> · {dashcamReachWords(done.ctx)}</span>}
                 {key === 'behaviour' && done.ctx.dashcamDaysFailed > 0 && <span className="rpt-warn"> · the dashcam alarms of {done.ctx.dashcamDaysFailed} day{done.ctx.dashcamDaysFailed === 1 ? '' : 's'} could not all be read</span>}
                 {key === 'behaviour' && done.ctx.dashcamUntyped > 0 && <span className="rpt-warn"> · {done.ctx.dashcamUntyped.toLocaleString('en-GB')} dashcam alarms had no type from the dashcam system and are not counted</span>}
                 {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
@@ -2115,7 +2167,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
 
         {key === 'behaviour' && SHOW_FOLLOW_UP && (
           <FollowUpPanel cases={cases} orgCode={orgCode} now={now} saveFailed={storeError}
-                         onOpen={(c) => setActing(c.id)} onReplace={importCaseList} />
+                         onOpen={openCase} onReplace={importCaseList} />
         )}
         {key === 'behaviour' && (
           <LoggedIncidents entries={entries} orgCode={orgCode} saveFailed={storeError}

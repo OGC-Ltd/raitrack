@@ -43,7 +43,7 @@ import { apiFetch } from "../services/api";
  * @returns {Promise<{items: Array, nextBefore: string|null}>} `nextBefore` is
  *   null when there is nothing older, which is what ends the scroll.
  */
-export async function getNotifications({ orgId, vehicleId, day, limit = 100, before, alertTypes }) {
+export async function getNotifications({ orgId, vehicleId, day, limit = 100, before, alertTypes, signal }) {
   if (!orgId) return { items: [], nextBefore: null };
 
   const res = await apiFetch(
@@ -51,7 +51,8 @@ export async function getNotifications({ orgId, vehicleId, day, limit = 100, bef
       (vehicleId ? `&vehicleId=${encodeURIComponent(vehicleId)}` : "") +
       (alertTypes?.length ? `&alertType=${encodeURIComponent(alertTypes.join(","))}` : "") +
       (day ? `&day=${encodeURIComponent(day)}` : "") +
-      (before ? `&before=${encodeURIComponent(before)}` : "")
+      (before ? `&before=${encodeURIComponent(before)}` : ""),
+    signal ? { signal } : undefined
   );
 
   const items = res.data?.notifications ?? [];

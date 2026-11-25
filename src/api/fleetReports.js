@@ -3,8 +3,8 @@
 //
 //   Driver conduct      GET /notifications?alertType=HARSH_ACCELERATION,HARSH_BRAKING&day=…
 //                       a fleet day at a time, paged; and the dashcam alarms,
-//                       GET /vss/alarms?org=…&since=… (no seatbelt, on phone),
-//                       which reach back 7 days
+//                       GET /vss/alarms?org=…&since=…[&until=…] (no seatbelt,
+//                       on phone), which reach back DASHCAM_DAYS (14)
 //   Overspeeding        GET /incidents/speeding/summary (which units), then
 //                       GET /incidents/speeding?vehicleId=… (their episodes,
 //                       each with its length and distance)
@@ -16,7 +16,7 @@
 // request: a unit or day that cannot be read is counted in `failed`, not fatal.
 
 import { getNotifications } from './notifications';
-import { fetchVssIncidents, fetchVssCameraCount, fetchVssWindow } from './vssAlarms';
+import { fetchVssCameraCount, fetchVssWindow } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
 import { apiFetch } from '../services/api';
 import { loadDay } from '../lib/vehicleDay';
@@ -28,7 +28,7 @@ const DAY_PAGE = 500;
 export const HARSH_TYPES = ['HARSH_ACCELERATION', 'HARSH_BRAKING'];
 
 /** Every harsh acceleration and harsh brake in [from, to). */
-export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPES, onProgress = () => {} }) {
+export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPES, onProgress = () => {}, signal }) {
   const days = daysCovering(from, to);
   let done = 0;
   let failed = 0;
@@ -37,7 +37,8 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
     const items = [];
     let before;
     for (let page = 0; page < 60; page++) {
-      const r = await getNotifications({ orgId, day, limit: DAY_PAGE, before, alertTypes });
+      signal?.throwIfAborted();
+      const r = await getNotifications({ orgId, day, limit: DAY_PAGE, before, alertTypes, signal });
       items.push(...r.items);
       if (!r.nextBefore) break;
       before = r.nextBefore;
@@ -46,6 +47,7 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
     onProgress({ done, total: days.length });
     return items;
   });
+  signal?.throwIfAborted();
   const events = [];
   for (const p of parts) {
     if (p.status === 'fulfilled') events.push(...p.value);
@@ -60,50 +62,66 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
 
 /**
  * The organisation's dashcam alarms over [from, to) as far back as the server
- * reaches (DASHCAM_DAYS), and whether it has dashcams at all. A period of up
- * to a day is one request; a longer one is read a day at a time, one after
- * another (VSS answers one search per 10 s, and the proxy waits 30 s), each
- * day with every alarm's type. Never throws: a day that cannot be read is
- * counted in `failedDays`, and none read at all is `failed`.
+ * reaches (DASHCAM_DAYS), and whether it has dashcams at all.
+ *
+ * A period of up to a day that runs to now is one search up to now, the one
+ * the Alarms tab shares. Anything else is read with `until`, a day at a time,
+ * one after another (VSS answers one search per 10 s, and the proxy waits
+ * 30 s), each day with every alarm's type: a search from a past day to now
+ * could run past the proxy's 30 s. A period that ends before the reach asks
+ * for nothing.
+ *
+ * `window` is the stretch the alarms were asked for, fixed when the reading
+ * began (null: none of the period is within reach); `read` the parts of it
+ * that came back whole, which a run's follow-up cases need (lib/followUp
+ * casesFromRun). A day that cannot be read is counted in `failedDays`, and
+ * none read at all is `failed`; it throws only when `signal` is aborted.
  */
-export async function loadDashcamAlarms({ orgId, from, to = Date.now(), onProgress = () => {} }) {
+export async function loadDashcamAlarms({ orgId, from, to = Date.now(), onProgress = () => {}, signal, now = Date.now() }) {
+  const reach = now - DASHCAM_DAYS * DAY_MS;
+  const none = { alarms: [], failed: false, failedDays: 0, untyped: 0, reach, window: null, read: [] };
   const cameras = await fetchVssCameraCount(orgId);
-  if (!cameras) return { alarms: [], cameras: 0, failed: false, failedDays: 0, untyped: 0 };
-  const start = Math.max(from, Date.now() - DASHCAM_DAYS * DAY_MS);
-  const end = Math.min(to, Date.now());
-  if (end - start <= DAY_MS) {
-    try {
-      const alarms = await fetchVssIncidents({ orgId, sinceIso: new Date(start).toISOString() });
-      return { alarms: alarms.filter((a) => !(a.occurredMs >= end)), cameras, failed: false, failedDays: 0, untyped: 0 };
-    } catch {
-      return { alarms: [], cameras, failed: true, failedDays: 0, untyped: 0 };
-    }
-  }
+  signal?.throwIfAborted();
+  if (!cameras) return { ...none, cameras: 0 };
+  const start = Math.max(from, reach);
+  const end = Math.min(to, now);
+  if (end <= start) return { ...none, cameras };
+  // A stretch read up to now covers the rest of the period too: nothing after now was there to read
+  const upTo = (b) => (b >= end && end === now ? Math.max(b, to) : b);
+  const iso = (ms) => new Date(ms).toISOString();
+
   const windows = [];
-  for (let a = start; a < end; a += DAY_MS) windows.push([a, Math.min(a + DAY_MS, end)]);
+  if (end === now && end - start <= DAY_MS) windows.push([start, end, false]);
+  else for (let a = start; a < end; a += DAY_MS) windows.push([a, Math.min(a + DAY_MS, end), true]);
   const seen = new Map();
+  const read = [];
   let failedDays = 0;
   let untyped = 0;
   onProgress({ done: 0, total: windows.length });
-  for (const [i, [a, b]] of windows.entries()) {
+  for (const [i, [a, b, until]] of windows.entries()) {
     try {
-      const got = await fetchVssWindow({ orgId, sinceIso: new Date(a).toISOString(), untilIso: new Date(b).toISOString() });
-      for (const x of got.alarms) seen.set(x.id, x);
+      const got = await fetchVssWindow({ orgId, sinceIso: iso(a), untilIso: until ? iso(b) : undefined, signal });
+      for (const x of got.alarms) if (!(x.occurredMs < start) && !(x.occurredMs >= end)) seen.set(x.id, x);
       untyped += got.untyped;
       if (got.partial) failedDays += 1;
-    } catch {
+      else read.push([a, upTo(b)]);
+    } catch (err) {
+      signal?.throwIfAborted();
+      if (err?.name === 'AbortError') throw err;
       failedDays += 1;
     }
     onProgress({ done: i + 1, total: windows.length });
   }
   const alarms = [...seen.values()].sort((x, y) => (y.occurredMs ?? 0) - (x.occurredMs ?? 0));
-  return { alarms, cameras, failed: failedDays === windows.length, failedDays: failedDays === windows.length ? 0 : failedDays, untyped };
+  const failed = failedDays === windows.length;
+  return { alarms, cameras, failed, failedDays: failed ? 0 : failedDays, untyped, reach, window: { from: start, to: end }, read };
 }
 
 const DAY_MS = 86_400_000;
 
 /** How far back the server reads the dashcam alarms (fleet-server dashcam.service MAX_DAYS; VSS keeps about two weeks). */
 export const DASHCAM_DAYS = 14;
+
 /** Every overspeed episode of the units in `vehicleIds`, in [from, to). */
 export async function loadOverspeeds({ orgId, from, to, vehicleIds, onProgress = () => {} }) {
   const f = new Date(from).toISOString();
@@ -247,12 +265,13 @@ export async function loadPeakTimes({ orgId, items, onProgress = () => {} }) {
  * request. The report then names only the driver of the run open now, and
  * only for incidents after it set off (lib/fleetReports driversAt).
  */
-export async function loadDispatchRuns({ orgId, from, to }) {
+export async function loadDispatchRuns({ orgId, from, to, signal }) {
   try {
     const qs = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(to).toISOString() });
-    const res = await apiFetch(`/api/v1/organisations/${orgId}/dispatches/runs?${qs}`);
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/dispatches/runs?${qs}`, signal ? { signal } : undefined);
     return Array.isArray(res?.data) ? res.data : null;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }
