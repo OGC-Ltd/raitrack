@@ -662,6 +662,15 @@ export function withFuelBeforeWaiting(rows, tankDays, today) {
  * not started yet, unmeasured, or a machine with no plan line that day, leaves
  * the row's Fuel before as it was (refill, then the day's opening).
  *
+ * Since 2026-11-25 (operator: "the fuel before should be the initial fuel
+ * before the unit started its first shift and before it was issued fuel ...
+ * we take 10 minutes before fuel was done and before issued happened"), a
+ * server that sends each shift's `beforeL` sets it instead: the tank over the
+ * ten minutes before the shift's work began, or before a refill that came
+ * first. The row is the day's first shift's; each plan line keeps its own
+ * shift's in `beforeByLine` for the machine panel, so a second shift reads the
+ * tank before its own start or its own refill.
+ *
  * @param {object[]} rows    withFuelBeforeWaiting rows
  * @param {object}   shifts  getFuelShifts' answer, or null
  * @param {string}   today   the fleet day today, YYYY-MM-DD
@@ -672,16 +681,33 @@ const eatDay = (iso) => new Date(Date.parse(iso) + 3 * 3_600_000).toISOString().
 /** Each machine's shift windows from the shifts read, by folded reference. */
 const shiftWindowsOf = (shifts) => new Map((shifts?.machines ?? []).map((m) => [foldRef(m.machine), m.windows ?? []]));
 
+/** One shift's Fuel before, from the server's `beforeL` (2026-11-25); null when it sent none. */
+const shiftBefore = (w, day) => (w?.beforeL != null && !w.ahead
+  ? { litres: w.beforeL, at: w.beforeAt, by: w.beforeBy ?? "work", readAt: w.beforeReadAt ?? null, day, before: true }
+  : null);
+
 export function withFuelBeforeShift(rows, shifts, today) {
   const windowsOf = shiftWindowsOf(shifts);
   return (rows ?? []).map((row) => {
     const windows = windowsOf.get(foldRef(row.reference));
     if (!windows?.length) return row;
+    // Each plan line's own shift, for the machine panel.
+    const beforeByLine = {};
+    for (const w of windows) {
+      const b = w.start ? shiftBefore(w, eatDay(w.start)) : null;
+      if (b) for (const id of w.lineIds ?? []) beforeByLine[id] = b;
+    }
     const end = !row.lastDay || row.lastDay >= today ? today : row.lastDay;
     const day = row.lastRefill?.day ?? end;
     const first = windows
       .filter((w) => w.start && eatDay(w.start) === day)
       .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+    const before = shiftBefore(first, day);
+    if (before) return { ...row, beforeByLine, fuelBefore: before.litres, fuelBeforeShift: before };
+    if (Object.keys(beforeByLine).length) row = { ...row, beforeByLine };
+    // A server that reads Fuel before but found no tank reading: the row keeps
+    // its refill's or the day's reading, never the first minutes of work.
+    if (first && "beforeL" in first) return row;
     // Over the shift's first ten minutes (operator 2026-11-23: "we need to
     // capture the fuel level first 10 minutes of work"), else the shift's
     // opening readings from a server without that figure.

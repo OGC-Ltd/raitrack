@@ -573,6 +573,17 @@ function probeUsedTitle(u) {
   return `Fuel the standard rate allows since the latest refill${u.open ? ", so far" : ""}: ${sum} = ${fmt(u.litres)} L. The run is the meter now (or after the refill) less Odometer before.`;
 }
 
+const eatClock = (iso) => new Date(Date.parse(iso) + 3 * 3_600_000).toISOString().slice(11, 16);
+/**
+ * Fuel before from the ten minutes before a shift (lib/factoryFuel
+ * withFuelBeforeShift, 2026-11-25): before the work began, or before the
+ * refill when one came first.
+ */
+const beforeTitle = (b, what) =>
+  `Fuel before ${what}: the tank over the 10 minutes before ${b.by === "refill" ? "the refill" : "the work began"}, `
+  + `${eatClock(b.at)} on ${fmtDay(b.day)}, from the fuel probe`
+  + (b.readAt ? `. The tracker sent nothing in those 10 minutes, so its last reading before, at ${eatClock(b.readAt)}` : "");
+
 /** Fuel before's hover while the machine waits for its refill. */
 const waitingTitle = (w) => (w.source === "opening"
   ? `No refill on ${fmtDay(w.day)}: the tank at the start of that day, from the fuel probe. The day's first refill then gives its own before reading`
@@ -584,6 +595,13 @@ const waitingTitle = (w) => (w.source === "opening"
 function RefillLevelCell({ r, which, label }) {
   // Before the day's planned work (lib/factoryFuel withFuelBeforeShift).
   const shift = which === "fuelBefore" ? r.fuelBeforeShift : null;
+  if (shift?.before) {
+    return (
+      <td className="dr-num" data-label={label} title={beforeTitle(shift, "its first planned shift")}>
+        {fmt(shift.litres)} L
+      </td>
+    );
+  }
   if (shift) {
     const at = new Date(Date.parse(shift.at) + 3 * 3_600_000).toISOString().slice(11, 16);
     const pump = r.lastRefill?.day === shift.day ? r.lastRefill.fuelBefore : null;
@@ -1076,6 +1094,13 @@ function MachinePanel({ m, from, to, onClose }) {
                         l.needLitres != null ? `needs about ${fmt(l.needLitres)} L` : null,
                         l.operator && nameCase(l.operator)].filter(Boolean).join(", ")}
                     </span>
+                    {m.beforeByLine?.[l.lineId] && (
+                      <span className="dr-case__sub" title={beforeTitle(m.beforeByLine[l.lineId], `shift ${l.shiftNo ?? 1}`)}>
+                        Fuel before {fmt(m.beforeByLine[l.lineId].litres)} L
+                        {m.beforeByLine[l.lineId].by === "refill" ? ", before its refill" : ", before work began"}
+                        {` (${eatClock(m.beforeByLine[l.lineId].at)})`}
+                      </span>
+                    )}
                     <span className="dr-case__sub fuel-case__plan">
                       {l.planCode}, {planStage(l.planStatus) === "PENDING" ? "pending approval" : sentence(l.planStatus)}
                       {l.requestId ? `, request ${sentence(l.requestStatus ?? "released").toLowerCase()}` : ", no fuel request yet"}
