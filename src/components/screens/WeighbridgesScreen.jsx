@@ -35,7 +35,7 @@
 // how the bridges themselves count, and it is the only count under which "how
 // many did this lorry do" has an answer.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useWeighments, MAX_DAYS } from "../../hooks/useWeighments";
 import WeighbridgeTotals from "../body/WeighbridgeTotals";
@@ -55,6 +55,7 @@ import { ticketsByBridge } from "../../lib/weighbridgeSheets";
 import ReportFilesBar from "../body/ReportFilesBar";
 import { ticketsDoc, spanWords } from "../../lib/weighbridgeDocs";
 import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
+import { rowRequest, clearRowRequest, subscribeRowRequests, pageOf } from "../../lib/rowFocus";
 import "../body/SensorPanel.css";
 /* For its TOKENS, not for its layout: the `an-*` chart palette the board draws
    in is declared on `.analytics-page` rather than on :root. Importing the
@@ -435,6 +436,26 @@ export default function WeighbridgesScreen() {
     if (view === "tickets" && !coverage && pendingTicket.current) { setSelected(pendingTicket.current); pendingTicket.current = null; }
   }, [view, coverage]);
   const closeRow = useCallback(() => setSelected(null), []);
+
+  // A click on a weighbridge pop-up (operator, 2026-11-25; lib/rowFocus): the
+  // Tickets view on its default span (yesterday and today) and every bridge,
+  // no search, then the ticket's page, its line marked and its panel open.
+  const rowReq = useSyncExternalStore(subscribeRowRequests, () => rowRequest("weighbridges"), () => null);
+  useEffect(() => {
+    if (!rowReq) return;
+    setView("tickets"); setCoverage(false); setCentre(null); setSearch("");
+    setFrom(backDays(1)); setTo(fleetDayKey());
+  }, [rowReq?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!rowReq || loading || !data) return;
+    if (view !== "tickets" || coverage || centre != null || search || from !== backDays(1) || to !== fleetDayKey()) return;
+    const i = rows.findIndex((r) => r.id === rowReq.id);
+    clearRowRequest(rowReq);
+    if (i < 0) return;
+    setSelected(rows[i]);
+    setPage(pageOf(i, GRID_STEP));
+    setTimeout(() => document.querySelector('.wb-grid tr[aria-selected="true"]')?.scrollIntoView({ block: "center", behavior: "smooth" }), 60);
+  }, [rowReq, loading, data, rows, view, coverage, centre, search, from, to]);
   const selectedRow = useMemo(
     () => (selected ? rows.find(r => r.id === selected.id) ?? selected : null),
     [selected, rows],

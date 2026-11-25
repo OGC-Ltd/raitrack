@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAppActions } from '../../context/AppContext';
 import { LIFE_MS, dismissToast, pauseToasts, subscribeToasts, toastsSnapshot } from '../../lib/toasts';
+import { requestRow } from '../../lib/rowFocus';
 import { stopCopyText, stopKind } from '../../lib/stopWatch';
 import { copyText } from '../../lib/copyText';
 import { cachedPlaceName } from '../../hooks/usePlaceName';
@@ -44,6 +45,8 @@ function CopyStop({ text, plate }) {
 
 function icon(t) {
   if (t.level === 'success') return 'ti-circle-check';
+  // The Ops Room Operator's weighbridge pop-ups name their own (lib/opsRoomAlerts)
+  if (typeof t.data?.icon === 'string') return t.data.icon;
   if (t.kind === 'stop') return stopKind(t.data).icon;
   return t.level === 'info' ? 'ti-bell' : 'ti-alert-triangle';
 }
@@ -51,6 +54,7 @@ function icon(t) {
 function Toast({ t }) {
   const { setDesktopActiveTab } = useAppActions();
   const stop = t.kind === 'stop' ? t.data : null;
+  const go = t.data?.go && typeof t.data.go.page === 'string' ? t.data.go : null;
   const orgCode = typeof t.data?.orgCode === 'string' ? t.data.orgCode : null;
   const logo = orgCode ? companyMark({ code: orgCode }) : null;
   const copyOf = () => stopCopyText(stop, { now: Date.now(), area: cachedPlaceName(stop.lat, stop.lng) });
@@ -69,6 +73,14 @@ function Toast({ t }) {
       ) : (
         <span className="tst__mark" aria-hidden="true"><i className={`ti ${icon(t)}`} /></span>
       )}
+      {/* A weighbridge pop-up (OpsRoomAlerts) opens its ticket on a click (operator, 2026-11-25). */}
+      {go ? (
+        <button type="button" className="tst__text tst__text--go" title="Show this line"
+                onClick={() => { setDesktopActiveTab(go.page); requestRow(go.page, go.id, go.day ?? null); dismissToast(t.id); }}>
+          <b>{t.title}</b>
+          {t.body && <span>{t.body}</span>}
+        </button>
+      ) : (
       <div className="tst__text">
         <b>{t.title}</b>
         {t.body && <span>{t.body}</span>}
@@ -79,6 +91,7 @@ function Toast({ t }) {
           </div>
         )}
       </div>
+      )}
       <button type="button" className="tst__x" aria-label="Dismiss" onClick={() => dismissToast(t.id)}>
         <i className="ti ti-x" aria-hidden="true" />
       </button>
@@ -93,7 +106,7 @@ export default function ToastStack() {
   useEffect(() => { if (!front) pauseToasts(false); }, [front]);
   if (!front) return null;
   return (
-    <div className="tst-stack" role="region" aria-label="Notifications"
+    <div className={'tst-stack' + (front.data?.go ? ' tst-stack--page' : '')} role="region" aria-label="Notifications"
          onMouseEnter={() => pauseToasts(true)} onMouseLeave={() => pauseToasts(false)}
          onFocus={() => pauseToasts(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) pauseToasts(false); }}>
       {/* Keyed by id: each toast that comes forward is a fresh card, so it

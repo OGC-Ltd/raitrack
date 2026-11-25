@@ -1,0 +1,80 @@
+/* The Gate log (operator, 2026-11-25). The frame, crumb, filter bar and table
+   are the Weighbridges page's and the shared sp4 ones; only what is new here. */
+
+.gl-figures {
+  display: flex;
+  gap: 32px;
+  margin: 0;
+  padding: 12px var(--sp4-gutter, 24px) 14px;
+}
+.gl-figures div { display: flex; flex-direction: column; gap: 2px; }
+.gl-figures dt { font-size: 12px; color: var(--sp4-muted, #6b7280); }
+.gl-figures dd { margin: 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gl-figures dd.gl-figures__day { font-size: 14px; font-weight: 500; padding-top: 4px; }
+
+.gl-day { display: inline-flex; align-items: center; gap: 6px; }
+.gl-day__label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--sp4-muted, #6b7280); }
+.gl-day__input { height: 30px; padding: 0 8px; border: 1px solid var(--sp4-border, #d1d5db); border-radius: 6px; font: inherit; font-size: 13px; background: transparent; color: inherit; }
+
+.gl-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gl-event { white-space: nowrap; font-weight: 500; }
+.gl-event--out { color: var(--sp4-warn, #b45309); }
+.gl-event--in  { color: var(--sp4-ok, #15803d); }
+.gl-text { white-space: normal; min-width: 280px; }
+.gl-note { margin: 0; padding: 8px var(--sp4-gutter, 24px) 0; }
+
+/* Where the line came from: FactorySuite (the gate system) or Geofence (the tracker). */
+.gl-source {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.gl-source--factorysuite { color: #1d4ed8; background: rgba(29, 78, 216, .06); }
+.gl-source--geofence     { color: #6d28d9; background: rgba(109, 40, 217, .06); }
+.gl-source--other        { color: var(--sp4-muted, #6b7280); }
+
+@media (max-width: 720px) {
+  .gl-figures { gap: 20px; padding-inline: 16px; }
+  .gl-figures dd { font-size: 17px; }
+}
+
+/* No white strip beside the side menu (operator, 2026-11-25): the crumb band
+   takes the page's own background, not the Weighbridges page's white band,
+   which has its white header under it and this page does not. */
+.app--light .sp4-root--framed.wb-root.gl-root .wb-crumbs { background: transparent; }
+
+/* The head card (operator, 2026-11-25: "a white background and some border
+   radius"): crumb, figures and filters in one frame like the table's below. */
+.gl-head {
+  margin: var(--sp4-md, 12px) var(--sp4-gutter, 24px) 0;
+  border: 1px solid var(--sp4-line, #e6e9ee);
+  border-radius: 12px;
+  background: var(--sp4-surface, #fff);
+  overflow: clip;
+}
+.app--light .gl-head { background: #ffffff; }
+.gl-head .wb-crumbs,
+.app--light .sp4-root--framed.wb-root.gl-root .gl-head .wb-crumbs { background: transparent; padding-inline: 16px; }
+.gl-head .wb-rule { display: none; }
+.gl-head .gl-figures { padding-inline: 16px; }
+.sp4-root--framed.gl-root .gl-head .sp4-filterbar,
+.app--light .sp4-root--framed.gl-root .gl-head .sp4-filterbar {
+  background: transparent;
+  background-image: none;
+  border: 0;
+  padding: 4px 16px 14px;
+  margin: 0;
+}
+@media (max-width: 767px) {
+  .gl-head { margin-inline: 0; border-radius: 0; border-inline: 0; }
+}
+
+/* Trip columns (operator, 2026-11-25): out, in and the time out. */
+.gl-dur { font-weight: 600; }
+.gl-text { min-width: 240px; }
+.gl-day__input--time { width: 96px; }

@@ -52,6 +52,9 @@ export const NAV_ITEMS = [
   // 2026-11-14). Only where FactorySuite fuels by work plan; see
   // usePermissions' FACTORY_FUEL.
   { key: 'fuel',         label: 'Fuel',         icon: 'gas-station', permission: 'factory_fuel:read' },
+  // Gate log: sign-outs and returns at the gate, the Ops Room Operator's page
+  // (operator, 2026-11-25). Before Weighbridges so that role lands on it.
+  { key: 'gateLog',      label: 'Gate log',     icon: 'door-exit', permission: 'gate_log:read'    },
   { key: 'weighbridges', label: 'Weighbridges', icon: 'scale',     permission: 'weighbridge:read' },
   // Planner: a truck's delivery sheet for a day, its customers' geofences,
   // and plan against actual (operator, 2026-11-11). Menengai only, by
