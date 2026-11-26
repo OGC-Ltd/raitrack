@@ -86,8 +86,8 @@ describe('the Fuel Usage Report PDF', () => {
 
 describe('probe records and shifts completed (operator 2026-11-26)', () => {
   const shiftRuns = [
-    { lineId: 'a', day: '2026-11-16', state: 'ran', runHours: 8.2, plannedHours: 8 },       // finished its hours
-    { lineId: 'b', day: '2026-11-17', state: 'not-run', runHours: 0.1, plannedHours: 8 },   // did not
+    { lineId: 'a', day: '2026-11-16', state: 'ran', runHours: 7.2, plannedHours: 8 },       // 90% of its 8 hours: completed
+    { lineId: 'b', day: '2026-11-17', state: 'ran', runHours: 7.1, plannedHours: 8 },       // just under 90%: not completed
   ];
   const r3 = buildFuelUsage(data, { fillings, shiftRuns });
   const h3 = fuelUsageHtml(r3, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', logos: { rai: 'r', ogc: 'o' }, now: Date.parse('2026-11-24T18:00:00+03:00') });
@@ -99,7 +99,7 @@ describe('probe records and shifts completed (operator 2026-11-26)', () => {
     expect(h3).toContain('no probe');
   });
 
-  it('a shift is completed when the tracker shows it ran all its planned hours', () => {
+  it('a shift is completed when the tracker shows it ran 90% of its planned hours', () => {
     expect(r3.totals).toMatchObject({ shiftsCompleted: 1, shiftsJudged: 2 });
     expect(r3.register.find((x) => x.machine === 'EX-01')).toMatchObject({ completed: 1, judged: 1 });
     expect(h3).toContain('Shifts completed');

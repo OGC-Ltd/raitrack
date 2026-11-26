@@ -152,7 +152,7 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
 <div><div class="k">Pump records</div><div class="v">${n0(t.issued)} L</div><div class="s">${n0(t.issues)} fills in FactorySuite</div></div>
 <div class="red"><div class="k">Not at pump</div><div class="v">${probe ? `${n0(t.unrecorded.litres)} L` : '–'}</div><div class="s">${probe ? `${n0(t.unrecorded.fills)} fills · ${n0(t.unrecorded.machines)} machines` : 'probe fills not read'}</div></div>
 <div><div class="k">Shifts planned</div><div class="v">${n0(t.shifts)}</div><div class="s">${n0(t.onPlans)} machines · ${n0(t.multiShiftDays)} days with 2+ shifts</div></div>
-<div><div class="k">Shifts completed</div><div class="v">${t.shiftsCompleted == null ? '–' : n0(t.shiftsCompleted)}</div><div class="s">${t.shiftsCompleted == null ? 'tracker hours not read' : `ran all planned hours · of ${n0(t.shiftsJudged)} the tracker could check`}</div></div>
+<div><div class="k">Shifts completed</div><div class="v">${t.shiftsCompleted == null ? '–' : n0(t.shiftsCompleted)}</div><div class="s">${t.shiftsCompleted == null ? 'tracker hours not read' : `ran 90% of planned hours · of ${n0(t.shiftsJudged)} the tracker could check`}</div></div>
 <div><div class="k">Planned, no fuel recorded</div><div class="v">${n0(t.plannedNotFuelled.machines)} machines</div><div class="s">${n0(t.plannedNotFuelled.need)} L of need · ${n0(t.down.machines)} down on plan</div></div>
 </div></div>`);
 
@@ -213,7 +213,7 @@ ${pn.length > 16 ? `<div class="fu-note">And ${n0(pn.length - 16)} more in the r
 <li><b>Probe records</b>: every fill the machine's fuel probe recorded (fuel moving in the tank left out). Machines without a probe show "no probe".</li>
 <li><b>Pump records</b>: fuel issues recorded in FactorySuite against each machine. <b>Not at pump</b>: a probe fill that no pump issue matches, same machine, 30 minutes before to 2 hours after.</li>
 <li><b>Site</b>: each shift's work location; a pump issue counts at the site of the shift it was requested for. Probe records count at the machine's main site for the period. <b>Variance</b>: probe records less the need of the machines with a probe.</li>
-<li><b>Shifts completed</b>: the tracker shows the engine ran at least the shift's planned hours inside the shift. Shifts the tracker could not check (no tracker, no signal, no planned hours) are not counted either way.</li>
+<li><b>Shifts completed</b>: the tracker shows the engine ran at least 90% of the shift's planned hours inside the shift. Shifts the tracker could not check (no tracker, no signal, no planned hours) are not counted either way.</li>
 </ul><div class="fu-note">${esc(CONTACT_LINE)}</div></div>`);
 
   // The machine register: one table, split across pages with its header repeated (class lst)

@@ -35,6 +35,9 @@ export const isDown = (status) => DOWN_STATUSES.has(fold(status));
 export const PUMP_FLAGS = ['Off plan', 'Operator mismatch', 'Job mismatch'];
 export const pumpFlagsOf = (i) => (i.flags ?? []).filter((f) => PUMP_FLAGS.includes(f));
 
+/** A shift is completed when its machine ran this share of the planned hours (operator 2026-11-26). */
+export const COMPLETED_SHARE = 0.9;
+
 /** A refill this soon (planned use since the last fill under this share of it) is too early. */
 export const EARLY_SHARE = 0.5;
 /** A fill this much over the tank's size is more than it holds. */
@@ -217,8 +220,9 @@ export function buildFuelUsage(data, { site = null, price = null, fillings = nul
   /** Probe records (operator 2026-11-26): the probe's fills, for a machine with a probe; null without one. */
   const probeOf = (ref) => { const t = tankOf(ref); return probeKnown && t.hasProbe ? t.probeL ?? 0 : null; };
 
-  // Shifts completed (operator 2026-11-26: "it finished its hours"): the tracker
-  // shows the engine ran at least the shift's planned hours inside its window.
+  // Shifts completed (operator 2026-11-26: "it finished its hours", then "maybe 90%"):
+  // the tracker shows the engine ran at least COMPLETED_SHARE of the shift's planned
+  // hours inside its window.
   // Judged = the tracker could say (ran or did not run); for the rest it could not.
   const shiftsKnown = Array.isArray(shiftRuns);
   const runOf = new Map((shiftRuns ?? []).map((x) => [`${x.lineId}|${x.day}`, x]));
@@ -226,7 +230,7 @@ export function buildFuelUsage(data, { site = null, price = null, fillings = nul
     const x = runOf.get(`${l.lineId}|${l.day}`);
     if (!x || (x.state !== 'ran' && x.state !== 'not-run')) return null;
     const planned = l.plannedHours ?? x.plannedHours ?? 0;
-    return planned > 0 && (x.runHours ?? 0) >= planned;
+    return planned > 0 && (x.runHours ?? 0) >= COMPLETED_SHARE * planned;
   };
   const shiftCounts = (lines) => {
     if (!shiftsKnown) return { completed: null, judged: null };
