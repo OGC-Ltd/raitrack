@@ -1,80 +1,262 @@
-/* The Gate log (operator, 2026-11-25). The frame, crumb, filter bar and table
-   are the Weighbridges page's and the shared sp4 ones; only what is new here. */
+/* Hallmark · app screen: Gate log · genre: modern-minimal · theme: brand, the Drivers/Fuel page tokens (by request) · states: 8 · contrast: pass · redesign: restyle (26 Nov 2026) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: E, the 2 h and 8 h time-out bands are this page's own cut, not the operator's */
+/* Hallmark · waive 9 · DriversScreen.css .dr-grid thead th sets the tracked capitals · the app's own column head, kept to match Fuel */
+/* Hallmark · waive 24b · .dr-grid__sort pads 9px 14px · the head lines up with Fuel's and with the 14px cells under it */
 
-.gl-figures {
-  display: flex;
-  gap: 32px;
-  margin: 0;
-  padding: 12px var(--sp4-gutter, 24px) 14px;
+/* The Gate log, restyled onto the Fuel page (operator, 2026-11-26: "adopt
+   to the theme and typography of our application, use the fuel page to
+   match"). The head, strip, toolbar, table and phone cards are the Drivers
+   page's stylesheet, which Fuel uses; only what a gate row has that a
+   machine row does not is here. Colours are that sheet's tokens. */
+
+/* The page's own tokens: Out amber and In green (Fuel's status tones), and
+   the event map's gate, track and unit. */
+:root { --gl-out: var(--accent-warn, #b45309); --gl-in: var(--accent-ok, #15803d); --gl-gate: var(--accent); --gl-track: #0891b2; --gl-track-dark: #06b6d4; --gl-pin-ring: var(--card); --gl-on-gate: var(--on-accent, #fff); --gl-no: var(--accent-crit, #b91c1c); }
+.app--dark { --gl-out: var(--tone-speed); --gl-in: var(--tone-up); --gl-track: var(--gl-track-dark); --gl-no: var(--tone-theft); }
+
+/* The strip is Fuel's: Units, Signed out by hour, Returned by hour, Time out.
+   Below it, the toolbar, on Fuel's own gap. */
+.gl-strip { margin-bottom: 16px; }
+/* A time-out row is a plain count: no dot column. A row with trips in it
+   takes full ink; Out over 8 h takes the amber the Fuel checks use. */
+.gl-times .dr-summary__incident { grid-template-columns: minmax(0, 1fr) auto; }
+.gl-times .gl-times__on { color: var(--ink); }
+.gl-times .gl-times__on .dr-summary__name { color: var(--ink); }
+.gl-times .dr-summary__incident--speed { color: var(--tone-speed); }
+
+/* The toolbar: source, day, hours, then the search against the right edge. */
+.gl-filters .fuel-period { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gl-hours { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gl-hours .dr-typepick { margin-left: 0; }
+.gl-tool {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  padding: 4px 12px;
 }
-.gl-figures div { display: flex; flex-direction: column; gap: 2px; }
-.gl-figures dt { font-size: 12px; color: var(--sp4-muted, #6b7280); }
-.gl-figures dd { margin: 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.gl-figures dd.gl-figures__day { font-size: 14px; font-weight: 500; padding-top: 4px; }
+.gl-tool:active { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.gl-tool:disabled { color: var(--text-3); background: none; cursor: not-allowed; }
+.gl-tool .ti { font-size: 14px; }
+.gl-filters .dr-searchwrap { position: relative; }
+.gl-search-clear {
+  position: absolute; right: 6px;
+  width: 24px; height: 24px;
+  border: 0; border-radius: 6px;
+  background: none; color: var(--dg-label);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.gl-search-clear:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.gl-search-clear:active { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.gl-search-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.gl-day { display: inline-flex; align-items: center; gap: 6px; }
-.gl-day__label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--sp4-muted, #6b7280); }
-.gl-day__input { height: 30px; padding: 0 8px; border: 1px solid var(--sp4-border, #d1d5db); border-radius: 6px; font: inherit; font-size: 13px; background: transparent; color: inherit; }
+.gl-note { margin: 0 0 8px; }
 
+/* The table. Plain heads (nothing sorts here), so the head cell carries its
+   own inset where Fuel's carries it on the sort button. */
+.dr-grid.gl-grid thead th { padding: 9px 14px; cursor: default; }
+.dr-grid.gl-grid thead th:first-child { padding-left: var(--dg-gutter, 16px); }
+.dr-grid.gl-grid thead th:last-child { padding-right: var(--dg-gutter, 16px); }
 .gl-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.gl-event { white-space: nowrap; font-weight: 500; }
-.gl-event--out { color: var(--sp4-warn, #b45309); }
-.gl-event--in  { color: var(--sp4-ok, #15803d); }
-.gl-text { white-space: normal; min-width: 280px; }
-.gl-note { margin: 0; padding: 8px var(--sp4-gutter, 24px) 0; }
+.gl-unit .dr-driver__name { white-space: nowrap; }
+.dr-grid.gl-grid tbody td.gl-text { white-space: normal; min-width: 240px; max-width: 460px; line-height: 1.4; }
+.gl-none { color: var(--text-3); }
+.gl-dur { font-weight: 700; color: var(--ink); }
+.dr-grid.gl-grid tbody td.gl-source { color: var(--dg-label); }
 
-/* Where the line came from: FactorySuite (the gate system) or Geofence (the tracker). */
-.gl-source {
-  display: inline-block;
-  padding: 1px 8px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-  white-space: nowrap;
+/* Out is amber and In is green, the badge tones the Fuel status uses; the
+   word and its wash carry it, so no dot. */
+.gl-event--out { --tone: var(--gl-out); }
+.gl-event--in  { --tone: var(--gl-in); }
+
+/* Acknowledged (operator 2026-11-26): green where it did, red where it did not. */
+.gl-ack--yes { --tone: var(--gl-in); }
+.gl-ack--no  { --tone: var(--gl-no); }
+.gl-ack__cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.gl-ack__by { font-size: 12px; color: var(--dg-label); overflow-wrap: anywhere; }
+
+/* ── Phones: one card per gate event ─────────────────────────────────────
+     unit                         event
+     details                      time
+     out          in              time out
+     source
+   The Drivers sheet's card rules place ten cells by position for a driver
+   row; these place the gate row's eight. Same specificity, later. */
+@media (max-width: 700px) {
+  .dr-grid.gl-grid tbody tr {
+    grid-template-areas:
+      "who  who  status"
+      "rule rule rule"
+      "dept dept when"
+      "m1   m2   m3"
+      "m4   m4   m5";
+  }
+  .dr-grid.gl-grid tbody td:nth-child(1) { grid-area: when; }
+  .dr-grid.gl-grid tbody td:nth-child(2) { grid-area: who; }
+  .dr-grid.gl-grid tbody td:nth-child(3) { grid-area: status; justify-self: end; align-self: center; }
+  .dr-grid.gl-grid tbody td:nth-child(4) { grid-area: dept; white-space: normal; min-width: 0; max-width: none; }
+  .dr-grid.gl-grid tbody td:nth-child(5) { grid-area: m1; }
+  .dr-grid.gl-grid tbody td:nth-child(6) { grid-area: m2; }
+  .dr-grid.gl-grid tbody td:nth-child(7) { grid-area: m3; }
+  .dr-grid.gl-grid tbody td:nth-child(8) { grid-area: m4; }
+  .dr-grid.gl-grid tbody td:nth-child(9) { grid-area: m5; }
+  /* The card's labels: every cell but the unit and the event, in the page's
+     label size and sentence case (as Fuel's cards). */
+  .dr-grid.gl-grid tbody td:nth-child(2)::before { content: none; }
+  .dr-grid.gl-grid tbody td:nth-child(1)::before,
+  .dr-grid.gl-grid tbody td:nth-child(n + 4)::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none;
+    color: var(--dg-label);
+  }
+  .dr-grid.gl-grid tbody td:nth-child(1) { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .dr-grid.gl-grid tbody td:nth-child(4) { font-size: 12.5px; font-weight: 500; color: var(--dg-cell); }
+  .gl-hours { width: 100%; }
+  .gl-hours .dr-typepick { flex: 1 1 120px; }
 }
-.gl-source--factorysuite { color: #1d4ed8; background: rgba(29, 78, 216, .06); }
-.gl-source--geofence     { color: #6d28d9; background: rgba(109, 40, 217, .06); }
-.gl-source--other        { color: var(--sp4-muted, #6b7280); }
 
-@media (max-width: 720px) {
-  .gl-figures { gap: 20px; padding-inline: 16px; }
-  .gl-figures dd { font-size: 17px; }
-}
-
-/* No white strip beside the side menu (operator, 2026-11-25): the crumb band
-   takes the page's own background, not the Weighbridges page's white band,
-   which has its white header under it and this page does not. */
-.app--light .sp4-root--framed.wb-root.gl-root .wb-crumbs { background: transparent; }
-
-/* The head card (operator, 2026-11-25: "a white background and some border
-   radius"): crumb, figures and filters in one frame like the table's below. */
-.gl-head {
-  margin: var(--sp4-md, 12px) var(--sp4-gutter, 24px) 0;
-  border: 1px solid var(--sp4-line, #e6e9ee);
-  border-radius: 12px;
-  background: var(--sp4-surface, #fff);
-  overflow: clip;
-}
-.app--light .gl-head { background: #ffffff; }
-.gl-head .wb-crumbs,
-.app--light .sp4-root--framed.wb-root.gl-root .gl-head .wb-crumbs { background: transparent; padding-inline: 16px; }
-.gl-head .wb-rule { display: none; }
-.gl-head .gl-figures { padding-inline: 16px; }
-.sp4-root--framed.gl-root .gl-head .sp4-filterbar,
-.app--light .sp4-root--framed.gl-root .gl-head .sp4-filterbar {
-  background: transparent;
-  background-image: none;
-  border: 0;
-  padding: 4px 16px 14px;
+/* ── The event panel (GateEventPanel, operator 2026-11-26) ───────────────
+   Fuel's machine panel: the details, five facts, then where the unit was at
+   that moment against the gate, on a small map. */
+.gl-panel .dr-panel__ident { gap: 6px; }
+.gl-panel__first { border-top: 0; }
+.gl-panel__text { margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.gl-panel__facts {
   margin: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
 }
-@media (max-width: 767px) {
-  .gl-head { margin-inline: 0; border-radius: 0; border-inline: 0; }
+.gl-panel__facts dt { font-size: 11px; font-weight: 600; color: var(--text-2); margin-bottom: 4px; }
+.gl-panel__facts dd { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* The map (operator 2026-11-26: "show the geofence of the organization with
+   the zoom in effect on the gate and the icon of the unit"). It opens on the
+   premises and flies in on the gate; the unit is the main map's sprite. */
+.gl-panel__where { margin-bottom: 12px; }
+.gl-panel__where b { font-weight: 700; color: var(--ink); }
+.gl-map {
+  height: 320px;
+  border: 1px solid var(--dg-line, var(--border));
+  border-radius: 12px;
+  overflow: clip;
+  background: var(--elevated);
+}
+.gl-map .leaflet-control-attribution { font-size: 10px; }
+.gl-map .leaflet-control-zoom a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Leaflet's paths take their look from these classes, not inline colours;
+   a fence alone takes its own map colour, as on the main map. */
+.gl-map .gl-map__gate { stroke: var(--gl-gate); stroke-width: 2; stroke-dasharray: 4 3; fill: var(--gl-gate); fill-opacity: .16; }
+.gl-map .gl-map__track { stroke: var(--gl-track); stroke-width: 4; stroke-opacity: .8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.gl-map .gl-map__fence { stroke-linejoin: round; }
+/* The gate's name, set on the map beside its circle. */
+.gl-map .gl-map__gate-tag { background: none; border: 0; }
+.gl-map .gl-map__gate-tag span {
+  display: inline-block;
+  transform: translate(10px, -50%);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--gl-gate);
+  color: var(--gl-on-gate);
+  font-size: 11px; font-weight: 700; line-height: 16px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 25%, transparent);
+}
+/* The unit: the main map's marker; its name stays under the sprite here. */
+.gl-map .gl-map__unit { background: none; border: 0; }
+.gl-map .gl-map__unit .lf-marker-wrap { cursor: default; }
+/* Out through the gate for a sign-out, in for a return: the sprite faces that
+   way (GateEventPanel) and glides 14px along it, from behind its spot to just
+   past it, so it reads as driving. --gl-dx and --gl-dy are the facing as a
+   unit vector, set on the element. */
+.gl-map .gl-drive {
+  animation: gl-drive 1.8s cubic-bezier(.4, 0, .4, 1) infinite;
+  will-change: transform, opacity;
+}
+@keyframes gl-drive {
+  0%   { transform: translate(calc(var(--gl-dx) * -10px), calc(var(--gl-dy) * -10px)); opacity: .6; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translate(calc(var(--gl-dx) * 4px), calc(var(--gl-dy) * 4px)); opacity: .6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gl-map .gl-drive { animation: none; }
+}
+.gl-map .gl-map__unit .lf-marker-wrap:hover { transform: none; }
+.gl-map .gl-map__unit .lf-name {
+  display: block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 11px; font-weight: 700; line-height: 16px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 25%, transparent);
 }
 
-/* Trip columns (operator, 2026-11-25): out, in and the time out. */
-.gl-dur { font-weight: 600; }
-.gl-text { min-width: 240px; }
-.gl-day__input--time { width: 96px; }
+.gl-panel__key {
+  display: flex; flex-wrap: wrap; gap: 8px 16px;
+  margin: 12px 0 0; padding: 0; list-style: none;
+  font-size: 12px; color: var(--text-2);
+}
+.gl-panel__key li { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.gl-key { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; }
+.gl-key--unit { --lf-marker: 22px; width: 22px; height: 22px; margin: -4px -2px; background-position: 0 0; border-radius: 0; }
+.gl-key--track { width: 16px; height: 4px; border-radius: 2px; background: var(--gl-track); }
+.gl-key--gate { border-radius: 50%; border: 2px dashed var(--gl-gate); background: color-mix(in srgb, var(--gl-gate) 16%, transparent); }
+.gl-key--fence { border: 2px solid var(--gl-fence); background: color-mix(in srgb, var(--gl-fence) 12%, transparent); }
+.gl-panel__aside { margin-top: 8px; }
+
+/* A row opens its panel: the keyboard is shown it as the pointer is. */
+.dr-grid.gl-grid tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── The panel's Decision (operator 2026-11-26) ──────────────────────────
+   The decision taken, then two picks, a reason or note, and a confirm that
+   says what will be saved: the Alerts page's decision, on this page's tokens. */
+.gl-decide__done { display: grid; gap: 4px; margin-bottom: 12px; justify-items: start; }
+.gl-decide__by { font-size: 12px; color: var(--text-2); }
+.gl-decide__note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.gl-decide__picks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.gl-decide__pick {
+  --pick: var(--gl-in);
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 36px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: var(--ink);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.gl-decide__pick--no { --pick: var(--gl-no); }
+.gl-decide__pick .ti { font-size: 16px; color: var(--pick); }
+.gl-decide__pick:hover { border-color: var(--pick); }
+.gl-decide__pick:active { background: color-mix(in srgb, var(--pick) 14%, var(--card)); }
+.gl-decide__pick.is-on { border-color: var(--pick); color: var(--pick); background: color-mix(in srgb, var(--pick) 10%, var(--card)); }
+.gl-decide__pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gl-decide__pick:disabled { cursor: default; color: var(--text-3); border-color: var(--border); background: var(--card); }
+
+.gl-decide__form { display: grid; gap: 8px; margin-top: 12px; }
+.gl-decide__field { display: grid; gap: 4px; }
+.gl-decide__label { font-size: 11px; font-weight: 600; color: var(--text-2); }
+.gl-decide__field textarea {
+  width: 100%; box-sizing: border-box; min-height: 72px; resize: vertical;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: var(--ink); font: inherit; font-size: 13px; line-height: 1.45;
+}
+.gl-decide__field textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.gl-decide__hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.gl-decide__fail { margin: 0; font-size: 12px; color: var(--gl-no); }
+.gl-decide__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.gl-decide__need { margin-right: auto; font-size: 12px; color: var(--text-2); }
+.gl-decide__go {
+  --go: var(--gl-in);
+  min-height: 36px; padding: 0 16px;
+  border: 1px solid var(--go); border-radius: 8px;
+  background: var(--go); color: var(--gl-on-gate);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.gl-decide__go--no { --go: var(--gl-no); }
+.gl-decide__go:hover { opacity: .9; }
+.gl-decide__go:active { transform: translateY(1px); }
+.gl-decide__go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gl-decide__go:disabled { cursor: default; background: var(--border); border-color: var(--border); color: var(--text-2); }

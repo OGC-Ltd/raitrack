@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, issuedByShift } from "./factoryFuel";
+import { daysBetween, fuelRoster, odometerUnit, refillMeterUnit, fuelByDay, fuelTotals, departmentOptions, machineState, fuelRange, periodRange, calendarPick, withFuelNow, reconcileFills, pumpTimeMs, varianceFlagged, varianceBand, withConsumed, refillFigures, plannedLitres, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, issuedByShift, withFuelAfterSum } from "./factoryFuel";
 
 const line = (o) => ({
   lineId: "l", taskId: "t", planId: "p", planCode: "WP", planStatus: "APPROVED", department: "AGRICULTURE",
@@ -900,5 +900,35 @@ describe("withWorkConsumption with the server's shift figures", () => {
     expect(r.consumedByLine.l1).toMatchObject({ used: 142.4, kept: true, probeUsed: 228 });
     expect(r.consumedByLine.l2).toMatchObject({ used: 9.4, issued: 576, probeFilled: 579.2, fuellings: 1 });
     expect(r.probeUsed).toBe(414);
+  });
+});
+
+describe("withFuelAfterSum", () => {
+  const iss = (day, litres) => ({ day, litres });
+  it("adds the day's issued fuel, both shifts, to that day's Fuel before", () => {
+    const [r] = withFuelAfterSum([{
+      fuelBeforeShift: { litres: 120.4, day: "2026-11-25" },
+      lastRefill: { day: "2026-11-25", fuelBefore: { litres: 80 } },
+      pumpIssues: [iss("2026-11-25", 300.25), iss("2026-11-25", 200), iss("2026-11-24", 600)],
+      issues: 3, issued: 1100.25,
+    }]);
+    expect(r.fuelAfter).toBeCloseTo(620.65);
+    expect(r.fuelAfterSum).toEqual({ before: 120.4, issued: 500.25, day: "2026-11-25", fuellings: 2 });
+  });
+  it("falls back to the refill's before, then the waiting tank, each on its own day", () => {
+    const [refill, waiting] = withFuelAfterSum([
+      { lastRefill: { day: "2026-11-23", fuelBefore: { litres: 78.8 } }, pumpIssues: [iss("2026-11-23", 563.1)] },
+      { fuelBeforeWaiting: { litres: 40, day: "2026-11-26" }, pumpIssues: [iss("2026-11-26", 0)] },
+    ]);
+    expect(refill.fuelAfter).toBeCloseTo(641.9);
+    expect(waiting.fuelAfter).toBe(40);
+  });
+  it("is blank without a Fuel before or without a fuelling that day", () => {
+    const [noBefore, otherDay] = withFuelAfterSum([
+      { pumpIssues: [iss("2026-11-25", 300)] },
+      { fuelBeforeWaiting: { litres: 50, day: "2026-11-26" }, pumpIssues: [iss("2026-11-25", 300)] },
+    ]);
+    expect(noBefore).toMatchObject({ fuelAfter: null, fuelAfterSum: null });
+    expect(otherDay).toMatchObject({ fuelAfter: null, fuelAfterSum: null });
   });
 });

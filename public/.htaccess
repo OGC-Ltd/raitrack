@@ -16,7 +16,7 @@ SetEnvIf Request_URI "^/api/" no-gzip=1 dont-vary=1
 # ── API → AWS fleet-server ──────────────────────────────────────────────────
 # OPTION 1 (fastest, if your host has mod_proxy): uncomment the next line and
 # comment out OPTION 2. Test: https://yourdomain/api/v1/bootstrap should give JSON.
-# RewriteRule ^api/(.*)$ http://13.247.178.217/api/$1 [P,L,QSA]
+# RewriteRule ^api/(.*)$ http://13.244.125.1/api/$1 [P,L,QSA]
 
 # OPTION 2 (works on almost any cPanel): relay through api.php
 RewriteRule ^api/(.*)$ api.php?__path=$1 [L,QSA]

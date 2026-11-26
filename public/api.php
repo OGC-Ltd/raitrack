@@ -16,7 +16,7 @@
 
 // ── Config ──────────────────────────────────────────────────────────────────
 // The AWS fleet-server (same target the dev proxy in vite.config.js uses).
-const UPSTREAM        = 'http://13.247.178.217';
+const UPSTREAM        = 'http://13.244.125.1';
 const REQUEST_TIMEOUT = 60;   // seconds, for ordinary API calls
 const CONNECT_TIMEOUT = 10;   // seconds
 

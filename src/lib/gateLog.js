@@ -6,11 +6,14 @@
 //   SALE_DISPATCH   a sales run signed out
 //   SALE_RETURN     a sales run signed back in
 
+import { fenceColor, isDummyFence } from "./zoneLegend";
+
 export const GATE_EVENTS = {
   DISPATCH:       { label: "Signed out",       way: "out" },
-  MOVEMENT_ENTRY: { label: "Returned",         way: "in" },
+  // "Signed in", not "Returned" (operator, 2026-11-26: "use signed in").
+  MOVEMENT_ENTRY: { label: "Signed in",        way: "in" },
   SALE_DISPATCH:  { label: "Sales signed out", way: "out" },
-  SALE_RETURN:    { label: "Sales returned",   way: "in" },
+  SALE_RETURN:    { label: "Sales signed in",  way: "in" },
 };
 
 /**
@@ -32,6 +35,21 @@ export function bySource(rows, key) {
 }
 
 /** Feed items → table rows, newest first. Anything not a gate event is dropped. */
+/**
+ * Names in capitals put in normal case (operator, 2026-11-26: "drivers name
+ * and the locations name to be capitalized"): FactorySuite sends "KTCB 450R ·
+ * EMMANUEL BARASA signed out to ADEK", read as "KTCB 450R · Emmanuel Barasa
+ * signed out to Adek". A word of two or more capitals becomes Capitalised
+ * (each part of a hyphenated name too); the plate's own words, and any word
+ * with a digit, are left as they are.
+ */
+export function nameCase(text, plate) {
+  const keep = new Set(String(plate ?? "").toUpperCase().split(/\s+/).filter(Boolean));
+  return String(text ?? "").replace(/(?<![\p{L}\p{N}])\p{Lu}[\p{Lu}'’]+(?![\p{L}\p{N}])/gu, (w) => (
+    keep.has(w) ? w : w.toLowerCase().replace(/(^|['’])\p{L}/gu, (c) => c.toUpperCase())
+  ));
+}
+
 export function gateRows(events) {
   return (events ?? [])
     .filter((e) => GATE_EVENTS[e?.alertType])
@@ -39,11 +57,15 @@ export function gateRows(events) {
       key: e.id,
       at: Date.parse(e.ts),
       plate: e.plate ?? null,
+      vehicleId: e.vehicleId ?? null,
       alertType: e.alertType,
       label: GATE_EVENTS[e.alertType].label,
       way: GATE_EVENTS[e.alertType].way,
       source: sourceKey(e.source),
-      text: e.text ?? "",
+      text: nameCase(e.text ?? "", e.plate),
+      // The event's acknowledgement: null where none, undefined where the
+      // server sent none at all (not read, or a server without them).
+      ack: e.acknowledgement,
     }))
     .filter((r) => Number.isFinite(r.at))
     .sort((a, b) => b.at - a.at);
@@ -157,3 +179,267 @@ export function shiftDay(day, n) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * The event panel's map (operator, 2026-11-26: "a map that shows where it was
+ * at that moment and the gate"). The tracker's fixes round the event, oldest
+ * first, with a usable coordinate; the route sends them newest first.
+ */
+export function fixesOf(pings) {
+  return (pings ?? [])
+    .map((p) => ({ at: Date.parse(p.capturedAt ?? p.ts ?? p.recordedAt ?? ""), lat: Number(p.lat), lng: Number(p.lng), speedKmh: p.speedKmh ?? null, headingDeg: p.headingDeg ?? null }))
+    .filter((f) => Number.isFinite(f.at) && Number.isFinite(f.lat) && Number.isFinite(f.lng) && !(f.lat === 0 && f.lng === 0))
+    .sort((a, b) => a.at - b.at);
+}
+
+/** The fix nearest the moment, or null; `gapMs` is how far from it that fix was. */
+export function fixAt(fixes, at) {
+  let best = null;
+  for (const f of fixes ?? []) {
+    if (!best || Math.abs(f.at - at) < Math.abs(best.at - at)) best = f;
+  }
+  return best ? { ...best, gapMs: Math.abs(best.at - at) } : null;
+}
+
+/** Metres between two points (haversine). */
+export function metresBetween(a, b) {
+  const R = 6_371_000, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** The fence kinds that make up a site's premises; roads, routes and keep-outs are not drawn round the gate. */
+const SITE_KINDS = new Set(["perimeter", "factory", "gate", "weighing", "parking", "fuel", "logistics", "facility"]);
+/** A site fence further than this from the gate (or the unit) belongs to another site. */
+const SITE_REACH_M = 3000;
+
+const ringsOf = (g) => (g?.type === "Polygon" ? g.coordinates : g?.type === "MultiPolygon" ? g.coordinates.flat() : []);
+
+/** A fence's middle: the centre of its box, or a circle's own centre. */
+function fenceMiddle(f) {
+  const g = f.geometry;
+  if (g?.type === "Point") return { lat: g.coordinates[1], lng: g.coordinates[0] };
+  let s = Infinity, w = Infinity, n = -Infinity, e = -Infinity;
+  for (const ring of ringsOf(g)) for (const [lng, lat] of ring) {
+    s = Math.min(s, lat); n = Math.max(n, lat); w = Math.min(w, lng); e = Math.max(e, lng);
+  }
+  return Number.isFinite(s) ? { lat: (s + n) / 2, lng: (w + e) / 2 } : null;
+}
+
+/**
+ * The organisation's premises from its /geofences/geojson: the site fences
+ * (perimeter, factory, gate, weighbridge and the like; polygons and circles),
+ * within 3 km of `near` when given. Perimeters first, so they draw underneath.
+ */
+export function siteFences(fc, near) {
+  const out = [];
+  for (const f of fc?.features ?? []) {
+    const p = f?.properties ?? {};
+    const kind = p.purpose ?? p.category;
+    if (!SITE_KINDS.has(kind) || isDummyFence(p.name)) continue;
+    const g = f.geometry;
+    const circle = g?.type === "Point" && p.radiusM > 0 ? { lat: g.coordinates[1], lng: g.coordinates[0], radiusM: p.radiusM } : null;
+    if (!circle && !ringsOf(g).length) continue;
+    const mid = fenceMiddle(f);
+    if (!mid || (near && metresBetween(mid, near) > SITE_REACH_M)) continue;
+    out.push({ id: String(p.id ?? p.name ?? out.length), name: String(p.name ?? "Fence").trim(), kind, color: fenceColor(f), feature: f, circle, mid });
+  }
+  const rank = (k) => (k === "perimeter" ? 0 : k === "gate" ? 2 : 1);
+  return out.sort((a, b) => rank(a.kind) - rank(b.kind));
+}
+
+/**
+ * A works-site survey (lib/sitePlans, public/<org>-site.geojson) as fences of
+ * the same shape as siteFences: its boundary as the perimeter and its gate
+ * point as the gate (operator, 2026-11-26: "use the sukari sitemap and the
+ * gate to be always at the place shown"). Within 3 km of `near` when given.
+ */
+export function planFences(fc, planId, near) {
+  const out = [];
+  (fc?.features ?? []).forEach((f, i) => {
+    const p = f?.properties ?? {};
+    const g = f?.geometry;
+    const kind = p.category === "perimeter" || p.kind === "boundary" ? "perimeter" : p.category === "gate" ? "gate" : null;
+    if (!kind) return;
+    if (kind === "perimeter" && !ringsOf(g).length) return;
+    if (kind === "gate" && g?.type !== "Point") return;
+    const mid = fenceMiddle(f);
+    if (!mid || (near && metresBetween(mid, near) > SITE_REACH_M)) return;
+    out.push({
+      id: `${planId}:${i}`, name: String(p.name ?? "Site").trim(), kind, plan: planId,
+      color: fenceColor({ properties: { category: "perimeter" }, geometry: g }), feature: f, circle: null, mid,
+    });
+  });
+  return out;
+}
+
+/** The one fence the map draws: the perimeter, else the factory, else the first site fence (never the gate's own). */
+export function premisesOf(fences, near) {
+  const site = (fences ?? []).filter((f) => f.kind !== "gate");
+  const closest = (list) => (near && list.length > 1
+    ? [...list].sort((a, b) => metresBetween(a.mid, near) - metresBetween(b.mid, near))[0]
+    : list[0]) ?? null;
+  return closest(site.filter((f) => f.plan && f.kind === "perimeter"))
+    ?? closest(site.filter((f) => f.kind === "perimeter"))
+    ?? closest(site.filter((f) => f.kind === "factory"))
+    ?? site[0] ?? null;
+}
+
+/** Is the point inside the fence: a circle by distance, a polygon by even-odd over its rings. */
+export function insideFence(fence, pt) {
+  if (!fence || !pt) return false;
+  if (fence.circle) return metresBetween(fence.circle, pt) <= fence.circle.radiusM;
+  let inside = false;
+  for (const ring of ringsOf(fence.feature?.geometry)) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > pt.lat) !== (yj > pt.lat) && pt.lng < ((xj - xi) * (pt.lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** The fence's edges as [lng, lat] pairs (a circle as 48 of them). */
+function edgesOf(fence) {
+  let rings = ringsOf(fence.feature?.geometry);
+  if (fence.circle) {
+    const { lat, lng, radiusM } = fence.circle;
+    const dLat = radiusM / 111_320, dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+    rings = [Array.from({ length: 49 }, (_, k) => [lng + dLng * Math.cos((k / 48) * 2 * Math.PI), lat + dLat * Math.sin((k / 48) * 2 * Math.PI)])];
+  }
+  const out = [];
+  for (const ring of rings) for (let i = 1; i < ring.length; i++) out.push([ring[i - 1], ring[i]]);
+  return out;
+}
+
+/** Where segment a→b ({lat, lng}) first meets the fence's edge, or null. */
+function edgeCrossing(fence, a, b) {
+  let best = null;
+  for (const [[x3, y3], [x4, y4]] of edgesOf(fence)) {
+    const x1 = a.lng, y1 = a.lat, x2 = b.lng, y2 = b.lat;
+    const d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (d === 0) continue;
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && (!best || t < best.t)) best = { t, lat: y1 + t * (y2 - y1), lng: x1 + t * (x2 - x1) };
+  }
+  return best;
+}
+
+/** The point on the fence's edge nearest pt (planar, fine across a site). */
+function nearestOnEdge(fence, pt) {
+  let best = null;
+  for (const [[x1, y1], [x2, y2]] of edgesOf(fence)) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = dx * dx + dy * dy;
+    const t = len ? Math.max(0, Math.min(1, ((pt.lng - x1) * dx + (pt.lat - y1) * dy) / len)) : 0;
+    const q = { lat: y1 + t * dy, lng: x1 + t * dx };
+    const m = metresBetween(q, pt);
+    if (!best || m < best.m) best = { ...q, m };
+  }
+  return best ? { lat: best.lat, lng: best.lng } : null;
+}
+
+/**
+ * Where the gate is, so the map always has one:
+ *   recorded  the organisation's gate point (fleet-server gate-log `gate`)
+ *   plan      the gate on the works-site survey (Sukari's Main Gate)
+ *   fence     the middle of a fence drawn as the gate
+ *   track     where the unit's track crossed the premises fence nearest the event
+ *   edge      the point of the premises fence nearest the unit
+ * null only with no gate, no fence and no position.
+ */
+export function findGate({ gate, fences, premises, fixes, at, here }) {
+  if (gate && Number.isFinite(gate.lat) && Number.isFinite(gate.lng)) return { lat: gate.lat, lng: gate.lng, from: "recorded" };
+  // A surveyed gate, else a fence drawn as the gate: the one of the drawn
+  // premises' own survey, else the nearest to the premises.
+  const gates = (fences ?? []).filter((f) => f.kind === "gate");
+  const own = premises?.plan ? gates.find((f) => f.plan === premises.plan) : null;
+  const ref = premises?.mid ?? here;
+  const drawn = own ?? (ref && gates.length > 1 ? [...gates].sort((a, b) => metresBetween(a.mid, ref) - metresBetween(b.mid, ref))[0] : gates[0]);
+  if (drawn) return { ...drawn.mid, from: drawn.plan ? "plan" : "fence" };
+  if (!premises) return null;
+  let best = null;
+  const fx = fixes ?? [];
+  for (let i = 1; i < fx.length; i++) {
+    const a = fx[i - 1], b = fx[i];
+    if (insideFence(premises, a) === insideFence(premises, b)) continue;
+    const c = edgeCrossing(premises, a, b);
+    if (!c) continue;
+    const when = a.at + c.t * (b.at - a.at);
+    if (!best || Math.abs(when - at) < Math.abs(best.when - at)) best = { lat: c.lat, lng: c.lng, when };
+  }
+  if (best) return { lat: best.lat, lng: best.lng, from: "track" };
+  const edge = here ? nearestOnEdge(premises, here) : null;
+  return edge ? { ...edge, from: "edge" } : null;
+}
+
+/** Where the gate is: the recorded point, else the middle of a fence drawn as the gate. */
+export function gateSpot(gate, fences) {
+  const g = findGate({ gate, fences });
+  return g ? { lat: g.lat, lng: g.lng } : null;
+}
+
+/**
+ * Which way the unit is drawn facing: out through the gate for a sign-out,
+ * in through it for a return. Along the line between the unit and the gate
+ * when the unit was clear of the gate's circle (`nearM`); else across the
+ * gate from the premises' middle.
+ */
+export function gateFacing(way, here, spot, premises, nearM = 60) {
+  if (!spot) return null;
+  const inner = premises?.mid ?? null;
+  // Inside the gate's circle which side of the fence line a fix falls is GPS
+  // noise, so there the premises' middle says which way is in.
+  if (here && metresBetween(here, spot) > nearM) {
+    // Still inside on the way out, it is heading for the gate; outside, away
+    // from it. A return mirrors that.
+    const inside = premises ? insideFence(premises, here) : way === "in";
+    const toGate = way === "out" ? inside : !inside;
+    return toGate ? bearing(here, spot) : bearing(spot, here);
+  }
+  if (inner && metresBetween(inner, spot) > 1) return way === "out" ? bearing(inner, spot) : bearing(spot, inner);
+  return null;
+}
+
+/** Compass bearing from a to b, degrees. */
+function bearing(a, b) {
+  const r = Math.PI / 180;
+  const y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+
+/**
+ * Which way the unit faced at the fix: the tracker's own heading when it sent
+ * one, else from the last fix before that is more than jitter away, else
+ * towards the first one after. 0 (north) when it never moved.
+ */
+export function headingAt(fixes, here) {
+  if (!here) return 0;
+  if (Number.isFinite(here.headingDeg) && here.headingDeg !== 0) return here.headingDeg;
+  const far = (f) => metresBetween(f, here) > 15;
+  const prev = (fixes ?? []).filter((f) => f.at < here.at && far(f)).pop();
+  if (prev) return bearing(prev, here);
+  const next = (fixes ?? []).find((f) => f.at > here.at && far(f));
+  return next ? bearing(here, next) : 0;
+}
+
+/**
+ * The words for an acknowledgement, by the way the event went (operator,
+ * 2026-11-26: "acknowledge it truly left or got into the premises").
+ */
+export const ACK_WORDS = {
+  out: {
+    CONFIRMED: { pick: "It signed out", cell: "Signed out", confirm: "Confirm it signed out", placeholder: "Anything to add? Optional." },
+    DISPUTED:  { pick: "It did not sign out", cell: "Did not sign out", confirm: "Record that it did not sign out", placeholder: "Why? e.g. still parked in the yard, signed out by mistake" },
+  },
+  in: {
+    CONFIRMED: { pick: "It signed in", cell: "Signed in", confirm: "Confirm it signed in", placeholder: "Anything to add? Optional." },
+    DISPUTED:  { pick: "It did not sign in", cell: "Did not sign in", confirm: "Record that it did not sign in", placeholder: "Why? e.g. still out on the road, signed in by mistake" },
+  },
+};
+
+/** A dispute needs a reason; a confirmation does not. */
+export const ackNoteOk = (outcome, note) => outcome === "CONFIRMED" || String(note ?? "").trim().length >= 3;
