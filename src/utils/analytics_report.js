@@ -5,7 +5,7 @@
 import { jsPDF } from "jspdf";
 import autoTableModule from "jspdf-autotable";
 import html2canvas from "html2canvas";
-import { splitDrained } from "../lib/fuelTheftSplit";
+import { SHOW_FUEL_DRAINED, splitDrained } from "../lib/fuelTheftSplit";
 
 const autoTable =
   typeof autoTableModule === "function"
@@ -1628,16 +1628,20 @@ export async function downloadAnalyticsReport({
               "litres",
           },
 
-          {
-            label:
-              "Fuel drained",
-            value:
-              fmt(
-                splitDrained(fuelTotals).lost,
-              ),
-            unit:
-              "litres",
-          },
+          ...(SHOW_FUEL_DRAINED
+            ? [
+              {
+                label:
+                  "Fuel drained",
+                value:
+                  fmt(
+                    splitDrained(fuelTotals).lost,
+                  ),
+                unit:
+                  "litres",
+              },
+            ]
+            : []),
 
           {
             label:
@@ -1674,22 +1678,30 @@ export async function downloadAnalyticsReport({
               ),
           },
 
-          {
-            label:
-              "Drain events",
-            value:
-              fmt(
-                splitDrained(fuelTotals).drains,
-              ),
-          },
+          ...(SHOW_FUEL_DRAINED
+            ? [
+              {
+                label:
+                  "Drain events",
+                value:
+                  fmt(
+                    splitDrained(fuelTotals).drains,
+                  ),
+              },
+            ]
+            : []),
 
-          {
-            label:
-              "Value of fuel drained",
-            value: `${currency} ${fmt(
-              splitDrained(fuelTotals).lossCost,
-            )}`,
-          },
+          ...(SHOW_FUEL_DRAINED
+            ? [
+              {
+                label:
+                  "Value of fuel drained",
+                value: `${currency} ${fmt(
+                  splitDrained(fuelTotals).lossCost,
+                )}`,
+              },
+            ]
+            : []),
 
           {
             label:
@@ -1766,7 +1778,7 @@ export async function downloadAnalyticsReport({
             head: [
               "Date",
               "Litres filled",
-              "Litres lost",
+              ...(SHOW_FUEL_DRAINED ? ["Litres lost"] : []),
               `Cost (${currency})`,
             ],
 
@@ -1775,17 +1787,14 @@ export async function downloadAnalyticsReport({
                 (d) => [
                   fmtDay(d.day),
                   fmt(d.litres),
-                  fmt(d.lost),
+                  ...(SHOW_FUEL_DRAINED ? [fmt(d.lost)] : []),
                   fmt(d.cost),
                 ],
               ),
 
-            columnWidths: [
-              0.25,
-              0.25,
-              0.25,
-              0.25,
-            ],
+            columnWidths: SHOW_FUEL_DRAINED
+              ? [0.25, 0.25, 0.25, 0.25]
+              : [1 / 3, 1 / 3, 1 / 3],
 
             columnStyles: {
               1: {
@@ -1807,7 +1816,8 @@ export async function downloadAnalyticsReport({
 
       // Independent of "Fuel by day": a window can carry drains on days the
       // per-day series has nothing else to say about.
-      fuelDrainTable(
+      // Hidden with the rest of Fuel drained until verified (lib/fuelTheftSplit)
+      if (SHOW_FUEL_DRAINED) fuelDrainTable(
         doc,
         C,
         fuelDrains,
@@ -2350,16 +2360,20 @@ export async function downloadAnalyticsReport({
               "litres",
           },
 
-          {
-            label:
-              "Fuel drained",
-            value:
-              fmt(
-                splitDrained(fuelTotals).lost,
-              ),
-            unit:
-              "litres",
-          },
+          ...(SHOW_FUEL_DRAINED
+            ? [
+              {
+                label:
+                  "Fuel drained",
+                value:
+                  fmt(
+                    splitDrained(fuelTotals).lost,
+                  ),
+                unit:
+                  "litres",
+              },
+            ]
+            : []),
 
           {
             label:
@@ -2396,22 +2410,30 @@ export async function downloadAnalyticsReport({
               ),
           },
 
-          {
-            label:
-              "Drain events",
-            value:
-              fmt(
-                splitDrained(fuelTotals).drains,
-              ),
-          },
+          ...(SHOW_FUEL_DRAINED
+            ? [
+              {
+                label:
+                  "Drain events",
+                value:
+                  fmt(
+                    splitDrained(fuelTotals).drains,
+                  ),
+              },
+            ]
+            : []),
 
-          {
-            label:
-              "Value of fuel drained",
-            value: `${currency} ${fmt(
-              splitDrained(fuelTotals).lossCost,
-            )}`,
-          },
+          ...(SHOW_FUEL_DRAINED
+            ? [
+              {
+                label:
+                  "Value of fuel drained",
+                value: `${currency} ${fmt(
+                  splitDrained(fuelTotals).lossCost,
+                )}`,
+              },
+            ]
+            : []),
 
           {
             label:
@@ -2459,7 +2481,7 @@ export async function downloadAnalyticsReport({
             head: [
               "Date",
               "Litres filled",
-              "Litres lost",
+              ...(SHOW_FUEL_DRAINED ? ["Litres lost"] : []),
               `Cost (${currency})`,
             ],
 
@@ -2468,17 +2490,14 @@ export async function downloadAnalyticsReport({
                 (d) => [
                   fmtDay(d.day),
                   fmt(d.litres),
-                  fmt(d.lost),
+                  ...(SHOW_FUEL_DRAINED ? [fmt(d.lost)] : []),
                   fmt(d.cost),
                 ],
               ),
 
-            columnWidths: [
-              0.25,
-              0.25,
-              0.25,
-              0.25,
-            ],
+            columnWidths: SHOW_FUEL_DRAINED
+              ? [0.25, 0.25, 0.25, 0.25]
+              : [1 / 3, 1 / 3, 1 / 3],
 
             columnStyles: {
               1: {
@@ -2500,7 +2519,9 @@ export async function downloadAnalyticsReport({
         );
       }
 
-      fuelDrainTable(
+      // Hidden with the rest of Fuel drained until verified (lib/fuelTheftSplit)
+
+      if (SHOW_FUEL_DRAINED) fuelDrainTable(
         doc,
         C,
         fuelDrains,
