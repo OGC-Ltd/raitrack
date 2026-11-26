@@ -67,8 +67,8 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
         const t = kind === 'register' ? registerTable(rep) : unrecordedTable(rep);
         await downloadTableXlsx({
           ...t,
-          title: kind === 'register' ? 'Fuel usage — machine register' : 'Fuel usage — no pump record',
-          filenameSlug: `fuel-usage-${kind === 'register' ? 'register' : 'no-pump-record'}-${String(orgCode ?? 'fleet').toLowerCase()}${site ? `-${site.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}`,
+          title: kind === 'register' ? 'Fuel usage — machine register' : 'Fuel usage — not at pump',
+          filenameSlug: `fuel-usage-${kind === 'register' ? 'register' : 'not-at-pump'}-${String(orgCode ?? 'fleet').toLowerCase()}${site ? `-${site.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}`,
           meta: [['Period', periodWords(rep.from, rep.to)], ['Sites', site || 'All']],
         });
       }
@@ -99,7 +99,7 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
             <button type="button" className="sp4-ghost-btn" onClick={() => save('pdf')} disabled={Boolean(saving)}>{saving === 'pdf' ? 'Saving…' : 'PDF'}</button>
             <button type="button" className="sp4-ghost-btn" onClick={() => save('register')} disabled={Boolean(saving)}>{saving === 'register' ? 'Saving…' : 'Excel: register'}</button>
             {t.probeKnown && t.unrecorded.fills > 0 && (
-              <button type="button" className="sp4-ghost-btn" onClick={() => save('unrecorded')} disabled={Boolean(saving)}>{saving === 'unrecorded' ? 'Saving…' : 'Excel: no pump record'}</button>
+              <button type="button" className="sp4-ghost-btn" onClick={() => save('unrecorded')} disabled={Boolean(saving)}>{saving === 'unrecorded' ? 'Saving…' : 'Excel: not at pump'}</button>
             )}
           </>
         )}
@@ -114,7 +114,7 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
             <p className="rpt-sub">
               {periodWords(rep.from, rep.to)} · {site || 'all sites'} · into tanks <b>{n0(t.probeKnown ? t.intoTank : t.issued)} L</b> against
               {' '}{n0(t.need)} L of need · pump <b>{n0(t.issued)} L</b>
-              {t.probeKnown ? <> · no pump record <b style={{ color: '#a33030' }}>{n0(t.unrecorded.litres)} L</b></> : ' · the fuel probes could not be read'}
+              {t.probeKnown ? <> · not at pump <b style={{ color: '#a33030' }}>{n0(t.unrecorded.litres)} L</b></> : ' · the fuel probes could not be read'}
             </p>
             <iframe title="Fuel usage report preview" srcDoc={html}
                     style={{ width: '100%', height: '78vh', border: '1px solid #c8c8c8', background: '#f4f4f4' }} />

@@ -32,9 +32,10 @@ describe('the Fuel Usage Report PDF', () => {
   it('leads with fuel into tanks, the pump records and the fuel with no pump record', () => {
     expect(html).toContain('Fuel into tanks');
     expect(html).toContain('268 L');                       // 118 + 150
-    expect(html).toContain('No pump record');
+    expect(html).toContain('Not at pump');
     expect(html).toContain('150 L');
-    expect(html).toContain('Fuel into tanks with no pump record');
+    expect(html).toContain('Fuel into tanks, not at pump');
+    expect(html).toContain('<th class="r t-not">Not at pump</th>');
   });
 
   it('carries no cost: five figures in the band, no KES anywhere (operator 2026-11-24)', () => {
@@ -54,7 +55,7 @@ describe('the Fuel Usage Report PDF', () => {
     const own = html.slice(html.indexOf('<div id="flow"'));
     expect(own.length).toBeGreaterThan(1000);
     for (const c of own.match(/#[0-9a-fA-F]{6}\b/g) ?? []) {
-      expect(['#5f5f5f', '#c8c8c8', '#e8e8e8', '#a33030', '#1e6b3a', '#8a5a00', '#ececec', '#9a9a9a', '#7a7a7a', '#cfcfcf', '#ff8c8c']).toContain(c.toLowerCase());
+      expect(['#5f5f5f', '#c8c8c8', '#e8e8e8', '#a33030', '#1e6b3a', '#8a5a00', '#ececec', '#9a9a9a', '#7a7a7a', '#cfcfcf', '#ff8c8c', '#e6eef8', '#e6f2ea', '#f8e6e6']).toContain(c.toLowerCase());
     }
     expect(html).not.toMatch(/navy|#1f3a5f|gold/i);
   });
