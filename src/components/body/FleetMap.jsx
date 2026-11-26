@@ -402,12 +402,17 @@ const PLAN_STYLE = {
   factory:     { color: "#22c55e", weight: 1.4, fill: 0.2 },
   road:        { color: "#78716c", weight: 2, fill: 0.15 },
   irrigation:  { color: "#0d9488", weight: 1.6, fill: 0 },
+  // The 700 / 1600 / 2500 / 2000 Ha blocks, from the operations team's Google
+  // Earth file rather than the drawing (scripts/kml-to-ha-blocks.py). Outline
+  // only, in a hue nothing else on the sheet uses: they overlap the drawing's
+  // zones and a wash would muddy the blocks underneath.
+  hablock:     { color: "#e11d48", weight: 2.4, fill: 0.04 },
 };
-const PLAN_LEGEND = ["planted", "nursery", "rainfed", "flood", "water", "reservoir", "factory", "irrigation", "headcontrol", "zone", "boundary"];
+const PLAN_LEGEND = ["planted", "nursery", "rainfed", "flood", "water", "reservoir", "factory", "irrigation", "headcontrol", "zone", "hablock", "boundary"];
 const PLAN_LABEL = {
   boundary: "Estate boundary", zone: "Zone", headcontrol: "Head-control area", planted: "Irrigation block",
   nursery: "Nursery", rainfed: "Rainfed area", flood: "Flood zone", water: "River", reservoir: "Reservoir",
-  factory: "Factory site", road: "Road", irrigation: "Irrigation main",
+  factory: "Factory site", road: "Road", irrigation: "Irrigation main", hablock: "Hectare block",
 };
 
 // The drawing's area names — the ones a reader of the sheet navigates by, and
@@ -430,6 +435,14 @@ const PLAN_LABELS = [
   { text: "INTAKE 1", lat: -4.02183, lng: 30.54110, minZoom: 13, priority: 1 },
   { text: "INTAKE 2", lat: -4.00190, lng: 30.49923, minZoom: 13, priority: 1 },
   { text: "INTAKE 3", lat: -3.98890, lng: 30.45628, minZoom: 13, priority: 1 },
+  // The hectare blocks' names, at the operations team's own pins in
+  // tools/kasulu-ha-blocks.kml. Below the sheet's zone names in priority:
+  // three of them sit a few hundred metres from NURSERY B, COMMERCIAL AREA and
+  // ZONE 4, and on a clash the drawing's name wins.
+  { text: "700 HA AREA",  lat: -4.02146, lng: 30.51215, minZoom: 12, priority: 2 },
+  { text: "1600 HA AREA", lat: -4.03567, lng: 30.49495, minZoom: 12, priority: 2 },
+  { text: "2500 HA AREA", lat: -4.04198, lng: 30.43366, minZoom: 12, priority: 2 },
+  { text: "2000 HA AREA", lat: -4.06715, lng: 30.40170, minZoom: 12, priority: 2 },
 ];
 
 function planLabelHtml(text) {
@@ -5213,7 +5226,7 @@ export default function FleetMap() {
         // Shading sits under its own block grid, and the whole plan layer stays
         // negative so it can never climb above the authoritative zone layer or
         // the fleet, both of which start at 1.
-        zIndex: shade ? -2 : cls === "boundary" || cls === "zone" ? -3 : -1,
+        zIndex: shade ? -2 : cls === "boundary" || cls === "zone" || cls === "hablock" ? -3 : -1,
       };
     });
 
@@ -5230,13 +5243,17 @@ export default function FleetMap() {
       if (!name || areaHoverQuietRef.current) return;
       const cls = e.feature.getProperty("c");
       const ha  = e.feature.getProperty("a");
+      // A hectare block's name is its nominal figure ("700 Ha Area"); the
+      // outline measures 736 ha. Say so, rather than leave two numbers that
+      // look like a mistake.
+      const measured = cls === "hablock" && ha ? ` measured` : "";
       hoverWin.open({
         html:
           `<article class="mapcard mapcard--plan">` +
             `<header class="mapcard__head"><h3 class="mapcard__title">${esc(name)}</h3></header>` +
             `<p class="mapcard__class"><i class="mapcard__swatch" style="--swatch:${
                (PLAN_STYLE[cls] ?? PLAN_STYLE.boundary).color
-             }"></i>${esc(PLAN_LABEL[cls] ?? cls)}${ha ? ` · ${ha.toLocaleString()} ha` : ""}</p>` +
+             }"></i>${esc(PLAN_LABEL[cls] ?? cls)}${ha ? ` · ${ha.toLocaleString()} ha${measured}` : ""}</p>` +
           `</article>`,
         position: e.latLng,
       });

@@ -1,0 +1,1110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+<LookAt>
+<longitude>30.66044630</longitude>
+<latitude>-3.80290065</latitude>
+<range>210319</range>
+</LookAt>
+<Style id="Filled_Label_00">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.0</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_01">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.3</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_02">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.4</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_03">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.5</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_04">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.6</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_05">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.7</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_06">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.8</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_07">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.9</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_08">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>1.0</scale>
+</LabelStyle>
+</Style>
+<Style id="Filled_Label_09">
+<IconStyle>
+<scale>0.0</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/blank.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>1.1</scale>
+</LabelStyle>
+</Style>
+<Style id="Point__Point_Features_-1_03">
+<IconStyle>
+<scale>0.50</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/Garmin/Flag_Blue.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.5</scale>
+</LabelStyle>
+<BalloonStyle>
+<text>
+<![CDATA[<style>td{font-size:1.5em; } table{border-collapse:collapse; border:1px;}</style><b><font color="#eb6b0b" size="+5">$[name]</font></b><br /><br /><font size="+3">$[description]</font><br /><br /><table width="1000px" border="1px"><tr style="background-color:FFFFFF"><td width="20%">Type</td><td>$[Type]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Symbol</td><td>$[Symbol]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Name on GPS</td><td>$[Name on GPS]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Comment</td><td>$[Comment]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Latitude</td><td>$[Latitude]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Longitude</td><td>$[Longitude]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Elevation</td><td>$[Elevation]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Distance to Active Point</td><td>$[Distance to Active Point]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Bearing</td><td>$[Bearing]</td></tr></table></body>]]></text>
+</BalloonStyle>
+</Style>
+<Style id="Point_KML_Point_-1_03">
+<IconStyle>
+<scale>0.50</scale>
+<Icon>
+<href>https://www.topografix.com/symbols/Garmin/Flag_Blue.png</href>
+</Icon>
+</IconStyle>
+<LabelStyle>
+<scale>0.5</scale>
+</LabelStyle>
+<BalloonStyle>
+<text>
+<![CDATA[<style>td{font-size:1.5em; } table{border-collapse:collapse; border:1px;}</style><b><font color="#eb6b0b" size="+5">$[name]</font></b><br /><br /><font size="+3">$[description]</font><br /><br /><table width="1000px" border="1px"><tr style="background-color:FFFFFF"><td width="20%">Type</td><td>$[Type]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Symbol</td><td>$[Symbol]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Name on GPS</td><td>$[Name on GPS]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Comment</td><td>$[Comment]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Latitude</td><td>$[Latitude]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Longitude</td><td>$[Longitude]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Elevation</td><td>$[Elevation]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Distance to Active Point</td><td>$[Distance to Active Point]</td></tr><tr style="background-color:FFFFFF"><td width="20%">Bearing</td><td>$[Bearing]</td></tr></table></body>]]></text>
+</BalloonStyle>
+</Style>
+<Style id="Line__Line_Features_line1_ffff00ff_03">
+<LineStyle>
+<color>ffff00ff</color>
+<width>1.0</width>
+</LineStyle>
+<PolyStyle>
+<fill>0</fill>
+</PolyStyle>
+<BalloonStyle>
+<text>
+<![CDATA[<style>td{font-size:1.5em; } table{border-collapse:collapse; border:1px;}</style><b><font color="#eb6b0b" size="+5">$[name]</font></b><br /><br /><font size="+3">$[description]</font><br /><br /><table width="1000px" border="1px"><tr style="background-color:FFFFFF"><td width="20%">Type</td><td>$[Type]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Number of Trackpoints</td><td>$[Number of Trackpoints]</td></tr></table></body>]]></text>
+</BalloonStyle>
+</Style>
+<Style id="Line_KML_Polygon_ffff0000_03">
+<LineStyle>
+<color>ff0000ff</color>
+<width>1.5</width>
+</LineStyle>
+<PolyStyle>
+<fill>0</fill>
+</PolyStyle>
+<BalloonStyle>
+<text>
+<![CDATA[<style>td{font-size:1.5em; } table{border-collapse:collapse; border:1px;}</style><b><font color="#eb6b0b" size="+5">$[name]</font></b><br /><br /><font size="+3">$[description]</font><br /><br /><table width="1000px" border="1px"><tr style="background-color:FFFFFF"><td width="20%">Type</td><td>$[Type]</td></tr><tr style="background-color:D8E6E6"><td width="20%">Number of Trackpoints</td><td>$[Number of Trackpoints]</td></tr></table></body>]]></text>
+</BalloonStyle>
+</Style>
+<Folder>
+<name>Waypoints</name>
+<Folder>
+<name> Point Features</name>
+<Placemark>
+<name>AREA 1 -210</name>
+<description>UNKNOWN_POINT_FEATURE</description>
+<LookAt>
+<longitude>30.36570046</longitude>
+<latitude>-3.94867534</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point__Point_Features_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Point Features</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>AREA 1 -210</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S03.94868</value>
+</Data>
+<Data name="Longitude">
+<value>E030.36570</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.36570046,-3.94867534</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>AREA 3 - 211</name>
+<description>UNKNOWN_POINT_FEATURE</description>
+<LookAt>
+<longitude>30.39667507</longitude>
+<latitude>-4.03087100</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point__Point_Features_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Point Features</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>AREA 3 - 211</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.03087</value>
+</Data>
+<Data name="Longitude">
+<value>E030.39668</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.39667507,-4.03087100</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>AREA 4 - 215</name>
+<description>UNKNOWN_POINT_FEATURE</description>
+<LookAt>
+<longitude>30.48737271</longitude>
+<latitude>-4.02792462</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point__Point_Features_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Point Features</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>AREA 4 - 215</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.02792</value>
+</Data>
+<Data name="Longitude">
+<value>E030.48737</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.48737271,-4.02792462</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>AREA 5 - 214</name>
+<description>UNKNOWN_POINT_FEATURE</description>
+<LookAt>
+<longitude>30.40715214</longitude>
+<latitude>-4.18161431</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point__Point_Features_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Point Features</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>AREA 5 - 214</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.18161</value>
+</Data>
+<Data name="Longitude">
+<value>E030.40715</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.40715214,-4.18161431</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>AREA 6 - 212</name>
+<description>UNKNOWN_POINT_FEATURE</description>
+<LookAt>
+<longitude>30.23649855</longitude>
+<latitude>-4.00382246</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point__Point_Features_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Point Features</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>AREA 6 - 212</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.00382</value>
+</Data>
+<Data name="Longitude">
+<value>E030.23650</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.23649855,-4.00382246</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>AREA 7 - 213</name>
+<description>UNKNOWN_POINT_FEATURE</description>
+<LookAt>
+<longitude>30.17507081</longitude>
+<latitude>-4.11188222</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point__Point_Features_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Point Features</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>AREA 7 - 213</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.11188</value>
+</Data>
+<Data name="Longitude">
+<value>E030.17507</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.17507081,-4.11188222</coordinates>
+</Point>
+</Placemark>
+</Folder>
+<Folder>
+<name>KML Point</name>
+<Placemark>
+<name>Kasulu</name>
+<LookAt>
+<longitude>30.10118360</longitude>
+<latitude>-4.57023580</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Kasulu</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.57024</value>
+</Data>
+<Data name="Longitude">
+<value>E030.10118</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.10118360,-4.57023580</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>Kibondo</name>
+<LookAt>
+<longitude>30.71775090</longitude>
+<latitude>-3.58376380</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Kibondo</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S03.58376</value>
+</Data>
+<Data name="Longitude">
+<value>E030.71775</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.71775090,-3.58376380</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>Nyakanazi</name>
+<LookAt>
+<longitude>31.21970900</longitude>
+<latitude>-3.03556550</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Nyakanazi</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S03.03557</value>
+</Data>
+<Data name="Longitude">
+<value>E031.21971</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>31.21970900,-3.03556550</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>Kanve Junction</name>
+<description>&lt;div&gt;Kanve junction is junction from where an earthen road approach is available to access the proposed factory site&lt;br&gt;&lt;/div&gt;</description>
+<LookAt>
+<longitude>30.53168850</longitude>
+<latitude>-4.08667542</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Kanve Junction</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.08668</value>
+</Data>
+<Data name="Longitude">
+<value>E030.53169</value>
+</Data>
+<Data name="Elevation">
+<value>3801.77 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.53168850,-4.08667542</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>Intake - 2</name>
+<LookAt>
+<longitude>30.50130564</longitude>
+<latitude>-4.00400110</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Intake - 2</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.00400</value>
+</Data>
+<Data name="Longitude">
+<value>E030.50131</value>
+</Data>
+<Data name="Elevation">
+<value>3705.70 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.50130564,-4.00400110</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>Intake - 1</name>
+<LookAt>
+<longitude>30.54402359</longitude>
+<latitude>-4.02620778</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Intake - 1</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.02621</value>
+</Data>
+<Data name="Longitude">
+<value>E030.54402</value>
+</Data>
+<Data name="Elevation">
+<value>3700.37 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.54402359,-4.02620778</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>Quarry SIte at Jangwe location</name>
+<description>&lt;div&gt;4°02'47.5"S 30°21'27.4"E&lt;br&gt;&lt;/div&gt;</description>
+<LookAt>
+<longitude>30.35761110</longitude>
+<latitude>-4.04652780</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>Quarry SIte at Jangwe location</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.04653</value>
+</Data>
+<Data name="Longitude">
+<value>E030.35761</value>
+</Data>
+<Data name="Elevation">
+<value>0.00 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.35761110,-4.04652780</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>700 Ha Area</name>
+<LookAt>
+<longitude>30.51214594</longitude>
+<latitude>-4.02145568</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>700 Ha Area</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.02146</value>
+</Data>
+<Data name="Longitude">
+<value>E030.51215</value>
+</Data>
+<Data name="Elevation">
+<value>3720.58 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.51214594,-4.02145568</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>1600 Ha Area</name>
+<LookAt>
+<longitude>30.49495260</longitude>
+<latitude>-4.03566575</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>1600 Ha Area</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.03567</value>
+</Data>
+<Data name="Longitude">
+<value>E030.49495</value>
+</Data>
+<Data name="Elevation">
+<value>3732.30 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.49495260,-4.03566575</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>2500 Ha Area</name>
+<LookAt>
+<longitude>30.43366470</longitude>
+<latitude>-4.04198384</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>2500 Ha Area</value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.04198</value>
+</Data>
+<Data name="Longitude">
+<value>E030.43366</value>
+</Data>
+<Data name="Elevation">
+<value>3880.01 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.43366470,-4.04198384</coordinates>
+</Point>
+</Placemark>
+<Placemark>
+<name>2000 Ha Area </name>
+<LookAt>
+<longitude>30.40170331</longitude>
+<latitude>-4.06714820</latitude>
+<range>200</range>
+</LookAt>
+<styleUrl>#Point_KML_Point_-1_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Point</value>
+</Data>
+<Data name="Symbol">
+<value>Flag, Blue</value>
+</Data>
+<Data name="Name on GPS">
+<value>2000 Ha Area </value>
+</Data>
+<Data name="Comment">
+</Data>
+<Data name="Latitude">
+<value>S04.06715</value>
+</Data>
+<Data name="Longitude">
+<value>E030.40170</value>
+</Data>
+<Data name="Elevation">
+<value>4109.27 ft</value>
+</Data>
+<Data name="Distance to Active Point">
+<value>N/A</value>
+</Data>
+<Data name="Bearing">
+<value>N/A</value>
+</Data>
+</ExtendedData>
+<Point>
+<coordinates>30.40170331,-4.06714820</coordinates>
+</Point>
+</Placemark>
+</Folder>
+</Folder>
+<Folder>
+<name>Shapes</name>
+<Folder>
+<name> Line Features line1</name>
+<Placemark>
+<name>UNKNOWN_LINE_TYPE</name>
+<description>UNKNOWN_LINE_TYPE</description>
+<LookAt>
+<longitude>30.41368347</longitude>
+<latitude>-4.17152506</latitude>
+<range>11774</range>
+</LookAt>
+<styleUrl>#Line__Line_Features_line1_ffff00ff_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Line Features line1</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>6</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.40979058,-4.21404226 30.44559373,-4.17867221 30.41217988,-4.12900787 30.38177322,-4.19352667 30.39030270,-4.19058164 30.40979058,-4.21404226 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>UNKNOWN_LINE_TYPE</name>
+<description>UNKNOWN_LINE_TYPE</description>
+<LookAt>
+<longitude>30.50426173</longitude>
+<latitude>-4.02587956</latitude>
+<range>12721</range>
+</LookAt>
+<styleUrl>#Line__Line_Features_line1_ffff00ff_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Line Features line1</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>79</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.50907819,-4.05890092 30.52422060,-4.03417323 30.54884043,-4.03612809 30.55071796,-4.02531453 30.55116204,-4.02429450 30.55000778,-4.02404918 30.54659617,-4.02543273 30.54519616,-4.02520099 30.54381026,-4.02565996 30.54020688,-4.02366430 30.53713309,-4.02410148 30.53159160,-4.02405951 30.52903652,-4.02155750 30.52889603,-4.02076423 30.52904672,-4.01805803 30.52898230,-4.01689027 30.52828992,-4.01557573 30.52819643,-4.01338136 30.52879517,-4.01050773 30.52864172,-4.00894225 30.52862534,-4.00675355 30.52770395,-4.00580945 30.52606136,-4.00613018 30.52358496,-4.00507017 30.52046822,-4.00316649 30.51905803,-4.00273108 30.51842141,-4.00293071 30.51822570,-4.00691912 30.51628089,-4.00879991 30.51513692,-4.00897254 30.51470497,-4.00767595 30.51367586,-4.00689478 30.51279794,-4.00653695 30.51183611,-4.00574162 30.51069843,-4.00376464 30.50975870,-4.00382367 30.50865133,-4.00328556 30.50894548,-4.00248676 30.50960313,-4.00208610 30.51084756,-4.00040595 30.51099808,-3.99982041 30.51001499,-3.99818313 30.50979860,-3.99679112 30.50850557,-3.99600496 30.50735863,-3.99601964 30.50684569,-3.99530527 30.50509977,-3.99494607 30.50228884,-3.99320534 30.50096258,-3.99285820 30.49950883,-3.99319377 30.49829449,-3.99412333 30.49810561,-3.99466690 30.49819330,-3.99533657 30.49881215,-3.99634531 30.49889250,-3.99718341 30.49862168,-3.99792776 30.49864129,-3.99880554 30.49878408,-3.99993530 30.49931564,-4.00074723 30.49938286,-4.00166645 30.49900064,-4.00226253 30.49765344,-4.00311760 30.49638434,-4.00340449 30.49443858,-4.00423143 30.49276080,-4.00566029 30.49096511,-4.00567945 30.49079558,-4.00836922 30.48937185,-4.00892905 30.48844166,-4.00895912 30.48769593,-4.00733038 30.48838764,-4.00606227 30.48817141,-4.00499284 30.48642779,-4.00421341 30.48620544,-4.00192472 30.48529483,-4.00154304 30.46382541,-4.02060116 30.45736142,-4.03862984 30.48733678,-4.04590879 30.50907819,-4.05890092 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>UNKNOWN_LINE_TYPE</name>
+<description>UNKNOWN_LINE_TYPE</description>
+<LookAt>
+<longitude>30.41193583</longitude>
+<latitude>-4.04408383</latitude>
+<range>24863</range>
+</LookAt>
+<styleUrl>#Line__Line_Features_line1_ffff00ff_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Line Features line1</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>254</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.41217988,-4.12900787 30.42715188,-4.10606413 30.44191303,-4.07145192 30.45736142,-4.03862984 30.46382541,-4.02060116 30.48529483,-4.00154304 30.48486678,-4.00130868 30.48424489,-4.00171477 30.48315334,-4.00166468 30.48199550,-4.00080294 30.47980574,-4.00043619 30.47830249,-4.00106157 30.47666126,-4.00088130 30.47483899,-4.00120537 30.47291502,-4.00099869 30.47167825,-4.00206119 30.47032829,-4.00222183 30.46820727,-4.00192799 30.46724619,-4.00082316 30.46583654,-4.00026045 30.46468404,-3.99928124 30.46440499,-3.99795272 30.46268204,-3.99568566 30.46251268,-3.99482447 30.46200349,-3.99413554 30.46158856,-3.99428462 30.45931028,-3.99377066 30.45907717,-3.99282722 30.45806840,-3.99246140 30.45703123,-3.99193310 30.45673150,-3.99077548 30.45548390,-3.98964535 30.45534396,-3.98853001 30.45586861,-3.98767607 30.45563003,-3.98583443 30.45509384,-3.98577028 30.45379741,-3.98603882 30.45352969,-3.98553611 30.45363568,-3.98374129 30.45285059,-3.98295075 30.45256969,-3.98222251 30.45249424,-3.98121211 30.45086216,-3.97922772 30.45010942,-3.97879720 30.45011823,-3.97754751 30.44923406,-3.97635670 30.44815262,-3.97594082 30.44795415,-3.97527613 30.44835234,-3.97442521 30.44805152,-3.97425996 30.44720934,-3.97481475 30.44618637,-3.97388819 30.44490351,-3.97310163 30.44375558,-3.97290870 30.44247332,-3.97356645 30.44214464,-3.97450996 30.44110502,-3.97459495 30.44007167,-3.97432706 30.43989238,-3.97377639 30.44158953,-3.97279763 30.44164303,-3.97161730 30.44132110,-3.97096607 30.44074669,-3.97086465 30.43958162,-3.97192680 30.43949419,-3.97306370 30.43875045,-3.97473766 30.43661567,-3.97569971 30.43567039,-3.97525778 30.43572875,-3.97456430 30.43740046,-3.97401192 30.43805586,-3.97325931 30.43782363,-3.97249469 30.43718730,-3.97231199 30.43564208,-3.97308880 30.43515044,-3.97271633 30.43595854,-3.97121360 30.43610438,-3.97018315 30.43566833,-3.96972104 30.43496624,-3.96970801 30.43454218,-3.97061194 30.43370003,-3.97108611 30.43289209,-3.97049451 30.43192532,-3.97030059 30.43142179,-3.96968812 30.43133700,-3.96664212 30.43090201,-3.96620888 30.43015124,-3.96648325 30.42995303,-3.96906536 30.42950861,-3.97072789 30.42841468,-3.97164887 30.42789239,-3.97100727 30.42789454,-3.97031043 30.42701700,-3.96999481 30.42655093,-3.96949561 30.42653941,-3.96864229 30.42788623,-3.96841895 30.42798666,-3.96802106 30.42715333,-3.96715095 30.42623702,-3.96562639 30.42642342,-3.96491590 30.42796742,-3.96507715 30.42978797,-3.96334153 30.42981765,-3.96244150 30.42893930,-3.96225874 30.42805928,-3.96261604 30.42712213,-3.96314331 30.42639862,-3.96302353 30.42505830,-3.96270951 30.42389689,-3.96074597 30.42326101,-3.95916298 30.42224009,-3.95915979 30.42082511,-3.96011712 30.41930996,-3.96044476 30.41776698,-3.96006845 30.41677323,-3.95932245 30.41568810,-3.95940978 30.41429928,-3.96045271 30.41445867,-3.96145757 30.41471747,-3.96169240 30.41411479,-3.96202183 30.41337826,-3.96258597 30.41381651,-3.96351309 30.41293850,-3.96359993 30.41156625,-3.96296379 30.41156771,-3.96314353 30.41043707,-3.96259297 30.40983812,-3.96292036 30.40903848,-3.96312497 30.40911187,-3.96359983 30.40835821,-3.96338588 30.40811356,-3.96367273 30.40819067,-3.96429782 30.40771273,-3.96439550 30.40775756,-3.96481220 30.40653804,-3.96489504 30.40589325,-3.96553290 30.40403807,-3.96552182 30.40300014,-3.96575819 30.40129444,-3.96455646 30.39981112,-3.96431047 30.39874865,-3.96470654 30.39816664,-3.96522894 30.39810600,-3.96606087 30.39826259,-3.96636093 30.39823824,-3.96753125 30.39755067,-3.96788651 30.39731697,-3.96834680 30.39664490,-3.96869693 30.39631447,-3.96844762 30.39625244,-3.96738472 30.39600588,-3.96680667 30.39549570,-3.96692314 30.39486726,-3.96723602 30.39422257,-3.96855908 30.39317373,-3.96953975 30.39183998,-3.96966672 30.39185011,-3.96893745 30.39364618,-3.96788703 30.39362158,-3.96744364 30.39314263,-3.96689451 30.39199948,-3.96687786 30.39250989,-3.96567994 30.39234276,-3.96511876 30.39188862,-3.96494782 30.39050872,-3.96585614 30.38973952,-3.96672728 30.38839510,-3.96880560 30.38806408,-3.96957577 30.38841395,-3.97015955 30.38843707,-3.97079496 30.38870743,-3.97109332 30.38876928,-3.97219274 30.38909595,-3.97215849 30.38923168,-3.97182941 30.38986094,-3.97267292 30.38933040,-3.97308214 30.38924847,-3.97373332 30.38891392,-3.97374228 30.38889542,-3.97327619 30.38839589,-3.97334977 30.38784982,-3.97393433 30.38784318,-3.97464476 30.38736705,-3.97457353 30.38711283,-3.97494124 30.38621967,-3.97494837 30.38586112,-3.97535559 30.38603050,-3.97584924 30.38663081,-3.97591511 30.38684400,-3.97627818 30.38593453,-3.97620699 30.38560279,-3.97651824 30.38542910,-3.97689538 30.38497742,-3.97653351 30.38465730,-3.97654032 30.38412524,-3.97691474 30.38371097,-3.97707013 30.38342129,-3.97732778 30.38348959,-3.97833588 30.38280193,-3.97863674 30.38242479,-3.97903015 30.38187101,-3.97930584 30.38134976,-3.98002947 30.38114511,-3.98170852 30.38083929,-3.98198330 30.38113449,-3.98268779 30.38178967,-3.98343298 30.38116424,-3.98403004 30.38018140,-3.98355476 30.37974983,-3.98416936 30.37903013,-3.98429832 30.37896422,-3.98327606 30.37871886,-3.98323263 30.37806580,-3.98371859 30.37766490,-3.98464168 30.37685657,-3.98445117 30.37564036,-3.98533432 30.37533295,-3.98640849 30.37468973,-3.98695292 30.37434013,-3.98664487 30.37374934,-3.98712209 30.37275508,-3.98648384 30.37222962,-3.98698601 30.37131814,-3.98697206 30.37119334,-3.98769123 30.37080305,-3.98761872 30.37047302,-3.98720197 30.36983346,-3.98736619 30.36946488,-3.98791134 30.36948484,-3.98907534 30.36895228,-3.98908550 30.36887981,-3.98954847 30.36819442,-3.98923747 30.36794410,-3.98980675 30.36815480,-3.99053192 30.36766840,-3.99091041 30.36766704,-3.99133797 30.36610855,-3.99213018 30.36950108,-3.99497881 30.36695700,-4.00260719 30.36347616,-4.00485530 30.36311201,-4.01457828 30.36439831,-4.02596044 30.36408725,-4.03312602 30.35381411,-4.03184541 30.34577982,-4.03951884 30.34937205,-4.05013126 30.34892534,-4.06017014 30.33857684,-4.07083596 30.34644346,-4.07621349 30.35271101,-4.08700022 30.36776514,-4.09915836 30.38073375,-4.11170725 30.39519403,-4.11531947 30.41217988,-4.12900787 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>UNKNOWN_LINE_TYPE</name>
+<description>UNKNOWN_LINE_TYPE</description>
+<LookAt>
+<longitude>30.37491507</longitude>
+<latitude>-3.90211972</latitude>
+<range>22177</range>
+</LookAt>
+<styleUrl>#Line__Line_Features_line1_ffff00ff_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Line Features line1</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>371</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.36610855,-3.99213018 30.36766704,-3.99133797 30.36766840,-3.99091041 30.36815480,-3.99053192 30.36794410,-3.98980675 30.36819442,-3.98923747 30.36887981,-3.98954847 30.36895228,-3.98908550 30.36948484,-3.98907534 30.36946488,-3.98791134 30.36983346,-3.98736619 30.37047302,-3.98720197 30.37080305,-3.98761872 30.37119334,-3.98769123 30.37131814,-3.98697206 30.37193721,-3.98698154 30.37246752,-3.98675865 30.37275508,-3.98648384 30.37300622,-3.98624383 30.37319848,-3.98676848 30.37374934,-3.98712209 30.37434013,-3.98664487 30.37468973,-3.98695292 30.37533295,-3.98640849 30.37564036,-3.98533432 30.37685657,-3.98445117 30.37766490,-3.98464168 30.37806580,-3.98371859 30.37895032,-3.98306040 30.37901372,-3.98404382 30.37928216,-3.98425316 30.37974983,-3.98416936 30.38018140,-3.98355476 30.38116424,-3.98403004 30.38160176,-3.98361237 30.38155517,-3.98316626 30.38113449,-3.98268779 30.38083929,-3.98198330 30.38114511,-3.98170852 30.38134976,-3.98002947 30.38187101,-3.97930584 30.38242479,-3.97903015 30.38280193,-3.97863674 30.38348959,-3.97833588 30.38342129,-3.97732778 30.38371097,-3.97707013 30.38412524,-3.97691474 30.38483226,-3.97641721 30.38542910,-3.97689538 30.38575269,-3.97619276 30.38684400,-3.97627818 30.38663081,-3.97591511 30.38603050,-3.97584924 30.38586112,-3.97535559 30.38621967,-3.97494837 30.38711283,-3.97494124 30.38769262,-3.97410262 30.38839589,-3.97334977 30.38912212,-3.97324279 30.38986094,-3.97267292 30.38941775,-3.97207883 30.38917696,-3.97196209 30.38909595,-3.97215849 30.38876928,-3.97219274 30.38870743,-3.97109332 30.38843707,-3.97079496 30.38841395,-3.97015955 30.38806408,-3.96957577 30.38839510,-3.96880560 30.38973952,-3.96672728 30.39050872,-3.96585614 30.39188862,-3.96494782 30.39234276,-3.96511876 30.39250989,-3.96567994 30.39199948,-3.96687786 30.39314263,-3.96689451 30.39388597,-3.96774678 30.39185011,-3.96893745 30.39183998,-3.96966672 30.39317373,-3.96953975 30.39422257,-3.96855908 30.39486726,-3.96723602 30.39595749,-3.96669322 30.39625244,-3.96738472 30.39631447,-3.96844762 30.39664490,-3.96869693 30.39731697,-3.96834680 30.39755067,-3.96788651 30.39823824,-3.96753125 30.39826259,-3.96636093 30.39810600,-3.96606087 30.39816664,-3.96522894 30.39874865,-3.96470654 30.39981112,-3.96431047 30.40129444,-3.96455646 30.40282490,-3.96563473 30.40349644,-3.96564516 30.40403807,-3.96552182 30.40589325,-3.96553290 30.40653804,-3.96489504 30.40775756,-3.96481220 30.40771273,-3.96439550 30.40819067,-3.96429782 30.40806801,-3.96330349 30.40911187,-3.96359983 30.40903848,-3.96312497 30.40983812,-3.96292036 30.41043707,-3.96259297 30.41156771,-3.96314353 30.41156625,-3.96296379 30.41156278,-3.96253752 30.41195151,-3.96252271 30.41198680,-3.96315875 30.41293850,-3.96359993 30.41356698,-3.96353777 30.41361100,-3.96307834 30.41337826,-3.96258597 30.41450122,-3.96172584 30.41429928,-3.96045271 30.41568810,-3.95940978 30.41677323,-3.95932245 30.41711554,-3.95756902 30.41891608,-3.95572634 30.41856367,-3.95481515 30.41740540,-3.95453007 30.41723484,-3.95527073 30.41585840,-3.95600763 30.41494291,-3.95580774 30.41449651,-3.95506514 30.41552356,-3.95378566 30.41555420,-3.95254822 30.41661516,-3.95176365 30.41665376,-3.95009053 30.41558099,-3.94990443 30.41391960,-3.95101499 30.41273161,-3.95188768 30.41146492,-3.95214387 30.41148514,-3.95145421 30.41278231,-3.95108921 30.41309583,-3.95036683 30.41259102,-3.94978941 30.41103928,-3.95025626 30.41036785,-3.94988161 30.41069679,-3.94877309 30.40985869,-3.94771023 30.40859374,-3.94763847 30.40809142,-3.94709575 30.40840369,-3.94604228 30.41048301,-3.94520149 30.41040032,-3.94469965 30.40994218,-3.94359898 30.40914170,-3.94317608 30.40840366,-3.94383349 30.40778112,-3.94488489 30.40655218,-3.94527059 30.40557770,-3.94571292 30.40421521,-3.94604707 30.40307123,-3.94567314 30.40317491,-3.94506687 30.40437805,-3.94482799 30.40433265,-3.94384379 30.40495444,-3.94315967 30.40580973,-3.94268404 30.40586406,-3.94204161 30.40532046,-3.94124941 30.40371441,-3.94037766 30.40358184,-3.94123776 30.40359684,-3.94279391 30.40152202,-3.94280462 30.40126899,-3.94146144 30.39995270,-3.94016656 30.39976943,-3.93844499 30.39996141,-3.93736136 30.40135360,-3.93629870 30.40245574,-3.93477046 30.40164102,-3.93396346 30.40055125,-3.93337428 30.39967596,-3.93332815 30.39888033,-3.93199139 30.39682656,-3.93208259 30.39614238,-3.93314352 30.39561290,-3.93310932 30.39522685,-3.93213182 30.39472010,-3.93173971 30.39465620,-3.92795367 30.39547371,-3.92623521 30.39638731,-3.92610530 30.39784166,-3.92773740 30.39969137,-3.92785267 30.40135412,-3.92703496 30.40166609,-3.92631742 30.40188236,-3.92538541 30.40176042,-3.92474942 30.40144493,-3.92438227 30.40079076,-3.92446314 30.39900540,-3.92530043 30.39782022,-3.92570435 30.39787745,-3.92500674 30.39807309,-3.92406776 30.39829371,-3.92153938 30.39670384,-3.92117357 30.39629422,-3.92038719 30.39693420,-3.91895219 30.39678936,-3.91836292 30.39552624,-3.91840997 30.39423015,-3.91617073 30.39490544,-3.91548295 30.39584696,-3.91577749 30.39725727,-3.91571076 30.39789195,-3.91440409 30.39867669,-3.91432623 30.39960547,-3.91581436 30.40165076,-3.91697465 30.40299465,-3.91673891 30.40383005,-3.91529054 30.40377634,-3.91425070 30.40138672,-3.91401477 30.40108298,-3.91284849 30.40026619,-3.91195480 30.40007452,-3.91136011 30.39876363,-3.91023413 30.39857917,-3.90930796 30.39867635,-3.90816574 30.39935581,-3.90743750 30.40034307,-3.90735379 30.40096048,-3.90805714 30.40114447,-3.90913516 30.40192692,-3.91005596 30.40285604,-3.91013839 30.40376497,-3.90976530 30.40402196,-3.90906271 30.40251145,-3.90671138 30.40298364,-3.90533637 30.40417371,-3.90409862 30.40722097,-3.90491245 30.40768655,-3.90396190 30.40695962,-3.90354672 30.40619479,-3.90332802 30.40556421,-3.90296054 30.40459069,-3.90293515 30.40365489,-3.90273084 30.40275854,-3.90178068 30.40322419,-3.90051458 30.40328517,-3.90009537 30.40382537,-3.89912642 30.40384422,-3.89687367 30.40418482,-3.89603747 30.40418118,-3.89566935 30.40414524,-3.89456362 30.40542492,-3.89215054 30.40633507,-3.89097352 30.40727578,-3.88985056 30.40753704,-3.88813065 30.40789637,-3.88780610 30.40819373,-3.88716056 30.40826301,-3.88646112 30.40806346,-3.88584164 30.40661958,-3.88445859 30.40587586,-3.88197110 30.40639302,-3.88017620 30.40644834,-3.87955189 30.40692349,-3.87903797 30.40775275,-3.87846509 30.40862192,-3.87736174 30.40957763,-3.87644836 30.40985167,-3.87586244 30.40996564,-3.87525191 30.41036012,-3.87456187 30.41145553,-3.87364274 30.41215379,-3.87307745 30.41224799,-3.87089689 30.41263947,-3.87014121 30.41379651,-3.86884821 30.41529296,-3.86916058 30.41683325,-3.86849841 30.41708073,-3.86786358 30.41674981,-3.86685932 30.41603245,-3.86623384 30.41589494,-3.86550626 30.41587857,-3.86495251 30.41528384,-3.86393411 30.41460715,-3.86294014 30.41438901,-3.86246190 30.41384218,-3.86175173 30.41303808,-3.86116657 30.41202997,-3.86146183 30.41130034,-3.86139662 30.41139234,-3.86046211 30.41097720,-3.85885551 30.41034353,-3.85742996 30.40975575,-3.85709719 30.40878952,-3.85738077 30.40783889,-3.85779838 30.40658345,-3.85789496 30.40647897,-3.85678723 30.40673213,-3.85550329 30.40622354,-3.85478894 30.40575892,-3.85429763 30.40504723,-3.85391014 30.40406636,-3.85367595 30.40372202,-3.85281771 30.40326422,-3.85276092 30.40273366,-3.85467220 30.40088357,-3.85679298 30.39984806,-3.85628266 30.39974292,-3.85588196 30.39973633,-3.85513457 30.40069560,-3.85447911 30.40069752,-3.85384741 30.39948471,-3.85334545 30.39813099,-3.85254945 30.39791162,-3.85181920 30.39820904,-3.85044958 30.39810260,-3.84966265 30.39817868,-3.84815570 30.39889346,-3.84653924 30.39896195,-3.84507196 30.39944593,-3.84439547 30.40003823,-3.84385000 30.40007853,-3.84254576 30.40067884,-3.84235604 30.40109816,-3.84191950 30.40064793,-3.84098207 30.40043095,-3.84036196 30.40090892,-3.84009691 30.40079495,-3.83947957 30.40029993,-3.83927557 30.40035878,-3.83887078 30.40096992,-3.83817296 30.40157475,-3.83716184 30.40196698,-3.83603856 30.40113470,-3.83572934 30.40059717,-3.83507155 30.40050857,-3.83356573 30.40021540,-3.83241949 30.39949479,-3.83065835 30.39885208,-3.83020053 30.39920929,-3.82820088 30.40041616,-3.82770913 30.40171672,-3.82761781 30.40172129,-3.82620918 30.40297288,-3.82494914 30.40462927,-3.82348883 30.40543593,-3.82400856 30.40664930,-3.82454622 30.40742667,-3.82385161 30.40662595,-3.82267221 30.40633194,-3.82112968 30.40868928,-3.82121040 30.40900863,-3.82062891 30.40910068,-3.81947073 30.40961134,-3.81893666 30.41068685,-3.81700290 30.40961714,-3.81561510 30.40932541,-3.81362608 30.40871353,-3.81210927 30.39292055,-3.81543145 30.37260638,-3.83271288 30.37462052,-3.85003889 30.37639843,-3.87971007 30.37473897,-3.89343031 30.36941710,-3.90662840 30.36302942,-3.92397517 30.35370428,-3.94223667 30.34371277,-3.95298098 30.34155538,-3.96291534 30.33091406,-3.97681513 30.33697224,-3.98173200 30.35127411,-3.98180272 30.35703272,-3.98803416 30.36610855,-3.99213018 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>UNKNOWN_LINE_TYPE</name>
+<description>UNKNOWN_LINE_TYPE</description>
+<LookAt>
+<longitude>30.25018740</longitude>
+<latitude>-3.97922410</latitude>
+<range>15683</range>
+</LookAt>
+<styleUrl>#Line__Line_Features_line1_ffff00ff_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Line Features line1</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>377</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.21206793,-4.03891569 30.23119016,-4.03850089 30.24917679,-4.02695999 30.26947173,-4.00954262 30.28648873,-4.00572322 30.28830686,-4.00004549 30.28653211,-3.99832713 30.28535070,-3.99774020 30.28425996,-3.99658041 30.28275540,-3.99546005 30.28209454,-3.99453081 30.27841984,-3.99318359 30.27712027,-3.99311368 30.27612842,-3.99221399 30.27506178,-3.99196995 30.27299730,-3.99081309 30.27011821,-3.99019475 30.26712159,-3.98984527 30.26502307,-3.99010744 30.26414173,-3.98922628 30.26271045,-3.98894649 30.26067480,-3.98931177 30.25826205,-3.98923113 30.25645835,-3.98754496 30.25478090,-3.98744890 30.25313530,-3.98703839 30.25153611,-3.98743399 30.25055006,-3.98751363 30.25009451,-3.98782608 30.24846507,-3.98787357 30.24731874,-3.98754548 30.24737477,-3.98784129 30.24776666,-3.98857213 30.24693022,-3.98865515 30.24684992,-3.98932772 30.24618605,-3.98953329 30.24448081,-3.98934638 30.24382751,-3.98866688 30.24315153,-3.98900325 30.24252015,-3.98897694 30.24199617,-3.98854461 30.24138764,-3.98744921 30.24211213,-3.98648217 30.24235188,-3.98671826 30.24243471,-3.98744274 30.24283365,-3.98741353 30.24295129,-3.98683334 30.24242852,-3.98569043 30.24235532,-3.98568545 30.24234101,-3.98535376 30.24332023,-3.98498799 30.24325952,-3.98442242 30.24363676,-3.98391328 30.24414615,-3.98366372 30.24534342,-3.98360492 30.24587392,-3.98324167 30.24697768,-3.98296323 30.24501151,-3.98189577 30.24415584,-3.98105122 30.24325928,-3.98056512 30.24243431,-3.97986280 30.24160053,-3.97983494 30.23970027,-3.97905075 30.23845423,-3.97761186 30.23806015,-3.97670845 30.23693701,-3.97662186 30.23627501,-3.97624380 30.23630119,-3.97436181 30.23582851,-3.97311652 30.23571314,-3.97246306 30.23497472,-3.97206950 30.23454077,-3.97164148 30.23400656,-3.97174893 30.23359314,-3.97138341 30.23371952,-3.97078561 30.23354804,-3.96997275 30.23276517,-3.96965016 30.23300454,-3.96839210 30.23357729,-3.96778264 30.23373236,-3.96701257 30.23435962,-3.96657660 30.23435741,-3.96565822 30.23412467,-3.96477155 30.23300390,-3.96454915 30.23371537,-3.96373455 30.23326769,-3.96310104 30.23319581,-3.96243694 30.23426458,-3.96226422 30.23405434,-3.96115989 30.23351059,-3.96051391 30.23376707,-3.95895628 30.23467763,-3.95831872 30.23500638,-3.95754899 30.23575150,-3.95697435 30.23586831,-3.95610357 30.23550656,-3.95558511 30.23568400,-3.95477903 30.23472276,-3.95435004 30.23532555,-3.95357323 30.23621826,-3.95349728 30.23613368,-3.95294924 30.23656059,-3.95216620 30.23655842,-3.95150966 30.23557581,-3.95100776 30.23535586,-3.94995939 30.23493549,-3.94925857 30.23547760,-3.94845949 30.23612594,-3.94782433 30.23565008,-3.94656860 30.23573195,-3.94580112 30.23708929,-3.94486160 30.23783198,-3.94473327 30.23850852,-3.94405308 30.23953444,-3.94375748 30.24023080,-3.94313836 30.23953433,-3.94243281 30.23948003,-3.94146324 30.23914979,-3.94049275 30.24037860,-3.93877324 30.24100370,-3.93730912 30.24169431,-3.93707286 30.24221195,-3.93655094 30.24293210,-3.93614605 30.24317400,-3.93521651 30.24252094,-3.93476386 30.24256940,-3.93424784 30.24329414,-3.93280493 30.24312972,-3.93162186 30.24469951,-3.93031088 30.24487939,-3.92949995 30.24461735,-3.92888333 30.24478986,-3.92767131 30.24522296,-3.92726295 30.24558078,-3.92762447 30.24558968,-3.92848649 30.24616916,-3.92891147 30.24670369,-3.92863123 30.24658705,-3.92801460 30.24718989,-3.92724816 30.24819488,-3.92646024 30.24829273,-3.92568228 30.24853992,-3.92469202 30.24806952,-3.92408028 30.24784622,-3.92336789 30.24731870,-3.92266545 30.24742132,-3.92178366 30.24793164,-3.92015887 30.24707080,-3.91985271 30.24693001,-3.91962107 30.24644014,-3.92014125 30.24585710,-3.92006933 30.24516147,-3.91953250 30.24442336,-3.92035094 30.24328803,-3.92049991 30.24250818,-3.92051006 30.24292467,-3.92110323 30.24383652,-3.92143715 30.24382303,-3.92195839 30.24321668,-3.92201642 30.24228541,-3.92144096 30.24174366,-3.92125905 30.24133654,-3.92151680 30.24042892,-3.92296373 30.23912415,-3.92318982 30.23954753,-3.92366087 30.24019068,-3.92405396 30.23987145,-3.92502047 30.23987979,-3.92559252 30.24070289,-3.92553882 30.24035161,-3.92588908 30.24005670,-3.92684583 30.24063078,-3.92741342 30.24080517,-3.92817375 30.23953121,-3.92983512 30.23932383,-3.93047250 30.23883479,-3.93104387 30.23802971,-3.93132561 30.23819164,-3.93201342 30.23765891,-3.93193787 30.23672494,-3.93209191 30.23649106,-3.93251539 30.23653702,-3.93361972 30.23711728,-3.93424915 30.23693290,-3.93453937 30.23592738,-3.93473614 30.23557792,-3.93525362 30.23560400,-3.93624872 30.23474884,-3.93717920 30.23345238,-3.93771985 30.23287754,-3.93824087 30.23272475,-3.93942237 30.23226549,-3.93958309 30.23143229,-3.94091975 30.23137377,-3.94136868 30.23270097,-3.94199396 30.23337123,-3.94264339 30.23410967,-3.94226925 30.23442089,-3.94293488 30.23385405,-3.94347796 30.23325861,-3.94332533 30.23304906,-3.94377448 30.23314102,-3.94465137 30.23369320,-3.94496449 30.23347436,-3.94523858 30.23266099,-3.94532841 30.23230906,-3.94576746 30.23285603,-3.94594497 30.23341714,-3.94591982 30.23330798,-3.94635641 30.23244924,-3.94680401 30.23243892,-3.94720941 30.23305803,-3.94759691 30.23303333,-3.94823595 30.23228413,-3.94808840 30.23229167,-3.94853718 30.23314380,-3.94897064 30.23326861,-3.94946967 30.23230236,-3.94939845 30.23166885,-3.94977256 30.23259687,-3.95062820 30.23292667,-3.95201925 30.23259689,-3.95258947 30.23163085,-3.95277820 30.23117617,-3.95256186 30.23051119,-3.95259620 30.22943396,-3.95308545 30.22932963,-3.95376327 30.23010419,-3.95389839 30.23047112,-3.95442102 30.22996146,-3.95463400 30.22909922,-3.95440161 30.22885532,-3.95454886 30.22890385,-3.95548182 30.22957571,-3.95529159 30.23017293,-3.95536762 30.23007411,-3.95624827 30.22938939,-3.95716207 30.22931084,-3.95846544 30.23001279,-3.95941387 30.23064338,-3.95950538 30.23094642,-3.95988632 30.23019474,-3.96123713 30.23022126,-3.96172186 30.23041030,-3.96267294 30.23021169,-3.96314039 30.22986295,-3.96201770 30.22946063,-3.96121848 30.22895044,-3.96128451 30.22893163,-3.96242855 30.22852522,-3.96285623 30.22883453,-3.96418391 30.22847827,-3.96465987 30.22845215,-3.96603693 30.22795893,-3.96671458 30.22783294,-3.96804601 30.22654446,-3.96892219 30.22600156,-3.97028461 30.22623656,-3.97081554 30.22709581,-3.97077578 30.22735650,-3.97113137 30.22731534,-3.97177238 30.22689275,-3.97273512 30.22705445,-3.97391175 30.22638184,-3.97470261 30.22578451,-3.97519313 30.22585691,-3.97611310 30.22551081,-3.97709425 30.22471518,-3.97773323 30.22436611,-3.97874769 30.22331706,-3.97934750 30.22333552,-3.97982018 30.22279774,-3.98058797 30.22175171,-3.98268611 30.22014097,-3.98403253 30.22006095,-3.98463887 30.21911622,-3.98513463 30.21825177,-3.98666281 30.21766539,-3.98720617 30.21674813,-3.98821115 30.21627205,-3.98777985 30.21553119,-3.98774428 30.21465611,-3.98993473 30.21395191,-3.99057428 30.21465975,-3.99126340 30.21512923,-3.99202657 30.21501503,-3.99317415 30.21526187,-3.99394267 30.21525506,-3.99549424 30.21607001,-3.99621548 30.21634203,-3.99717742 30.21823500,-3.99915869 30.21834746,-4.00004507 30.21899068,-4.00061294 30.21908471,-4.00141544 30.21822083,-4.00215600 30.21798076,-4.00281302 30.21817020,-4.00306759 30.21900489,-4.00308128 30.21873563,-4.00505233 30.21956506,-4.00463129 30.22002591,-4.00474998 30.21914553,-4.00544412 30.21911569,-4.00605192 30.21986094,-4.00587600 30.22097174,-4.00606383 30.22110378,-4.00706982 30.22219386,-4.00706998 30.22246545,-4.00734796 30.22178089,-4.00778607 30.22181423,-4.00798175 30.22261713,-4.00800240 30.22258834,-4.00913050 30.22312909,-4.00963376 30.22476689,-4.01010109 30.22624463,-4.01003443 30.22676740,-4.01043353 30.22810114,-4.01052299 30.22865434,-4.01092240 30.22981873,-4.01067221 30.22950604,-4.01151553 30.22900522,-4.01200382 30.22866409,-4.01268279 30.22797901,-4.01270971 30.22776460,-4.01305594 30.22864789,-4.01434361 30.22868821,-4.01495851 30.22815509,-4.01519523 30.22758274,-4.01565694 30.22776320,-4.01650627 30.22726923,-4.01743046 30.22649634,-4.01688773 30.22604505,-4.01743222 30.22481587,-4.01716689 30.22432942,-4.01737454 30.22413748,-4.01782179 30.22422938,-4.01880153 30.22382795,-4.01946165 30.22382610,-4.02000860 30.22428652,-4.02056845 30.22500464,-4.02050300 30.22521408,-4.02081303 30.22459354,-4.02205005 30.22469374,-4.02277146 30.22506478,-4.02326962 30.22460618,-4.02383332 30.22437881,-4.02466898 30.22396403,-4.02465610 30.22319815,-4.02493230 30.22266184,-4.02571918 30.22200414,-4.02544192 30.22169245,-4.02451566 30.22108349,-4.02434609 30.21985370,-4.02535544 30.21882729,-4.02554689 30.21876448,-4.02573385 30.21910005,-4.02690223 30.21887436,-4.02726583 30.21784789,-4.02708496 30.21700126,-4.02668018 30.21676081,-4.02707486 30.21725369,-4.02820411 30.21700693,-4.02938190 30.21699112,-4.03047625 30.21648325,-4.03185830 30.21554302,-4.03237774 30.21593488,-4.03363010 30.21500634,-4.03464433 30.21478560,-4.03512932 30.21527310,-4.03560396 30.21504861,-4.03595597 30.21438088,-4.03575614 30.21352784,-4.03578202 30.21273125,-4.03648658 30.21299210,-4.03692971 30.21262507,-4.03724362 30.21223725,-4.03816724 30.21206793,-4.03891569 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>UNKNOWN_LINE_TYPE</name>
+<description>UNKNOWN_LINE_TYPE</description>
+<LookAt>
+<longitude>30.18207029</longitude>
+<latitude>-4.11233843</latitude>
+<range>11245</range>
+</LookAt>
+<styleUrl>#Line__Line_Features_line1_ffff00ff_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value> Line Features line1</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>282</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.16646462,-4.14916410 30.17574192,-4.14324838 30.19009302,-4.13278318 30.19847659,-4.11968367 30.20963818,-4.10686587 30.21698413,-4.09567105 30.20501423,-4.08825575 30.18375861,-4.07551275 30.18340753,-4.07569978 30.18291820,-4.07566028 30.18266146,-4.07586718 30.18262290,-4.07612775 30.18313415,-4.07647351 30.18346640,-4.07691122 30.18352374,-4.07752714 30.18338447,-4.07801175 30.18294185,-4.07804379 30.18286762,-4.07766115 30.18205809,-4.07772135 30.18181119,-4.07752394 30.18169810,-4.07710077 30.18145854,-4.07691451 30.18123620,-4.07708803 30.18134099,-4.07805928 30.18174605,-4.07867249 30.18226074,-4.07921722 30.18228892,-4.07949213 30.18153137,-4.07951870 30.18095825,-4.07845253 30.18064935,-4.07848068 30.18006590,-4.07870666 30.17954564,-4.07919598 30.17952062,-4.07968704 30.17963022,-4.08000316 30.18005598,-4.07988187 30.18037840,-4.07932170 30.18062329,-4.07926994 30.18080908,-4.07945769 30.18031373,-4.07998611 30.18022187,-4.08032429 30.18028617,-4.08060843 30.18081484,-4.08086509 30.18091517,-4.08121851 30.18049079,-4.08121702 30.17968684,-4.08085020 30.17901160,-4.08101889 30.17878547,-4.08137481 30.17876193,-4.08185813 30.17922065,-4.08287342 30.17881284,-4.08362222 30.17861271,-4.08373033 30.17766148,-4.08320582 30.17729051,-4.08321024 30.17694016,-4.08384471 30.17639033,-4.08440401 30.17663994,-4.08483442 30.17697029,-4.08501884 30.17774111,-4.08491275 30.17790596,-4.08510232 30.17779791,-4.08539080 30.17698203,-4.08551600 30.17709060,-4.08590062 30.17749395,-4.08613687 30.17736815,-4.08693991 30.17794206,-4.08705508 30.17833748,-4.08682665 30.17882420,-4.08668694 30.17932959,-4.08624675 30.17982897,-4.08651369 30.17987799,-4.08688627 30.17975628,-4.08760062 30.17994959,-4.08804828 30.17952820,-4.08814107 30.17943555,-4.08776710 30.17907795,-4.08753187 30.17891657,-4.08790495 30.17901954,-4.08831388 30.17874917,-4.08866409 30.17818066,-4.08871424 30.17765621,-4.08904624 30.17769471,-4.08972700 30.17741954,-4.09060680 30.17700577,-4.09096645 30.17676940,-4.09078946 30.17711389,-4.09016533 30.17636937,-4.08973113 30.17606870,-4.09037302 30.17530391,-4.09071382 30.17473146,-4.09126668 30.17505560,-4.09144398 30.17581931,-4.09141145 30.17642448,-4.09153689 30.17630748,-4.09236440 30.17576611,-4.09323005 30.17546123,-4.09291644 30.17548632,-4.09199539 30.17491260,-4.09199885 30.17486075,-4.09276080 30.17419865,-4.09303809 30.17386766,-4.09393612 30.17343542,-4.09410456 30.17330537,-4.09379706 30.17388725,-4.09302602 30.17344579,-4.09270644 30.17310398,-4.09357703 30.17240411,-4.09371711 30.17241250,-4.09332249 30.17203739,-4.09297124 30.17190962,-4.09391329 30.17155904,-4.09406876 30.17149550,-4.09376051 30.17114689,-4.09335398 30.17061917,-4.09334670 30.17043555,-4.09349736 30.17062323,-4.09372499 30.17092965,-4.09387739 30.17150842,-4.09467922 30.17144103,-4.09546796 30.17093382,-4.09575257 30.16980133,-4.09597576 30.16949837,-4.09633127 30.16980839,-4.09682689 30.17033603,-4.09645199 30.17084571,-4.09642016 30.17113264,-4.09681141 30.17128168,-4.09765657 30.17002242,-4.09763204 30.17054588,-4.09846636 30.17016114,-4.09891967 30.16959725,-4.09821560 30.16901007,-4.09866768 30.16882967,-4.09924770 30.16871841,-4.09988362 30.16858768,-4.10049197 30.16804940,-4.10057163 30.16801487,-4.10006653 30.16739954,-4.09949169 30.16670871,-4.09972871 30.16630249,-4.10017498 30.16635746,-4.10076865 30.16700981,-4.10114580 30.16745425,-4.10163153 30.16745299,-4.10199073 30.16706267,-4.10233814 30.16692227,-4.10243135 30.16660129,-4.10224280 30.16652451,-4.10194579 30.16638611,-4.10147155 30.16610175,-4.10119463 30.16582125,-4.10129775 30.16581494,-4.10161529 30.16564680,-4.10174600 30.16512063,-4.10179691 30.16488703,-4.10206811 30.16496511,-4.10229778 30.16528598,-4.10233849 30.16577765,-4.10239679 30.16594615,-4.10256192 30.16595451,-4.10309667 30.16558421,-4.10349126 30.16540483,-4.10350605 30.16511861,-4.10330450 30.16504842,-4.10286722 30.16468011,-4.10269624 30.16436967,-4.10321398 30.16472011,-4.10381798 30.16482362,-4.10506607 30.16477296,-4.10557268 30.16436547,-4.10562845 30.16429872,-4.10607779 30.16370576,-4.10560158 30.16340438,-4.10560051 30.16346864,-4.10585413 30.16378474,-4.10630483 30.16389684,-4.10685289 30.16352325,-4.10711352 30.16302301,-4.10660797 30.16272903,-4.10657130 30.16235170,-4.10716023 30.16274200,-4.10720742 30.16271071,-4.10745156 30.16245073,-4.10783735 30.16207547,-4.10784111 30.16184329,-4.10753497 30.16144298,-4.10745212 30.16085897,-4.10769429 30.16075649,-4.10799415 30.16200825,-4.10862895 30.16223414,-4.10902572 30.16222747,-4.10983113 30.16158905,-4.10990141 30.16144067,-4.11007754 30.16154013,-4.11039967 30.16132884,-4.11058819 30.16091360,-4.10980838 30.16038296,-4.10936039 30.16001608,-4.10952558 30.15991735,-4.10911682 30.15954204,-4.10901181 30.15905146,-4.10956258 30.15965678,-4.11003944 30.15979433,-4.11048983 30.15932685,-4.11065260 30.15934168,-4.11083261 30.15967437,-4.11101480 30.15972559,-4.11133324 30.16025326,-4.11188513 30.16037347,-4.11219212 30.16007944,-4.11245089 30.15952076,-4.11305282 30.15907222,-4.11373338 30.15879194,-4.11403691 30.15867064,-4.11400907 30.15850210,-4.11374544 30.15819899,-4.11296332 30.15786978,-4.11270991 30.15763244,-4.11302208 30.15760094,-4.11365202 30.15667510,-4.11377380 30.15670240,-4.11418769 30.15733069,-4.11414182 30.15810610,-4.11452470 30.15821079,-4.11475122 30.15791701,-4.11511584 30.15729411,-4.11499332 30.15684266,-4.11519860 30.15615704,-4.11518652 30.15577934,-4.11541972 30.15514647,-4.11543842 30.15436611,-4.11496537 30.15388781,-4.11516434 30.15398554,-4.11538334 30.15431055,-4.11548035 30.15472868,-4.11570076 30.15462382,-4.11592414 30.15423058,-4.11625709 30.15413419,-4.11705928 30.15397912,-4.11726054 30.15349265,-4.11727757 30.15335291,-4.11711750 30.15329875,-4.11656350 30.15292962,-4.11646362 30.15275089,-4.11674457 30.15267632,-4.11798801 30.15211362,-4.11839431 30.15162217,-4.11821734 30.15168191,-4.11779392 30.15160717,-4.11752486 30.15101099,-4.11695633 30.15126624,-4.11653347 30.15104222,-4.11632896 30.15085980,-4.11665569 30.15033704,-4.11710189 30.15032180,-4.11754497 30.15056234,-4.11775598 30.15104864,-4.11799072 30.15118015,-4.11813738 30.15065043,-4.11858776 30.15005812,-4.11871812 30.14970415,-4.11839705 30.14964663,-4.11793087 30.14938267,-4.11790251 30.14885765,-4.11831178 30.14881112,-4.11859486 30.14914722,-4.11881992 30.14946948,-4.11917187 30.14901589,-4.11947108 30.14898074,-4.11980868 30.14924698,-4.12049929 30.14914122,-4.12081110 30.14881595,-4.12081277 30.14881729,-4.12043815 30.14814410,-4.11966094 30.14778498,-4.11963978 30.14717471,-4.12026777 30.14715644,-4.12074076 30.14755881,-4.12094163 30.14814340,-4.12094601 30.14850737,-4.12128018 30.14837523,-4.12166854 30.15633499,-4.13295565 30.16646462,-4.14916410 </coordinates>
+</LineString>
+</Placemark>
+</Folder>
+<Folder>
+<name>KML Polygon</name>
+<Placemark>
+<name>Nursery A</name>
+<description>&lt;div&gt;Nursery A&lt;/div&gt;</description>
+<LookAt>
+<longitude>30.54149283</longitude>
+<latitude>-4.03046282</latitude>
+<range>1767</range>
+</LookAt>
+<styleUrl>#Line_KML_Polygon_ffff0000_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Polygon</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>5</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.53584950,-4.02570935 30.53509528,-4.03416771 30.54725679,-4.03521629 30.54789037,-4.02640883 30.53584950,-4.02570935 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>Nursery - B</name>
+<description>&lt;div&gt;Nursery - B&lt;br&gt;&lt;/div&gt;</description>
+<LookAt>
+<longitude>30.51275657</longitude>
+<latitude>-4.01978604</latitude>
+<range>6089</range>
+</LookAt>
+<styleUrl>#Line_KML_Polygon_ffff0000_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Polygon</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>10</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.49022537,-4.01311482 30.52309733,-4.03547152 30.52406199,-4.03399906 30.53465501,-4.03492087 30.53466678,-4.03395684 30.53528777,-4.02577838 30.53093991,-4.02441541 30.52820681,-4.02181391 30.50063867,-4.00410057 30.49022537,-4.01311482 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>Commercial Area</name>
+<LookAt>
+<longitude>30.49296996</longitude>
+<latitude>-4.03427052</latitude>
+<range>8530</range>
+</LookAt>
+<styleUrl>#Line_KML_Polygon_ffff0000_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Polygon</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>6</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.48557972,-4.00994585 30.46316112,-4.03978015 30.48731361,-4.04566008 30.50892272,-4.05859519 30.52277880,-4.03562530 30.48557972,-4.00994585 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>2500 Ha Area</name>
+<LookAt>
+<longitude>30.43153512</longitude>
+<latitude>-4.03612688</latitude>
+<range>9511</range>
+</LookAt>
+<styleUrl>#Line_KML_Polygon_ffff0000_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Polygon</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>9</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.46393092,-4.02051874 30.43793786,-4.00799769 30.42825419,-4.02975761 30.41020676,-4.02105683 30.40406998,-4.03289128 30.39913932,-4.04241452 30.44505741,-4.06425607 30.45524499,-4.04304927 30.46393092,-4.02051874 </coordinates>
+</LineString>
+</Placemark>
+<Placemark>
+<name>Rainfed Area</name>
+<LookAt>
+<longitude>30.41320743</longitude>
+<latitude>-4.07817093</latitude>
+<range>9611</range>
+</LookAt>
+<styleUrl>#Line_KML_Polygon_ffff0000_03</styleUrl>
+<ExtendedData>
+<Data name="Type">
+<value>KML Polygon</value>
+</Data>
+<Data name="Number of Trackpoints">
+<value>9</value>
+</Data>
+</ExtendedData>
+<LineString>
+<coordinates>30.40015265,-4.04307970 30.38768212,-4.07119322 30.41139857,-4.08303273 30.40152601,-4.10364465 30.42188065,-4.11326216 30.43873274,-4.07888178 30.41121263,-4.06607930 30.41668820,-4.05131248 30.40015265,-4.04307970 </coordinates>
+</LineString>
+</Placemark>
+</Folder>
+</Folder>
+</Document>
+</kml>
