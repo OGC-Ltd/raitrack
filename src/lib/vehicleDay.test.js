@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../services/api', () => ({ apiFetch: vi.fn() }));
 
 import { apiFetch } from '../services/api';
-import { _resetVehicleDay, burnAgainst, burnRate, overWords, cachedDay, decodeColumns, fuelFromLevel, journeySoFar, loadDay, mergeNewer, summariseDay, movingSpans } from './vehicleDay';
+import { _resetVehicleDay, burnAgainst, burnRate, overWords, cachedDay, decodeColumns, fuelFromFills, fuelFromLevel, journeySoFar, loadDay, mergeNewer, summariseDay, movingSpans } from './vehicleDay';
 
 const DAY = '2026-09-20'; // a finished day
 const FROM = Date.parse('2026-09-19T21:00:00.000Z');
@@ -116,6 +116,46 @@ describe('fuelFromLevel', () => {
 
   it('says nothing from too few readings', () => {
     expect(fuelFromLevel(day([100, 90]), 400).usedL).toBeNull();
+  });
+});
+
+describe('fuelFromFills', () => {
+  // A working machine: one 129 L refill, and the level swinging ±15 L every
+  // few readings all day (EX 30, 26 Nov: 252 L "Refuelled" under one 129 L refill)
+  const swinging = () => {
+    const lv = [];
+    for (let i = 0; i < 120; i++) lv.push(100 - i * 0.2 + (i >= 60 ? 129 : 0) + (i > 5 && i < 114 && Math.floor(i / 4) % 2 ? 15 : 0));
+    return day(lv, { step: 5 * MIN });
+  };
+
+  it('the level alone counts the swings as refills', () => {
+    expect(fuelFromLevel(swinging(), null).refilledL).toBeGreaterThan(200);
+  });
+
+  it('takes Refuelled from the listed refills and Fuel used from the ends', () => {
+    const p = swinging();
+    const sum = summariseDay(p, null);
+    const f = fuelFromFills(sum, p, 129);
+    expect(f.refilledL).toBe(129);
+    expect(f.usedSource).toBe('level');
+    expect(f.usedL).toBeCloseTo(23, 0);   // 0.2 L a reading; ends are medians of five (99.6 -> 205.6)
+  });
+
+  it('shows nothing while the refills are not known', () => {
+    const p = swinging();
+    expect(fuelFromFills(summariseDay(p, null), p, null)).toEqual({ refilledL: null, usedL: null, usedSource: null });
+  });
+
+  it('a day with no refill uses the ends alone', () => {
+    const p = day(Array.from({ length: 20 }, (_, i) => 200 - i));
+    const f = fuelFromFills(summariseDay(p, null), p, 0);
+    expect(f.refilledL).toBe(0);
+    expect(f.usedL).toBeCloseTo(15, 0);   // ends are medians of five: 198 -> 183
+  });
+
+  it('says nothing when the refills cannot explain the level', () => {
+    const p = day([...Array(10).fill(100), ...Array(10).fill(300)]);
+    expect(fuelFromFills(summariseDay(p, null), p, 0).usedL).toBeNull();
   });
 });
 

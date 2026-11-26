@@ -26,7 +26,7 @@ import { vehicleReadings } from '../../lib/vehicleReadings';
 import { menengaiGroup, fleetTypeLabel } from '../../lib/vehicleMap';
 import { unitSite } from '../../lib/siteLists';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { burnAgainst, burnRate, cachedDay, dayBounds, loadDay, summariseDay, movingSpans } from '../../lib/vehicleDay';
+import { burnAgainst, burnRate, cachedDay, dayBounds, fuelFromFills, loadDay, summariseDay, movingSpans } from '../../lib/vehicleDay';
 import { useFuelEpisodes, useVehicleFuelEventsRange } from '../../hooks/useVehicleFuelEvents';
 import { clampRange, daysBetween, joinDays, rangeWords } from '../../lib/dayRange';
 import { settleLimited } from '../../lib/settleLimited';
@@ -525,7 +525,13 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
     chartRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   };
 
-  const sum   = useMemo(() => summariseDay(tele.pings, vehicle.tankCapacityL), [tele.pings, vehicle.tankCapacityL]);
+  const daySum = useMemo(() => summariseDay(tele.pings, vehicle.tankCapacityL), [tele.pings, vehicle.tankCapacityL]);
+  // Refuelled is the refills listed above (and Fuel used follows from it), not
+  // the level's own rises, which count slosh as fuel put in (lib/vehicleDay fuelFromFills)
+  const fillsL = useMemo(() => (events.loading || events.error ? null
+    : episodes.filter((e) => e.kind === 'refill').reduce((s, e) => s + (e.litres ?? 0), 0)),
+  [events.loading, events.error, episodes]);
+  const sum   = useMemo(() => ({ ...daySum, ...fuelFromFills(daySum, tele.pings, fillsL) }), [daySum, tele.pings, fillsL]);
   const runs  = useMemo(() => overspeedRuns(tele.pings, limit), [tele.pings, limit]);
   const dayLabel = rangeWords(from, to, today, fmtDay);
   const title = isToday ? 'Today'
