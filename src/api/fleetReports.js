@@ -3,8 +3,8 @@
 //
 //   Driver conduct      GET /notifications?alertType=HARSH_ACCELERATION,HARSH_BRAKING&day=…
 //                       a fleet day at a time, paged; and the dashcam alarms,
-//                       GET /vss/alarms?org=…&since=… (no seatbelt, on phone),
-//                       which reach back 7 days
+//                       GET /vss/alarms?org=…&since=…[&until=…] (no seatbelt,
+//                       on phone), which reach back DASHCAM_DAYS (14)
 //   Overspeeding        GET /incidents/speeding/summary (which units), then
 //                       GET /incidents/speeding?vehicleId=… (their episodes,
 //                       each with its length and distance)
@@ -16,20 +16,22 @@
 // request: a unit or day that cannot be read is counted in `failed`, not fatal.
 
 import { getNotifications } from './notifications';
-import { fetchVssIncidents, fetchVssCameraCount, fetchVssWindow } from './vssAlarms';
+import { listDays } from './driverConduct';
+import { fetchVssCameraCount, fetchVssWindow } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
 import { apiFetch } from '../services/api';
 import { loadDay } from '../lib/vehicleDay';
 import { settleLimited } from '../lib/settleLimited';
-import { daysCovering, summariseWindows, peakFix } from '../lib/fleetReports';
+import { daysCovering, summariseWindows, peakFix, dayStart, fleetDay } from '../lib/fleetReports';
+import { slicer, append } from '../lib/slices';
 
 const DAY_PAGE = 500;
 
 export const HARSH_TYPES = ['HARSH_ACCELERATION', 'HARSH_BRAKING'];
 
-/** Every harsh acceleration and harsh brake in [from, to). */
-export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPES, onProgress = () => {} }) {
-  const days = daysCovering(from, to);
+/** Every harsh acceleration and harsh brake in [from, to), or on the fleet days in `days`. */
+export async function loadHarshEvents({ orgId, from, to, days: only = null, alertTypes = HARSH_TYPES, onProgress = () => {}, signal }) {
+  const days = only ?? daysCovering(from, to);
   let done = 0;
   let failed = 0;
   onProgress({ done, total: days.length });
@@ -37,7 +39,8 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
     const items = [];
     let before;
     for (let page = 0; page < 60; page++) {
-      const r = await getNotifications({ orgId, day, limit: DAY_PAGE, before, alertTypes });
+      signal?.throwIfAborted();
+      const r = await getNotifications({ orgId, day, limit: DAY_PAGE, before, alertTypes, signal });
       items.push(...r.items);
       if (!r.nextBefore) break;
       before = r.nextBefore;
@@ -46,6 +49,7 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
     onProgress({ done, total: days.length });
     return items;
   });
+  signal?.throwIfAborted();
   const events = [];
   for (const p of parts) {
     if (p.status === 'fulfilled') events.push(...p.value);
@@ -60,50 +64,163 @@ export async function loadHarshEvents({ orgId, from, to, alertTypes = HARSH_TYPE
 
 /**
  * The organisation's dashcam alarms over [from, to) as far back as the server
- * reaches (DASHCAM_DAYS), and whether it has dashcams at all. A period of up
- * to a day is one request; a longer one is read a day at a time, one after
- * another (VSS answers one search per 10 s, and the proxy waits 30 s), each
- * day with every alarm's type. Never throws: a day that cannot be read is
- * counted in `failedDays`, and none read at all is `failed`.
+ * reaches (DASHCAM_DAYS), and whether it has dashcams at all.
+ *
+ * A period of up to a day that runs to now is one search up to now, the one
+ * the Alarms tab shares. Anything else is read with `until`, a day at a time,
+ * one after another (VSS answers one search per 10 s, and the proxy waits
+ * 30 s), each day with every alarm's type: a search from a past day to now
+ * could run past the proxy's 30 s. A period that ends before the reach asks
+ * for nothing.
+ *
+ * `window` is the stretch the alarms were asked for, fixed when the reading
+ * began (null: none of the period is within reach); `read` the parts of it
+ * that came back whole, which a run's follow-up cases need (lib/followUp
+ * casesFromRun). A day that cannot be read is counted in `failedDays`, and
+ * none read at all is `failed`; it throws only when `signal` is aborted.
  */
-export async function loadDashcamAlarms({ orgId, from, to = Date.now(), onProgress = () => {} }) {
+export async function loadDashcamAlarms({ orgId, from, to = Date.now(), stretches = null, onProgress = () => {}, signal, now = Date.now() }) {
+  const reach = now - DASHCAM_DAYS * DAY_MS;
+  const none = { alarms: [], failed: false, failedDays: 0, untyped: 0, reach, window: null, read: [] };
   const cameras = await fetchVssCameraCount(orgId);
-  if (!cameras) return { alarms: [], cameras: 0, failed: false, failedDays: 0, untyped: 0 };
-  const start = Math.max(from, Date.now() - DASHCAM_DAYS * DAY_MS);
-  const end = Math.min(to, Date.now());
-  if (end - start <= DAY_MS) {
-    try {
-      const alarms = await fetchVssIncidents({ orgId, sinceIso: new Date(start).toISOString() });
-      return { alarms: alarms.filter((a) => !(a.occurredMs >= end)), cameras, failed: false, failedDays: 0, untyped: 0 };
-    } catch {
-      return { alarms: [], cameras, failed: true, failedDays: 0, untyped: 0 };
-    }
-  }
+  signal?.throwIfAborted();
+  if (!cameras) return { ...none, cameras: 0 };
+  // Only these parts of the period, when the rest is built already (loadConductPeriod)
+  const parts = (stretches ?? [[from, to]])
+    .map(([a, b]) => [Math.max(a, reach), Math.min(b, now), b])
+    .filter(([a, b]) => b > a);
+  if (!parts.length) return { ...none, cameras };
+  const start = parts[0][0];
+  const end = parts[parts.length - 1][1];
+  const iso = (ms) => new Date(ms).toISOString();
+
+  // [from, to, with until, read up to]: a stretch read up to now covers the rest of
+  // the period too, since nothing after now was there to read
   const windows = [];
-  for (let a = start; a < end; a += DAY_MS) windows.push([a, Math.min(a + DAY_MS, end)]);
+  for (const [s, e, asked] of parts) {
+    const upTo = (b) => (b >= e && e === now ? Math.max(b, asked) : b);
+    if (e === now && e - s <= DAY_MS) windows.push([s, e, false, upTo(e)]);
+    else for (let a = s; a < e; a += DAY_MS) windows.push([a, Math.min(a + DAY_MS, e), true, upTo(Math.min(a + DAY_MS, e))]);
+  }
   const seen = new Map();
+  const read = [];
   let failedDays = 0;
   let untyped = 0;
   onProgress({ done: 0, total: windows.length });
-  for (const [i, [a, b]] of windows.entries()) {
+  for (const [i, [a, b, until, upTo]] of windows.entries()) {
     try {
-      const got = await fetchVssWindow({ orgId, sinceIso: new Date(a).toISOString(), untilIso: new Date(b).toISOString() });
-      for (const x of got.alarms) seen.set(x.id, x);
+      const got = await fetchVssWindow({ orgId, sinceIso: iso(a), untilIso: until ? iso(b) : undefined, signal });
+      for (const x of got.alarms) if (!(x.occurredMs < a) && !(x.occurredMs >= b)) seen.set(x.id, x);
       untyped += got.untyped;
       if (got.partial) failedDays += 1;
-    } catch {
+      else read.push([a, upTo]);
+    } catch (err) {
+      signal?.throwIfAborted();
+      if (err?.name === 'AbortError') throw err;
       failedDays += 1;
     }
     onProgress({ done: i + 1, total: windows.length });
   }
   const alarms = [...seen.values()].sort((x, y) => (y.occurredMs ?? 0) - (x.occurredMs ?? 0));
-  return { alarms, cameras, failed: failedDays === windows.length, failedDays: failedDays === windows.length ? 0 : failedDays, untyped };
+  const failed = failedDays === windows.length;
+  return { alarms, cameras, failed, failedDays: failed ? 0 : failedDays, untyped, reach, window: { from: start, to: end }, read };
 }
 
 const DAY_MS = 86_400_000;
 
 /** How far back the server reads the dashcam alarms (fleet-server dashcam.service MAX_DAYS; VSS keeps about two weeks). */
 export const DASHCAM_DAYS = 14;
+
+/** The code a built day's alarm of each kind stands for (lib/fleetReports PHONE_CODES, SEATBELT_CODES, COVER_CODES). */
+const KIND_CODE = { phone: 116, seatbelt: 125, covered: 123 };
+const KIND_ALERT = { accel: 'HARSH_ACCELERATION', brake: 'HARSH_BRAKING' };
+
+/** [from, to) less the stretches in `out` (sorted, apart): what is left, in order. */
+export function stretchesLeft(from, to, out) {
+  const left = [];
+  let at = from;
+  for (const [a, b] of out) {
+    if (a > at) left.push([at, Math.min(a, to)]);
+    at = Math.max(at, b);
+  }
+  if (at < to) left.push([at, to]);
+  return left.filter(([a, b]) => b > a);
+}
+
+/**
+ * Driver conduct's harsh driving and dashcam alarms over [from, to), the
+ * fleet days the server built in advance first (fleet-server
+ * driver-conduct-days, operator 25 Nov 2026: "cache the drivers conduct on a
+ * daily basis for a consolidated monthly driver conduct"), one request for
+ * them all; what is not built (today, a day cut by the period's hours, a day
+ * not built yet or expired) is read live as before. Without the built days
+ * (an older server, a failed read) every day is read live.
+ *
+ * Answers as loadHarshEvents and loadDashcamAlarms do, the dashcam's `read`,
+ * `window` and `reach` taking in the built days whose capture was whole, and
+ * `builtDays`: how many came from the server.
+ */
+export async function loadConductPeriod({ orgId, from, to, signal, onBuilt = () => {}, onHarsh = () => {}, onDashcam = () => {}, now = Date.now() }) {
+  const today = fleetDay(now);
+  const wanted = daysCovering(from, to);
+  let built = null;
+  if (wanted.length > 1) {
+    onBuilt({ done: 0, total: 0 });
+    try {
+      built = await listDays(orgId, wanted[0], wanted[wanted.length - 1], signal);
+    } catch {
+      signal?.throwIfAborted();
+      built = null;
+    }
+  }
+  // Whole days inside the period, ended, built
+  const whole = new Map((built?.days ?? [])
+    .filter((d) => d.day < today && dayStart(d.day) >= from && dayStart(d.day) + DAY_MS <= to)
+    .map((d) => [d.day, d]));
+  if (wanted.length > 1) onBuilt({ done: 0, total: 0, note: whole.size ? `${whole.size} day${whole.size === 1 ? '' : 's'} already built` : 'No days built yet: each day is read' });
+  const builtStretches = [...whole.keys()].sort().map((d) => [dayStart(d), dayStart(d) + DAY_MS]);
+  const live = stretchesLeft(from, to, builtStretches);
+  const liveDays = [...new Set(live.flatMap(([a, b]) => daysCovering(a, b)))];
+
+  const [h, cam] = await Promise.all([
+    liveDays.length ? loadHarshEvents({ orgId, days: liveDays, signal, onProgress: onHarsh }) : { events: [], failed: 0 },
+    loadDashcamAlarms({ orgId, from, to, stretches: live, signal, onProgress: onDashcam, now }),
+  ]);
+
+  // The built days' records, in the shapes behaviourRows reads
+  const events = [...h.events];
+  const alarms = [...cam.alarms];
+  for (const r of built?.rows ?? []) {
+    if (!whole.has(r.day)) continue;
+    const key = r.vehicleId ?? r.plate;
+    for (const [kind, alertType] of Object.entries(KIND_ALERT)) {
+      (r.times?.[kind] ?? []).forEach((t, i) => events.push({ id: `day:${r.day}:${key}:${kind}:${i}`, vehicleId: r.vehicleId, plate: r.plate, alertType, ts: new Date(t).toISOString() }));
+    }
+    for (const [kind, code] of Object.entries(KIND_CODE)) {
+      (r.times?.[kind] ?? []).forEach((t, i) => alarms.push({ id: `day:${r.day}:${key}:${kind}:${i}`, vehicleId: r.vehicleId, plate: r.plate, code, occurredMs: t }));
+    }
+  }
+  if (!cam.cameras) return { harsh: { events, failed: h.failed }, cam: { ...cam, alarms }, builtDays: whole.size };
+
+  // A built day whose capture was whole counts as read; one that was not, within reach, could not all be read
+  const captured = [...whole.values()].filter((d) => d.captured);
+  const read = [...cam.read, ...captured.map((d) => [dayStart(d.day), dayStart(d.day) + DAY_MS])];
+  const reach = Math.min(cam.reach, ...captured.map((d) => dayStart(d.day)));
+  const unread = [...whole.values()].filter((d) => !d.captured && dayStart(d.day) >= reach).length;
+  const asked = [cam.window, ...captured.map((d) => ({ from: dayStart(d.day), to: dayStart(d.day) + DAY_MS }))].filter(Boolean);
+  const window = asked.length ? { from: Math.min(...asked.map((w) => w.from)), to: Math.min(Math.max(...asked.map((w) => w.to)), to, now) } : null;
+  const failed = cam.failed && !captured.length;
+  return {
+    harsh: { events, failed: h.failed },
+    cam: {
+      ...cam, alarms, read, reach, window, failed,
+      failedDays: failed ? 0 : (cam.failed ? 0 : cam.failedDays) + unread,
+      untyped: cam.untyped + captured.reduce((n, d) => n + (d.untyped || 0), 0),
+    },
+    builtDays: whole.size,
+  };
+}
+
 /** Every overspeed episode of the units in `vehicleIds`, in [from, to). */
 export async function loadOverspeeds({ orgId, from, to, vehicleIds, onProgress = () => {} }) {
   const f = new Date(from).toISOString();
@@ -148,7 +265,7 @@ export async function loadOverspeeds({ orgId, from, to, vehicleIds, onProgress =
  * Distance and time per unit inside `windows` ([[from, to], …]), from each
  * unit's readings over the fleet days the windows touch.
  */
-export async function loadDistances({ orgId, vehicles, windows, onProgress = () => {} }) {
+export async function loadDistances({ orgId, vehicles, windows, signal, onProgress = () => {} }) {
   if (!windows.length) return { perVehicle: new Map(), failed: 0 };
   const days = daysCovering(windows[0][0], windows[windows.length - 1][1]);
   const jobs = [];
@@ -163,17 +280,23 @@ export async function loadDistances({ orgId, vehicles, windows, onProgress = () 
     return r.pings;
   });
 
+  // A month of a whole fleet is millions of readings: gathered and summed a
+  // slice at a time, so the page keeps answering (lib/slices)
+  const slice = slicer({ signal });
   const pings = new Map();
   const failedUnits = new Set();
-  parts.forEach((p, i) => {
+  for (let i = 0; i < parts.length; i++) {
+    await slice();
+    const p = parts[i];
     const id = jobs[i].v.vehicleId;
-    if (p.status !== 'fulfilled') { failedUnits.add(id); return; }
+    if (p.status !== 'fulfilled') { failedUnits.add(id); continue; }
     if (!pings.has(id)) pings.set(id, []);
-    pings.get(id).push(...p.value);
-  });
+    append(pings.get(id), p.value);
+  }
 
   const perVehicle = new Map();
   for (const v of vehicles) {
+    await slice();
     const list = (pings.get(v.vehicleId) ?? []).sort((a, b) => a.t - b.t);
     perVehicle.set(v.vehicleId, summariseWindows(list, windows));
   }
@@ -185,7 +308,7 @@ export async function loadDistances({ orgId, vehicles, windows, onProgress = () 
  * telemetry (the Tankers Report reads a trip from them). `failed`: trackers
  * whose readings could not all be read.
  */
-export async function loadPings({ orgId, vehicles, from, to, onProgress = () => {} }) {
+export async function loadPings({ orgId, vehicles, from, to, signal, onProgress = () => {} }) {
   const days = daysCovering(from, to);
   const jobs = [];
   for (const v of vehicles) for (const day of days) jobs.push({ v, day });
@@ -197,15 +320,19 @@ export async function loadPings({ orgId, vehicles, from, to, onProgress = () => 
     if (done % 5 === 0 || done === jobs.length) onProgress({ done, total: jobs.length });
     return r.pings;
   });
+  const slice = slicer({ signal });
   const pings = new Map();
   const failed = new Set();
-  parts.forEach((p, i) => {
+  for (let i = 0; i < parts.length; i++) {
+    await slice();
+    const p = parts[i];
     const id = jobs[i].v.vehicleId;
     if (!pings.has(id)) pings.set(id, []);
-    if (p.status !== 'fulfilled') { failed.add(id); return; }
-    pings.get(id).push(...p.value.filter((x) => x.t >= from && x.t <= to));
-  });
-  for (const list of pings.values()) list.sort((a, b) => a.t - b.t);
+    if (p.status !== 'fulfilled') { failed.add(id); continue; }
+    const into = pings.get(id);
+    for (const x of p.value) if (x.t >= from && x.t <= to) into.push(x);
+  }
+  for (const list of pings.values()) { await slice(); list.sort((a, b) => a.t - b.t); }
   return { pings, failed };
 }
 
@@ -247,12 +374,13 @@ export async function loadPeakTimes({ orgId, items, onProgress = () => {} }) {
  * request. The report then names only the driver of the run open now, and
  * only for incidents after it set off (lib/fleetReports driversAt).
  */
-export async function loadDispatchRuns({ orgId, from, to }) {
+export async function loadDispatchRuns({ orgId, from, to, signal }) {
   try {
     const qs = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(to).toISOString() });
-    const res = await apiFetch(`/api/v1/organisations/${orgId}/dispatches/runs?${qs}`);
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/dispatches/runs?${qs}`, signal ? { signal } : undefined);
     return Array.isArray(res?.data) ? res.data : null;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }

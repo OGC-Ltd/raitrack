@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  casesFromRun, mergeCases, recordAction, isOverdue, needsEscalation, statusWord, periodCases,
-  opensCase, incidentWords, importCases, exportCases, loadCases, saveCases,
+  casesFromRun, mergeCases, recordAction, isOverdue, needsEscalation, escalations, statusWord, periodCases,
+  opensCase, incidentWords, importCases, exportCases, loadCases, saveCases, camKnown,
 } from './followUp';
 import { scopeUnits } from './fleetGroups';
-import { REPORTS, dashcamWindowWords, CORNER_MAX_MS } from './reportTables';
+import { REPORTS, dashcamWindowWords, dashcamReachWords, DASHCAM_NONE_WORDS, CORNER_MAX_MS } from './reportTables';
 import { reportHtml } from './reportLetterhead';
 
 const at = (s) => Date.parse(`${s}+03:00`);
@@ -161,24 +161,90 @@ describe('columns with nothing in them', () => {
   });
 });
 
-describe('a month’s run: days the dashcam no longer reaches', () => {
-  // 1 Nov: 5 harsh on KCN 901F; 2 Nov: a phone alarm on KCS 082M. The dashcam reaches back to 2 Nov only.
+describe('a month’s run: days whose dashcam alarms were not all read', () => {
+  // 1 Nov: 5 harsh on KCN 901F; 2 Nov: a phone alarm on KCS 082M. The dashcam was read from 2 Nov only.
   const harsh = [1, 2, 3, 4, 5].map((m) => ev('v2', `2026-11-01T08:0${m}:00`));
   const alarms = [alarm('v1', '2026-11-02T10:00:00', 116)];
+  const from2nd = [[at('2026-11-02T00:00:00'), at('2026-11-03T00:00:00')]];
 
-  it('sends no case for a day before the dashcam’s reach, so a held case keeps its counts', () => {
-    const found = casesFromRun(units, harsh, alarms, { ...twoDays, dashcamFrom: at('2026-11-02T00:00:00') });
-    expect(found.map((c) => c.day)).toEqual(['2026-11-02']);
+  it('a day before the dashcam’s reach still opens its harsh driving cases', () => {
+    const found = casesFromRun(units, harsh, alarms, { ...twoDays, dashcamRead: from2nd });
+    expect(found.map((c) => `${c.plate} ${c.day}`).sort()).toEqual(['KCN 901F 2026-11-01', 'KCS 082M 2026-11-02']);
+    expect(found.find((c) => c.day === '2026-11-01')).toMatchObject({ accel: 5, seatbelt: 0, phone: 0, covered: 0 });
   });
 
-  it('a day only partly reached is left out too', () => {
-    const found = casesFromRun(units, harsh, alarms, { ...twoDays, dashcamFrom: at('2026-11-02T06:00:00') });
+  it('never lowers the camera counts the server holds for such a day, and takes the run’s harsh counts', () => {
+    // 1 Nov was read whole last week: the server holds 2 on phone and 3 harsh for KCN 901F
+    const stored = [{ id: 'KCN901F|2026-11-01', day: '2026-11-01', unitKey: 'KCN901F', phone: 2, seatbelt: 1, covered: 0, accel: 3, openedAt: at('2026-11-01T07:00:00') }];
+    const found = casesFromRun(units, harsh, alarms, { ...twoDays, dashcamRead: from2nd, stored });
+    expect(found.find((c) => c.day === '2026-11-01')).toMatchObject({ id: 'KCN901F|2026-11-01', accel: 5, phone: 2, seatbelt: 1, covered: 0 });
+  });
+
+  it('a day that timed out or came back incomplete is treated the same: its held counts stay', () => {
+    // 2 Nov could not be read: no alarms for it, and the server holds the phone case from an earlier run
+    const stored = [{ id: 'KCS082M|2026-11-02', day: '2026-11-02', unitKey: 'KCS082M', phone: 4, seatbelt: 0, covered: 1, accel: 0, brake: 0 }];
+    const read = [[at('2026-11-01T00:00:00'), at('2026-11-02T00:00:00')]];
+    const found = casesFromRun(units, [...harsh, ev('v1', '2026-11-02T09:00:00')], [], { ...twoDays, dashcamRead: read, stored });
+    expect(found.find((c) => c.day === '2026-11-02')).toMatchObject({ phone: 4, covered: 1, accel: 1 });
+    // Read whole, the run's own counts stand, as before
+    expect(casesFromRun(units, harsh, alarms, { ...twoDays, dashcamRead: [[twoDays.from, twoDays.to]], stored })
+      .find((c) => c.day === '2026-11-02')).toMatchObject({ phone: 1, covered: 0 });
+  });
+
+  it('a day only partly read counts as not read', () => {
+    const found = casesFromRun(units, [], alarms, { ...twoDays, dashcamRead: [[at('2026-11-02T06:00:00'), twoDays.to]] });
     expect(found).toEqual([]);
   });
 
-  it('sends every day where the fleet has no dashcams, or the period is within reach', () => {
-    expect(casesFromRun(units, harsh, [], { ...twoDays, dashcams: false, dashcamFrom: at('2026-11-02T00:00:00') }).map((c) => c.day)).toEqual(['2026-11-01']);
+  it('every day is read on a fleet with no dashcams, or when nothing is said of what was read', () => {
+    expect(casesFromRun(units, harsh, [], { ...twoDays, dashcams: false, dashcamRead: [] }).map((c) => c.day)).toEqual(['2026-11-01']);
     expect(casesFromRun(units, harsh, alarms, twoDays).map((c) => c.day).sort()).toEqual(['2026-11-01', '2026-11-02']);
+  });
+
+  it('leaves out a new case of such a day when the server’s list may be cut short', () => {
+    expect(casesFromRun(units, harsh, alarms, { ...twoDays, dashcamRead: from2nd, stored: [], storedAll: false }).map((c) => c.day)).toEqual(['2026-11-02']);
+  });
+
+  it('what was read: windows joined end to end', () => {
+    expect(camKnown(null, 0, 10)).toBe(true);
+    expect(camKnown([[0, 5], [5, 10]], 2, 10)).toBe(true);
+    expect(camKnown([[5, 10], [0, 5]], 0, 10)).toBe(true);
+    expect(camKnown([[0, 4], [5, 10]], 0, 10)).toBe(false);
+    expect(camKnown([], 0, 10)).toBe(false);
+  });
+});
+
+describe('a month’s run is quick enough not to hold up the page (Sukari, 25 Nov 2026)', () => {
+  it('600 units, 6,000 dispatch runs and 6,000 harsh events over 31 days in well under the 25 s it took', () => {
+    const vs = Array.from({ length: 600 }, (_, i) => ({ id: `KAA ${String(i).padStart(3, '0')}A`, vehicleId: `x${i}` }));
+    const { units: many } = scopeUnits(vs, null);
+    const from = at('2026-10-26T00:00:00');
+    const to = from + 31 * 24 * HOUR;
+    const runs = Array.from({ length: 6000 }, (_, i) => ({ vehicleId: `x${i % 600}`, plate: vs[i % 600].id, driverName: `D${i % 97}`,
+      dispatchedAt: new Date(from + (i % 31) * 24 * HOUR + 6 * HOUR).toISOString(), actualReturnAt: new Date(from + (i % 31) * 24 * HOUR + 18 * HOUR).toISOString() }));
+    // In fives: a unit's five on one day open a case
+    const harsh = Array.from({ length: 6000 }, (_, i) => ({ id: `h${i}`, vehicleId: `x${Math.floor(i / 5) % 600}`, alertType: 'HARSH_BRAKING',
+      ts: new Date(from + (Math.floor(i / 5) % 31) * 24 * HOUR + 8 * HOUR + i).toISOString() }));
+    const t = performance.now();
+    const found = casesFromRun(many, harsh, [], { from, to, dashcams: true, logged: [], runs });
+    expect(performance.now() - t).toBeLessThan(5000);
+    expect(found.length).toBeGreaterThan(0);
+    expect(found[0].driver).toMatch(/^D\d+/);
+  });
+
+  it('the Follow-up table’s escalations: once per list, the same as asked case by case', () => {
+    const list = [];
+    for (let d = 1; d <= 20; d++) for (const who of ['A', 'B', '']) {
+      if ((d + who.length) % 3 === 0) continue;
+      list.push({ id: `${who}|${d}`, day: `2026-11-${String(d).padStart(2, '0')}`, driver: who, unitKey: who ? `U${who}` : 'UX' });
+    }
+    const flagged = escalations(list);
+    for (const c of list) expect(flagged.has(c.id)).toBe(needsEscalation(c, list));
+    expect(flagged.size).toBeGreaterThan(0);
+    const big = Array.from({ length: 3000 }, (_, i) => ({ id: `c${i}`, day: `2026-11-${String((i % 28) + 1).padStart(2, '0')}`, driver: `D${i % 200}`, unitKey: `U${i % 300}` }));
+    const t = performance.now();
+    escalations(big);
+    expect(performance.now() - t).toBeLessThan(500);
   });
 });
 
@@ -215,6 +281,21 @@ describe('the stretch of time the dashcam alarms cover (operator, 24 Nov 2026)',
   it('says so when the fleet has no dashcams, or they could not be read', () => {
     expect(dashcamWindowWords({ ...month, dashcams: false }, t)).toBe('No dashcams in this fleet');
     expect(dashcamWindowWords({ ...month, dashcamFailed: true }, t)).toBe('Could not be read');
+  });
+
+  it('ends when the alarms were read, not when the file is made', () => {
+    const ctx = { ...month, dashcamFrom: at('2026-11-10T14:05:00'), dashcamWindow: { from: at('2026-11-10T14:05:00'), to: at('2026-11-24T14:12:00') } };
+    expect(dashcamWindowWords(ctx, at('2026-11-25T09:30:00'))).toBe('10 Nov 2026 14:05 to 24 Nov 2026 14:12');
+  });
+
+  it('a period before the dashcam’s reach has no stretch, not one that runs backwards', () => {
+    const early = { from: at('2026-11-01T00:00:00'), to: at('2026-11-06T00:00:00'), dashcams: true, dashcamFrom: at('2026-11-10T14:05:00') };
+    expect(dashcamWindowWords({ ...early, dashcamWindow: null }, t)).toBe('None: the period is older than the 14 days the dashcam keeps');
+    // A run kept from before the window was stored
+    expect(dashcamWindowWords(early, t)).toBe('None: the period is older than the 14 days the dashcam keeps');
+    expect(dashcamReachWords({ ...early, dashcamWindow: null })).toBe(DASHCAM_NONE_WORDS);
+    expect(dashcamReachWords({ ...month, dashcamFrom: at('2026-11-10T14:05:00'), dashcamWindow: {} })).toMatch(/from 10 Nov 14:05 only/);
+    expect(dashcamReachWords({ ...month, dashcamFrom: null, dashcamWindow: {} })).toBeNull();
   });
 
   it('is among the PDF’s details', () => {

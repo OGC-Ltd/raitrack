@@ -35,7 +35,7 @@
 // how the bridges themselves count, and it is the only count under which "how
 // many did this lorry do" has an answer.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { useWeighments, MAX_DAYS } from "../../hooks/useWeighments";
 import WeighbridgeTotals from "../body/WeighbridgeTotals";
@@ -55,6 +55,7 @@ import { ticketsByBridge } from "../../lib/weighbridgeSheets";
 import ReportFilesBar from "../body/ReportFilesBar";
 import { ticketsDoc, spanWords } from "../../lib/weighbridgeDocs";
 import { useLetterheadFleet } from "../../hooks/useLetterheadFleet";
+import { rowRequest, clearRowRequest, subscribeRowRequests, pageOf } from "../../lib/rowFocus";
 import "../body/SensorPanel.css";
 /* For its TOKENS, not for its layout: the `an-*` chart palette the board draws
    in is declared on `.analytics-page` rather than on :root. Importing the
@@ -118,10 +119,9 @@ function backDays(n) {
   return fleetDayKey(new Date(Date.now() - n * 86_400_000));
 }
 
-/** The bridge the page opens on. The factory takes about three quarters of the
- *  traffic (570 of 729 tickets on 2026-09-09), so it is the tab most readers
- *  wanted anyway — and an empty first tab reads as a broken page. */
-const DEFAULT_CENTRE = 101;
+/** The bridge the page opens on: all of them (operator, 2026-11-25: "All
+ *  weighbridges should be the default"). It used to open on the factory (101). */
+const DEFAULT_CENTRE = null;
 
 /**
  * The two ways to read the same bridges.
@@ -354,9 +354,9 @@ const GRID_STEP = 15;
 export default function WeighbridgesScreen() {
   const { orgId } = useFleetLiveShared();
   const [view,     setView]     = useState(VIEWS[0].key);
-  /* The range, both ends inclusive. They start equal, which is one day — the
-     reading this screen opens on and the one most visits never leave. */
-  const [from,     setFrom]     = useState(fleetDayKey());
+  /* The range, both ends inclusive. It opens on the previous day through today
+     (operator, 2026-11-25: "the default from date is the previous date"). */
+  const [from,     setFrom]     = useState(() => backDays(1));
   const [to,       setTo]       = useState(fleetDayKey());
   const [centre,   setCentre]   = useState(DEFAULT_CENTRE);
   const [search,   setSearch]   = useState("");
@@ -436,6 +436,26 @@ export default function WeighbridgesScreen() {
     if (view === "tickets" && !coverage && pendingTicket.current) { setSelected(pendingTicket.current); pendingTicket.current = null; }
   }, [view, coverage]);
   const closeRow = useCallback(() => setSelected(null), []);
+
+  // A click on a weighbridge pop-up (operator, 2026-11-25; lib/rowFocus): the
+  // Tickets view on its default span (yesterday and today) and every bridge,
+  // no search, then the ticket's page, its line marked and its panel open.
+  const rowReq = useSyncExternalStore(subscribeRowRequests, () => rowRequest("weighbridges"), () => null);
+  useEffect(() => {
+    if (!rowReq) return;
+    setView("tickets"); setCoverage(false); setCentre(null); setSearch("");
+    setFrom(backDays(1)); setTo(fleetDayKey());
+  }, [rowReq?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!rowReq || loading || !data) return;
+    if (view !== "tickets" || coverage || centre != null || search || from !== backDays(1) || to !== fleetDayKey()) return;
+    const i = rows.findIndex((r) => r.id === rowReq.id);
+    clearRowRequest(rowReq);
+    if (i < 0) return;
+    setSelected(rows[i]);
+    setPage(pageOf(i, GRID_STEP));
+    setTimeout(() => document.querySelector('.wb-grid tr[aria-selected="true"]')?.scrollIntoView({ block: "center", behavior: "smooth" }), 60);
+  }, [rowReq, loading, data, rows, view, coverage, centre, search, from, to]);
   const selectedRow = useMemo(
     () => (selected ? rows.find(r => r.id === selected.id) ?? selected : null),
     [selected, rows],
@@ -521,12 +541,14 @@ export default function WeighbridgesScreen() {
           The day across every bridge, then a card per bridge that also picks
           the bridge the tickets show (operator, 3 Nov 2026: "fix the
           weighbridges ui"). The day's figures cover EVERY bridge whatever
-          bridge is picked, so picking one never moves them. */}
+          bridge is picked, so picking one never moves them; a search for a
+          unit or a driver does narrow them (operator, 25 Nov 2026). */}
       <WeighbridgeTotals
         stats={stats}
         centres={centres}
         loading={loading || !data}
         periodLabel={spanLabel(from, to)}
+        search={view === "tickets" && !coverage ? search : ""}
         showBridges={view === "tickets"}
         centre={centre}
         onPickCentre={setCentre}

@@ -16,6 +16,7 @@
 
 import raiLogo from '../assets/rai-group-logo.jpeg';
 import ogcLogo from '../assets/ogc-monitoring-logo.png';
+import { cancelled, isCancel } from '../lib/slices';
 
 const BAND = 'FF222222';
 const HEAD = 'FF1F3A5F';
@@ -100,7 +101,7 @@ function docLines(doc) {
 }
 
 /** How many columns the document's widest table has. */
-const docCols = (doc) => Math.max(1, ...docLines(doc).map((r) => r.length));
+const docCols = (doc) => docLines(doc).reduce((m, r) => Math.max(m, r.length), 1);
 
 /**
  * The workbook. `ExcelJS`: the library; `logos`: { rai, ogc } as { buffer, extension }, either may be missing.
@@ -112,18 +113,28 @@ const docCols = (doc) => Math.max(1, ...docLines(doc).map((r) => r.length));
  * one file, sheet 1 with all of them and a sheet for each weighbridge).
  * `sheetName` names the first sheet's tab; it is the title otherwise.
  */
-export function buildWorkbook(ExcelJS, o, logos = {}) {
+export function buildWorkbook(ExcelJS, o, logos = {}, onProgress = null) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAI Operations';
   wb.created = new Date(o.now ?? Date.now());
   const tab = tabNamer();
-  addSheet(wb, o, logos, tab(o.sheetName ?? titleCase(String(o.doc?.title ?? o.title ?? 'Report'))));
-  if (!o.doc) {
-    for (const s of o.sheets ?? []) {
-      addSheet(wb, { ...o, title: s.title ?? o.title, body: s.body ?? [], meta: s.meta ?? o.meta ?? [], fills: s.fills ?? null }, logos, tab(s.name));
-    }
+  // `onProgress({ done, total })` in rows, over every sheet: the worker's bar (workers/xlsx.worker)
+  const extra = o.doc ? [] : (o.sheets ?? []);
+  const total = workbookRows(o);
+  let base = 0;
+  const step = onProgress ? (n) => onProgress({ done: base + n, total }) : null;
+  base += addSheet(wb, o, logos, tab(o.sheetName ?? titleCase(String(o.doc?.title ?? o.title ?? 'Report'))), step);
+  for (const s of extra) {
+    base += addSheet(wb, { ...o, title: s.title ?? o.title, body: s.body ?? [], meta: s.meta ?? o.meta ?? [], fills: s.fills ?? null }, logos, tab(s.name), step);
   }
+  onProgress?.({ done: total, total });
   return wb;
+}
+
+/** How many table rows the workbook will hold, over all its sheets: the measure of its work. */
+export function workbookRows(o) {
+  if (o.doc) return docLines(o.doc).length;
+  return (o.body?.length ?? 0) + (o.sheets ?? []).reduce((n, s) => n + (s.body?.length ?? 0), 0);
 }
 
 /** Tab names Excel accepts: 31 characters at most, none of \ / ? * [ ] :, and no two alike (Excel ignores case). */
@@ -157,7 +168,7 @@ export function inputsAt(head, inputs) {
 }
 
 /** One sheet of the workbook: the letterhead, the details, the table or document, the footer. */
-function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, inputs = null, now = Date.now() }, logos, tabName) {
+function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', meta = [], fills = null, headFills = null, inputs = null, now = Date.now() }, logos, tabName, onRows = null) {
   const name = String(doc?.title ?? title ?? 'Report');
   const ws = wb.addWorksheet(tabName, {
     pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
@@ -165,7 +176,9 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
     headerFooter: { oddFooter: `&L${`${fleet ? `${fleet} · ` : ''}${titleCase(name)}`.replace(/&/g, '&&')}&RPage &P of &N` },
     views: [{ showGridLines: false }],
   });
-  const n = doc ? docCols(doc) : Math.max(head.length, ...body.map((r) => r.length), 1);
+  // Not Math.max(...rows): a spread of 100,000 rows overflows the stack
+  const n = doc ? docCols(doc) : body.reduce((m, row) => Math.max(m, row.length), Math.max(head.length, 1));
+  let rowsDone = 0;
   const lines = doc ? docLines(doc) : [head, ...body];
   // At least two columns, so the details have a label and a value
   const cols = Math.max(n, 2);
@@ -259,6 +272,8 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
         }
       });
       r += 1;
+      rowsDone += 1;
+      if (onRows && rowsDone % 500 === 0) onRows(rowsDone);
     });
     if (filter && rows.length) ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: headRow, column: t.head.length } };
     return headRow;
@@ -341,7 +356,7 @@ function addSheet(wb, { head = [], body = [], doc = null, title, fleet = '', met
   ws.getCell(r + 1, 1).value = 'RAI Operations · OGC Monitoring';
   ws.getCell(r + 1, 1).font = { size: 8, color: { argb: MUTED } };
   ws.pageSetup.printArea = `A1:${colName(cols)}${r + 1}`;
-  return ws;
+  return rowsDone;
 }
 
 const titleCase = (s) => String(s).toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
@@ -365,16 +380,78 @@ async function logoBuffer(url, extension) {
   } catch { return null; }
 }
 
+/** A table this many rows or more is made in a worker, with a bar and a Cancel; a smaller one is made at once. */
+export const WORKER_ROWS = 1500;
+
+/** Makes the workbook's bytes in a worker. Rejects with an AbortError when cancelled. */
+function bytesInWorker(o, logos, { onProgress, signal }) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/xlsx.worker.js', import.meta.url), { type: 'module' });
+    const stop = () => { worker.terminate(); reject(cancelled()); };
+    if (signal?.aborted) { stop(); return; }
+    signal?.addEventListener('abort', stop, { once: true });
+    const end = () => { signal?.removeEventListener('abort', stop); worker.terminate(); };
+    worker.onmessage = ({ data: m }) => {
+      if (m.type === 'progress') onProgress?.(m);
+      else if (m.type === 'done') { end(); resolve(m.buffer); } else if (m.type === 'error') { end(); reject(new Error(m.message)); }
+    };
+    worker.onerror = (e) => { end(); reject(new Error(e.message || 'The Excel file could not be made')); };
+    // Logos are copied, not handed over: they are read once a session and used again
+    worker.postMessage({ o, logos });
+  });
+}
+
+let logosOnce = null;
+/** Both logos, read once a session; either may be missing. */
+function loadLogos() {
+  logosOnce ??= Promise.all([logoBuffer(raiLogo, 'jpeg'), logoBuffer(ogcLogo, 'png')]).then(([rai, ogc]) => ({ rai, ogc }));
+  return logosOnce;
+}
+
 /** Make the .xlsx and download it. Same arguments as downloadTableCsv, plus optional doc, title, meta, fills, sheetName and sheets. */
 export async function downloadTableXlsx({ head, body, doc = null, filenameSlug = 'report', title = null, meta = [], fills = null, headFills = null, sheetName, sheets, inputs = null }) {
-  const { default: ExcelJS } = await import('exceljs');
-  const [rai, ogc] = await Promise.all([logoBuffer(raiLogo, 'jpeg'), logoBuffer(ogcLogo, 'png')]);
-  const wb = buildWorkbook(ExcelJS, {
+  const o = {
     head, body, doc, fills, headFills, meta, sheetName, sheets, inputs,
     title: title ?? titleFromSlug(filenameSlug),
     fleet: fleetFromTitle(typeof document !== 'undefined' ? document.title : ''),
-  }, { rai, ogc });
-  const buf = await wb.xlsx.writeBuffer();
+    now: Date.now(),
+  };
+  const rows = workbookRows(o);
+  const logos = await loadLogos();
+  const here = async () => {
+    const { default: ExcelJS } = await import('exceljs');
+    return buildWorkbook(ExcelJS, o, logos).xlsx.writeBuffer();
+  };
+  let buf;
+  if (rows < WORKER_ROWS || typeof Worker === 'undefined') {
+    buf = await here();
+  } else {
+    // A big table is made off the page's thread, with a bar and a Cancel in the corner (lib/pdfProgress),
+    // so the page goes on answering (25 Nov 2026: 20,000 rows held it for 3.5 s)
+    const { showPdfProgress } = await import('../lib/pdfProgress');
+    const ctl = new AbortController();
+    const progress = showPdfProgress(o.title, { kind: 'Excel', onCancel: () => ctl.abort() });
+    const n = (x) => x.toLocaleString('en-GB');
+    progress.update(0, `Preparing ${n(rows)} row${rows === 1 ? '' : 's'}…`);
+    try {
+      buf = await bytesInWorker(o, logos, {
+        signal: ctl.signal,
+        onProgress: (m) => (m.phase === 'Saving'
+          ? progress.update(0.9, 'Saving the file…')
+          : progress.update(0.02 + 0.85 * (m.total ? m.done / m.total : 0), `${n(m.done ?? 0)} of ${n(m.total ?? rows)} rows`)),
+      });
+    } catch (err) {
+      if (isCancel(err)) return;
+      if (err?.name !== 'DataCloneError') {
+        progress.fail('The Excel file could not be made. Please try again.');
+        throw err;
+      }
+      // A table holding something a worker cannot be sent is made here, as before
+      progress.close();
+      buf = await here();
+    }
+    progress.done('Ready: the file has downloaded');
+  }
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

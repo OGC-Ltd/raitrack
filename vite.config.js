@@ -80,7 +80,7 @@ export default defineConfig({
         // console, or override without editing this file:
         //
         //     VITE_PROXY_TARGET=http://<host> npm run dev
-        target: process.env.VITE_PROXY_TARGET || 'http://13.247.178.217',
+        target: process.env.VITE_PROXY_TARGET || 'http://13.244.125.1',
         changeOrigin: true,
       },
     },

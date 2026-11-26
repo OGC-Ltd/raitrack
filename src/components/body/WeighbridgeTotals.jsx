@@ -7,6 +7,9 @@
 // bridge card is also the bridge picker for the ticket grid, carrying its own
 // tonnage and its own trucks and tractors, so nothing has to be read twice.
 //
+// A search for a unit or a driver narrows every figure here to what it
+// matched (operator, 25 Nov 2026); picking a bridge never does.
+//
 // Every figure comes from the server (weighments.service) or the range merge
 // (useWeighments). Nothing here is computed beyond a share for a bar.
 
@@ -45,12 +48,12 @@ function TicketFigure({ label, kg, ticket, onOpen }) {
 /**
  * @param {{
  *   stats: object|undefined, centres: object[], loading: boolean,
- *   periodLabel: string,
+ *   periodLabel: string, search?: string,
  *   showBridges: boolean, centre: number|null, onPickCentre: (code: number) => void,
  *   onOpenTicket: (row: object) => void,
  * }} p
  */
-export default function WeighbridgeTotals({ stats, centres, loading, periodLabel, showBridges, centre, onPickCentre, onOpenTicket }) {
+export default function WeighbridgeTotals({ stats, centres, loading, periodLabel, search = "", showBridges, centre, onPickCentre, onOpenTicket }) {
   const ready = Boolean(stats);
   return (
     <section className="wbt" aria-label="Weighbridge totals">
@@ -59,6 +62,8 @@ export default function WeighbridgeTotals({ stats, centres, loading, periodLabel
           <span className="wbt-total__n">{ready ? tonnesTotal(stats.totalNetKg) : "·"}</span>
           <span className="wbt-total__l">
             Weighed in, every bridge · {ready ? plural(stats.weighments, "weighment") : "…"} · {periodLabel}
+            {/* The figures follow the unit or driver searched (operator, 25 Nov 2026) */}
+            {search.trim() && <> · matching “{search.trim()}”</>}
           </span>
         </div>
 

@@ -203,3 +203,31 @@
   .tst__copy { width: 36px; height: 36px; }
   .tst__open { height: 36px; }
 }
+
+/* The Ops Room Operator's tickets to acknowledge (OpsRoomAlerts, 2026-11-25):
+   the same cards, stacked above the pop-ups, staying until acknowledged. */
+.tst-stack.ops-sticky { bottom: 150px; gap: 8px; }
+.ops-sticky__more { margin: 0; font-size: 12px; text-align: right; color: var(--sp4-muted, #6b7280); }
+@media (max-width: 720px) {
+  .tst-stack.ops-sticky { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Weighbridge pop-ups (OpsRoomAlerts, operator 2026-11-25): inside the
+   page's own edge, the pages' gutter in from the right, not over it. */
+@media (min-width: 721px) {
+  .tst-stack.tst-stack--page { right: calc(clamp(20px, 4vw, 64px) + 12px); }
+}
+/* The whole text is the way to the line: a plain block, not a button's look. */
+.tst__text--go {
+  display: grid;
+  gap: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tst__text--go:hover b { text-decoration: underline; }
+.tst__text--go:focus-visible { outline: 2px solid var(--sp4-accent, #2563eb); outline-offset: 2px; border-radius: 4px; }

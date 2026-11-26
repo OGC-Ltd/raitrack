@@ -10,6 +10,7 @@
 //
 // Times are fleet time, Africa/Nairobi (UTC+3 all year, no daylight saving).
 
+import { mapSliced } from './slices';
 import { summariseDay, MOVING_KMH } from './vehicleDay';
 import { unitKey } from './fleetGroups';
 
@@ -260,11 +261,39 @@ function spansOf(runs) {
   return out;
 }
 
-/** A unit's runs, by vehicle id or by plate, in sign-out order. */
+/**
+ * A list of runs indexed once, by vehicle id and by plate, and each unit's
+ * runs kept, so a month's report does not sift every run for every unit on
+ * every day (Sukari, 25 Nov 2026: 634 units by 5,764 runs took 2.4 s a call,
+ * 25 s for a month's follow-up cases, and froze the page).
+ */
+const runIndex = new WeakMap();
+function indexOf(runs) {
+  let ix = runIndex.get(runs);
+  if (ix) return ix;
+  const byId = new Map();
+  const byKey = new Map();
+  const add = (m, k, i) => { const l = m.get(k); if (l) l.push(i); else m.set(k, [i]); };
+  runs.forEach((r, i) => {
+    if (r.vehicleId) add(byId, r.vehicleId, i);
+    if (r.plate) add(byKey, unitKey(r.plate), i);
+  });
+  ix = { byId, byKey, units: new Map() };
+  runIndex.set(runs, ix);
+  return ix;
+}
+
+/** A unit's runs, by vehicle id or by plate, in sign-out order; the same array each time for one list. */
 function runsOfUnit(u, runs) {
-  const ids = new Set(u.vehicles.map((v) => v.vehicleId));
-  return runs.filter((r) => (r.vehicleId && ids.has(r.vehicleId)) || (r.plate && unitKey(r.plate) === u.key))
-    .sort((a, b) => Date.parse(a.dispatchedAt) - Date.parse(b.dispatchedAt));
+  const ix = indexOf(runs);
+  const kept = ix.units.get(u);
+  if (kept) return kept;
+  const at = new Set(ix.byKey.get(u.key) ?? []);
+  for (const v of u.vehicles) for (const i of ix.byId.get(v.vehicleId) ?? []) at.add(i);
+  const mine = [...at].sort((a, b) => a - b).map((i) => runs[i])
+    .map((r) => [Date.parse(r.dispatchedAt), r]).sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+  ix.units.set(u, mine);
+  return mine;
 }
 
 /**
@@ -281,6 +310,7 @@ function runsOfUnit(u, runs) {
  */
 export function driversAt(u, times, runs) {
   if (runs === undefined) return u.vehicles.map((v) => (v.driver && v.driver !== 'Unassigned' ? v.driver : null)).find(Boolean) ?? null;
+  if (!times.length) return null;
   const mine = runs ? runsOfUnit(u, runs) : null;
   const count = new Map();
   for (const t of times) {
@@ -309,17 +339,30 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
     const list = times.get(k);
     if (list) list.push(t); else times.set(k, [t]);
   };
+  // vehicleId → kind → fleet day → n: the same counts a day at a time, for the
+  // Driver conduct trend cards (25 Nov 2026)
+  const perVehicleDay = new Map();
+  const tally = (byKind, kind, t) => {
+    const days = byKind.get(kind) ?? new Map();
+    byKind.set(kind, days);
+    const d = fleetDay(t);
+    days.set(d, (days.get(d) ?? 0) + 1);
+  };
   const bump = (it, kind, t, alarm = false) => {
     const hit = find(it);
     if (!hit) return;
     let r = perVehicle.get(hit.v.vehicleId);
     if (!r) perVehicle.set(hit.v.vehicleId, (r = { accel: 0, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0 }));
     r[kind] += 1;
+    const vd = perVehicleDay.get(hit.v.vehicleId) ?? new Map();
+    perVehicleDay.set(hit.v.vehicleId, vd);
+    tally(vd, kind, t);
     seenAt(hit.u.key, t);
     if (alarm) {
       const byKind = alarmTimes.get(hit.u.key) ?? new Map();
       alarmTimes.set(hit.u.key, byKind);
-      byKind.set(kind, [...(byKind.get(kind) ?? []), t]);
+      const list = byKind.get(kind);
+      if (list) list.push(t); else byKind.set(kind, [t]);
     }
   };
   for (const e of harsh ?? []) {
@@ -339,6 +382,7 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
 
   // Operator entries: in the period, on a unit in scope.
   const manual = new Map();   // unit key → { kind: n }
+  const manualDays = new Map();   // unit key → kind → fleet day → n
   const inScope = [];
   for (const e of logged ?? []) {
     if (!(e.at >= from && e.at < to)) continue;
@@ -353,17 +397,22 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
       const m = manual.get(hit.u.key) ?? {};
       m[e.kind] = (m[e.kind] ?? 0) + 1;
       manual.set(hit.u.key, m);
+      const md = manualDays.get(hit.u.key) ?? new Map();
+      manualDays.set(hit.u.key, md);
+      tally(md, e.kind, e.at);
     }
     inScope.push({ ...e, unit: hit.u, matched: near, counted });
   }
 
   const days = Math.max(1, (to - from) / DAY);
+  const loggedOn = new Set(inScope.map((e) => e.unit.key));
   const rows = [];
   for (const u of units) {
     const auto = { accel: 0, brake: 0, corner: 0, seatbelt: 0, phone: 0, covered: 0 };
+    const autoFrom = {};   // kind → the vehicle whose count the unit takes
     for (const v of u.vehicles) {
       const c = perVehicle.get(v.vehicleId);
-      if (c) for (const k of BEHAVIOUR_KINDS) auto[k] = Math.max(auto[k], c[k]);
+      if (c) for (const k of BEHAVIOUR_KINDS) if (c[k] > auto[k]) { auto[k] = c[k]; autoFrom[k] = v.vehicleId; }
     }
     const m = manual.get(u.key) ?? {};
     // No dashcam (from the client's list, or none in the whole fleet): its own
@@ -376,11 +425,24 @@ export function behaviourRows(units, harsh, alarms, { from, to, dashcams = true,
       r.logged += m[k] ?? 0;
     }
     r.total = r.accel + r.brake + r.corner + r.seatbelt + r.phone + r.covered;
+    // The same counts by fleet day, { day: { harsh, dashcam } }: they add up to the row's own
+    r.days = {};
+    const addDays = (days, group) => {
+      for (const [d, k] of days ?? []) {
+        const at = (r.days[d] ??= { harsh: 0, dashcam: 0 });
+        at[group] += k;
+      }
+    };
+    for (const k of BEHAVIOUR_KINDS) {
+      const group = SEEN_KINDS.includes(k) ? 'dashcam' : 'harsh';
+      if (group === 'harsh' || dashcam) addDays(perVehicleDay.get(autoFrom[k])?.get(k), group);
+      if (group === 'dashcam') addDays(manualDays.get(u.key)?.get(k), group);
+    }
     r.suspect = r.accel / days > HARSH_SUSPECT_PER_DAY || r.brake / days > HARSH_SUSPECT_PER_DAY;
     // The driver AT THE TIME of its incidents, not the one on the unit now
     r.driver = driversAt(u, times.get(u.key) ?? [], runs);
     r.firstAt = firstAt.get(u.key) ?? null;
-    if (r.total > 0 || inScope.some((e) => e.unit.key === u.key)) rows.push(r);
+    if (r.total > 0 || loggedOn.has(u.key)) rows.push(r);
   }
   rows.sort(unitOrder);
   return Object.assign(rows, { logged: inScope.sort((a, b) => a.at - b.at) });
@@ -704,9 +766,21 @@ function firstFrom(list, t) {
  * @param windows  hourWindows(from, to) or dayWindows(from, to)
  */
 export function machineryRows(units, pings, windows) {
+  return machineryJoin(units, units.map((u) => machineryUnit(u, pings, windows)));
+}
+
+/**
+ * machineryRows a machine at a time, handing the page back between machines
+ * (lib/slices): a month of a whole site by the hour held the page for seconds.
+ */
+export async function machineryRowsSliced(units, pings, windows, { signal } = {}) {
+  return machineryJoin(units, await mapSliced(units, (u) => machineryUnit(u, pings, windows), { signal }));
+}
+
+/** One machine's rows, a row for each window it worked in. */
+function machineryUnit(u, pings, windows) {
   const rows = [];
-  const idle = [];
-  for (const u of units) {
+  {
     const kind = machineKind(u);
     // The register's burn rate, where it rates the machine by the hour
     const rated = ratedOf(u);
@@ -761,8 +835,16 @@ export function machineryRows(units, pings, windows) {
         section: kind,
       });
     }
-    if (!any) idle.push(u);
+    if (!any) return null;
   }
+  return rows;
+}
+
+/** The machines' rows in the report's order, and the machines that did not work. */
+function machineryJoin(units, parts) {
+  const rows = [];
+  const idle = [];
+  parts.forEach((p, i) => { if (p) for (const r of p) rows.push(r); else idle.push(units[i]); });
   // Greens first, the best of them at the top; then reds, the least over first and the
   // worst at the foot; then the rows with nothing to judge (operator, 16 Nov 2026)
   const rank = (r) => (r.vsStd === 'within' ? 0 : r.vsStd === 'above' ? 1 : 2);

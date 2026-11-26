@@ -224,6 +224,32 @@ export function fuelFromLevel(pings, tankL) {
 }
 
 /**
+ * The Fuel tab's Refuelled and Fuel used, from the server's refills: the ones
+ * its event list shows (lib/fuelEpisodes, kind 'refill', checked or not).
+ *
+ * fuelFromLevel counts every rise of 10 L or more as fuel put in, so on a
+ * machine whose level swings as it works the slosh piles up: MUFINDI EX 30 on
+ * 26 Nov read Refuelled 252 L under a list with one refill of 129 L. Here the
+ * level gives only the two ends (medians of five, as there), and the fuel
+ * put in is the server's.
+ *
+ * `sum` is summariseDay of the same pings; `fillsL` the litres of the
+ * listed refills, or null while they are loading or could not be loaded, and
+ * then both figures are null rather than a guess. A device counter, where one
+ * exists, still gives Fuel used.
+ */
+export function fuelFromFills(sum, pings, fillsL) {
+  if (fillsL == null) {
+    return { refilledL: null, usedL: sum.usedSource === 'level' ? null : sum.usedL, usedSource: sum.usedSource === 'level' ? null : sum.usedSource };
+  }
+  if (sum.usedSource && sum.usedSource !== 'level') return { refilledL: fillsL, usedL: sum.usedL, usedSource: sum.usedSource };
+  const lv = pings.filter((p) => Number.isFinite(p.fuelLevelMl)).map((p) => p.fuelLevelMl / 1000);
+  if (lv.length < 10) return { refilledL: fillsL, usedL: null, usedSource: null };
+  const usedL = median(lv.slice(0, 5)) - median(lv.slice(-5)) + fillsL;
+  return usedL >= 0 ? { refilledL: fillsL, usedL, usedSource: 'level' } : { refilledL: fillsL, usedL: null, usedSource: null };
+}
+
+/**
  * Where and when a unit set off today, and how far it has gone since — the
  * unit card's start row (operator, 28 Sep: "the start and the current
  * location, departed will be the time they start, outbound will be the

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import { getFactoryFuel, getFuelRefills, getFuelShifts, getProbeFillings, getTankDays } from "../../api/factoryFuel";
-import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withProbeUsed, varianceBand } from "../../lib/factoryFuel";
+import { fuelRoster, fuelByDay, fuelTotals, departmentOptions, machineState, periodRange, issueFlagged, withFuelNow, reconcileFills, withConsumed, odometerUnit, refillMeterUnit, refillFigures, withRefillColumns, withConsumedSinceRefill, withFuelBeforeWaiting, withFuelBeforeShift, withWorkConsumption, withFuelAfterSum, fuelBeforeShown, withProbeUsed, varianceBand, issuedByShift, shiftLineKey } from "../../lib/factoryFuel";
 import { fleetDay } from "../../lib/fleetReports";
 import { addDays } from "../../lib/dayRange";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
@@ -150,10 +150,10 @@ export default function FuelScreen() {
     // rate times the run since that refill (withProbeUsed). Fuel before is the
     // tank before the day's planned work (withFuelBeforeShift, 2026-11-23);
     // Consumed and Probe used then cover that work (withWorkConsumption).
-    () => withWorkConsumption(withProbeUsed(withFuelBeforeShift(withFuelBeforeWaiting(withConsumedSinceRefill(
-      withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings), tankDays, vehicles, today), meters),
+    () => withFuelAfterSum(withWorkConsumption(withProbeUsed(withFuelBeforeShift(withFuelBeforeWaiting(withConsumedSinceRefill(
+      withRefillColumns(withConsumed(reconcileFills(withFuelNow(roster, vehicles), fillings, meters), tankDays, vehicles, today), meters),
       tankDays, today,
-    ), tankDays, today), shifts, today)), shifts, today),
+    ), tankDays, today), shifts, today)), shifts, today)),
     [roster, vehicles, fillings, tankDays, today, meters, shifts],
   );
   const tableRows = useMemo(() => (dept === ALL ? checked : checked.filter((r) => (r.department ?? "") === dept)), [checked, dept]);
@@ -414,7 +414,6 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                 {th("Issued", "issued", true)}
                 {th("Probe filled", "probeFilled", true)}
                 {th("Fuel after", "fuelAfter", true)}
-                {th("Fuel now", "fuelNow", true)}
                 {th("Consumed", "consumed", true)}
                 {/* Fuel used over the planned shifts, by the probe, with the hours run
                     (operator 2026-11-20). In the place the hidden Probe consumed held,
@@ -472,13 +471,14 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                         title="What the fuel probe recorded going in, for the fuellings the pump recorded">
                       {r.probeFilled != null ? `${fmt(r.probeFilled)} L` : "-"}
                     </td>
-                    <RefillLevelCell r={r} which="fuelAfter" label="Fuel after" />
-                    {/* Live from the probe, as Maintenance shows it: "320 L · 45%".
-                        The Need column went 2026-11-19 (operator); after Fuel after
-                        since 2026-11-19 (operator). */}
-                    <td className={r.fuelNow != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel now"
-                        title={r.fuelNow != null ? "In the tank now, from the fuel probe" : "No fuel probe reading for this machine"}>
-                      {r.fuelNow != null ? `${fmt(r.fuelNow)} L${r.fuelNowPct != null ? ` · ${Math.round(r.fuelNowPct)}%` : ""}` : "-"}
+                    {/* Fuel before + Issued (lib/factoryFuel withFuelAfterSum, operator
+                        2026-11-26). The Fuel now column went the same day (operator). */}
+                    <td className={r.fuelAfter != null ? "dr-num" : "dr-num dr-num--zero"} data-label="Fuel after"
+                        title={r.fuelAfterSum
+                          ? `Fuel before ${fmt(r.fuelAfterSum.before)} L + issued ${fmt(r.fuelAfterSum.issued)} L on ${fmtDay(r.fuelAfterSum.day)} (${r.fuelAfterSum.fuellings} fuelling${r.fuelAfterSum.fuellings === 1 ? "" : "s"}, both shifts)`
+                          : fuelBeforeShown(r) == null ? "No Fuel before to add the issued fuel to"
+                          : `Nothing issued at the pump on ${fmtDay(fuelBeforeShown(r).day)}, the day of the Fuel before`}>
+                      {r.fuelAfter != null ? `${fmt(r.fuelAfter)} L` : "-"}
                     </td>
                     {/* Burnt over the planned work: start − end + issued (lib/factoryFuel
                         withWorkConsumption, operator 2026-11-23); since the latest
@@ -493,7 +493,7 @@ function MachinesSection({ rows, selected, onSelect, rangePicker, deptPicker }) 
                   </tr>
                 );
               })}
-              {sorted.length === 0 && <tr><td colSpan={15} className="dr-grid__empty">No machines match.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={14} className="dr-grid__empty">No machines match.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -522,6 +522,12 @@ function consumedTitle(r) {
     const endWords = w.open ? "now"
       : w.gap ? `when the tracker came back (${fmtFillWhen.format(w.endAt)}; it was silent as the last shift ended)`
       : `at the end of the last shift (${fmtFillWhen.format(w.endAt)})`;
+    if (w.perShift) {
+      // Shift by shift, added up (operator 2026-11-26): each shift's start − end + what was issued in it.
+      const parts = w.perShift.filter((s) => s.used != null)
+        .map((s) => `${fmtFillWhen.format(Date.parse(s.start))}: ${fmt(s.startL)} − ${fmt(s.endL)} + ${fmt(s.issued)} = ${fmt(s.used)} L`);
+      return `Fuel used shift by shift, from the fuel probe (tank at the start − tank at the end + litres issued in that shift), added up: ${parts.join("; ")}. Total ${fmt(r.consumed)} L${w.missing ? `; ${w.missing} shift${w.missing === 1 ? "" : "s"} without a figure left out` : ""}.${w.open ? " The last shift is still running, so it counts to now." : w.gap ? " The tracker was silent as the last shift ended, so its end is the first reading back." : ""}`;
+    }
     return `Fuel used over the planned work, from the fuel probe: ${fmt(w.startL)} L in the first 10 minutes of work (${fmtFillWhen.format(w.startAt)}) − ${fmt(w.endL)} L ${endWords} + ${fmt(w.issued)} L issued at the pump in between${w.fuellings ? ` (${w.fuellings} fuelling${w.fuellings === 1 ? "" : "s"})` : ""} = ${fmt(r.consumed)} L.`;
   }
   if (r.workWhy === "negative") {
@@ -573,6 +579,17 @@ function probeUsedTitle(u) {
   return `Fuel the standard rate allows since the latest refill${u.open ? ", so far" : ""}: ${sum} = ${fmt(u.litres)} L. The run is the meter now (or after the refill) less Odometer before.`;
 }
 
+const eatClock = (iso) => new Date(Date.parse(iso) + 3 * 3_600_000).toISOString().slice(11, 16);
+/**
+ * Fuel before from the ten minutes before a shift (lib/factoryFuel
+ * withFuelBeforeShift, 2026-11-25): before the work began, or before the
+ * refill when one came first.
+ */
+const beforeTitle = (b, what) =>
+  `Fuel before ${what}: the tank over the 10 minutes before ${b.by === "refill" ? "the refill" : "the work began"}, `
+  + `${eatClock(b.at)} on ${fmtDay(b.day)}, from the fuel probe`
+  + (b.readAt ? `. The tracker sent nothing in those 10 minutes, so its last reading before, at ${eatClock(b.readAt)}` : "");
+
 /** Fuel before's hover while the machine waits for its refill. */
 const waitingTitle = (w) => (w.source === "opening"
   ? `No refill on ${fmtDay(w.day)}: the tank at the start of that day, from the fuel probe. The day's first refill then gives its own before reading`
@@ -584,6 +601,13 @@ const waitingTitle = (w) => (w.source === "opening"
 function RefillLevelCell({ r, which, label }) {
   // Before the day's planned work (lib/factoryFuel withFuelBeforeShift).
   const shift = which === "fuelBefore" ? r.fuelBeforeShift : null;
+  if (shift?.before) {
+    return (
+      <td className="dr-num" data-label={label} title={beforeTitle(shift, "its first planned shift")}>
+        {fmt(shift.litres)} L
+      </td>
+    );
+  }
   if (shift) {
     const at = new Date(Date.parse(shift.at) + 3 * 3_600_000).toISOString().slice(11, 16);
     const pump = r.lastRefill?.day === shift.day ? r.lastRefill.fuelBefore : null;
@@ -740,7 +764,7 @@ function FillCheck({ m }) {
               <tr>
                 <th>Date</th>
                 <th className="r">Actual fill</th>
-                <th className="r">Probe refill</th>
+                <th className="r" title="The tank over the 10 minutes after each refill less the 10 minutes before it, by the fuel probe">Probe refill</th>
                 <th className="r">Variance</th>
               </tr>
             </thead>
@@ -815,7 +839,10 @@ function Refills({ m, from, to }) {
             </tr>
             <tr>
               <th scope="row">Fuel after refill</th>
-              <td className="r" title={levelSource(r.fuelAfter)}>{r.fuelAfter ? `${fmt(r.fuelAfter.litres)} L` : "-"}</td>
+              {/* Fuel before + issued (operator 2026-11-26), as the table's Fuel after */}
+              <td className="r" title={r.fuelBefore && r.issued != null ? `Fuel before ${fmt(r.fuelBefore.litres)} L + issued ${fmt(r.issued)} L` : "Needs both the fuel before and the issued figure"}>
+                {r.fuelBefore && r.issued != null ? `${fmt(Math.round((r.fuelBefore.litres + r.issued) * 100) / 100)} L` : "-"}
+              </td>
             </tr>
             <tr>
               <th scope="row">Consumed</th>
@@ -959,6 +986,75 @@ function plannedLead(m) {
   return { label: "Planned", value: fmt(m.planned), unit: `L${full ? ` + ${full}` : ""}` };
 }
 
+/** Probe filled in words: where its two readings came from. */
+const probeFilledTitle = (pf) => (pf?.source !== "after-ten" ? "The fuel probe's recorded fill"
+  : `The fuel probe: the tank over the 10 minutes after the refill less the 10 minutes before it${pf.fallback ? " (the tracker sent nothing in one of them, so the nearest readings within 30 minutes)" : ""}`);
+
+/** A shift's fuellings: the server's (kept once the shift settled) where it sent them, else placed here. */
+const shiftIssuedOf = (c, s) => (c?.fuellingList
+  ? {
+    litres: c.issued, probe: c.probeFilled,
+    fuellings: c.fuellingList.map((f) => ({ id: f.issueId, litres: f.litres, done: true, at: f.at ? Date.parse(f.at) : null, siv: f.siv, probe: f.probeFilledL, probeFill: f.probeFilledL != null ? { source: "after-ten" } : null })),
+  }
+  : s);
+
+/**
+ * What the pump issued in one plan shift and what the probe saw go in
+ * (operator 2026-11-26): each fuelling on the shift it happened in.
+ */
+function ShiftIssued({ s }) {
+  if (!s?.fuellings.length) return <span className="dr-case__sub">Nothing issued in this shift</span>;
+  const done = s.fuellings.filter((f) => f.done);
+  return (
+    <span className="dr-case__sub" title={done.map((f) => [f.siv, f.at != null ? clockOf(new Date(f.at).toISOString()) : null, f.litres != null ? `${fmt(f.litres)} L` : null].filter(Boolean).join(" ")).join("; ") || undefined}>
+      {done.length ? `Issued ${fmt(s.litres)} L` : "Fuelling now"}
+      {done.length === 1 && done[0].at != null ? ` at ${clockOf(new Date(done[0].at).toISOString())}` : done.length > 1 ? ` in ${fmt(done.length)} fuellings` : ""}
+      {done.length === 1 && done[0].siv ? ` (${done[0].siv})` : ""}
+      {s.probe != null && <span title={probeFilledTitle(done.find((f) => f.probeFill)?.probeFill)}>, probe filled {fmt(s.probe)} L</span>}
+    </span>
+  );
+}
+
+/**
+ * One shift's Consumed (operator 2026-11-26: "(fuel start - fuel end) + issued
+ * on the individual shift"), lib/factoryFuel withWorkConsumption; the row's
+ * Consumed is these added up.
+ */
+function ShiftConsumed({ c }) {
+  if (!c) return null;
+  const startWords = c.startBy === "refill" ? "before its refill" : c.startBy === "before" ? "before work began" : c.startBy === "first-ten" ? "in the first 10 minutes of work" : "at the start";
+  const endWords = c.open ? "now" : c.gap ? "when the tracker came back" : "at the end";
+  if (c.used == null) {
+    return (
+      <span className="dr-case__sub" title={c.why === "negative"
+        ? `${fmt(c.startL)} L ${startWords} − ${fmt(c.endL)} L ${endWords} + ${fmt(c.issued)} L issued comes out below nothing: fuel went in that the pump did not record, or the probe misread.`
+        : "No fuel probe reading at the start or the end of this shift."}>
+        Consumed -
+      </span>
+    );
+  }
+  return (
+    <span className="dr-case__sub" title={`From the fuel probe: ${fmt(c.startL)} L ${startWords} (${fmtFillWhen.format(c.startAt)}) − ${fmt(c.endL)} L ${endWords} (${fmtFillWhen.format(c.endAt)}) + ${fmt(c.issued)} L issued in the shift`}>
+      Consumed {fmt(c.used)} L{c.open ? " so far" : ""}
+      <span className="fuel-refill__note"> ({fmt(c.startL)} − {fmt(c.endL)} + {fmt(c.issued)})</span>
+    </span>
+  );
+}
+
+/** One shift's Probe used: its own hours (or km) at the register's standard; the row's is all of them. */
+function ShiftProbeUsed({ c }) {
+  if (!c || (c.run == null && c.rate == null)) return null;
+  if (c.probeUsed == null) {
+    return <span className="dr-case__sub" title={c.rate == null ? "No standard burn rate in the register" : "The tracker counted no hours in this shift"}>Probe used -</span>;
+  }
+  const how = c.runUnit === "km" ? `${fmt(c.run)} km ÷ ${fmt(c.rate)} km/L` : `${fmt(c.run)} h × ${fmt(c.rate)} L/h`;
+  return (
+    <span className="dr-case__sub" title={`The standard burn rate times the ${c.runUnit === "km" ? "kilometres" : "engine hours"} the tracker counted in this shift${c.open ? ", so far" : ""}`}>
+      Probe used {fmt(c.probeUsed)} L<span className="fuel-refill__note"> ({how})</span>
+    </span>
+  );
+}
+
 function MachinePanel({ m, from, to, onClose }) {
   const ref = useRef(null);
   const st = machineState(m);
@@ -989,6 +1085,8 @@ function MachinePanel({ m, from, to, onClose }) {
   const odoUnit = refillMeterUnit(m.basis);
   const odoNow = [m.lastRefill?.trackerNow, m.meterNow].find((x) => x?.value != null && (x.unit ?? "km") === odoUnit) ?? null;
   const lines = [...m.lines].sort((a, b) => b.day.localeCompare(a.day) || (a.shiftNo ?? 1) - (b.shiftNo ?? 1));
+  // Each fuelling on the shift it happened in (lib/factoryFuel issuedByShift), not on the request it was keyed to.
+  const perShift = useMemo(() => issuedByShift(m), [m]);
 
   return (
     <aside className="dr-panel fuel-panel" role="dialog" aria-label={`${m.reference}, fuel details`}>
@@ -1076,15 +1174,30 @@ function MachinePanel({ m, from, to, onClose }) {
                         l.needLitres != null ? `needs about ${fmt(l.needLitres)} L` : null,
                         l.operator && nameCase(l.operator)].filter(Boolean).join(", ")}
                     </span>
+                    {m.beforeByLine?.[l.lineId] && (
+                      <span className="dr-case__sub" title={beforeTitle(m.beforeByLine[l.lineId], `shift ${l.shiftNo ?? 1}`)}>
+                        Fuel before {fmt(m.beforeByLine[l.lineId].litres)} L
+                        {m.beforeByLine[l.lineId].by === "refill" ? ", before its refill" : ", before work began"}
+                        {` (${eatClock(m.beforeByLine[l.lineId].at)})`}
+                      </span>
+                    )}
                     <span className="dr-case__sub fuel-case__plan">
                       {l.planCode}, {planStage(l.planStatus) === "PENDING" ? "pending approval" : sentence(l.planStatus)}
                       {l.requestId ? `, request ${sentence(l.requestStatus ?? "released").toLowerCase()}` : ", no fuel request yet"}
-                      {l.issuedLitres ? `, ${fmt(l.issuedLitres)} L issued` : ""}
                     </span>
+                    <ShiftIssued s={shiftIssuedOf(m.consumedByLine?.[l.lineId], perShift.byLine.get(shiftLineKey(l)))} />
+                    <ShiftConsumed c={m.consumedByLine?.[l.lineId]} />
+                    <ShiftProbeUsed c={m.consumedByLine?.[l.lineId]} />
                   </span>
                 </li>
               ))}
             </ul>
+          )}
+          {perShift.unplaced.length > 0 && (
+            <p className="dr-panel__note">
+              {fmt(perShift.unplaced.length)} fuelling{perShift.unplaced.length === 1 ? "" : "s"} on a day with no shift:{" "}
+              {perShift.unplaced.map((f) => `${f.done ? litres(f.litres) : "fuelling"}${f.at != null ? ` at ${fmtFillWhen.format(f.at)}` : ""}`).join(", ")}
+            </p>
           )}
         </section>
 

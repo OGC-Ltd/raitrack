@@ -35,8 +35,9 @@ import { loadPings } from '../../api/fleetReports';
 import { loadMovementReport, makeReportPdf } from '../../api/reports';
 import { TEMPLATES, loadTemplate, saveTemplate, fgLines, fgCells, fgCsv, finishedGoodsDoc, FG_HEADS, fgState, fgFill, fgColour, FG_COLOURS, FG_FILL, NOT_GEOFENCED } from '../../lib/finishedGoodsReport';
 import { listPlans, getPlan, fileAsBase64, previewSheet, listCustomers, setPlanList, PLAN_LIST_MOVED } from '../../api/planner';
-import { sheetDaysFor, sheetsForReport, sheetOnDays, sheetListed, sheetRunDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList } from '../../lib/plannerReport';
+import { sheetDaysFor, sheetsForReport, sheetOnDays, sheetRunDays, trackersFor, readSpan, actualFor, sheetRow, sheetWords, outcomeWords, plateKey, sheetDays, planForDay, planStopsForList, planStopChoices, stopsPicked } from '../../lib/plannerReport';
 import { kmWords, isKeyed } from '../../lib/plannerActual';
+import { listOf, listView, withList, planList, plansOnList, judgedOnList } from '../../lib/deliveriesLists';
 import { openPlanNext } from '../../lib/planOverlay';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAppActions } from '../../context/AppContext';
@@ -72,6 +73,7 @@ import ChoicePicker from './ChoicePicker';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
 import CheckPicker from './CheckPicker';
+import PlanStopPick from './PlanStopPick';
 
 const DAY = 86_400_000;
 const lastWords = (h) => (h === 1 ? 'Last hour' : `Last ${h} hours`);
@@ -222,10 +224,9 @@ const RETURN_DAYS = 2;
 /** The report's own template (operator, 12 Nov 2026: Van Sales and Finished Goods kept apart; 13 Nov: one
  *  Deliveries tab, the two picked inside it): it opens on that template's group, with no template to pick. */
 const TAB_GROUP = { vanSales: 'Van Sales', finishedGoods: 'Finished Goods' };
-/** Each report's own list on the day (operator, 12 Nov 2026): a vehicle without `list` is FG's, as every list kept before. */
+/** Each report's own list on the day (operator, 12 Nov 2026): a vehicle without `list` is FG's, as every list kept before.
+ *  A unit may be on both, each entry with its own stops (lib/deliveriesLists, operator 2026-11-25). */
 const TAB_LIST = { vanSales: 'vs', finishedGoods: 'fg' };
-const listOf = (v) => (v?.list === 'vs' ? 'vs' : 'fg');
-const tagList = (v, list) => { const { list: _was, ...rest } = v; return list === 'vs' ? { ...rest, list: 'vs' } : rest; }; // eslint-disable-line no-unused-vars
 
 /** The two Deliveries reports, in the order the switch offers them. */
 const REPORT_KINDS = [
@@ -326,7 +327,7 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const tabList = TAB_LIST[fixedTemplate] ?? null;
   const mine = (v) => !tabList || listOf(v) === tabList;
   const fullPlan = dayList.data ?? emptyPlan();
-  const plan = useMemo(() => (tabList ? { ...fullPlan, vehicles: fullPlan.vehicles.filter(mine) } : fullPlan), [fullPlan, tabList]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plan = useMemo(() => (tabList ? listView(fullPlan, tabList) : fullPlan), [fullPlan, tabList]);
   // Every day of a range, for its count and so a range with vehicles on a later day only can run
   const rangeLists = useQueries({ queries: rangeDays.length > 1 ? rangeDays.map((d) => dayQuery(d)) : [] });
   const listedOn = (i) => (rangeLists[i]?.data ? rangeLists[i].data.vehicles.filter(mine).length : null);
@@ -343,22 +344,21 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // A day's list for this tab, as it is now
   const planOn = (d) => {
     const full = qc.getQueryData(['deliveries', 'day', orgId, d]) ?? (d === day ? fullPlan : emptyPlan());
-    return tabList ? { ...full, vehicles: full.vehicles.filter(mine) } : full;
+    return tabList ? listView(full, tabList) : full;
   };
   // Saves go one after another, each the whole list, so the last change is the one kept
   const saving = useRef(Promise.resolve());
   // `failedDay`: a day whose list on screen is not yet on the server. The list is kept as the operator
   // left it (never snapped back to the server's copy) until Try again, or the next change, saves it
   const [saveState, setSaveState] = useState({ busy: 0, error: null, failedDay: null });
-  // `next`: this tab's list for the day; the other tab's vehicles are kept as they are
+  // `next`: this tab's list for the day; the other tab's vehicles are kept as they are, the same unit's
+  // entry there included (lib/deliveriesLists withList)
   const changeOn = (d, next) => {
     const key = ['deliveries', 'day', orgId, d];
     if (!tabList) { saveFullOn(d, next); return; }
-    const others = (qc.getQueryData(key) ?? (d === day ? fullPlan : emptyPlan())).vehicles.filter((v) => !mine(v));
-    saveFullOn(d, { ...next, vehicles: [...others, ...next.vehicles.map((v) => tagList(v, tabList))] });
+    saveFullOn(d, withList(qc.getQueryData(key) ?? (d === day ? fullPlan : emptyPlan()), tabList, next));
   };
   const change = (next, forDay = day) => changeOn(forDay, next);
-  const saveFull = (next) => saveFullOn(day, next);
   // A change that would leave a day with no vehicles asks first, and only then is saved with `clear`
   // (operator, 20 Nov 2026: 18 and 19 Nov were emptied from the range view, a ✕ at a time, and lost)
   const saveFullOn = (forDay, next, { clear = false } = {}) => {
@@ -425,8 +425,9 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const [sheetsRead, setSheets] = useState({ status: 'idle', list: [] });
   // On a tab, the Planner's sheets of its own units: Van Sales units' on VS, the rest on FG, unless the
   // sheet was moved to the other report (operator, 2026-11-21: "swap a planner from FG to VS and vice versa")
-  const groupList = (p) => (units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group === TAB_GROUP.vanSales ? 'vs' : 'fg');
-  const sheetListOf = (p) => p.list ?? groupList(p);
+  const groupOfPlate = (p) => units.find((u) => plateKey(u.plate) === plateKey(p.plate))?.group ?? null;
+  const groupList = (p) => planList({ ...p, list: null }, groupOfPlate);
+  const sheetListOf = (p) => planList(p, groupOfPlate);
   // A report row read from a sheet: the sheet's own list, else its unit's group
   const sheetTab = (g, list = null) => !tabList || (list ?? (g === TAB_GROUP.vanSales ? 'vs' : 'fg')) === tabList;
   const sheets = useMemo(() => (tabList ? { ...sheetsRead, list: sheetsRead.list.filter((p) => sheetListOf(p) === tabList) } : sheetsRead), [sheetsRead, tabList, units]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -476,19 +477,22 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   const ownGroup = (key) => unitOf(key)?.group ?? null;
   const groupOfV = (v) => v.group ?? ownGroup(v.key);
   const addUnit = (u) => {
-    const there = tabList && fullPlan.vehicles.find((v) => v.key === u.key && !mine(v));
-    if (there) {
-      const name = tabList === 'vs' ? 'Finished Goods' : 'Van Sales';
-      setAssign({ plate: u.plate, icon: 'ti-arrows-exchange', words: `${u.plate} is on the ${name} list for ${dayWords(day)}. Move it to this list?`, yes: 'Move it here',
-        go: () => { saveFull({ ...fullPlan, vehicles: fullPlan.vehicles.map((v) => (v.key === u.key ? tagList(v, tabList) : v)) }); setFind(''); } });
-      return;
-    }
     const put = () => {
       const next = addVehicle(plan, u);
       change(group && group !== u.group ? setVehicleGroup(next, u.key, group) : next);
       setJustAdded(`${day}|${u.key}`); setFind('');
       takePlannerStops(u.key, u.plate);                   // its Planner plan's geofences, ticked
     };
+    // On the other report's list too (operator, 2026-11-25): that entry keeps its own stops and run there;
+    // this report judges the unit only on the stops added here
+    const there = tabList && fullPlan.vehicles.some((v) => v.key === u.key && !mine(v));
+    if (there) {
+      const name = tabList === 'vs' ? 'Finished Goods' : 'Van Sales';
+      const here = tabList === 'vs' ? 'Van Sales' : 'Finished Goods';
+      setAssign({ plate: u.plate, icon: 'ti-arrows-exchange', yes: `Add to ${here}`, go: put,
+        words: `${u.plate} is on the ${name} list for ${dayWords(day)}, and stays there with its own stops. Add it to ${here} too? Here it is judged only on the stops you add for ${here}.` });
+      return;
+    }
     if (group && u.group && group !== u.group && !plan.vehicles.some((v) => v.key === u.key)) {
       setAssign({ plate: u.plate, icon: 'ti-users-group', words: `${u.plate} belongs to ${u.group}. Assign it to ${group} anyway?`, yes: `Assign to ${group}`, go: put });
     } else put();
@@ -605,17 +609,34 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
   // added point is. `fromPlanner`: what it did, by vehicle
   const [fromPlanner, setFromPlanner] = useState({});
   const tell = (key, words, warn = false) => setFromPlanner((m) => ({ ...m, [key]: words ? { words, warn } : null }));
+  // The other report's plan, its stops to pick some of for this list (PlanStopPick), by vehicle
+  const [picking, setPicking] = useState({});
+  const pickOn = (key, x) => setPicking((m) => ({ ...m, [key]: x }));
   const takePlannerStops = async (key, plate, forDay = day) => {
     if (!orgId || !canSheets) return;
     tell(key, 'Looking for its plan in the Planner…');
+    pickOn(key, null);
     try {
       const d = sheetDays(dayStart(forDay), dayStart(forDay) + DAY - 1, fleetDay);
-      const p = planForDay(await listPlans(orgId, d.from, d.to), plate, forDay, dayStart);
-      if (!p) { tell(key, `No plan for ${plate} on ${dayWords(forDay)} in the Planner`); return; }
-      const [full, fc] = await Promise.all([getPlan(orgId, p.id), zones.fc ? Promise.resolve(zones.fc) : loadZones(orgId)]);
+      // Only a plan read on this report: a Van Sales itinerary never ticks its stops onto Finished Goods
+      const all = await listPlans(orgId, d.from, d.to);
+      const p = planForDay(tabList ? plansOnList(all, tabList, groupOfPlate) : all, plate, forDay, dayStart);
+      const other = tabList && !p ? planForDay(plansOnList(all, tabList === 'vs' ? 'fg' : 'vs', groupOfPlate), plate, forDay, dayStart) : null;
+      if (!p && !other) { tell(key, `No ${tabList ? `${TAB_GROUP[fixedTemplate]} ` : ''}plan for ${plate} on ${dayWords(forDay)} in the Planner`); return; }
+      const [full, fc] = await Promise.all([getPlan(orgId, (p ?? other).id), zones.fc ? Promise.resolve(zones.fc) : loadZones(orgId)]);
       const pickable = new Set(customersIn(fc, findStorages(fc)).map((c) => c.name));
-      const { names, pins } = planStopsForList(full, fc, pickable, FENCE_RADIUS_M);
       const what = full.source === 'itinerary' ? 'Wialon itinerary' : 'delivery sheet';
+      if (other) {
+        // Only the other report's plan (operator, 2026-11-25: a VS unit on FG for 2 of its 11 routes): its
+        // stops offered one by one, none ticked; the other list keeps its own whatever is picked here
+        const choices = planStopChoices(full, fc, pickable, FENCE_RADIUS_M);
+        const from = tabList === 'vs' ? TAB_GROUP.finishedGoods : TAB_GROUP.vanSales;
+        if (!choices.length) { tell(key, `No ${TAB_GROUP[fixedTemplate]} plan for ${plate} on ${dayWords(forDay)}, and its ${from} ${what} has no stops with a place`, true); return; }
+        tell(key, `No ${TAB_GROUP[fixedTemplate]} plan for ${plate} on ${dayWords(forDay)}: pick its stops from its ${from} ${what} below`);
+        pickOn(key, { day: forDay, from, what, planDay: dayWords(full.planDate), choices });
+        return;
+      }
+      const { names, pins } = planStopsForList(full, fc, pickable, FENCE_RADIUS_M);
       if (!names.length && !pins.length) { tell(key, `The Planner’s ${what} for ${plate} has no stops with a place`, true); return; }
       const r = await fenceStops(key, pins, names, forDay);
       const ticked = names.length + pins.length - r.kept - r.unnamed;
@@ -624,6 +645,24 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
       tell(key, words.join('; '), Boolean(r.kept || r.unnamed));
     } catch (err) {
       tell(key, `The Planner’s stops could not be read: ${err?.message ?? err}`, true);
+    }
+  };
+  // The stops picked from the other report's plan, on this list's entry only
+  const addPicked = async (key, keys) => {
+    const x = picking[key];
+    if (!x) return;
+    const { names, pins } = stopsPicked(x.choices, keys);
+    pickOn(key, { ...x, busy: true });
+    try {
+      const r = await fenceStops(key, pins, names, x.day);
+      const added = names.length + pins.length - r.kept - r.unnamed;
+      const words = [`${added} stop${added === 1 ? '' : 's'} added from its ${x.from} ${x.what}; ${x.from} keeps all ${x.choices.length}`];
+      if (fencedWords(r)) words.push(fencedWords(r));
+      tell(key, words.join('; '), Boolean(r.kept || r.unnamed));
+      pickOn(key, null);
+    } catch (err) {
+      tell(key, `The stops could not be added: ${err?.message ?? err}`, true);
+      pickOn(key, { ...x, busy: false });
     }
   };
   const removePins = (key, pins, forDay = day) => {
@@ -759,16 +798,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
         return { ...row, group: unit?.group ?? null, ownGroup: unit?.group ?? null, remake: { plan: p, actual, opts } };
       });
       // Only the sheets this report's days ran (lib/plannerReport sheetOnDays): no earlier day carried forward
-      // `listed`: its unit is on this report's list for the sheet's own day, never another day of the range
-      const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay))
-        .map((r) => ({ ...r, listed: sheetListed(r, r.remake.plan, marksOf(r.remake.plan), runs, fleetDay) }));
+      const sheetRows = sheetRowsAll.filter((r) => sheetOnDays(r, marksOf(r.remake.plan), reportDays, fleetDay));
       // A vehicle on a kept sheet is the sheet's row: not checked again from the list (on a range, that day's list).
-      // Only a sheet this report shows, and on a range only on the sheet's own day: KDM 138L's 13 Nov Van Sales
-      // itinerary neither replaces nor hides its 11 Nov Finished Goods line (operator, 13 Nov 2026)
+      // Only a sheet read on this report, and on a range only on the sheet's own day: a Van Sales itinerary never
+      // stands in for the unit's Finished Goods line, which is judged on its own stops (operator, 2026-11-25)
       const planned = runs.flatMap((run) => {
-        const onSheets = new Set(sheetRows.filter((r) => (r.listed || sheetTab(r.group, r.remake.plan?.list))
-          && (!multi || sheetRunDays(r, r.remake.plan, marksOf(r.remake.plan), fleetDay).has(run.day))).map((r) => plateKey(r.plate)));
-        return run.vehicles.filter((v) => !onSheets.has(plateKey(v.plate)))
+        const onSheets = sheetRows.filter((r) => sheetTab(r.group, r.remake.plan?.list)
+          && (!multi || sheetRunDays(r, r.remake.plan, marksOf(r.remake.plan), fleetDay).has(run.day))).map((r) => r.plate);
+        return judgedOnList(run.vehicles, onSheets)
           .map((v) => ({ ...v, vehicleIds: unitOf(v.key)?.vehicles.map((x) => x.vehicleId) ?? v.vehicleIds, run }));
       });
       const idsOf = (list) => [...new Set(list.flatMap((v) => v.vehicleIds))];
@@ -820,13 +857,13 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
     if (!r.remake) return r;
     const latest = qc.getQueryData(['planner', 'plan', orgId, r.remake.plan.id]) ?? r.remake.plan;
     return { ...sheetRow(r.remake.plan, r.remake.actual, { ...r.remake.opts, marks: marksOf(latest) }),
-      group: r.group, ownGroup: r.ownGroup, remake: r.remake, listed: r.listed };
+      group: r.group, ownGroup: r.ownGroup, remake: r.remake };
   }) } : null), [ranRaw, planTick, qc, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
   // The rows as the PDF, JPEG and CSV print them: a typed count over the report's
   // On a tab every vehicle on its list is reported, whatever its group (operator, 12 Nov 2026: "all
   // should appear in the report"); its Planner sheets by their units' group
-  // A sheet whose unit is on this tab's list stands in for it here, so the unit is never lost
-  const keepRow = (r) => (r.remake ? (r.listed || sheetTab(r.group, r.remake.plan?.list)) : true)
+  // A sheet is shown only on the report it is read on: the unit's line on this tab's list is its own row
+  const keepRow = (r) => (r.remake ? sheetTab(r.group, r.remake.plan?.list) : true)
     && (group == null || r.group === group || (tabList != null && group === TAB_GROUP[fixedTemplate]));
   const done = useMemo(() => (ran ? { ...ran, rows: ran.rows.filter(keepRow).map((r) => {
     const t = readOrders(typed[r.plate]);
@@ -1206,6 +1243,14 @@ export default function DeliveriesReport({ orgId, vehicles, orgCode, companyName
                           <i className="ti ti-calendar-time" aria-hidden="true" /> From the Planner
                         </button>
                       </span>
+                    )}
+                    {picking[v.key] && picking[v.key].day === v.day && (
+                      <div className="dlv-roster__wide dlv-roster__note">
+                        <PlanStopPick plate={v.plate} from={picking[v.key].from} here={TAB_GROUP[fixedTemplate]} what={picking[v.key].what}
+                                      day={picking[v.key].planDay} choices={picking[v.key].choices} busy={Boolean(picking[v.key].busy)}
+                                      has={(c) => (c.name ? v.customers.includes(c.name) : (v.pins ?? []).some((p) => pinCode(p) === pinCode(c.pin)))}
+                                      onAdd={(keys) => addPicked(v.key, keys)} onClose={() => pickOn(v.key, null)} />
+                      </div>
                     )}
                     {v.pins?.length > 0 && (
                       // Points listed before stops were fenced, or whose fence could not be drawn

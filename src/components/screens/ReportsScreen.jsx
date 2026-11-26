@@ -16,19 +16,20 @@
  * large fleet, and a half-chosen period should not start that.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDrawnRows } from '../../hooks/useDrawnRows';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { useCompanies } from '../../context/AppContext';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
-import { loadHarshEvents, loadDashcamAlarms, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings, DASHCAM_DAYS } from '../../api/fleetReports';
+import { loadConductPeriod, loadOverspeeds, loadDistances, loadPeakTimes, loadDispatchRuns, loadPings } from '../../api/fleetReports';
 import { reportGroupsFor, scopeUnits } from '../../lib/fleetGroups';
 import {
   presetRange, nightWindows, behaviourRows, cornerAsHarsh, overspeedRows, overspeedEvents, nightRows, utilisationRows, sections, RATED_SECTIONS,
-  machineKind, machineryRows, machineWindows, MACHINE_SECTIONS,
+  machineKind, machineryRowsSliced, machineWindows, MACHINE_SECTIONS,
   NIGHT, shiftPeriod, periodWords as periodText, fleetDay, dayStart, toLocalInput, fromLocalInput,
 } from '../../lib/fleetReports';
 import { addDays } from '../../lib/dayRange';
-import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, noDispatchDriver, noDispatchKey, dashcamFromWords, dashcamWindowWords, CORNER_SKIPPED_WORDS, CORNER_MAX_MS } from '../../lib/reportTables';
+import { REPORTS, csvTable, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, conductMatch, noDispatchDriver, noDispatchKey, dashcamReachWords, dashcamWindowWords, CORNER_SKIPPED_WORDS, CORNER_MAX_MS } from '../../lib/reportTables';
 import { reportHtml } from '../../lib/reportLetterhead';
 import { saveLetterheadPdf, saveLetterheadJpeg, letterheadLogos } from '../../api/letterheadPdf';
 import FuelUsageReport from './FuelUsageReport';
@@ -37,12 +38,13 @@ import { downloadTableCsv } from '../../utils/tableExport';
 import { docCsv, docSlug } from '../../lib/docCsv';
 import TableToolbar from '../body/TableToolbar';
 import EmptyNote from '../shared/EmptyNote';
+import ConductStrip from './ConductStrip';
 import { IncidentDialog, LoggedIncidents } from './OperatorIncidents';
 import { upsert, remove } from '../../lib/operatorLog';
 import * as conductApi from '../../api/driverConduct';
 import { moveBrowserFollowUp } from '../../lib/conductMove';
 import { ActionDialog, FollowUpPanel } from './FollowUp';
-import { casesFromRun, periodCases, ACTIONS as FOLLOW_UP_ACTIONS } from '../../lib/followUp';
+import { casesFromRun, periodCases, ACTIONS as FOLLOW_UP_ACTIONS, SERVER_CASES_MAX } from '../../lib/followUp';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { loadEndOfShiftDoc, downloadEditedEndOfShift, makeEditedEndOfShift } from '../../api/endOfShiftReport';
@@ -92,6 +94,8 @@ import '../body/SensorPanel.css';
 import './FuelReportScreen.css';
 import './ReportsScreen.css';
 import './OperatorIncidents.css';
+// The Driver conduct tables, on the Drivers roster's grid (Hallmark redesign, 25 Nov 2026)
+import './DriverConduct.css';
 
 const DAY = 86_400_000;
 /** One unit's overspeeds, each on its own row, under its totals. */
@@ -114,6 +118,15 @@ function OverspeedEvents({ events, unit }) {
       </table>
     </section>
   );
+}
+
+/** "Reading harsh driving, day 4 of 31." for a step of a run, or what it is doing. */
+const stepWords = (l) => (l.note ? `${l.note}.` : l.total ? `${l.words} ${Math.min(l.done + 1, l.total)} of ${l.total}.` : `${l.words ?? 'Starting'}…`);
+/** How far a run has got, across its lines. */
+function progressOf(run) {
+  const ls = run.lines ? Object.values(run.lines) : [run];
+  const total = ls.reduce((n, l) => n + (l.total || 0), 0);
+  return total ? ls.reduce((n, l) => n + Math.min(l.done || 0, l.total || 0), 0) / total : null;
 }
 
 /** Driver conduct's Follow-up in the Excel file: a pick list of the actions, any words taken too. */
@@ -1454,6 +1467,70 @@ function ReportLegend({ legend }) {
  * tab is in view; a report on a tab not yet opened is not made, so opening
  * Movements does not read every machine's day behind it.
  */
+/**
+ * The report table's rows. Drawn again only when the report or its columns
+ * change, not on every live update of the page: re-drawing a fleet's 634 rows
+ * on each one held the page for ~200 ms every few seconds (25 Nov 2026).
+ * `upTo`: how many rows are drawn so far (hooks/useDrawnRows).
+ */
+const ReportRows = memo(function ReportRows({ secs, def, ctx, columns, shown, reportKey: key, conduct, upTo, onCase }) {
+  let drawn = 0;
+  return (
+    <>
+    {secs.map((s) => (
+      <Fragment key={s.name ?? 'all'}>
+        {s.name && (
+          <tr className="rpt-group">
+            <th colSpan={shown.length} scope="rowgroup">
+              <span className="rpt-group__name">{s.name}</span>
+              <span className="rpt-group__meta">{def.countWords ? def.countWords(s.rows) : `${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'}`} · {def.sumWords(s.total)}</span>
+            </th>
+          </tr>
+        )}
+        {s.rows.map((r) => {
+          if (drawn++ >= upTo) return null;
+          const cells = def.cells(r, ctx);
+          const noDriver = conduct && noDispatchDriver(r);
+          return (
+            <tr key={r.key ?? r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}${def.rowTone?.(r) ? ` rpt-row--${def.rowTone(r)}` : ''}`}
+                style={def.rowDepth ? { '--rpt-depth': def.rowDepth(r) } : undefined}>
+              {shown.map((i) => {
+                const c = cells[i];
+                if (i === 0) {
+                  return (
+                    <td key={i} className="rpt-unit">
+                      {r.unit.plate}
+                      {key === 'utilisation' && overStandard(r) && <span className="rpt-tag rpt-tag--warn" title="More than 15% over the standard on the register">Over standard</span>}
+                      {r.suspect && <span className="rpt-tag rpt-tag--warn" title="More than 100 harsh events a day, far more than a driver makes: most likely a faulty sensor">Check sensor</span>}
+                    </td>
+                  );
+                }
+                if (key === 'behaviour' && columns[i] === 'Follow-up') {
+                  return (
+                    <td key={i}>
+                      {c === 'No case' ? <span className="rpt-fu-none">No case</span> : (
+                        <button type="button" className={`rpt-fu rpt-fu--${c === 'Overdue' ? 'overdue' : c === 'Pending' ? 'pending' : 'done'}`}
+                                onClick={() => onCase(r.unit.key)}
+                                title={c === 'Action taken' ? 'See or change the action taken' : 'Record the action taken'}>{c}</button>
+                      )}
+                    </td>
+                  );
+                }
+                const cls = [isFigure(def, columns, i) && 'rpt-num',
+                  conduct && columns[i] === 'Driver' && 'rpt-driver',
+                  conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero',
+      conduct && columns[i] === 'Total' && 'conduct-total'].filter(Boolean).join(' ');
+                return <td key={i} className={cls || undefined}>{c}</td>;
+              })}
+            </tr>
+          );
+        })}
+      </Fragment>
+    ))}
+    </>
+  );
+});
+
 export default function ReportsScreen({ only = null, active = true } = {}) {
   const { vehicles = [], orgId } = useFleetLiveShared();
   const { activeCompany } = useCompanies();
@@ -1479,12 +1556,20 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const siteVehicles = useMemo(() => vehicles.filter(sitePick.keepVehicle), [vehicles, sitePick]);
   // One unit, on the reports that take it (UNIT_REPORTS); null = every unit in the group
   const [unit, setUnit] = useState(null);
+  // Driver conduct: narrow the report to a vehicle or a driver (operator, 25 Nov 2026)
+  const [find, setFind] = useState('');
   const [night, setNight] = useState(NIGHT);
   const [rate, setRate] = useState(DEFAULT_RATE);
   // Machinery: a row per hour (the default: operator, 16 Nov 2026, "an hourly report") or per day
   const [per, setPer] = useState('hour');
   const [run, setRun] = useState({ status: 'idle' });
   const runId = useRef(0);
+  // The run's requests: a new run, a cancel, another report or organisation, or
+  // leaving the page stops them, so a month's dashcam days do not keep going
+  // behind the next run (review of #157, 25 Nov 2026)
+  const runCtl = useRef(null);
+  const stopRun = () => { runCtl.current?.abort(); runCtl.current = null; };
+  useEffect(() => stopRun, []);
 
   // Incidents operators logged by hand (lib/operatorLog), kept in this browser.
   const me = useAuth().user;
@@ -1496,16 +1581,20 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // window comes back into view and every minute, for other machines' work.
   const [entries, setEntries] = useState([]);
   const [cases, setCases] = useState([]);
+  // The cases have been read from the server: until then a run's cases are not
+  // sent, since a day the dashcam did not reach takes its counts from them
+  const [casesRead, setCasesRead] = useState(false);
   const [storeError, setStoreError] = useState(null);
   const [dialog, setDialog] = useState(null);   // null | { entry? }
   const [acting, setActing] = useState(null);   // the case id in the action form
   const [now, setNow] = useState(() => Date.now());
   const failed = (what) => (err) => setStoreError(`${what}: ${err?.message ?? err}`);
   useEffect(() => {
+    setCasesRead(false);
     if (!orgId) { setEntries([]); setCases([]); return undefined; }
     let live = true;
     const read = () => Promise.all([conductApi.listCases(orgId), conductApi.listIncidents(orgId)])
-      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setStoreError(null); } })
+      .then(([c, e]) => { if (live) { setCases(c); setEntries(e); setCasesRead(true); setStoreError(null); } })
       .catch((err) => { if (live) failed('The follow-up could not be read')(err); });
     moveBrowserFollowUp(orgId).catch((err) => { if (live) failed('What this browser kept could not be moved to the server; it is kept here and tried again next time')(err); })
       .finally(read);
@@ -1526,9 +1615,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const importEntries = (list) => {
     conductApi.importIncidents(orgId, list).then((r) => setEntries(r.entries)).catch(failed('The incidents could not be imported'));
   };
-  const importCaseList = (list) => {
+  // Kept the same between renders, so the Follow-up table is not drawn again on every live tick
+  const importCaseList = useCallback((list) => {
     conductApi.importCases(orgId, list).then((r) => setCases(r.cases)).catch(failed('The follow-up could not be imported'));
-  };
+  }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openCase = useCallback((c) => setActing(c.id), []);
   const saveAction = (id, a) => {
     conductApi.recordAction(orgId, id, a)
       .then((c) => setCases((l) => l.map((x) => (x.id === c.id ? c : x))))
@@ -1538,12 +1629,15 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // A different organisation starts over: its groups and units differ.
   useEffect(() => {
     runId.current += 1;
+    stopRun();
     setRun({ status: 'idle' });
     setGroup(null);
     setUnit(null);
   }, [orgId]);
 
-  const reset = () => { runId.current += 1; setRun({ status: 'idle' }); };
+  const reset = () => { runId.current += 1; stopRun(); setRun({ status: 'idle' }); };
+  // Stopped by hand: not idle, which would make the report's default period again
+  const cancel = () => { runId.current += 1; stopRun(); setRun({ status: 'cancelled' }); };
   // Picked in the sidebar's Reports tree: the new report starts on its own period.
   // So does a newly loaded organisation, whose period may be its own.
   const showing = useRef(`${key}|${orgCode}`);
@@ -1595,7 +1689,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
     const nt = over.night ?? night;
     if (problemFor(sp)) return;
     const id = ++runId.current;
-    const live = () => id === runId.current;
+    stopRun();
+    const ctl = new AbortController();
+    runCtl.current = ctl;
+    const { signal } = ctl;
+    const live = () => id === runId.current && !signal.aborted;
     const scoped0 = scopeUnits(siteVehicles, groups, group);
     // Machinery: the excavators and dozers alone
     const scoped = key === 'machinery' ? { ...scoped0, units: scoped0.units.filter(machineKind) } : scoped0;
@@ -1610,34 +1708,42 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       return;
     }
     const step = (words) => ({ done, total }) => { if (live()) setRun({ status: 'loading', words, done, total }); };
+    // Driver conduct reads two things a day at a time: a line each, so neither count jumps back
+    const line = (name, words) => ({ done, total, note }) => {
+      if (live()) setRun((r) => ({ status: 'loading', lines: { ...(r.status === 'loading' ? r.lines : null), [name]: { words, done, total, note } } }));
+    };
     setRun({ status: 'loading', words: 'Starting', done: 0, total: 0 });
     try {
       let rows;
       let failed = 0;
       if (key === 'behaviour') {
         const cornerSkipped = ctx.to - ctx.from > CORNER_MAX_MS;
-        const [h, cam, turns, runs] = await Promise.all([
-          loadHarshEvents({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading harsh driving, day') }),
-          loadDashcamAlarms({ orgId, from: ctx.from, to: ctx.to, onProgress: step('Reading the dashcam alarms, day') }),
-          // Harsh cornering is not on the feed: the movement events, a day at a time
+        const [{ harsh: h, cam }, turns, runs] = await Promise.all([
+          // The days built on the server in one request, the rest live (api/fleetReports loadConductPeriod)
+          loadConductPeriod({ orgId, from: ctx.from, to: ctx.to, signal,
+            onBuilt: line('built', 'Reading the days already built'),
+            onHarsh: line('harsh', 'Reading harsh driving, day'),
+            onDashcam: line('dashcam', 'Reading the dashcam alarms, day') }),
           // Harsh cornering is not on the feed: the movement events, for a period of a day at most.
           // Over a day it is not asked for: a day at a time was a heavy query per day that used up the
           // server's database connections (#155, reverted 24 Nov 2026), until the server reads it cheaply.
           cornerSkipped ? Promise.resolve(null) : loadMovementEvents({ orgId, from: ctx.from, to: ctx.to, kinds: ['cornering'] }).catch(() => null),
           // The dispatch runs over the period, to name the driver at the time of each incident
-          loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to }),
+          loadDispatchRuns({ orgId, from: ctx.from, to: ctx.to, signal }),
         ]);
+        if (!live()) return;
         ctx.cornerSkipped = cornerSkipped;
         ctx.cornerFailed = !cornerSkipped && turns == null;
-        // The dashcam reaches back DASHCAM_DAYS: the days before count only what operators logged
-        const camFrom = Date.now() - DASHCAM_DAYS * DAY;
-        ctx.dashcamFrom = ctx.from < camFrom ? camFrom : null;
+        // The dashcam reaches back DASHCAM_DAYS from when the reading began: the days before count only what operators logged
+        ctx.dashcamFrom = cam.cameras > 0 && ctx.from < cam.reach ? cam.reach : null;
+        // The stretch its alarms were asked for (null: none of the period), and the parts that came back whole
+        ctx.dashcamWindow = cam.window;
+        ctx.dashcamRead = cam.read;
         ctx.runsFailed = runs == null;
         ctx.dashcams = cam.cameras > 0;
         ctx.dashcamFailed = cam.failed;
         ctx.dashcamDaysFailed = cam.failedDays ?? 0;
         ctx.dashcamUntyped = cam.untyped ?? 0;
-        if (!live()) return;
         // The rows are worked out below, with the operators' entries, so a
         // new entry shows in the report without running it again.
         setRun({ status: 'done', raw: { events: [...h.events, ...cornerAsHarsh(turns?.events)], alarms: cam.alarms, dashcams: ctx.dashcams && !cam.failed, runs },
@@ -1698,7 +1804,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         const vs = units.flatMap((u) => u.vehicles);
         // From 15 minutes early, so the first hour's hour meter has a reading to count from
         const p = await loadPings({ orgId, vehicles: vs, from: ctx.from - 15 * 60_000, to: ctx.to, onProgress: step('Reading each machine’s day') });
-        const made = machineryRows(units, p.pings, windows);
+        if (!live()) return;
+        const made = await machineryRowsSliced(units, p.pings, windows);
         // What the period at the top already says need not be said on every row
         ctx.oneWindow = windows.length <= 1;
         ctx.oneDay = new Set(windows.map((w) => w.day)).size <= 1;
@@ -1718,6 +1825,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       setRun({ status: 'done', rows, secs, ctx, missing, failed, units: units.length });
     } catch (err) {
       if (live()) setRun({ status: 'error', message: err?.message ?? String(err) });
+    } finally {
+      if (runCtl.current === ctl) runCtl.current = null;
     }
   };
 
@@ -1739,28 +1848,41 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   // what operators recorded on cases already there stays.
   // Sent only when what was found changes: the entries are read again every
   // minute, and the same cases need not go to the server each time.
+  // Not until the stored cases are in: a day whose dashcam alarms were not all
+  // read keeps the camera counts the server holds (lib/followUp casesFromRun).
   const sentFound = useRef('');
+  const found = useMemo(() => {
+    if (run.status !== 'done' || !run.raw || !casesRead) return null;
+    return casesFromRun(run.unitList, run.raw.events, run.raw.alarms, {
+      ...run.ctx, dashcams: run.ctx.dashcams, dashcamRead: run.ctx.dashcams ? run.ctx.dashcamRead ?? [] : null,
+      logged: entries, runs: run.raw.runs, stored: cases, storedAll: cases.length < SERVER_CASES_MAX,
+    });
+  }, [run, entries, cases, casesRead]);
   useEffect(() => {
-    if (run.status !== 'done' || !run.raw || !orgId) return;
-    const found = casesFromRun(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
+    if (!found?.length || !orgId) return;
     const sig = `${orgId}:${JSON.stringify(found)}`;
-    if (sig === sentFound.current || !found.length) return;
+    if (sig === sentFound.current) return;
     sentFound.current = sig;
     // The server folds them in, keeping what operators recorded, and answers with every case
     conductApi.sendFound(orgId, found).then(setCases).catch((err) => { sentFound.current = ''; failed('The follow-up cases could not be saved')(err); });
-  }, [run, entries, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [found, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = useMemo(() => {
     if (run.status !== 'done') return null;
     if (!run.raw) return run;
-    const rows = behaviourRows(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
+    const all = behaviourRows(run.unitList, run.raw.events, run.raw.alarms, { ...run.ctx, dashcams: run.raw.dashcams, logged: entries, runs: run.raw.runs });
+    // The search narrows what the page, the stats and the exports read; the
+    // cases sent to the server (`found`) are worked out from the whole run
+    const rows = conductMatch(all, find);
     const inScope = new Set(run.unitList.map((u) => u.key));
     const period = periodCases(cases, run.ctx).filter((c) => inScope.has(c.unitKey));
     const followUp = new Map();
     for (const c of period) followUp.set(c.unitKey, [...(followUp.get(c.unitKey) ?? []), c]);
-    const ctx = { ...run.ctx, followUp, cases: period, allCases: cases, now };
-    return { ...run, ctx, rows, logged: rows.logged, secs: sections(rows, groups?.map((g) => g.name), REPORTS.behaviour.sum) };
-  }, [run, entries, groups, cases, now]);
+    const ctx = { ...run.ctx, followUp, cases: period, allCases: cases, now, find: find.trim() || null };
+    return { ...run, ctx, rows, allRows: all.length, logged: all.logged, secs: sections(rows, groups?.map((g) => g.name), REPORTS.behaviour.sum) };
+  }, [run, entries, groups, cases, now, find]);
+  // A long table is drawn a batch of rows a turn (hooks/useDrawnRows), so the page answers while it is drawn
+  const drawnUpTo = useDrawnRows(done?.rows?.length ?? 0, run);
 
   // The case the report's Follow-up cell opens: the oldest pending, else the latest.
   const openCaseFor = (unitKey) => {
@@ -1775,11 +1897,16 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
   const kpis = conduct
     ? [...allKpis.filter((k) => k.label === 'Total incidents'), ...allKpis.filter((k) => k.label !== 'Total incidents' && k.label !== 'Vehicles')]
     : allKpis;
-  const columns = def.columns(ctx);
+  // Kept from one live update to the next while the report stays the same, so its rows are not drawn again (ReportRows)
+  const columns = useMemo(() => def.columns(ctx), [def, done, span.from, span.to]); // eslint-disable-line react-hooks/exhaustive-deps
   // Type or Driver blank for every vehicle (e.g. all "UNSPECIFIED"): left out.
-  const shown = done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i);
+  const shown = useMemo(() => (done ? shownColumns(def, done.rows, done.ctx) : columns.map((_, i) => i)), [def, done, columns]);
+  const caseFor = useRef(openCaseFor);
+  caseFor.current = openCaseFor;
+  const onCase = useCallback((unitKey) => caseFor.current(unitKey), []);
   // Machinery covers the excavators and dozers alone, so it says so (operator, 16 Nov 2026: "All vehicles" read as every unit)
-  const groupWords = done?.ctx.group ?? (key === 'shiftHours' ? 'Machines on approved work plans' : key === 'machinery' ? 'Excavators and dozers' : groups ? 'All groups' : 'All vehicles');
+  const groupWords = (done?.ctx.group ?? (key === 'shiftHours' ? 'Machines on approved work plans' : key === 'machinery' ? 'Excavators and dozers' : groups ? 'All groups' : 'All vehicles'))
+    + (done?.ctx.find ? `, vehicle or driver matching “${done.ctx.find}”` : '');
   const periodWords = periodText(ctx.from, ctx.to);
   const nightWords = key === 'night' ? `Night hours ${hh((done?.ctx.night ?? night).start)}hrs – ${hh((done?.ctx.night ?? night).end || 24)}hrs` : null;
   const slugOf = (w) => `-${w.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -1884,13 +2011,21 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
       {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} fuelUsage={can('fuel_filling:read') && isPlantFleet(activeCompany?.id)} companyId={activeCompany?.id} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
         : (<>
 
-      <div className={`sp4-header rpt-header${conduct ? ' rpt-header--conduct' : ''}`}>
-        <div className="sp4-header-kpis">
-          {kpis.map((k) => (
-            <Kpi key={k.label} label={k.label} tone={k.tone} value={done ? k.value : <span className="frp-kpi-none">-</span>} />
-          ))}
+      {conduct ? (
+        // The Alerts page's stats cards, read for Driver conduct (operator, 25 Nov 2026)
+        <div className="rpt-conduct-stats dr-tones">
+          <ConductStrip rows={done?.rows} ctx={done?.ctx} status={run.status}
+                        scope={done?.ctx.find ? `matching “${done.ctx.find}”` : 'all vehicles'} />
         </div>
-      </div>
+      ) : (
+        <div className="sp4-header rpt-header">
+          <div className="sp4-header-kpis">
+            {kpis.map((k) => (
+              <Kpi key={k.label} label={k.label} tone={k.tone} value={done ? k.value : <span className="frp-kpi-none">-</span>} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         {/* One field for the period: days on the calendar, hours under it, as Movements has it */}
@@ -1927,10 +2062,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
               )}
               <div className="mvr-hours__foot">
                 {pickingProblem && <span className="rpt-problem" role="status">{pickingProblem}</span>}
+                {/* A run in progress is stopped for the new period (review of #157, 25 Nov 2026) */}
                 <button type="button" className="sp4-submit-btn frp-run"
-                        disabled={run.status === 'loading' || Boolean(pickingProblem)}
+                        disabled={Boolean(pickingProblem)}
                         onClick={() => { close(); applyDays(shownDays); }}>
-                  {run.status === 'loading' ? 'Running…' : 'Run report'}
+                  Run report
                 </button>
               </div>
             </>
@@ -1970,6 +2106,18 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         )}
 
         {key === 'behaviour' && (
+          // The Drivers roster's search field: narrows the table, the stats and the exports
+          <div className="rpt-find" role="search">
+            <svg className="rpt-find__icon" width="13" height="13" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+            </svg>
+            <input className="rpt-find__input" type="search" value={find} onChange={(e) => setFind(e.target.value)}
+                   placeholder="Search vehicle or driver" aria-label="Search vehicle or driver" />
+          </div>
+        )}
+        {key === 'behaviour' && (
           <button type="button" className="sp4-ghost-btn rpt-log" onClick={() => setDialog({})}>Log incident</button>
         )}
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => editor.guard('Make the report again', () => execute())}
@@ -1979,7 +2127,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
       </div>
 
-      <div className="sp4-body rpt-body">
+      <div className={`sp4-body rpt-body${conduct ? ' rpt-body--conduct' : ''}`}>
         {run.status === 'idle' && (
           <EmptyNote icon={<ReportIcon name={def.key} />} title={def.title}>
             Choose the period{groups ? ' and group' : ''}, then press Run report.
@@ -1987,8 +2135,16 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
         )}
         {run.status === 'loading' && (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report"
-                     progress={run.total ? run.done / run.total : null}>
-            {run.total ? `${run.words} ${Math.min(run.done + 1, run.total)} of ${run.total}.` : `${run.words}…`}
+                     progress={progressOf(run)} action={{ label: 'Cancel', onClick: cancel }}>
+            {run.lines
+              ? Object.entries(run.lines).map(([name, l], i) => <Fragment key={name}>{i > 0 && <br />}{stepWords(l)}</Fragment>)
+              : stepWords(run)}
+          </EmptyNote>
+        )}
+        {run.status === 'cancelled' && (
+          <EmptyNote icon="ti-player-stop" title="Report Cancelled"
+                     action={{ label: 'Run report', onClick: () => execute() }}>
+            Nothing more is being read. Run the report again when you are ready.
           </EmptyNote>
         )}
         {run.status === 'error' && (
@@ -2005,12 +2161,13 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                 {def.countWords ? <strong>{def.countWords(done.rows)}</strong> : (
                   <><strong>{done.rows.length.toLocaleString('en-GB')}</strong> vehicle{done.rows.length === 1 ? '' : 's'}</>
                 )}
-                {key === 'utilisation' || key === 'night' ? ` of ${done.units.toLocaleString('en-GB')}` : key === 'machinery' ? ` ran, of ${done.units.toLocaleString('en-GB')}` : ''}
+                {key === 'behaviour' && done.ctx.find ? ` of ${done.allRows.toLocaleString('en-GB')}`
+                  : key === 'utilisation' || key === 'night' ? ` of ${done.units.toLocaleString('en-GB')}` : key === 'machinery' ? ` ran, of ${done.units.toLocaleString('en-GB')}` : ''}
                 <span className="rpt-sub"> · {periodWords} · {groupWords}{done.ctx.unit ? ` · ${done.ctx.unit}` : ''}{nightWords ? ` · ${nightWords}` : ''}</span>
                 {done.failed > 0 && <span className="rpt-warn"> · {done.failed} could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerFailed && <span className="rpt-warn"> · harsh cornering could not be read</span>}
                 {key === 'behaviour' && done.ctx.cornerSkipped && <span className="rpt-warn"> · {CORNER_SKIPPED_WORDS}</span>}
-                {key === 'behaviour' && done.ctx.dashcams && done.ctx.dashcamFrom && <span className="rpt-warn"> · {dashcamFromWords(done.ctx.dashcamFrom)}</span>}
+                {key === 'behaviour' && dashcamReachWords(done.ctx) && <span className="rpt-warn"> · {dashcamReachWords(done.ctx)}</span>}
                 {key === 'behaviour' && done.ctx.dashcamDaysFailed > 0 && <span className="rpt-warn"> · the dashcam alarms of {done.ctx.dashcamDaysFailed} day{done.ctx.dashcamDaysFailed === 1 ? '' : 's'} could not all be read</span>}
                 {key === 'behaviour' && done.ctx.dashcamUntyped > 0 && <span className="rpt-warn"> · {done.ctx.dashcamUntyped.toLocaleString('en-GB')} dashcam alarms had no type from the dashcam system and are not counted</span>}
                 {key === 'behaviour' && done.ctx.runsFailed && <span className="rpt-warn"> · the dispatch runs could not be read; drivers are named only for the run out now</span>}
@@ -2033,10 +2190,17 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
               <PdfPreview state={preview.state} title={`${def.label} report`} edited={editor.edited ? 1 : 0}
                           caption={`${periodWords} · ${groupWords}${done.ctx.unit ? ` · ${done.ctx.unit}` : ''}`} onRetry={preview.retry} onClose={preview.close} />
             )}
-            {!done.rows.length ? (
+            {!done.rows.length && done.ctx.find && done.allRows ? (
+              <EmptyNote icon="ti-search" title="No Match"
+                         action={{ label: 'Clear search', onClick: () => setFind('') }}>
+                No vehicle or driver in this report matches “{done.ctx.find}”.
+              </EmptyNote>
+            ) : !done.rows.length ? (
               <EmptyNote icon="ti-circle-check" title="Nothing to Report">{def.empty}</EmptyNote>
             ) : (
               <div className={`sp4-table-scroll sp4-keep-table rpt-scroll${key === 'overspeed' ? ' rpt-scroll--overspeed' : ''}`}>
+                {/* Driver conduct's table sits in the Drivers roster's box (DriverConduct.css) */}
+                <div className={conduct ? 'conduct-grid' : undefined}>
                 <table className={`sp4-table rpt-table${def.wide ? ' rpt-table--grid' : ''}`}>
                   <thead>
                     <tr>
@@ -2046,56 +2210,11 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
                     </tr>
                   </thead>
                   <tbody>
-                    {done.secs.map((s) => (
-                      <Fragment key={s.name ?? 'all'}>
-                        {s.name && (
-                          <tr className="rpt-group">
-                            <th colSpan={shown.length} scope="rowgroup">
-                              <span className="rpt-group__name">{s.name}</span>
-                              <span className="rpt-group__meta">{def.countWords ? def.countWords(s.rows) : `${s.rows.length} vehicle${s.rows.length === 1 ? '' : 's'}`} · {def.sumWords(s.total)}</span>
-                            </th>
-                          </tr>
-                        )}
-                        {s.rows.map((r) => {
-                          const cells = def.cells(r, done.ctx);
-                          const noDriver = conduct && noDispatchDriver(r);
-                          return (
-                            <tr key={r.key ?? r.unit.key} className={`sp4-tr${r.noData ? ' rpt-row--nodata' : ''}${noDriver ? ' rpt-row--nodriver' : ''}${def.rowTone?.(r) ? ` rpt-row--${def.rowTone(r)}` : ''}`}
-                                style={def.rowDepth ? { '--rpt-depth': def.rowDepth(r) } : undefined}>
-                              {shown.map((i) => {
-                                const c = cells[i];
-                                if (i === 0) {
-                                  return (
-                                    <td key={i} className="rpt-unit">
-                                      {r.unit.plate}
-                                      {key === 'utilisation' && overStandard(r) && <span className="rpt-tag rpt-tag--warn" title="More than 15% over the standard on the register">Over standard</span>}
-                                      {r.suspect && <span className="rpt-tag rpt-tag--warn" title="More than 100 harsh events a day, far more than a driver makes: most likely a faulty sensor">Check sensor</span>}
-                                    </td>
-                                  );
-                                }
-                                if (key === 'behaviour' && columns[i] === 'Follow-up') {
-                                  return (
-                                    <td key={i}>
-                                      {c === 'No case' ? <span className="rpt-fu-none">No case</span> : (
-                                        <button type="button" className={`rpt-fu rpt-fu--${c === 'Overdue' ? 'overdue' : c === 'Pending' ? 'pending' : 'done'}`}
-                                                onClick={() => openCaseFor(r.unit.key)}
-                                                title={c === 'Action taken' ? 'See or change the action taken' : 'Record the action taken'}>{c}</button>
-                                      )}
-                                    </td>
-                                  );
-                                }
-                                const cls = [isFigure(def, columns, i) && 'rpt-num',
-                                  conduct && columns[i] === 'Driver' && 'rpt-driver',
-                                  conduct && isFigure(def, columns, i) && c === '0' && 'rpt-zero'].filter(Boolean).join(' ');
-                                return <td key={i} className={cls || undefined}>{c}</td>;
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </Fragment>
-                    ))}
+                    <ReportRows secs={done.secs} def={def} ctx={done.ctx} columns={columns} shown={shown} reportKey={key}
+                                conduct={conduct} upTo={drawnUpTo} onCase={onCase} />
                   </tbody>
                 </table>
+                </div>
                 {def.legend && <ReportLegend legend={def.legend} />}
                 {key === 'machinery' && (
                   <div className="rpt-missing">
@@ -2124,12 +2243,12 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
 
         {key === 'behaviour' && SHOW_FOLLOW_UP && (
           <FollowUpPanel cases={cases} orgCode={orgCode} now={now} saveFailed={storeError}
-                         onOpen={(c) => setActing(c.id)} onReplace={importCaseList} />
+                         onOpen={openCase} onReplace={importCaseList} find={find} />
         )}
         {key === 'behaviour' && (
           <LoggedIncidents entries={entries} orgCode={orgCode} saveFailed={storeError}
                            onLog={() => setDialog({})} onEdit={(entry) => setDialog({ entry })}
-                           onDelete={dropEntry} onReplace={importEntries} />
+                           onDelete={dropEntry} onReplace={importEntries} find={find} />
         )}
       </div>
 

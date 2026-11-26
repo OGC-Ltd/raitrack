@@ -58,7 +58,7 @@ import { writeFileSync, readFileSync, existsSync } from "node:fs";
 const ORG_ID   = "cmth0avgf0000ukuhkx53kztd";      // WESTSUGAR
 const FENCE    = "Kabras Sugar Factory (West Kenya)";
 const arg      = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
-const API      = arg("--api", process.env.FLEET_API ?? "http://13.247.178.217");
+const API      = arg("--api", process.env.FLEET_API ?? "http://13.244.125.1");
 const KML      = arg("--kml", new URL("./kabras-site.kml", import.meta.url).pathname);
 
 /** Placemark name -> ZONE_STYLE category. Anything unlisted draws grey. */

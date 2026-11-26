@@ -6,7 +6,7 @@
 // Pure: returns the HTML and what the PDF needs to know about it.
 
 import { renderLetterheadHtml, table, cells, tag, esc, ruledLines } from './letterhead';
-import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, noDispatchKey, dashcamFromWords, dashcamWindowWords, CORNER_SKIPPED_WORDS } from './reportTables';
+import { fuelSuspect, RATES, DEFAULT_RATE, isFigure, shownColumns, overStandard, overspeedEventTable, SHOW_FOLLOW_UP, SHOW_FOLLOW_UP_COLUMN, noDispatchDriver, noDispatchKey, dashcamReachWords, dashcamWindowWords, CORNER_SKIPPED_WORDS } from './reportTables';
 import { incidentWords } from './followUp';
 import { OVERSPEED_MIN_SEC } from './fleetReports';
 import { textMm } from './shiftDoc';
@@ -277,7 +277,7 @@ export function reportHtml(def, done, { companyName, orgCode, groupWords, period
     if (done.rows.some((r) => r.suspect)) notes.push('Check sensor: more than 100 harsh accelerations or brakes a day, far more than a driver makes. Most likely a faulty sensor.');
     if (ctx.cornerSkipped) notes.push(CORNER_SKIPPED_WORDS + '.');
     else if (ctx.cornerFailed) notes.push('Harsh cornering could not be read and is not counted.');
-    if (ctx.dashcams && !ctx.dashcamFailed && ctx.dashcamFrom) notes.push(dashcamFromWords(ctx.dashcamFrom) + '.');
+    if (dashcamReachWords(ctx)) notes.push(dashcamReachWords(ctx) + '.');
     if (ctx.dashcamDaysFailed) notes.push(`The dashcam alarms of ${ctx.dashcamDaysFailed} day${ctx.dashcamDaysFailed === 1 ? '' : 's'} could not all be read.`);
     if (ctx.dashcamUntyped) notes.push(`${ctx.dashcamUntyped.toLocaleString('en-GB')} dashcam alarms had no type from the dashcam system and are not counted.`);
     if (ctx.dashcamFailed) notes.push('The dashcam alarms could not be read: no seatbelt, on phone and camera covered count only what operators logged.');

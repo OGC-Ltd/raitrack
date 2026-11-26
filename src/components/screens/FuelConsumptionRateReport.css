@@ -124,3 +124,7 @@
   .sp4-gridbar-tools:has(> .fgr-bar) { flex: 1 1 100%; min-width: 0; margin-left: 0; }
   .fgr-bar { width: 100%; justify-content: flex-start; }
 }
+
+/* Within or Above expected against the unit's target (operator, 2026-11-25): above in red */
+.fcr-morl__expect { white-space: nowrap; }
+.fcr-morl__expect--above { background: #ff6b6b; color: #3b0a0a; font-weight: 600; }
