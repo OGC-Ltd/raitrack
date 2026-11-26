@@ -31,3 +31,12 @@ export function splitDrained(level) {
     thefts,
   };
 }
+
+/**
+ * "Fuel drained" and its value, shown or not on the Analytics page (the Fuel
+ * Consumption & Cost card's rows, and the Drained bars on the fleet and unit
+ * fuel charts). Off from 26 Nov 2026 until the drained figures are verified
+ * (operator: "remove the fuel drains first ... we will look into later").
+ * Suspected theft is unaffected. Set back to true to show them again.
+ */
+export const SHOW_FUEL_DRAINED = false;
