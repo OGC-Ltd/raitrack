@@ -37,7 +37,9 @@ function SheetContent({ vehicleId, onClose }) {
   }
 
   const color = STATUS_COLORS[vehicle.status] || "#22c55e";
-  const speedOk = vehicle.speed <= vehicle.speedLimit;
+  // A generator has no speed: the figure is left blank (lib/vehicleMap hasNoSpeed).
+  const noSpeed = vehicle.noSpeed === true;
+  const speedOk = noSpeed || vehicle.speed <= vehicle.speedLimit;
 
   return (
     <>
@@ -60,7 +62,7 @@ function SheetContent({ vehicleId, onClose }) {
         <div className="mvs__stat">
           <span className="mvs__stat-label">Speed</span>
           <span className="mvs__stat-value" style={{ color: speedOk ? "#22c55e" : "#f59e0b" }}>
-            {vehicle.speed} km/h
+            {noSpeed ? "" : `${vehicle.speed} km/h`}
           </span>
         </div>
         <div className="mvs__stat">

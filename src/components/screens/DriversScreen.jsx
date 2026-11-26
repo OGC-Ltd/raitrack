@@ -1065,7 +1065,9 @@ function FleetCard({ fleet, loading }) {
 function DriverIdCard({ driver, tier, st, row, w, liveVehicle, totals, windowDays, companyId, orgId }) {
   const v        = liveVehicle;
   const engineOn = v?.engine === "on";
-  const liveState = !v ? "No vehicle on record" : engineOn ? `Live · ${Math.round(v.speed ?? 0)} km/h` : "Engine off";
+  const liveState = !v ? "No vehicle on record"
+    : engineOn ? (v.noSpeed ? "Live" : `Live · ${Math.round(v.speed ?? 0)} km/h`)
+    : "Engine off";
   const dash = useDashcamBreaches(companyId, orgId);
   const tiles = complianceTiles(totals, dash, { driver, vehicle: row?.vehicle ?? v?.id ?? null, windowDays });
   const sum = complianceWords(tiles);

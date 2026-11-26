@@ -24,6 +24,7 @@ import { usePlaceName } from '../../hooks/usePlaceName';
 import { fleetDayKey } from '../../hooks/useFuelEvents';
 import { vehicleReadings } from '../../lib/vehicleReadings';
 import { menengaiGroup, fleetTypeLabel } from '../../lib/vehicleMap';
+
 import { unitSite } from '../../lib/siteLists';
 import { ORG_CODE_BY_COMPANY } from '../../api/org';
 import { burnAgainst, burnRate, cachedDay, dayBounds, fuelFromFills, loadDay, summariseDay, movingSpans } from '../../lib/vehicleDay';
@@ -52,6 +53,9 @@ import './VehicleDetailPanel.css';
 import { displayPlate } from '../../lib/plate';
 import { useWorkshopUnits } from '../../hooks/useWorkshopUnits';
 import OpenInWorkshop from '../body/OpenInWorkshop';
+
+/** A generator's day without its speed (lib/vehicleMap hasNoSpeed): no line, no overspeeds. */
+const withoutSpeed = (pings) => pings.map((p) => ({ ...p, speedKmh: null }));
 
 // ── Config ──────────────────────────────────────────────────────────────────
 // KSh per litre, for the cost estimate: EPRA's Nairobi pump price as the
@@ -296,7 +300,7 @@ function limitLabel(pings, limit) {
  * Overview's "Today so far" and the Fuel tab's picked dates: fuel, then
  * driving, then engine and speed.
  */
-function dayFigures(sum, { limit, runs, hasPings }) {
+function dayFigures(sum, { limit, runs, hasPings, noSpeed = false }) {
   const cost = sum.usedL != null ? sum.usedL * FUEL_PRICE_KSH : null;
   const top  = hasPings ? Math.round(sum.topSpeed ?? 0) : null;
   return [
@@ -309,8 +313,10 @@ function dayFigures(sum, { limit, runs, hasPings }) {
     { label: 'Moving',     value: sum.movingMin != null ? fmtMinutes(sum.movingMin) : null },
     { label: 'Idle',       value: sum.idleMin != null ? fmtMinutes(sum.idleMin) : null },
     { label: 'Engine hours', value: sum.engineHoursToday != null ? `${num(sum.engineHoursToday, 1)} h` : null },
-    { label: 'Top speed',  value: top != null ? `${top} km/h` : null, tone: top > limit ? 'alert' : null },
-    { label: 'Overspeeds', value: hasPings ? String(runs.length) : null, tone: runs.length ? 'alert' : null },
+    ...(noSpeed ? [] : [
+      { label: 'Top speed',  value: top != null ? `${top} km/h` : null, tone: top > limit ? 'alert' : null },
+      { label: 'Overspeeds', value: hasPings ? String(runs.length) : null, tone: runs.length ? 'alert' : null },
+    ]),
   ];
 }
 
@@ -532,7 +538,10 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
     : episodes.filter((e) => e.kind === 'refill').reduce((s, e) => s + (e.litres ?? 0), 0)),
   [events.loading, events.error, episodes]);
   const sum   = useMemo(() => ({ ...daySum, ...fuelFromFills(daySum, tele.pings, fillsL) }), [daySum, tele.pings, fillsL]);
-  const runs  = useMemo(() => overspeedRuns(tele.pings, limit), [tele.pings, limit]);
+  // A generator's chart is fuel alone: its tracker's speed is GPS drift.
+  const noSpeed = vehicle.noSpeed === true;
+  const chartPings = useMemo(() => (noSpeed ? withoutSpeed(tele.pings) : tele.pings), [noSpeed, tele.pings]);
+  const runs  = useMemo(() => overspeedRuns(chartPings, limit), [chartPings, limit]);
   const dayLabel = rangeWords(from, to, today, fmtDay);
   const title = isToday ? 'Today'
     : multiDay ? `${fmtDay(from)} – ${to === today ? 'today' : fmtDay(to)}`
@@ -554,7 +563,7 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
     <section className="vdp-block" ref={chartRef}>
       <div className="vdp-block-head">
         <div className="vdp-block-title">
-          Fuel &amp; overspeed
+          {noSpeed ? 'Fuel' : <>Fuel &amp; overspeed</>}
           {to === today && vehicle.online && <span className="vdp-live">live</span>}
         </div>
         <DateRangePicker from={from} to={to} today={today} maxDays={MAX_RANGE_DAYS} onChange={pick} align="right" label="Chart dates" />
@@ -563,8 +572,8 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
       <div className="fp-chart fp-chart--bare">
         <FuelChart
           key={`${from}|${to}`} series={sum.series} unit={sum.unit} loading={tele.loading} overspeeds={runs} dayLabel={dayLabel}
-          pings={tele.pings} limit={limit} reservePct={RESERVE_PCT} limitText={limitLabel(tele.pings, limit)}
-          episodes={episodes} focus={focus} showList withDate={multiDay} dayStarts={dayStarts} tall
+          pings={chartPings} limit={limit} reservePct={RESERVE_PCT} limitText={limitLabel(chartPings, limit)}
+          episodes={episodes} focus={focus} showList withDate={multiDay} dayStarts={dayStarts} tall noSpeed={noSpeed}
         />
       </div>
       {events.error && <div className="vdp-empty">Fuel events could not be loaded: {events.error}</div>}
@@ -578,7 +587,7 @@ function FuelTab({ orgId, vehicle, vehicleId, readings, todayTele }) {
         drains={events.drains} episodes={episodes} dayWord={dayLabel} withDate={multiDay}
         loading={events.loading} error={events.error} onPick={pickBand}
       />
-      <DayGroups items={dayFigures(sum, { limit, runs, hasPings: tele.pings.length > 0 })} />
+      <DayGroups items={dayFigures(sum, { limit, runs, hasPings: tele.pings.length > 0, noSpeed })} noSpeed={noSpeed} />
     </section>
   </>);
 }
@@ -967,7 +976,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
 
       {/* ── Tabs ── */}
       <div className="vdp-tabs" role="tablist">
-        {TABS.map(t => (
+        {TABS.filter(t => !(vehicle.noSpeed && t.key === 'safety')).map(t => (
           <button
             key={t.key}
             role="tab"
@@ -1026,8 +1035,9 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
           </section>
 
           {/* Speed & overspeed — today, growing with every live frame. Fuel is the
-              Fuel tab's (operator, 2026-10-02: the Overview should not repeat it). */}
-          <section className="vdp-block">
+              Fuel tab's (operator, 2026-10-02: the Overview should not repeat it).
+              None for a generator, which has no speed (lib/vehicleMap hasNoSpeed). */}
+          {!vehicle.noSpeed && <section className="vdp-block">
             <div className="vdp-block-head">
               <div className="vdp-block-title">
                 Speed &amp; overspeed
@@ -1044,7 +1054,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
                 />
               </div>
             </div>
-          </section>
+          </section>}
 
           {/* Today, from the day's readings (lib/vehicleDay) */}
           <section className="vdp-block">
@@ -1053,7 +1063,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
               {tele.loading && <span className="vdp-meta">Loading…</span>}
             </div>
             {/* Fuel and FUEL RATE / FUEL DOWN are the Fuel tab's */}
-            <DayGroups items={dayFigures(today, { limit, runs: todayRuns, hasPings })} only={['Driving', 'Engine & speed']} />
+            <DayGroups items={dayFigures(today, { limit, runs: todayRuns, hasPings, noSpeed: vehicle.noSpeed })} only={['Driving', 'Engine & speed']} noSpeed={vehicle.noSpeed} />
           </section>
 
           {/* What it is */}
@@ -1075,7 +1085,7 @@ export default function VehicleDetailPanel({ vehicle, onClose }) {
         {tab === 'alerts' && <AlertsTab key={vehicleId} vehicle={vehicle} />}
 
         {/* ═════ SAFETY ═════ */}
-        {tab === 'safety' && (<>
+        {tab === 'safety' && !vehicle.noSpeed && (<>
           <section className="vdp-block">
             <div className="vdp-block-title">Right now</div>
             {/* One meter, speed against limit, rather than three boxes to

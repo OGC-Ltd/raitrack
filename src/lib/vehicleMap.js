@@ -508,6 +508,23 @@ export function spriteKind(vehicle) {
 }
 
 /**
+ * A unit with no speed at all: a generator (operator, 2026-11-26: "on the
+ * generators they do not have speed, should be blank and never have speed
+ * limit configurations at all").
+ *
+ * A standing genset's tracker still reports a speed — GPS drift, 38 km/h on
+ * MUFINDI: DG 09 that afternoon — and the server sent it the fleet's 80 km/h
+ * limit, so it could be drawn "speeding" next to a fuel tank. Such a unit
+ * carries `speed: null`, `speedLimit: null` and `noSpeed: true` from the
+ * snapshot on; every speed figure, limit and overspeed view keys off that.
+ * The same rule as the server's `isGeneratorUnit` (lib/generator.ts), so a
+ * unit the browser blanks is one the server never judges.
+ */
+export function hasNoSpeed(vehicle) {
+  return spriteKind(vehicle) === 'gen'
+}
+
+/**
  * Fleet TYPE — the machine-class axis the Fleets funnel filters on.
  *
  * ## Why this keys off spriteKind rather than the equipment code
@@ -1113,6 +1130,9 @@ export function mapSnapshotVehicle(v) {
   // read "Empty"). Everything else on this shape is telemetry, which the cargo
   // question does not use.
   const identity = { id: v.plate ?? v.vehicleId, name: v.name ?? null, vehicleType: v.vehicleType ?? 'TRUCK' }
+  // A generator has no speed and no limit (hasNoSpeed). Its reported speed
+  // still decides nothing: never speeding, never "in transit".
+  const noSpeed = hasNoSpeed(identity)
   return {
     id:            v.plate ?? v.vehicleId,
     // The registration plate inside the name, for display (lib/plate):
@@ -1130,7 +1150,10 @@ export function mapSnapshotVehicle(v) {
     driver:        v.driver ?? 'Unassigned',
     driverSource:  v.driverSource ?? null,
     vehicleType:   v.vehicleType ?? 'TRUCK',
-    status:        deriveStatus({ speedKmh: v.speedKmh, flags, capturedAt: v.capturedAt, movement: v.movement, connectionOnline: v.connectionOnline, engineOn: v.engineOn, speedLimitKmh: v.speedLimitKmh }),
+    status:        deriveStatus(noSpeed
+      ? { speedKmh: 0, flags, capturedAt: v.capturedAt, movement: v.movement, connectionOnline: v.connectionOnline, engineOn: v.engineOn, speedLimitKmh: Infinity }
+      : { speedKmh: v.speedKmh, flags, capturedAt: v.capturedAt, movement: v.movement, connectionOnline: v.connectionOnline, engineOn: v.engineOn, speedLimitKmh: v.speedLimitKmh }),
+    noSpeed,
     // The provider's own connection verdict, kept raw so it can be recomputed
     // without re-reading the snapshot.
     connectionOnline: v.connectionOnline ?? null,
@@ -1146,8 +1169,8 @@ export function mapSnapshotVehicle(v) {
     lat:           v.lat,
     lng:           v.lng,
     heading:       v.headingDeg ?? 0,
-    speed:         Math.round(v.speedKmh ?? 0),
-    speedLimit:    v.speedLimitKmh ?? FALLBACK_SPEED_LIMIT,
+    speed:         noSpeed ? null : Math.round(v.speedKmh ?? 0),
+    speedLimit:    noSpeed ? null : v.speedLimitKmh ?? FALLBACK_SPEED_LIMIT,
     engine:        v.engineOn ? 'on' : 'off',
     // NO fuelConsumption. It mapped fuelUsedMl (null on every live frame — the
     // Wialon position payload carries no consumption channel) onto 0, so the
@@ -1392,7 +1415,8 @@ export function applyLiveUpdate(existing, data) {
     lat:           data.lat ?? existing.lat,
     lng:           data.lng ?? existing.lng,
     heading:       data.headingDeg ?? existing.heading,
-    speed:         data.speedKmh != null ? Math.round(data.speedKmh) : existing.speed,
+    // A generator keeps no speed across live frames either (hasNoSpeed).
+    speed:         existing.noSpeed ? null : data.speedKmh != null ? Math.round(data.speedKmh) : existing.speed,
     engine:        data.engineOn != null ? (data.engineOn ? 'on' : 'off') : existing.engine,
     connectionOnline: data.connectionOnline ?? existing.connectionOnline ?? null,
     online:        isOnline({
@@ -1410,15 +1434,19 @@ export function applyLiveUpdate(existing, data) {
     // snapshot set it, and the vehicle would flicker back to 'ok' while an
     // incident was still open.
     status:        deriveStatus({
-      speedKmh:   data.speedKmh,
-      flags:      { ...data.flags, fuelInconsistency: existing.fuelIncident != null || data.flags?.fuelInconsistency === true },
+      speedKmh:   existing.noSpeed ? 0 : data.speedKmh,
+      flags:      {
+        ...data.flags,
+        overspeeding: existing.noSpeed ? false : data.flags?.overspeeding,
+        fuelInconsistency: existing.fuelIncident != null || data.flags?.fuelInconsistency === true,
+      },
       capturedAt: data.capturedAt ?? existing.capturedAt,
       movement:   data.movement ?? existing.movement,
       connectionOnline: data.connectionOnline ?? existing.connectionOnline,
       engineOn:   data.engineOn ?? existing.engine === 'on',
       // See applyConnectionRefresh: the SSE payload carries no limit, and the
       // type it derives from cannot change mid-session.
-      speedLimitKmh: data.speedLimitKmh ?? existing.speedLimit,
+      speedLimitKmh: existing.noSpeed ? Infinity : data.speedLimitKmh ?? existing.speedLimit,
     }),
     fuelLevel:     data.fuelLevelPct ?? existing.fuelLevel,
     fuelLitres:    data.fuelLevelMl != null ? data.fuelLevelMl / 1000 : existing.fuelLitres,

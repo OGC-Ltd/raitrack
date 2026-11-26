@@ -143,8 +143,10 @@ function placeChips(marks, lo, hi, keepId) {
 export default function FuelChart({
   series, unit = '%', loading, overspeeds = [], dayLabel = 'today', pings = [], limit = 80,
   reservePct = 25, episodes = [], focus = null, showList = false, limitText = null,
-  withDate = false, dayStarts = [], speedOnly = false, tall = false,
+  withDate = false, dayStarts = [], speedOnly = false, tall = false, noSpeed = false,
 }) {
+  // `noSpeed`: a generator (lib/vehicleMap hasNoSpeed) — fuel alone, with no
+  // km/h axis and no speed or overspeed in the key.
   // Speed only (the Overview, operator 2026-10-02: fuel belongs to the Fuel
   // tab): no fuel line or fuel events; a limit line and a km/h axis instead,
   // and the speed drawn red wherever it runs over.
@@ -157,7 +159,7 @@ export default function FuelChart({
     <FuelChartPlot
       series={series} speeds={speeds} unit={unit} overspeeds={overspeeds} pings={pings} limit={limit}
       reservePct={reservePct} episodes={episodes} focus={focus} showList={showList} limitText={limitText}
-      withDate={withDate} dayStarts={dayStarts} speedOnly={speedOnly} tall={tall}
+      withDate={withDate} dayStarts={dayStarts} speedOnly={speedOnly} tall={tall} noSpeed={noSpeed}
     />
   );
 }
@@ -170,7 +172,7 @@ const litresText = (e) => `${num(e.litres, e.kind === 'drop' ? 1 : 0)} L`;
 /** Whether this screen has a mouse, so the hint can offer the wheel. */
 const hasWheel = () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(hover: hover) and (pointer: fine)').matches);
 
-function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit, reservePct, episodes, focus, showList, limitText, withDate, dayStarts, speedOnly, tall }) {
+function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit, reservePct, episodes, focus, showList, limitText, withDate, dayStarts, speedOnly, tall, noSpeed }) {
   const when = withDate ? fmtDayTime : fmtTime;   // a moment, with its day over a range
   const spanOf = (a, b) => spanText(a, b, withDate);
   const svgRef = useRef(null);
@@ -482,7 +484,7 @@ function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit, reserve
           className={`vdp-chart vdp-chart--live${drag ? ' vdp-chart--dragging' : ''}`}
           tabIndex={0}
           role="img"
-          aria-label={`${hasFuel ? 'Fuel level and speed' : 'Speed'} from ${when(t0)} to ${when(t1)}`
+          aria-label={`${hasFuel ? (noSpeed ? 'Fuel level' : 'Fuel level and speed') : 'Speed'} from ${when(t0)} to ${when(t1)}`
             + `${episodes.length ? `, with ${episodes.length} fuel event${episodes.length === 1 ? '' : 's'} marked` : ''}. Use the arrow keys to read values, plus and minus to zoom.`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -504,7 +506,7 @@ function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit, reserve
           ))}
           {speedOnly
             ? <text x={W - 2} y={PT - 6} fontSize="7.5" fill="#94a3b8" textAnchor="end">km/h</text>
-            : <text x={W - 2} y={PT + 8} fontSize="7.5" fill="#94a3b8" textAnchor="end">{sTop} km/h</text>}
+            : !noSpeed && <text x={W - 2} y={PT + 8} fontSize="7.5" fill="#94a3b8" textAnchor="end">{sTop} km/h</text>}
           <g clipPath="url(#vdp-plot-clip)">
             {/* fuel events, behind everything drawn on the plot */}
             {inView.map(e => {
@@ -620,8 +622,8 @@ function FuelChartPlot({ series, speeds, unit, overspeeds, pings, limit, reserve
       </div>
       <div className="vdp-legend fc-legend">
         {hasFuel && <span><i className="vdp-legend-line" /> Fuel level ({pct ? '%' : 'litres'})</span>}
-        <span><i className="vdp-legend-speed" /> Speed</span>
-        <span><i className="fc-swatch fc-swatch--bar" style={{ background: OVERSPEED_COLOR }} /> {overText}</span>
+        {!noSpeed && <span><i className="vdp-legend-speed" /> Speed</span>}
+        {!noSpeed && <span><i className="fc-swatch fc-swatch--bar" style={{ background: OVERSPEED_COLOR }} /> {overText}</span>}
         <span><i className="fc-swatch fc-swatch--bar" style={{ background: ENGINE_ON }} /> Engine on</span>
       </div>
       {episodes.length > 0 && (

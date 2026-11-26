@@ -25,13 +25,15 @@ const GROUPS = [
 /**
  * dayFigures' nine, three to a labelled row, in the order it gives them;
  * `only` keeps some rows by title (the Overview leaves Fuel to the Fuel tab).
+ * `noSpeed`: a generator's figures carry no speed (lib/vehicleMap hasNoSpeed),
+ * so the last row is titled for the engine alone.
  */
-export function DayGroups({ items, only = null }) {
+export function DayGroups({ items, only = null, noSpeed = false }) {
   return (
     <div className="fp-groups">
       {GROUPS.map((g, gi) => (only && !only.includes(g.title) ? null : (
         <section key={g.title} className="fp-group" aria-label={g.title}>
-          <h4 className="fp-group-title"><i className={`ti ${g.icon}`} aria-hidden="true" />{g.title}</h4>
+          <h4 className="fp-group-title"><i className={`ti ${g.icon}`} aria-hidden="true" />{noSpeed && g.title === 'Engine & speed' ? 'Engine' : g.title}</h4>
           <dl className="fp-group-row">
             {items.slice(gi * 3, gi * 3 + 3).map(f => (
               <div key={f.label} className={`fp-fig${f.tone ? ` fp-fig--${f.tone}` : ''}`}>

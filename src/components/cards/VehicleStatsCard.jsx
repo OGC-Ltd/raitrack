@@ -500,9 +500,12 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
     : vehicle.fuelLitres != null && vehicle.fuelLevel != null ? `${fuel}%`
     : vehicle.fuelLevel == null && vehicle.fuelLitres == null ? "no reading" : null;
 
+  // A generator has no speed and no limit: the tile stays, blank (lib/vehicleMap hasNoSpeed).
+  const noSpeed = vehicle.noSpeed === true;
   const limit = vehicle.speedLimit ?? 80;
-  const over = engineOn && vehicle.speed > limit;
-  const speedNote = !engineOn ? "sensor off"
+  const over = !noSpeed && engineOn && vehicle.speed > limit;
+  const speedNote = noSpeed ? null
+    : !engineOn ? "sensor off"
     : vehicle.speedLimit != null ? (over ? <><WarnGlyph />{` limit ${vehicle.speedLimit}`}</> : `limit ${vehicle.speedLimit}`)
     : null;
 
@@ -585,10 +588,10 @@ export default function VehicleStatsCard({ vehicle, withDay = false, onAlertClic
         />
         <Figure
           label="Speed"
-          value={engineOn ? vehicle.speed : "-"}
-          unit={engineOn ? " km/h" : ""}
+          value={noSpeed ? "" : engineOn ? vehicle.speed : "-"}
+          unit={!noSpeed && engineOn ? " km/h" : ""}
           note={speedNote}
-          valColor={!engineOn ? undefined : vehicle.speed > 100 ? "var(--accent-crit)" : over ? "var(--accent-warn)" : undefined}
+          valColor={noSpeed || !engineOn ? undefined : vehicle.speed > 100 ? "var(--accent-crit)" : over ? "var(--accent-warn)" : undefined}
           noteColor={over ? "var(--accent-warn)" : undefined}
         />
         <Figure label="Burn rate" value={burnFig.value} unit={burnFig.unit} note={burnFig.note} />
