@@ -65,6 +65,32 @@ function Empty({ head, note }) {
 }
 
 /** One channel: its canvas, its own player, its own controls. */
+/**
+ * The grid's spare cell: a video camera with a no-entry sign over it, in black
+ * and white (operator, 26 Nov 2026), so the hole reads as "no camera here".
+ * Drawn, not the emoji: 🚫 is red and renders differently on every system.
+ * Colours come from the stylesheet (currentColor and the --vcam-none tokens).
+ */
+function NoCameraCell() {
+  return (
+    <figure className="vcam__feed vcam__none" role="img" aria-label="No camera on this channel">
+      <svg className="vcam__none-icon" viewBox="0 0 64 64" aria-hidden="true">
+        {/* The camera, behind: body, lens hood, and the lens as a cut-out */}
+        <g className="vcam__none-cam">
+          <rect x="8" y="22" width="34" height="22" rx="4.5" />
+          <path d="M42 30.5 56 23.5v19L42 35.5z" />
+        </g>
+        <circle className="vcam__none-lens" cx="20" cy="33" r="4.5" />
+        {/* The sign, over it: the slash first in the tile's colour, so it cuts the camera cleanly */}
+        <path className="vcam__none-halo" d="M17.2 18.2 46.8 47.8" />
+        <circle className="vcam__none-sign" cx="32" cy="33" r="21" />
+        <path className="vcam__none-sign" d="M17.2 18.2 46.8 47.8" />
+      </svg>
+      <figcaption className="vcam__none-text">No camera</figcaption>
+    </figure>
+  );
+}
+
 function LiveChannel({ streamUrl, deviceId, channel, quality, generation }) {
   const domId = `vcam-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const tileRef = useRef(null);
@@ -236,6 +262,8 @@ export default function VehicleCamera({ vehicle, onClose }) {
             <LiveChannel key={c.no} streamUrl={cam.streamUrl} deviceId={cam.deviceId}
               channel={c} quality={quality} generation={generation} />
           ))}
+          {/* An odd count leaves a hole in the two-column grid: marked as no camera, not left blank */}
+          {shown.length > 1 && shown.length % 2 === 1 && <NoCameraCell />}
         </div>
       </>
     );
