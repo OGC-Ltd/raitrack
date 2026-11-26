@@ -40,16 +40,14 @@ export const COMPLETED_SHARE = 0.9;
 /** A shift started on time when the machine first worked within this many minutes of the shift start. */
 export const ON_TIME_MINUTES = 60;
 
-/** A department's grade from its score (0-100). */
-export const gradeOf = (score) => (score == null ? null : score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D');
-
 /**
  * Each department's work efficiency (operator 2026-11-26: "rate the departments
  * in terms of work efficiency"), over the shifts the tracker could check:
  *   completed  shifts whose machine ran COMPLETED_SHARE of the planned hours
- *   hours      engine hours run ÷ hours planned (counted up to 100% in the score)
+ *   hours      engine hours run ÷ hours planned
  *   onTime     shifts the machine worked, starting within ON_TIME_MINUTES of the shift start
- * Score = the mean of the three, as a percentage; grade A-D (gradeOf).
+ * No score or grade (operator 2026-11-26: "remove the score and grade"); best
+ * completed share first.
  *
  * @param {object[]} lines     plan lines (lineId, day, department, plannedHours)
  * @param {Map} runOf          `${lineId}|${day}` → factory-supervisors line (state, runHours, lateMinutes)
@@ -72,13 +70,9 @@ export function departmentRatings(lines, runOf) {
     if (x.state === 'ran' && (x.lateMinutes == null || x.lateMinutes <= ON_TIME_MINUTES)) d.onTime += 1;
   }
   return [...by.values()].map((d) => {
-    if (!d.judged) return { ...d, completedPct: null, hoursPct: null, onTimePct: null, score: null, grade: null };
-    const completedPct = d.completed / d.judged;
-    const hoursPct = d.plannedHours > 0 ? d.runHours / d.plannedHours : null;
-    const onTimePct = d.onTime / d.judged;
-    const score = Math.round((100 * (completedPct + Math.min(1, hoursPct ?? 0) + onTimePct)) / 3);
-    return { ...d, completedPct, hoursPct, onTimePct, score, grade: gradeOf(score) };
-  }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.shifts - a.shifts || a.department.localeCompare(b.department));
+    if (!d.judged) return { ...d, completedPct: null, hoursPct: null, onTimePct: null };
+    return { ...d, completedPct: d.completed / d.judged, hoursPct: d.plannedHours > 0 ? d.runHours / d.plannedHours : null, onTimePct: d.onTime / d.judged };
+  }).sort((a, b) => (b.completedPct ?? -1) - (a.completedPct ?? -1) || b.shifts - a.shifts || a.department.localeCompare(b.department));
 }
 
 /** A refill this soon (planned use since the last fill under this share of it) is too early. */

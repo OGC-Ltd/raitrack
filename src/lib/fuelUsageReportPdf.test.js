@@ -106,22 +106,22 @@ describe('probe records and shifts completed (operator 2026-11-26)', () => {
     expect(h3).toContain('of 2 the tracker could check');
   });
 
-  it('rates each department on completed, hours delivered and on-time starts', () => {
+  it('shows each department: completed, hours delivered and on-time starts, no score or grade', () => {
     const runs = [
       { lineId: 'a', day: '2026-11-16', state: 'ran', runHours: 8, plannedHours: 8, lateMinutes: null },     // IRRIGATION: all three
       { lineId: 'b', day: '2026-11-17', state: 'ran', runHours: 4, plannedHours: 8, lateMinutes: 90 },       // FACTORY: half the hours, late
     ];
     const r4 = buildFuelUsage(data, { fillings, shiftRuns: runs });
     const [first, second] = r4.byDepartment;
-    expect(first).toMatchObject({ department: 'IRRIGATION', judged: 1, completed: 1, onTime: 1, score: 100, grade: 'A' });
-    expect(second).toMatchObject({ department: 'FACTORY', judged: 1, completed: 0, onTime: 0, score: 17, grade: 'D' });
+    expect(first).toMatchObject({ department: 'IRRIGATION', judged: 1, completed: 1, onTime: 1, completedPct: 1, hoursPct: 1, onTimePct: 1 });
+    expect(second).toMatchObject({ department: 'FACTORY', judged: 1, completed: 0, onTime: 0, completedPct: 0, hoursPct: 0.5, onTimePct: 0 });
+    expect(first).not.toHaveProperty('score');
     const h4 = fuelUsageHtml(r4, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', logos: { rai: 'r', ogc: 'o' }, now: Date.parse('2026-11-24T18:00:00+03:00') });
     expect(h4).toContain('Department efficiency');
     // Straight after the chart and By site, so it is on page 2 at the latest
     expect(h4.indexOf('Department efficiency')).toBeGreaterThan(h4.indexOf('By site'));
     expect(h4.indexOf('Department efficiency')).toBeLessThan(h4.indexOf('By machine type'));
-    expect(h4).toContain('<span class="fu-grade green">A</span>');
-    expect(h4).toContain('<span class="fu-grade red">D</span>');
+    expect(h4).not.toMatch(/fu-grade|>Score<|>Grade</);
   });
 
   it('without the tracker hours, completed reads as a dash, not zero', () => {
