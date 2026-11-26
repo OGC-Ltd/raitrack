@@ -54,7 +54,7 @@ import {
 import { niceScale } from "../../lib/niceScale";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { joinUnitFuelDays } from "../../lib/unitFuelSeries";
-import { splitDrained } from "../../lib/fuelTheftSplit";
+import { SHOW_FUEL_DRAINED, splitDrained } from "../../lib/fuelTheftSplit";
 import "./AnalyticsScreen.css";
 
 import {
@@ -2398,6 +2398,8 @@ export default function AnalyticsScreen() {
                         </span>
                       </div>
 
+                      {/* Hidden until the drained figures are verified (lib/fuelTheftSplit SHOW_FUEL_DRAINED) */}
+                      {SHOW_FUEL_DRAINED && (<>
                       <div className="an-calc__row">
                         <span className="an-calc__k">
                           Fuel drained{" "}
@@ -2440,6 +2442,7 @@ export default function AnalyticsScreen() {
                           )}
                         </span>
                       </div>
+                      </>)}
 
                       {/* Suspected theft, apart from what drained above:
                           the SIPHON drains, the only ones the product calls
@@ -3682,12 +3685,16 @@ function FuelChart({
 
     // Amber: fuel that left the tank for any other reason. Red is kept for
     // suspected theft, the bar beside it.
-    lost: {
-      mark: "bar",
-      label: "Drained",
-      color:
-        "var(--chart-4)",
-    },
+    ...(SHOW_FUEL_DRAINED
+      ? {
+        lost: {
+          mark: "bar",
+          label: "Drained",
+          color:
+            "var(--chart-4)",
+        },
+      }
+      : {}),
 
     theft: {
       mark: "bar",
@@ -3760,7 +3767,7 @@ function FuelChart({
           hidden.has("litres")
             ? 0
             : s.litres ?? 0,
-          hidden.has("lost")
+          !SHOW_FUEL_DRAINED || hidden.has("lost")
             ? 0
             : s.lost ?? 0,
           hidden.has("theft")
@@ -3905,7 +3912,7 @@ function FuelChart({
         <Bar
           yAxisId="left"
           dataKey="lost"
-          hide={hidden.has("lost")}
+          hide={!SHOW_FUEL_DRAINED || hidden.has("lost")}
           fill="var(--color-lost)"
           radius={[
             4,
@@ -4174,7 +4181,7 @@ function UnitFuelChart({
   const litresAxis = niceScale(
     peakOf(
       "litres",
-      "lost",
+      ...(SHOW_FUEL_DRAINED ? ["lost"] : []),
       "theft",
       "used",
       "avg",
@@ -4311,11 +4318,15 @@ function UnitFuelChart({
       color: "var(--chart-2)",
     },
 
-    lost: {
-      mark: "bar",
-      label: "Fuel drained",
-      color: "var(--chart-4)",
-    },
+    ...(SHOW_FUEL_DRAINED
+      ? {
+        lost: {
+          mark: "bar",
+          label: "Fuel drained",
+          color: "var(--chart-4)",
+        },
+      }
+      : {}),
 
     theft: {
       mark: "bar",
@@ -4653,7 +4664,7 @@ function UnitFuelChart({
             <Bar
               yAxisId="litres"
               dataKey="lost"
-              hide={hidden.has("lost")}
+              hide={!SHOW_FUEL_DRAINED || hidden.has("lost")}
               fill="var(--color-lost)"
               radius={[4, 4, 0, 0]}
               maxBarSize={
