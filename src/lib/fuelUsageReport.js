@@ -37,6 +37,49 @@ export const pumpFlagsOf = (i) => (i.flags ?? []).filter((f) => PUMP_FLAGS.inclu
 
 /** A shift is completed when its machine ran this share of the planned hours (operator 2026-11-26). */
 export const COMPLETED_SHARE = 0.9;
+/** A shift started on time when the machine first worked within this many minutes of the shift start. */
+export const ON_TIME_MINUTES = 60;
+
+/** A department's grade from its score (0-100). */
+export const gradeOf = (score) => (score == null ? null : score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D');
+
+/**
+ * Each department's work efficiency (operator 2026-11-26: "rate the departments
+ * in terms of work efficiency"), over the shifts the tracker could check:
+ *   completed  shifts whose machine ran COMPLETED_SHARE of the planned hours
+ *   hours      engine hours run ÷ hours planned (counted up to 100% in the score)
+ *   onTime     shifts the machine worked, starting within ON_TIME_MINUTES of the shift start
+ * Score = the mean of the three, as a percentage; grade A-D (gradeOf).
+ *
+ * @param {object[]} lines     plan lines (lineId, day, department, plannedHours)
+ * @param {Map} runOf          `${lineId}|${day}` → factory-supervisors line (state, runHours, lateMinutes)
+ */
+export function departmentRatings(lines, runOf) {
+  const by = new Map();
+  for (const l of lines ?? []) {
+    const name = String(l.department ?? '').trim() || 'No department';
+    if (!by.has(name)) by.set(name, { department: name, shifts: 0, judged: 0, completed: 0, onTime: 0, plannedHours: 0, runHours: 0 });
+    const d = by.get(name);
+    d.shifts += 1;
+    const x = runOf.get(`${l.lineId}|${l.day}`);
+    const planned = l.plannedHours ?? x?.plannedHours ?? 0;
+    if (!x || (x.state !== 'ran' && x.state !== 'not-run') || !(planned > 0)) continue;
+    const ran = x.runHours ?? 0;
+    d.judged += 1;
+    d.plannedHours += planned;
+    d.runHours += ran;
+    if (ran >= COMPLETED_SHARE * planned) d.completed += 1;
+    if (x.state === 'ran' && (x.lateMinutes == null || x.lateMinutes <= ON_TIME_MINUTES)) d.onTime += 1;
+  }
+  return [...by.values()].map((d) => {
+    if (!d.judged) return { ...d, completedPct: null, hoursPct: null, onTimePct: null, score: null, grade: null };
+    const completedPct = d.completed / d.judged;
+    const hoursPct = d.plannedHours > 0 ? d.runHours / d.plannedHours : null;
+    const onTimePct = d.onTime / d.judged;
+    const score = Math.round((100 * (completedPct + Math.min(1, hoursPct ?? 0) + onTimePct)) / 3);
+    return { ...d, completedPct, hoursPct, onTimePct, score, grade: gradeOf(score) };
+  }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.shifts - a.shifts || a.department.localeCompare(b.department));
+}
 
 /** A refill this soon (planned use since the last fill under this share of it) is too early. */
 export const EARLY_SHARE = 0.5;
@@ -455,6 +498,7 @@ export function buildFuelUsage(data, { site = null, price = null, fillings = nul
     cumulative,
     bySite,
     byType,
+    byDepartment: shiftsKnown ? departmentRatings(scoped?.lines ?? [], runOf) : null,
     exceptions: { unrecorded, early, overTank: overTankFills, probeShort, flagged, plannedNotFuelled, downOnPlan },
     byOperator,
     register,

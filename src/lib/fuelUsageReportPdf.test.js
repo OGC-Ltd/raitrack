@@ -106,8 +106,25 @@ describe('probe records and shifts completed (operator 2026-11-26)', () => {
     expect(h3).toContain('of 2 the tracker could check');
   });
 
+  it('rates each department on completed, hours delivered and on-time starts', () => {
+    const runs = [
+      { lineId: 'a', day: '2026-11-16', state: 'ran', runHours: 8, plannedHours: 8, lateMinutes: null },     // IRRIGATION: all three
+      { lineId: 'b', day: '2026-11-17', state: 'ran', runHours: 4, plannedHours: 8, lateMinutes: 90 },       // FACTORY: half the hours, late
+    ];
+    const r4 = buildFuelUsage(data, { fillings, shiftRuns: runs });
+    const [first, second] = r4.byDepartment;
+    expect(first).toMatchObject({ department: 'IRRIGATION', judged: 1, completed: 1, onTime: 1, score: 100, grade: 'A' });
+    expect(second).toMatchObject({ department: 'FACTORY', judged: 1, completed: 0, onTime: 0, score: 17, grade: 'D' });
+    const h4 = fuelUsageHtml(r4, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', logos: { rai: 'r', ogc: 'o' }, now: Date.parse('2026-11-24T18:00:00+03:00') });
+    expect(h4).toContain('Department efficiency');
+    expect(h4).toContain('<span class="fu-grade green">A</span>');
+    expect(h4).toContain('<span class="fu-grade red">D</span>');
+  });
+
   it('without the tracker hours, completed reads as a dash, not zero', () => {
     expect(rep.totals.shiftsCompleted).toBeNull();
+    expect(rep.byDepartment).toBeNull();
+    expect(html).not.toContain('Department efficiency');
     expect(html).toContain('tracker hours not read');
   });
 });
