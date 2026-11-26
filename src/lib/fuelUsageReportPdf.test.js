@@ -51,7 +51,7 @@ describe('the Fuel Usage Report PDF', () => {
 
   it('keeps to black, white and greys, colour only for meaning', () => {
     // The report's own blocks; the letterhead's dark band and base styles are the house letterhead's
-    const own = html.slice(html.indexOf('<div id="flow">'));
+    const own = html.slice(html.indexOf('<div id="flow"'));
     expect(own.length).toBeGreaterThan(1000);
     for (const c of own.match(/#[0-9a-fA-F]{6}\b/g) ?? []) {
       expect(['#5f5f5f', '#c8c8c8', '#e8e8e8', '#a33030', '#1e6b3a', '#8a5a00', '#ececec', '#9a9a9a', '#7a7a7a', '#cfcfcf', '#ff8c8c']).toContain(c.toLowerCase());
