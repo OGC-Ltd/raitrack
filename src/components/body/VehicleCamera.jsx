@@ -75,12 +75,12 @@ function NoCameraCell() {
   return (
     <figure className="vcam__feed vcam__none" role="img" aria-label="No camera on this channel">
       <svg className="vcam__none-icon" viewBox="0 0 64 64" aria-hidden="true">
-        {/* The camera, behind: body, lens hood, and the lens as a cut-out */}
+        {/* The camera, behind and wholly inside the ring: body, lens hood, the lens as a cut-out */}
         <g className="vcam__none-cam">
-          <rect x="8" y="22" width="34" height="22" rx="4.5" />
-          <path d="M42 30.5 56 23.5v19L42 35.5z" />
+          <rect x="19" y="26" width="17" height="14" rx="3" />
+          <path d="M36 30.5 45 26v14l-9-4.5z" />
         </g>
-        <circle className="vcam__none-lens" cx="20" cy="33" r="4.5" />
+        <circle className="vcam__none-lens" cx="25.5" cy="33" r="3" />
         {/* The sign, over it: the slash first in the tile's colour, so it cuts the camera cleanly */}
         <path className="vcam__none-halo" d="M17.2 18.2 46.8 47.8" />
         <circle className="vcam__none-sign" cx="32" cy="33" r="21" />

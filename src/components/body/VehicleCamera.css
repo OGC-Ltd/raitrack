@@ -146,10 +146,10 @@
   background: var(--vcam-none-tile);
 }
 @media (min-width: 720px) { .vcam__grid--two .vcam__none { display: grid; } }
-.vcam__none-icon { width: clamp(48px, 24%, 96px); height: auto; overflow: visible; }
+.vcam__none-icon { width: clamp(48px, 24%, 96px); height: auto; }
 .vcam__none-cam { fill: var(--vcam-none-cam); }
 .vcam__none-lens { fill: var(--vcam-none-tile); }
-.vcam__none-halo { fill: none; stroke: var(--vcam-none-tile); stroke-width: 8.5; stroke-linecap: round; }
+.vcam__none-halo { fill: none; stroke: var(--vcam-none-tile); stroke-width: 7.5; stroke-linecap: round; }
 .vcam__none-sign { fill: none; stroke: var(--vcam-none-sign); stroke-width: 4; stroke-linecap: round; }
 .vcam__none-text { margin: 0; font-size: 11px; color: var(--vcam-none-text); }
 
