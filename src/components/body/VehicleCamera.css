@@ -1,6 +1,16 @@
+/* Hallmark · component: camera window, the spare grid cell (a camera under a no-entry sign, black and white) · genre: modern-minimal · theme: brand (the window family's tokens; the cell's greys as --vcam-none tokens) · states: n/a, not interactive · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E5 S4 R5 V4 · weakest: H, on purpose: the cell is a quiet filler beside live feeds and must not pull the eye from them */
 /* Camera window. Same family as the vehicle card and the playback transport —
    shared metrics, shared drag, themed tokens throughout. */
 @import "../shared/windowChrome.css";
+
+/* The spare cell's black and white (.vcam__none): a dark tile, the camera grey behind, the sign white over it */
+:root {
+  --vcam-none-tile: #0b0d10;               /* the same black as .vcam__feed */
+  --vcam-none-cam:  rgba(255, 255, 255, 0.4);
+  --vcam-none-sign: rgba(255, 255, 255, 0.86);
+  --vcam-none-text: rgba(255, 255, 255, 0.55);
+}
 
 .vcam {
   pointer-events: auto;
@@ -125,6 +135,24 @@
   border: 1px solid var(--border);
   background: #0b0d10;
 }
+/* The spare cell beside an odd camera out: a camera under a no-entry sign, in
+   black and white on the feeds' own dark tile. One column has no spare cell.
+   Its greys are the --vcam-none tokens at :root, so the drawing holds no literal colour. */
+.vcam__none {
+  display: none;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  background: var(--vcam-none-tile);
+}
+@media (min-width: 720px) { .vcam__grid--two .vcam__none { display: grid; } }
+.vcam__none-icon { width: clamp(48px, 24%, 96px); height: auto; }
+.vcam__none-cam { fill: var(--vcam-none-cam); }
+.vcam__none-lens { fill: var(--vcam-none-tile); }
+.vcam__none-halo { fill: none; stroke: var(--vcam-none-tile); stroke-width: 7.5; stroke-linecap: round; }
+.vcam__none-sign { fill: none; stroke: var(--vcam-none-sign); stroke-width: 4; stroke-linecap: round; }
+.vcam__none-text { margin: 0; font-size: 11px; color: var(--vcam-none-text); }
+
 .vcam__feed:fullscreen { aspect-ratio: auto; border-radius: 0; border: 0; }
 /* The SDK appends its own canvas here, sized to the box when it starts. */
 .vcam__canvas, .vcam__canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
