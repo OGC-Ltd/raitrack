@@ -16,7 +16,7 @@ const RULE_LIGHT = '#e8e8e8';
 const RED = '#a33030';
 const GREEN = '#1e6b3a';
 const AMBER = '#8a5a00';
-// Column tints for the three fuel columns (operator 2026-11-26): into tanks, pump, not at pump
+// Column tints for the three fuel columns (operator 2026-11-26): probe records, pump records, not at pump
 const TINT_IN = '#e6eef8';
 const TINT_PUMP = '#e6f2ea';
 const TINT_NOT = '#f8e6e6';
@@ -55,7 +55,7 @@ const STYLE = `<style>
 .fu { color: ${INK}; font-variant-numeric: tabular-nums; }
 .fu h2 { font-size: 12pt; font-weight: 600; margin: 4mm 0 1.5mm; padding-bottom: 1mm; border-bottom: 0.5mm solid ${INK}; display: flex; justify-content: space-between; align-items: baseline; }
 .fu h2 small { font-size: 7.5pt; font-weight: 400; color: ${MUTED}; }
-.fu-band { display: grid; grid-template-columns: repeat(5, 1fr); background: ${INK}; color: #fff; margin: 2mm 0 3mm; }
+.fu-band { display: grid; grid-template-columns: repeat(6, 1fr); background: ${INK}; color: #fff; margin: 2mm 0 3mm; }
 .fu-band > div { padding: 3mm 3.5mm; border-left: 0.3mm solid #444; }
 .fu-band > div:first-child { border-left: 0; }
 .fu-band .k { font-size: 6.5pt; letter-spacing: 0.06em; text-transform: uppercase; color: #cfcfcf; }
@@ -96,13 +96,14 @@ const table = (head, rows, { right = [], total = null, tint = {} } = {}) => {
   }${total ? `<tr class="tot">${total.map((c, i) => `<td${cls(i)}>${c}</td>`).join('')}</tr>` : ''}</tbody></table>`;
 };
 
-/** The cumulative chart: need dashed grey, fuel into tanks solid black, pump-recorded solid grey, used blue; one axis. */
+/** The cumulative chart: need dashed grey, probe records solid black, pump records solid grey, used blue; one axis. */
 export function cumulativeSvg(cumulative) {
   const W = 520, H = 210, L = 46, R = 96, T = 10, B = 26;
   const pts = cumulative ?? [];
   if (!pts.length) return '';
   const hasUsed = pts.some((p) => p.used != null);
-  const max = Math.max(1, ...pts.map((p) => Math.max(p.need, p.intoTank ?? 0, p.issued, p.used ?? 0)));
+  const hasProbe = pts.some((p) => p.probe != null);
+  const max = Math.max(1, ...pts.map((p) => Math.max(p.need, p.probe ?? 0, p.issued, p.used ?? 0)));
   const step = Math.pow(10, Math.floor(Math.log10(max)));
   const top = Math.ceil(max / step) * step;
   const x = (i) => L + (pts.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (pts.length - 1));
@@ -114,19 +115,19 @@ export function cumulativeSvg(cumulative) {
   // End labels, kept at least 11 apart so lines that finish close together stay readable
   const ends = [
     { v: last.need, text: 'Need', cls: `fill="${MUTED}"` },
-    { v: last.intoTank ?? 0, text: 'Into tanks', cls: `fill="${INK}" font-weight="600"` },
+    ...(hasProbe ? [{ v: last.probe ?? 0, text: 'Probe records', cls: `fill="${INK}" font-weight="600"` }] : []),
     ...(hasUsed ? [{ v: last.used ?? 0, text: 'Used', cls: `fill="${USED}" font-weight="600"` }] : []),
-    { v: last.issued, text: 'Pump', cls: 'fill="#7a7a7a"' },
+    { v: last.issued, text: 'Pump records', cls: 'fill="#7a7a7a"' },
   ].map((e) => ({ ...e, at: y(e.v) + 3 })).sort((a, b) => a.at - b.at);
   for (let i = 1; i < ends.length; i++) ends[i].at = Math.max(ends[i].at, ends[i - 1].at + 11);
   const labels = ends.map((e) => `<text x="${(x(pts.length - 1) + 6).toFixed(1)}" y="${e.at.toFixed(1)}" font-size="9" ${e.cls}>${esc(e.text)} ${n0(e.v)}</text>`).join('');
-  const area = `${line('need')} ${[...pts].reverse().map((p, j) => `L${x(pts.length - 1 - j).toFixed(1)},${y(p.intoTank ?? 0).toFixed(1)}`).join(' ')} Z`;
+  const area = `${line('need')} ${[...pts].reverse().map((p, j) => `L${x(pts.length - 1 - j).toFixed(1)},${y(p.probe ?? p.issued ?? 0).toFixed(1)}`).join(' ')} Z`;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
 ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${RULE_LIGHT}" stroke-width="0.8"/><text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="${MUTED}">${n0(v)}</text>`).join('')}
 <path d="${area}" fill="#ececec"/>
 <path d="${line('need')}" fill="none" stroke="${MUTED}" stroke-width="1.6" stroke-dasharray="5 4"/>
 <path d="${line('issued')}" fill="none" stroke="#9a9a9a" stroke-width="1.4"/>
-<path d="${line('intoTank')}" fill="none" stroke="${INK}" stroke-width="2"/>
+${hasProbe ? `<path d="${line('probe')}" fill="none" stroke="${INK}" stroke-width="2"/>` : ''}
 ${hasUsed ? `<path d="${line('used')}" fill="none" stroke="${USED}" stroke-width="2"/>` : ''}
 ${pts.map((p, i) => (i % every === 0 || i === pts.length - 1 ? `<text x="${x(i).toFixed(1)}" y="${H - 8}" font-size="8.5" text-anchor="middle" fill="${MUTED}">${esc(dayFmt.format(asDay(p.day)).replace(',', ''))}</text>` : '')).join('')}
 ${labels}
@@ -147,36 +148,37 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
 
   // Page 1: the band
   flow.push(`<div class="fu"><div class="fu-band">
-<div><div class="k">Fuel into tanks</div><div class="v">${n0(probe ? t.intoTank : t.issued)} L</div><div class="s">${pct(probe ? t.intoTankShare : t.issuedShare)} of the plans' ${n0(t.need)} L</div></div>
-<div><div class="k">Recorded at the pump</div><div class="v">${n0(t.issued)} L</div><div class="s">${probe ? `${pct(t.recordedShare)} of fuel into tanks · ` : ''}${n0(t.issues)} fills</div></div>
+<div><div class="k">Probe records</div><div class="v">${probe ? `${n0(t.probe)} L` : '–'}</div><div class="s">${probe ? `${pct(t.probeShare)} of the plans' ${n0(t.need)} L · ${n0(t.probeMachines)} machines with a probe` : 'probe fills not read'}</div></div>
+<div><div class="k">Pump records</div><div class="v">${n0(t.issued)} L</div><div class="s">${n0(t.issues)} fills in FactorySuite</div></div>
 <div class="red"><div class="k">Not at pump</div><div class="v">${probe ? `${n0(t.unrecorded.litres)} L` : '–'}</div><div class="s">${probe ? `${n0(t.unrecorded.fills)} fills · ${n0(t.unrecorded.machines)} machines` : 'probe fills not read'}</div></div>
 <div><div class="k">Shifts planned</div><div class="v">${n0(t.shifts)}</div><div class="s">${n0(t.onPlans)} machines · ${n0(t.multiShiftDays)} days with 2+ shifts</div></div>
-<div><div class="k">Planned, nothing in</div><div class="v">${n0(t.plannedNotFuelled.machines)} machines</div><div class="s">${n0(t.plannedNotFuelled.need)} L of need · ${n0(t.down.machines)} down on plan</div></div>
+<div><div class="k">Shifts completed</div><div class="v">${t.shiftsCompleted == null ? '–' : n0(t.shiftsCompleted)}</div><div class="s">${t.shiftsCompleted == null ? 'tracker hours not read' : `ran all planned hours · of ${n0(t.shiftsJudged)} the tracker could check`}</div></div>
+<div><div class="k">Planned, no fuel recorded</div><div class="v">${n0(t.plannedNotFuelled.machines)} machines</div><div class="s">${n0(t.plannedNotFuelled.need)} L of need · ${n0(t.down.machines)} down on plan</div></div>
 </div></div>`);
 
   // Chart and by site
-  const maxSite = Math.max(1, ...rep.bySite.map((s) => Math.max(s.need, s.intoTank)));
+  const maxSite = Math.max(1, ...rep.bySite.map((s) => Math.max(s.need, s.probe ?? 0)));
   const siteRows = rep.bySite.map((s) => [
-    esc(s.site), `${n0(s.fuelled)} / ${n0(s.machines)}`, n0(s.need), `<b>${n0(s.intoTank)}</b>`,
-    `<span class="fu-barbox"><span class="fu-bar" style="width:${Math.min(100, (s.intoTank / maxSite) * 100).toFixed(0)}%"></span></span>`,
-    n0(s.issued), s.unrecorded > 0 ? `<span class="red">${n0(s.unrecorded)}</span>` : '–', vary(s.intoTank - s.need),
+    esc(s.site), `${n0(s.fuelled)} / ${n0(s.machines)}`, n0(s.need), probe ? `<b>${n0(s.probe)}</b>` : '–',
+    `<span class="fu-barbox"><span class="fu-bar" style="width:${Math.min(100, ((s.probe ?? 0) / maxSite) * 100).toFixed(0)}%"></span></span>`,
+    n0(s.issued), s.unrecorded > 0 ? `<span class="red">${n0(s.unrecorded)}</span>` : '–', s.probeVariance == null ? '–' : vary(s.probeVariance),
   ]);
-  const siteTot = ['Total', '', n0(t.need), n0(t.intoTank), '', n0(t.issued), `<span class="red">${n0(t.unrecorded.litres)}</span>`, vary(t.intoTank - t.need)];
+  const siteTot = ['Total', '', n0(t.need), probe ? n0(t.probe) : '–', '', n0(t.issued), `<span class="red">${n0(t.unrecorded.litres)}</span>`, t.probeVariance == null ? '–' : vary(t.probeVariance)];
   flow.push(`<div class="fu fu-grid">
-<div><h2>Fuel into tanks against the plans' need <small>cumulative, litres</small></h2>${cumulativeSvg(rep.cumulative)}
-<div class="fu-note">Need: dashed. Into tanks: black (probe fills, and pump fills the probe could not see). Used: blue (each machine's tank: level at the start of the day + fuel in − fuel drained − level at the end${t.used ? `; ${n0(t.used.machines)} machines with a fuel probe` : ''}). Pump: grey (FactorySuite's records).</div></div>
-<div><h2>By site <small>litres</small></h2>${table(['Site', 'Fuelled', 'Need', 'Into tanks', '', 'Pump', 'Not at pump', 'Variance'], siteRows, { right: [1, 2, 3, 5, 6, 7], total: siteTot, tint: { 3: 'in', 4: 'in', 5: 'pump', 6: 'not' } })}</div>
+<div><h2>Probe records against the plans' need <small>cumulative, litres</small></h2>${cumulativeSvg(rep.cumulative)}
+<div class="fu-note">Need: dashed. Probe records: black (fills the fuel probes saw). Used: blue (each machine's tank: level at the start of the day + fuel in − fuel drained − level at the end${t.used ? `; ${n0(t.used.machines)} machines with a fuel probe` : ''}). Pump records: grey (FactorySuite).</div></div>
+<div><h2>By site <small>litres</small></h2>${table(['Site', 'Fuelled', 'Need', 'Probe records', '', 'Pump records', 'Not at pump', 'Variance'], siteRows, { right: [1, 2, 3, 5, 6, 7], total: siteTot, tint: { 3: 'in', 4: 'in', 5: 'pump', 6: 'not' } })}</div>
 </div>`);
 
   // No pump record, by machine type
   const un = rep.exceptions.unrecorded;
   const unRows = un.slice(0, 14).map((u) => [`<b>${esc(u.machine)}</b>`, esc(u.type), esc(u.site), n0(u.fills), `<span class="red b">${n0(u.litres)}</span>`, u.pumpFills ? `${n0(u.pumpFills)} · ${n0(u.pumpL)} L` : '<span class="red">none</span>']);
-  const typeRows = rep.byType.slice(0, 14).map((x) => [esc(x.type), n0(x.units), n0(x.shifts), n0(x.need), `<b>${n0(x.intoTank)}</b>`, n0(x.issued), x.unrecorded > 0 ? `<span class="red">${n0(x.unrecorded)}</span>` : '–']);
+  const typeRows = rep.byType.slice(0, 14).map((x) => [esc(x.type), n0(x.units), n0(x.shifts), x.completed == null ? '–' : n0(x.completed), n0(x.need), probe && x.probed ? `<b>${n0(x.probe)}</b>` : '<span class="muted">no probe</span>', n0(x.issued), x.unrecorded > 0 ? `<span class="red">${n0(x.unrecorded)}</span>` : '–']);
   flow.push(`<div class="fu fu-grid">
-<div><h2>Fuel into tanks, not at pump <small>${probe ? `${n0(t.unrecorded.machines)} machines · top ${Math.min(14, un.length)}` : 'probe fills not read'}</small></h2>${
+<div><h2>Probe records not at pump <small>${probe ? `${n0(t.unrecorded.machines)} machines · top ${Math.min(14, un.length)}` : 'probe fills not read'}</small></h2>${
   probe ? table(['Machine', 'Type', 'Site', 'Fills', 'Litres', 'Pump records'], unRows, { right: [3, 4], tint: { 4: 'not', 5: 'pump' }, total: un.length ? ['Total', '', '', n0(t.unrecorded.fills), `<span class="red">${n0(t.unrecorded.litres)}</span>`, ''] : null }) : '<p class="fu-note">The probe fills could not be read.</p>'}
 <div class="fu-note">A fill the fuel probe saw that no pump issue in FactorySuite matches (same machine, from 30 minutes before to 2 hours after).${t.otherProbe?.fills ? ` A further ${n0(t.otherProbe.litres)} L in ${n0(t.otherProbe.fills)} fills went into ${n0(t.otherProbe.vehicles)} tracked vehicles that were on no plan and at no pump.` : ''}</div></div>
-<div><h2>By machine type <small>litres</small></h2>${table(['Type', 'Units', 'Shifts', 'Need', 'Into tanks', 'Pump', 'Not at pump'], typeRows, { right: [1, 2, 3, 4, 5, 6], tint: { 4: 'in', 5: 'pump', 6: 'not' } })}</div>
+<div><h2>By machine type <small>litres</small></h2>${table(['Type', 'Units', 'Shifts', 'Completed', 'Need', 'Probe records', 'Pump records', 'Not at pump'], typeRows, { right: [1, 2, 3, 4, 5, 6, 7], tint: { 5: 'in', 6: 'pump', 7: 'not' } })}</div>
 </div>`);
 
   // Fill checks and machines down
@@ -201,22 +203,23 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
   const pn = rep.exceptions.plannedNotFuelled;
   flow.push(`<div class="fu fu-grid">
 <div><h2>At the pump, by operator <small>${n0(rep.byOperator.length)} operators</small></h2>${table(['Operator', 'Fills', 'Litres', 'Machines', 'Flags', 'Probe saw less L'], op.map((o) => [esc(o.operator), n0(o.fills), n0(o.litres), n0(o.machines), o.flags ? `<span class="amber">${n0(o.flags)}</span>` : '–', o.probeShortL > 0 ? n0(o.probeShortL) : '–']), { right: [1, 2, 3, 4, 5] })}</div>
-<div><h2>Planned, nothing into the tank <small>${n0(pn.length)} machines</small></h2>${pn.length ? table(['Machine', 'Type', 'Site', 'Shifts', 'Need L'], pn.slice(0, 16).map((x) => [`<b>${esc(x.machine)}</b>${x.down ? '<span class="fu-down">down</span>' : ''}`, esc(x.type), esc(x.site), n0(x.shifts), n0(x.need)]), { right: [3, 4] }) : '<p class="fu-note">None.</p>'}
+<div><h2>Planned, no fuel recorded <small>${n0(pn.length)} machines</small></h2>${pn.length ? table(['Machine', 'Type', 'Site', 'Shifts', 'Need L'], pn.slice(0, 16).map((x) => [`<b>${esc(x.machine)}</b>${x.down ? '<span class="fu-down">down</span>' : ''}`, esc(x.type), esc(x.site), n0(x.shifts), n0(x.need)]), { right: [3, 4] }) : '<p class="fu-note">None.</p>'}
 ${pn.length > 16 ? `<div class="fu-note">And ${n0(pn.length - 16)} more in the register.</div>` : ''}</div>
 </div>`);
 
   // Basis of preparation
   flow.push(`<div class="fu"><h2>Basis of preparation</h2><ul class="fu-basis">
 <li><b>Need</b>: FactorySuite's figure on each work-plan shift: planned hours × the register's litres per hour, or planned km ÷ km per litre.</li>
-<li><b>Fuel into tanks</b>: every fill the machine's fuel probe recorded (fuel moving in the tank left out), and every pump fill the probe could not see. Machines without a probe count their pump fills alone.</li>
-<li><b>Pump</b>: fuel issues recorded in FactorySuite against each machine. <b>Not at pump</b>: a probe fill that no pump issue matches, same machine, 30 minutes before to 2 hours after.</li>
-<li><b>Site</b>: each shift's work location; a pump issue counts at the site of the shift it was requested for. Fuel into tanks counts at the machine's main site for the period.</li>
+<li><b>Probe records</b>: every fill the machine's fuel probe recorded (fuel moving in the tank left out). Machines without a probe show "no probe".</li>
+<li><b>Pump records</b>: fuel issues recorded in FactorySuite against each machine. <b>Not at pump</b>: a probe fill that no pump issue matches, same machine, 30 minutes before to 2 hours after.</li>
+<li><b>Site</b>: each shift's work location; a pump issue counts at the site of the shift it was requested for. Probe records count at the machine's main site for the period. <b>Variance</b>: probe records less the need of the machines with a probe.</li>
+<li><b>Shifts completed</b>: the tracker shows the engine ran at least the shift's planned hours inside the shift. Shifts the tracker could not check (no tracker, no signal, no planned hours) are not counted either way.</li>
 </ul><div class="fu-note">${esc(CONTACT_LINE)}</div></div>`);
 
   // The machine register: one table, split across pages with its header repeated (class lst)
-  const regRows = rep.register.map((r) => `<tr><td><b>${esc(r.machine)}</b>${r.down ? '<span class="fu-down">down</span>' : ''}</td><td>${esc(r.type)}</td><td>${esc(r.site)}</td><td class="r">${n0(r.days)}</td><td class="r">${n0(r.shifts)}</td><td class="r">${n1(r.plannedHours)}</td><td class="r">${n0(r.need)}</td><td class="r t-in"><b>${n0(r.intoTank)}</b></td><td class="r t-pump">${n0(r.issued)}</td><td class="r t-not">${r.unrecorded > 0 ? `<span class="red">${n0(r.unrecorded)}</span>` : '–'}</td><td class="r">${vary(r.difference)}</td><td>${r.tracker ? '' : '<span class="muted">no tracker</span>'}</td></tr>`);
+  const regRows = rep.register.map((r) => `<tr><td><b>${esc(r.machine)}</b>${r.down ? '<span class="fu-down">down</span>' : ''}</td><td>${esc(r.type)}</td><td>${esc(r.site)}</td><td class="r">${n0(r.days)}</td><td class="r">${n0(r.shifts)}</td><td class="r">${r.completed == null ? '–' : n0(r.completed)}</td><td class="r">${n1(r.plannedHours)}</td><td class="r">${n0(r.need)}</td><td class="r t-in">${r.probe == null ? '<span class="muted">no probe</span>' : `<b>${n0(r.probe)}</b>`}</td><td class="r t-pump">${n0(r.issued)}</td><td class="r t-not">${r.unrecorded > 0 ? `<span class="red">${n0(r.unrecorded)}</span>` : '–'}</td><td class="r">${r.probeDifference == null ? '–' : vary(r.probeDifference)}</td><td>${r.tracker ? '' : '<span class="muted">no tracker</span>'}</td></tr>`);
   flow.push(`<h2 class="fu" style="font-size:12pt;font-weight:600;border-bottom:0.5mm solid ${INK};margin:4mm 0 1.5mm;padding-bottom:1mm">Machine register <small style="font-size:7.5pt;font-weight:400;color:${MUTED}">all ${n0(rep.register.length)} machines on the plans or at the pumps, by site · litres</small></h2>`);
-  flow.push(`<table class="lst fu-t fu"><thead><tr><th>Machine</th><th>Type</th><th>Site</th><th class="r">Days</th><th class="r">Shifts</th><th class="r">Plan h</th><th class="r">Need</th><th class="r t-in">Into tanks</th><th class="r t-pump">Pump</th><th class="r t-not">Not at pump</th><th class="r">Variance</th><th></th></tr></thead><tbody>${regRows.join('')}</tbody></table>`);
+  flow.push(`<table class="lst fu-t fu"><thead><tr><th>Machine</th><th>Type</th><th>Site</th><th class="r">Days</th><th class="r">Shifts</th><th class="r">Completed</th><th class="r">Plan h</th><th class="r">Need</th><th class="r t-in">Probe records</th><th class="r t-pump">Pump records</th><th class="r t-not">Not at pump</th><th class="r">Variance</th><th></th></tr></thead><tbody>${regRows.join('')}</tbody></table>`);
 
   const reportNo = reportNumber('FU', orgCode, now);
   const date = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Nairobi', day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
@@ -236,11 +239,11 @@ ${pn.length > 16 ? `<div class="fu-note">And ${n0(pn.length - 16)} more in the r
 /** The register as an Excel table: head and body for downloadTableCsv/Xlsx. */
 export function registerTable(rep) {
   return {
-    head: ['Machine', 'Type', 'Site', 'Department', 'Days', 'Shifts', 'Planned hours', 'Need L', 'Into tanks L', 'Pump L', 'Pump fills', 'Not at pump L', 'Not at pump fills', 'Variance L', 'Down', 'Tracker'],
+    head: ['Machine', 'Type', 'Site', 'Department', 'Days', 'Shifts', 'Shifts completed', 'Planned hours', 'Need L', 'Probe records L', 'Pump records L', 'Pump fills', 'Not at pump L', 'Not at pump fills', 'Variance L', 'Down', 'Tracker'],
     body: rep.register.map((r) => [
-      r.machine, r.type, r.site, r.department, r.days, r.shifts, Math.round((r.plannedHours ?? 0) * 10) / 10,
-      Math.round(r.need ?? 0), Math.round(r.intoTank ?? 0), Math.round(r.issued ?? 0), r.fills,
-      r.unrecorded == null ? '' : Math.round(r.unrecorded), r.unrecordedFills, r.difference == null ? '' : Math.round(r.difference),
+      r.machine, r.type, r.site, r.department, r.days, r.shifts, r.completed ?? '', Math.round((r.plannedHours ?? 0) * 10) / 10,
+      Math.round(r.need ?? 0), r.probe == null ? 'no probe' : Math.round(r.probe), Math.round(r.issued ?? 0), r.fills,
+      r.unrecorded == null ? '' : Math.round(r.unrecorded), r.unrecordedFills, r.probeDifference == null ? '' : Math.round(r.probeDifference),
       r.down ? 'Yes' : '', r.tracker ? 'Yes' : 'No',
     ]),
   };

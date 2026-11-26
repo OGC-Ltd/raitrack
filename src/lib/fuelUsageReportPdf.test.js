@@ -30,17 +30,18 @@ describe('the Fuel Usage Report PDF', () => {
   });
 
   it('leads with fuel into tanks, the pump records and the fuel with no pump record', () => {
-    expect(html).toContain('Fuel into tanks');
-    expect(html).toContain('268 L');                       // 118 + 150
+    expect(html).toContain('Probe records');
+    expect(html).toContain('Pump records');
+    expect(html).toContain('268 L');                       // 118 + 150, the probe's fills
     expect(html).toContain('Not at pump');
     expect(html).toContain('150 L');
-    expect(html).toContain('Fuel into tanks, not at pump');
+    expect(html).toContain('Probe records not at pump');
     expect(html).toContain('<th class="r t-not">Not at pump</th>');
   });
 
   it('carries no cost: five figures in the band, no KES anywhere (operator 2026-11-24)', () => {
     expect(html).not.toMatch(/KES|>Cost</);
-    expect(html).toContain('grid-template-columns: repeat(5, 1fr)');
+    expect(html).toContain('grid-template-columns: repeat(6, 1fr)');
   });
 
   it('shows a machine down on the plan, the register with its header to repeat, and the basis', () => {
@@ -62,8 +63,8 @@ describe('the Fuel Usage Report PDF', () => {
 
   it('draws the cumulative chart with one axis and three lines', () => {
     const svg = cumulativeSvg(rep.cumulative);
-    expect(svg.match(/<path /g)).toHaveLength(4);            // the gap, need, pump, into tanks
-    expect(svg).toContain('Into tanks 268');
+    expect(svg.match(/<path /g)).toHaveLength(4);            // the gap, need, pump records, probe records
+    expect(svg).toContain('Probe records 268');
     expect(svg).not.toContain('Used');                        // no tank days read: no Used line
   });
 
@@ -80,6 +81,34 @@ describe('the Fuel Usage Report PDF', () => {
     const svg = cumulativeSvg(r2.cumulative);
     expect(svg.match(/<path /g)).toHaveLength(5);            // and used
     expect(svg).toContain('Used 88');
+  });
+});
+
+describe('probe records and shifts completed (operator 2026-11-26)', () => {
+  const shiftRuns = [
+    { lineId: 'a', day: '2026-11-16', state: 'ran', runHours: 8.2, plannedHours: 8 },       // finished its hours
+    { lineId: 'b', day: '2026-11-17', state: 'not-run', runHours: 0.1, plannedHours: 8 },   // did not
+  ];
+  const r3 = buildFuelUsage(data, { fillings, shiftRuns });
+  const h3 = fuelUsageHtml(r3, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', logos: { rai: 'r', ogc: 'o' }, now: Date.parse('2026-11-24T18:00:00+03:00') });
+
+  it('probe records are the probe fills only; a machine with no probe shows no probe', () => {
+    expect(r3.totals.probe).toBe(268);
+    expect(r3.register.find((x) => x.machine === 'EX-01').probe).toBe(268);
+    expect(r3.register.find((x) => x.machine === 'DZ-05').probe).toBeNull();
+    expect(h3).toContain('no probe');
+  });
+
+  it('a shift is completed when the tracker shows it ran all its planned hours', () => {
+    expect(r3.totals).toMatchObject({ shiftsCompleted: 1, shiftsJudged: 2 });
+    expect(r3.register.find((x) => x.machine === 'EX-01')).toMatchObject({ completed: 1, judged: 1 });
+    expect(h3).toContain('Shifts completed');
+    expect(h3).toContain('of 2 the tracker could check');
+  });
+
+  it('without the tracker hours, completed reads as a dash, not zero', () => {
+    expect(rep.totals.shiftsCompleted).toBeNull();
+    expect(html).toContain('tracker hours not read');
   });
 });
 
@@ -101,8 +130,8 @@ describe('words and figures', () => {
 describe('the Excel files', () => {
   it('the register: one row a machine, every column', () => {
     const t = registerTable(rep);
-    expect(t.head).toHaveLength(16);
-    expect(t.body.find((r) => r[0] === 'EX-01')).toEqual(['EX-01', 'Excavator', 'Zone 4', 'IRRIGATION', 1, 1, 8, 128, 268, 120, 1, 150, 1, 140, '', 'Yes']);
+    expect(t.head).toHaveLength(17);
+    expect(t.body.find((r) => r[0] === 'EX-01')).toEqual(['EX-01', 'Excavator', 'Zone 4', 'IRRIGATION', 1, 1, '', 8, 128, 268, 120, 1, 150, 1, 140, '', 'Yes']);   // '' = shifts completed not read
   });
   it('no pump record: one row a fill', () => {
     const t = unrecordedTable(rep);

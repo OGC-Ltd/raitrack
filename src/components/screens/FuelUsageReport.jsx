@@ -6,6 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { getFactoryFuel, getProbeFillings, getTankDays } from '../../api/factoryFuel';
+import { getFactorySupervisors } from '../../api/factorySupervisors';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import { buildFuelUsage, siteOptions, lastFullWeek } from '../../lib/fuelUsageReport';
 import { fuelUsageHtml, registerTable, unrecordedTable, periodWords, n0 } from '../../lib/fuelUsageReportPdf';
@@ -34,24 +35,27 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
     try {
       // The plans and pumps, and the probes' fills, side by side.
       // The fills are optional: the report says when they could not be read.
-      const [data, fillings, tankDays] = await Promise.all([
+      const [data, fillings, tankDays, supervisors] = await Promise.all([
         getFactoryFuel({ companyId, from, to }),
         getProbeFillings({ companyId, from, to }).catch(() => null),
         // Each probed machine's tank day by day, for the chart's Used line (optional too)
         getTankDays({ companyId, from, to }).catch(() => null),
+        // What each planned shift's machine ran (the tracker), for Shifts completed (optional too)
+        getFactorySupervisors({ companyId, from, to }).catch(() => null),
       ]);
+      const shiftRuns = Array.isArray(supervisors?.supervisors) ? supervisors.supervisors.flatMap((x) => x.history ?? []) : null;
       if (!data?.factory) {
         setRun({ status: 'error', message: 'This fleet does not fuel by FactorySuite work plans.' });
         return;
       }
       setSite((s) => (s && siteOptions(data).includes(s) ? s : ''));
-      setRun({ status: 'done', data, fillings, tankDays, at: Date.now() });
+      setRun({ status: 'done', data, fillings, tankDays, shiftRuns, at: Date.now() });
     } catch (err) {
       setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
 
-  const rep = useMemo(() => (run.status === 'done' ? buildFuelUsage(run.data, { site: site || null, fillings: run.fillings, tankDays: run.tankDays }) : null), [run, site]);
+  const rep = useMemo(() => (run.status === 'done' ? buildFuelUsage(run.data, { site: site || null, fillings: run.fillings, tankDays: run.tankDays, shiftRuns: run.shiftRuns }) : null), [run, site]);
   const sites = useMemo(() => (run.status === 'done' ? siteOptions(run.data) : []), [run]);
   const html = useMemo(() => (rep ? fuelUsageHtml(rep, {
     companyName: companyName ?? orgCode ?? 'Fleet', orgCode, siteWords: site || `All · ${sites.length} sites`, logos: letterheadLogos(), now: run.at,
@@ -109,13 +113,13 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
 
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && <p className="rpt-sub">Pick the period (the last full week to begin with), then press Run report.</p>}
-        {run.status === 'loading' && <p className="rpt-sub" role="status">Reading the work plans, the pumps and the fuel probes…</p>}
+        {run.status === 'loading' && <p className="rpt-sub" role="status">Reading the work plans, the pumps, the fuel probes and the trackers…</p>}
         {run.status === 'error' && <p className="rpt-warn" role="alert">The report could not be made: {run.message}</p>}
         {rep && (
           <>
             <p className="rpt-sub">
-              {periodWords(rep.from, rep.to)} · {site || 'all sites'} · into tanks <b>{n0(t.probeKnown ? t.intoTank : t.issued)} L</b> against
-              {' '}{n0(t.need)} L of need · pump <b>{n0(t.issued)} L</b>
+              {periodWords(rep.from, rep.to)} · {site || 'all sites'} · probe records <b>{t.probeKnown ? `${n0(t.probe)} L` : '–'}</b> against
+              {' '}{n0(t.need)} L of need · pump records <b>{n0(t.issued)} L</b>
               {t.probeKnown ? <> · not at pump <b style={{ color: '#a33030' }}>{n0(t.unrecorded.litres)} L</b></> : ' · the fuel probes could not be read'}
             </p>
             <iframe title="Fuel usage report preview" srcDoc={html}
