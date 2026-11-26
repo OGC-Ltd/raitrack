@@ -173,6 +173,20 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
 <div><h2>By site <small>litres</small></h2>${table(['Site', 'Fuelled', 'Need', 'Probe records', '', 'Pump records', 'Not at pump', 'Variance'], siteRows, { right: [1, 2, 3, 5, 6, 7], total: siteTot, tint: { 3: 'in', 4: 'in', 5: 'pump', 6: 'not' } })}</div>
 </div>`);
 
+  // Department efficiency (operator 2026-11-26), early: page 2 at the latest
+  const dep = rep.byDepartment;
+  if (dep?.length) {
+    const p0 = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
+    const gradeCls = { A: 'green', B: 'amber', C: 'amber', D: 'red' };
+    const depRows = dep.map((d) => [
+      `<b>${esc(d.department)}</b>`, n0(d.shifts), n0(d.judged), p0(d.completedPct), p0(d.hoursPct), p0(d.onTimePct),
+      d.score == null ? '–' : `<b>${n0(d.score)}</b>`,
+      d.grade ? `<span class="fu-grade ${gradeCls[d.grade]}">${d.grade}</span>` : '<span class="muted">not checked</span>',
+    ]);
+    flow.push(`<div class="fu"><h2>Department efficiency <small>shifts the tracker could check</small></h2>${table(['Department', 'Shifts', 'Checked', 'Completed', 'Hours delivered', 'On-time starts', 'Score', 'Grade'], depRows, { right: [1, 2, 3, 4, 5, 6] })}
+<div class="fu-note">Score: the average of shifts completed (90% of planned hours run), hours delivered (engine hours ÷ planned, up to 100%) and on-time starts (working within 1 hour of the shift start). A 85 and over, B 70–84, C 50–69, D under 50.</div></div>`);
+  }
+
   // No pump record, by machine type
   const un = rep.exceptions.unrecorded;
   const unRows = un.slice(0, 14).map((u) => [`<b>${esc(u.machine)}</b>`, esc(u.type), esc(u.site), n0(u.fills), `<span class="red b">${n0(u.litres)}</span>`, u.pumpFills ? `${n0(u.pumpFills)} · ${n0(u.pumpL)} L` : '<span class="red">none</span>']);
@@ -200,20 +214,6 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
 <div class="fu-note">Pump flags this period: ${Object.entries(flagCounts).map(([f, c]) => `${esc(f)} ${n0(c)}`).join(', ') || 'none'}${t.flags.offPlanL ? ` (Off plan ${n0(t.flags.offPlanL)} L)` : ''}. Shown for reference: what FactorySuite means by each flag is still to be confirmed.</div></div>
 <div><h2>Machines down, still on the plan <small>${n0(dn.length)} machines</small></h2>${dn.length ? table(['Machine', 'Type', 'Shifts', 'Need L', 'Pump L'], dn.map((x) => [`<b>${esc(x.machine)}</b><span class="fu-down">down</span>`, esc(x.type), n0(x.shifts), n0(x.need), x.issued > 0 ? `<span class="red">${n0(x.issued)}</span>` : '–']), { right: [2, 3, 4] }) : '<p class="fu-note">None.</p>'}</div>
 </div>`);
-
-  // Department efficiency (operator 2026-11-26)
-  const dep = rep.byDepartment;
-  if (dep?.length) {
-    const p0 = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
-    const gradeCls = { A: 'green', B: 'amber', C: 'amber', D: 'red' };
-    const depRows = dep.map((d) => [
-      `<b>${esc(d.department)}</b>`, n0(d.shifts), n0(d.judged), p0(d.completedPct), p0(d.hoursPct), p0(d.onTimePct),
-      d.score == null ? '–' : `<b>${n0(d.score)}</b>`,
-      d.grade ? `<span class="fu-grade ${gradeCls[d.grade]}">${d.grade}</span>` : '<span class="muted">not checked</span>',
-    ]);
-    flow.push(`<div class="fu"><h2>Department efficiency <small>shifts the tracker could check</small></h2>${table(['Department', 'Shifts', 'Checked', 'Completed', 'Hours delivered', 'On-time starts', 'Score', 'Grade'], depRows, { right: [1, 2, 3, 4, 5, 6] })}
-<div class="fu-note">Score: the average of shifts completed (90% of planned hours run), hours delivered (engine hours ÷ planned, up to 100%) and on-time starts (working within 1 hour of the shift start). A 85 and over, B 70–84, C 50–69, D under 50.</div></div>`);
-  }
 
   // By operator, planned but nothing in
   const op = rep.byOperator.slice(0, 16);

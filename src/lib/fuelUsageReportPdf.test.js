@@ -117,6 +117,9 @@ describe('probe records and shifts completed (operator 2026-11-26)', () => {
     expect(second).toMatchObject({ department: 'FACTORY', judged: 1, completed: 0, onTime: 0, score: 17, grade: 'D' });
     const h4 = fuelUsageHtml(r4, { companyName: 'Mufindi Paper Mills Ltd', orgCode: 'KASULU', logos: { rai: 'r', ogc: 'o' }, now: Date.parse('2026-11-24T18:00:00+03:00') });
     expect(h4).toContain('Department efficiency');
+    // Straight after the chart and By site, so it is on page 2 at the latest
+    expect(h4.indexOf('Department efficiency')).toBeGreaterThan(h4.indexOf('By site'));
+    expect(h4.indexOf('Department efficiency')).toBeLessThan(h4.indexOf('By machine type'));
     expect(h4).toContain('<span class="fu-grade green">A</span>');
     expect(h4).toContain('<span class="fu-grade red">D</span>');
   });
