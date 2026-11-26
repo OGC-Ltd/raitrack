@@ -407,12 +407,22 @@ const PLAN_STYLE = {
   // only, in a hue nothing else on the sheet uses: they overlap the drawing's
   // zones and a wash would muddy the blocks underneath.
   hablock:     { color: "#e11d48", weight: 2.4, fill: 0.04 },
+  // The six "AREA n - 21x" parcels from the same file — 3,000 to 16,000 ha
+  // each, most of them off the drawing to the west and south. The number after
+  // the dash is the Wialon zone (AREA 7 - 213 is FARM#213). Outline only; they
+  // overlap one another and AREA 3 - 211 wraps round the rest.
+  farmarea:    { color: "#7c3aed", weight: 2, fill: 0.02 },
 };
-const PLAN_LEGEND = ["planted", "nursery", "rainfed", "flood", "water", "reservoir", "factory", "irrigation", "headcontrol", "zone", "hablock", "boundary"];
+const PLAN_LEGEND = ["planted", "nursery", "rainfed", "flood", "water", "reservoir", "factory", "irrigation", "headcontrol", "zone", "hablock", "farmarea", "boundary"];
+// Too large to frame with the estate: AREA 7 - 213 is 25 km west of it, and a
+// fit taking the parcels in lands the drawing at a zoom where none of it reads.
+// They draw; the camera frames the rest.
+const PLAN_FIT_SKIP = new Set(["farmarea"]);
 const PLAN_LABEL = {
   boundary: "Estate boundary", zone: "Zone", headcontrol: "Head-control area", planted: "Irrigation block",
   nursery: "Nursery", rainfed: "Rainfed area", flood: "Flood zone", water: "River", reservoir: "Reservoir",
   factory: "Factory site", road: "Road", irrigation: "Irrigation main", hablock: "Hectare block",
+  farmarea: "Farm area",
 };
 
 // The drawing's area names — the ones a reader of the sheet navigates by, and
@@ -443,6 +453,14 @@ const PLAN_LABELS = [
   { text: "1600 HA AREA", lat: -4.03567, lng: 30.49495, minZoom: 12, priority: 2 },
   { text: "2500 HA AREA", lat: -4.04198, lng: 30.43366, minZoom: 12, priority: 2 },
   { text: "2000 HA AREA", lat: -4.06715, lng: 30.40170, minZoom: 12, priority: 2 },
+  // The farm areas' pins from the same file. Lowest priority: AREA 3 and
+  // AREA 4 sit inside the estate's own names and give way to them.
+  { text: "AREA 1 - 210", lat: -3.94868, lng: 30.36570, minZoom: 10, priority: 1 },
+  { text: "AREA 3 - 211", lat: -4.03087, lng: 30.39668, minZoom: 10, priority: 1 },
+  { text: "AREA 4 - 215", lat: -4.02792, lng: 30.48737, minZoom: 10, priority: 1 },
+  { text: "AREA 5 - 214", lat: -4.18161, lng: 30.40715, minZoom: 10, priority: 1 },
+  { text: "AREA 6 - 212", lat: -4.00382, lng: 30.23650, minZoom: 10, priority: 1 },
+  { text: "AREA 7 - 213", lat: -4.11188, lng: 30.17507, minZoom: 10, priority: 1 },
 ];
 
 function planLabelHtml(text) {
@@ -5139,7 +5157,11 @@ export default function FleetMap() {
     if (subject) {
       extendData(sitesRef.current[subject.id].data);
     } else {
-      if (showPlan && planAllowed) extendData(planDataRef.current);
+      if (showPlan && planAllowed) {
+        planDataRef.current?.forEach(f => {
+          if (!PLAN_FIT_SKIP.has(f.getProperty("c"))) f.getGeometry()?.forEachLatLng(ll => b.extend(ll));
+        });
+      }
       // The boundaries and the drawing cover the same ground within a
       // kilometre, so unioning them costs no zoom — and when only the
       // boundaries are on, they are what there is to frame.
@@ -5226,7 +5248,8 @@ export default function FleetMap() {
         // Shading sits under its own block grid, and the whole plan layer stays
         // negative so it can never climb above the authoritative zone layer or
         // the fleet, both of which start at 1.
-        zIndex: shade ? -2 : cls === "boundary" || cls === "zone" || cls === "hablock" ? -3 : -1,
+        zIndex: shade ? -2 : cls === "farmarea" ? -4
+          : cls === "boundary" || cls === "zone" || cls === "hablock" ? -3 : -1,
       };
     });
 

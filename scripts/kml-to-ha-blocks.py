@@ -1,7 +1,8 @@
 """
-Kasulu's four hectare blocks -- the 700, 1600, 2500 and 2000 Ha areas -- from
-the operations team's Google Earth file, merged into public/estate-plan.geojson
-as class `hablock` for FleetMap's planting-plan layer.
+Kasulu's hectare blocks and farm areas from the operations team's Google Earth
+file, merged into public/estate-plan.geojson for FleetMap's planting-plan
+layer: the 700, 1600, 2500 and 2000 Ha areas as class `hablock`, and the six
+"AREA n - 21x" parcels as class `farmarea`.
 
     python scripts/kml-to-ha-blocks.py "tools/kasulu-ha-blocks.kml" public/estate-plan.geojson
 
@@ -21,17 +22,24 @@ printed beside the figure in its name; they differ by a few percent because the
 names are round working figures (see FleetMap ZONE_PLAN_ALIAS for the sheet's
 own printed numbers, which differ again).
 
-Not taken from the file: Nursery A, the six unnamed outlines (FARM#210-215, the
-estate boundary among them -- already in the plan from the drawing), and the
-place pins (towns, intakes, quarry). Re-running replaces the `hablock` features
-and leaves every other feature of the plan alone.
+The farm areas are six UNNAMED outlines, each with an "AREA n - 21x" pin in
+it; the number after the dash is the Wialon zone (AREA 7 - 213 is FARM#213).
+Each pin must fall inside exactly one unnamed outline and no two pins may share
+one, or the script stops. They overlap one another at their edges, and AREA 3 -
+211 (16,373 ha) is the large envelope round the others; AREA 4 - 215 is the
+estate boundary's ground.
 
-Each feature carries `c` ("hablock"), `n` (the block's name, "700 Ha Area"),
-`a` (computed area, ha), `ha` (the nominal figure) and `k` (the outline's name
-in the file).
+Not taken from the file: Nursery A (the drawing has its own) and the place
+pins (towns, intakes, quarry). Re-running replaces the `hablock` and
+`farmarea` features and leaves every other feature of the plan alone.
+
+Each feature carries `c`, `n` (the pin's name, "700 Ha Area" / "AREA 7 -
+213"), `a` (computed area, ha), and for hectare blocks `ha` (the nominal
+figure) and `k` (the outline's name in the file).
 """
 
 import json
+import re
 import math
 import sys
 import xml.etree.ElementTree as ET
@@ -45,6 +53,10 @@ BLOCKS = {
     "2500 Ha Area": ("2500 Ha Area", 2500),
     "2000 Ha Area": ("Rainfed Area", 2000),
 }
+
+# "AREA 7 - 213" and "AREA 1 -210" alike; the file is not consistent.
+FARM_PIN = re.compile(r"^AREA \d+ ?- ?\d+$")
+OURS = {"hablock", "farmarea"}
 
 R = 6371008.8  # mean Earth radius, m
 
@@ -72,7 +84,7 @@ def coords(el):
 
 def main(kml_path, plan_path):
     root = ET.parse(kml_path).getroot()
-    pins, outlines = {}, {}
+    pins, outlines, unnamed = {}, {}, []
     for pm in root.iter(K + "Placemark"):
         name = (pm.findtext(K + "name") or "").strip()
         pt = pm.find(f"{K}Point/{K}coordinates")
@@ -81,12 +93,14 @@ def main(kml_path, plan_path):
             ln = pm.find(f".//{K}LinearRing/{K}coordinates")
         if pt is not None:
             pins[name] = coords(pt)[0]
+        elif ln is not None and name == "UNKNOWN_LINE_TYPE":
+            unnamed.append(coords(ln))
         elif ln is not None and name in {o for o, _ in BLOCKS.values()}:
             # "2500 Ha Area" is both a pin and an outline; the outline is the
             # LineString, so it is keyed apart from the pin.
             outlines[name] = coords(ln)
 
-    for lon, lat in [p for r in outlines.values() for p in r] + list(pins.values()):
+    for lon, lat in [p for r in [*outlines.values(), *unnamed] for p in r] + list(pins.values()):
         if not (29 < lon < 32 and -6 < lat < -2):
             sys.exit(f"coordinate {lon},{lat} is not near Kasulu -- not WGS 84 lon/lat?")
 
@@ -110,9 +124,29 @@ def main(kml_path, plan_path):
                          "coordinates": [[[round(x, 6), round(y, 6)] for x, y in ring]]},
         })
 
+    taken = set()
+    for pin in sorted((n for n in pins if FARM_PIN.match(n)), key=lambda n: int(n.split()[1])):
+        homes = [i for i, r in enumerate(unnamed) if inside(pins[pin], r[:-1])]
+        if len(homes) != 1 or homes[0] in taken:
+            sys.exit(f"pin {pin!r} sits in unnamed outlines {homes}; expected one of its own")
+        taken.add(homes[0])
+        ring = unnamed[homes[0]]
+        if ring[0] != ring[-1]:
+            sys.exit(f"outline of {pin!r} is not closed")
+        a = round(area_ha(ring[:-1]), 1)
+        print(f"{pin:<13} <- unnamed #{homes[0]:<9} {a:>8.1f} ha computed", file=sys.stderr)
+        feats.append({
+            "type": "Feature",
+            "properties": {"c": "farmarea", "n": pin, "a": a},
+            "geometry": {"type": "Polygon",
+                         "coordinates": [[[round(x, 6), round(y, 6)] for x, y in ring]]},
+        })
+    if len(taken) != 6:
+        sys.exit(f"expected six AREA parcels, found {len(taken)}")
+
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
-    plan["features"] = [f for f in plan["features"] if f["properties"].get("c") != "hablock"] + feats
+    plan["features"] = [f for f in plan["features"] if f["properties"].get("c") not in OURS] + feats
     plan["hablocks"] = "tools/kasulu-ha-blocks.kml via scripts/kml-to-ha-blocks.py"
     with open(plan_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(plan, f, separators=(",", ":"))

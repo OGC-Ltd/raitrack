@@ -1,5 +1,5 @@
 /**
- * Kasulu's hectare blocks in the planting plan (public/estate-plan.geojson,
+ * Kasulu's hectare blocks and AREA parcels in the planting plan (public/estate-plan.geojson,
  * merged by scripts/kml-to-ha-blocks.py from tools/kasulu-ha-blocks.kml).
  *
  * What these pin: all four blocks are there, each is a closed lon/lat ring on
@@ -44,6 +44,24 @@ describe("Kasulu hectare blocks", () => {
     const ha = areaHa(ring);
     expect(Math.abs(ha - f.properties.a)).toBeLessThan(1);
     expect(Math.abs(ha - f.properties.ha) / f.properties.ha).toBeLessThan(0.1);
+  });
+
+  it("has the six AREA parcels, each a closed ring of its own size", () => {
+    const farms = plan.features.filter((f) => f.properties.c === "farmarea");
+    expect(farms.map((f) => f.properties.n).sort()).toEqual([
+      "AREA 1 -210", "AREA 3 - 211", "AREA 4 - 215", "AREA 5 - 214", "AREA 6 - 212", "AREA 7 - 213",
+    ]);
+    for (const f of farms) {
+      const ring = f.geometry.coordinates[0];
+      expect(ring[0]).toEqual(ring[ring.length - 1]);
+      for (const [lon, lat] of ring) {
+        expect(lon).toBeGreaterThan(30.1); expect(lon).toBeLessThan(30.6);
+        expect(lat).toBeGreaterThan(-4.25); expect(lat).toBeLessThan(-3.8);
+      }
+      expect(Math.abs(areaHa(ring) - f.properties.a)).toBeLessThan(1);
+    }
+    // Six different outlines, not one ring picked six times.
+    expect(new Set(farms.map((f) => f.properties.a)).size).toBe(6);
   });
 
   it("leaves the drawing's own features in place", () => {
