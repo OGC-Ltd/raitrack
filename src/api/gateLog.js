@@ -37,9 +37,12 @@ export async function getGateLogDay({ orgId, day, isLive = () => true, readPage 
   const seen = new Set();
   const events = [];
   let before = null;
+  // The organisation's gate, sent on every page (null where none is recorded).
+  let gate = null;
   for (let i = 0; i < GATE_LOG_MAX_PAGES; i++) {
     const page = await readPage({ orgId, day, before });
     if (!isLive()) return null;
+    if (page.gate !== undefined) gate = page.gate;
     for (const e of page.events ?? []) {
       if (seen.has(e.id)) continue;
       seen.add(e.id);
@@ -47,9 +50,22 @@ export async function getGateLogDay({ orgId, day, isLive = () => true, readPage 
     }
     onPage([...events]);
     // The route gives a cursor whenever its page had lines; an empty page is the end.
-    if (!page.nextBefore || (page.events ?? []).length === 0) return { events, cut: false };
-    if (page.nextBefore === before) return { events, cut: false };
+    if (!page.nextBefore || (page.events ?? []).length === 0) return { events, cut: false, gate };
+    if (page.nextBefore === before) return { events, cut: false, gate };
     before = page.nextBefore;
   }
-  return { events, cut: true };
+  return { events, cut: true, gate };
+}
+
+/**
+ * Acknowledge one gate event (operator, 2026-11-26): it truly left or came in
+ * (CONFIRMED), or it did not (DISPUTED, with why). fleet-server modules/gate-log
+ * on `gate_log:acknowledge`; answers { outcome, note, by, at }.
+ */
+export async function acknowledgeGateEvent({ orgId, eventId, outcome, note }) {
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/gate-log/${encodeURIComponent(eventId)}/acknowledgement`, {
+    method: "POST",
+    body: JSON.stringify({ outcome, note: note || undefined }),
+  });
+  return res.data?.acknowledgement ?? null;
 }

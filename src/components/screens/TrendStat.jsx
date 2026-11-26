@@ -13,6 +13,9 @@ const fmt = (n, d = 0) =>
 const fmtDay = (day) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
+/** One point of the series: a day, by default. */
+const DAY_STEP = { word: "day", text: (s) => fmtDay(s.day) };
+
 const titleCase = (name = "") =>
   String(name).replace(/[^\s'’-]+/g, (w) =>
     (/[a-z]/.test(w) && /[A-Z]/.test(w))
@@ -40,7 +43,10 @@ export function periodDelta(values) {
 // tooltip over the plot: the number is already set in the size the card wants
 // it read at, the caption row already exists, and nothing moves when the
 // pointer does. A tooltip would have been a second, smaller copy of both.
-export default function TrendStat({ title, series, valueKey, unit, value, tone, type, sub, loading, upIsBad = false, pointWords, what = "tonnage" }) {
+// `point` names what one point is ("day" unless given; the Gate log draws hours)
+// and `delta={false}` drops the trend pill where halves of the series do not
+// compare (the morning against the afternoon).
+export default function TrendStat({ title, series, valueKey, unit, value, tone, type, sub, loading, upIsBad = false, pointWords, what = "tonnage", point = DAY_STEP, delta = true }) {
   const deltaPct = periodDelta(series.map((s) => s[valueKey]));
   const up = (deltaPct ?? 0) >= 0;
   const [cursor, setCursor] = useState(null);
@@ -52,7 +58,7 @@ export default function TrendStat({ title, series, valueKey, unit, value, tone, 
     <div className={`dr-cell dr-statchart dr-statchart--${tone}`}>
       <div className="dr-statchart__head">
         <span className="dr-statchart__label">{title}</span>
-        {deltaPct != null && (
+        {delta && deltaPct != null && (
           <span className={`dr-statchart__delta ${up !== upIsBad ? "up" : "down"}`}>
             {up ? "▲" : "▼"} {Math.abs(deltaPct)}%
           </span>
@@ -65,11 +71,11 @@ export default function TrendStat({ title, series, valueKey, unit, value, tone, 
       <div className="dr-statchart__sub">{at && pointWords ? pointWords(at) : at ? `${fmtDay(at.day)} · ${at.loads?.length ? `${at.loads.length} load${at.loads.length === 1 ? "" : "s"} weighed` : "one day"}` : sub}</div>
       {type === "line" ? (
         <TrendLine
-          series={series} valueKey={valueKey} unit={unit} title={title}
+          series={series} valueKey={valueKey} unit={unit} title={title} point={point}
           decimals={decimals} loading={loading} cursor={cursor} onCursor={setCursor}
         />
       ) : (
-        <TrendMini series={series} valueKey={valueKey} unit={unit} what={what} loading={loading} cursor={cursor} onCursor={setCursor} />
+        <TrendMini series={series} valueKey={valueKey} unit={unit} what={what} point={point} loading={loading} cursor={cursor} onCursor={setCursor} />
       )}
       {type !== "line" && at?.loads?.length > 0 && <DayLoads loads={at.loads} />}
     </div>
@@ -132,7 +138,7 @@ function smoothPath(pts) {
 const CHART = { W: 264, H: 73, PAD_X: 7, PAD_T: 10, PAD_B: 4 };
 
 // Per-day mileage as a smooth, readable line.
-function TrendLine({ series, valueKey, unit, title, decimals, loading, cursor, onCursor }) {
+function TrendLine({ series, valueKey, unit, title, decimals, loading, cursor, onCursor, point = DAY_STEP }) {
   // useId, not a module counter: a duplicated gradient id would make the second
   // chart's fill resolve to the first one's stops.
   const gid = useId();
@@ -191,7 +197,7 @@ function TrendLine({ series, valueKey, unit, title, decimals, loading, cursor, o
          card the band they sat in; the day a reader actually wants is the one
          under the pointer, and that is written into the caption above in the
          size the card sets its numbers. Nothing is lost to a screen reader. */
-      aria-label={`${title} by day, ${fmtDay(series[0].day)} to ${fmtDay(series.at(-1).day)}. ${n} day${n === 1 ? "" : "s"}, highest ${fmt(max, decimals)} ${unit}. Arrow keys read each day.`}
+      aria-label={`${title} by ${point.word}, ${point.text(series[0])} to ${point.text(series.at(-1))}. ${n} ${point.word}${n === 1 ? "" : "s"}, highest ${fmt(max, decimals)} ${unit}. Arrow keys read each ${point.word}.`}
       onPointerMove={pick}
       onPointerDown={pick}
       onPointerLeave={() => onCursor(null)}
@@ -229,7 +235,7 @@ function TrendLine({ series, valueKey, unit, title, decimals, loading, cursor, o
 // Per-day tonnes as bars. A bar carries its own hit target and its <title>
 // answers "which day", which is why this one needed no cursor of its own — and
 // why the date ticks came off it too.
-function TrendMini({ series, valueKey, unit, what, loading, cursor = null, onCursor }) {
+function TrendMini({ series, valueKey, unit, what, loading, cursor = null, onCursor, point = DAY_STEP }) {
   if (loading) return <div className="dr-chart__empty" aria-busy="true">Loading…</div>;
   if (!series || series.length === 0) return <div className="dr-chart__empty">No activity in window</div>;
   // Every bar zero-height is an empty box, not a chart. Same call as TrendLine.
@@ -242,12 +248,12 @@ function TrendMini({ series, valueKey, unit, what, loading, cursor = null, onCur
   const decimals = unit === "t" ? 1 : 0;
   const words = (s) => {
     const loads = s.loads?.length ? ` · ${s.loads.length} load${s.loads.length === 1 ? "" : "s"}: ${s.loads.map((l) => `${l.where ?? "weighbridge"} ${fmt(l.tonnes, 1)} t`).join(", ")}` : "";
-    return `${fmtDay(s.day)}: ${fmt(s[valueKey], decimals)} ${unit}${loads}`;
+    return `${point.text(s)}: ${fmt(s[valueKey], decimals)} ${unit}${loads}`;
   };
 
   return (
     <svg className={`dr-spark${cursor != null ? " dr-spark--reading" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img"
-         aria-label={`${fmt(n)} days of ${what}, ${fmtDay(series[0].day)} to ${fmtDay(series.at(-1).day)}, highest ${fmt(max, 1)} ${unit}. Point at a bar for its day.`}
+         aria-label={`${fmt(n)} ${point.word}s of ${what}, ${point.text(series[0])} to ${point.text(series.at(-1))}, highest ${fmt(max, 1)} ${unit}. Point at a bar for its ${point.word}.`}
          onMouseLeave={() => onCursor?.(null)}>
       <line className="dr-spark__base" x1={PAD_X} y1={base} x2={W - PAD_X} y2={base} />
       {series.map((s, i) => {
