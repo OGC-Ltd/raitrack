@@ -7,7 +7,7 @@
 // Pure: returns an HTML string.
 
 import { renderLetterheadHtml, esc } from './letterhead';
-import { reportNumber, CONTACT_LINE } from './reportLetterhead';
+import { reportNumber } from './reportLetterhead';
 
 const INK = '#111';
 const MUTED = '#5f5f5f';
@@ -80,7 +80,6 @@ const STYLE = `<style>
 .fu-bar.red { background: ${RED}; }
 .fu-barbox { display: inline-block; width: 22mm; height: 2.2mm; background: ${RULE_LIGHT}; vertical-align: middle; }
 .fu-note { font-size: 7pt; color: ${MUTED}; margin-top: 1.5mm; line-height: 1.35; }
-.fu-basis { font-size: 7.4pt; margin: 0; padding-left: 4mm; line-height: 1.45; }
 .fu-down { color: ${RED}; font-size: 6.5pt; font-weight: 600; margin-left: 1mm; }
 </style>`;
 
@@ -207,14 +206,7 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
 ${pn.length > 16 ? `<div class="fu-note">And ${n0(pn.length - 16)} more in the register.</div>` : ''}</div>
 </div>`);
 
-  // Basis of preparation
-  flow.push(`<div class="fu"><h2>Basis of preparation</h2><ul class="fu-basis">
-<li><b>Need</b>: FactorySuite's figure on each work-plan shift: planned hours × the register's litres per hour, or planned km ÷ km per litre.</li>
-<li><b>Probe records</b>: every fill the machine's fuel probe recorded (fuel moving in the tank left out). Machines without a probe show "no probe".</li>
-<li><b>Pump records</b>: fuel issues recorded in FactorySuite against each machine. <b>Not at pump</b>: a probe fill that no pump issue matches, same machine, 30 minutes before to 2 hours after.</li>
-<li><b>Site</b>: each shift's work location; a pump issue counts at the site of the shift it was requested for. Probe records count at the machine's main site for the period. <b>Variance</b>: probe records less the need of the machines with a probe.</li>
-<li><b>Shifts completed</b>: the tracker shows the engine ran at least 90% of the shift's planned hours inside the shift. Shifts the tracker could not check (no tracker, no signal, no planned hours) are not counted either way.</li>
-</ul><div class="fu-note">${esc(CONTACT_LINE)}</div></div>`);
+  // (The Basis of preparation and contact line were removed: operator 2026-11-26, "remove this part".)
 
   // The machine register: one table, split across pages with its header repeated (class lst)
   const regRows = rep.register.map((r) => `<tr><td><b>${esc(r.machine)}</b>${r.down ? '<span class="fu-down">down</span>' : ''}</td><td>${esc(r.type)}</td><td>${esc(r.site)}</td><td class="r">${n0(r.days)}</td><td class="r">${n0(r.shifts)}</td><td class="r">${r.completed == null ? '–' : n0(r.completed)}</td><td class="r">${n1(r.plannedHours)}</td><td class="r">${n0(r.need)}</td><td class="r t-in">${r.probe == null ? '<span class="muted">no probe</span>' : `<b>${n0(r.probe)}</b>`}</td><td class="r t-pump">${n0(r.issued)}</td><td class="r t-not">${r.unrecorded > 0 ? `<span class="red">${n0(r.unrecorded)}</span>` : '–'}</td><td class="r">${r.probeDifference == null ? '–' : vary(r.probeDifference)}</td><td>${r.tracker ? '' : '<span class="muted">no tracker</span>'}</td></tr>`);

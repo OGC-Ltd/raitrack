@@ -48,7 +48,7 @@ describe('the Fuel Usage Report PDF', () => {
     expect(html).toContain('Machines down, still on the plan');
     expect(html).toMatch(/DZ-05<\/b><span class="fu-down">down/);
     expect(html).toContain('<table class="lst fu-t fu">');
-    expect(html).toContain('Basis of preparation');
+    expect(html).not.toContain('Basis of preparation');   // removed, operator 2026-11-26
   });
 
   it('keeps to black, white and greys, colour only for meaning', () => {
