@@ -164,8 +164,7 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
   ]);
   const siteTot = ['Total', '', n0(t.need), probe ? n0(t.probe) : '–', '', n0(t.issued), `<span class="red">${n0(t.unrecorded.litres)}</span>`, t.probeVariance == null ? '–' : vary(t.probeVariance)];
   flow.push(`<div class="fu fu-grid">
-<div><h2>Probe records against the plans' need <small>cumulative, litres</small></h2>${cumulativeSvg(rep.cumulative)}
-<div class="fu-note">Need: dashed. Probe records: black (fills the fuel probes saw). Used: blue (each machine's tank: level at the start of the day + fuel in − fuel drained − level at the end${t.used ? `; ${n0(t.used.machines)} machines with a fuel probe` : ''}). Pump records: grey (FactorySuite).</div></div>
+<div><h2>Probe records against the plans' need <small>cumulative, litres</small></h2>${cumulativeSvg(rep.cumulative)}</div>
 <div><h2>By site <small>litres</small></h2>${table(['Site', 'Fuelled', 'Need', 'Probe records', '', 'Pump records', 'Not at pump', 'Variance'], siteRows, { right: [1, 2, 3, 5, 6, 7], total: siteTot, tint: { 3: 'in', 4: 'in', 5: 'pump', 6: 'not' } })}</div>
 </div>`);
 
@@ -185,8 +184,7 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
   const typeRows = rep.byType.slice(0, 14).map((x) => [esc(x.type), n0(x.units), n0(x.shifts), x.completed == null ? '–' : n0(x.completed), n0(x.need), probe && x.probed ? `<b>${n0(x.probe)}</b>` : '<span class="muted">no probe</span>', n0(x.issued), x.unrecorded > 0 ? `<span class="red">${n0(x.unrecorded)}</span>` : '–']);
   flow.push(`<div class="fu fu-grid">
 <div><h2>Probe records not at pump <small>${probe ? `${n0(t.unrecorded.machines)} machines · top ${Math.min(14, un.length)}` : 'probe fills not read'}</small></h2>${
-  probe ? table(['Machine', 'Type', 'Site', 'Fills', 'Litres', 'Pump records'], unRows, { right: [3, 4], tint: { 4: 'not', 5: 'pump' }, total: un.length ? ['Total', '', '', n0(t.unrecorded.fills), `<span class="red">${n0(t.unrecorded.litres)}</span>`, ''] : null }) : '<p class="fu-note">The probe fills could not be read.</p>'}
-<div class="fu-note">A fill the fuel probe saw that no pump issue in FactorySuite matches (same machine, from 30 minutes before to 2 hours after).${t.otherProbe?.fills ? ` A further ${n0(t.otherProbe.litres)} L in ${n0(t.otherProbe.fills)} fills went into ${n0(t.otherProbe.vehicles)} tracked vehicles that were on no plan and at no pump.` : ''}</div></div>
+  probe ? table(['Machine', 'Type', 'Site', 'Fills', 'Litres', 'Pump records'], unRows, { right: [3, 4], tint: { 4: 'not', 5: 'pump' }, total: un.length ? ['Total', '', '', n0(t.unrecorded.fills), `<span class="red">${n0(t.unrecorded.litres)}</span>`, ''] : null }) : '<p class="fu-note">The probe fills could not be read.</p>'}</div>
 <div><h2>By machine type <small>litres</small></h2>${table(['Type', 'Units', 'Shifts', 'Completed', 'Need', 'Probe records', 'Pump records', 'Not at pump'], typeRows, { right: [1, 2, 3, 4, 5, 6, 7], tint: { 5: 'in', 6: 'pump', 7: 'not' } })}</div>
 </div>`);
 
@@ -194,16 +192,12 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
   const ps = rep.exceptions.probeShort;
   const ot = rep.exceptions.overTank;
   const dn = rep.exceptions.downOnPlan;
-  const fl = rep.exceptions.flagged;
   const fillRows = [
     ...ps.map((x) => [shortDay.format(asDay(x.issue.day)), `<b>${esc(x.machine)}</b>`, esc(x.issue.pump ?? ''), n0(x.issue.litres), '<span class="amber">Probe saw less</span>', `probe rise ${n0(x.issue.sensor?.riseL)} L, ${n0(x.shortL)} L not seen`]),
     ...ot.map((x) => [shortDay.format(asDay(x.issue.day)), `<b>${esc(x.machine)}</b>`, esc(x.issue.pump ?? ''), n0(x.issue.litres), '<span class="amber">More than the tank</span>', x.over.kind === 'tank' ? `tank ${n0(x.tankLitres)} L` : `room in tank ${n0(x.over.limit)} L (probe)`]),
   ].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-  const flagCounts = {};
-  for (const x of fl) for (const f of x.flags) flagCounts[f] = (flagCounts[f] ?? 0) + 1;
   flow.push(`<div class="fu fu-grid">
-<div><h2>Checks at the pump <small>${n0(ps.length)} probe · ${n0(ot.length)} tank</small></h2>${fillRows.length ? table(['Day', 'Machine', 'Pump', 'Litres', 'Check', 'Detail'], fillRows, { right: [3] }) : '<p class="fu-note">No pump fill failed a probe or tank check.</p>'}
-<div class="fu-note">Pump flags this period: ${Object.entries(flagCounts).map(([f, c]) => `${esc(f)} ${n0(c)}`).join(', ') || 'none'}${t.flags.offPlanL ? ` (Off plan ${n0(t.flags.offPlanL)} L)` : ''}. Shown for reference: what FactorySuite means by each flag is still to be confirmed.</div></div>
+<div><h2>Checks at the pump <small>${n0(ps.length)} probe · ${n0(ot.length)} tank</small></h2>${fillRows.length ? table(['Day', 'Machine', 'Pump', 'Litres', 'Check', 'Detail'], fillRows, { right: [3] }) : '<p class="fu-note">No pump fill failed a probe or tank check.</p>'}</div>
 <div><h2>Machines down, still on the plan <small>${n0(dn.length)} machines</small></h2>${dn.length ? table(['Machine', 'Type', 'Shifts', 'Need L', 'Pump L'], dn.map((x) => [`<b>${esc(x.machine)}</b><span class="fu-down">down</span>`, esc(x.type), n0(x.shifts), n0(x.need), x.issued > 0 ? `<span class="red">${n0(x.issued)}</span>` : '–']), { right: [2, 3, 4] }) : '<p class="fu-note">None.</p>'}</div>
 </div>`);
 

@@ -49,6 +49,8 @@ describe('the Fuel Usage Report PDF', () => {
     expect(html).toMatch(/DZ-05<\/b><span class="fu-down">down/);
     expect(html).toContain('<table class="lst fu-t fu">');
     expect(html).not.toContain('Basis of preparation');   // removed, operator 2026-11-26
+    // No explanatory notes under the tables (operator 2026-11-26)
+    expect(html).not.toMatch(/Pump flags this period|Shown for reference|Need: dashed|A fill the fuel probe saw/);
   });
 
   it('keeps to black, white and greys, colour only for meaning', () => {
