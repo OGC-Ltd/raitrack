@@ -200,10 +200,11 @@ export function fuelIntoTanks(rows, fillings) {
  * The whole report for the period (and site, when one is picked).
  *
  * @param {object} data      planner/factory-fuel: { from, to, lines, issues, machines }
- * @param {object} [o]       { site, price, fillings }: price per litre or null;
- *                           fillings = fuel/fillings for the period, or null when not read
+ * @param {object} [o]       { site, price, fillings, tankDays }: price per litre or null;
+ *                           fillings = fuel/fillings for the period, or null when not read;
+ *                           tankDays = planner/factory-fuel/tank-days, or null when not read
  */
-export function buildFuelUsage(data, { site = null, price = null, fillings = null } = {}) {
+export function buildFuelUsage(data, { site = null, price = null, fillings = null, tankDays = null } = {}) {
   const scoped = forSite(data, site);
   const rows = fuelRoster(scoped);
   const tanks = fuelIntoTanks(rows, fillings);
@@ -229,11 +230,30 @@ export function buildFuelUsage(data, { site = null, price = null, fillings = nul
     }
   }
 
+  // Fuel used day by day (operator 2026-11-26: "can we put used?"): each machine's
+  // tank balance for the day, as the Fuel page's Consumed: opening + fills - drains
+  // - closing, on the days its probe gave both levels. The report's machines only.
+  const usedKnown = Array.isArray(tankDays);
+  const usedByDay = new Map();
+  const usedMachines = new Set();
+  if (usedKnown) {
+    const ids = new Set(rows.map((r) => r.vehicleId && String(r.vehicleId)).filter(Boolean));
+    for (const d of tankDays) {
+      if (!ids.has(String(d.vehicleId)) || d.openingL == null || d.closingL == null) continue;
+      usedByDay.set(d.day, (usedByDay.get(d.day) ?? 0) + usedOfDay(d));
+      usedMachines.add(String(d.vehicleId));
+    }
+  }
+
   // Running totals day by day, for the chart
   let needRun = 0;
   let issuedRun = 0;
   let intoRun = 0;
-  const cumulative = days.map((d) => ({ day: d.day, need: (needRun += d.need), issued: (issuedRun += d.issued), intoTank: (intoRun += intoByDay.get(d.day) ?? 0) }));
+  let usedRun = 0;
+  const cumulative = days.map((d) => ({
+    day: d.day, need: (needRun += d.need), issued: (issuedRun += d.issued), intoTank: (intoRun += intoByDay.get(d.day) ?? 0),
+    used: usedKnown ? (usedRun += usedByDay.get(d.day) ?? 0) : null,
+  }));
 
   // Shifts: how many, and how many machine-days carried two or more
   const perMachineDay = new Map();
@@ -376,6 +396,7 @@ export function buildFuelUsage(data, { site = null, price = null, fillings = nul
       probeShort: { fills: probeShort.length, litres: sum(probeShort, (x) => x.shortL), cost: cost(sum(probeShort, (x) => x.shortL)) },
       flags: { fills: flagged.length, offPlanL },
       plannedNotFuelled: { machines: plannedNotFuelled.length, need: sum(plannedNotFuelled, (x) => x.need) },
+      used: usedKnown ? { litres: usedRun, machines: usedMachines.size } : null,
       down: { machines: downOnPlan.length, issued: sum(downOnPlan, (x) => x.issued) },
     },
     cumulative,
@@ -386,6 +407,9 @@ export function buildFuelUsage(data, { site = null, price = null, fillings = nul
     register,
   };
 }
+
+/** One machine's fuel used in a tank day: opening + fills - drains - closing, litres. */
+export const usedOfDay = (d) => (d.openingL ?? 0) + (d.fillL ?? 0) - (d.drainL ?? 0) - (d.closingL ?? 0);
 
 /** The last complete Monday–Sunday week before `today` (fleet days, YYYY-MM-DD). */
 export function lastFullWeek(today) {

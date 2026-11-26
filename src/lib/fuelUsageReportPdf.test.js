@@ -55,7 +55,7 @@ describe('the Fuel Usage Report PDF', () => {
     const own = html.slice(html.indexOf('<div id="flow"'));
     expect(own.length).toBeGreaterThan(1000);
     for (const c of own.match(/#[0-9a-fA-F]{6}\b/g) ?? []) {
-      expect(['#5f5f5f', '#c8c8c8', '#e8e8e8', '#a33030', '#1e6b3a', '#8a5a00', '#ececec', '#9a9a9a', '#7a7a7a', '#cfcfcf', '#ff8c8c', '#e6eef8', '#e6f2ea', '#f8e6e6']).toContain(c.toLowerCase());
+      expect(['#5f5f5f', '#c8c8c8', '#e8e8e8', '#a33030', '#1e6b3a', '#8a5a00', '#ececec', '#9a9a9a', '#7a7a7a', '#cfcfcf', '#ff8c8c', '#e6eef8', '#e6f2ea', '#f8e6e6', '#2b5c8a']).toContain(c.toLowerCase());
     }
     expect(html).not.toMatch(/navy|#1f3a5f|gold/i);
   });
@@ -64,6 +64,22 @@ describe('the Fuel Usage Report PDF', () => {
     const svg = cumulativeSvg(rep.cumulative);
     expect(svg.match(/<path /g)).toHaveLength(4);            // the gap, need, pump, into tanks
     expect(svg).toContain('Into tanks 268');
+    expect(svg).not.toContain('Used');                        // no tank days read: no Used line
+  });
+
+  it('adds a Used line from the tank days: opening + fills - drains - closing, the report machines only', () => {
+    const tankDays = [
+      { vehicleId: 'v1', day: '2026-11-16', openingL: 100, closingL: 150, fillL: 118, drainL: 0 },   // 68 used
+      { vehicleId: 'v1', day: '2026-11-17', openingL: 150, closingL: 120, fillL: 0, drainL: 10 },    // 20 used
+      { vehicleId: 'v1', day: '2026-11-18', openingL: 120, closingL: null, fillL: 150, drainL: 0 },  // no closing: left out
+      { vehicleId: 'v9', day: '2026-11-16', openingL: 500, closingL: 100, fillL: 0, drainL: 0 },     // not on the report
+    ];
+    const r2 = buildFuelUsage(data, { fillings, tankDays });
+    expect(r2.totals.used).toEqual({ litres: 88, machines: 1 });
+    expect(r2.cumulative.find((d) => d.day === '2026-11-17').used).toBe(88);
+    const svg = cumulativeSvg(r2.cumulative);
+    expect(svg.match(/<path /g)).toHaveLength(5);            // and used
+    expect(svg).toContain('Used 88');
   });
 });
 

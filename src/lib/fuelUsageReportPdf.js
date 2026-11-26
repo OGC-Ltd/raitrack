@@ -20,6 +20,8 @@ const AMBER = '#8a5a00';
 const TINT_IN = '#e6eef8';
 const TINT_PUMP = '#e6f2ea';
 const TINT_NOT = '#f8e6e6';
+/** The chart's Used line (operator 2026-11-26). */
+const USED = '#2b5c8a';
 
 /** 12,345 (whole litres), or a dash. */
 export const n0 = (x) => (x == null || !Number.isFinite(x) ? '–' : Math.round(x).toLocaleString('en-GB'));
@@ -94,12 +96,13 @@ const table = (head, rows, { right = [], total = null, tint = {} } = {}) => {
   }${total ? `<tr class="tot">${total.map((c, i) => `<td${cls(i)}>${c}</td>`).join('')}</tr>` : ''}</tbody></table>`;
 };
 
-/** The cumulative chart: need dashed grey, fuel into tanks solid black, pump-recorded solid grey; one axis. */
+/** The cumulative chart: need dashed grey, fuel into tanks solid black, pump-recorded solid grey, used blue; one axis. */
 export function cumulativeSvg(cumulative) {
   const W = 520, H = 210, L = 46, R = 96, T = 10, B = 26;
   const pts = cumulative ?? [];
   if (!pts.length) return '';
-  const max = Math.max(1, ...pts.map((p) => Math.max(p.need, p.intoTank ?? 0, p.issued)));
+  const hasUsed = pts.some((p) => p.used != null);
+  const max = Math.max(1, ...pts.map((p) => Math.max(p.need, p.intoTank ?? 0, p.issued, p.used ?? 0)));
   const step = Math.pow(10, Math.floor(Math.log10(max)));
   const top = Math.ceil(max / step) * step;
   const x = (i) => L + (pts.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (pts.length - 1));
@@ -108,7 +111,15 @@ export function cumulativeSvg(cumulative) {
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * top);
   const every = Math.max(1, Math.ceil(pts.length / 8));
   const last = pts.at(-1);
-  const label = (v, k, text, cls) => `<text x="${(x(pts.length - 1) + 6).toFixed(1)}" y="${(y(v) + 3).toFixed(1)}" font-size="9" ${cls}>${esc(text)} ${n0(v)}</text>`;
+  // End labels, kept at least 11 apart so lines that finish close together stay readable
+  const ends = [
+    { v: last.need, text: 'Need', cls: `fill="${MUTED}"` },
+    { v: last.intoTank ?? 0, text: 'Into tanks', cls: `fill="${INK}" font-weight="600"` },
+    ...(hasUsed ? [{ v: last.used ?? 0, text: 'Used', cls: `fill="${USED}" font-weight="600"` }] : []),
+    { v: last.issued, text: 'Pump', cls: 'fill="#7a7a7a"' },
+  ].map((e) => ({ ...e, at: y(e.v) + 3 })).sort((a, b) => a.at - b.at);
+  for (let i = 1; i < ends.length; i++) ends[i].at = Math.max(ends[i].at, ends[i - 1].at + 11);
+  const labels = ends.map((e) => `<text x="${(x(pts.length - 1) + 6).toFixed(1)}" y="${e.at.toFixed(1)}" font-size="9" ${e.cls}>${esc(e.text)} ${n0(e.v)}</text>`).join('');
   const area = `${line('need')} ${[...pts].reverse().map((p, j) => `L${x(pts.length - 1 - j).toFixed(1)},${y(p.intoTank ?? 0).toFixed(1)}`).join(' ')} Z`;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
 ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${RULE_LIGHT}" stroke-width="0.8"/><text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="${MUTED}">${n0(v)}</text>`).join('')}
@@ -116,10 +127,9 @@ ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${
 <path d="${line('need')}" fill="none" stroke="${MUTED}" stroke-width="1.6" stroke-dasharray="5 4"/>
 <path d="${line('issued')}" fill="none" stroke="#9a9a9a" stroke-width="1.4"/>
 <path d="${line('intoTank')}" fill="none" stroke="${INK}" stroke-width="2"/>
+${hasUsed ? `<path d="${line('used')}" fill="none" stroke="${USED}" stroke-width="2"/>` : ''}
 ${pts.map((p, i) => (i % every === 0 || i === pts.length - 1 ? `<text x="${x(i).toFixed(1)}" y="${H - 8}" font-size="8.5" text-anchor="middle" fill="${MUTED}">${esc(dayFmt.format(asDay(p.day)).replace(',', ''))}</text>` : '')).join('')}
-${label(last.need, 'need', 'Need', `fill="${MUTED}"`)}
-${label(last.intoTank ?? 0, 'into', 'Into tanks', `fill="${INK}" font-weight="600"`)}
-${label(last.issued, 'pump', 'Pump', `fill="#7a7a7a"`)}
+${labels}
 </svg>`;
 }
 
@@ -154,7 +164,7 @@ export function fuelUsageHtml(rep, { companyName, orgCode, siteWords = 'All site
   const siteTot = ['Total', '', n0(t.need), n0(t.intoTank), '', n0(t.issued), `<span class="red">${n0(t.unrecorded.litres)}</span>`, vary(t.intoTank - t.need)];
   flow.push(`<div class="fu fu-grid">
 <div><h2>Fuel into tanks against the plans' need <small>cumulative, litres</small></h2>${cumulativeSvg(rep.cumulative)}
-<div class="fu-note">Need: dashed. Into tanks: black (probe fills, and pump fills the probe could not see). Pump: grey (FactorySuite's records).</div></div>
+<div class="fu-note">Need: dashed. Into tanks: black (probe fills, and pump fills the probe could not see). Used: blue (each machine's tank: level at the start of the day + fuel in − fuel drained − level at the end${t.used ? `; ${n0(t.used.machines)} machines with a fuel probe` : ''}). Pump: grey (FactorySuite's records).</div></div>
 <div><h2>By site <small>litres</small></h2>${table(['Site', 'Fuelled', 'Need', 'Into tanks', '', 'Pump', 'Not at pump', 'Variance'], siteRows, { right: [1, 2, 3, 5, 6, 7], total: siteTot, tint: { 3: 'in', 4: 'in', 5: 'pump', 6: 'not' } })}</div>
 </div>`);
 

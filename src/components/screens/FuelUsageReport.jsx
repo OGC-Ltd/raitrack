@@ -5,7 +5,7 @@
 // lib/fuelUsageReportPdf.
 
 import { useMemo, useState } from 'react';
-import { getFactoryFuel, getProbeFillings } from '../../api/factoryFuel';
+import { getFactoryFuel, getProbeFillings, getTankDays } from '../../api/factoryFuel';
 import { saveLetterheadPdf, letterheadLogos } from '../../api/letterheadPdf';
 import { buildFuelUsage, siteOptions, lastFullWeek } from '../../lib/fuelUsageReport';
 import { fuelUsageHtml, registerTable, unrecordedTable, periodWords, n0 } from '../../lib/fuelUsageReportPdf';
@@ -34,22 +34,24 @@ export default function FuelUsageReport({ companyId, orgCode, companyName }) {
     try {
       // The plans and pumps, and the probes' fills, side by side.
       // The fills are optional: the report says when they could not be read.
-      const [data, fillings] = await Promise.all([
+      const [data, fillings, tankDays] = await Promise.all([
         getFactoryFuel({ companyId, from, to }),
         getProbeFillings({ companyId, from, to }).catch(() => null),
+        // Each probed machine's tank day by day, for the chart's Used line (optional too)
+        getTankDays({ companyId, from, to }).catch(() => null),
       ]);
       if (!data?.factory) {
         setRun({ status: 'error', message: 'This fleet does not fuel by FactorySuite work plans.' });
         return;
       }
       setSite((s) => (s && siteOptions(data).includes(s) ? s : ''));
-      setRun({ status: 'done', data, fillings, at: Date.now() });
+      setRun({ status: 'done', data, fillings, tankDays, at: Date.now() });
     } catch (err) {
       setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
 
-  const rep = useMemo(() => (run.status === 'done' ? buildFuelUsage(run.data, { site: site || null, fillings: run.fillings }) : null), [run, site]);
+  const rep = useMemo(() => (run.status === 'done' ? buildFuelUsage(run.data, { site: site || null, fillings: run.fillings, tankDays: run.tankDays }) : null), [run, site]);
   const sites = useMemo(() => (run.status === 'done' ? siteOptions(run.data) : []), [run]);
   const html = useMemo(() => (rep ? fuelUsageHtml(rep, {
     companyName: companyName ?? orgCode ?? 'Fleet', orgCode, siteWords: site || `All · ${sites.length} sites`, logos: letterheadLogos(), now: run.at,
