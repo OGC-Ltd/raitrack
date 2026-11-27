@@ -56,14 +56,22 @@ export async function getSpeedingInsights({ orgId, from, to }) {
 
 /* ── sensor faults ────────────────────────────────────────────────────────── */
 
-export function getFaultSummary({ orgId, from, to, kind, sort = "count", q, cursor, limit = 50 }) {
+// detail: one error type, the message without its reading (Wialon view, 2026-11-27).
+export function getFaultSummary({ orgId, from, to, kind, detail, sort = "count", q, cursor, limit = 50 }) {
   if (!orgId) return Promise.resolve({ rows: [], cursor: null, hasNextPage: false });
-  return page(`${base(orgId)}/faults/summary`, { from, to, kind, sort, q, cursor, limit });
+  return page(`${base(orgId)}/faults/summary`, { from, to, kind, detail, sort, q, cursor, limit });
 }
 
-export function getFaultEpisodes({ orgId, vehicleId, from, to, kind, cursor, limit = 50 }) {
+export function getFaultEpisodes({ orgId, vehicleId, from, to, kind, detail, cursor, limit = 50 }) {
   if (!orgId || !vehicleId) return Promise.resolve({ rows: [], cursor: null, hasNextPage: false });
-  return page(`${base(orgId)}/faults`, { vehicleId, from, to, kind, cursor, limit });
+  return page(`${base(orgId)}/faults`, { vehicleId, from, to, kind, detail, cursor, limit });
+}
+
+/** The error types in a window, with how many units carry each: [{ kind, detail, episodes, units }]. */
+export async function getFaultDetails({ orgId, from, to, kind }) {
+  if (!orgId) return [];
+  const res = await apiFetch(`${base(orgId)}/faults/details?${qs({ from, to, kind })}`);
+  return res.data ?? [];
 }
 
 export async function getFaultInsights({ orgId, from, to }) {
