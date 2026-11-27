@@ -35,6 +35,13 @@ const BACK = {
 /** Kinds whose record carries the tracker's own words ("Fuel probe: Status Error", "GPS: On without Fix"). */
 const TRACKER_WORDS = new Set(["fuel_probe_fault", "fuel_probe_status", "fuel_probe_battery", "gnss_fault"]);
 
+/**
+ * Where a record comes from, as Maintenance splits it (operator, 2026-11-27): the tracker's own
+ * status codes are Wialon; the probe's 4095 / 6500 / 7000 codes sit on both views for now.
+ */
+const SOURCE = { fuel_probe_status: "Wialon", fuel_probe_battery: "Wialon", gnss_fault: "Wialon", fuel_probe_fault: "Wialon/System" };
+export const sourceOf = (kind) => SOURCE[kind] ?? "System";
+
 const ms = (v) => {
   const t = typeof v === "number" ? v : Date.parse(v ?? "");
   return Number.isFinite(t) ? t : null;
@@ -52,9 +59,10 @@ export function faultMessages(episodes = [], disconnections = [], now = Date.now
     if (start == null) continue;
     const end = ms(e.recoveredAt);
     const fault = TRACKER_WORDS.has(e.kind) && e.detail ? e.detail : faultLabel(e.kind);
-    out.push({ key: `${e.id}:start`, at: start, text: fault, ok: false, open: end == null, source: "System", durationMs: null });
+    const source = sourceOf(e.kind);
+    out.push({ key: `${e.id}:start`, at: start, text: fault, ok: false, open: end == null, source, durationMs: null });
     if (end != null) {
-      out.push({ key: `${e.id}:end`, at: end, text: BACK[e.kind] ?? `${faultLabel(e.kind)}: cleared`, ok: true, open: false, source: "System", durationMs: end - start });
+      out.push({ key: `${e.id}:end`, at: end, text: BACK[e.kind] ?? `${faultLabel(e.kind)}: cleared`, ok: true, open: false, source, durationMs: end - start });
     }
   }
   for (const d of disconnections) {

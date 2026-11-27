@@ -17,7 +17,7 @@ import { useState, useEffect } from "react";
 import { useAppFields, useAppActions } from "../../context/AppContext";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import MaintenancePage from "../body/MaintenancePage";
-import SensorPanel from "../body/SensorPanel";
+import SensorPanel, { WialonFaultsPanel } from "../body/SensorPanel";
 import { usePermissions } from "../../hooks/usePermissions";
 import LoadError from "../shared/LoadError";
 import TabEmptyState from "../shared/TabEmptyState";
@@ -47,7 +47,7 @@ export default function MaintenanceScreen() {
   const { setMaintenanceView: setActiveTab } = useAppActions();
   // The org, so the stored view is not corrected before it is known (below).
   // The Plan view that needed it moved to its own page (PlansScreen, 2026-11-20).
-  const { orgCode } = usePermissions();
+  const { orgCode, can } = usePermissions();
 
   /**
    * The sub-views, and which of them this person can actually open.
@@ -66,7 +66,10 @@ export default function MaintenanceScreen() {
    */
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
-    { key: "sensors", label: "Sensor Monitor", enabled: true },
+    // System | Wialon (operator, 2026-11-27): what the system works out, and what the trackers
+    // report in their own status codes. The key stays "sensors" so a saved view still opens.
+    { key: "sensors", label: "System", enabled: true },
+    { key: "wialon",  label: "Wialon", enabled: can("sensor:read") },
   ];
   const available = VIEWS.filter((v) => v.enabled);
   const activeTab = available.some((v) => v.key === savedView) ? savedView : available[0].key;
@@ -143,6 +146,10 @@ export default function MaintenanceScreen() {
 
       {activeTab === "sensors" && (
         <SensorPanel />
+      )}
+
+      {activeTab === "wialon" && (
+        <WialonFaultsPanel />
       )}
     </div>
   );
