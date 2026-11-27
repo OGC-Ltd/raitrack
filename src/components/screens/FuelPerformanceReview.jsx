@@ -10,9 +10,12 @@
  * Figures are the server's (fuel-performance-review.ts); the lists and the
  * wording are lib/performanceReview's, shared with the PDF and the dashboard.
  *
- * TELEMETRY until issuance (SIV) records are imported: "litres put in" is the
- * refills the fuel sensors confirmed, and work is the trackers' hours and km.
- * The page says so, because the stores' figures will be larger.
+ * Litres put in are FactorySuite's pump issues (the SIV) where they are kept,
+ * with the tank's rise on the probe beside them, and the work behind a pump
+ * refill is the issue's own meter step. The fuel probes' refills and the
+ * trackers' hours and km stand in on the days before the pump records start
+ * (operator 2026-11-28: "for the days we don't have value the previous days
+ * we use the fuel probes"). The source chip says which the period holds.
  */
 
 import { useMemo, useState } from "react";
@@ -66,21 +69,36 @@ function Bars({ rows, tone, format }) {
   );
 }
 
+/** Litres a day by month; a month with pump issues shows them as the solid part of its column. */
 function MonthColumns({ months }) {
   const max = Math.max(...months.map((m) => m.perDay), 1);
   return (
-    <div className="fpr-cols" role="img" aria-label="Average litres per day, by month">
-      {months.map((m, i) => (
-        <div key={m.month} className="fpr-cols__col">
-          <span className="fpr-cols__v">{m.perDay ? `${(m.perDay / 1000).toFixed(1)}k` : "-"}</span>
-          <span className={`fpr-cols__bar${i === months.length - 1 ? " fpr-cols__bar--last" : ""}`}
-                style={{ height: `${(m.perDay / max) * 100}%` }} />
-          <span className="fpr-cols__l">{monthLabel(m.month)}<small>{m.days} days</small></span>
-        </div>
-      ))}
+    <div className="fpr-cols" role="img" aria-label="Average litres per day, by month, pump issues and probe refills">
+      {months.map((m, i) => {
+        const pump = m.litres ? (m.pumpL ?? 0) / m.litres : 0;
+        return (
+          <div key={m.month} className="fpr-cols__col"
+               title={`${monthLabel(m.month)}: ${litres(m.litres)} over ${m.days} days${m.pumpL ? `, ${litres(m.pumpL)} issued at the pumps` : ""}${m.litres - (m.pumpL ?? 0) > 0.5 ? `, ${litres(m.litres - (m.pumpL ?? 0))} seen by the fuel probes` : ""}`}>
+            <span className="fpr-cols__v">{m.perDay ? `${(m.perDay / 1000).toFixed(1)}k` : "-"}</span>
+            <span className={`fpr-cols__bar${i === months.length - 1 ? " fpr-cols__bar--last" : ""}${pump > 0 ? " fpr-cols__bar--split" : ""}`}
+                  style={{ height: `${(m.perDay / max) * 100}%`, "--pump": `${pump * 100}%` }} />
+            <span className="fpr-cols__l">{monthLabel(m.month)}<small>{m.days} days</small></span>
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+/** What the period's litres are, in words: the pumps, the probes or both. */
+function sourceWords(review) {
+  if (!review || review.source === "telemetry") return { icon: "ti-antenna", text: "Fuel probes: sensor-confirmed refills, tracker hours and km" };
+  if (review.source === "pump") return { icon: "ti-gas-station", text: "Pump issues (SIV), pump meter hours and km, tank rise on the probe" };
+  return { icon: "ti-gas-station", text: `Pump issues from ${fmtDay(review.pumpFrom)}, fuel probes before` };
+}
+
+/** Issued litres against what the tank rose by, over the issues the probe read. */
+const reached = (u) => (u.issuedWithTankL > 0 ? u.tankL / u.issuedWithTankL : null);
 
 const SCALE = 2.5; // the exhibit's axis runs to 250%…
 const TRACK = 78;  // …across this share of the row, leaving room for the figure
@@ -143,11 +161,13 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
 
   const exportPdf = () => review && buildPerformanceReviewPdf({ review, read, orgName });
   const exportCsv = () => review && downloadTableCsv({
-    head: ["Unit", "Name", "Group", "Standard", "Litres", "Refills", "Usable refills", "% of standard", "Excess L", "Hours / km", "Refills against no work"],
+    head: ["Unit", "Name", "Group", "Standard", "Litres", "Issued at pump L", "Probe refills L", "Tank rise L", "Issued, probe read L",
+           "Refills", "Usable refills", "% of standard", "Excess L", "Hours / km", "Refills against no work"],
     body: review.units.map((u) => [
       u.ref, u.name, u.group,
       u.rate == null ? "" : `${u.rate} ${u.basis === "HOURS" ? "L/h" : "km/L"}`,
-      Math.round(u.litres), u.refills, u.usableRefills,
+      Math.round(u.litres), Math.round(u.pumpL ?? 0), Math.round(u.probeL ?? u.litres), Math.round(u.tankL ?? 0), Math.round(u.issuedWithTankL ?? 0),
+      u.refills, u.usableRefills,
       u.ratio == null ? "" : Math.round(u.ratio * 100), Math.round(u.excessL), Math.round(u.work), u.nearZeroWork,
     ]),
     filenameSlug: `fuel-performance-review-${span.from}-${span.to}`,
@@ -156,13 +176,23 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
   const t = review?.totals;
   const dot = <span className="frp-kpi-none">-</span>;
   const p = read?.pace;
+  const src = sourceWords(review);
+  const pumped = Boolean(t?.pumpL);
+  const tankShare = t?.issuedWithTankL ? t.tankL / t.issuedWithTankL : null;
+  const checks = t?.checks;
 
   return (
     <div className="sp4-root frp-root fpr-root">
       <div className="sp4-header">
         <div data-tour="fpr-kpis" className="sp4-header-kpis">
           <Kpi n={t ? litres(t.litres, { short: true }) : dot} label="Put in" tone="fleet"
-               title={`Litres the fuel sensors saw go in over ${review?.days ?? "the"} days`} />
+               title={!t ? "" : pumped
+                 ? `${litres(t.pumpL)} issued at the pumps${t.probeL > 0.5 ? ` and ${litres(t.probeL)} seen by the fuel probes before the pump records` : ""}, over ${review.days} days`
+                 : `Litres the fuel sensors saw go in over ${review.days} days`} />
+          {pumped && (
+            <Kpi n={tankShare != null ? `${Math.round(tankShare * 100)}%` : dot} label="Reached the tank" tone={tankShare != null && tankShare < 0.9 ? "speed" : "live"}
+                 title={tankShare != null ? `The tanks rose ${litres(t.tankL)} on the probes for ${litres(t.issuedWithTankL)} issued, over the issues a probe read` : "No probe read a pump issue in this period"} />
+          )}
           <Kpi n={t ? litres(t.perMonth, { short: true }) : dot} label="Typical month" tone="stat"
                title="Average litres a day × 30" />
           <Kpi n={p?.change != null ? `${p.change >= 0 ? "+" : ""}${Math.round(p.change * 100)}%` : dot}
@@ -193,8 +223,8 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                    onChange={(e) => e.target.value && setSpan((s) => ({ ...s, id: null, to: e.target.value }))} />
           </label>
         </div>
-        <span className="fpr-source" title="Issuance (SIV) records replace these litres once they are imported">
-          <i className="ti ti-antenna" aria-hidden="true" /> Telemetry: sensor-confirmed refills, tracker hours and km
+        <span className="fpr-source" title={src.text}>
+          <i className={`ti ${src.icon}`} aria-hidden="true" /> {src.text}
         </span>
       </div>
 
@@ -209,7 +239,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
           </EmptyNote>
         ) : !review || !review.units.length ? (
           <EmptyNote icon="ti-gas-station-off" title="No Refills in This Period">
-            The fuel sensors confirmed no refills between these dates, so there is nothing to judge.
+            No pump issued fuel and the fuel sensors confirmed no refills between these dates, so there is nothing to judge.
           </EmptyNote>
         ) : !review.totals.unitsWithStandard ? (
           // No unit has a standard rate (L/h or km/L) on record, so there is
@@ -271,6 +301,32 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                         ]} />
                 </section>
               </div>
+              {pumped && (
+                // The pumps against the tanks: what was issued and what the
+                // probe saw arrive, over the issues a probe read, and how
+                // FactorySuite's own sensor check came out on each issue.
+                <div className="fpr-strip fpr-strip--two">
+                  <section data-tour="fpr-tank" className="fpr-panel">
+                    <h4 className="fpr-panel__t">Issued against Tank Rise <span>{tankShare != null ? `${Math.round(tankShare * 100)}% reached the tank` : "no probe readings"}</span></h4>
+                    <Bars format={(v) => litres(v, { short: true })} tone="fleet"
+                          rows={[
+                            { label: "Issued at the pumps", value: t.pumpL, tone: "fleet" },
+                            { label: "Issued, probe read", value: t.issuedWithTankL, tone: "muted" },
+                            { label: "Tank rise on the probe", value: t.tankL, tone: tankShare != null && tankShare < 0.9 ? "warn" : "ok" },
+                          ]} />
+                  </section>
+                  <section data-tour="fpr-checks" className="fpr-panel">
+                    <h4 className="fpr-panel__t">Pump Issues by Probe Check <span>{(checks.match + checks.mismatch + checks.noSensor + checks.noReading).toLocaleString("en-KE")}</span></h4>
+                    <Bars format={(v) => `${v.toLocaleString("en-KE")}`} tone="fleet"
+                          rows={[
+                            { label: "Tank rise matches", value: checks.match, tone: "ok" },
+                            { label: "Tank rise does not match", value: checks.mismatch, tone: "crit" },
+                            { label: "No fuel sensor", value: checks.noSensor, tone: "muted" },
+                            { label: "Sensor gave no reading", value: checks.noReading, tone: "warn" },
+                          ]} />
+                  </section>
+                </div>
+              )}
             </section>
 
             <section className="fpr-sec" aria-labelledby="fpr-act">
@@ -284,7 +340,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                   {read.attention.length ? (
                     <table className="fpr-att">
                       <thead><tr>
-                        <th>Unit</th><th>Against standard</th><th className="fpr-num">Refills</th><th className="fpr-num">Above</th>
+                        <th>Unit</th><th>Against standard</th><th className="fpr-num">Refills</th>{pumped && <th className="fpr-num" title="Tank rise on the probe against litres issued">In tank</th>}<th className="fpr-num">Above</th>
                       </tr></thead>
                       <tbody>
                         {read.attention.slice(0, Math.max(6, Math.min(8, read.benchmarks.length))).map((u) => (
@@ -301,6 +357,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                               <b className="fpr-gauge__v">{pct(u.ratio)}</b>
                             </td>
                             <td className="fpr-num">{u.usableRefills}</td>
+                            {pumped && <td className="fpr-num">{reached(u) != null ? `${Math.round(reached(u) * 100)}%` : "-"}</td>}
                             <td className="fpr-num fpr-num--crit">{litres(u.excessL)}</td>
                           </tr>
                         ))}
@@ -333,7 +390,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                   <h4 className="fpr-panel__t">What to Do <span>about {litres(read.excessPerMonth, { short: true })} a month goes in above standard</span></h4>
                   <ol>{read.actions.map((a) => <li key={a}>{a}</li>)}</ol>
                   {read.meterFixes.length > 0 && (
-                    <p className="fpr-todo__note"><i className="ti ti-gauge" aria-hidden="true" /> <b>Readings to check:</b> {listRefs(read.meterFixes.slice(0, 8))}: most refills were logged against next to no hours or km, usually a tracker meter that is not reporting.</p>
+                    <p className="fpr-todo__note"><i className="ti ti-gauge" aria-hidden="true" /> <b>Readings to check:</b> {listRefs(read.meterFixes.slice(0, 8))}: most refills were logged against next to no hours or km: a meter keyed at the pump the same as last time, or a tracker meter that is not reporting.</p>
                   )}
                 </div>
               )}

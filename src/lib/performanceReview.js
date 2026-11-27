@@ -108,7 +108,7 @@ export function readReview(review) {
     actions.push(`Review ${singular(worstGroup.group).toLowerCase()} operations: idling at loading points, load limits and haul-road condition.`);
   }
   if (meterFixes.length) {
-    actions.push(`Check the trackers' hour and km readings on ${listRefs(meterFixes.slice(0, 6))}: refills are logged against next to no work.`);
+    actions.push(`Check the hour and km readings on ${listRefs(meterFixes.slice(0, 6))}, at the pump and on the tracker: refills are logged against next to no work.`);
   }
   if (suspectGroups.length || unmeasured.length) {
     const parts = [];
