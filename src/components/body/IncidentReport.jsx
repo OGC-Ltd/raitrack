@@ -28,7 +28,8 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { whenLabel } from "../../api/incidents";
+import { whenLabel, dateLabel, timeLabel } from "../../api/incidents";
+import { readingCounts, readingName, readingValue, readingVerdict, readingsSection } from "../../lib/trackerReadings";
 import TableToolbar from "./TableToolbar";
 import TablePager, { usePager, withMore } from "./TablePager";
 import { downloadTableCsv } from "../../utils/tableExport";
@@ -113,8 +114,25 @@ const tableFor = (columns, rows) => {
  * list must not re-fetch the list, and paging its cases must not disturb the
  * page behind it.
  */
-function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, caption, timeline = false }) {
+function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, caption, timeline = false, fetchReadings = null }) {
   const fleet = useLetterheadFleet();
+
+  /* The unit's tracker readings now, where the panel asks for them (the Wialon view; operator,
+     2026-11-27: every reading the tracker sends, with its status at the time of the report,
+     before the fault history). Read once a unit is opened; a failed read leaves the cases. */
+  const [readings, setReadings] = useState(null);
+  const [readingsState, setReadingsState] = useState(fetchReadings ? "loading" : "off");
+  useEffect(() => {
+    if (!fetchReadings) return undefined;
+    let cancelled = false;
+    setReadingsState("loading");
+    fetchReadings(unit.vehicleId)
+      .then((d) => { if (!cancelled) { setReadings(d); setReadingsState("ready"); } })
+      .catch(() => { if (!cancelled) { setReadings(null); setReadingsState("error"); } });
+    return () => { cancelled = true; };
+  }, [fetchReadings, unit.vehicleId]);
+  const readingsAt = readings?.lastMessageAt ? `${dateLabel(readings.lastMessageAt)} ${timeLabel(readings.lastMessageAt)}` : null;
+  const counts = readingCounts(readings?.readings);
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [more, setMore] = useState(false);
@@ -178,13 +196,45 @@ function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, capt
           filterNote: `${caption}. ${rows.length} case${rows.length === 1 ? "" : "s"} loaded${more ? ", more available, load them before exporting for a complete file" : ""}.`,
           cards: [
             { label: "Unit",           value: plate },
+            ...(readings?.readings?.length ? [{ label: "Readings at fault now", value: String(counts.faults) }] : []),
             { label: "Cases in file",  value: String(rows.length) },
           ],
+          before: readings?.readings?.length
+            ? [readingsSection(readings, `Generated ${dateLabel(new Date().toISOString())} ${timeLabel(new Date().toISOString())}${readingsAt ? ` · last message ${readingsAt}` : ""}`)]
+            : [],
           ...tableFor(columns, rows),
           filenameSlug: `${exportSlug}-${plate}`.replace(/\s+/g, "-").toLowerCase(),
         })}
-        disabled={!rows.length}
+        disabled={!rows.length && !readings?.readings?.length}
       />
+
+      {fetchReadings && (
+        <DetailSidebarSection
+          title="Tracker status now"
+          aside={readingsState === "ready" && readings?.readings?.length
+            ? <span className="dsb-rd__aside">{counts.faults ? `${counts.faults} fault${counts.faults === 1 ? "" : "s"}` : "No faults"}{readingsAt ? ` · last message ${readingsAt}` : ""}</span>
+            : null}
+        >
+          {readingsState === "loading" && <Loading label="Reading the tracker…" />}
+          {readingsState === "error" && <Failed>Could not read the tracker now.</Failed>}
+          {readingsState === "ready" && !readings?.readings?.length && (
+            <Empty>{readings?.reason === "no_tracker" ? "No tracker on this unit." : "No readings from the tracker."}</Empty>
+          )}
+          {readingsState === "ready" && readings?.readings?.length > 0 && (
+            <table className="dsb-rd">
+              <tbody>
+                {[...readings.readings].sort((a, b) => (b.verdict === "fault") - (a.verdict === "fault")).map((r) => (
+                  <tr key={r.id} className={r.verdict === "fault" ? "dsb-rd--fault" : r.value == null ? "dsb-rd--none" : ""}>
+                    <th scope="row">{readingName(r)}</th>
+                    <td className="dsb-rd__v">{readingValue(r)}</td>
+                    <td className="dsb-rd__l">{r.label ?? ""}{r.verdict ? <b className={`dsb-rd__s dsb-rd__s--${r.verdict}`}>{readingVerdict(r)}</b> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </DetailSidebarSection>
+      )}
 
       {error && <Failed>Could not load this unit’s cases.</Failed>}
       {!error && loading && rows.length === 0 && <Loading label="Loading cases…" />}
@@ -237,6 +287,7 @@ export default function IncidentReport({
   timeline = false,   // the unit's cases as a -O-O- rail, newest first (Malfunction)
   search = "",        // plate or name, from the panel's search box
   filterKey = "",     // any other filter the fetchers close over (Wialon's error type): a new list when it changes
+  fetchUnitReadings = null, // (vehicleId) => the unit's tracker readings now, shown before its cases (Wialon view)
 }) {
   const fleet = useLetterheadFleet();
   const [rows, setRows] = useState([]);
@@ -331,6 +382,7 @@ export default function IncidentReport({
         exportSlug={exportSlug}
         caption={caption}
         timeline={timeline}
+        fetchReadings={fetchUnitReadings}
       />
     </DetailSidebar>
   );

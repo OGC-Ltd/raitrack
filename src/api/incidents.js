@@ -68,6 +68,13 @@ export function getFaultEpisodes({ orgId, vehicleId, from, to, kind, detail, sta
   return page(`${base(orgId)}/faults`, { vehicleId, from, to, kind, detail, state, minHours, maxHours, cursor, limit });
 }
 
+/** A unit's tracker readings now, every sensor set up in Wialon (Wialon view's unit report, 2026-11-27). */
+export async function getFaultReadings({ orgId, vehicleId }) {
+  if (!orgId || !vehicleId) return null;
+  const res = await apiFetch(`${base(orgId)}/faults/readings?${qs({ vehicleId })}`);
+  return res.data ?? null;
+}
+
 /** The error types in a window, with how many units carry each: [{ kind, detail, episodes, units }]. */
 export async function getFaultDetails({ orgId, from, to, kind, state, minHours, maxHours }) {
   if (!orgId) return [];

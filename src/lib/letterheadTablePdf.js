@@ -143,8 +143,6 @@ export function drawLetterheadTablePdf(spec, logos = {}, onProgress = () => {}) 
     y += bh;
   }
 
-  // ── the table, its header on every page
-  heading(spec.sectionTitle, spec.rowsWord);
   const runningHead = (page) => {
     if (page === 1) return;
     doc.setFont('helvetica', 'bold');
@@ -159,6 +157,40 @@ export function drawLetterheadTablePdf(spec, logos = {}, onProgress = () => {}) 
     doc.setLineWidth(1.2 * PT);
     doc.line(SIDE, 6 + 10 * PT + 1.2, W - SIDE, 6 + 10 * PT + 1.2);
   };
+
+  // ── sections before the main table (the Wialon unit report's "Tracker status now"): a plain
+  // table each under its own heading, a Fault drawn in red. None on every other report.
+  for (const b of spec.before ?? []) {
+    heading(b.title, b.small);
+    autoTable(doc, {
+      startY: y,
+      margin: { left: SIDE, right: SIDE, top: 6 + 10 * PT + 4, bottom: FOOT_H + 2 },
+      theme: 'plain',
+      head: [b.head.map(plain)],
+      body: b.body.map((r) => r.map(plain)),
+      rowPageBreak: 'avoid',
+      tableWidth: inner,
+      styles: { fontSize: 7.8, cellPadding: { top: 0.6, bottom: 0.6, left: 1.4, right: 1.4 }, textColor: INK, valign: 'top', lineWidth: 0, overflow: 'linebreak' },
+      headStyles: { fontSize: 7.2, fontStyle: 'bold', textColor: MUT, valign: 'bottom' },
+      columnStyles: { 0: { fontStyle: 'bold' } },
+      didParseCell: (d) => {
+        if (d.column.index === 0) d.cell.styles.cellPadding = { ...d.cell.styles.cellPadding, left: 0 };
+        if (d.section === 'body' && d.cell.raw === '-') d.cell.styles.textColor = MUT;
+        if (d.section === 'body' && d.cell.raw === 'Fault') { d.cell.styles.textColor = [185, 28, 28]; d.cell.styles.fontStyle = 'bold'; }
+      },
+      didDrawCell: (d) => {
+        const { x, y: cy, width, height } = d.cell;
+        doc.setDrawColor(...(d.section === 'head' ? RULE : SOFT));
+        doc.setLineWidth((d.section === 'head' ? 0.6 : 0.4) * PT);
+        doc.line(x, cy + height, x + width, cy + height);
+      },
+      didDrawPage: (d) => runningHead(d.pageNumber),
+    });
+    y = doc.lastAutoTable.finalY;
+  }
+
+  // ── the table, its header on every page
+  heading(spec.sectionTitle, spec.rowsWord);
 
   if (!total) {
     doc.setFont('helvetica', 'italic');

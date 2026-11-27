@@ -8,7 +8,7 @@ import IncidentReport, { SORTS as INCIDENT_SORTS } from "./IncidentReport";
 import { rangeFor } from "../../lib/analyticsFilter";
 import {
   getSpeedingSummary, getSpeedingIncidents, getSpeedingInsights,
-  getFaultSummary, getFaultEpisodes, getFaultInsights, getFaultDetails,
+  getFaultSummary, getFaultEpisodes, getFaultInsights, getFaultDetails, getFaultReadings,
   durationLabel, distanceLabel, whenLabel, faultLabel,
   faultSensor, faultSensors, coordLabel, motionLabel,
   dateLabel, timeLabel,
@@ -1753,6 +1753,8 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
 
   const fetchSummary = useCallback((args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS, ...filters }), [filters]);
   const fetchDetail = useCallback((args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS, ...filters }), [filters]);
+  // A unit's tracker readings now, every sensor set up in Wialon, before its cases (operator, 2026-11-27).
+  const fetchReadings = useCallback((vehicleId) => getFaultReadings({ orgId, vehicleId }), [orgId]);
 
   // What a report says it covers: every filter in force (operator: "generate report based on those filters").
   const periodWords = WIALON_WINDOWS.find((w) => w.key === windowKey)?.label.toLowerCase() ?? "";
@@ -1844,6 +1846,7 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
           detailColumns={FAULT_DETAIL_COLUMNS}
           fetchSummary={fetchSummary}
           fetchDetail={fetchDetail}
+          fetchUnitReadings={fetchReadings}
           caption={caption}
           loadingLabel="Loading tracker faults…"
           reportTitle="Maintenance: Wialon"

@@ -122,6 +122,9 @@ export function tableLetterheadHtml({
 export function tableLetterheadSpec({
   reportTitle, sectionTitle, filterNote, cards = [], head, body,
   companyName, orgCode, prefix = 'SM', now = Date.now(),
+  // Sections drawn before the main table: [{ title, small, head, body }] (the Wialon unit report's
+  // "Tracker status now", 2026-11-27). None by default, so every other report is as it was.
+  before = [],
 }) {
   const rows = (body ?? []).map((r) => r.map((c) => String(c ?? '').trim()));
   const landscape = head.length > UPRIGHT_MAX_COLS;
@@ -145,6 +148,12 @@ export function tableLetterheadSpec({
     landscape,
     footNote: `${companyName} · ${reportTitle}`,
     filename: `${name}.pdf`,
+    before: (before ?? []).filter((b) => b?.head?.length).map((b) => ({
+      title: String(b.title ?? ''),
+      small: b.small ? String(b.small) : '',
+      head: b.head.map(String),
+      body: (b.body ?? []).map((r) => r.map((v) => (blank(String(v ?? '').trim()) ? '-' : String(v).trim()))),
+    })),
   };
 }
 
