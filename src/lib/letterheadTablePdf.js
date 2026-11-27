@@ -202,6 +202,13 @@ export function drawLetterheadTablePdf(spec, logos = {}, onProgress = () => {}) 
       const rightEnd = { page: doc.getCurrentPageInfo().pageNumber, y: doc.lastAutoTable.finalY };
       // Carry on below whichever half ends lower.
       const last = rightEnd.page > leftEnd.page || (rightEnd.page === leftEnd.page && rightEnd.y >= leftEnd.y) ? rightEnd : leftEnd;
+      // A hairline down the middle of the gap, so the two halves read apart (operator, 2026-11-27),
+      // from the headings to the lower half's end; on the first page only when a half runs on.
+      const midX = SIDE + width + GAP / 2;
+      doc.setPage(startPage);
+      doc.setDrawColor(...RULE);
+      doc.setLineWidth(0.6 * PT);
+      doc.line(midX, y, midX, last.page === startPage ? last.y : H - FOOT_H - 2);
       doc.setPage(last.page);
       y = last.y;
     } else {
