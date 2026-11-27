@@ -155,6 +155,7 @@
 .rpt-table th.rpt-num,
 .rpt-table td.rpt-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rpt-unit { font-weight: 700; color: var(--sp4-text-1); white-space: nowrap; }
+.rpt-table td.rpt-nowrap { white-space: nowrap; }
 
 /* A group's heading row: its name, how many vehicles, its total. */
 .rpt-table .rpt-group th {

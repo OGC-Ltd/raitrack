@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refuelsOf, rowCells, setAsideOf, summary, unitsOf } from './fuelFilledReport';
+import { dayWords, groupsOf, plateHas, refuelsOf, rowCells, setAsideOf, summary, unitsOf, ymdOf } from './fuelFilledReport';
 import { fuelFilledDoc } from './reportDocs';
 
 const T0 = Date.parse('2026-10-13T21:00:00Z'); // 14 Oct 00:00 EAT
@@ -71,5 +71,25 @@ describe('the document', () => {
     expect(doc.filename).toBe('Fuel Filled Report Aquamist 2026-10-14');
     expect(doc.blocks.find((b) => b.kind === 'table').rows).toHaveLength(4);
     expect(doc.meta.find((m) => m.label === 'Filled').value).toBe('733.6 L');
+  });
+});
+
+describe('the page: days and the plate search', () => {
+  it('puts a refuel on its Nairobi day, headed in words', () => {
+    // 22:30 UTC on 13 Oct is 01:30 on the 14th in Nairobi
+    expect(ymdOf(Date.UTC(2026, 9, 13, 22, 30))).toBe('2026-10-14');
+    expect(dayWords('2026-10-14')).toBe('Wed 14 Oct 2026');
+    expect(dayWords(null)).toBe('No date');
+  });
+
+  it('groups rows by day in the order they come', () => {
+    const g = groupsOf([{ d: 'b', n: 1 }, { d: 'a', n: 2 }, { d: 'b', n: 3 }], (r) => r.d);
+    expect(g.map((x) => [x.key, x.rows.map((r) => r.n)])).toEqual([['b', [1, 3]], ['a', [2]]]);
+  });
+
+  it('finds a plate however it is typed', () => {
+    expect(plateHas('KBY 767G', 'kby767')).toBe(true);
+    expect(plateHas('KBY 767G', ' 767 g')).toBe(true);
+    expect(plateHas('KBY 767G', 'KBZ')).toBe(false);
   });
 });

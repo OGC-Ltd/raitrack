@@ -791,8 +791,8 @@ export function probeReconDoc(rows, { fleet, unit = '', orgCode, sheet = '', now
     .map((c, i) => (RECON_FIGURES.has(i) ? { ...c, align: 'right' } : c));
   const notes = [
     s.noFill > 0 && `${plural(s.noFill, 'row')} had no probe refuel for that unit on that day: left blank.`,
-    s.before > 0 && `${plural(s.before, 'row')} are dated before the fuel records begin and were not checked; the sheet's figures are kept.`,
-    s.notOnPlatform > 0 && `${plural(s.notOnPlatform, 'row')} are on units not on the platform; the sheet's figures are kept.`,
+    s.before > 0 && `${plural(s.before, 'row')} are dated before the fuel records begin and were not checked; their probe and variance are left blank.`,
+    s.notOnPlatform > 0 && `${plural(s.notOnPlatform, 'row')} are on units not on the platform; their probe and variance are left blank.`,
     'Variance is the records less the probe. Totals are over the rows a probe refuel was found for.',
   ].filter(Boolean);
   const name = unit ? `${fleet} ${unit}` : fleet;

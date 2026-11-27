@@ -71,7 +71,8 @@ async function writeSheet(sheet, writes) {
   return new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
-export default function ProbeReconUpload({ orgId, onDone }) {
+// `primary`: the page's main action, on the right of the filters (the reconciled sheet's view)
+export default function ProbeReconUpload({ orgId, onDone, primary = false, label = 'Reconcile a sheet' }) {
   const input = useRef(null);
   const [state, setState] = useState({ status: 'idle' });
 
@@ -103,9 +104,9 @@ export default function ProbeReconUpload({ orgId, onDone }) {
   const busy = state.status === 'reading';
   return (
     <>
-      <button type="button" className="sp4-ghost-btn" disabled={!orgId || busy} onClick={() => input.current?.click()}
+      <button type="button" className={primary ? 'sp4-submit-btn frp-run rpt-run' : 'sp4-ghost-btn'} disabled={!orgId || busy} onClick={() => input.current?.click()}
               title={`Pick an Excel or CSV sheet with "Qty per Aqmst Records": ${HEAD_PROBE} is filled from the probes and the Variance worked out`}>
-        <i className="ti ti-file-upload" aria-hidden="true" /> Reconcile a sheet
+        <i className="ti ti-file-upload" aria-hidden="true" /> {label}
       </button>
       <input ref={input} type="file" accept=".xlsx,.csv" hidden tabIndex={-1}
              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; run(f); }} />

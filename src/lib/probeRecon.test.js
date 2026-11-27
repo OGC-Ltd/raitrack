@@ -139,13 +139,13 @@ describe('a sheet', () => {
     expect(byRow[5]).toMatchObject({ probe: 202.15, variance: -15.52 }); // 9 Jan, the big one of four
     expect(byRow[1]).toEqual({ row: 1, probe: '', variance: '' }); // 3 Nov 2025: no fill on Wialon that day
     expect(byRow[6]).toEqual({ row: 6, probe: '', variance: '' }); // 13 Jan: no fill
-    expect(byRow[2]).toBeUndefined(); // KBP 167E is not on the platform: left as it was
-    expect(tally).toMatchObject({ rows: 7, matched: 3, notOnPlatform: 2, noFill: 2, blanked: 1, changed: 2 });
+    expect(byRow[2]).toEqual({ row: 2, probe: '', variance: '' }); // KBP 167E is not on the platform: no probe record, blank
+    expect(tally).toMatchObject({ rows: 7, matched: 3, notOnPlatform: 2, noFill: 2, blanked: 3, changed: 2 });
 
     const out = parseCsv(toCsv(applyToRows(rows, cols, writes)));
     expect(out[4].slice(0, 5)).toEqual(['1/22/2026', 'KBY 767G', '236.86', '253.72', '-16.86']);
     expect(out[1].slice(0, 5)).toEqual(['11/3/2025', 'KCJ 100X', '40', '', '']);
-    expect(out[2][3]).toBe('No FLS');
+    expect(out[2].slice(3, 5)).toEqual(['', '']); // was No FLS
     expect(out[7][5]).toBe('Fueled at Aquamist, Sigona');
   });
 
@@ -157,11 +157,11 @@ describe('a sheet', () => {
     expect(m.get(2)).toEqual({ note: 'No probe fill' });
   });
 
-  it('leaves rows before the records unchecked, as the sheet had them', () => {
+  it('leaves rows before the records unchecked, and blank: no probe record', () => {
     const items = sheetItems(rows, cols);
     const fills = new Map([['KCJ100X', { fills: [] }], ['KBY767G', { fills: KBY767G }]]);
     const { writes, tally } = fillPlan(items, matchRows(items, fills, '2025-11-27'));
-    expect(writes.find((w) => w.row === 1)).toBeUndefined(); // 3 Nov 2025, KCJ 100X keeps 39.06
+    expect(writes.find((w) => w.row === 1)).toEqual({ row: 1, probe: '', variance: '' }); // 3 Nov 2025, KCJ 100X: 39.06 cleared
     expect(writes.find((w) => w.row === 4)).toMatchObject({ probe: 253.72 });
     expect(tally.notChecked).toBe(1);
   });
@@ -185,11 +185,11 @@ describe('the reconciliation report', () => {
 
   it('shows every sheet row in date order, with what the filled sheet holds and why', () => {
     expect(report.map((r) => [r.day, r.plate, r.probe, r.variance, r.check])).toEqual([
-      ['2025-11-03', 'KBP 167E', 'No FLS', null, CHECK.NOT_ON_PLATFORM],
-      ['2025-11-03', 'KCJ 100X', 39.06, 0.94, CHECK.BEFORE],
+      ['2025-11-03', 'KBP 167E', null, null, CHECK.NOT_ON_PLATFORM],
+      ['2025-11-03', 'KCJ 100X', null, null, CHECK.BEFORE],
       ['2025-12-20', 'KBY 767G', 190.19, -12.17, CHECK.FILLED],
       ['2026-01-09', 'KBY 767G', 202.15, -15.52, CHECK.FILLED],
-      ['2026-01-10', 'KDM 148L', 71, -1.97, CHECK.NOT_ON_PLATFORM],
+      ['2026-01-10', 'KDM 148L', null, null, CHECK.NOT_ON_PLATFORM],
       ['2026-01-13', 'KBY 767G', null, null, CHECK.NO_FILL],
       ['2026-01-22', 'KBY 767G', 253.72, -16.86, CHECK.FILLED],
     ]);

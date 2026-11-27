@@ -267,7 +267,7 @@ export function matchRows(items, fillsByKey, coveredFrom = null) {
 
 /** The note of a row whose unit had no refuel on its day: written blank. */
 export const NO_FILL = 'No probe fill';
-/** The note of a row before the records begin: left as the sheet had it. */
+/** The note of a row before the records begin: no probe record, so left blank. */
 export const NOT_CHECKED = 'Before the records';
 
 /** Records minus probe, to the hundredth (the sheet's 40 − 39.06 = 0.94). */
@@ -275,8 +275,8 @@ export const varianceOf = (qty, probe) => r2(qty - probe);
 
 /**
  * What to write: per sheet row { probe, variance }: the refuel's litres, or
- * blanks where the unit had none that day. Rows whose unit was not read are
- * left as they are.
+ * blanks wherever there is no probe record (no refuel that day, before the
+ * records, a unit not on the platform).
  */
 export function fillPlan(items, matches) {
   const writes = [];
@@ -293,6 +293,9 @@ export function fillPlan(items, matches) {
       if (m?.note === 'Not on the platform') tally.notOnPlatform += 1;
       else if (m?.note === NOT_CHECKED) tally.notChecked += 1;
       else tally.notRead += 1;
+      // No probe record for the row (operator, 2026-11-27): blank, not the sheet's old figure
+      if (String(it.was ?? '').trim()) tally.blanked += 1;
+      writes.push({ row: it.row, probe: '', variance: '' });
       continue;
     }
     const probe = r2(m.litres);
@@ -313,8 +316,8 @@ export const CHECK = { FILLED: 'Probe fill', NO_FILL: 'No fill that day', BEFORE
 /**
  * The sheet's rows as the report shows them, in date then unit order:
  * { row, day, plate, key, qty, probe, variance, check, comment, kept }. `probe`
- * and `variance` are what the filled sheet holds: the refuel's litres, blank on
- * a day with no refuel, or what the sheet had (`kept`) for a row not checked.
+ * and `variance` are what the filled sheet holds: the refuel's litres, or blank
+ * where there is no probe record (no refuel that day, or a row not checked: `kept`).
  */
 export function reconRows(items, matches, rows, cols) {
   const out = items.map((it) => {
@@ -324,9 +327,9 @@ export function reconRows(items, matches, rows, cols) {
     const base = { row: it.row, day: m?.day ?? it.day, plate: it.plate, key: it.key, qty: it.qty, comment };
     if (m && !m.note) { const probe = r2(m.litres); return { ...base, probe, variance: varianceOf(it.qty, probe), check: CHECK.FILLED, kept: false }; }
     if (m?.note === NO_FILL) return { ...base, probe: null, variance: null, check: CHECK.NO_FILL, kept: false };
-    const was = r[cols.probe], varWas = r[cols.variance];
+    // No probe record: blank (operator, 2026-11-27), never the sheet's old figure
     return {
-      ...base, probe: numberOf(was) ?? (String(was ?? '').trim() || null), variance: numberOf(varWas), kept: true,
+      ...base, probe: null, variance: null, kept: true,
       check: m?.note === 'Not on the platform' ? CHECK.NOT_ON_PLATFORM : CHECK.BEFORE,
     };
   });
