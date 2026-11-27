@@ -35,7 +35,7 @@ const STATUSES = ['Not fuelled', 'Fuelling now', 'Short', 'Over', 'As planned'];
 const TONE = { 'Not fuelled': 'crit', 'Fuelling now': 'info', Short: 'warn', Over: 'over', 'As planned': 'ok', [OFF_PLAN]: 'idle' };
 // The list's order: what is still moving, then the ones to chase, then the done
 const LIST_ORDER = ['Fuelling now', 'Short', 'Over', 'Not fuelled', 'As planned'];
-const HEADS = ['Machine', 'Type', 'Site', 'Department', 'Plan', 'Planned L', 'Fuelled L', 'Difference L'];
+const HEADS = ['Machine', 'Type', 'Site', 'Department', 'Plan', 'Planned L', 'Fuelled L', 'Variance L'];
 const FIGURES = new Set([5, 6, 7]);
 const titleCase = (s) => String(s ?? '').toLowerCase().replace(/(^|[\s(/-])([a-z])/g, (_, a, b) => a + b.toUpperCase());
 
