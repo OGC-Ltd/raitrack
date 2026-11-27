@@ -153,6 +153,9 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
 }
 
 export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
+  // A machine the pumps fuel that is no unit of ours (server id "machine:…",
+  // hired vehicles, untracked generators) has no vehicle analytics to open.
+  const openOwn = (id) => { if (!String(id).startsWith("machine:")) onOpenUnit?.(id); };
   const [span, setSpan] = useState(() => presetSpan(90));
   const { data: review, status, error, refetch, isFetching } = useQuery({
     queryKey: ["fuel-performance-review", orgId, span.from, span.to],
@@ -339,9 +342,9 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                       </tr></thead>
                       <tbody>
                         {read.attention.slice(0, Math.max(6, Math.min(8, read.benchmarks.length))).map((u) => (
-                          <tr key={u.id} onClick={() => onOpenUnit?.(u.id)} title={`Open ${u.name}'s vehicle analytics`}>
+                          <tr key={u.id} onClick={() => openOwn(u.id)} title={`Open ${u.name}'s vehicle analytics`}>
                             <td>
-                              <button type="button" className="fpr-unit" onClick={(e) => { e.stopPropagation(); onOpenUnit?.(u.id); }}>{u.ref}</button>
+                              <button type="button" className="fpr-unit" onClick={(e) => { e.stopPropagation(); openOwn(u.id); }}>{u.ref}</button>
                               <small>{u.group.replace(/s$/, "")}</small>
                             </td>
                             <td>
@@ -370,7 +373,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                           <dt>{b.group}</dt>
                           <dd>
                             {b.units.map((u, i) => (
-                              <span key={u.id}>{i > 0 && " · "}<button type="button" className="fpr-unit" onClick={() => onOpenUnit?.(u.id)}>{u.ref}</button> {pct(u.ratio)}{u.id === b.busiestId && <i title="Largest fuel user in the group"> ★</i>}</span>
+                              <span key={u.id}>{i > 0 && " · "}<button type="button" className="fpr-unit" onClick={() => openOwn(u.id)}>{u.ref}</button> {pct(u.ratio)}{u.id === b.busiestId && <i title="Largest fuel user in the group"> ★</i>}</span>
                             ))}
                           </dd>
                         </div>
@@ -405,7 +408,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                 {review.groups.map((g) => (
                   <Exhibit key={g.group} group={g.group} units={read.byGroup.get(g.group) ?? []}
                            busiestId={[...(read.byGroup.get(g.group) ?? [])].sort((a, b) => b.litres - a.litres)[0]?.id}
-                           suspect={read.suspectGroups.includes(g.group)} onOpen={onOpenUnit} />
+                           suspect={read.suspectGroups.includes(g.group)} onOpen={openOwn} />
                 ))}
               </div>
             </section>
