@@ -191,7 +191,12 @@ export default function GateLogScreen() {
           <section className="gl-figures" aria-label="Units at the gate">
             <table className="gl-units">
               <thead>
-                <tr><th scope="col" /><th scope="col">Units</th><th scope="col">Back</th><th scope="col">Still out</th></tr>
+                <tr>
+                  <th scope="col"><span className="gl-units__sr">Signed out</span></th>
+                  <th scope="col">Units</th>
+                  <th scope="col"><span className="gl-units__mark gl-units__mark--back" aria-hidden="true" />Back</th>
+                  <th scope="col"><span className="gl-units__mark gl-units__mark--out" aria-hidden="true" />Still out</th>
+                </tr>
               </thead>
               <tbody>
                 {[
