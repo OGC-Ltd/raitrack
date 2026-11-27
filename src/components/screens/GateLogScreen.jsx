@@ -14,7 +14,6 @@ import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gate
 import { fleetDay } from "../../lib/alertsView";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
-import TrendStat from "./TrendStat";
 import GateEventPanel from "./GateEventPanel";
 import DateRangePicker from "../layout/DateRangePicker";
 import "./DriversScreen.css";
@@ -104,112 +103,6 @@ function usePrevDayEvents(orgId, day) {
   return got?.key === key ? got.events : null;
 }
 
-/** One point of the hourly charts: an hour of the day shown. */
-const HOUR_STEP = { word: "hour", text: (p) => hourText(p.hour) };
-const num = (n) => n.toLocaleString("en-GB");
-
-/**
- * The strip's figures, over the hours and search shown, every source (a trip needs both its ends),
- * counted in trips so they balance (lib/gateLog gateBalance; operator, 2026-11-27): the sign-outs
- * by hour, each trip's first return by hour, and the records by source.
- */
-function gateStats(rows, contextRows, fromH, toH, day) {
-  const last = Math.max(fromH, Math.ceil(toH) - 1);
-  const hourly = [];
-  for (let h = fromH; h <= last; h++) hourly.push({ day, hour: h, out: 0, in: 0 });
-  const slotOf = (r) => hourly[Number(clock(r.at).slice(0, 2)) - fromH];
-  const sources = { factorysuite: 0, geofence: 0 };
-  for (const r of rows) {
-    if (r.source in sources) sources[r.source] += 1;
-    if (r.way === "out") { const slot = slotOf(r); if (slot) slot.out += 1; }
-  }
-  const b = gateBalance(rows, contextRows);
-  for (const r of b.returns) { const slot = slotOf(r); if (slot) slot.in += 1; }
-  return { ...b, hourly, sources };
-}
-
-/** The lead cell, as Fuel's Machines: units at the gate, three facts, the sources as one bar. */
-function GateUnitsCard({ s, busy, failed, windowWords }) {
-  if (busy || failed) {
-    return <div className="dr-cell dr-fleet"><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading units…" : "Not loaded"}</div></div>;
-  }
-  // The window's sign-outs, and where each one stands: these three and "no return" add up to it.
-  const facts = [
-    { label: "Signed out", value: num(s.signedOut) },
-    { label: "Back", value: num(s.back) },
-    { label: "Still out", value: num(s.stillOut) },
-  ];
-  const mix = [
-    { key: "done", label: GATE_SOURCES.factorysuite.label, n: s.sources.factorysuite },
-    { key: "new", label: GATE_SOURCES.geofence.label, n: s.sources.geofence },
-  ];
-  return (
-    <div className="dr-cell dr-fleet">
-      <div className="dr-statchart__head"><span className="dr-statchart__label">Units</span></div>
-      <div className="dr-summary__lead">
-        <span className="dr-summary__figure">{num(s.units)}</span>
-        <span className="dr-summary__caption">at the gate,<br />{windowWords}</span>
-      </div>
-      <dl className="dr-fleet__facts">
-        {facts.map((f) => (
-          <div key={f.label} className="dr-fleet__fact"><dt>{f.label}</dt><dd>{f.value}</dd></div>
-        ))}
-      </dl>
-      <p className="gl-balance">
-        {num(s.signedOut)} signed out = {num(s.back)} back + {num(s.stillOut)} still out
-        {" + "}{num(s.noReturn)} signed out again with no return recorded
-      </p>
-      <div className="dr-fleet__mix">
-        <span className="dr-fleet__mixlabel">Records by source</span>
-        <span className="dr-fleet__bar" role="img" aria-label={mix.map((m) => `${m.n} from ${m.label}`).join(", ")}>
-          {mix.map((m) => m.n > 0 && (
-            <span key={m.key} className={`dr-fleet__seg dr-fleet__seg--${m.key}`} style={{ flexGrow: m.n }}
-                  title={`${m.label}: ${num(m.n)} record${m.n === 1 ? "" : "s"}`} />
-          ))}
-        </span>
-        <ul className="dr-fleet__legend">
-          {mix.map((m) => (
-            <li key={m.key} className={`dr-fleet__key dr-fleet__key--${m.key}`}>
-              <span className="dr-fleet__swatch" aria-hidden="true" />{m.label}<b>{num(m.n)}</b>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-/** The last cell, as Fuel's At the pump: trips back, then how long they were out. */
-function GateTimeOutCard({ s, busy, failed }) {
-  if (busy || failed) {
-    return <div className="dr-cell dr-summary"><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading…" : "Not loaded"}</div></div>;
-  }
-  // Every trip back in the window, once (its first return), by how long it was out: they add up to it.
-  const rows = [
-    { name: "Back within 2 h", n: s.within2h },
-    { name: "Out 2 to 8 h", n: s.from2to8h },
-    { name: "Out over 8 h", n: s.over8h, tone: "speed" },
-  ];
-  return (
-    <div className="dr-cell dr-summary gl-times">
-      <div className="dr-statchart__head"><span className="dr-statchart__label">Time out</span></div>
-      <div className="dr-summary__lead">
-        <span className="dr-summary__figure">{num(s.cameBack)}</span>
-        <span className="dr-summary__caption">
-          trip{s.cameBack === 1 ? "" : "s"} back,<br />{s.cameBack ? `longest ${durationWords(s.longest)}` : "none back yet"}
-        </span>
-      </div>
-      <div className="dr-summary__incidents">
-        {rows.map((r) => (
-          <div key={r.name} className={`dr-summary__incident${r.n ? " gl-times__on" : ""}${r.n && r.tone ? ` dr-summary__incident--${r.tone}` : ""}`}>
-            <span className="dr-summary__name">{r.name}</span>
-            <span className="dr-summary__count">{num(r.n)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /** The Acknowledged cell: what was said of the event and by whom, else a dash. */
 function AckCell({ row }) {
@@ -274,14 +167,12 @@ export default function GateLogScreen() {
   // The figures wait until the whole day is read; a part-read day would undercount.
   const ready = log.status === "ready" && !log.more;
   const figure = (n) => (ready ? n.toLocaleString("en-GB") : "-");
-  const windowWords = `${hourText(fromH)} to ${toValue === NOW ? nowText : hourText(toValue)}`;
   const busy = log.status === "loading" || Boolean(log.more);
   const failed = log.status === "error";
   // The figures: hours and search applied, every source (a trip needs both ends), the day before for context.
   const figureRows = useMemo(() => searchGate(byHours(all, fromH, toH), q), [all, fromH, toH, q]);
   const contextRows = useMemo(() => (prevEvents ? [...gateRows(prevEvents), ...all] : all), [all, prevEvents]);
-  const stats = useMemo(() => gateStats(figureRows, contextRows, fromH, toH, day), [figureRows, contextRows, fromH, toH, day]);
-  const hourly = stats.hourly;
+  const stats = useMemo(() => gateBalance(figureRows, contextRows), [figureRows, contextRows]);
   const yesterday = shiftDay(today, -1);
 
   return (
@@ -291,27 +182,25 @@ export default function GateLogScreen() {
         <div className="dr-head">
           <div>
             <h1 className="dr-title">Gate log</h1>
-            <div className="dr-subtitle">
-              {ready ? `${rows.length.toLocaleString("en-GB")} gate event${rows.length === 1 ? "" : "s"}, ${dayWords(day)}` : dayWords(day)}
-            </div>
           </div>
         </div>
 
         <div className="dr-layout">
-          <section className="dr-strip gl-strip" aria-label="The day at the gate">
-            <GateUnitsCard s={stats} busy={busy} failed={failed} windowWords={windowWords} />
-            <TrendStat title="Signed out" series={hourly} valueKey="out" unit="" tone="speed" type="bar" what="sign-outs"
-              point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(stats.signedOut)} sub={`${windowWords}, by hour`}
-              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.out.toLocaleString("en-GB")} signed out`} />
-            {/* Each trip's first return, by hour: a FactorySuite sign-in or the tracker at the gate,
-                once per trip (repeat sightings left out), including trips out before the window. */}
-            <TrendStat title="Came back" series={hourly} valueKey="in" unit="" tone="tonnes" type="line"
-              point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(stats.cameBack)}
-              sub={busy || failed ? `${windowWords}, by hour` : `${num(stats.back)} of these sign-outs + ${num(stats.earlier)} out from before, by hour`}
-              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.in.toLocaleString("en-GB")} came back`} />
-            <GateTimeOutCard s={stats} busy={busy} failed={failed} />
+          {/* The day at the gate in one row of figures, counted in trips (lib/gateLog gateBalance;
+              operator, 2026-11-27: no charts, no units card). Signed out = Back + Still out (+ the
+              few signed out again before any return); the last two are units, twice or more. */}
+          <section className="gl-figures" aria-label="The day at the gate">
+            <dl className="gl-figures__row">
+              {[
+                ["Signed out", stats.signedOut],
+                ["Back", stats.back],
+                ["Still out", stats.stillOut],
+                ["Signed out twice", stats.outTwice],
+                ["Signed in twice", stats.inTwice],
+              ].map(([label, n]) => (
+                <div key={label} className="gl-figures__cell"><dt>{label}</dt><dd>{busy || failed ? "-" : figure(n)}</dd></div>
+              ))}
+            </dl>
           </section>
         </div>
 

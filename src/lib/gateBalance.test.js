@@ -50,4 +50,13 @@ describe("the Gate log figures balance (operator, 2026-11-27)", () => {
     const rows = [out("J", "06:00"), seen("J", "07:00"), out("K", "06:00"), signedIn("K", "07:00")];
     expect(gateBalance(rows, rows).backBySource).toEqual({ factorysuite: 1, geofence: 1, other: 0 });
   });
+
+  it("units signed out twice, and units back twice (repeat sightings of one return do not count)", () => {
+    const rows = [
+      out("L", "06:00"), seen("L", "07:00"), seen("L", "07:20"), out("L", "08:00"), signedIn("L", "09:00"), // out twice, back twice
+      out("M", "06:00"), out("M", "10:00"),                                                                 // out twice, never back
+      out("N", "06:00"), seen("N", "06:30"), seen("N", "11:00"),                                            // one trip, seen twice
+    ];
+    expect(gateBalance(rows, rows)).toMatchObject({ outTwice: 2, inTwice: 1 });
+  });
 });

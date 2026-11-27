@@ -177,6 +177,8 @@ export function gateTrips(rows, now = Date.now()) {
  *   within2h + 2to8h + over8h = cameBack
  *   return records in the window = cameBack + extra (repeat sightings of a trip already back, and
  *                                  returns with no sign-out on record)
+ *   outTwice / inTwice  units signed out two or more times in the window / with two or more trips
+ *                       back in it (each trip's first return, so repeat sightings do not count)
  *
  * `windowRows` are the rows shown (hours and search applied, every source: a trip needs both
  * ends); `contextRows` every row read, the day before included, so a trip that left yesterday
@@ -215,10 +217,14 @@ export function gateBalance(windowRows, contextRows) {
   let within2h = 0, from2to8h = 0, over8h = 0, longest = 0;
   const backBySource = { factorysuite: 0, geofence: 0, other: 0 };
   const returns = [];
+  const outsByUnit = new Map();
+  const backsByUnit = new Map();
+  const bump = (m, unit) => m.set(unit, (m.get(unit) ?? 0) + 1);
   for (const r of windowRows ?? []) {
     if (r.plate) units.add(squash(r.plate));
     if (r.way === "out") {
       records.out += 1;
+      if (r.plate) bump(outsByUnit, squash(r.plate));
       const ret = firstReturn.get(r.key);
       const next = superseded.get(r.key);
       if (ret && inWindow.has(ret.key)) back += 1;
@@ -230,6 +236,7 @@ export function gateBalance(windowRows, contextRows) {
     const out = tripOf.get(r.key);
     if (!out) { extra += 1; continue; }
     returns.push(r);
+    if (r.plate) bump(backsByUnit, squash(r.plate));
     if (!inWindow.has(out.key)) earlier += 1;
     backBySource[r.source in backBySource ? r.source : "other"] += 1;
     const ms = r.at - out.at;
@@ -242,6 +249,8 @@ export function gateBalance(windowRows, contextRows) {
     units: units.size, records, signedOut: records.out, back, stillOut, noReturn,
     cameBack: returns.length, earlier, extra, backBySource,
     within2h, from2to8h, over8h, longest, returns,
+    outTwice: [...outsByUnit.values()].filter((k) => k >= 2).length,
+    inTwice: [...backsByUnit.values()].filter((k) => k >= 2).length,
   };
 }
 
