@@ -20,6 +20,8 @@ import { useSensorHealth } from "../../hooks/useSensorHealth";
 // reads. Both the badge and the panel read this one object.
 import { useProbeHealth } from "../../hooks/useProbeHealth";
 import { useFuelEvents, fleetDayKey } from "../../hooks/useFuelEvents";
+import { loadProbeReport } from "../../api/reports";
+import { faultMessages } from "../../lib/unitFaultHistory";
 import { useVehicleTelemetry } from "../../hooks/useVehicleTelemetry";
 import { useWindowTelemetry } from "../../hooks/useWindowTelemetry";
 import { readingCoverage } from "../../lib/vehicleReadings";
@@ -1368,6 +1370,89 @@ function RepairHistory({ rows }) {
   );
 }
 
+/**
+ * The unit's fault messages over the past FAULT_HISTORY_DAYS, newest first
+ * (operator, 2026-11-27): our fault episodes (the tracker's probe fault with
+ * its reason, tracker silent, GPS and the other channels) with their
+ * recoveries, and Wialon's own probe disconnection alerts for this unit.
+ * Each source is read only where the role may read it, and one failing leaves
+ * the other on screen with a line saying so.
+ */
+const FAULT_HISTORY_DAYS = 30; // operator, 2026-11-27: 30 days (the Wialon read stays under the 31-day cap)
+const FAULT_HISTORY_FIRST = 10;
+function FaultHistory({ orgId, vehicleId }) {
+  const { can } = usePermissions();
+  const mayFaults = can("sensor:read");
+  const mayWialon = can("telemetry:read");
+  const [state, setState] = useState({ loading: true, episodes: [], runs: [], failed: [] });
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    if (!orgId || !vehicleId || (!mayFaults && !mayWialon)) { setState({ loading: false, episodes: [], runs: [], failed: [] }); return undefined; }
+    let cancelled = false;
+    setState({ loading: true, episodes: [], runs: [], failed: [] });
+    setAll(false);
+    const now = new Date();
+    const from = new Date(now.getTime() - FAULT_HISTORY_DAYS * 86_400_000);
+    Promise.allSettled([
+      mayFaults
+        ? getFaultEpisodes({ orgId, vehicleId, from: from.toISOString(), to: now.toISOString(), kind: "all", limit: 200 }).then((p) => p.rows)
+        : Promise.resolve([]),
+      mayWialon
+        ? loadProbeReport({ orgId, vehicleId, from: fleetDayKey(new Date(now.getTime() - (FAULT_HISTORY_DAYS - 1) * 86_400_000)), to: fleetDayKey(now) })
+            // Only this unit's rows, whatever the server sends back: a server older than the one-unit
+            // option ignores vehicleId and answers with every truck in the company.
+            .then((r) => (r?.rows ?? []).filter((x) => x.vehicleId === vehicleId))
+        : Promise.resolve([]),
+    ]).then(([f, w]) => {
+      if (cancelled) return;
+      setState({
+        loading: false,
+        episodes: f.status === "fulfilled" ? f.value : [],
+        runs: w.status === "fulfilled" ? w.value : [],
+        failed: [f.status === "rejected" && "Fault records", w.status === "rejected" && "Wialon alerts"].filter(Boolean),
+      });
+    });
+    return () => { cancelled = true; };
+  }, [orgId, vehicleId, mayFaults, mayWialon]);
+
+  const messages = useMemo(() => faultMessages(state.episodes, state.runs), [state.episodes, state.runs]);
+  if (!mayFaults && !mayWialon) return null;
+  const shown = all ? messages : messages.slice(0, FAULT_HISTORY_FIRST);
+  const when = (t) => { const iso = new Date(t).toISOString(); return `${dateLabel(iso)} ${timeLabel(iso)}`; };
+  return (
+    <section className="sp4-ph-hist sp4-fh" aria-label="Fault history">
+      <h3 className="sp4-ph-hist__title">Fault history, past {FAULT_HISTORY_DAYS} days</h3>
+      {state.loading ? (
+        <p className="sp4-muted sp4-fh__note">Loading…</p>
+      ) : !messages.length ? (
+        <p className="sp4-muted sp4-fh__note">{state.failed.length ? "Could not be loaded." : "No faults recorded."}</p>
+      ) : (
+        <ol className="sp4-ph-hist__list">
+          {shown.map((m) => (
+            <li key={m.key} className="sp4-ph-hist__item sp4-fh__item">
+              <span className="sp4-fh__when">{when(m.at)}</span>
+              <span className={"sp4-fh__text" + (m.neutral ? "" : m.ok ? " sp4-fh__text--ok" : " sp4-fh__text--fault")}>
+                {m.text}
+                {m.durationMs != null && <span className="sp4-fh__dur"> (after {durationLabel(m.durationMs / 1000)})</span>}
+                {m.open && <span className="sp4-fh__dur"> (ongoing)</span>}
+              </span>
+              <span className="sp4-fh__src">{m.source}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {!state.loading && state.failed.length > 0 && messages.length > 0 && (
+        <p className="sp4-muted sp4-fh__note">{state.failed.join(" and ")} could not be loaded.</p>
+      )}
+      {messages.length > FAULT_HISTORY_FIRST && (
+        <button type="button" className="sp4-ghost-btn sp4-ph-hist__more" onClick={() => setAll((v) => !v)}>
+          {all ? "Show fewer" : `Show all ${messages.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 function SensorDetail({
   vehicleId, vehicleName, orgId, onClose,
   canSeeRepairs = false, canResolveRepairs = false, faulty = false, repairNonce = 0, inPanel = false,
@@ -1513,6 +1598,7 @@ function SensorDetail({
           {reportActions}
         </section>
       )}
+      {inPanel && <FaultHistory orgId={orgId} vehicleId={vehicleId} />}
       {inPanel && <RepairHistory rows={history} />}
 
       {/* The readings table stays out of the side panel (operator,
@@ -1582,6 +1668,96 @@ function SensorDetail({
 }
 
 // ── Main panel ─────────────────────────────────────────────────────────────────
+/**
+ * Maintenance > Wialon (operator, 2026-11-27: "two tabs, system and wialon"):
+ * the faults the trackers report in their own status codes, as the Wialon
+ * account labels them (Fls Status Error, Sensor Not Found, No Fuel Error, probe
+ * battery, GPS without a fix), and the probe's 4095 / 6500 / 7000 codes, which
+ * also stay on System's Malfunction tab for now. The same list as Malfunction,
+ * asking the server for these kinds only; System's tabs never see the rest.
+ */
+export const WIALON_VIEW_KINDS = "fuel_probe_status,fuel_probe_battery,gnss_fault,fuel_probe_fault";
+const WIALON_WINDOWS = [
+  { key: "1",  label: "Today",   days: 1 },
+  { key: "7",  label: "7 days",  days: 7 },
+  { key: "30", label: "30 days", days: 30 },
+];
+const wialonSummary = (args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS });
+const wialonEpisodes = (args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS });
+
+export function WialonFaultsPanel() {
+  const { orgId } = useFleetLiveShared();
+  const [windowKey, setWindowKey] = useState("7");
+  const [sort, setSort] = useState("recent");
+  const [search, setSearch] = useState("");
+  // Re-read when the window changes, not on every render (IncidentReport keys on from/to).
+  const range = useMemo(() => {
+    const days = WIALON_WINDOWS.find((w) => w.key === windowKey)?.days ?? 7;
+    const to = new Date();
+    const from = days === 1
+      ? new Date(Date.parse(`${fleetDayKey(to)}T00:00:00+03:00`))
+      : new Date(to.getTime() - days * 86_400_000);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [windowKey]);
+  const label = WIALON_WINDOWS.find((w) => w.key === windowKey)?.label.toLowerCase() ?? "";
+  if (!orgId) return null;
+  return (
+    <div className="sp4-root sp4-root--framed">
+      <FilterBar
+        peek={(
+          <div className="sp4-search-wrap">
+            <svg className="sp4-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input className="sp4-search" type="text" placeholder="Search plate or name…" aria-label="Search units"
+                   value={search} onChange={(e) => setSearch(e.target.value)} />
+            {search && <button className="sp4-search-clear" onClick={() => setSearch("")}>✕</button>}
+          </div>
+        )}
+        activeCount={(windowKey !== "7" ? 1 : 0) + (sort !== "recent" ? 1 : 0)}
+      >
+        <div className="sp4-filter-divider" />
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Period</span>
+          {WIALON_WINDOWS.map((w) => (
+            <button key={w.key} className={"sp4-filter-chip" + (windowKey === w.key ? " sp4-filter-chip--on" : "")} onClick={() => setWindowKey(w.key)}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+        <div className="sp4-filter-divider" />
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Sort</span>
+          {INCIDENT_SORTS.map((s) => (
+            <button key={s.key} className={"sp4-filter-chip" + (sort === s.key ? " sp4-filter-chip--on" : "")} onClick={() => setSort(s.key)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </FilterBar>
+      <div className="sp4-body">
+        <IncidentReport
+          orgId={orgId}
+          range={range}
+          sort={sort}
+          summaryColumns={FAULT_SUMMARY_COLUMNS}
+          detailColumns={FAULT_DETAIL_COLUMNS}
+          fetchSummary={wialonSummary}
+          fetchDetail={wialonEpisodes}
+          caption={`Faults reported by the trackers, ${label}`}
+          loadingLabel="Loading tracker faults…"
+          reportTitle="Maintenance: Wialon"
+          panelTitle="Tracker faults"
+          timeline
+          exportSlug={`wialon-faults-${windowKey}-${sort}`}
+          search={search}
+          emptyLabel="No faults reported by the trackers in this period."
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function SensorPanel() {
   const { orgId, vehicles } = useFleetLiveShared();
   const { user } = useAuth();

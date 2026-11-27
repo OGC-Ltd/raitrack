@@ -123,9 +123,11 @@ export async function downloadRecoveryReport({ orgId, day, vehicle, landscape = 
 
 /** Each unit that went over its limit on a fleet day (YYYY-MM-DD). */
 /** Each time a unit's fuel probe was disconnected, over fleet days. */
-export async function loadProbeReport({ orgId, from, to }) {
+export async function loadProbeReport({ orgId, from, to, vehicleId }) {
   if (!orgId) throw new Error('No organisation selected')
-  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/probe-disconnections?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+  // vehicleId: that one unit only (the Sensor Monitor's fault history).
+  const unit = vehicleId ? `&vehicleId=${encodeURIComponent(vehicleId)}` : ''
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/probe-disconnections?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${unit}`)
   return res.data
 }
 
