@@ -10,11 +10,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { getGateLogDay } from "../../api/gateLog";
-import { gateRows, searchGate, gateCounts, shiftDay, bySource, GATE_SOURCES, gateTrips, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
+import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gateUnits, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
 import { fleetDay } from "../../lib/alertsView";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
-import TrendStat from "./TrendStat";
 import GateEventPanel from "./GateEventPanel";
 import DateRangePicker from "../layout/DateRangePicker";
 import "./DriversScreen.css";
@@ -104,119 +103,6 @@ function usePrevDayEvents(orgId, day) {
   return got?.key === key ? got.events : null;
 }
 
-/** One point of the hourly charts: an hour of the day shown. */
-const HOUR_STEP = { word: "hour", text: (p) => hourText(p.hour) };
-/** A trip back within this is short; past the second it is long (2 h, 8 h). */
-const SHORT_MS = 2 * 3_600_000;
-const LONG_MS = 8 * 3_600_000;
-const num = (n) => n.toLocaleString("en-GB");
-
-/**
- * The strip's figures, over the rows shown (source, hours and search applied):
- * the units seen, the hourly sign-outs and returns, and the trips' time out.
- * A return counts its trip; a sign-out still open counts as still out.
- */
-function gateStats(rows, trips, fromH, toH, day) {
-  const last = Math.max(fromH, Math.ceil(toH) - 1);
-  const hourly = [];
-  for (let h = fromH; h <= last; h++) hourly.push({ day, hour: h, out: 0, in: 0 });
-  const units = new Set();
-  const sources = { factorysuite: 0, geofence: 0 };
-  let stillOut = 0, short = 0, mid = 0, long = 0, longest = 0;
-  for (const r of rows) {
-    if (r.plate) units.add(r.plate);
-    if (r.source in sources) sources[r.source] += 1;
-    const slot = hourly[Number(clock(r.at).slice(0, 2)) - fromH];
-    if (slot) slot[r.way === "out" ? "out" : "in"] += 1;
-    const t = trips.get(r.key);
-    if (r.way === "out" && t?.open) stillOut += 1;
-    if (r.way === "in" && t && !t.open) {
-      if (t.outMs <= SHORT_MS) short += 1;
-      else if (t.outMs <= LONG_MS) mid += 1;
-      else long += 1;
-      longest = Math.max(longest, t.outMs);
-    }
-  }
-  return { hourly, units: units.size, sources, stillOut, short, mid, long, back: short + mid + long, longest };
-}
-
-/** The lead cell, as Fuel's Machines: units at the gate, three facts, the sources as one bar. */
-function GateUnitsCard({ s, busy, failed, windowWords }) {
-  if (busy || failed) {
-    return <div className="dr-cell dr-fleet"><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading units…" : "Not loaded"}</div></div>;
-  }
-  const facts = [
-    { label: "Signed out", value: num(s.hourly.reduce((n, p) => n + p.out, 0)) },
-    { label: "Signed in", value: num(s.hourly.reduce((n, p) => n + p.in, 0)) },
-    { label: "Still out", value: num(s.stillOut) },
-  ];
-  const mix = [
-    { key: "done", label: GATE_SOURCES.factorysuite.label, n: s.sources.factorysuite },
-    { key: "new", label: GATE_SOURCES.geofence.label, n: s.sources.geofence },
-  ];
-  return (
-    <div className="dr-cell dr-fleet">
-      <div className="dr-statchart__head"><span className="dr-statchart__label">Units</span></div>
-      <div className="dr-summary__lead">
-        <span className="dr-summary__figure">{num(s.units)}</span>
-        <span className="dr-summary__caption">at the gate,<br />{windowWords}</span>
-      </div>
-      <dl className="dr-fleet__facts">
-        {facts.map((f) => (
-          <div key={f.label} className="dr-fleet__fact"><dt>{f.label}</dt><dd>{f.value}</dd></div>
-        ))}
-      </dl>
-      <div className="dr-fleet__mix">
-        <span className="dr-fleet__mixlabel">Source</span>
-        <span className="dr-fleet__bar" role="img" aria-label={mix.map((m) => `${m.n} from ${m.label}`).join(", ")}>
-          {mix.map((m) => m.n > 0 && (
-            <span key={m.key} className={`dr-fleet__seg dr-fleet__seg--${m.key}`} style={{ flexGrow: m.n }}
-                  title={`${m.label}: ${num(m.n)} event${m.n === 1 ? "" : "s"}`} />
-          ))}
-        </span>
-        <ul className="dr-fleet__legend">
-          {mix.map((m) => (
-            <li key={m.key} className={`dr-fleet__key dr-fleet__key--${m.key}`}>
-              <span className="dr-fleet__swatch" aria-hidden="true" />{m.label}<b>{num(m.n)}</b>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-/** The last cell, as Fuel's At the pump: trips back, then how long they were out. */
-function GateTimeOutCard({ s, busy, failed }) {
-  if (busy || failed) {
-    return <div className="dr-cell dr-summary"><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading…" : "Not loaded"}</div></div>;
-  }
-  const rows = [
-    { name: "Back within 2 h", n: s.short },
-    { name: "Out 2 to 8 h", n: s.mid },
-    { name: "Out over 8 h", n: s.long, tone: "speed" },
-    { name: "Still out", n: s.stillOut },
-  ];
-  return (
-    <div className="dr-cell dr-summary gl-times">
-      <div className="dr-statchart__head"><span className="dr-statchart__label">Time out</span></div>
-      <div className="dr-summary__lead">
-        <span className="dr-summary__figure">{num(s.back)}</span>
-        <span className="dr-summary__caption">
-          trip{s.back === 1 ? "" : "s"} back,<br />{s.back ? `longest ${durationWords(s.longest)}` : "none back yet"}
-        </span>
-      </div>
-      <div className="dr-summary__incidents">
-        {rows.map((r) => (
-          <div key={r.name} className={`dr-summary__incident${r.n ? " gl-times__on" : ""}${r.n && r.tone ? ` dr-summary__incident--${r.tone}` : ""}`}>
-            <span className="dr-summary__name">{r.name}</span>
-            <span className="dr-summary__count">{num(r.n)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /** The Acknowledged cell: what was said of the event and by whom, else a dash. */
 function AckCell({ row }) {
@@ -271,7 +157,6 @@ export default function GateLogScreen() {
     [all, prevEvents],
   );
   const rows = useMemo(() => searchGate(byHours(bySource(all, source), fromH, toH), q), [all, source, fromH, toH, q]);
-  const counts = useMemo(() => gateCounts(rows), [rows]);
   const pager = usePager(rows, `${day}|${q}|${source}|${fromH}|${toValue}`);
 
   // The line last clicked stays marked, and opens its panel (operator, 2026-11-26).
@@ -282,11 +167,11 @@ export default function GateLogScreen() {
   // The figures wait until the whole day is read; a part-read day would undercount.
   const ready = log.status === "ready" && !log.more;
   const figure = (n) => (ready ? n.toLocaleString("en-GB") : "-");
-  const windowWords = `${hourText(fromH)} to ${toValue === NOW ? nowText : hourText(toValue)}`;
   const busy = log.status === "loading" || Boolean(log.more);
   const failed = log.status === "error";
-  const stats = useMemo(() => gateStats(rows, trips, fromH, toH, day), [rows, trips, fromH, toH, day]);
-  const hourly = stats.hourly;
+  // The figures: hours and search applied, every source (a trip needs both its ends).
+  const figureRows = useMemo(() => searchGate(byHours(all, fromH, toH), q), [all, fromH, toH, q]);
+  const units = useMemo(() => gateUnits(figureRows), [figureRows]);
   const yesterday = shiftDay(today, -1);
 
   return (
@@ -296,24 +181,45 @@ export default function GateLogScreen() {
         <div className="dr-head">
           <div>
             <h1 className="dr-title">Gate log</h1>
-            <div className="dr-subtitle">
-              {ready ? `${rows.length.toLocaleString("en-GB")} gate event${rows.length === 1 ? "" : "s"}, ${dayWords(day)}` : dayWords(day)}
-            </div>
           </div>
         </div>
 
         <div className="dr-layout">
-          <section className="dr-strip gl-strip" aria-label="The day at the gate">
-            <GateUnitsCard s={stats} busy={busy} failed={failed} windowWords={windowWords} />
-            <TrendStat title="Signed out" series={hourly} valueKey="out" unit="" tone="speed" type="bar" what="sign-outs"
-              point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(counts.out)} sub={`${windowWords}, by hour`}
-              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.out.toLocaleString("en-GB")} signed out`} />
-            <TrendStat title="Signed in" series={hourly} valueKey="in" unit="" tone="tonnes" type="line"
-              point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(counts.in)} sub={`${windowWords}, by hour`}
-              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.in.toLocaleString("en-GB")} signed in`} />
-            <GateTimeOutCard s={stats} busy={busy} failed={failed} />
+          {/* The units that went out, once or more, and where each stands now (lib/gateLog
+              gateUnits; operator, 2026-11-27: "numbers that are straightforward"). Each unit once,
+              by its latest sign-out; every row and column adds up. */}
+          <section className="gl-figures" aria-label="Units at the gate">
+            <table className="gl-units">
+              <thead>
+                <tr>
+                  <th scope="col"><span className="gl-units__sr">Signed out</span></th>
+                  <th scope="col">Units</th>
+                  <th scope="col"><span className="gl-units__mark gl-units__mark--back" aria-hidden="true" />Back</th>
+                  <th scope="col"><span className="gl-units__mark gl-units__mark--out" aria-hidden="true" />Still out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Signed out once", units.once],
+                  ["Signed out twice or more", units.twice],
+                ].map(([label, r]) => (
+                  <tr key={label}>
+                    <th scope="row">{label}</th>
+                    <td>{busy || failed ? "-" : figure(r.units)}</td>
+                    <td>{busy || failed ? "-" : figure(r.back)}</td>
+                    <td>{busy || failed ? "-" : figure(r.out)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row">Total</th>
+                  <td>{busy || failed ? "-" : figure(units.total.units)}</td>
+                  <td>{busy || failed ? "-" : figure(units.total.back)}</td>
+                  <td>{busy || failed ? "-" : figure(units.total.out)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </section>
         </div>
 
