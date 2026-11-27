@@ -314,3 +314,10 @@
 
 /* A drawn rail icon (the Tools toolbox), sized as the font's .ti icons. */
 .mtr-btn__glyph { flex: none; width: 18px; height: 18px; display: block; }
+
+/* While measuring, the unit markers and their plates let the pointer through (operator, 2026-11-27:
+   "hovering on a unit marker should not show a tooltip as it makes it inconvenient to draw"): no hover
+   card opens, and a click over a unit adds a point instead of opening its card. A card pinned open
+   before the ruler came on stays; a hover card is hidden. */
+.mtr-measuring .fm-overlay { pointer-events: none !important; }
+.mtr-measuring .vehicle-tooltip:not(.vehicle-tooltip--pinned) { display: none !important; }
