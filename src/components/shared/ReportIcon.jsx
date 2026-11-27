@@ -59,6 +59,14 @@ const MARKS = {
       <path d="m14 17.500 3 3 3-3" />
     </>
   ),
+  // Fuelling plan: a clipboard, and a fuel drop on it.
+  fuellingPlan: (
+    <>
+      <rect x="5" y="4.5" width="14" height="16.5" rx="2" />
+      <path d="M9.5 4.5V3.500h5v1" />
+      <path d="M12 9s-3 3.300-3 5.400a3 3 0 0 0 6 0C15 12.300 12 9 12 9z" />
+    </>
+  ),
   // Recovery: a road line leading to a location pin.
   recovery: (
     <>

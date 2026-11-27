@@ -96,6 +96,13 @@ export const MACHINERY_ORGS = new Set(['KASULU']);
  */
 export const hasMachineryTab = (can, orgCode) => can('telemetry:read') && MACHINERY_ORGS.has(String(orgCode ?? '').toUpperCase());
 
+/**
+ * Fuelling Plan under Movements › Fuel: a day's FactorySuite work plans and
+ * vehicle requests against its pumps (operator, 27 Nov 2026). Mufindi (KASULU)
+ * alone fuels by work plan; a fuel screen, so the fuel fillings' right.
+ */
+export const hasFuellingPlanTab = (can, orgCode) => can('fuel_filling:read') && MACHINERY_ORGS.has(String(orgCode ?? '').toUpperCase());
+
 /** Shift hours, beside Machinery: where FactorySuite plans the machines' shifts (Mufindi, operator 17 Nov 2026). */
 export const hasShiftHoursTab = hasMachineryTab;
 
@@ -109,7 +116,7 @@ export const MOVEMENTS_TAB_GROUPS = [
   { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'tatFuel', 'recovery'] },
   // Deliveries by itself (operator, 18 Nov 2026): it has its own Van Sales | Finished Goods trail inside
   { key: 'deliveries', label: 'Deliveries', tabs: ['deliveries'] },
-  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'fuelFilled', 'probes'] },
+  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'fuelFilled', 'fuellingPlan', 'probes'] },
   { key: 'safety', label: 'Safety and conduct', tabs: ['speed', 'alarmDist', 'unauthorizedPassengers'] },
   { key: 'sites', label: 'Sites and machinery', tabs: ['geofences', 'dormant', 'machinery', 'shiftHours'] },
 ];
