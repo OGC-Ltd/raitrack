@@ -8,7 +8,8 @@
  *
  * No records-side quantity (Aquamist's own issue records) is held on the
  * platform: FactorySuite fuel issues are Mufindi's alone. So no Variance or
- * Comment columns here.
+ * Comment columns here; a sheet that has them is reconciled with Reconcile a
+ * sheet (ProbeReconUpload), shown as its own report (ProbeReconView).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +28,7 @@ import EmptyNote from '../shared/EmptyNote';
 import ReportIcon from '../shared/ReportIcon';
 import ChoicePicker from './ChoicePicker';
 import ProbeReconUpload from './ProbeReconUpload';
+import ProbeReconView from './ProbeReconView';
 import DateRangePicker from '../layout/DateRangePicker';
 
 function Kpi({ value, label }) {
@@ -49,6 +51,8 @@ export default function FuelFilledReport({ orgId, orgCode, companyName, active =
   const [unit, setUnit] = useState(null);
   const [run, setRun] = useState({ status: 'idle' });
   const [file, setFile] = useState({ busy: false, error: null });
+  // A reconciled sheet (Reconcile a sheet): shown as its own report until closed
+  const [recon, setRecon] = useState(null);
   const runId = useRef(0);
   const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : days.to > today ? 'That day has not happened yet' : null;
 
@@ -98,6 +102,11 @@ export default function FuelFilledReport({ orgId, orgCode, companyName, active =
   };
   const saveCsv = () => { if (done) { const d = sheet(); downloadTableCsv({ ...docCsv(d), filenameSlug: docSlug(d) }); } };
 
+  if (recon) {
+    return <ProbeReconView key={recon.name + recon.rows.length} recon={recon} orgId={orgId} orgCode={orgCode} fleet={companyName ?? orgCode ?? ''}
+                           onClose={() => setRecon(null)} onReplace={setRecon} />;
+  }
+
   return (
     <>
       <div className="sp4-header rpt-header">
@@ -117,7 +126,7 @@ export default function FuelFilledReport({ orgId, orgCode, companyName, active =
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
-        <ProbeReconUpload orgId={orgId} />
+        <ProbeReconUpload orgId={orgId} onDone={setRecon} />
       </div>
 
       <div className="sp4-body rpt-body">

@@ -80,6 +80,8 @@ export function dayCandidates(v) {
 
 /** Proven neighbours each side a two-way date is judged by. */
 export const NEIGHBOURS = 4;
+/** How far outside the sheet's proven dates a reading may fall and still be meant. */
+const SPAN_SLACK_MS = 31 * DAY;
 
 /**
  * Which way round the cell itself proves it is: 'md' ("1/29/2026"), 'dm'
@@ -113,10 +115,18 @@ export function resolveDayChoices(cells) {
   const cands = cells.map(dayCandidates);
   const anchors = [];
   cands.forEach((c, i) => { const fmt = c.length === 1 ? provenFormat(cells[i]) : null; if (fmt) anchors.push({ i, fmt, t: Date.parse(c[0]) }); });
+  // The sheet's own span, a month either side of its proven dates: a reading
+  // outside it is not what was meant when the other is inside (11/3/2025 on a
+  // sheet that runs Nov 2025 to Nov 2026 is 3 Nov, not 11 Mar)
+  const ts = anchors.map((a) => a.t);
+  const lo = ts.length ? Math.min(...ts) - SPAN_SLACK_MS : -Infinity;
+  const hi = ts.length ? Math.max(...ts) + SPAN_SLACK_MS : Infinity;
+  const inSpan = (d) => { const t = Date.parse(d); return t >= lo && t <= hi; };
   let k = 0; // the first anchor after the current row
   return cands.map((c, i) => {
     while (k < anchors.length && anchors[k].i <= i) k += 1;
     if (c.length < 2) return { day: c[0] ?? null, alt: null };
+    if (inSpan(c[0]) !== inSpan(c[1])) return inSpan(c[0]) ? { day: c[0], alt: null } : { day: c[1], alt: null };
     const near = [...anchors.slice(Math.max(0, k - NEIGHBOURS), k), ...anchors.slice(k, k + NEIGHBOURS)];
     if (!near.length) return { day: c[0], alt: c[1] };
     let md = 0, dm = 0;
@@ -163,7 +173,8 @@ export function findColumns(rows) {
     if (probe < 0) { probe = ++last; added.push(HEAD_PROBE); }
     let variance = h.indexOf('variance');
     if (variance < 0) { variance = ++last; added.push(HEAD_VARIANCE); }
-    return { head, date, reg, qty, probe, variance, added };
+    const comment = h.indexOf('comment');
+    return { head, date, reg, qty, probe, variance, comment, added };
   }
   return null;
 }
@@ -293,6 +304,63 @@ export function fillPlan(items, matches) {
   }
   return { writes, tally };
 }
+
+// ── The reconciliation as a report (Fuel Filled tab, PDF) ────────────────────
+
+/** What the check found for a row. */
+export const CHECK = { FILLED: 'Probe fill', NO_FILL: 'No fill that day', BEFORE: 'Before the records', NOT_ON_PLATFORM: 'Not on the platform' };
+
+/**
+ * The sheet's rows as the report shows them, in date then unit order:
+ * { row, day, plate, key, qty, probe, variance, check, comment, kept }. `probe`
+ * and `variance` are what the filled sheet holds: the refuel's litres, blank on
+ * a day with no refuel, or what the sheet had (`kept`) for a row not checked.
+ */
+export function reconRows(items, matches, rows, cols) {
+  const out = items.map((it) => {
+    const m = matches.get(it.row);
+    const r = rows[it.row] ?? [];
+    const comment = cols.comment >= 0 ? String(r[cols.comment] ?? '').trim() : '';
+    const base = { row: it.row, day: m?.day ?? it.day, plate: it.plate, key: it.key, qty: it.qty, comment };
+    if (m && !m.note) { const probe = r2(m.litres); return { ...base, probe, variance: varianceOf(it.qty, probe), check: CHECK.FILLED, kept: false }; }
+    if (m?.note === NO_FILL) return { ...base, probe: null, variance: null, check: CHECK.NO_FILL, kept: false };
+    const was = r[cols.probe], varWas = r[cols.variance];
+    return {
+      ...base, probe: numberOf(was) ?? (String(was ?? '').trim() || null), variance: numberOf(varWas), kept: true,
+      check: m?.note === 'Not on the platform' ? CHECK.NOT_ON_PLATFORM : CHECK.BEFORE,
+    };
+  });
+  return out.sort((a, b) => a.day.localeCompare(b.day) || a.plate.localeCompare(b.plate, 'en', { numeric: true }) || a.row - b.row);
+}
+
+/** The report's figures: litres on the records and from the probes over the rows a refuel was found for. */
+export function reconSummary(rs) {
+  const filled = rs.filter((r) => r.check === CHECK.FILLED);
+  const sum = (xs) => r2(xs.reduce((n, v) => n + v, 0));
+  return {
+    rows: rs.length,
+    units: new Set(rs.map((r) => r.key)).size,
+    filled: filled.length,
+    noFill: rs.filter((r) => r.check === CHECK.NO_FILL).length,
+    before: rs.filter((r) => r.check === CHECK.BEFORE).length,
+    notOnPlatform: rs.filter((r) => r.check === CHECK.NOT_ON_PLATFORM).length,
+    recordsL: sum(filled.map((r) => r.qty)),
+    probeL: sum(filled.map((r) => r.probe)),
+    varianceL: sum(filled.map((r) => r.variance)),
+    from: rs[0]?.day ?? null,
+    to: rs.at(-1)?.day ?? null,
+  };
+}
+
+/** "27/11/2026" from "2026-11-27". */
+export const dmyOf = (day) => (day ? `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}` : '');
+
+export const RECON_HEADS = ['Date', 'Reg No', 'Qty per Aqmst Records', 'Filling as per Fuel Probes', 'Variance', 'Check', 'Comment'];
+/** The figures' columns, right-aligned. */
+export const RECON_FIGURES = new Set([2, 3, 4]);
+
+const two = (v) => (typeof v === 'number' ? v.toFixed(2) : v ?? '');
+export const reconCells = (r) => [dmyOf(r.day), r.plate, two(r.qty), two(r.probe), two(r.variance), r.check, r.comment];
 
 // ── CSV ─────────────────────────────────────────────────────────────────────
 

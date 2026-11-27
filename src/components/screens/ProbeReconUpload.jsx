@@ -1,10 +1,12 @@
 /*
  * Reconcile a sheet (Movements › Fuel › Fuel Filled; operator, 2026-11-27): the
  * user picks an Excel or CSV sheet with "Qty per Aqmst Records", the app fills
- * "Filling as per Fuel Probes" from each unit's Wialon fill report, works out
- * the Variance (records − probe) and saves the filled copy, in the same format.
- * A row whose unit had no refuel on its date is left blank in both columns.
- * lib/probeRecon does the reading, matching and writing; this is the button.
+ * "Filling as per Fuel Probes" from the probe refuels (fleet-server
+ * fuel/probe-fills) and works out the Variance (records − probe). The tab then
+ * shows it as a report (FuelFilledReport, `onDone`), whose Excel button saves
+ * the filled copy in the sheet's own format. A row whose unit had no refuel on
+ * its date is left blank in both columns. lib/probeRecon does the reading,
+ * matching and writing; this is the button.
  *
  * An .xlsx is filled in place, so its other sheets, formatting and formulas
  * stay (a Variance written as a formula is left to recalculate on opening).
@@ -14,7 +16,7 @@ import { useRef, useState } from 'react';
 import { loadProbeFills } from '../../api/reports';
 import { saveFile } from '../../api/tripReport';
 import {
-  HEAD_PROBE, HEAD_VARIANCE, applyToRows, findColumns, fillPlan, matchRows, outName, parseCsv, requestsFor, sheetItems, toCsv, unitsByKey,
+  HEAD_PROBE, HEAD_VARIANCE, applyToRows, findColumns, fillPlan, matchRows, outName, parseCsv, reconRows, requestsFor, sheetItems, toCsv, unitsByKey,
 } from '../../lib/probeRecon';
 
 const fmt = (n) => n.toLocaleString('en-GB');
@@ -69,7 +71,7 @@ async function writeSheet(sheet, writes) {
   return new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
-export default function ProbeReconUpload({ orgId }) {
+export default function ProbeReconUpload({ orgId, onDone }) {
   const input = useRef(null);
   const [state, setState] = useState({ status: 'idle' });
 
@@ -87,18 +89,18 @@ export default function ProbeReconUpload({ orgId }) {
       const answers = [];
       for (const r of requests) answers.push(await loadProbeFills({ orgId, ...r }));
       const coveredFrom = answers.map((x) => x?.coveredFrom).filter(Boolean).sort()[0] ?? null;
-      const { writes, tally } = fillPlan(items, matchRows(items, unitsByKey(answers), coveredFrom));
-      setState({ status: 'reading', text: 'Writing the filled sheet…' });
+      const matches = matchRows(items, unitsByKey(answers), coveredFrom);
+      const { writes, tally } = fillPlan(items, matches);
       const ext = sheet.kind === 'csv' ? 'csv' : 'xlsx';
-      saveFile(await writeSheet(sheet, writes), outName(file.name, ext));
-      setState({ status: 'done', tally, units, coveredFrom, name: file.name });
+      const saveSheet = async () => saveFile(await writeSheet(sheet, writes), outName(file.name, ext));
+      setState({ status: 'idle' });
+      onDone?.({ name: file.name, ext, rows: reconRows(items, matches, sheet.rows, sheet.cols), tally, coveredFrom, saveSheet });
     } catch (err) {
       setState({ status: 'error', text: err?.message ?? String(err) });
     }
   };
 
   const busy = state.status === 'reading';
-  const t = state.tally;
   return (
     <>
       <button type="button" className="sp4-ghost-btn" disabled={!orgId || busy} onClick={() => input.current?.click()}
@@ -108,16 +110,7 @@ export default function ProbeReconUpload({ orgId }) {
       <input ref={input} type="file" accept=".xlsx,.csv" hidden tabIndex={-1}
              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; run(f); }} />
       {busy && <span className="rpt-sub" role="status">{state.text}</span>}
-      {state.status === 'error' && <span className="rpt-warn" role="alert">The sheet could not be filled: {state.text}</span>}
-      {state.status === 'done' && (
-        <span className="rpt-sub" role="status"
-              title={`${state.name}: ${fmt(t.rows)} rows, ${fmt(state.units)} units. A row whose unit had no refuel on its date is blank${t.blanked ? ` (${fmt(t.blanked)} of them had a figure before)` : ''}; rows on units not on the platform keep what the sheet had.`}>
-          Filled {fmt(t.matched)} of {fmt(t.rows)} rows ({fmt(t.changed)} changed)
-          {t.noFill > 0 && <> · {fmt(t.noFill)} blank, no fill that day</>}
-          {t.notOnPlatform > 0 && <> · {fmt(t.notOnPlatform)} on units not on the platform</>}
-          {t.notChecked > 0 && <> · {fmt(t.notChecked)} before {state.coveredFrom ?? 'the records'}, not checked</>}
-        </span>
-      )}
+      {state.status === 'error' && <span className="rpt-warn" role="alert">The sheet could not be reconciled: {state.text}</span>}
     </>
   );
 }
