@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readingValue, readingVerdict, readingName, readingCounts, readingsSection } from "./trackerReadings";
+import { readingValue, readingVerdict, readingName, readingCounts, readingsSection, withSiteVerdicts } from "./trackerReadings";
 
 const rd = (o) => ({ name: "1.X", type: "custom", unit: null, value: 0, label: null, verdict: null, ...o });
 
@@ -28,5 +28,19 @@ describe("a tracker reading as words", () => {
     expect(s.small).toBe("27/11/2026 16:40 · 1 fault");
     expect(s.body[0]).toEqual(["Fls Status", "3", "Error", "Fault"]);
     expect(s.body[2]).toEqual(["Main Tank Fuel Level", "No reading", "-", "-"]);
+  });
+});
+
+describe("a label of Critical is a fault on the site (2026-11-27)", () => {
+  it("GNSS Jamming: Critical becomes a fault; the server's own verdicts stand", () => {
+    const d = withSiteVerdicts({ readings: [
+      rd({ name: "15.GNSS Jamming", value: 2, label: "Critical", verdict: null }),
+      rd({ name: "15.GNSS Jamming", value: 0, label: "Healthy", verdict: null }),
+      rd({ name: "20.BLE Probe Battery", value: 3.6, label: "Heathly", verdict: "ok" }),
+    ] });
+    expect(d.readings.map((r) => r.verdict)).toEqual(["fault", null, "ok"]);
+    expect(readingCounts(d.readings).faults).toBe(1);
+    expect(readingsSection(d, "now").body[0]).toEqual(["GNSS Jamming", "2", "Critical", "Fault"]);
+    expect(withSiteVerdicts(null)).toBeNull();
   });
 });

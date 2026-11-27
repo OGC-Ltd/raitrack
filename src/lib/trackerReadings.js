@@ -14,6 +14,19 @@ export function readingValue(r) {
   return r.unit ? `${text} ${r.unit}` : text;
 }
 
+/**
+ * The site's own word on a label the server leaves unjudged (operator, 2026-11-27): "Critical", as
+ * on GNSS Jamming, is a fault, drawn red and counted. Applied as the readings arrive, so the panel
+ * and the PDF agree. The server's verdict, where it gives one, stands.
+ */
+export function withSiteVerdicts(data) {
+  if (!data?.readings) return data;
+  return {
+    ...data,
+    readings: data.readings.map((r) => (r.verdict == null && /\bcritical\b/i.test(r.label ?? "") ? { ...r, verdict: "fault" } : r)),
+  };
+}
+
 /** The verdict as words: Fault, OK, or blank where the installer's label says neither. */
 export const readingVerdict = (r) => (r?.verdict === "fault" ? "Fault" : r?.verdict === "ok" ? "OK" : "");
 

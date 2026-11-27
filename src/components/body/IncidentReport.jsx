@@ -29,7 +29,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { whenLabel, dateLabel, timeLabel } from "../../api/incidents";
-import { readingCounts, readingName, readingValue, readingVerdict, readingsSection } from "../../lib/trackerReadings";
+import { readingCounts, readingName, readingValue, readingVerdict, readingsSection, withSiteVerdicts } from "../../lib/trackerReadings";
 import TableToolbar from "./TableToolbar";
 import TablePager, { usePager, withMore } from "./TablePager";
 import { downloadTableCsv } from "../../utils/tableExport";
@@ -130,7 +130,7 @@ function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, capt
     let cancelled = false;
     setReadingsState("loading");
     fetchReadings(unit.vehicleId)
-      .then((d) => { if (!cancelled) { setReadings(d); setReadingsState("ready"); } })
+      .then((d) => { if (!cancelled) { setReadings(withSiteVerdicts(d)); setReadingsState("ready"); } })
       .catch(() => { if (!cancelled) { setReadings(null); setReadingsState("error"); } });
     return () => { cancelled = true; };
   }, [fetchReadings, includeReadings, unit.vehicleId]);
