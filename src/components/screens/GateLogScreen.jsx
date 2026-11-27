@@ -187,13 +187,15 @@ export default function GateLogScreen() {
 
         <div className="dr-layout">
           {/* The day at the gate in one row of figures, counted in trips (lib/gateLog gateBalance;
-              operator, 2026-11-27: no charts, no units card). Signed out = Back + Still out (+ the
-              few signed out again before any return); the last two are units, twice or more. */}
+              operator, 2026-11-27: no charts, no units card, "they should balance").
+              Signed out = Back + Still out. Back counts the trips signed out again with no return
+              recorded (noReturn): the unit came back to be signed out, only the return is missing.
+              The last two are units, twice or more. */}
           <section className="gl-figures" aria-label="The day at the gate">
             <dl className="gl-figures__row">
               {[
                 ["Signed out", stats.signedOut],
-                ["Back", stats.back],
+                ["Back", stats.back + stats.noReturn],
                 ["Still out", stats.stillOut],
                 ["Signed out twice", stats.outTwice],
                 ["Signed in twice", stats.inTwice],
