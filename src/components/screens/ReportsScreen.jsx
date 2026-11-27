@@ -68,6 +68,7 @@ import RecoveryReport from './RecoveryReport';
 import SpeedReport from './SpeedReport';
 import ProbeReport from './ProbeReport';
 import FuelFilledReport from './FuelFilledReport';
+import FuellingPlanReport from './FuellingPlanReport';
 import OfflineReport from './OfflineReport';
 import { loadMovementReport, loadMovementEvents, makeReportDoc } from '../../api/reports';
 import { EVENTS, eventKeys, pickedEvents, countByUnit, countCell, eventsFor, eventSections, eventNotes } from '../../lib/movementEvents';
@@ -82,7 +83,7 @@ import JpegButton, { PreviewButton } from '../shared/JpegButton';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import CheckPicker from './CheckPicker';
 import DateRangePicker, { pickedText } from '../layout/DateRangePicker';
-import { REPORT_NODES, chooseReport, reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasFuelFilledTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
+import { REPORT_NODES, chooseReport, reportKeysFor, useCurrentReport, firstReport, hasDeliveriesTab, hasTankersTab, hasDormantTab, hasGeofencesTab, hasTatFuelTab, hasRecoveryTab, hasSpeedTab, hasProbeTab, hasAlarmDistTab, hasUnauthorizedPassengersTab, hasFuelConsumptionTab, hasFuelFilledTab, hasFuellingPlanTab, hasMachineryTab, hasShiftHoursTab, groupMovementsTabs, groupOfTab, isSoloGroup } from '../../lib/reportNav';
 // Shift hours: the day's approved shifts (FactorySuite) against the engine hours run in them
 import { dayShifts, shiftHoursRows } from '../../lib/shiftHours';
 import { getFactoryFuel } from '../../api/factoryFuel';
@@ -735,10 +736,10 @@ function TypePicker({ types, picked, counts, onChange }) {
  * one survives a look at another.
  */
 function MovementsPage(props) {
-  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, fuelFilled, machinery, shiftHours } = props;
+  const { orgId, orgCode, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, fuelFilled, fuellingPlan, machinery, shiftHours } = props;
   const [tab, setTab] = useState('hourly');
   const [lastTab, setLastTab] = useState({});
-  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !fuelFilled && !machinery && !shiftHours) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
+  if (!tankers && !deliveries && !geofences && !tatFuel && !recovery && !speed && !probes && !dormant && !alarmDist && !unauthorizedPassengers && !fuelConsumption && !fuelFilled && !fuellingPlan && !machinery && !shiftHours) return <MovementsReport orgId={orgId} orgCode={orgCode} />;
   const TABS = [
     { key: 'hourly', label: 'Movements' },
     tankers && { key: 'tankers', label: 'Tankers' },
@@ -757,6 +758,8 @@ function MovementsPage(props) {
     fuelConsumption && { key: 'fuelGraphs', label: 'Fuel Graphs' },
     // Each refuel and the litres the probe saw go in (Aquamist's sheet, 27 Nov 2026)
     fuelFilled && { key: 'fuelFilled', label: 'Fuel Filled' },
+    // A day's work plans and vehicle requests against the pumps, Mufindi only (operator, 27 Nov 2026)
+    fuellingPlan && { key: 'fuellingPlan', label: 'Fuelling Plan' },
     // Excavators and dozers against the burn rate, after Fuel Graphs (operator, 16 Nov 2026)
     machinery && { key: 'machinery', label: 'Machinery' },
     // Each machine's engine hours against its shift so far, after Machinery (operator, 17 Nov 2026)
@@ -807,7 +810,7 @@ function MovementsPage(props) {
 }
 
 /** Movements' panels, one a tab, every one mounted; MovementsPage shows the picked one. */
-function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, fuelFilled, machinery, shiftHours, whoAmI }) {
+function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, deliveries, geofences, tatFuel, recovery, speed, probes, dormant, alarmDist, unauthorizedPassengers, fuelConsumption, fuelFilled, fuellingPlan, machinery, shiftHours, whoAmI }) {
   return (
     <>
       <div className="mvt-panel" role="tabpanel" id="mvt-hourly-panel" aria-labelledby="mvt-hourly" hidden={tab !== 'hourly'}>
@@ -876,6 +879,11 @@ function MovementsPanels({ tab, orgId, vehicles, orgCode, companyName, tankers, 
       {fuelFilled && (
       <div className="mvt-panel" role="tabpanel" id="mvt-fuelFilled-panel" aria-labelledby="mvt-fuelFilled" hidden={tab !== 'fuelFilled'}>
         <FuelFilledReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'fuelFilled'} />
+      </div>
+      )}
+      {fuellingPlan && (
+      <div className="mvt-panel" role="tabpanel" id="mvt-fuellingPlan-panel" aria-labelledby="mvt-fuellingPlan" hidden={tab !== 'fuellingPlan'}>
+        <FuellingPlanReport orgId={orgId} orgCode={orgCode} companyName={companyName} active={tab === 'fuellingPlan'} />
       </div>
       )}
       {machinery && (
@@ -2007,7 +2015,7 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           <i className="ti ti-selector rpt-switch__i" aria-hidden="true" />
         </label>
       )}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} fuelFilled={hasFuelFilledTab(can)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
+      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} fuelFilled={hasFuelFilledTab(can)} fuellingPlan={hasFuellingPlanTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       {conduct ? (

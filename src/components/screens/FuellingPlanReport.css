@@ -1,0 +1,89 @@
+/* Hallmark · component: Fuelling Plan overview (Reports › Fuel) · genre: modern-minimal · theme: the app's own (--sp4-*)
+ * pre-emit critique: P4 H5 E4 S5 R5 V4
+ * states: key item default · hover · focus-visible · active · pressed (filtering) · disabled n/a
+ *
+ * FactorySuite's "plan vs actual" on the page (operator 2026-11-27): the
+ * opening sentence, where every planned machine stands as one bar whose key
+ * filters the list, and site and type progress as meters, on the same gutter
+ * as the figures above and the table below. Status tones are the app's own:
+ * crit not fuelled, warn short, ok as planned.
+ */
+:root {
+  --fpr-over: var(--accent-idling);
+  --fpr-track: color-mix(in srgb, var(--sp4-text-3) 18%, transparent);
+}
+
+.fpr-n--crit { color: var(--sp4-crit); }
+.fpr-n--warn { color: var(--sp4-warn); }
+.fpr-n--ok { color: var(--sp4-ok); }
+
+.fpr-fill--crit { background: var(--sp4-crit); }
+.fpr-fill--warn { background: var(--sp4-warn); }
+.fpr-fill--ok { background: var(--sp4-ok); }
+.fpr-fill--info { background: var(--sp4-info); }
+.fpr-fill--over { background: var(--fpr-over); }
+.fpr-fill--idle { background: var(--sp4-text-3); }
+.fpr-fill--accent { background: var(--sp4-accent); }
+
+.fpr-overview {
+  display: flex; flex-direction: column; gap: 18px;
+  padding: 14px var(--sp4-gutter) 6px;
+  max-width: 1440px;
+}
+.fpr-lead {
+  margin: 0; max-width: 72ch;
+  font-size: var(--sp4-strong); line-height: 1.5; color: var(--sp4-text-1);
+}
+
+.fpr-stand { display: flex; flex-direction: column; gap: 10px; }
+.fpr-bar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; }
+.fpr-bar__part { flex-basis: 0; min-width: 3px; }
+
+.fpr-key { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.fpr-key__item {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--sp4-text-2);
+  font: inherit; font-size: var(--sp4-body); cursor: pointer;
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), border-color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.fpr-key__item strong { color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
+.fpr-key__pct { color: var(--sp4-text-3); font-variant-numeric: tabular-nums; }
+.fpr-key__item:hover { background: var(--fpr-track); }
+.fpr-key__item:active { transform: translateY(1px); }
+.fpr-key__item:focus-visible { outline: 2px solid var(--sp4-accent); outline-offset: 1px; }
+.fpr-key__item--on { border-color: var(--sp4-line-hi); background: var(--sp4-raised); color: var(--sp4-text-1); }
+.fpr-key__dot { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; vertical-align: 1px; }
+
+.fpr-panels {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 40px;
+}
+.fpr-panel { min-width: 0; }
+.fpr-panel__title { margin: 0; font-size: var(--sp4-strong); font-weight: 700; color: var(--sp4-text-1); }
+.fpr-panel__note { margin: 2px 0 10px; font-size: var(--sp4-body); color: var(--sp4-text-3); }
+
+.fpr-meters { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.fpr-meter {
+  position: relative;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 4px;
+  font-size: var(--sp4-body);
+}
+.fpr-meter__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sp4-text-2); }
+.fpr-meter__name--faint { color: var(--sp4-text-3); }
+.fpr-meter__fig { color: var(--sp4-text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fpr-meter__track {
+  grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--fpr-track);
+}
+.fpr-meter__fill {
+  position: absolute; left: 0; bottom: 0; height: 6px; border-radius: 3px;
+}
+
+.rpt-table td.fpr-short { color: var(--sp4-crit); }
+
+@media (max-width: 900px) {
+  .fpr-panels { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fpr-key__item { transition: none; }
+  .fpr-key__item:active { transform: none; }
+}
