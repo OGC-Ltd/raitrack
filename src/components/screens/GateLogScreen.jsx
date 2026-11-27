@@ -16,6 +16,7 @@ import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
 import GateEventPanel from "./GateEventPanel";
 import DateRangePicker from "../layout/DateRangePicker";
+import TrendStat from "./TrendStat";
 import "./DriversScreen.css";
 import "./FuelScreen.css";
 import "./GateLogScreen.css";
@@ -104,6 +105,102 @@ function usePrevDayEvents(orgId, day) {
 }
 
 
+/** One point of the hourly charts: an hour of the day shown. */
+const HOUR_STEP = { word: "hour", text: (p) => hourText(p.hour) };
+const num = (n) => n.toLocaleString("en-GB");
+
+/** Sign-outs and returns by hour over the rows behind the figures, from `fromH` to the hour `toH` falls in. */
+function gateHourly(rows, fromH, toH, day) {
+  const last = Math.max(fromH, Math.ceil(toH) - 1);
+  const hourly = [];
+  for (let h = fromH; h <= last; h++) hourly.push({ day, hour: h, out: 0, in: 0 });
+  for (const r of rows) {
+    const slot = hourly[Number(clock(r.at).slice(0, 2)) - fromH];
+    if (slot) slot[r.way === "out" ? "out" : "in"] += 1;
+  }
+  return hourly;
+}
+
+/** A card waiting on the day, as the Drivers strip's. */
+const CellWait = ({ kind, busy }) => (
+  <div className={`dr-cell ${kind}`}><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading units…" : "Not loaded"}</div></div>
+);
+
+/** The lead card, as the Drivers card: the units signed out, where they stand, back against still out as one bar. */
+function GateUnitsCard({ u, busy, failed, windowWords }) {
+  if (busy || failed) return <CellWait kind="dr-fleet" busy={busy} />;
+  const facts = [
+    { label: "Back", value: num(u.total.back) },
+    { label: "Still out", value: num(u.total.out), live: u.total.out > 0 },
+    { label: "Out twice or more", value: num(u.twice.units) },
+  ];
+  const mix = [
+    { key: "good", label: "Back", n: u.total.back },
+    { key: "fair", label: "Still out", n: u.total.out },
+  ];
+  return (
+    <div className="dr-cell dr-fleet">
+      <div className="dr-statchart__head"><span className="dr-statchart__label">Units</span></div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{num(u.total.units)}</span>
+        <span className="dr-summary__caption">signed out,<br />{windowWords}</span>
+      </div>
+      <dl className="dr-fleet__facts">
+        {facts.map((f) => (
+          <div key={f.label} className={`dr-fleet__fact${f.live ? " dr-fleet__fact--live" : ""}`}>
+            <dt>{f.live && <span className="dr-live__dot" aria-hidden="true" />}{f.label}</dt>
+            <dd>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="dr-fleet__mix">
+        <span className="dr-fleet__mixlabel">Where they are</span>
+        <span className="dr-fleet__bar" role="img" aria-label={mix.map((m) => `${m.n} ${m.label}`).join(", ")}>
+          {mix.map((m) => m.n > 0 && (
+            <span key={m.key} className={`dr-fleet__seg dr-fleet__seg--${m.key}`} style={{ flexGrow: m.n }}
+                  title={`${m.label}: ${num(m.n)} unit${m.n === 1 ? "" : "s"}`} />
+          ))}
+        </span>
+        <ul className="dr-fleet__legend">
+          {mix.map((m) => (
+            <li key={m.key} className={`dr-fleet__key dr-fleet__key--${m.key}`}>
+              <span className="dr-fleet__swatch" aria-hidden="true" />{m.label}<b>{num(m.n)}</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/** The last card, as the Drivers Summary: the units table's four rows, adding up to the lead figure. */
+function GateBreakdownCard({ u, busy, failed }) {
+  if (busy || failed) return <CellWait kind="dr-summary" busy={busy} />;
+  const rows = [
+    { name: "Out once, back", n: u.once.back },
+    { name: "Out once, still out", n: u.once.out, tone: "speed" },
+    { name: "Out twice or more, back", n: u.twice.back },
+    { name: "Out twice or more, still out", n: u.twice.out, tone: "speed" },
+  ];
+  return (
+    <div className="dr-cell dr-summary gl-times">
+      <div className="dr-statchart__head"><span className="dr-statchart__label">Summary</span></div>
+      <div className="dr-summary__lead">
+        <span className="dr-summary__figure">{num(u.once.units)}</span>
+        <span className="dr-summary__caption">out once,<br />{num(u.twice.units)} twice or more</span>
+      </div>
+      <div className="dr-summary__incidents">
+        {rows.map((r) => (
+          <div key={r.name} className={`dr-summary__incident${r.n ? " gl-times__on" : ""}${r.n && r.tone ? ` dr-summary__incident--${r.tone}` : ""}`}>
+            <span className="dr-summary__name">{r.name}</span>
+            <span className="dr-summary__count">{num(r.n)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** The Acknowledged cell: what was said of the event and by whom, else a dash. */
 function AckCell({ row }) {
   const a = row.ack;
@@ -172,6 +269,9 @@ export default function GateLogScreen() {
   // The figures: hours and search applied, every source (a trip needs both its ends).
   const figureRows = useMemo(() => searchGate(byHours(all, fromH, toH), q), [all, fromH, toH, q]);
   const units = useMemo(() => gateUnits(figureRows), [figureRows]);
+  const hourly = useMemo(() => gateHourly(figureRows, fromH, toH, day), [figureRows, fromH, toH, day]);
+  const sum = (k) => hourly.reduce((n, p) => n + p[k], 0);
+  const windowWords = `${hourText(fromH)} to ${toValue === NOW ? nowText : hourText(toValue)}`;
   const yesterday = shiftDay(today, -1);
 
   return (
@@ -185,41 +285,21 @@ export default function GateLogScreen() {
         </div>
 
         <div className="dr-layout">
-          {/* The units that went out, once or more, and where each stands now (lib/gateLog
-              gateUnits; operator, 2026-11-27: "numbers that are straightforward"). Each unit once,
-              by its latest sign-out; every row and column adds up. */}
-          <section className="gl-figures" aria-label="Units at the gate">
-            <table className="gl-units">
-              <thead>
-                <tr>
-                  <th scope="col"><span className="gl-units__sr">Signed out</span></th>
-                  <th scope="col">Units</th>
-                  <th scope="col"><span className="gl-units__mark gl-units__mark--back" aria-hidden="true" />Back</th>
-                  <th scope="col"><span className="gl-units__mark gl-units__mark--out" aria-hidden="true" />Still out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["Signed out once", units.once],
-                  ["Signed out twice or more", units.twice],
-                ].map(([label, r]) => (
-                  <tr key={label}>
-                    <th scope="row">{label}</th>
-                    <td>{busy || failed ? "-" : figure(r.units)}</td>
-                    <td>{busy || failed ? "-" : figure(r.back)}</td>
-                    <td>{busy || failed ? "-" : figure(r.out)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row">Total</th>
-                  <td>{busy || failed ? "-" : figure(units.total.units)}</td>
-                  <td>{busy || failed ? "-" : figure(units.total.back)}</td>
-                  <td>{busy || failed ? "-" : figure(units.total.out)}</td>
-                </tr>
-              </tfoot>
-            </table>
+          {/* The figures as the Drivers page's cards (operator, 2026-11-28: "the stats on the gate logs
+              has to match the stats cards on the drivers page"), the units table's figures kept
+              (lib/gateLog gateUnits, 2026-11-27 "numbers that are straightforward"): each unit once, by
+              its latest sign-out; Back + Still out = Units, and the Summary's four rows add up to it. */}
+          <section className="dr-strip gl-strip" aria-label="Units at the gate">
+            <GateUnitsCard u={units} busy={busy} failed={failed} windowWords={windowWords} />
+            <TrendStat title="Sign-outs" series={hourly} valueKey="out" unit="" tone="speed" type="bar" what="sign-outs"
+              point={HOUR_STEP} delta={false} loading={busy}
+              value={busy || failed ? "-" : figure(sum("out"))} sub={`${windowWords}, by hour`}
+              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${num(p.out)} signed out`} />
+            <TrendStat title="Returns" series={hourly} valueKey="in" unit="" tone="tonnes" type="line"
+              point={HOUR_STEP} delta={false} loading={busy}
+              value={busy || failed ? "-" : figure(sum("in"))} sub={`${windowWords}, by hour`}
+              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${num(p.in)} came back`} />
+            <GateBreakdownCard u={units} busy={busy} failed={failed} />
           </section>
         </div>
 

@@ -261,64 +261,11 @@
 .gl-decide__go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .gl-decide__go:disabled { cursor: default; background: var(--border); border-color: var(--border); color: var(--text-2); }
 
-/* The units at the gate (operator, 2026-11-27: "straightforward", then "appealing, professional
-   and corporate"): a framed card in the strip's own frame (DriversScreen.css .dr-strip), a quiet
-   header band, figures in tabular digits, a firmer Total. Colour only as a small marker on the
-   Back and Still out headings, never as a pill. Light and dark from the page's tokens. */
-.gl-figures { margin-bottom: 16px; }
-.gl-units {
-  --gl-line: #e6e9ee;
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  font-variant-numeric: tabular-nums;
-}
-.app--dark .gl-units { --gl-line: color-mix(in srgb, var(--border) 65%, var(--card)); }
-
-.gl-units th, .gl-units td { padding: 10px 20px; text-align: right; white-space: nowrap; }
-.gl-units th:first-child { text-align: left; }
-
-.gl-units thead th {
-  padding-top: 9px; padding-bottom: 9px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-2);
-  background: color-mix(in srgb, var(--ink) 3%, var(--card));
-  border-bottom: 1px solid var(--gl-line);
-}
-.gl-units__mark {
-  display: inline-block; width: 7px; height: 7px; margin: 0 6px 1px 0;
-  border-radius: 2px; vertical-align: middle;
-}
-.gl-units__mark--back { background: var(--tone-tonnes); }
-.gl-units__mark--out  { background: var(--tone-speed); }
-.gl-units__sr {
-  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
-}
-
-.gl-units tbody th {
-  font-size: 13px; font-weight: 600; color: var(--text-2);
-}
-.gl-units tbody td {
-  font-size: 15px; font-weight: 600; color: var(--ink);
-}
-.gl-units tbody tr + tr th, .gl-units tbody tr + tr td { border-top: 1px solid var(--gl-line); }
-
-.gl-units tfoot th, .gl-units tfoot td {
-  border-top: 1px solid var(--border);
-  background: color-mix(in srgb, var(--ink) 2%, var(--card));
-  color: var(--ink);
-}
-.gl-units tfoot th { font-size: 13px; font-weight: 700; }
-.gl-units tfoot td { font-size: 17px; font-weight: 800; }
-
-/* Full width, as the table beneath (operator, 2026-11-27): the first column takes the room, the
-   three figures keep an even width at the right. */
-.gl-units th:not(:first-child), .gl-units td { width: 16%; }
-@media (max-width: 560px) {
-  .gl-units th, .gl-units td { padding: 9px 12px; }
-  .gl-units th:not(:first-child), .gl-units td { width: auto; }
-}
+/* The figures as the Drivers strip (operator, 2026-11-28): its cards and frame
+   (DriversScreen.css .dr-strip). A Summary row is a plain count, no dot column;
+   a row with units in it takes full ink, Still out takes the amber. */
+.gl-strip { margin-bottom: 16px; }
+.gl-times .dr-summary__incident { grid-template-columns: minmax(0, 1fr) auto; }
+.gl-times .gl-times__on { color: var(--ink); }
+.gl-times .gl-times__on .dr-summary__name { color: var(--ink); }
+.gl-times .dr-summary__incident--speed { color: var(--tone-speed); }
