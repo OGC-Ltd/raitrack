@@ -29,11 +29,14 @@ import { buildPerformanceReviewPdf } from "../../utils/performanceReviewPdf";
 import { downloadTableCsv } from "../../utils/tableExport";
 import TableToolbar from "../body/TableToolbar";
 import EmptyNote from "../shared/EmptyNote";
+import DateRangePicker from "../layout/DateRangePicker";
 
 const DAY = 86_400_000;
 const EAT = 3 * 3_600_000;
 const todayKey = () => new Date(Date.now() + EAT).toISOString().slice(0, 10);
 const addDays = (key, n) => new Date(Date.parse(`${key}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
+/** The server judges at most this many days at once (fuel-performance-review.service MAX_DAYS). */
+const MAX_DAYS = 366;
 const PRESETS = [[30, "30 days"], [60, "60 days"], [90, "90 days"]];
 const fmtDay = (key) => new Date(`${key}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -210,19 +213,11 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                     aria-pressed={span.id === n} onClick={() => setSpan(presetSpan(n))}>{label}</button>
           ))}
         </div>
-        <div className="frp-range">
-          <label className="frp-when"><span className="frp-when__l">From</span>
-            <span className="frp-when__v">{fmtDay(span.from)}</span>
-            <input className="frp-when__input" type="date" value={span.from} max={span.to}
-                   onChange={(e) => e.target.value && setSpan((s) => ({ ...s, id: null, from: e.target.value }))} />
-          </label>
-          <span className="frp-range__dash" aria-hidden="true">–</span>
-          <label className="frp-when"><span className="frp-when__l">To</span>
-            <span className="frp-when__v">{fmtDay(span.to)}</span>
-            <input className="frp-when__input" type="date" value={span.to} min={span.from} max={addDays(todayKey(), -1)}
-                   onChange={(e) => e.target.value && setSpan((s) => ({ ...s, id: null, to: e.target.value }))} />
-          </label>
-        </div>
+        {/* Any days up to today, as the other reports' picker (operator 2026-11-28:
+            "we also need to custom pick the date"); the chips stay as quick picks. */}
+        <DateRangePicker from={span.from} to={span.to} today={todayKey()} maxDays={MAX_DAYS} spans={[]} quickPicks={false}
+                         label="Days" on={span.id == null}
+                         onChange={(from, to) => setSpan({ id: null, from, to: to ?? from })} />
         <span className="fpr-source" title={src.text}>
           <i className={`ti ${src.icon}`} aria-hidden="true" /> {src.text}
         </span>
