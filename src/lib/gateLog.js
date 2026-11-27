@@ -163,6 +163,88 @@ export function gateTrips(rows, now = Date.now()) {
   return trips;
 }
 
+/**
+ * The strip's figures, made to balance (operator, 2026-11-27: "make these figures make sense, they
+ * should balance"). Everything is counted in TRIPS: a sign-out and its FIRST return of either kind
+ * (a FactorySuite sign-in, or the tracker seen arriving at the gate), each trip once.
+ *
+ *   sign-outs in the window = back + stillOut + noReturn
+ *       back      its first return is in the window
+ *       noReturn  signed out again before any return was recorded (FactorySuite often records no
+ *                 sign-in: KTCC 769G, 27 Nov, seen at the gate twice, then signed out again)
+ *       stillOut  neither, by the window's end
+ *   cameBack (by hour)  = back + earlier (trips signed out before the window, back in it)
+ *   within2h + 2to8h + over8h = cameBack
+ *   return records in the window = cameBack + extra (repeat sightings of a trip already back, and
+ *                                  returns with no sign-out on record)
+ *
+ * `windowRows` are the rows shown (hours and search applied, every source: a trip needs both
+ * ends); `contextRows` every row read, the day before included, so a trip that left yesterday
+ * has its sign-out. Pure.
+ */
+const GATE_SHORT_MS = 2 * 3_600_000;
+const GATE_LONG_MS = 8 * 3_600_000;
+export function gateBalance(windowRows, contextRows) {
+  const inWindow = new Set((windowRows ?? []).map((r) => r.key));
+  const firstReturn = new Map(); // sign-out key -> its first return row
+  const superseded = new Map();  // sign-out key -> the next sign-out, where no return came between
+  const tripOf = new Map();      // return key -> its trip's sign-out row (first returns only)
+  const byUnit = new Map();
+  for (const r of contextRows ?? []) {
+    const unit = squash(r.plate);
+    if (!unit) continue;
+    if (!byUnit.has(unit)) byUnit.set(unit, []);
+    byUnit.get(unit).push(r);
+  }
+  for (const list of byUnit.values()) {
+    list.sort((a, b) => a.at - b.at);
+    let open = null;
+    for (const r of list) {
+      if (r.way === "out") {
+        if (open && !firstReturn.has(open.key)) superseded.set(open.key, r);
+        open = r;
+      } else if (open && !firstReturn.has(open.key)) {
+        firstReturn.set(open.key, r);
+        tripOf.set(r.key, open);
+      }
+    }
+  }
+  const units = new Set();
+  const records = { out: 0, in: 0 };
+  let back = 0, stillOut = 0, noReturn = 0, earlier = 0, extra = 0;
+  let within2h = 0, from2to8h = 0, over8h = 0, longest = 0;
+  const backBySource = { factorysuite: 0, geofence: 0, other: 0 };
+  const returns = [];
+  for (const r of windowRows ?? []) {
+    if (r.plate) units.add(squash(r.plate));
+    if (r.way === "out") {
+      records.out += 1;
+      const ret = firstReturn.get(r.key);
+      const next = superseded.get(r.key);
+      if (ret && inWindow.has(ret.key)) back += 1;
+      else if (!ret && next && inWindow.has(next.key)) noReturn += 1;
+      else stillOut += 1;
+      continue;
+    }
+    records.in += 1;
+    const out = tripOf.get(r.key);
+    if (!out) { extra += 1; continue; }
+    returns.push(r);
+    if (!inWindow.has(out.key)) earlier += 1;
+    backBySource[r.source in backBySource ? r.source : "other"] += 1;
+    const ms = r.at - out.at;
+    if (ms <= GATE_SHORT_MS) within2h += 1;
+    else if (ms <= GATE_LONG_MS) from2to8h += 1;
+    else over8h += 1;
+    longest = Math.max(longest, ms);
+  }
+  return {
+    units: units.size, records, signedOut: records.out, back, stillOut, noReturn,
+    cameBack: returns.length, earlier, extra, backBySource,
+    within2h, from2to8h, over8h, longest, returns,
+  };
+}
+
 /** 45 min, 2 h 05 min, 1 d 3 h. */
 export function durationWords(ms) {
   if (!Number.isFinite(ms) || ms < 0) return "";

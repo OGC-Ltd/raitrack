@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { getGateLogDay } from "../../api/gateLog";
-import { gateRows, searchGate, gateCounts, shiftDay, bySource, GATE_SOURCES, gateTrips, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
+import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gateBalance, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
 import { fleetDay } from "../../lib/alertsView";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
@@ -106,38 +106,26 @@ function usePrevDayEvents(orgId, day) {
 
 /** One point of the hourly charts: an hour of the day shown. */
 const HOUR_STEP = { word: "hour", text: (p) => hourText(p.hour) };
-/** A trip back within this is short; past the second it is long (2 h, 8 h). */
-const SHORT_MS = 2 * 3_600_000;
-const LONG_MS = 8 * 3_600_000;
 const num = (n) => n.toLocaleString("en-GB");
 
 /**
- * The strip's figures, over the rows shown (source, hours and search applied):
- * the units seen, the hourly sign-outs and returns, and the trips' time out.
- * A return counts its trip; a sign-out still open counts as still out.
+ * The strip's figures, over the hours and search shown, every source (a trip needs both its ends),
+ * counted in trips so they balance (lib/gateLog gateBalance; operator, 2026-11-27): the sign-outs
+ * by hour, each trip's first return by hour, and the records by source.
  */
-function gateStats(rows, trips, fromH, toH, day) {
+function gateStats(rows, contextRows, fromH, toH, day) {
   const last = Math.max(fromH, Math.ceil(toH) - 1);
   const hourly = [];
   for (let h = fromH; h <= last; h++) hourly.push({ day, hour: h, out: 0, in: 0 });
-  const units = new Set();
+  const slotOf = (r) => hourly[Number(clock(r.at).slice(0, 2)) - fromH];
   const sources = { factorysuite: 0, geofence: 0 };
-  let stillOut = 0, short = 0, mid = 0, long = 0, longest = 0;
   for (const r of rows) {
-    if (r.plate) units.add(r.plate);
     if (r.source in sources) sources[r.source] += 1;
-    const slot = hourly[Number(clock(r.at).slice(0, 2)) - fromH];
-    if (slot) slot[r.way === "out" ? "out" : "in"] += 1;
-    const t = trips.get(r.key);
-    if (r.way === "out" && t?.open) stillOut += 1;
-    if (r.way === "in" && t && !t.open) {
-      if (t.outMs <= SHORT_MS) short += 1;
-      else if (t.outMs <= LONG_MS) mid += 1;
-      else long += 1;
-      longest = Math.max(longest, t.outMs);
-    }
+    if (r.way === "out") { const slot = slotOf(r); if (slot) slot.out += 1; }
   }
-  return { hourly, units: units.size, sources, stillOut, short, mid, long, back: short + mid + long, longest };
+  const b = gateBalance(rows, contextRows);
+  for (const r of b.returns) { const slot = slotOf(r); if (slot) slot.in += 1; }
+  return { ...b, hourly, sources };
 }
 
 /** The lead cell, as Fuel's Machines: units at the gate, three facts, the sources as one bar. */
@@ -145,9 +133,10 @@ function GateUnitsCard({ s, busy, failed, windowWords }) {
   if (busy || failed) {
     return <div className="dr-cell dr-fleet"><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading units…" : "Not loaded"}</div></div>;
   }
+  // The window's sign-outs, and where each one stands: these three and "no return" add up to it.
   const facts = [
-    { label: "Signed out", value: num(s.hourly.reduce((n, p) => n + p.out, 0)) },
-    { label: "Signed in", value: num(s.hourly.reduce((n, p) => n + p.in, 0)) },
+    { label: "Signed out", value: num(s.signedOut) },
+    { label: "Back", value: num(s.back) },
     { label: "Still out", value: num(s.stillOut) },
   ];
   const mix = [
@@ -166,12 +155,16 @@ function GateUnitsCard({ s, busy, failed, windowWords }) {
           <div key={f.label} className="dr-fleet__fact"><dt>{f.label}</dt><dd>{f.value}</dd></div>
         ))}
       </dl>
+      <p className="gl-balance">
+        {num(s.signedOut)} signed out = {num(s.back)} back + {num(s.stillOut)} still out
+        {" + "}{num(s.noReturn)} signed out again with no return recorded
+      </p>
       <div className="dr-fleet__mix">
-        <span className="dr-fleet__mixlabel">Source</span>
+        <span className="dr-fleet__mixlabel">Records by source</span>
         <span className="dr-fleet__bar" role="img" aria-label={mix.map((m) => `${m.n} from ${m.label}`).join(", ")}>
           {mix.map((m) => m.n > 0 && (
             <span key={m.key} className={`dr-fleet__seg dr-fleet__seg--${m.key}`} style={{ flexGrow: m.n }}
-                  title={`${m.label}: ${num(m.n)} event${m.n === 1 ? "" : "s"}`} />
+                  title={`${m.label}: ${num(m.n)} record${m.n === 1 ? "" : "s"}`} />
           ))}
         </span>
         <ul className="dr-fleet__legend">
@@ -191,19 +184,19 @@ function GateTimeOutCard({ s, busy, failed }) {
   if (busy || failed) {
     return <div className="dr-cell dr-summary"><div className="dr-cell__empty" aria-busy={busy}>{busy ? "Loading…" : "Not loaded"}</div></div>;
   }
+  // Every trip back in the window, once (its first return), by how long it was out: they add up to it.
   const rows = [
-    { name: "Back within 2 h", n: s.short },
-    { name: "Out 2 to 8 h", n: s.mid },
-    { name: "Out over 8 h", n: s.long, tone: "speed" },
-    { name: "Still out", n: s.stillOut },
+    { name: "Back within 2 h", n: s.within2h },
+    { name: "Out 2 to 8 h", n: s.from2to8h },
+    { name: "Out over 8 h", n: s.over8h, tone: "speed" },
   ];
   return (
     <div className="dr-cell dr-summary gl-times">
       <div className="dr-statchart__head"><span className="dr-statchart__label">Time out</span></div>
       <div className="dr-summary__lead">
-        <span className="dr-summary__figure">{num(s.back)}</span>
+        <span className="dr-summary__figure">{num(s.cameBack)}</span>
         <span className="dr-summary__caption">
-          trip{s.back === 1 ? "" : "s"} back,<br />{s.back ? `longest ${durationWords(s.longest)}` : "none back yet"}
+          trip{s.cameBack === 1 ? "" : "s"} back,<br />{s.cameBack ? `longest ${durationWords(s.longest)}` : "none back yet"}
         </span>
       </div>
       <div className="dr-summary__incidents">
@@ -271,7 +264,6 @@ export default function GateLogScreen() {
     [all, prevEvents],
   );
   const rows = useMemo(() => searchGate(byHours(bySource(all, source), fromH, toH), q), [all, source, fromH, toH, q]);
-  const counts = useMemo(() => gateCounts(rows), [rows]);
   const pager = usePager(rows, `${day}|${q}|${source}|${fromH}|${toValue}`);
 
   // The line last clicked stays marked, and opens its panel (operator, 2026-11-26).
@@ -285,7 +277,10 @@ export default function GateLogScreen() {
   const windowWords = `${hourText(fromH)} to ${toValue === NOW ? nowText : hourText(toValue)}`;
   const busy = log.status === "loading" || Boolean(log.more);
   const failed = log.status === "error";
-  const stats = useMemo(() => gateStats(rows, trips, fromH, toH, day), [rows, trips, fromH, toH, day]);
+  // The figures: hours and search applied, every source (a trip needs both ends), the day before for context.
+  const figureRows = useMemo(() => searchGate(byHours(all, fromH, toH), q), [all, fromH, toH, q]);
+  const contextRows = useMemo(() => (prevEvents ? [...gateRows(prevEvents), ...all] : all), [all, prevEvents]);
+  const stats = useMemo(() => gateStats(figureRows, contextRows, fromH, toH, day), [figureRows, contextRows, fromH, toH, day]);
   const hourly = stats.hourly;
   const yesterday = shiftDay(today, -1);
 
@@ -307,12 +302,15 @@ export default function GateLogScreen() {
             <GateUnitsCard s={stats} busy={busy} failed={failed} windowWords={windowWords} />
             <TrendStat title="Signed out" series={hourly} valueKey="out" unit="" tone="speed" type="bar" what="sign-outs"
               point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(counts.out)} sub={`${windowWords}, by hour`}
+              value={busy || failed ? "-" : figure(stats.signedOut)} sub={`${windowWords}, by hour`}
               pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.out.toLocaleString("en-GB")} signed out`} />
-            <TrendStat title="Signed in" series={hourly} valueKey="in" unit="" tone="tonnes" type="line"
+            {/* Each trip's first return, by hour: a FactorySuite sign-in or the tracker at the gate,
+                once per trip (repeat sightings left out), including trips out before the window. */}
+            <TrendStat title="Came back" series={hourly} valueKey="in" unit="" tone="tonnes" type="line"
               point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(counts.in)} sub={`${windowWords}, by hour`}
-              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.in.toLocaleString("en-GB")} signed in`} />
+              value={busy || failed ? "-" : figure(stats.cameBack)}
+              sub={busy || failed ? `${windowWords}, by hour` : `${num(stats.back)} of these sign-outs + ${num(stats.earlier)} out from before, by hour`}
+              pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${p.in.toLocaleString("en-GB")} came back`} />
             <GateTimeOutCard s={stats} busy={busy} failed={failed} />
           </section>
         </div>

@@ -260,3 +260,6 @@
 .gl-decide__go:active { transform: translateY(1px); }
 .gl-decide__go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .gl-decide__go:disabled { cursor: default; background: var(--border); border-color: var(--border); color: var(--text-2); }
+
+/* The units card's balance line: the sign-outs and where each stands (gateBalance). */
+.gl-balance { margin: 6px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--ink-3, #64748b); }
