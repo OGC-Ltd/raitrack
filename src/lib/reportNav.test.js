@@ -23,7 +23,7 @@ describe('the reports menu', () => {
 });
 
 describe('Movements tab headings', () => {
-  const all = ['hourly', 'tankers', 'deliveries', 'geofences', 'tatFuel', 'recovery', 'speed', 'probes', 'dormant', 'alarmDist', 'unauthorizedPassengers', 'fuelConsumption', 'fuelGraphs', 'machinery', 'shiftHours'];
+  const all = ['hourly', 'tankers', 'deliveries', 'geofences', 'tatFuel', 'recovery', 'speed', 'probes', 'dormant', 'alarmDist', 'unauthorizedPassengers', 'fuelConsumption', 'fuelGraphs', 'fuelFilled', 'machinery', 'shiftHours'];
   const tabsOf = (keys) => keys.map((key) => ({ key, label: key }));
   const flat = (groups) => groups.flatMap((g) => g.tabs.map((t) => t.key));
 

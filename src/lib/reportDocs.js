@@ -21,6 +21,7 @@ import { PEAK_COLUMN, peakUrl, rowCells as speedCells, sections as speedSections
 import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit, mapUrl, runCells, summary as probeSummary, unitCells } from './probeReport';
 import { KEY as HEALTH_KEY, NOT_WORKING, WORKING, partStates, byGroup as healthByGroup, cellsFor as healthCells, headsFor as healthHeads, hasFleetList, summary as healthSummary } from './probeHealthReport';
 import { reportGroupsFor } from './fleetGroups';
+import { FIGURES as FUEL_FILLED_FIGURES, HEADS as FUEL_FILLED_HEADS, rowCells as fuelFilledCells, summary as fuelFilledSummary } from './fuelFilledReport';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, sheetSub, spansDays, stopWords, SHEET_STOP_HEADS, sheetStopCells } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
@@ -774,5 +775,36 @@ export function flowDoc({ parts, landscape, filename }, parse = browserParse) {
     meta: parts.info.slice(0, 8).map(([label, value]) => ({ label, value: strip(value) })),
     blocks: flowBlocks(parts.flow, landscape ? LANDSCAPE_MM : PORTRAIT_MM, parse),
     footer: parts.footNote,
+  };
+}
+
+/** Fuel filled (Movements › Fuel): each refuel and the litres the fuel probe saw go in. */
+export function fuelFilledDoc(rows, { from, to, fleet, unit = '', orgCode, now = Date.now() }) {
+  const s = fuelFilledSummary(rows);
+  const several = from !== to;
+  const words = periodWords(from, to);
+  const cols = [{ w: 20 }, { w: 11 }, { w: 24, wrap: true }, { w: 44 }, { w: 15 }, { w: 15 }, { w: 0, wrap: true }]
+    .map((c, i) => (FUEL_FILLED_FIGURES.has(i) ? { ...c, align: 'right' } : c));
+  const notes = [
+    s.joined > 0 && `${plural(s.joined, 'ledger row')} at the same fill as another (several sensors, or a split ramp) were counted once.`,
+    s.pending > 0 && `* ${plural(s.pending, 'refuel')} still within the verifier's wait; the figure may yet move.`,
+  ].filter(Boolean);
+  const blocks = [
+    { kind: 'h2', title: '1. Overview', aside: words },
+    { kind: 'figures', items: [
+      { label: 'Units', value: fmt(s.units) }, { label: 'Refuels', value: fmt(s.refuels) }, { label: 'Filled, L', value: fmtFixed(s.litres) },
+    ] },
+    { kind: 'h2', title: '2. Each refuel', aside: plural(s.refuels, 'refuel') },
+    { kind: 'table', cols, head: FUEL_FILLED_HEADS, size: 7.8, rows: rows.map((r) => fuelFilledCells(r).map((t, k) => textCell(t, k === 2))) },
+    ...notes.map((text) => ({ kind: 'note', text })),
+  ];
+  const name = unit ? `${fleet} ${unit}` : fleet;
+  return {
+    title: 'FUEL FILLED REPORT', docName: `Fuel Filled Report ${name}`, pairs: true,
+    filename: `Fuel Filled Report ${name} ${from}${several ? ` to ${to}` : ''}`,
+    reportNo: reportNumber('FF', orgCode, now), date: dmy(now),
+    meta: meta([['Fleet', fleet], ...(unit ? [['Unit', unit]] : []), [several ? 'Days' : 'Day', words], ['Refuels', fmt(s.refuels)], ['Filled', `${fmtFixed(s.litres)} L`]]),
+    blocks,
+    footer: `${fleet} · Fuel Filled Report · ${words}`,
   };
 }
