@@ -269,7 +269,6 @@
 .gl-units {
   --gl-line: #e6e9ee;
   width: 100%;
-  max-width: 620px;
   border-collapse: separate;
   border-spacing: 0;
   background: var(--card);
@@ -316,7 +315,10 @@
 .gl-units tfoot th { font-size: 13px; font-weight: 700; }
 .gl-units tfoot td { font-size: 17px; font-weight: 800; }
 
+/* Full width, as the table beneath (operator, 2026-11-27): the first column takes the room, the
+   three figures keep an even width at the right. */
+.gl-units th:not(:first-child), .gl-units td { width: 16%; }
 @media (max-width: 560px) {
-  .gl-units { max-width: none; }
   .gl-units th, .gl-units td { padding: 9px 12px; }
+  .gl-units th:not(:first-child), .gl-units td { width: auto; }
 }
