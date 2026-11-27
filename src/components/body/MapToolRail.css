@@ -321,3 +321,13 @@
    before the ruler came on stays; a hover card is hidden. */
 .mtr-measuring .fm-overlay { pointer-events: none !important; }
 .mtr-measuring .vehicle-tooltip:not(.vehicle-tooltip--pinned) { display: none !important; }
+/* ...and so do every drawn shape (zones, the estate plan, site plans, fences), whether drawn as SVG
+   (the overlay pane) or on the shared canvas (g-data): the click reaches the map, which the ruler
+   listens to, and no shape opens its hover label or card. The measured line itself draws there too
+   and is not clickable anyway. */
+.mtr-measuring .leaflet-overlay-pane,
+.mtr-measuring .leaflet-overlay-pane *,
+.mtr-measuring .leaflet-g-data-pane,
+.mtr-measuring .leaflet-g-data-pane *,
+.mtr-measuring .leaflet-g-overlayLayer-pane *,
+.mtr-measuring .leaflet-g-markerLayer-pane * { pointer-events: none !important; }

@@ -4720,33 +4720,22 @@ export default function FleetMap() {
   }, [measuring, mapReady]);
 
   /*
-   * While the ruler is on, nothing on the map takes the click but the ruler (operator, 2026-11-27:
-   * "not able to measure ... within a site/estate when the plans are on; I want to measure
-   * regardless"). A clickable shape swallows the map's click, so the zones, the estate plan and the
-   * site plans are made unclickable for the measurement and given back after it. Re-run when one of
-   * them is switched on or rebuilt mid-measurement. The markers stand aside in CSS (fm-overlay), so
-   * hovering a unit opens no card while drawing.
+   * While the ruler is on, nothing on the map takes the pointer but the map itself (operator,
+   * 2026-11-27: "not able to measure ... within a site/estate when the plans are on", then "still
+   * unable": the zones answered with their card). It is done in CSS (MapToolRail.css .mtr-measuring):
+   * the vector panes (SVG and the shared g-data canvas the zones and plans draw on) and the marker
+   * pane let the pointer through, so a click lands on the map and adds a point, and no shape or unit
+   * opens a label or card. Setting `clickable: false` on the shapes did nothing: the map engine's
+   * Shape.setOptions only ever turns pointer handling ON. Here only a card already open on hover when
+   * the ruler came on is closed.
    */
   useEffect(() => {
-    if (!measuring || !mapReady) return undefined;
-    const restores = [];
-    for (const shape of zoneLayerRef.current?.shapes ?? []) {
-      shape.setOptions?.({ clickable: false });
-      restores.push(() => shape.setOptions?.({ clickable: true }));
-    }
-    const layers = [planDataRef.current, ...Object.values(sitesRef.current ?? {}).map((slot) => slot?.data)].filter(Boolean);
-    for (const data of layers) {
-      const style = data.getStyle();
-      data.setStyle(typeof style === "function"
-        ? (f) => ({ ...(style(f) ?? {}), clickable: false })
-        : { ...(style ?? {}), clickable: false });
-      restores.push(() => data.setStyle(style));
-    }
-    // A card already open on hover when the ruler came on is closed with it.
+    if (!measuring) return;
     setHoveredId(null);
     setHoveredClusterIds(null);
-    return () => { for (const restore of restores) restore(); };
-  }, [measuring, mapReady, zonesWanted, zonesOwnOnly, planState, siteOn, siteStatus]);
+    zoneLayerRef.current?.clearHover?.();
+    planHoverRef.current?.close?.();
+  }, [measuring]);
 
   // The measured path: one line, a dot per point and the total at the end.
   // Redrawn whole on every change; a ruler has a handful of points.
