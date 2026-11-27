@@ -5,7 +5,7 @@
 import { jsPDF } from "jspdf";
 import autoTableModule from "jspdf-autotable";
 import html2canvas from "html2canvas";
-import { SHOW_FUEL_DRAINED, splitDrained } from "../lib/fuelTheftSplit";
+import { SHOW_FUEL_DRAINED, SHOW_SUSPECTED_THEFT, splitDrained } from "../lib/fuelTheftSplit";
 
 const autoTable =
   typeof autoTableModule === "function"
@@ -1703,23 +1703,28 @@ export async function downloadAnalyticsReport({
             ]
             : []),
 
-          {
-            label:
-              "Suspected theft",
-            value: `${fmt(
-              splitDrained(fuelTotals).theft,
-            )} L  ·  ${fmt(
-              splitDrained(fuelTotals).thefts,
-            )} events`,
-          },
+          // Hidden with the card's (lib/fuelTheftSplit SHOW_SUSPECTED_THEFT).
+          ...(SHOW_SUSPECTED_THEFT
+            ? [
+              {
+                label:
+                  "Suspected theft",
+                value: `${fmt(
+                  splitDrained(fuelTotals).theft,
+                )} L  ·  ${fmt(
+                  splitDrained(fuelTotals).thefts,
+                )} events`,
+              },
 
-          {
-            label:
-              "Value of suspected theft",
-            value: `${currency} ${fmt(
-              splitDrained(fuelTotals).theftCost,
-            )}`,
-          },
+              {
+                label:
+                  "Value of suspected theft",
+                value: `${currency} ${fmt(
+                  splitDrained(fuelTotals).theftCost,
+                )}`,
+              },
+            ]
+            : []),
 
           {
             label:
@@ -2435,23 +2440,28 @@ export async function downloadAnalyticsReport({
             ]
             : []),
 
-          {
-            label:
-              "Suspected theft",
-            value: `${fmt(
-              splitDrained(fuelTotals).theft,
-            )} L  ·  ${fmt(
-              splitDrained(fuelTotals).thefts,
-            )} events`,
-          },
+          // Hidden with the card's (lib/fuelTheftSplit SHOW_SUSPECTED_THEFT).
+          ...(SHOW_SUSPECTED_THEFT
+            ? [
+              {
+                label:
+                  "Suspected theft",
+                value: `${fmt(
+                  splitDrained(fuelTotals).theft,
+                )} L  ·  ${fmt(
+                  splitDrained(fuelTotals).thefts,
+                )} events`,
+              },
 
-          {
-            label:
-              "Value of suspected theft",
-            value: `${currency} ${fmt(
-              splitDrained(fuelTotals).theftCost,
-            )}`,
-          },
+              {
+                label:
+                  "Value of suspected theft",
+                value: `${currency} ${fmt(
+                  splitDrained(fuelTotals).theftCost,
+                )}`,
+              },
+            ]
+            : []),
 
           {
             label:
