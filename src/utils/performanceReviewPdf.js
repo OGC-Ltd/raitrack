@@ -14,7 +14,7 @@
 // lib/performanceReview — nothing is worked out here.
 
 import { jsPDF } from "jspdf";
-import { pct, litres, monthLabel, band, listRefs } from "../lib/performanceReview";
+import { pct, litres, monthLabel, band, listRefs, judgedWords, notAssessedWhy, mtdSpan } from "../lib/performanceReview";
 
 const C = {
   ink: "#1d1d1b", sub: "#5f6368", faint: "#9aa0a6", rule: "#d9dcd6",
@@ -142,7 +142,7 @@ function restRuns(units) {
   const rest = units.filter((u) => u.ratio == null);
   if (!rest.length) return null;
   return [{ t: `Not assessed (${rest.length}): `, b: true, c: C.sub },
-          { t: rest.map((u) => `${u.ref}${u.rate == null ? " (no standard)" : ""}`).join(", "), c: C.sub }];
+          { t: rest.map((u) => { const w = notAssessedWhy(u).short; return `${u.ref}${w ? ` (${w})` : ""}`; }).join(", "), c: C.sub }];
 }
 
 /** Height one exhibit block takes: title, bars, axis, the not-assessed line and the note. */
@@ -234,16 +234,16 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   doc.setDrawColor(C.greenDeep); doc.setLineWidth(2); doc.line(M, y, W - M, y);
   y += 16;
   y = para(doc, [
-    { t: `Fuel is going in at about ${litres(t.perMonth, { short: true })} a month${p?.change != null ? ` and ${p.change >= 0 ? "rising" : "falling"}` : ""}. Around ${litres(t.excessL, { short: true })} went in above the expected rate`, b: true },
+    { t: `${litres(t.litres, { short: true })} went in over ${review.days === 1 ? "the day" : `${review.days} days`}${p?.change != null ? `, ${p.change >= 0 ? "rising" : "falling"}` : ""}. Of the ${litres(t.judgedL ?? 0, { short: true })} judged against a standard, ${litres(t.excessL, { short: true })} was above the expected rate`, b: true },
     { t: read.attention.length ? `, and most of that gap traces back to a short list of named units.` : ".", b: true },
   ], M, y, W - 2 * M, { size: 10.2, color: C.greenDeep });
   y += 4;
   y = tiles(doc, [
     { value: litres(t.litres, { short: true }), label: t.pumpL ? `put in over ${review.days} days, ${litres(t.pumpL, { short: true })} issued at the pumps` : `put in over ${review.days} days to ${t.units} units` },
-    { value: `~${litres(t.perMonth, { short: true })}`, label: "a typical month (average a day × 30)" },
+    { value: review.monthToDate ? litres(review.monthToDate.litres, { short: true }) : "-", label: review.monthToDate ? `put in ${mtdSpan(review.monthToDate)}, counted` : "month to date not read" },
     { value: p?.change != null ? `${p.change >= 0 ? "+" : ""}${Math.round(p.change * 100)}%` : "-",
       label: p ? `${monthLabel(p.latest.month)} pace vs the full months before` : "pace needs two months", color: "#b9600b" },
-    { value: litres(t.excessL, { short: true }), label: `above standard rates, ${(t.excessShare * 100).toFixed(1)}% of all fuel`, color: C.red },
+    { value: litres(t.excessL, { short: true }), label: `above standard, ${(t.excessShare * 100).toFixed(1)}% of the ${litres(t.judgedL ?? 0, { short: true })} judged`, color: C.red },
   ], y);
 
   y = sectionHead(doc, "WHERE THE FUEL GOES", y);
@@ -302,7 +302,7 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
 
   // Attention / benchmarks
   const attention = read.attention.slice(0, 6).map((u) => [
-    { t: `${u.ref} `, b: true }, { t: `(${u.group.replace(/s$/, "").toLowerCase()}): ${pct(u.ratio)} of standard over ${u.usableRefills} refills, ${litres(u.excessL)} above.` },
+    { t: `${u.ref} `, b: true }, { t: `(${u.group.replace(/s$/, "").toLowerCase()}): ${pct(u.ratio)} of standard over ${judgedWords(u)}, ${litres(u.excessL)} above.` },
   ]);
   if (read.meterFixes.length) attention.push([{ t: "Readings to check: ", b: true }, { t: `${listRefs(read.meterFixes.slice(0, 6))}, refills logged against next to no hours or km.` }]);
   // As many benchmark groups as there are attention lines, so the two boxes
@@ -336,7 +336,7 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   if (y + 220 > H - 40) { doc.addPage(); y = 44; } else { y += 18; }
   text(doc, "EXHIBIT: HOW EACH UNIT COMPARES WITH ITS STANDARD", M, y, { size: 13, bold: true, color: C.greenDeep });
   y += 13;
-  y = para(doc, "Each bar shows a unit's typical refill as a percentage of its standard rate. 100% = on standard; higher is worse. The worst unit sits at the top of each chart. Units with at least 5 usable refills (3 for CASE tractors). * = largest fuel user in its group.",
+  y = para(doc, "Each bar shows a unit's typical refill as a percentage of its standard rate. 100% = on standard; higher is worse. The worst unit sits at the top of each chart. Machines on the work plan are judged on the litres the probe saw them burn in their planned shifts against hours × L/h; other units on at least 5 usable refills (3 for CASE tractors). * = largest fuel user in its group.",
            M, y, W - 2 * M, { size: 7.8, color: C.sub });
   // legend
   let lx = M;

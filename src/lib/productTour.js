@@ -360,7 +360,7 @@ export const PAGE_TOURS = {
     intro: "The fleet's fuel against its standard, and any one unit's fuel over a period.",
     steps: [
       ["page-modes", "Two Views", "<b>Performance</b> reviews the whole fleet; <b>Vehicle analytics</b> is one unit's report."],
-      ["fpr-kpis", "The Fleet's Fuel", "Fuel put in over the period, a typical month, this month's pace against the months before, and the litres above standard."],
+      ["fpr-kpis", "The Fleet's Fuel", "Fuel put in over the period, what reached the tanks, the month so far, this month's pace against the months before, and the litres above standard."],
       ["fpr-period", "The Period", "Pick a number of months, or the first and last day."],
       ["fpr-perday", "Litres Put In per Day", "How much fuel went in each day, month by month."],
       ["fpr-share", "Share of All Fuel", "Which kinds of machine take the fuel."],
