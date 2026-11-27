@@ -69,6 +69,7 @@
   border: 1px solid var(--sp4-line); border-radius: var(--fpr-r);
   background: var(--sp4-surface);
 }
+.fpr-strip--two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
 .fpr-panel { min-width: 0; padding: 14px 16px 16px; }
 .fpr-panel + .fpr-panel { border-left: 1px solid var(--sp4-line); }
 @media (max-width: 1400px) {
@@ -101,6 +102,10 @@
 .fpr-cols__v { font-size: var(--sp4-label); font-weight: 700; color: var(--sp4-text-1); font-variant-numeric: tabular-nums; }
 .fpr-cols__bar { width: 100%; max-width: 56px; background: var(--fpr-within); border-radius: 1px 1px 0 0; min-height: 2px; }
 .fpr-cols__bar--last { background: var(--fpr-latest); }
+/* A month with pump issues: the pump litres solid at the foot, the probe litres above them faded. */
+.fpr-cols__bar--split {
+  background: linear-gradient(to top, var(--fpr-latest) 0 var(--pump), color-mix(in srgb, var(--fpr-within) 45%, transparent) var(--pump) 100%);
+}
 .fpr-cols__l {
   position: absolute; top: 100%; margin-top: 6px;
   font-size: var(--sp4-label); color: var(--sp4-text-2); text-align: center; line-height: 1.2; white-space: nowrap;

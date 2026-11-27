@@ -219,12 +219,16 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const t = review.totals;
   const p = read.pace;
+  const source = review.source === "pump" ? "pump issues (SIV)"
+    : review.source === "mixed" ? `pump issues from ${fmtDay(review.pumpFrom)}, fuel probes before`
+    : "fuel probes";
+  const tankShare = t.issuedWithTankL ? t.tankL / t.issuedWithTankL : null;
 
   // ── Page 1 ────────────────────────────────────────────────────────────────
   let y = 44;
   text(doc, "FUEL PERFORMANCE REVIEW", M, y, { size: 19, bold: true, color: C.greenDeep });
   y += 15;
-  text(doc, `${orgName ? `${orgName}  |  ` : ""}${fmtDay(review.from)} – ${fmtDay(review.to)}  |  ${t.refills.toLocaleString("en-KE")} refills to ${t.units} units  |  telemetry`,
+  text(doc, `${orgName ? `${orgName}  |  ` : ""}${fmtDay(review.from)} – ${fmtDay(review.to)}  |  ${t.refills.toLocaleString("en-KE")} refills to ${t.units} units  |  ${source}`,
        M, y, { size: 8.2, color: C.sub });
   y += 6;
   doc.setDrawColor(C.greenDeep); doc.setLineWidth(2); doc.line(M, y, W - M, y);
@@ -235,7 +239,7 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
   ], M, y, W - 2 * M, { size: 10.2, color: C.greenDeep });
   y += 4;
   y = tiles(doc, [
-    { value: litres(t.litres, { short: true }), label: `put in over ${review.days} days to ${t.units} units` },
+    { value: litres(t.litres, { short: true }), label: t.pumpL ? `put in over ${review.days} days, ${litres(t.pumpL, { short: true })} issued at the pumps` : `put in over ${review.days} days to ${t.units} units` },
     { value: `~${litres(t.perMonth, { short: true })}`, label: "a typical month (average a day × 30)" },
     { value: p?.change != null ? `${p.change >= 0 ? "+" : ""}${Math.round(p.change * 100)}%` : "-",
       label: p ? `${monthLabel(p.latest.month)} pace vs the full months before` : "pace needs two months", color: "#b9600b" },
@@ -278,6 +282,14 @@ export function buildPerformanceReviewPdf({ review, read, orgName }) {
       { t: `${g.group} are the biggest problem. `, b: true },
       { t: `${g.overCount} of ${g.assessed} assessed are at least 10% over standard, accounting for ${litres(g.excessL, { short: true })} of excess (typical unit ${pct(g.ratio)}).` },
       ...(g.overCount >= 3 ? [{ t: " As the gap is group-wide, likely causes are operational (idling, overloading, haul roads) rather than individual drivers." }] : []),
+    ], M, y, W - 2 * M);
+  }
+  if (t.pumpL && tankShare != null) {
+    const c = t.checks;
+    y = para(doc, [
+      { t: `${Math.round(tankShare * 100)}% of the fuel issued reached the tank. `, b: true },
+      { t: `Over the pump issues a fuel probe read, the tanks rose ${litres(t.tankL, { short: true })} for ${litres(t.issuedWithTankL, { short: true })} issued. ` },
+      { t: `FactorySuite's own check: ${c.match} issues match the tank rise, ${c.mismatch} do not, ${c.noSensor} have no fuel sensor and ${c.noReading} gave no reading.` },
     ], M, y, W - 2 * M);
   }
   if (read.reliableShare != null) {
