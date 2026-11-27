@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { getGateLogDay } from "../../api/gateLog";
-import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gateBalance, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
+import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gateUnits, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
 import { fleetDay } from "../../lib/alertsView";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
@@ -169,10 +169,9 @@ export default function GateLogScreen() {
   const figure = (n) => (ready ? n.toLocaleString("en-GB") : "-");
   const busy = log.status === "loading" || Boolean(log.more);
   const failed = log.status === "error";
-  // The figures: hours and search applied, every source (a trip needs both ends), the day before for context.
+  // The figures: hours and search applied, every source (a trip needs both its ends).
   const figureRows = useMemo(() => searchGate(byHours(all, fromH, toH), q), [all, fromH, toH, q]);
-  const contextRows = useMemo(() => (prevEvents ? [...gateRows(prevEvents), ...all] : all), [all, prevEvents]);
-  const stats = useMemo(() => gateBalance(figureRows, contextRows), [figureRows, contextRows]);
+  const units = useMemo(() => gateUnits(figureRows), [figureRows]);
   const yesterday = shiftDay(today, -1);
 
   return (
@@ -186,23 +185,36 @@ export default function GateLogScreen() {
         </div>
 
         <div className="dr-layout">
-          {/* The day at the gate in one row of figures, counted in trips (lib/gateLog gateBalance;
-              operator, 2026-11-27: no charts, no units card, "they should balance").
-              Signed out = Back + Still out. Back counts the trips signed out again with no return
-              recorded (noReturn): the unit came back to be signed out, only the return is missing.
-              The last two are units, twice or more. */}
-          <section className="gl-figures" aria-label="The day at the gate">
-            <dl className="gl-figures__row">
-              {[
-                ["Signed out", stats.signedOut],
-                ["Back", stats.back + stats.noReturn],
-                ["Still out", stats.stillOut],
-                ["Signed out twice", stats.outTwice],
-                ["Signed in twice", stats.inTwice],
-              ].map(([label, n]) => (
-                <div key={label} className="gl-figures__cell"><dt>{label}</dt><dd>{busy || failed ? "-" : figure(n)}</dd></div>
-              ))}
-            </dl>
+          {/* The units that went out, once or more, and where each stands now (lib/gateLog
+              gateUnits; operator, 2026-11-27: "numbers that are straightforward"). Each unit once,
+              by its latest sign-out; every row and column adds up. */}
+          <section className="gl-figures" aria-label="Units at the gate">
+            <table className="gl-units">
+              <thead>
+                <tr><th scope="col" /><th scope="col">Units</th><th scope="col">Back</th><th scope="col">Still out</th></tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Signed out once", units.once],
+                  ["Signed out twice or more", units.twice],
+                ].map(([label, r]) => (
+                  <tr key={label}>
+                    <th scope="row">{label}</th>
+                    <td>{busy || failed ? "-" : figure(r.units)}</td>
+                    <td>{busy || failed ? "-" : figure(r.back)}</td>
+                    <td>{busy || failed ? "-" : figure(r.out)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row">Total</th>
+                  <td>{busy || failed ? "-" : figure(units.total.units)}</td>
+                  <td>{busy || failed ? "-" : figure(units.total.back)}</td>
+                  <td>{busy || failed ? "-" : figure(units.total.out)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </section>
         </div>
 

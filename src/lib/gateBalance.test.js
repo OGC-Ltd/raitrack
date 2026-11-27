@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gateBalance } from "./gateLog";
+import { gateBalance, gateUnits } from "./gateLog";
 
 // Rows as gateRows makes them. Times in EAT on 27 Nov 2026 unless the day says otherwise.
 const at = (hhmm, day = "2026-11-27") => Date.parse(`${day}T${hhmm}:00+03:00`);
@@ -58,5 +58,21 @@ describe("the Gate log figures balance (operator, 2026-11-27)", () => {
       out("N", "06:00"), seen("N", "06:30"), seen("N", "11:00"),                                            // one trip, seen twice
     ];
     expect(gateBalance(rows, rows)).toMatchObject({ outTwice: 2, inTwice: 1 });
+  });
+});
+
+describe("the units, once or more, back or still out (operator, 2026-11-27)", () => {
+  it("counts each unit once, by its latest sign-out, and every row and column adds up", () => {
+    const rows = [
+      out("A", "06:00"), seen("A", "07:00"),                                   // once, back
+      out("B", "06:00"),                                                       // once, still out
+      out("C", "06:00"), seen("C", "07:00"), out("C", "08:00"), seen("C", "09:00"), // twice, back
+      out("D", "06:00"), signedIn("D", "07:00"), out("D", "08:00"),             // twice, still out
+      seen("E", "05:00"),                                                      // a return only: not a unit that went out
+    ];
+    const u = gateUnits(rows);
+    expect(u.once).toEqual({ units: 2, back: 1, out: 1 });
+    expect(u.twice).toEqual({ units: 2, back: 1, out: 1 });
+    expect(u.total).toEqual({ units: 4, back: 2, out: 2 });
   });
 });

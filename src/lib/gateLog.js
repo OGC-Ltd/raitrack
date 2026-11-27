@@ -254,6 +254,40 @@ export function gateBalance(windowRows, contextRows) {
   };
 }
 
+/**
+ * The units that went out in the window, once or more, and where each stands now (operator,
+ * 2026-11-27: "numbers that are straightforward"). Each unit is counted once, by its LATEST
+ * sign-out in the window: back when a return of either kind (FactorySuite sign-in, or the tracker
+ * at the gate) is in the window after it, else still out. Every row and column adds up:
+ *   once.units  = once.back  + once.out
+ *   twice.units = twice.back + twice.out      ("twice" = signed out two or more times)
+ *   total       = once + twice, column by column
+ * `windowRows` the rows shown (hours and search, every source); pure.
+ */
+export function gateUnits(windowRows) {
+  const byUnit = new Map();
+  for (const r of windowRows ?? []) {
+    const unit = squash(r.plate);
+    if (!unit) continue;
+    if (!byUnit.has(unit)) byUnit.set(unit, []);
+    byUnit.get(unit).push(r);
+  }
+  const row = () => ({ units: 0, back: 0, out: 0 });
+  const once = row();
+  const twice = row();
+  for (const list of byUnit.values()) {
+    const outs = list.filter((r) => r.way === "out");
+    if (!outs.length) continue;
+    const last = outs.reduce((a, b) => (b.at > a.at ? b : a));
+    const back = list.some((r) => r.way === "in" && r.at > last.at);
+    const into = outs.length >= 2 ? twice : once;
+    into.units += 1;
+    if (back) into.back += 1; else into.out += 1;
+  }
+  const total = { units: once.units + twice.units, back: once.back + twice.back, out: once.out + twice.out };
+  return { once, twice, total };
+}
+
 /** 45 min, 2 h 05 min, 1 d 3 h. */
 export function durationWords(ms) {
   if (!Number.isFinite(ms) || ms < 0) return "";
