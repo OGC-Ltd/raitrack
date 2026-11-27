@@ -318,6 +318,7 @@ export default function IncidentReport({
       label={`${panelTitle}, ${unit.plate ?? unit.vehicleId}`}
       itemKey={unit.vehicleId}
       onClose={closeUnit}
+      room
     >
       <Detail
         key={unit.vehicleId}

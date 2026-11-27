@@ -30,6 +30,21 @@
   animation: dsb-in 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 .dsb--wide { width: min(640px, 100vw); }
+/* room (lib/menuRoom): a framed card clear of the top bar and the screen's
+   edge, beside the page rather than over it (Samad's Compliance panel). A
+   phone keeps the full-width sheet. */
+@media (min-width: 768px) {
+  .dsb.dsb--room {
+    top: calc(var(--app-header-h, 52px) + 16px);
+    right: 16px;
+    bottom: 16px;
+    border: 1px solid var(--sp4-line-hi, #2e3440);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.10);
+  }
+  .app--light .dsb.dsb--room { border-color: #e6e9ee; }
+}
 @keyframes dsb-in { from { transform: translateX(24px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .dsb { animation: none; } }
 .app--light .dsb { background: #fff; border-left-color: #e6e9ee; }

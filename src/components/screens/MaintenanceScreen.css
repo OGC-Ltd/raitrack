@@ -173,6 +173,14 @@
   --maint-gutter: var(--app-gutter, clamp(20px, calc(var(--vw) * 4), 64px));
 }
 
+/* A row's side panel open (lib/menuRoom): the page stops short of it, the
+   panel's width plus its 16px inset and a 16px gap, instead of running under
+   it. A phone keeps the panel as a sheet over the page. */
+@media (min-width: 768px) {
+  body.dsb-room .maint-screen-scroll { padding-right: calc(420px + 32px); }
+  body.dsb-room--wide .maint-screen-scroll { padding-right: calc(640px + 32px); }
+}
+
 /* The scroll viewport for Service Status. min-height:0 is what actually lets a
    flex child shrink below its content and scroll — without it the child keeps
    its full intrinsic height, overflows the clipped parent, and the bottom of

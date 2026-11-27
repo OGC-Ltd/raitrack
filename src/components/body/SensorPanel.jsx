@@ -2261,6 +2261,7 @@ export default function SensorPanel() {
             itemKey={`${selectedAnomaly.vehicleId}|${fuelDay}`}
             onClose={closeSelected}
             wide
+            room
             footer={can("map:read") ? (
               <button type="button" className="sp4-ghost-btn"
                       onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>
@@ -2299,6 +2300,7 @@ export default function SensorPanel() {
             label={`Probe and repair, ${selectedAnomaly.vehicleName}`}
             itemKey={selectedAnomaly.vehicleId}
             onClose={closeSelected}
+            room
             footer={can("map:read") ? (
               <button type="button" className="sp4-ghost-btn"
                       onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>

@@ -19,9 +19,10 @@
 
 import { useEffect, useRef } from "react";
 import { claimSidePanel, onSidePanelClaim } from "../../lib/sidePanels";
+import { askMenuRoom } from "../../lib/menuRoom";
 import "./DetailSidebar.css";
 
-export default function DetailSidebar({ id, title, label, itemKey, onClose, footer = null, wide = false, children }) {
+export default function DetailSidebar({ id, title, label, itemKey, onClose, footer = null, wide = false, room = false, children }) {
   const body = useRef(null);
 
   useEffect(() => {
@@ -48,8 +49,17 @@ export default function DetailSidebar({ id, title, label, itemKey, onClose, foot
     return onSidePanelClaim("detail", () => closeRef.current?.());
   }, []);
 
+  // room: the panel sits BESIDE the page's table as a framed card, the page
+  // stops short of it and the left menu folds while it is open (lib/menuRoom;
+  // operator, 2026-11-27, Maintenance). Off by default: other pages unchanged.
+  useEffect(() => {
+    if (!room) return undefined;
+    askMenuRoom(true, { wide });
+    return () => askMenuRoom(false, { wide });
+  }, [room, wide]);
+
   return (
-    <aside id={id} className={"dsb" + (wide ? " dsb--wide" : "")} role="dialog" aria-label={label ?? title}>
+    <aside id={id} className={"dsb" + (wide ? " dsb--wide" : "") + (room ? " dsb--room" : "")} role="dialog" aria-label={label ?? title}>
       <header className="dsb__head">
         <span className="dsb__title">{title}</span>
         <button type="button" className="dsb__x" onClick={onClose} aria-label={`Close ${String(title).toLowerCase()}`}>×</button>
