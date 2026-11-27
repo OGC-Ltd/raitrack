@@ -61,6 +61,7 @@ import ChoicePicker from './ChoicePicker';
 import { useSitePick } from '../../hooks/useSitePick';
 import TatFuelReport from './TatFuelReport';
 import AlarmDistributionReport from './AlarmDistributionReport';
+import MonthlyReport from './MonthlyReport';
 import UnauthorizedPassengersReport from './UnauthorizedPassengersReport';
 import FuelConsumptionRateReport from './FuelConsumptionRateReport';
 import FuelGraphReport from './FuelGraphReport';
@@ -146,10 +147,12 @@ const UNIT_REPORTS = new Set(['overspeed']);
 /** The End of Shift and Movements tabs: made by the server, not from REPORTS. */
 const SHIFT = 'shift';
 const MOVEMENTS = 'movements';
-/** The pages with a form of their own, not made from REPORTS. */
+const MONTHLY = 'monthly';
+/** The pages with a form of their own, not made from REPORTS (never made on opening). */
 const SERVER_TABS = {
   [SHIFT]: { label: 'Shift' },
   [MOVEMENTS]: { label: 'Movements' },
+  [MONTHLY]: { label: 'Monthly report' },
 };
 
 
@@ -2015,7 +2018,8 @@ export default function ReportsScreen({ only = null, active = true } = {}) {
           <i className="ti ti-selector rpt-switch__i" aria-hidden="true" />
         </label>
       )}
-      {key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} fuelFilled={hasFuelFilledTab(can)} fuellingPlan={hasFuellingPlanTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
+      {key === MONTHLY ? <MonthlyReport key={orgId ?? 'none'} orgId={orgId} orgCode={orgCode} companyName={activeCompany?.name} vehicles={vehicles} can={can} />
+        : key === SHIFT ? <ShiftReport key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} groups={groups} /> : key === MOVEMENTS ? <MovementsPage key={orgId ?? 'none'} orgId={orgId} vehicles={vehicles} orgCode={orgCode} companyName={activeCompany?.name} tankers={hasTankersTab(can, orgCode)} deliveries={hasDeliveriesTab(can, orgCode)} geofences={hasGeofencesTab(can, orgCode)} tatFuel={hasTatFuelTab(can, orgCode)} recovery={hasRecoveryTab(can, orgCode)} speed={hasSpeedTab(can, orgCode)} probes={hasProbeTab(can, orgCode)} dormant={hasDormantTab(can, orgCode)} alarmDist={hasAlarmDistTab(can)} unauthorizedPassengers={hasUnauthorizedPassengersTab(can)} fuelConsumption={hasFuelConsumptionTab(can, orgCode)} fuelFilled={hasFuelFilledTab(can)} fuellingPlan={hasFuellingPlanTab(can, orgCode)} machinery={hasMachineryTab(can, orgCode)} shiftHours={hasShiftHoursTab(can, orgCode)} whoAmI={by} />
         : (<>
 
       {conduct ? (

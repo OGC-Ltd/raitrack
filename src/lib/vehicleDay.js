@@ -157,6 +157,17 @@ export function loadDay(orgId, vehicleId, dayKey) {
   return p;
 }
 
+/**
+ * The day's pings, read and not kept: for a report over many unit-days (the
+ * Monthly report reads a month of every unit), which would fill the session
+ * cache. A day already held whole is taken from it.
+ */
+export function readDayOnce(orgId, vehicleId, dayKey, signal) {
+  const held = cache.get(keyOf(orgId, vehicleId, dayKey));
+  if (held?.complete) return Promise.resolve(held);
+  return read(orgId, vehicleId, dayKey, null, signal);
+}
+
 /** Tests only. */
 export function _resetVehicleDay() {
   cache.clear();

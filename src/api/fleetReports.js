@@ -20,9 +20,10 @@ import { listDays } from './driverConduct';
 import { fetchVssCameraCount, fetchVssWindow } from './vssAlarms';
 import { getSpeedingSummary, getSpeedingIncidents } from './incidents';
 import { apiFetch } from '../services/api';
-import { loadDay } from '../lib/vehicleDay';
+import { loadDay, readDayOnce } from '../lib/vehicleDay';
 import { settleLimited } from '../lib/settleLimited';
-import { daysCovering, summariseWindows, peakFix, dayStart, fleetDay } from '../lib/fleetReports';
+import { daysCovering, summariseWindows, peakFix, dayStart, fleetDay, nightWindows } from '../lib/fleetReports';
+import { dayShiftOf } from '../lib/monthlyReport';
 import { slicer, append } from '../lib/slices';
 
 const DAY_PAGE = 500;
@@ -301,6 +302,86 @@ export async function loadDistances({ orgId, vehicles, windows, signal, onProgre
     perVehicle.set(v.vehicleId, summariseWindows(list, windows));
   }
   return { perVehicle, failed: failedUnits.size };
+}
+
+/**
+ * A long period of each tracker, a unit-day at a time, summed and let go (the
+ * Monthly report): each day's distance, use, day-shift distance, readings and
+ * last reading, and each night of Night driving's hours (nightWindows), from
+ * the same sums as Vehicle utilization and Night driving. The readings are
+ * never kept: a tracker's days are read in order, holding only the part of
+ * one day still inside an open night. A few trackers at a time.
+ *
+ * @returns {{ usage: Map<vehicleId, { days, nights, failedDays }>, failed: number }}
+ */
+export async function loadUsage({ orgId, vehicles, from, to, signal, onProgress = () => {}, limit = 4 }) {
+  const days = daysCovering(from, to);
+  const nights = nightWindows(from, to);
+  const total = vehicles.length * days.length;
+  let done = 0;
+  onProgress({ done, total });
+  const usage = new Map();
+  let failed = 0;
+  await settleLimited(vehicles, limit, async (v) => {
+    const rec = { days: {}, nights: [], failedDays: 0 };
+    let carry = [];
+    let ni = 0;
+    for (const day of days) {
+      signal?.throwIfAborted();
+      let pings = [];
+      try {
+        pings = [...(await readDayOnce(orgId, v.vehicleId, day, signal)).pings].sort((a, b) => a.t - b.t);
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        rec.failedDays += 1;
+      }
+      const a = Math.max(from, dayStart(day));
+      const b = Math.min(to, dayStart(day) + DAY_MS);
+      const s = summariseWindows(pings, [[a, b]]);
+      const [sa, sb] = dayShiftOf(day);
+      const shift = summariseWindows(pings, [[Math.max(a, sa), Math.min(b, sb)]].filter(([x, y]) => y > x));
+      rec.days[day] = {
+        km: s.km, movingMin: s.movingMin, idleMin: s.idleMin, engineOnMin: s.engineOnMin, readings: s.readings,
+        fuelReadings: pings.filter((p) => p.t >= a && p.t < b && Number.isFinite(p.fuelLevelMl)).length,
+        dayShiftKm: shift.km,
+        lastAt: pings.length ? pings[pings.length - 1].t : null,
+      };
+      // The nights that end within this day, from its readings and the last day's tail
+      const pool = carry.length ? carry.concat(pings) : pings;
+      while (ni < nights.length && nights[ni][1] <= b) {
+        const [na, nb] = nights[ni];
+        const n = summariseWindows(pool.filter((p) => p.t >= na && p.t < nb), [[na, nb]]);
+        rec.nights.push({ from: na, to: nb, km: n.km, movingMin: n.movingMin });
+        ni += 1;
+      }
+      carry = ni < nights.length ? pings.filter((p) => p.t >= nights[ni][0]) : [];
+      done += 1;
+      if (done % 10 === 0 || done === total) onProgress({ done, total });
+    }
+    if (rec.failedDays) failed += 1;
+    usage.set(v.vehicleId, rec);
+  });
+  signal?.throwIfAborted();
+  return { usage, failed };
+}
+
+/**
+ * Every fuel drain the platform recorded that began in [from, to), with the
+ * control room's verdict on each (GET /fuel/thefts, a page of 200 at a time).
+ */
+export async function loadFuelDrains({ orgId, from, to, signal, onProgress = () => {} }) {
+  const out = [];
+  let cursor = null;
+  for (let page = 0; page < 100; page++) {
+    const q = new URLSearchParams({ from: new Date(from).toISOString(), to: new Date(to).toISOString(), limit: '200' });
+    if (cursor) q.set('cursor', cursor);
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/thefts?${q}`, { signal });
+    out.push(...(res.data ?? []));
+    onProgress({ done: out.length, total: 0 });
+    if (!res.meta?.hasNextPage || !res.meta?.cursor) break;
+    cursor = res.meta.cursor;
+  }
+  return out;
 }
 
 /**
