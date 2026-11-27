@@ -66,10 +66,10 @@ export default function MaintenanceScreen() {
    */
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
-    // Sensor Monitor | Wialon (operator, 2026-11-27): what the system works out, and what the
-    // trackers report in their own status codes. Named Sensor Monitor as it always was (briefly
-    // "System" on 27 Nov, not asked for); the key stays "sensors" so a saved view still opens.
-    { key: "sensors", label: "Sensor Monitor", enabled: true },
+    // System | Wialon (operator, 2026-11-27): what the system works out, and what the trackers
+    // report in their own status codes. The button says System; the breadcrumb keeps the page's
+    // name, Sensor Monitor (crumb). The key stays "sensors" so a saved view still opens.
+    { key: "sensors", label: "System", crumb: "Sensor Monitor", enabled: true },
     { key: "wialon",  label: "Wialon", enabled: can("sensor:read") },
   ];
   const available = VIEWS.filter((v) => v.enabled);
@@ -87,7 +87,8 @@ export default function MaintenanceScreen() {
 
   // A lookup, not a ternary: the old `=== "service" ? … : "Sensor Monitor"`
   // labelled every view that was not Service Status as Sensor Monitor.
-  const crumbLabel = VIEWS.find((v) => v.key === activeTab)?.label ?? "Maintenance";
+  const crumbView = VIEWS.find((v) => v.key === activeTab);
+  const crumbLabel = crumbView?.crumb ?? crumbView?.label ?? "Maintenance";
 
   // The breadcrumb and the view chips. On System and Wialon they sit on the left of the page's
   // header row, beside the KPIs, instead of on a row of their own (operator, 2026-11-27: "reduce
