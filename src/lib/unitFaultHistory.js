@@ -18,6 +18,9 @@ export const WIALON_RUN_GAP_MS = 30 * 60_000;
 const BACK = {
   fuel_probe_fault:           "Fuel probe reading again",
   fuel_probe_dead:            "Fuel probe reading again",
+  fuel_probe_status:          "Fuel probe status normal",
+  fuel_probe_battery:         "Fuel probe battery OK",
+  gnss_fault:                 "GPS fix back",
   signal_lost:                "Tracker back online",
   frozen_gps:                 "Position fix back",
   low_accuracy:               "Position accurate again",
@@ -28,6 +31,9 @@ const BACK = {
   transit_no_engine:          "Ignition back to normal",
   speed_no_engine:            "Ignition back to normal",
 };
+
+/** Kinds whose record carries the tracker's own words ("Fuel probe: Status Error", "GPS: On without Fix"). */
+const TRACKER_WORDS = new Set(["fuel_probe_fault", "fuel_probe_status", "fuel_probe_battery", "gnss_fault"]);
 
 const ms = (v) => {
   const t = typeof v === "number" ? v : Date.parse(v ?? "");
@@ -45,7 +51,7 @@ export function faultMessages(episodes = [], disconnections = [], now = Date.now
     const start = ms(e.startedAt);
     if (start == null) continue;
     const end = ms(e.recoveredAt);
-    const fault = e.kind === "fuel_probe_fault" && e.detail ? e.detail : faultLabel(e.kind);
+    const fault = TRACKER_WORDS.has(e.kind) && e.detail ? e.detail : faultLabel(e.kind);
     out.push({ key: `${e.id}:start`, at: start, text: fault, ok: false, open: end == null, source: "System", durationMs: null });
     if (end != null) {
       out.push({ key: `${e.id}:end`, at: end, text: BACK[e.kind] ?? `${faultLabel(e.kind)}: cleared`, ok: true, open: false, source: "System", durationMs: end - start });

@@ -41,6 +41,15 @@ describe("a unit's fault history as messages", () => {
     expect(rows.map((r) => r.text)).toEqual(["GPS reporting again", "Probe reconnected", "Probe disconnected", "GPS stopped reporting"]);
   });
 
+  it("words the tracker's status codes, and their recoveries", () => {
+    const rows = faultMessages([
+      { id: "s", kind: "fuel_probe_status", detail: "Fuel probe: Status Error", startedAt: new Date(T).toISOString(), recoveredAt: new Date(T + H).toISOString() },
+      { id: "g", kind: "gnss_fault", detail: "GPS: On without Fix", startedAt: new Date(T + 2 * H).toISOString(), recoveredAt: null },
+      { id: "b", kind: "fuel_probe_battery", detail: "Fuel probe battery: Needs Replacement (3.10 V)", startedAt: new Date(T - H).toISOString(), recoveredAt: null },
+    ], [], T + 3 * H);
+    expect(rows.map((r) => r.text)).toEqual(["GPS: On without Fix", "Fuel probe status normal", "Fuel probe: Status Error", "Fuel probe battery: Needs Replacement (3.10 V)"]);
+  });
+
   it("skips rows with no usable time", () => {
     expect(faultMessages([{ id: "x", kind: "signal_lost", startedAt: null }], [{ at: null }])).toEqual([]);
   });
