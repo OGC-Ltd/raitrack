@@ -51,6 +51,14 @@ const MARKS = {
       <path d="M12.500 13.500l2.500 1.500 2 1v-4l2.500 1.500 2 1" />
     </>
   ),
+  // Fuel filled: a fuel drop, and an arrow going into it.
+  fuelFilled: (
+    <>
+      <path d="M8 3.5s-4.5 5-4.5 8.2a4.5 4.5 0 0 0 9 0C12.500 8.500 8 3.500 8 3.500z" />
+      <path d="M17 12.500v8" />
+      <path d="m14 17.500 3 3 3-3" />
+    </>
+  ),
   // Recovery: a road line leading to a location pin.
   recovery: (
     <>

@@ -129,6 +129,47 @@ export async function loadProbeReport({ orgId, from, to }) {
   return res.data
 }
 
+/** Pages of the fuel ledger read at most for Fuel filled: 200 a page, 6,000 rows. */
+const MAX_FILL_PAGES = 30
+
+/**
+ * Fuel filled (Movements › Fuel): the fuel ledger's rows over fleet days `from`
+ * to `to`, both whole days in Nairobi (fleet-server fuel/fillings, which the
+ * page joins into refuels, lib/fuelFilledReport). `capped` when the page limit
+ * stopped the read short.
+ */
+export async function loadFuelFillings({ orgId, from, to }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const start = new Date(`${from}T00:00:00+03:00`).toISOString()
+  // fuel/fillings reads `to` inclusive: stop a millisecond before the next midnight
+  const end = new Date(Date.parse(`${to}T00:00:00+03:00`) + 86_400_000 - 1).toISOString()
+  const fills = []
+  let cursor = null
+  for (let page = 0; page < MAX_FILL_PAGES; page++) {
+    const q = new URLSearchParams({ from: start, to: end, limit: '200', ...(cursor ? { cursor } : {}) })
+    const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/fillings?${q}`)
+    fills.push(...(res.data ?? []))
+    cursor = res.meta?.cursor ?? null
+    if (!res.meta?.hasNextPage || !cursor) return { fills, capped: false }
+  }
+  return { fills, capped: true }
+}
+
+/**
+ * A sheet's units' refuels over whole Nairobi days `from` to `to`, off the
+ * fuel ledger (fleet-server fuel/probe-fills, each refuel once):
+ * { coveredFrom, units: [{ plate, vehicle, note, fills: [{ at, litres, beforeL, afterL, rows }] }] }.
+ */
+export async function loadProbeFills({ orgId, plates, from, to }) {
+  if (!orgId) throw new Error('No organisation selected')
+  const res = await apiFetch(`/api/v1/organisations/${orgId}/fuel/probe-fills`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plates, from, to }),
+  })
+  return res.data
+}
+
 export async function loadSpeedReport({ orgId, day }) {
   if (!orgId) throw new Error('No organisation selected')
   const res = await apiFetch(`/api/v1/organisations/${orgId}/reports/speed?day=${encodeURIComponent(day)}`)

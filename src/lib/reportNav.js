@@ -78,6 +78,13 @@ export const hasUnauthorizedPassengersTab = (can) => can('telemetry:read');
 // elsewhere none is judged against one. Menengai keeps its own sheet (lib/fuelRateMorl)
 export const hasFuelConsumptionTab = (can) => can('telemetry:read');
 
+/**
+ * Does Movements carry a Fuel filled tab (each refuel and the litres the fuel
+ * probe saw go in)? Every organisation that reads the fuel ledger (Aquamist's
+ * sheet, 27 Nov 2026).
+ */
+export const hasFuelFilledTab = (can) => can('fuel_filling:read');
+
 /** The organisations with a Machinery report. */
 export const MACHINERY_ORGS = new Set(['KASULU']);
 
@@ -102,7 +109,7 @@ export const MOVEMENTS_TAB_GROUPS = [
   { key: 'trips', label: 'Trips', tabs: ['hourly', 'tankers', 'tatFuel', 'recovery'] },
   // Deliveries by itself (operator, 18 Nov 2026): it has its own Van Sales | Finished Goods trail inside
   { key: 'deliveries', label: 'Deliveries', tabs: ['deliveries'] },
-  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'probes'] },
+  { key: 'fuel', label: 'Fuel', tabs: ['fuelConsumption', 'fuelGraphs', 'fuelFilled', 'probes'] },
   { key: 'safety', label: 'Safety and conduct', tabs: ['speed', 'alarmDist', 'unauthorizedPassengers'] },
   { key: 'sites', label: 'Sites and machinery', tabs: ['geofences', 'dormant', 'machinery', 'shiftHours'] },
 ];
