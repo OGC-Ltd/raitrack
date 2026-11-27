@@ -8,13 +8,14 @@ import { apiFetch, apiFetchBlob } from '../services/api'
 
 const base = (orgId) => `/api/v1/organisations/${orgId}/planner/fuelling-plan`
 
-export async function getFuellingPlan({ orgId, day, signal }) {
-  const res = await apiFetch(`${base(orgId)}?${new URLSearchParams({ day })}`, { signal })
-  return res.data ?? { factory: null, day }
+// One day, or `from`..`to` (operator 2026-11-27: "the date picker should allow a range"), at most 14 days.
+export async function getFuellingPlan({ orgId, from, to = from, signal }) {
+  const res = await apiFetch(`${base(orgId)}?${new URLSearchParams({ from, to })}`, { signal })
+  return res.data ?? { factory: null, from, to }
 }
 
-/** The day's PDF: `{ blob, filename }`. */
-export async function fuellingPlanPdf({ orgId, day }) {
-  const { blob, filename } = await apiFetchBlob(`${base(orgId)}.pdf?${new URLSearchParams({ day })}`)
-  return { blob, filename: filename ?? `Fuelling plan vs actual ${day}.pdf` }
+/** The PDF: `{ blob, filename }`. */
+export async function fuellingPlanPdf({ orgId, from, to = from }) {
+  const { blob, filename } = await apiFetchBlob(`${base(orgId)}.pdf?${new URLSearchParams({ from, to })}`)
+  return { blob, filename: filename ?? `Fuelling plan vs actual ${from}${to !== from ? ` to ${to}` : ''}.pdf` }
 }

@@ -1,18 +1,19 @@
 /*
  * Fuelling Plan, a tab under Movements › Fuel (operator 2026-11-27, after
- * FactorySuite's own "Fuelling: plan vs actual" for Mufindi): one day, every
+ * FactorySuite's own "Fuelling: plan vs actual" for Mufindi): one day or a range
+ * of up to 14 days (each day judged against its own plan, the days added), every
  * machine an approved work plan or vehicle request asked fuel for, against what
  * FactorySuite's pumps put in. fleet-server planner/fuelling-plan works it out;
  * this page shows it, and the PDF is the server's, drawn with the logos as the
  * Logbook's is. The status key and the plate search narrow the machine list
- * here; the PDF is always the whole day.
+ * here; the PDF is always every machine over the days picked.
  */
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { fuellingPlanPdf, getFuellingPlan } from '../../api/fuellingPlan';
 import { saveFile } from '../../api/tripReport';
 import { savePdfAsJpeg } from '../../api/pdfJpeg';
-import { dayWords, plateHas, yesterday } from '../../lib/fuelFilledReport';
+import { dayWords, periodWords, plateHas, yesterday } from '../../lib/fuelFilledReport';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import PdfPreview from '../shared/PdfPreview';
 import { downloadTableCsv } from '../../utils/tableExport';
@@ -62,6 +63,10 @@ function Meter({ name, figure, of, fill, max, tone = 'accent', faint = false }) 
   );
 }
 
+/** At most 14 days, as the server takes. */
+const MAX_RANGE_DAYS = 14;
+const shortDay = (ymd) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
 const cellsOf = (m) => m.status === OFF_PLAN
   ? [m.machine, m.type ?? 'Unspecified', m.site ?? '-', m.department ? titleCase(m.department) : '-', 'Off plan', '', fmtL(m.fuelledL), '']
   : [m.machine, m.type ?? 'Unspecified', m.site ?? '-', m.department ? titleCase(m.department) : '-',
@@ -71,23 +76,25 @@ const cellsOf = (m) => m.status === OFF_PLAN
 export default function FuellingPlanReport({ orgId, companyName, orgCode, active = true }) {
   const today = yesterday(Date.now() + DAY_MS);
   const quick = [
-    { key: 'today', label: 'Today', day: today },
-    { key: 'yesterday', label: 'Yesterday', day: yesterday(Date.now()) },
+    { key: 'today', label: 'Today', from: today, to: today },
+    { key: 'yesterday', label: 'Yesterday', from: yesterday(Date.now()), to: yesterday(Date.now()) },
+    { key: 'week', label: 'Last 7 days', from: yesterday(Date.now() - 5 * DAY_MS), to: today },
   ];
-  const [day, setDay] = useState(today);
+  const [days, setDays] = useState(() => ({ from: today, to: today }));
   const [run, setRun] = useState({ status: 'idle' });
   const [status, setStatus] = useState(null);
   const [find, setFind] = useState('');
   const [file, setFile] = useState({ busy: false, error: null });
   const runId = useRef(0);
-  const problem = !orgId ? 'Waiting for the organisation to load' : !day ? 'Pick a day' : day > today ? 'That day has not happened yet' : null;
+  const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : days.to > today ? 'That day has not happened yet' : null;
 
-  const execute = async (d = day) => {
-    if (!orgId || (problem && d === day)) return;
+  // A quick chip passes its own days: they are always a real, past period
+  const execute = async (d = days) => {
+    if (!orgId || (problem && d === days)) return;
     const id = ++runId.current;
     setRun({ status: 'loading' });
     try {
-      const plan = await getFuellingPlan({ orgId, day: d });
+      const plan = await getFuellingPlan({ orgId, from: d.from, to: d.to });
       if (id !== runId.current) return;
       setRun({ status: 'done', plan });
       setStatus(null);
@@ -100,6 +107,9 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
 
   const plan = run.status === 'done' && run.plan?.factory ? run.plan : null;
   const t = plan?.totals;
+  const from = plan?.from ?? plan?.day, to = plan?.to ?? plan?.day;
+  const several = Boolean(plan) && from !== to;
+  const period = plan ? (several ? periodWords(from, to) : dayWords(from)) : '';
   const everyRow = useMemo(() => (plan ? [...plan.machines, ...plan.offPlan.map((m) => ({ ...m, status: OFF_PLAN }))] : []), [plan]);
   const picked = useMemo(() => (status ? everyRow.filter((m) => m.status === status) : everyRow), [everyRow, status]);
   const rows = useMemo(() => (find.trim() ? picked.filter((m) => plateHas(m.machine, find)) : picked), [picked, find]);
@@ -113,7 +123,7 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
     ? [`${fmt(t.fuelled)} of ${fmt(t.planned)}`, fmt(t.fuelledOnFiguresL), fmt(t.notFuelled), fmt(t.short), fmt(t.asPlanned)]
     : [0, 1, 2, 3, 4].map((i) => <span key={i} className="frp-kpi-none">-</span>);
 
-  const makePdf = () => fuellingPlanPdf({ orgId, day: plan.day });
+  const makePdf = () => fuellingPlanPdf({ orgId, from: plan.from ?? plan.day, to: plan.to ?? plan.day });
   const preview = usePdfPreview(makePdf);
   const save = async (as) => {
     if (!plan || file.busy) return;
@@ -130,9 +140,9 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
   const saveCsv = () => {
     if (!plan) return;
     downloadTableCsv({
-      head: ['Status', ...HEADS],
-      body: rows.map((m) => [m.status, ...cellsOf(m)]),
-      filenameSlug: `fuelling-plan-vs-actual-${plan.day}`,
+      head: ['Day', 'Status', ...HEADS],
+      body: rows.map((m) => [m.day, m.status, ...cellsOf(m)]),
+      filenameSlug: `fuelling-plan-vs-actual-${from}${several ? `-to-${to}` : ''}`,
     });
   };
   const fleet = companyName ?? orgCode ?? '';
@@ -152,20 +162,20 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
       <div className="sp4-filterbar frp-filterbar rpt-filterbar">
         <div className="sp4-filter-group" role="group" aria-label="Day">
           {quick.map((q) => {
-            const on = day === q.day;
+            const on = days.from === q.from && days.to === q.to;
             return (
               <button key={q.key} type="button" aria-pressed={on} disabled={!orgId || run.status === 'loading'}
                       className={`sp4-filter-chip${on ? ' sp4-filter-chip--on' : ''}`}
-                      onClick={() => { setDay(q.day); execute(q.day); }}>
+                      onClick={() => { const d = { from: q.from, to: q.to }; setDays(d); execute(d); }}>
                 {q.label}
               </button>
             );
           })}
         </div>
-        <DateRangePicker from={day} to={day} today={today} maxDays={1} spans={[]} quickPicks={false} label="Day"
-                         on={!quick.some((q) => q.day === day)} onChange={(from) => setDay(from)} />
+        <DateRangePicker from={days.from} to={days.to} today={today} maxDays={MAX_RANGE_DAYS} spans={[]} quickPicks={false} label="Days"
+                         on={!quick.some((q) => days.from === q.from && days.to === q.to)} onChange={(from, to) => setDays({ from, to: to ?? from })} />
         <button type="button" className="sp4-submit-btn frp-run rpt-run" onClick={() => execute()}
-                disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for this day'}>
+                disabled={Boolean(problem) || run.status === 'loading'} title={problem ?? 'Make the report for these days'}>
           {run.status === 'loading' ? 'Running…' : 'Run report'}
         </button>
         {problem && orgId && <span className="rpt-problem" role="status">{problem}</span>}
@@ -174,11 +184,11 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
       <div className="sp4-body rpt-body">
         {run.status === 'idle' && (
           <EmptyNote icon={<ReportIcon name="fuellingPlan" />} title="Fuelling Plan">
-            The day&rsquo;s work plans and vehicle requests against what the pumps put in.
+            The work plans and vehicle requests against what the pumps put in, for a day or a range of days.
           </EmptyNote>
         )}
         {run.status === 'loading' && (
-          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">Reading the day&rsquo;s plans and fuellings from FactorySuite…</EmptyNote>
+          <EmptyNote icon="ti-loader-2" tone="busy" title="Making the Report">Reading the plans and fuellings from FactorySuite…</EmptyNote>
         )}
         {run.status === 'error' && (
           <EmptyNote icon="ti-alert-triangle" tone="error" title="The Report Could Not Be Made" action={{ label: 'Try again', onClick: () => execute() }}>
@@ -192,7 +202,7 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
         )}
         {plan && !t.planned && !plan.offPlan.length && (
           <EmptyNote icon={<ReportIcon name="fuellingPlan" />} title="Nothing Planned">
-            No machine was on an approved work plan or vehicle request on {dayWords(plan.day)}, and the pumps fuelled none.
+            No machine was on an approved work plan or vehicle request on {period}, and the pumps fuelled none.
           </EmptyNote>
         )}
         {plan && (t.planned > 0 || plan.offPlan.length > 0) && (
@@ -200,7 +210,8 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
             <TableToolbar
               summary={<>
                 Fuelling Plan · <strong>{plural(t.fuelled, 'machine')} fuelled</strong> of {fmt(t.planned)}
-                <span className="rpt-sub"> · {fleet} · {dayWords(plan.day)}{plan.closed ? '' : ', so far'}</span>
+                <span className="rpt-sub"> · {fleet} · {period}{plan.closed ? '' : ', so far'}</span>
+                {several && <span className="rpt-sub" title="Each day is judged against its own plan: a machine counts once for each day it was planned"> · counted day by day</span>}
                 {plan.pendingLines > 0 && <span className="rpt-sub" title="Plan lines still waiting for approval are not counted"> · {plural(plan.pendingLines, 'line')} awaiting approval</span>}
               </>}
               onCsv={saveCsv}
@@ -210,7 +221,7 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
                 <button type="button" className="sp4-ghost-btn" onClick={() => save('jpeg')} disabled={Boolean(file.busy)} title="The PDF report as an image">
                   <i className="ti ti-photo" aria-hidden="true" /> JPEG
                 </button>
-                <button type="button" className="sp4-ghost-btn" onClick={() => save('pdf')} disabled={Boolean(file.busy)} title="The whole day as a PDF, with the logos">
+                <button type="button" className="sp4-ghost-btn" onClick={() => save('pdf')} disabled={Boolean(file.busy)} title="Every machine over these days as a PDF, with the logos">
                   <i className="ti ti-file-type-pdf" aria-hidden="true" /> PDF
                 </button>
                 <button type="button" className="sp4-ghost-btn" onClick={() => preview.open(false)} disabled={Boolean(file.busy)} title="See the PDF before you download it">
@@ -220,7 +231,7 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
             />
             {preview.state && <PdfPreview state={preview.state} title="Fuelling plan vs actual" edited={0} onRetry={preview.retry} onClose={preview.close} />}
 
-            <section className="fpr-overview" aria-label="The day at a glance">
+            <section className="fpr-overview" aria-label="The days at a glance">
               <p className="fpr-lead">{plan.lead}</p>
               {t.planned > 0 && (
                 <div className="fpr-stand">
@@ -272,11 +283,11 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
             </section>
 
             <PlateFind value={find} onChange={setFind} shown={rows.length} total={picked.length} noun="machine"
-                       follows="The PDF is the whole day." placeholder="Find a machine, e.g. EX-28" label="Find a machine by its code" none="No machine matches that code." />
+                       follows="The PDF has every machine." placeholder="Find a machine, e.g. EX-28" label="Find a machine by its code" none="No machine matches that code." />
             {rows.length > 0 && (
             <div className="sp4-table-scroll sp4-keep-table rpt-scroll">
               <table className="sp4-table rpt-table">
-                <thead><tr>{HEADS.map((h, i) => <th key={h} scope="col" className={FIGURES.has(i) ? 'rpt-num' : undefined}>{h}</th>)}</tr></thead>
+                <thead><tr>{several && <th scope="col">Day</th>}{HEADS.map((h, i) => <th key={h} scope="col" className={FIGURES.has(i) ? 'rpt-num' : undefined}>{h}</th>)}</tr></thead>
                 <tbody>
                   {groups.map((g) => {
                     const planned = g.rows.reduce((a, m) => a + (m.plannedL ?? 0), 0);
@@ -284,7 +295,7 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
                     return (
                       <Fragment key={g.status}>
                         <tr className="rpt-group">
-                          <th colSpan={HEADS.length} scope="rowgroup">
+                          <th colSpan={HEADS.length + (several ? 1 : 0)} scope="rowgroup">
                             <span className="rpt-group__name"><span className={`fpr-key__dot fpr-fill--${TONE[g.status]}`} aria-hidden="true" /> {g.status}</span>
                             <span className="rpt-group__meta">
                               {plural(g.rows.length, 'machine')}
@@ -295,7 +306,8 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
                         {g.rows.map((m) => {
                           const cells = cellsOf(m);
                           return (
-                            <tr key={`${g.status}|${m.machine}`} className="sp4-tr">
+                            <tr key={`${g.status}|${m.day}|${m.machine}`} className="sp4-tr">
+                              {several && <td className="rpt-nowrap">{shortDay(m.day)}</td>}
                               {cells.map((v, i) => (
                                 <td key={HEADS[i]} className={[i === 0 && 'rpt-unit', FIGURES.has(i) && 'rpt-num', (i === 1 && !m.type) || (i === 4 && v !== 'Litres') ? 'rpt-sub' : null, i === 7 && m.diffL < 0 ? 'fpr-short' : null].filter(Boolean).join(' ') || undefined}
                                     title={i === 4 && v === 'Request' ? 'A vehicle request no work plan names' : i === 4 && v === 'Full tank' ? 'A full tank with no litre figure: counted in machines, not in litres' : undefined}>
