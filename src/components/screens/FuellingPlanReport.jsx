@@ -120,7 +120,8 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
   const counts = useMemo(() => Object.fromEntries(STATUSES.map((s) => [s, plan?.machines.filter((m) => m.status === s).length ?? 0])), [plan]);
 
   const values = t
-    ? [`${fmt(t.fuelled)} of ${fmt(t.planned)}`, fmt(t.fuelledOnFiguresL), fmt(t.notFuelled), fmt(t.short), fmt(t.asPlanned)]
+    // Litres delivered: every litre the pumps issued, full tanks and off plan too (25 Nov: 6,651 L, not 5,960)
+    ? [`${fmt(t.fuelled)} of ${fmt(t.planned)}`, fmt(t.deliveredL ?? (t.fuelledL + (t.offPlanL ?? 0))),fmt(t.notFuelled), fmt(t.short), fmt(t.asPlanned)]
     : [0, 1, 2, 3, 4].map((i) => <span key={i} className="frp-kpi-none">-</span>);
 
   const makePdf = () => fuellingPlanPdf({ orgId, from: plan.from ?? plan.day, to: plan.to ?? plan.day });
