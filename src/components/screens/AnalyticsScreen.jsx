@@ -54,7 +54,7 @@ import {
 import { niceScale } from "../../lib/niceScale";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { joinUnitFuelDays } from "../../lib/unitFuelSeries";
-import { SHOW_FUEL_DRAINED, splitDrained } from "../../lib/fuelTheftSplit";
+import { SHOW_FUEL_DRAINED, SHOW_SUSPECTED_THEFT, splitDrained } from "../../lib/fuelTheftSplit";
 import "./AnalyticsScreen.css";
 
 import {
@@ -2446,7 +2446,9 @@ export default function AnalyticsScreen() {
 
                       {/* Suspected theft, apart from what drained above:
                           the SIPHON drains, the only ones the product calls
-                          possible theft (lib/fuelTheftSplit). */}
+                          possible theft (lib/fuelTheftSplit). Hidden: see
+                          SHOW_SUSPECTED_THEFT there. */}
+                      {SHOW_SUSPECTED_THEFT && (<>
                       <div className="an-calc__row an-calc__row--theft">
                         <span className="an-calc__k">
                           Suspected theft{" "}
@@ -2489,6 +2491,7 @@ export default function AnalyticsScreen() {
                           )}
                         </span>
                       </div>
+                      </>)}
 
                       <div className="an-calc__row">
                         <span className="an-calc__k">
@@ -3696,12 +3699,16 @@ function FuelChart({
       }
       : {}),
 
-    theft: {
-      mark: "bar",
-      label: "Suspected theft",
-      color:
-        "var(--chart-8)",
-    },
+    ...(SHOW_SUSPECTED_THEFT
+      ? {
+        theft: {
+          mark: "bar",
+          label: "Suspected theft",
+          color:
+            "var(--chart-8)",
+        },
+      }
+      : {}),
 
     ...(showAvg
       ? {
@@ -3770,7 +3777,7 @@ function FuelChart({
           !SHOW_FUEL_DRAINED || hidden.has("lost")
             ? 0
             : s.lost ?? 0,
-          hidden.has("theft")
+          !SHOW_SUSPECTED_THEFT || hidden.has("theft")
             ? 0
             : s.theft ?? 0,
         ),
@@ -3929,7 +3936,7 @@ function FuelChart({
         <Bar
           yAxisId="left"
           dataKey="theft"
-          hide={hidden.has("theft")}
+          hide={!SHOW_SUSPECTED_THEFT || hidden.has("theft")}
           fill="var(--color-theft)"
           radius={[
             4,
@@ -4182,7 +4189,7 @@ function UnitFuelChart({
     peakOf(
       "litres",
       ...(SHOW_FUEL_DRAINED ? ["lost"] : []),
-      "theft",
+      ...(SHOW_SUSPECTED_THEFT ? ["theft"] : []),
       "used",
       "avg",
     ),
@@ -4328,11 +4335,15 @@ function UnitFuelChart({
       }
       : {}),
 
-    theft: {
-      mark: "bar",
-      label: "Suspected theft",
-      color: "var(--chart-8)",
-    },
+    ...(SHOW_SUSPECTED_THEFT
+      ? {
+        theft: {
+          mark: "bar",
+          label: "Suspected theft",
+          color: "var(--chart-8)",
+        },
+      }
+      : {}),
 
     km: {
       mark: "line",
@@ -4678,7 +4689,7 @@ function UnitFuelChart({
             <Bar
               yAxisId="litres"
               dataKey="theft"
-              hide={hidden.has("theft")}
+              hide={!SHOW_SUSPECTED_THEFT || hidden.has("theft")}
               fill="var(--color-theft)"
               radius={[4, 4, 0, 0]}
               maxBarSize={
