@@ -24,7 +24,7 @@ import "../body/SensorPanel.css";
 import "./FuelReportScreen.css";
 import "./FuelPerformanceReview.css";
 import { getPerformanceReview } from "../../api/fuelReview";
-import { readReview, pct, litres, monthLabel, band, listRefs } from "../../lib/performanceReview";
+import { readReview, pct, litres, monthLabel, band, listRefs, judgedWords, notAssessedWhy, mtdSpan } from "../../lib/performanceReview";
 import { buildPerformanceReviewPdf } from "../../utils/performanceReviewPdf";
 import { downloadTableCsv } from "../../utils/tableExport";
 import TableToolbar from "../body/TableToolbar";
@@ -122,7 +122,7 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
         {rows.map((u) => (
           <li key={u.id}>
             <button type="button" className="fpr-ex__row" onClick={() => onOpen?.(u.id)}
-                    title={`${u.name} - ${u.ratio != null ? `${pct(u.ratio)} of standard, ` : ""}${u.usableRefills}/${u.refills} usable refills, ${litres(u.litres)}. Open its vehicle analytics.`}>
+                    title={`${u.name} - ${u.ratio != null ? `${pct(u.ratio)} of standard over ` : ""}${judgedWords(u)}, ${litres(u.litres)} put in. Open its vehicle analytics.`}>
               <span className="fpr-ex__ref">{u.ref}{u.id === busiestId && <i aria-label="largest fuel user"> ★</i>}</span>
               <span className="fpr-ex__track">
                 <span className="fpr-ex__std" aria-hidden="true" style={{ left: `${TRACK / SCALE}%` }} />
@@ -142,10 +142,12 @@ function Exhibit({ group, units, busiestId, suspect, onOpen }) {
       {rest.length > 0 && (
         <p className="fpr-ex__rest">
           <b>Not assessed ({rest.length}):</b>{" "}
-          {rest.map((u, i) => (
-            <span key={u.id}>{i > 0 && ", "}<button type="button" onClick={() => onOpen?.(u.id)}
-              title={u.rate == null ? "No standard on the register" : `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"}, at least 5 needed`}>{u.ref}</button>{u.rate == null ? " (no standard)" : ""}</span>
-          ))}
+          {rest.map((u, i) => {
+            const why = notAssessedWhy(u);
+            return (
+              <span key={u.id}>{i > 0 && ", "}<button type="button" onClick={() => onOpen?.(u.id)} title={why.long}>{u.ref}</button>{why.short ? ` (${why.short})` : ""}</span>
+            );
+          })}
         </p>
       )}
     </section>
@@ -168,13 +170,17 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
   const exportPdf = () => review && buildPerformanceReviewPdf({ review, read, orgName });
   const exportCsv = () => review && downloadTableCsv({
     head: ["Unit", "Name", "Group", "Standard", "Litres", "Issued at pump L", "Probe refills L", "Tank rise L", "Issued, probe read L",
-           "Refills", "Usable refills", "% of standard", "Excess L", "Hours / km", "Refills against no work"],
+           "Refills", "Usable refills", "Planned shifts", "Shifts judged", "Shift hours", "Burned in shifts L", "Shift standard L",
+           "Judged on", "Litres judged", "% of standard", "Excess L", "Hours / km", "Refills against no work", "Not assessed because"],
     body: review.units.map((u) => [
       u.ref, u.name, u.group,
       u.rate == null ? "" : `${u.rate} ${u.basis === "HOURS" ? "L/h" : "km/L"}`,
       Math.round(u.litres), Math.round(u.pumpL ?? 0), Math.round(u.probeL ?? u.litres), Math.round(u.tankL ?? 0), Math.round(u.issuedWithTankL ?? 0),
       u.refills, u.usableRefills,
+      u.shifts ?? 0, u.judgedShifts ?? 0, Math.round((u.shiftHours ?? 0) * 10) / 10, Math.round(u.consumedL ?? 0), Math.round(u.shiftStandardL ?? 0),
+      u.judgedOn ?? "", Math.round(u.judgedL ?? 0),
       u.ratio == null ? "" : Math.round(u.ratio * 100), Math.round(u.excessL), Math.round(u.work), u.nearZeroWork,
+      u.ratio == null ? notAssessedWhy(u).long : "",
     ]),
     filenameSlug: `fuel-performance-review-${span.from}-${span.to}`,
   });
@@ -199,13 +205,16 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
             <Kpi n={tankShare != null ? `${Math.round(tankShare * 100)}%` : dot} label="Reached the tank" tone={tankShare != null && tankShare < 0.9 ? "speed" : "live"}
                  title={tankShare != null ? `The tanks rose ${litres(t.tankL)} on the probes for ${litres(t.issuedWithTankL)} issued, over the issues a probe read` : "No probe read a pump issue in this period"} />
           )}
-          <Kpi n={t ? litres(t.perMonth, { short: true }) : dot} label="Typical month" tone="stat"
-               title="Average litres a day × 30" />
+          {/* Counted, not projected (operator 2026-11-28: "if its a cooked number
+              get rid of it"): every litre put in from the 1st to the last day. */}
+          <Kpi n={review?.monthToDate ? litres(review.monthToDate.litres, { short: true }) : dot}
+               label={review?.monthToDate ? mtdSpan(review.monthToDate) : "Month to date"} tone="stat"
+               title={review?.monthToDate ? `Litres put in from ${review.monthToDate.from} to ${review.monthToDate.to}, counted off the pump issues (and probe refills before them)` : ""} />
           <Kpi n={p?.change != null ? `${p.change >= 0 ? "+" : ""}${Math.round(p.change * 100)}%` : dot}
                label={p ? `${monthLabel(p.latest.month)} pace` : "Pace"} tone={p?.change > 0.05 ? "fuel" : "live"}
                title="The latest month's litres a day against the full months before it" />
           <Kpi n={t ? litres(t.excessL, { short: true }) : dot} label={t ? `Above standard · ${(t.excessShare * 100).toFixed(1)}%` : "Above standard"} tone="speed"
-               title="Litres put in above the standard rate, across every usable refill" />
+               title={t ? `${litres(t.excessL)} above standard, of the ${litres(t.judgedL ?? 0)} judged against a standard (burned in planned shifts, or put in on usable refills)` : ""} />
         </div>
       </div>
 
@@ -252,7 +261,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
         ) : (
           <>
             <TableToolbar
-              summary={<><b>{t.units}</b> units · <b>{t.refills.toLocaleString("en-KE")}</b> refills · {fmtDay(review.from)} – {fmtDay(review.to)} · <b>{t.assessedUnits}</b> judged against a standard</>}
+              summary={<><b>{t.units}</b> units · <b>{t.refills.toLocaleString("en-KE")}</b> refills{t.shifts?.worked ? <> · <b>{t.shifts.worked}</b> planned shifts</> : null} · {fmtDay(review.from)} – {fmtDay(review.to)} · <b>{t.assessedUnits}</b> judged against a standard</>}
               loading={isFetching}
               onReload={() => refetch()}
               onCsv={exportCsv}
@@ -263,9 +272,9 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                 movements read top to bottom: where the fuel goes, who to act
                 on, and the exhibit. Hairline sections, not a wall of cards. */}
             <p className="fpr-lede">
-              Fuel is going in at about <b>{litres(t.perMonth, { short: true })}</b> a month
-              {p?.change != null && <> and {p.change >= 0 ? "rising" : "falling"} ({p.change >= 0 ? "+" : ""}{Math.round(p.change * 100)}% in {monthLabel(p.latest.month)})</>}.
-              {" "}Around <em>{litres(t.excessL, { short: true })}</em> went in above the expected rate
+              <b>{litres(t.litres, { short: true })}</b> went in over {review.days === 1 ? "the day" : `${review.days} days`}
+              {p?.change != null && <>, {p.change >= 0 ? "rising" : "falling"} ({p.change >= 0 ? "+" : ""}{Math.round(p.change * 100)}% a day in {monthLabel(p.latest.month)})</>}.
+              {" "}Of the <b>{litres(t.judgedL ?? 0, { short: true })}</b> judged against a standard, <em>{litres(t.excessL, { short: true })}</em> was above the expected rate
               {read.attention.length > 0 && <>, and most of that traces back to {read.attention.length} named unit{read.attention.length === 1 ? "" : "s"}</>}.
             </p>
 
@@ -338,7 +347,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                   {read.attention.length ? (
                     <table className="fpr-att">
                       <thead><tr>
-                        <th>Unit</th><th>Against standard</th><th className="fpr-num">Refills</th>{pumped && <th className="fpr-num" title="Tank rise on the probe against litres issued">In tank</th>}<th className="fpr-num">Above</th>
+                        <th>Unit</th><th>Against standard</th><th className="fpr-num" title="Usable refills, or planned shifts (sh) for a machine judged on the work plan">Judged on</th>{pumped && <th className="fpr-num" title="Tank rise on the probe against litres issued">In tank</th>}<th className="fpr-num">Above</th>
                       </tr></thead>
                       <tbody>
                         {read.attention.slice(0, Math.max(6, Math.min(8, read.benchmarks.length))).map((u) => (
@@ -354,7 +363,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                               </span>
                               <b className="fpr-gauge__v">{pct(u.ratio)}</b>
                             </td>
-                            <td className="fpr-num">{u.usableRefills}</td>
+                            <td className="fpr-num" title={judgedWords(u)}>{u.judgedOn === "shifts" ? `${u.judgedShifts} sh` : u.usableRefills}</td>
                             {pumped && <td className="fpr-num">{reached(u) != null ? `${Math.round(reached(u) * 100)}%` : "-"}</td>}
                             <td className="fpr-num fpr-num--crit">{litres(u.excessL)}</td>
                           </tr>
