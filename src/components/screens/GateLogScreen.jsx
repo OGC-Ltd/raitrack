@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFleetLiveShared } from "../../context/FleetLiveContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { getGateLogDay } from "../../api/gateLog";
-import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gateUnits, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
+import { gateRows, searchGate, shiftDay, bySource, GATE_SOURCES, gateTrips, gateUnits, gateUnitMoves, durationWords, byHours, ACK_WORDS } from "../../lib/gateLog";
 import { fleetDay } from "../../lib/alertsView";
 import EmptyNote from "../shared/EmptyNote";
 import TablePager, { usePager } from "../body/TablePager";
@@ -109,15 +109,19 @@ function usePrevDayEvents(orgId, day) {
 const HOUR_STEP = { word: "hour", text: (p) => hourText(p.hour) };
 const num = (n) => n.toLocaleString("en-GB");
 
-/** Sign-outs and returns by hour over the rows behind the figures, from `fromH` to the hour `toH` falls in. */
+/**
+ * Sign-outs and returns by hour, from `fromH` to the hour `toH` falls in, counted as the Units
+ * card counts them (lib/gateLog gateUnitMoves): each unit's latest sign-out, and its return when
+ * it is back. The Sign-outs add up to Units, the Returns to Back.
+ */
 function gateHourly(rows, fromH, toH, day) {
   const last = Math.max(fromH, Math.ceil(toH) - 1);
   const hourly = [];
   for (let h = fromH; h <= last; h++) hourly.push({ day, hour: h, out: 0, in: 0 });
-  for (const r of rows) {
-    const slot = hourly[Number(clock(r.at).slice(0, 2)) - fromH];
-    if (slot) slot[r.way === "out" ? "out" : "in"] += 1;
-  }
+  const { outs, backs } = gateUnitMoves(rows);
+  const put = (r, k) => { const slot = hourly[Number(clock(r.at).slice(0, 2)) - fromH]; if (slot) slot[k] += 1; };
+  for (const r of outs) put(r, "out");
+  for (const r of backs) put(r, "in");
   return hourly;
 }
 
@@ -293,11 +297,11 @@ export default function GateLogScreen() {
             <GateUnitsCard u={units} busy={busy} failed={failed} windowWords={windowWords} />
             <TrendStat title="Sign-outs" series={hourly} valueKey="out" unit="" tone="speed" type="bar" what="sign-outs"
               point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(sum("out"))} sub={`${windowWords}, by hour`}
+              value={busy || failed ? "-" : figure(sum("out"))} sub={`units, by latest sign-out, ${windowWords}`}
               pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${num(p.out)} signed out`} />
             <TrendStat title="Returns" series={hourly} valueKey="in" unit="" tone="tonnes" type="line"
               point={HOUR_STEP} delta={false} loading={busy}
-              value={busy || failed ? "-" : figure(sum("in"))} sub={`${windowWords}, by hour`}
+              value={busy || failed ? "-" : figure(sum("in"))} sub={`units back, by return, ${windowWords}`}
               pointWords={(p) => `${hourText(p.hour)} to ${hourText(p.hour + 1)}, ${num(p.in)} came back`} />
             <GateBreakdownCard u={units} busy={busy} failed={failed} />
           </section>

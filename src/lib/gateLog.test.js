@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gateRows, searchGate, gateCounts, shiftDay, bySource, gateTrips, durationWords, byHours, fixesOf, fixAt, metresBetween, siteFences, gateSpot, headingAt, premisesOf, findGate, gateFacing, insideFence, planFences, ACK_WORDS, ackNoteOk, nameCase } from "./gateLog";
+import { gateRows, searchGate, gateCounts, shiftDay, bySource, gateTrips, durationWords, byHours, fixesOf, fixAt, metresBetween, siteFences, gateSpot, headingAt, premisesOf, findGate, gateFacing, insideFence, planFences, ACK_WORDS, ackNoteOk, nameCase, gateUnits, gateUnitMoves } from "./gateLog";
 import { getGateLogDay, GATE_LOG_MAX_PAGES, acknowledgeGateEvent } from "../api/gateLog";
 import { vi } from "vitest";
 import * as api from "../services/api";
@@ -323,5 +323,25 @@ describe("names in the details", () => {
     expect(nameCase("KDA 001A signed out to AWENDO-MIGORI, O’BRIEN driving", "KDA 001A"))
       .toBe("KDA 001A signed out to Awendo-Migori, O’Brien driving");
     expect(nameCase("Already Normal text, a B2B code", null)).toBe("Already Normal text, a B2B code");
+  });
+});
+
+describe("gateUnitMoves", () => {
+  const at = (h, m = 0) => Date.UTC(2026, 10, 27, h, m);
+  const rows = [
+    { plate: "KDA 001A", way: "out", at: at(5) }, { plate: "KDA 001A", way: "in", at: at(7) },
+    { plate: "KDA 001A", way: "out", at: at(9) }, { plate: "KDA 001A", way: "in", at: at(11) }, { plate: "KDA 001A", way: "in", at: at(11, 5) },
+    { plate: "KBZ 220T", way: "out", at: at(6) },
+    { plate: "KCC 300C", way: "in", at: at(8) },
+    { plate: "KDD 400D", way: "out", at: at(10) }, { plate: "KDD 400D", way: "in", at: at(12) },
+  ];
+  it("one sign-out per unit and one return per unit back, balancing gateUnits", () => {
+    const { outs, backs } = gateUnitMoves(rows);
+    const u = gateUnits(rows);
+    expect(outs.length).toBe(u.total.units);
+    expect(backs.length).toBe(u.total.back);
+    expect(outs.length - backs.length).toBe(u.total.out);
+    expect(outs.map((r) => r.at).sort()).toEqual([at(6), at(9), at(10)].sort());
+    expect(backs.map((r) => r.at).sort()).toEqual([at(11), at(12)].sort());
   });
 });
