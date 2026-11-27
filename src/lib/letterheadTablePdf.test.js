@@ -52,3 +52,33 @@ describe('drawLetterheadTablePdf', () => {
     expect(new TextDecoder().decode(new Uint8Array(buf).slice(0, 5))).toBe('%PDF-');
   });
 });
+
+describe('sections before the main table (the Wialon unit report, 2026-11-27)', () => {
+  const unitSpec = (before) => tableLetterheadSpec({
+    reportTitle: 'Maintenance: Wialon - KDJ 813Z', sectionTitle: 'KDJ 813Z, every case loaded', filterNote: 'test',
+    cards: [{ label: 'Unit', value: 'KDJ 813Z' }], head: ['Fault', 'Started', 'Detail'],
+    body: [['Fuel probe status error', '27 Nov, 11:46', 'Fuel probe: Status Error']],
+    companyName: 'Nzoia Sugar', orgCode: 'NZOIA', now: Date.parse('2026-11-27T16:00:00+03:00'), before,
+  });
+  const section = { title: 'Tracker status now', small: '27/11/2026 16:00 · 2 faults', head: ['Reading', 'Value', 'Label in Wialon', 'Status'],
+    body: [['Fls Status', '3', 'Error', 'Fault'], ['Fls Temperature', '0 °C', 'Sensor not found', 'Fault'], ['External Battery Voltage', '26.1 V', '', '']] };
+  it('carries them into the spec, blanks as dashes; none by default', () => {
+    expect(unitSpec(undefined).before).toEqual([]);
+    const s = unitSpec([section]);
+    expect(s.before).toHaveLength(1);
+    expect(s.before[0].body[2]).toEqual(['External Battery Voltage', '26.1 V', '-', '-']);
+  });
+  it('draws a PDF with them, longer than the same report without', () => {
+    const without = drawLetterheadTablePdf(unitSpec([]));
+    const withIt = drawLetterheadTablePdf(unitSpec([section]));
+    expect(new TextDecoder().decode(new Uint8Array(withIt).slice(0, 5))).toBe('%PDF-');
+    expect(withIt.byteLength).toBeGreaterThan(without.byteLength);
+  });
+  it('a unit’s 29 readings in two columns fit the first page with its case (MUFINDI DG 11)', () => {
+    const readings = Array.from({ length: 29 }, (_, i) => [`Reading number ${i + 1}`, i === 0 ? '1 Kvants' : `${i}.5 V`, i === 0 ? 'No Fuel Error - Contact Support' : '-', i === 0 ? 'Fault' : '-']);
+    const two = { ...section, columns: 2, body: readings };
+    const pages = (buf) => (new TextDecoder('latin1').decode(new Uint8Array(buf)).match(/\/Type \/Page\b/g) ?? []).length;
+    expect(unitSpec([two]).before[0].columns).toBe(2);
+    expect(pages(drawLetterheadTablePdf(unitSpec([two])))).toBe(1);
+  });
+});

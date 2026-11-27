@@ -143,8 +143,6 @@ export function drawLetterheadTablePdf(spec, logos = {}, onProgress = () => {}) 
     y += bh;
   }
 
-  // ── the table, its header on every page
-  heading(spec.sectionTitle, spec.rowsWord);
   const runningHead = (page) => {
     if (page === 1) return;
     doc.setFont('helvetica', 'bold');
@@ -159,6 +157,68 @@ export function drawLetterheadTablePdf(spec, logos = {}, onProgress = () => {}) 
     doc.setLineWidth(1.2 * PT);
     doc.line(SIDE, 6 + 10 * PT + 1.2, W - SIDE, 6 + 10 * PT + 1.2);
   };
+
+  // ── sections before the main table (the Wialon unit report's "Tracker status now"): a plain
+  // table under its own heading, a Fault drawn in red. `columns: 2` sets the rows side by side,
+  // the first half on the left and the rest on the right (operator, 2026-11-27: "two columns on the
+  // first page ... instead of it extending to two pages"). None on every other report.
+  const GAP = 6;
+  const sideTable = (b, rows, left, width) => autoTable(doc, {
+    startY: y,
+    margin: { left, right: W - left - width, top: 6 + 10 * PT + 4, bottom: FOOT_H + 2 },
+    theme: 'plain',
+    head: [b.head.map(plain)],
+    body: rows.map((r) => r.map(plain)),
+    rowPageBreak: 'avoid',
+    tableWidth: width,
+    styles: { fontSize: b.columns === 2 ? 7.2 : 7.8, cellPadding: { top: 0.5, bottom: 0.5, left: 1.2, right: 1.2 }, textColor: INK, valign: 'top', lineWidth: 0, overflow: 'linebreak' },
+    headStyles: { fontSize: 6.8, fontStyle: 'bold', textColor: MUT, valign: 'bottom' },
+    columnStyles: b.columns === 2
+      ? { 0: { fontStyle: 'bold', cellWidth: width * 0.36 }, 1: { cellWidth: width * 0.19 }, 2: { cellWidth: width * 0.31 }, 3: { cellWidth: width * 0.14 } }
+      : { 0: { fontStyle: 'bold' } },
+    didParseCell: (d) => {
+      if (d.column.index === 0) d.cell.styles.cellPadding = { ...d.cell.styles.cellPadding, left: 0 };
+      if (d.section === 'body' && d.cell.raw === '-') d.cell.styles.textColor = MUT;
+      if (d.section === 'body' && d.cell.raw === 'Fault') { d.cell.styles.textColor = [185, 28, 28]; d.cell.styles.fontStyle = 'bold'; }
+    },
+    didDrawCell: (d) => {
+      const { x, y: cy, width: cw, height } = d.cell;
+      doc.setDrawColor(...(d.section === 'head' ? RULE : SOFT));
+      doc.setLineWidth((d.section === 'head' ? 0.6 : 0.4) * PT);
+      doc.line(x, cy + height, x + cw, cy + height);
+    },
+    didDrawPage: (d) => runningHead(d.pageNumber),
+  });
+  for (const b of spec.before ?? []) {
+    heading(b.title, b.small);
+    if (b.columns === 2 && b.body.length > 1) {
+      const half = Math.ceil(b.body.length / 2);
+      const width = (inner - GAP) / 2;
+      const startPage = doc.getCurrentPageInfo().pageNumber;
+      sideTable(b, b.body.slice(0, half), SIDE, width);
+      const leftEnd = { page: doc.getCurrentPageInfo().pageNumber, y: doc.lastAutoTable.finalY };
+      doc.setPage(startPage);
+      sideTable(b, b.body.slice(half), SIDE + width + GAP, width);
+      const rightEnd = { page: doc.getCurrentPageInfo().pageNumber, y: doc.lastAutoTable.finalY };
+      // Carry on below whichever half ends lower.
+      const last = rightEnd.page > leftEnd.page || (rightEnd.page === leftEnd.page && rightEnd.y >= leftEnd.y) ? rightEnd : leftEnd;
+      // A hairline down the middle of the gap, so the two halves read apart (operator, 2026-11-27),
+      // from the headings to the lower half's end; on the first page only when a half runs on.
+      const midX = SIDE + width + GAP / 2;
+      doc.setPage(startPage);
+      doc.setDrawColor(...RULE);
+      doc.setLineWidth(0.6 * PT);
+      doc.line(midX, y, midX, last.page === startPage ? last.y : H - FOOT_H - 2);
+      doc.setPage(last.page);
+      y = last.y;
+    } else {
+      sideTable(b, b.body, SIDE, inner);
+      y = doc.lastAutoTable.finalY;
+    }
+  }
+
+  // ── the table, its header on every page
+  heading(spec.sectionTitle, spec.rowsWord);
 
   if (!total) {
     doc.setFont('helvetica', 'italic');

@@ -153,3 +153,21 @@
 .dsb__cards--timeline .dsb__card--open::before,
 .app--light .dsb__cards--timeline .dsb__card--open::before { border-color: var(--sp4-warn, #f59e0b); background: var(--sp4-warn, #f59e0b); }
 .dsb__cards--timeline .dsb__card--open { border-color: color-mix(in srgb, var(--sp4-warn, #f59e0b) 45%, transparent); }
+
+/* Tracker status now (the Wialon view's unit panel, 2026-11-27): one line a reading, the name, its
+   value and the installer's label; a fault in red and first, a reading with no value muted. */
+.dsb-rd { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.dsb-rd th, .dsb-rd td { padding: 4px 6px 4px 0; vertical-align: top; text-align: left; border-bottom: 1px solid var(--sp4-line-hi, #2e3440); }
+.dsb-rd th { font-weight: 600; color: var(--sp4-text-2, #9aa7b6); width: 42%; }
+.dsb-rd__v { font-weight: 700; color: var(--sp4-text-1, #f0f4f8); white-space: nowrap; }
+.dsb-rd__l { color: var(--sp4-text-2, #9aa7b6); }
+.dsb-rd__s { margin-left: 6px; font-size: 11px; }
+.dsb-rd__s--fault { color: var(--sp4-crit, #e34948); }
+.dsb-rd__s--ok { color: var(--sp4-ok, #1f9d55); }
+.dsb-rd--fault th, .dsb-rd--fault .dsb-rd__v { color: var(--sp4-crit, #e34948); }
+.dsb-rd--none .dsb-rd__v { color: var(--sp4-text-3, #64748b); font-weight: 500; }
+.dsb-rd__aside { font-size: 11px; color: var(--sp4-text-3, #64748b); }
+.app--light .dsb-rd th, .app--light .dsb-rd td { border-bottom-color: #e6e9ee; }
+.dsb-rd__pick { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: 12.5px; font-weight: 600; color: var(--sp4-text-1, #f0f4f8); cursor: pointer; }
+.dsb-rd__pick input { width: 15px; height: 15px; accent-color: var(--sp4-accent, #3b82f6); cursor: pointer; }
+.app--light .dsb-rd__pick { color: #0f172a; }
