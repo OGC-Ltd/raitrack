@@ -20,6 +20,8 @@ import { useSensorHealth } from "../../hooks/useSensorHealth";
 // reads. Both the badge and the panel read this one object.
 import { useProbeHealth } from "../../hooks/useProbeHealth";
 import { useFuelEvents, fleetDayKey } from "../../hooks/useFuelEvents";
+import { loadProbeReport } from "../../api/reports";
+import { faultMessages } from "../../lib/unitFaultHistory";
 import { useVehicleTelemetry } from "../../hooks/useVehicleTelemetry";
 import { useWindowTelemetry } from "../../hooks/useWindowTelemetry";
 import { readingCoverage } from "../../lib/vehicleReadings";
@@ -1368,6 +1370,87 @@ function RepairHistory({ rows }) {
   );
 }
 
+/**
+ * The unit's fault messages over the past FAULT_HISTORY_DAYS, newest first
+ * (operator, 2026-11-27): our fault episodes (the tracker's probe fault with
+ * its reason, tracker silent, GPS and the other channels) with their
+ * recoveries, and Wialon's own probe disconnection alerts for this unit.
+ * Each source is read only where the role may read it, and one failing leaves
+ * the other on screen with a line saying so.
+ */
+const FAULT_HISTORY_DAYS = 14;
+const FAULT_HISTORY_FIRST = 10;
+function FaultHistory({ orgId, vehicleId }) {
+  const { can } = usePermissions();
+  const mayFaults = can("sensor:read");
+  const mayWialon = can("telemetry:read");
+  const [state, setState] = useState({ loading: true, episodes: [], runs: [], failed: [] });
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    if (!orgId || !vehicleId || (!mayFaults && !mayWialon)) { setState({ loading: false, episodes: [], runs: [], failed: [] }); return undefined; }
+    let cancelled = false;
+    setState({ loading: true, episodes: [], runs: [], failed: [] });
+    setAll(false);
+    const now = new Date();
+    const from = new Date(now.getTime() - FAULT_HISTORY_DAYS * 86_400_000);
+    Promise.allSettled([
+      mayFaults
+        ? getFaultEpisodes({ orgId, vehicleId, from: from.toISOString(), to: now.toISOString(), limit: 200 }).then((p) => p.rows)
+        : Promise.resolve([]),
+      mayWialon
+        ? loadProbeReport({ orgId, vehicleId, from: fleetDayKey(new Date(now.getTime() - (FAULT_HISTORY_DAYS - 1) * 86_400_000)), to: fleetDayKey(now) })
+            .then((r) => r?.rows ?? [])
+        : Promise.resolve([]),
+    ]).then(([f, w]) => {
+      if (cancelled) return;
+      setState({
+        loading: false,
+        episodes: f.status === "fulfilled" ? f.value : [],
+        runs: w.status === "fulfilled" ? w.value : [],
+        failed: [f.status === "rejected" && "Fault records", w.status === "rejected" && "Wialon alerts"].filter(Boolean),
+      });
+    });
+    return () => { cancelled = true; };
+  }, [orgId, vehicleId, mayFaults, mayWialon]);
+
+  const messages = useMemo(() => faultMessages(state.episodes, state.runs), [state.episodes, state.runs]);
+  if (!mayFaults && !mayWialon) return null;
+  const shown = all ? messages : messages.slice(0, FAULT_HISTORY_FIRST);
+  const when = (t) => { const iso = new Date(t).toISOString(); return `${dateLabel(iso)} ${timeLabel(iso)}`; };
+  return (
+    <section className="sp4-ph-hist sp4-fh" aria-label="Fault history">
+      <h3 className="sp4-ph-hist__title">Fault history, past {FAULT_HISTORY_DAYS} days</h3>
+      {state.loading ? (
+        <p className="sp4-muted sp4-fh__note">Loading…</p>
+      ) : !messages.length ? (
+        <p className="sp4-muted sp4-fh__note">{state.failed.length ? "Could not be loaded." : "No faults recorded."}</p>
+      ) : (
+        <ol className="sp4-ph-hist__list">
+          {shown.map((m) => (
+            <li key={m.key} className="sp4-ph-hist__item sp4-fh__item">
+              <span className="sp4-fh__when">{when(m.at)}</span>
+              <span className={"sp4-fh__text" + (m.ok ? " sp4-fh__text--ok" : " sp4-fh__text--fault")}>
+                {m.text}
+                {m.durationMs != null && <span className="sp4-fh__dur"> (after {durationLabel(m.durationMs / 1000)})</span>}
+                {m.open && <span className="sp4-fh__dur"> (ongoing)</span>}
+              </span>
+              <span className="sp4-fh__src">{m.source}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {!state.loading && state.failed.length > 0 && messages.length > 0 && (
+        <p className="sp4-muted sp4-fh__note">{state.failed.join(" and ")} could not be loaded.</p>
+      )}
+      {messages.length > FAULT_HISTORY_FIRST && (
+        <button type="button" className="sp4-ghost-btn sp4-ph-hist__more" onClick={() => setAll((v) => !v)}>
+          {all ? "Show fewer" : `Show all ${messages.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 function SensorDetail({
   vehicleId, vehicleName, orgId, onClose,
   canSeeRepairs = false, canResolveRepairs = false, faulty = false, repairNonce = 0, inPanel = false,
@@ -1513,6 +1596,7 @@ function SensorDetail({
           {reportActions}
         </section>
       )}
+      {inPanel && <FaultHistory orgId={orgId} vehicleId={vehicleId} />}
       {inPanel && <RepairHistory rows={history} />}
 
       {/* The readings table stays out of the side panel (operator,

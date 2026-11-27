@@ -4607,3 +4607,12 @@
 .sp4-ph-hist__meta dt { font-size: var(--sp4-body); color: var(--sp4-text-3); }
 .sp4-ph-hist__meta dd { margin: 0; font-size: var(--sp4-body); color: var(--sp4-text-2); font-variant-numeric: tabular-nums; }
 .sp4-ph-hist__more { margin-block-start: var(--sp4-xs); }
+/* Fault history: when, message, source, one row each. */
+.sp4-fh__item { display: grid; grid-template-columns: auto 1fr auto; gap: var(--sp4-xs) var(--sp4-sm); align-items: baseline; }
+.sp4-fh__when { font-size: var(--sp4-body); color: var(--sp4-text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sp4-fh__text { font-size: var(--sp4-body); color: var(--sp4-text-1); }
+.sp4-fh__text--fault { color: var(--sp4-crit); }
+.sp4-fh__text--ok { color: var(--sp4-ok); }
+.sp4-fh__dur { color: var(--sp4-text-3); }
+.sp4-fh__src { font-size: var(--sp4-body); color: var(--sp4-text-3); white-space: nowrap; }
+.sp4-fh__note { margin: var(--sp4-xs) 0 0; font-size: var(--sp4-body); }

@@ -141,6 +141,7 @@ export const FAULT_LABELS = {
   odometer_not_reporting:     "Odometer stopped reporting",
   engine_hours_not_reporting: "Engine hours stopped reporting",
   fuel_probe_dead:            "Fuel probe dead",
+  fuel_probe_fault:           "Fuel probe fault (tracker)",
 };
 export const faultLabel = (kind) => FAULT_LABELS[kind] ?? kind;
 
@@ -164,6 +165,7 @@ export const FAULT_SENSORS = {
   odometer_not_reporting:     "Odometer",
   engine_hours_not_reporting: "Engine hours",
   fuel_probe_dead:            "Fuel probe",
+  fuel_probe_fault:           "Fuel probe",
 };
 export const faultSensor  = (kind) => FAULT_SENSORS[kind] ?? "-";
 export const faultSensors = (kinds) =>
