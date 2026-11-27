@@ -1677,18 +1677,27 @@ function SensorDetail({
  * asking the server for these kinds only; System's tabs never see the rest.
  */
 export const WIALON_VIEW_KINDS = "fuel_probe_status,fuel_probe_battery,gnss_fault,fuel_probe_fault";
-/* The period, back from now (operator, 2026-11-27: "12hrs, 24hrs, 48hrs or custom range"). */
 const WIALON_WINDOWS = [
-  { key: "12",     label: "12 h",   hours: 12 },
-  { key: "24",     label: "24 h",   hours: 24 },
-  { key: "48",     label: "48 h",   hours: 48 },
-  { key: "custom", label: "Custom" },
+  { key: "1",  label: "Today",   days: 1 },
+  { key: "7",  label: "7 days",  days: 7 },
+  { key: "30", label: "30 days", days: 30 },
 ];
-const WIALON_DEFAULT_WINDOW = "24";
-/** A datetime-local value ("2026-11-27T08:00") in the browser's own zone, and back. */
-const toLocalInput = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-const fromLocalInput = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
-const stamp = (ms) => { const iso = new Date(ms).toISOString(); return `${dateLabel(iso)} ${timeLabel(iso)}`; };
+const WIALON_DEFAULT_WINDOW = "7";
+/* How long the fault lasted, to now while it is open (operator, 2026-11-27:
+   "faulty time period ... 12hrs, 24hrs, 48hrs or custom", in a drop-down). */
+const FAULTY_FOR = [
+  { key: "",       label: "Any duration" },
+  { key: "12",     label: "Over 12 h", minHours: 12 },
+  { key: "24",     label: "Over 24 h", minHours: 24 },
+  { key: "48",     label: "Over 48 h", minHours: 48 },
+  { key: "custom", label: "Custom…" },
+];
+const WIALON_STATES = [
+  { key: "",         label: "All" },
+  { key: "open",     label: "Open" },
+  { key: "resolved", label: "Resolved" },
+];
+const hoursOrNull = (v) => { const n = Number(v); return v !== "" && Number.isFinite(n) && n >= 0 ? n : null; };
 
 /* The list's columns, with the unit's exact message (the installer's words) in
    place of the fault group's pill: on this view the message is the point. */
@@ -1700,45 +1709,63 @@ const WIALON_SUMMARY_COLUMNS = FAULT_SUMMARY_COLUMNS.map((c) => (c.key === "kind
 export function WialonFaultsPanel({ headerStart = null } = {}) {
   const { orgId } = useFleetLiveShared();
   const [windowKey, setWindowKey] = useState(WIALON_DEFAULT_WINDOW);
-  const [custom, setCustom] = useState(() => {
-    const now = Date.now();
-    return { from: toLocalInput(now - 24 * 3_600_000), to: toLocalInput(now) };
-  });
+  const [faultyFor, setFaultyFor] = useState("");
+  const [customHours, setCustomHours] = useState({ min: "", max: "" });
+  const [state, setState] = useState("");
   const [errorType, setErrorType] = useState("");
   const [search, setSearch] = useState("");
 
   // Re-read when the window changes, not on every render (IncidentReport keys on from/to).
   const range = useMemo(() => {
-    if (windowKey === "custom") {
-      const f = fromLocalInput(custom.from);
-      const t = fromLocalInput(custom.to);
-      if (f != null && t != null && f < t) return { from: new Date(f).toISOString(), to: new Date(t).toISOString() };
-    }
-    const hours = WIALON_WINDOWS.find((w) => w.key === windowKey)?.hours ?? 24;
-    const to = Date.now();
-    return { from: new Date(to - hours * 3_600_000).toISOString(), to: new Date(to).toISOString() };
-  }, [windowKey, custom.from, custom.to]);
+    const days = WIALON_WINDOWS.find((w) => w.key === windowKey)?.days ?? 7;
+    const to = new Date();
+    const from = days === 1
+      ? new Date(Date.parse(`${fleetDayKey(to)}T00:00:00+03:00`))
+      : new Date(to.getTime() - days * 86_400_000);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [windowKey]);
 
-  // The error types found in the period, for the list (with how many units carry each).
+  // The record filters, as the server takes them.
+  const filters = useMemo(() => {
+    const preset = FAULTY_FOR.find((f) => f.key === faultyFor);
+    const minHours = faultyFor === "custom" ? hoursOrNull(customHours.min) : preset?.minHours ?? null;
+    const maxHours = faultyFor === "custom" ? hoursOrNull(customHours.max) : null;
+    return {
+      detail: errorType || undefined,
+      state: state || undefined,
+      minHours: minHours ?? undefined,
+      maxHours: maxHours ?? undefined,
+    };
+  }, [errorType, state, faultyFor, customHours.min, customHours.max]);
+  const filterKey = JSON.stringify(filters);
+
+  // The error types found under the other filters, for the list (with how many units carry each).
   const [types, setTypes] = useState([]);
   useEffect(() => {
     if (!orgId) return undefined;
     let cancelled = false;
-    getFaultDetails({ orgId, ...range, kind: WIALON_VIEW_KINDS })
+    getFaultDetails({ orgId, ...range, kind: WIALON_VIEW_KINDS, state: filters.state, minHours: filters.minHours, maxHours: filters.maxHours })
       .then((rows) => { if (!cancelled) setTypes(rows); })
       .catch(() => { if (!cancelled) setTypes([]); });
     return () => { cancelled = true; };
-  }, [orgId, range]);
+  }, [orgId, range, filters.state, filters.minHours, filters.maxHours]);
   const totalUnits = useMemo(() => types.reduce((n, t) => n + t.units, 0), [types]);
 
-  const fetchSummary = useCallback((args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS, detail: errorType || undefined }), [errorType]);
-  const fetchDetail = useCallback((args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS, detail: errorType || undefined }), [errorType]);
+  const fetchSummary = useCallback((args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS, ...filters }), [filters]);
+  const fetchDetail = useCallback((args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS, ...filters }), [filters]);
 
-  const periodWords = windowKey === "custom"
-    ? `from ${stamp(Date.parse(range.from))} to ${stamp(Date.parse(range.to))}`
-    : `last ${WIALON_WINDOWS.find((w) => w.key === windowKey)?.label ?? ""}`;
-  // What a report says it covers: the period and the error type (operator: "generate report based on those filters").
-  const caption = `Faults reported by the trackers, ${periodWords}${errorType ? `, error: ${errorType}` : ", all errors"}`;
+  // What a report says it covers: every filter in force (operator: "generate report based on those filters").
+  const periodWords = WIALON_WINDOWS.find((w) => w.key === windowKey)?.label.toLowerCase() ?? "";
+  const lastedWords = filters.minHours != null && filters.maxHours != null ? `faulty ${filters.minHours}-${filters.maxHours} h`
+    : filters.minHours != null ? `faulty over ${filters.minHours} h`
+    : filters.maxHours != null ? `faulty up to ${filters.maxHours} h` : null;
+  const caption = ["Faults reported by the trackers, " + periodWords,
+    state ? (state === "open" ? "open" : "resolved") : null,
+    lastedWords,
+    errorType ? `error: ${errorType}` : "all errors",
+  ].filter(Boolean).join(", ");
+  const slug = ["wialon-faults", windowKey, state, faultyFor === "custom" ? `${customHours.min || 0}-${customHours.max || "x"}h` : faultyFor && `${faultyFor}h`,
+    errorType && errorType.replace(/[^a-z0-9]+/gi, "-").toLowerCase()].filter(Boolean).join("-");
 
   if (!orgId) return null;
   return (
@@ -1756,7 +1783,7 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
             {search && <button className="sp4-search-clear" onClick={() => setSearch("")}>✕</button>}
           </div>
         )}
-        activeCount={(windowKey !== WIALON_DEFAULT_WINDOW ? 1 : 0) + (errorType ? 1 : 0)}
+        activeCount={(windowKey !== WIALON_DEFAULT_WINDOW ? 1 : 0) + (faultyFor ? 1 : 0) + (state ? 1 : 0) + (errorType ? 1 : 0)}
       >
         <div className="sp4-filter-divider" />
         <div className="sp4-filter-group">
@@ -1766,15 +1793,30 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
               {w.label}
             </button>
           ))}
-          {windowKey === "custom" && (
+        </div>
+        <div className="sp4-filter-divider" />
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Status</span>
+          {WIALON_STATES.map((s) => (
+            <button key={s.key || "all"} className={"sp4-filter-chip" + (state === s.key ? " sp4-filter-chip--on" : "")} onClick={() => setState(s.key)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div className="sp4-filter-divider" />
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Faulty for</span>
+          <select className="sp4-date-input" aria-label="Faulty for" value={faultyFor} onChange={(e) => setFaultyFor(e.target.value)}>
+            {FAULTY_FOR.map((f) => <option key={f.key || "any"} value={f.key}>{f.label}</option>)}
+          </select>
+          {faultyFor === "custom" && (
             <>
-              <input type="datetime-local" className="sp4-date-input" aria-label="From"
-                     value={custom.from} max={custom.to}
-                     onChange={(e) => e.target.value && setCustom((c) => ({ ...c, from: e.target.value }))} />
+              <input type="number" min="0" step="1" className="sp4-date-input sp4-hours-input" aria-label="At least, hours" placeholder="from"
+                     value={customHours.min} onChange={(e) => setCustomHours((c) => ({ ...c, min: e.target.value }))} />
               <span className="sp4-filter-label">to</span>
-              <input type="datetime-local" className="sp4-date-input" aria-label="To"
-                     value={custom.to} min={custom.from} max={toLocalInput(Date.now())}
-                     onChange={(e) => e.target.value && setCustom((c) => ({ ...c, to: e.target.value }))} />
+              <input type="number" min="0" step="1" className="sp4-date-input sp4-hours-input" aria-label="At most, hours" placeholder="any"
+                     value={customHours.max} onChange={(e) => setCustomHours((c) => ({ ...c, max: e.target.value }))} />
+              <span className="sp4-filter-label">h</span>
             </>
           )}
         </div>
@@ -1787,7 +1829,7 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
               <option key={`${t.kind}|${t.detail}`} value={t.detail}>{t.detail} ({t.units} unit{t.units === 1 ? "" : "s"})</option>
             ))}
             {errorType && !types.some((t) => t.detail === errorType) && (
-              <option value={errorType}>{errorType} (none in this period)</option>
+              <option value={errorType}>{errorType} (none under these filters)</option>
             )}
           </select>
         </div>
@@ -1797,7 +1839,7 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
           orgId={orgId}
           range={range}
           sort="recent"
-          filterKey={errorType}
+          filterKey={filterKey}
           summaryColumns={WIALON_SUMMARY_COLUMNS}
           detailColumns={FAULT_DETAIL_COLUMNS}
           fetchSummary={fetchSummary}
@@ -1807,7 +1849,7 @@ export function WialonFaultsPanel({ headerStart = null } = {}) {
           reportTitle="Maintenance: Wialon"
           panelTitle="Tracker faults"
           timeline
-          exportSlug={`wialon-faults-${windowKey}${errorType ? "-" + errorType.replace(/[^a-z0-9]+/gi, "-").toLowerCase() : ""}`}
+          exportSlug={slug}
           search={search}
           emptyLabel="No faults reported by the trackers for these filters."
         />

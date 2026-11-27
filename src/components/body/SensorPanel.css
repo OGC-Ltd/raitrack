@@ -4616,3 +4616,6 @@
 .sp4-fh__dur { color: var(--sp4-text-3); }
 .sp4-fh__src { font-size: var(--sp4-body); color: var(--sp4-text-3); white-space: nowrap; }
 .sp4-fh__note { margin: var(--sp4-xs) 0 0; font-size: var(--sp4-body); }
+
+/* Wialon view: the custom 'faulty for' hours, two short number fields. */
+.sp4-hours-input { width: 64px; }
