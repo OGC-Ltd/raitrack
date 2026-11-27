@@ -1399,7 +1399,9 @@ function FaultHistory({ orgId, vehicleId }) {
         : Promise.resolve([]),
       mayWialon
         ? loadProbeReport({ orgId, vehicleId, from: fleetDayKey(new Date(now.getTime() - (FAULT_HISTORY_DAYS - 1) * 86_400_000)), to: fleetDayKey(now) })
-            .then((r) => r?.rows ?? [])
+            // Only this unit's rows, whatever the server sends back: a server older than the one-unit
+            // option ignores vehicleId and answers with every truck in the company.
+            .then((r) => (r?.rows ?? []).filter((x) => x.vehicleId === vehicleId))
         : Promise.resolve([]),
     ]).then(([f, w]) => {
       if (cancelled) return;
