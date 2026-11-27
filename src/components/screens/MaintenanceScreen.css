@@ -300,3 +300,19 @@
   background-image: none;
   border-bottom: 1px solid var(--maint-band-line);
 }
+
+/* ── The breadcrumb and view chips on the header row (operator, 2026-11-27) ──
+   On System and Wialon they sit on the left of the KPI row instead of on a row
+   of their own, so the top of the page is one band, not two. Same crumbs and
+   chips; only the row's own band (padding, border, background) is dropped, and
+   the chips follow the crumbs rather than going to the far right. */
+.maint-crumbs.maint-crumbs--inline,
+.app--light .maint-crumbs.maint-crumbs--inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  margin-right: auto;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.maint-crumbs--inline .maint-views { margin-left: 0; }

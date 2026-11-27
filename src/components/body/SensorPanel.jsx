@@ -1685,7 +1685,7 @@ const WIALON_WINDOWS = [
 const wialonSummary = (args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS });
 const wialonEpisodes = (args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS });
 
-export function WialonFaultsPanel() {
+export function WialonFaultsPanel({ headerStart = null } = {}) {
   const { orgId } = useFleetLiveShared();
   const [windowKey, setWindowKey] = useState("7");
   const [sort, setSort] = useState("recent");
@@ -1703,6 +1703,8 @@ export function WialonFaultsPanel() {
   if (!orgId) return null;
   return (
     <div className="sp4-root sp4-root--framed">
+      {/* The page's breadcrumb and view chips, on the header row (operator, 2026-11-27). */}
+      {headerStart && <div className="sp4-header">{headerStart}</div>}
       <FilterBar
         peek={(
           <div className="sp4-search-wrap">
@@ -1758,7 +1760,8 @@ export function WialonFaultsPanel() {
   );
 }
 
-export default function SensorPanel() {
+/** headerStart: the page's breadcrumb and view chips, drawn on the left of the KPI row (operator, 2026-11-27). */
+export default function SensorPanel({ headerStart = null } = {}) {
   const { orgId, vehicles } = useFleetLiveShared();
   const { user } = useAuth();
   const { anomalies, loading } = useSensorHealth();
@@ -2070,6 +2073,7 @@ export default function SensorPanel() {
           repeating it named the same thing twice in adjacent rows. The KPI
           row is the header's content now. */}
       <div className="sp4-header">
+        {headerStart}
         <div data-tour="page-kpis" className="sp4-header-kpis">
           <div
             className="sp4-kpi sp4-kpi--fleet"
