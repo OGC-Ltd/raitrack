@@ -1378,7 +1378,7 @@ function RepairHistory({ rows }) {
  * Each source is read only where the role may read it, and one failing leaves
  * the other on screen with a line saying so.
  */
-const FAULT_HISTORY_DAYS = 14;
+const FAULT_HISTORY_DAYS = 30; // operator, 2026-11-27: 30 days (the Wialon read stays under the 31-day cap)
 const FAULT_HISTORY_FIRST = 10;
 function FaultHistory({ orgId, vehicleId }) {
   const { can } = usePermissions();
