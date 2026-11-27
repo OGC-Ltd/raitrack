@@ -11,6 +11,14 @@
 // "Suspected theft", never both. A server without the new fields reads as no
 // suspected theft, and "Drained" stays what it was.
 
+/**
+ * Suspected theft is off the Fuel Consumption & Cost card and its chart (operator, 2026-11-27:
+ * "remove the suspected theft and its value"). The figure counts every SIPHON drain whatever
+ * its review: Mufindi, November, 93 drains / 2,383 L, of which 88 / 2,299 L were reviewed and
+ * judged not theft, 2 / 35 L confirmed. Back on once it counts confirmed and open cases only.
+ */
+export const SHOW_SUSPECTED_THEFT = false;
+
 const tenth = (n) => Math.round(n * 10) / 10;
 
 /**
