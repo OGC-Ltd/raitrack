@@ -117,20 +117,23 @@ const tableFor = (columns, rows) => {
 function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, caption, timeline = false, fetchReadings = null }) {
   const fleet = useLetterheadFleet();
 
-  /* The unit's tracker readings now, where the panel asks for them (the Wialon view; operator,
+  /* The unit's tracker readings now, where the panel offers them (the Wialon view; operator,
      2026-11-27: every reading the tracker sends, with its status at the time of the report,
-     before the fault history). Read once a unit is opened; a failed read leaves the cases. */
+     before the fault history). Only on asking ("a place where we can select ... then it gets
+     included"): off by default, nothing is read from Wialon until "Include tracker status now"
+     is ticked; ticked, the readings show here and go into the PDF. A failed read leaves the cases. */
+  const [includeReadings, setIncludeReadings] = useState(false);
   const [readings, setReadings] = useState(null);
-  const [readingsState, setReadingsState] = useState(fetchReadings ? "loading" : "off");
+  const [readingsState, setReadingsState] = useState("off");
   useEffect(() => {
-    if (!fetchReadings) return undefined;
+    if (!fetchReadings || !includeReadings) { setReadings(null); setReadingsState("off"); return undefined; }
     let cancelled = false;
     setReadingsState("loading");
     fetchReadings(unit.vehicleId)
       .then((d) => { if (!cancelled) { setReadings(d); setReadingsState("ready"); } })
       .catch(() => { if (!cancelled) { setReadings(null); setReadingsState("error"); } });
     return () => { cancelled = true; };
-  }, [fetchReadings, unit.vehicleId]);
+  }, [fetchReadings, includeReadings, unit.vehicleId]);
   const readingsAt = readings?.lastMessageAt ? `${dateLabel(readings.lastMessageAt)} ${timeLabel(readings.lastMessageAt)}` : null;
   const counts = readingCounts(readings?.readings);
   const [rows, setRows] = useState([]);
@@ -209,6 +212,13 @@ function Detail({ unit, columns, fetchPage, range, reportTitle, exportSlug, capt
       />
 
       {fetchReadings && (
+        <label className="dsb-rd__pick">
+          <input type="checkbox" checked={includeReadings} onChange={(e) => setIncludeReadings(e.target.checked)} />
+          Include tracker status now
+        </label>
+      )}
+
+      {fetchReadings && includeReadings && (
         <DetailSidebarSection
           title="Tracker status now"
           aside={readingsState === "ready" && readings?.readings?.length

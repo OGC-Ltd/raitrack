@@ -168,3 +168,6 @@
 .dsb-rd--none .dsb-rd__v { color: var(--sp4-text-3, #64748b); font-weight: 500; }
 .dsb-rd__aside { font-size: 11px; color: var(--sp4-text-3, #64748b); }
 .app--light .dsb-rd th, .app--light .dsb-rd td { border-bottom-color: #e6e9ee; }
+.dsb-rd__pick { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: 12.5px; font-weight: 600; color: var(--sp4-text-1, #f0f4f8); cursor: pointer; }
+.dsb-rd__pick input { width: 15px; height: 15px; accent-color: var(--sp4-accent, #3b82f6); cursor: pointer; }
+.app--light .dsb-rd__pick { color: #0f172a; }
