@@ -8,7 +8,7 @@ import IncidentReport, { SORTS as INCIDENT_SORTS } from "./IncidentReport";
 import { rangeFor } from "../../lib/analyticsFilter";
 import {
   getSpeedingSummary, getSpeedingIncidents, getSpeedingInsights,
-  getFaultSummary, getFaultEpisodes, getFaultInsights,
+  getFaultSummary, getFaultEpisodes, getFaultInsights, getFaultDetails,
   durationLabel, distanceLabel, whenLabel, faultLabel,
   faultSensor, faultSensors, coordLabel, motionLabel,
   dateLabel, timeLabel,
@@ -1682,14 +1682,39 @@ const WIALON_WINDOWS = [
   { key: "7",  label: "7 days",  days: 7 },
   { key: "30", label: "30 days", days: 30 },
 ];
-const wialonSummary = (args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS });
-const wialonEpisodes = (args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS });
+const WIALON_DEFAULT_WINDOW = "7";
+/* How long the fault lasted, to now while it is open (operator, 2026-11-27:
+   "faulty time period ... 12hrs, 24hrs, 48hrs or custom", in a drop-down). */
+const FAULTY_FOR = [
+  { key: "",       label: "Any duration" },
+  { key: "12",     label: "Over 12 h", minHours: 12 },
+  { key: "24",     label: "Over 24 h", minHours: 24 },
+  { key: "48",     label: "Over 48 h", minHours: 48 },
+  { key: "custom", label: "Custom…" },
+];
+const WIALON_STATES = [
+  { key: "",         label: "All" },
+  { key: "open",     label: "Open" },
+  { key: "resolved", label: "Resolved" },
+];
+const hoursOrNull = (v) => { const n = Number(v); return v !== "" && Number.isFinite(n) && n >= 0 ? n : null; };
 
-export function WialonFaultsPanel() {
+/* The list's columns, with the unit's exact message (the installer's words) in
+   place of the fault group's pill: on this view the message is the point. */
+const WIALON_SUMMARY_COLUMNS = FAULT_SUMMARY_COLUMNS.map((c) => (c.key === "kinds"
+  ? { key: "error", label: "Error", title: "The unit's newest message in the period, as the tracker's settings in Wialon word it",
+      render: (r) => r.latestDetail ?? "-" }
+  : c));
+
+export function WialonFaultsPanel({ headerStart = null } = {}) {
   const { orgId } = useFleetLiveShared();
-  const [windowKey, setWindowKey] = useState("7");
-  const [sort, setSort] = useState("recent");
+  const [windowKey, setWindowKey] = useState(WIALON_DEFAULT_WINDOW);
+  const [faultyFor, setFaultyFor] = useState("");
+  const [customHours, setCustomHours] = useState({ min: "", max: "" });
+  const [state, setState] = useState("");
+  const [errorType, setErrorType] = useState("");
   const [search, setSearch] = useState("");
+
   // Re-read when the window changes, not on every render (IncidentReport keys on from/to).
   const range = useMemo(() => {
     const days = WIALON_WINDOWS.find((w) => w.key === windowKey)?.days ?? 7;
@@ -1699,10 +1724,54 @@ export function WialonFaultsPanel() {
       : new Date(to.getTime() - days * 86_400_000);
     return { from: from.toISOString(), to: to.toISOString() };
   }, [windowKey]);
-  const label = WIALON_WINDOWS.find((w) => w.key === windowKey)?.label.toLowerCase() ?? "";
+
+  // The record filters, as the server takes them.
+  const filters = useMemo(() => {
+    const preset = FAULTY_FOR.find((f) => f.key === faultyFor);
+    const minHours = faultyFor === "custom" ? hoursOrNull(customHours.min) : preset?.minHours ?? null;
+    const maxHours = faultyFor === "custom" ? hoursOrNull(customHours.max) : null;
+    return {
+      detail: errorType || undefined,
+      state: state || undefined,
+      minHours: minHours ?? undefined,
+      maxHours: maxHours ?? undefined,
+    };
+  }, [errorType, state, faultyFor, customHours.min, customHours.max]);
+  const filterKey = JSON.stringify(filters);
+
+  // The error types found under the other filters, for the list (with how many units carry each).
+  const [types, setTypes] = useState([]);
+  useEffect(() => {
+    if (!orgId) return undefined;
+    let cancelled = false;
+    getFaultDetails({ orgId, ...range, kind: WIALON_VIEW_KINDS, state: filters.state, minHours: filters.minHours, maxHours: filters.maxHours })
+      .then((rows) => { if (!cancelled) setTypes(rows); })
+      .catch(() => { if (!cancelled) setTypes([]); });
+    return () => { cancelled = true; };
+  }, [orgId, range, filters.state, filters.minHours, filters.maxHours]);
+  const totalUnits = useMemo(() => types.reduce((n, t) => n + t.units, 0), [types]);
+
+  const fetchSummary = useCallback((args) => getFaultSummary({ ...args, kind: WIALON_VIEW_KINDS, ...filters }), [filters]);
+  const fetchDetail = useCallback((args) => getFaultEpisodes({ ...args, kind: WIALON_VIEW_KINDS, ...filters }), [filters]);
+
+  // What a report says it covers: every filter in force (operator: "generate report based on those filters").
+  const periodWords = WIALON_WINDOWS.find((w) => w.key === windowKey)?.label.toLowerCase() ?? "";
+  const lastedWords = filters.minHours != null && filters.maxHours != null ? `faulty ${filters.minHours}-${filters.maxHours} h`
+    : filters.minHours != null ? `faulty over ${filters.minHours} h`
+    : filters.maxHours != null ? `faulty up to ${filters.maxHours} h` : null;
+  const caption = ["Faults reported by the trackers, " + periodWords,
+    state ? (state === "open" ? "open" : "resolved") : null,
+    lastedWords,
+    errorType ? `error: ${errorType}` : "all errors",
+  ].filter(Boolean).join(", ");
+  const slug = ["wialon-faults", windowKey, state, faultyFor === "custom" ? `${customHours.min || 0}-${customHours.max || "x"}h` : faultyFor && `${faultyFor}h`,
+    errorType && errorType.replace(/[^a-z0-9]+/gi, "-").toLowerCase()].filter(Boolean).join("-");
+
   if (!orgId) return null;
   return (
     <div className="sp4-root sp4-root--framed">
+      {/* The page's breadcrumb and view chips, on the header row (operator, 2026-11-27). */}
+      {headerStart && <div className="sp4-header">{headerStart}</div>}
       <FilterBar
         peek={(
           <div className="sp4-search-wrap">
@@ -1714,7 +1783,7 @@ export function WialonFaultsPanel() {
             {search && <button className="sp4-search-clear" onClick={() => setSearch("")}>✕</button>}
           </div>
         )}
-        activeCount={(windowKey !== "7" ? 1 : 0) + (sort !== "recent" ? 1 : 0)}
+        activeCount={(windowKey !== WIALON_DEFAULT_WINDOW ? 1 : 0) + (faultyFor ? 1 : 0) + (state ? 1 : 0) + (errorType ? 1 : 0)}
       >
         <div className="sp4-filter-divider" />
         <div className="sp4-filter-group">
@@ -1727,38 +1796,70 @@ export function WialonFaultsPanel() {
         </div>
         <div className="sp4-filter-divider" />
         <div className="sp4-filter-group">
-          <span className="sp4-filter-label">Sort</span>
-          {INCIDENT_SORTS.map((s) => (
-            <button key={s.key} className={"sp4-filter-chip" + (sort === s.key ? " sp4-filter-chip--on" : "")} onClick={() => setSort(s.key)}>
+          <span className="sp4-filter-label">Status</span>
+          {WIALON_STATES.map((s) => (
+            <button key={s.key || "all"} className={"sp4-filter-chip" + (state === s.key ? " sp4-filter-chip--on" : "")} onClick={() => setState(s.key)}>
               {s.label}
             </button>
           ))}
+        </div>
+        <div className="sp4-filter-divider" />
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Faulty for</span>
+          <select className="sp4-date-input" aria-label="Faulty for" value={faultyFor} onChange={(e) => setFaultyFor(e.target.value)}>
+            {FAULTY_FOR.map((f) => <option key={f.key || "any"} value={f.key}>{f.label}</option>)}
+          </select>
+          {faultyFor === "custom" && (
+            <>
+              <input type="number" min="0" step="1" className="sp4-date-input sp4-hours-input" aria-label="At least, hours" placeholder="from"
+                     value={customHours.min} onChange={(e) => setCustomHours((c) => ({ ...c, min: e.target.value }))} />
+              <span className="sp4-filter-label">to</span>
+              <input type="number" min="0" step="1" className="sp4-date-input sp4-hours-input" aria-label="At most, hours" placeholder="any"
+                     value={customHours.max} onChange={(e) => setCustomHours((c) => ({ ...c, max: e.target.value }))} />
+              <span className="sp4-filter-label">h</span>
+            </>
+          )}
+        </div>
+        <div className="sp4-filter-divider" />
+        <div className="sp4-filter-group">
+          <span className="sp4-filter-label">Error</span>
+          <select className="sp4-date-input" aria-label="Error type" value={errorType} onChange={(e) => setErrorType(e.target.value)}>
+            <option value="">All errors ({totalUnits} units)</option>
+            {types.map((t) => (
+              <option key={`${t.kind}|${t.detail}`} value={t.detail}>{t.detail} ({t.units} unit{t.units === 1 ? "" : "s"})</option>
+            ))}
+            {errorType && !types.some((t) => t.detail === errorType) && (
+              <option value={errorType}>{errorType} (none under these filters)</option>
+            )}
+          </select>
         </div>
       </FilterBar>
       <div className="sp4-body">
         <IncidentReport
           orgId={orgId}
           range={range}
-          sort={sort}
-          summaryColumns={FAULT_SUMMARY_COLUMNS}
+          sort="recent"
+          filterKey={filterKey}
+          summaryColumns={WIALON_SUMMARY_COLUMNS}
           detailColumns={FAULT_DETAIL_COLUMNS}
-          fetchSummary={wialonSummary}
-          fetchDetail={wialonEpisodes}
-          caption={`Faults reported by the trackers, ${label}`}
+          fetchSummary={fetchSummary}
+          fetchDetail={fetchDetail}
+          caption={caption}
           loadingLabel="Loading tracker faults…"
           reportTitle="Maintenance: Wialon"
           panelTitle="Tracker faults"
           timeline
-          exportSlug={`wialon-faults-${windowKey}-${sort}`}
+          exportSlug={slug}
           search={search}
-          emptyLabel="No faults reported by the trackers in this period."
+          emptyLabel="No faults reported by the trackers for these filters."
         />
       </div>
     </div>
   );
 }
 
-export default function SensorPanel() {
+/** headerStart: the page's breadcrumb and view chips, drawn on the left of the KPI row (operator, 2026-11-27). */
+export default function SensorPanel({ headerStart = null } = {}) {
   const { orgId, vehicles } = useFleetLiveShared();
   const { user } = useAuth();
   const { anomalies, loading } = useSensorHealth();
@@ -2070,6 +2171,7 @@ export default function SensorPanel() {
           repeating it named the same thing twice in adjacent rows. The KPI
           row is the header's content now. */}
       <div className="sp4-header">
+        {headerStart}
         <div data-tour="page-kpis" className="sp4-header-kpis">
           <div
             className="sp4-kpi sp4-kpi--fleet"
@@ -2261,6 +2363,7 @@ export default function SensorPanel() {
             itemKey={`${selectedAnomaly.vehicleId}|${fuelDay}`}
             onClose={closeSelected}
             wide
+            room
             footer={can("map:read") ? (
               <button type="button" className="sp4-ghost-btn"
                       onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>
@@ -2299,6 +2402,7 @@ export default function SensorPanel() {
             label={`Probe and repair, ${selectedAnomaly.vehicleName}`}
             itemKey={selectedAnomaly.vehicleId}
             onClose={closeSelected}
+            room
             footer={can("map:read") ? (
               <button type="button" className="sp4-ghost-btn"
                       onClick={() => { setDesktopActiveTab("fleet"); setPendingFocusId(selectedAnomaly.vehicleName); }}>

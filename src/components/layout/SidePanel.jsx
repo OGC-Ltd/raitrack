@@ -2,6 +2,7 @@
 // Sample 2 design: cloud illustration weather, bordered stat boxes, bordered nav and layers sections.
 
 import { useState, useEffect, useRef } from 'react';
+import { MENU_ROOM_EVENT } from '../../lib/menuRoom';
 import { useAppSelector, useAppActions, useCompanies } from '../../context/AppContext';
 import { useFleetLiveShared } from '../../context/FleetLiveContext';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -242,6 +243,30 @@ export default function SidePanel() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only a page change should fold or restore
   }, [desktopActiveTab]);
+  /* A page showing a side panel beside its table asks for room
+   * (lib/menuRoom): the menu folds if open, and opens again when the panel
+   * closes, but only if it was the panel that folded it. Pressing the toggle
+   * in between makes the choice the operator's again. */
+  const now = useRef({ collapsed, userCollapsed });
+  useEffect(() => { now.current = { collapsed, userCollapsed }; });
+  const foldedFor = useRef(null); // { prev }: the userCollapsed to go back to, while folded for a panel
+  useEffect(() => {
+    const onRoom = (e) => {
+      if (e.detail?.need) {
+        if (!now.current.collapsed && foldedFor.current === null) {
+          foldedFor.current = { prev: now.current.userCollapsed };
+          setUserCollapsed(true);
+        }
+      } else if (foldedFor.current) {
+        const { prev } = foldedFor.current;
+        foldedFor.current = null;
+        setUserCollapsed(prev);
+      }
+    };
+    window.addEventListener(MENU_ROOM_EVENT, onRoom);
+    return () => window.removeEventListener(MENU_ROOM_EVENT, onRoom);
+  }, []);
+
   const { setDesktopActiveTab } = useAppActions();
   const { activeCompany } = useCompanies();
   const { can, orgCode } = usePermissions();
@@ -334,7 +359,7 @@ export default function SidePanel() {
         <button
           type="button"
           className="side-panel__toggle"
-          onClick={() => setUserCollapsed(collapsed ? false : true)}
+          onClick={() => { foldedFor.current = null; setUserCollapsed(collapsed ? false : true); }}
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
           title={collapsed ? 'Expand menu' : 'Collapse menu'}

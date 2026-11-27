@@ -67,8 +67,9 @@ export default function MaintenanceScreen() {
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
     // System | Wialon (operator, 2026-11-27): what the system works out, and what the trackers
-    // report in their own status codes. The key stays "sensors" so a saved view still opens.
-    { key: "sensors", label: "System", enabled: true },
+    // report in their own status codes. The button says System; the breadcrumb keeps the page's
+    // name, Sensor Monitor (crumb). The key stays "sensors" so a saved view still opens.
+    { key: "sensors", label: "System", crumb: "Sensor Monitor", enabled: true },
     { key: "wialon",  label: "Wialon", enabled: can("sensor:read") },
   ];
   const available = VIEWS.filter((v) => v.enabled);
@@ -86,7 +87,40 @@ export default function MaintenanceScreen() {
 
   // A lookup, not a ternary: the old `=== "service" ? … : "Sensor Monitor"`
   // labelled every view that was not Service Status as Sensor Monitor.
-  const crumbLabel = VIEWS.find((v) => v.key === activeTab)?.label ?? "Maintenance";
+  const crumbView = VIEWS.find((v) => v.key === activeTab);
+  const crumbLabel = crumbView?.crumb ?? crumbView?.label ?? "Maintenance";
+
+  // The breadcrumb and the view chips. On System and Wialon they sit on the left of the page's
+  // header row, beside the KPIs, instead of on a row of their own (operator, 2026-11-27: "reduce
+  // the height of the section").
+  const crumbs = (inline) => (
+    <div className={"maint-crumbs" + (inline ? " maint-crumbs--inline" : "")}>
+      <nav aria-label="Breadcrumb">
+        <ol className="maint-crumbs__list">
+          <li className="maint-crumbs__item">Maintenance</li>
+          <li className="maint-crumbs__item maint-crumbs__item--current" aria-current="page">
+            {crumbLabel}
+          </li>
+        </ol>
+      </nav>
+      {available.length > 1 && (
+        <div className="sp4-filter-group maint-views" role="tablist" aria-label="Maintenance views">
+          {available.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === v.key}
+              className={"sp4-filter-chip" + (activeTab === v.key ? " sp4-filter-chip--on" : "")}
+              onClick={() => setActiveTab(v.key)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="maint-screen-scroll">
@@ -94,32 +128,7 @@ export default function MaintenanceScreen() {
           shows its reports (operator, 2026-11-20: the separate tab bar is gone).
           The crumbs are plain text: Maintenance is this tab, so there is nowhere
           for a click to go. The chips show only when there is a choice. */}
-      <div className="maint-crumbs">
-        <nav aria-label="Breadcrumb">
-          <ol className="maint-crumbs__list">
-            <li className="maint-crumbs__item">Maintenance</li>
-            <li className="maint-crumbs__item maint-crumbs__item--current" aria-current="page">
-              {crumbLabel}
-            </li>
-          </ol>
-        </nav>
-        {available.length > 1 && (
-          <div className="sp4-filter-group maint-views" role="tablist" aria-label="Maintenance views">
-            {available.map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === v.key}
-                className={"sp4-filter-chip" + (activeTab === v.key ? " sp4-filter-chip--on" : "")}
-                onClick={() => setActiveTab(v.key)}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {activeTab === "service" && crumbs(false)}
 
       {activeTab === "service" && (
         <div className="maint-screen-panel">
@@ -145,11 +154,11 @@ export default function MaintenanceScreen() {
       )}
 
       {activeTab === "sensors" && (
-        <SensorPanel />
+        <SensorPanel headerStart={crumbs(true)} />
       )}
 
       {activeTab === "wialon" && (
-        <WialonFaultsPanel />
+        <WialonFaultsPanel headerStart={crumbs(true)} />
       )}
     </div>
   );

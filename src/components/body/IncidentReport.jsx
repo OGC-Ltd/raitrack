@@ -236,6 +236,7 @@ export default function IncidentReport({
   panelTitle = "Cases", // heads the sidebar a unit opens in: "Overspeeding cases"
   timeline = false,   // the unit's cases as a -O-O- rail, newest first (Malfunction)
   search = "",        // plate or name, from the panel's search box
+  filterKey = "",     // any other filter the fetchers close over (Wialon's error type): a new list when it changes
 }) {
   const fleet = useLetterheadFleet();
   const [rows, setRows] = useState([]);
@@ -279,7 +280,7 @@ export default function IncidentReport({
     setUnit(null);
     void load(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, range.from, range.to, sort, q]);
+  }, [orgId, range.from, range.to, sort, q, filterKey]);
 
   /**
    * The window reaches back further than the ledger does.
@@ -295,7 +296,7 @@ export default function IncidentReport({
       : rows),
     [rows, needle],
   );
-  const pager = usePager(shown, `${orgId}|${range.from}|${range.to}|${sort}|${needle}`);
+  const pager = usePager(shown, `${orgId}|${range.from}|${range.to}|${sort}|${needle}|${filterKey}`);
   const lastPage = pager.page === pager.pageCount - 1;
   // As in the unit's cases: the next batch is read when the last page is reached.
   useEffect(() => {
@@ -318,6 +319,7 @@ export default function IncidentReport({
       label={`${panelTitle}, ${unit.plate ?? unit.vehicleId}`}
       itemKey={unit.vehicleId}
       onClose={closeUnit}
+      room
     >
       <Detail
         key={unit.vehicleId}
