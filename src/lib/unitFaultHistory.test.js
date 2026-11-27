@@ -60,6 +60,17 @@ describe("a unit's fault history as messages", () => {
     expect(src("gnss_fault")).toBe("Wialon");
   });
 
+  it("does not call the alerts' end on 1 Nov a reconnection: the rule was switched off", () => {
+    const at = Date.parse("2026-11-01T07:42:00+03:00");
+    const to = Date.parse("2026-11-01T07:58:00+03:00");
+    const rows = faultMessages([], [{ at, to, alerts: 16 }], Date.parse("2026-11-27T12:00:00+03:00"));
+    expect(rows.map((r) => r.text)).toEqual(["Wialon alerts stopped (alert rule switched off)", "Probe disconnected"]);
+    expect(rows[0]).toMatchObject({ ok: false, neutral: true, durationMs: null, source: "Wialon" });
+    // The day before, the same run is a real reconnection.
+    const before = faultMessages([], [{ at: at - 86_400_000, to: to - 86_400_000, alerts: 16 }], Date.parse("2026-11-27T12:00:00+03:00"));
+    expect(before[0].text).toBe("Probe reconnected");
+  });
+
   it("skips rows with no usable time", () => {
     expect(faultMessages([{ id: "x", kind: "signal_lost", startedAt: null }], [{ at: null }])).toEqual([]);
   });

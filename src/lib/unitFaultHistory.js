@@ -15,6 +15,15 @@ import { faultLabel } from "../api/incidents";
 /** Alerts this far apart are separate disconnections (server RUN_GAP_MS). */
 export const WIALON_RUN_GAP_MS = 30 * 60_000;
 
+/**
+ * When the Wialon alert rules were switched off: 1 Nov 2026, the last probe alerts at 07:55-08:08
+ * EAT across Kabras, Nzoia, Sukari and West Sugar, and none since (checked 27 Nov). A run whose
+ * alerts stop in this window stopped because the rule did, not because the probe came back
+ * (KDJ 813Z: last alert 07:58, still on Fls Status Error on 27 Nov), so it is not a reconnection.
+ */
+export const WIALON_RULES_OFF = { from: Date.parse("2026-11-01T06:00:00+03:00"), to: Date.parse("2026-11-01T08:15:00+03:00") };
+const stoppedByRulesOff = (t) => t >= WIALON_RULES_OFF.from && t <= WIALON_RULES_OFF.to;
+
 const BACK = {
   fuel_probe_fault:           "Fuel probe reading again",
   fuel_probe_dead:            "Fuel probe reading again",
@@ -72,8 +81,15 @@ export function faultMessages(episodes = [], disconnections = [], now = Date.now
     // Still alerting (within one run gap of now): not reconnected yet.
     const open = now - last < WIALON_RUN_GAP_MS;
     out.push({ key: `w:${start}:start`, at: start, text: "Probe disconnected", ok: false, open, source: "Wialon", durationMs: null });
-    if (!open) out.push({ key: `w:${start}:end`, at: last, text: "Probe reconnected", ok: true, open: false, source: "Wialon", durationMs: last - start });
+    if (open) continue;
+    if (stoppedByRulesOff(last)) {
+      // Neither a fault nor a recovery: the alerts ended with the rule (see WIALON_RULES_OFF).
+      out.push({ key: `w:${start}:end`, at: last, text: "Wialon alerts stopped (alert rule switched off)", ok: false, neutral: true, open: false, source: "Wialon", durationMs: null });
+    } else {
+      out.push({ key: `w:${start}:end`, at: last, text: "Probe reconnected", ok: true, open: false, source: "Wialon", durationMs: last - start });
+    }
   }
-  // Newest first; at the same moment the recovery reads above the fault it ends.
-  return out.sort((a, b) => b.at - a.at || Number(b.ok) - Number(a.ok));
+  // Newest first; at the same moment the recovery (or the rule's end) reads above the fault it ends.
+  const after = (m) => Number(m.ok || Boolean(m.neutral));
+  return out.sort((a, b) => b.at - a.at || after(b) - after(a));
 }

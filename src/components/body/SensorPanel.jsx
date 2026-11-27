@@ -1431,7 +1431,7 @@ function FaultHistory({ orgId, vehicleId }) {
           {shown.map((m) => (
             <li key={m.key} className="sp4-ph-hist__item sp4-fh__item">
               <span className="sp4-fh__when">{when(m.at)}</span>
-              <span className={"sp4-fh__text" + (m.ok ? " sp4-fh__text--ok" : " sp4-fh__text--fault")}>
+              <span className={"sp4-fh__text" + (m.neutral ? "" : m.ok ? " sp4-fh__text--ok" : " sp4-fh__text--fault")}>
                 {m.text}
                 {m.durationMs != null && <span className="sp4-fh__dur"> (after {durationLabel(m.durationMs / 1000)})</span>}
                 {m.open && <span className="sp4-fh__dur"> (ongoing)</span>}
