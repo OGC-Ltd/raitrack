@@ -74,4 +74,11 @@ describe('sections before the main table (the Wialon unit report, 2026-11-27)', 
     expect(new TextDecoder().decode(new Uint8Array(withIt).slice(0, 5))).toBe('%PDF-');
     expect(withIt.byteLength).toBeGreaterThan(without.byteLength);
   });
+  it('a unit’s 29 readings in two columns fit the first page with its case (MUFINDI DG 11)', () => {
+    const readings = Array.from({ length: 29 }, (_, i) => [`Reading number ${i + 1}`, i === 0 ? '1 Kvants' : `${i}.5 V`, i === 0 ? 'No Fuel Error - Contact Support' : '-', i === 0 ? 'Fault' : '-']);
+    const two = { ...section, columns: 2, body: readings };
+    const pages = (buf) => (new TextDecoder('latin1').decode(new Uint8Array(buf)).match(/\/Type \/Page\b/g) ?? []).length;
+    expect(unitSpec([two]).before[0].columns).toBe(2);
+    expect(pages(drawLetterheadTablePdf(unitSpec([two])))).toBe(1);
+  });
 });

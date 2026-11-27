@@ -151,6 +151,7 @@ export function tableLetterheadSpec({
     before: (before ?? []).filter((b) => b?.head?.length).map((b) => ({
       title: String(b.title ?? ''),
       small: b.small ? String(b.small) : '',
+      columns: b.columns === 2 ? 2 : 1,
       head: b.head.map(String),
       body: (b.body ?? []).map((r) => r.map((v) => (blank(String(v ?? '').trim()) ? '-' : String(v).trim()))),
     })),

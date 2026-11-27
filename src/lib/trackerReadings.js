@@ -37,6 +37,8 @@ export function readingsSection(data, when) {
   return {
     title: "Tracker status now",
     small: `${when}${c.faults ? ` · ${c.faults} fault${c.faults === 1 ? "" : "s"}` : ""}`,
+    // Two columns side by side, so a unit's 25-30 readings fit the first page (operator, 2026-11-27).
+    columns: 2,
     head: ["Reading", "Value", "Label in Wialon", "Status"],
     body: rows.map((r) => [readingName(r), readingValue(r), r.label ?? "-", readingVerdict(r) || "-"]),
   };

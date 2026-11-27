@@ -159,34 +159,55 @@ export function drawLetterheadTablePdf(spec, logos = {}, onProgress = () => {}) 
   };
 
   // ── sections before the main table (the Wialon unit report's "Tracker status now"): a plain
-  // table each under its own heading, a Fault drawn in red. None on every other report.
+  // table under its own heading, a Fault drawn in red. `columns: 2` sets the rows side by side,
+  // the first half on the left and the rest on the right (operator, 2026-11-27: "two columns on the
+  // first page ... instead of it extending to two pages"). None on every other report.
+  const GAP = 6;
+  const sideTable = (b, rows, left, width) => autoTable(doc, {
+    startY: y,
+    margin: { left, right: W - left - width, top: 6 + 10 * PT + 4, bottom: FOOT_H + 2 },
+    theme: 'plain',
+    head: [b.head.map(plain)],
+    body: rows.map((r) => r.map(plain)),
+    rowPageBreak: 'avoid',
+    tableWidth: width,
+    styles: { fontSize: b.columns === 2 ? 7.2 : 7.8, cellPadding: { top: 0.5, bottom: 0.5, left: 1.2, right: 1.2 }, textColor: INK, valign: 'top', lineWidth: 0, overflow: 'linebreak' },
+    headStyles: { fontSize: 6.8, fontStyle: 'bold', textColor: MUT, valign: 'bottom' },
+    columnStyles: b.columns === 2
+      ? { 0: { fontStyle: 'bold', cellWidth: width * 0.36 }, 1: { cellWidth: width * 0.19 }, 2: { cellWidth: width * 0.31 }, 3: { cellWidth: width * 0.14 } }
+      : { 0: { fontStyle: 'bold' } },
+    didParseCell: (d) => {
+      if (d.column.index === 0) d.cell.styles.cellPadding = { ...d.cell.styles.cellPadding, left: 0 };
+      if (d.section === 'body' && d.cell.raw === '-') d.cell.styles.textColor = MUT;
+      if (d.section === 'body' && d.cell.raw === 'Fault') { d.cell.styles.textColor = [185, 28, 28]; d.cell.styles.fontStyle = 'bold'; }
+    },
+    didDrawCell: (d) => {
+      const { x, y: cy, width: cw, height } = d.cell;
+      doc.setDrawColor(...(d.section === 'head' ? RULE : SOFT));
+      doc.setLineWidth((d.section === 'head' ? 0.6 : 0.4) * PT);
+      doc.line(x, cy + height, x + cw, cy + height);
+    },
+    didDrawPage: (d) => runningHead(d.pageNumber),
+  });
   for (const b of spec.before ?? []) {
     heading(b.title, b.small);
-    autoTable(doc, {
-      startY: y,
-      margin: { left: SIDE, right: SIDE, top: 6 + 10 * PT + 4, bottom: FOOT_H + 2 },
-      theme: 'plain',
-      head: [b.head.map(plain)],
-      body: b.body.map((r) => r.map(plain)),
-      rowPageBreak: 'avoid',
-      tableWidth: inner,
-      styles: { fontSize: 7.8, cellPadding: { top: 0.6, bottom: 0.6, left: 1.4, right: 1.4 }, textColor: INK, valign: 'top', lineWidth: 0, overflow: 'linebreak' },
-      headStyles: { fontSize: 7.2, fontStyle: 'bold', textColor: MUT, valign: 'bottom' },
-      columnStyles: { 0: { fontStyle: 'bold' } },
-      didParseCell: (d) => {
-        if (d.column.index === 0) d.cell.styles.cellPadding = { ...d.cell.styles.cellPadding, left: 0 };
-        if (d.section === 'body' && d.cell.raw === '-') d.cell.styles.textColor = MUT;
-        if (d.section === 'body' && d.cell.raw === 'Fault') { d.cell.styles.textColor = [185, 28, 28]; d.cell.styles.fontStyle = 'bold'; }
-      },
-      didDrawCell: (d) => {
-        const { x, y: cy, width, height } = d.cell;
-        doc.setDrawColor(...(d.section === 'head' ? RULE : SOFT));
-        doc.setLineWidth((d.section === 'head' ? 0.6 : 0.4) * PT);
-        doc.line(x, cy + height, x + width, cy + height);
-      },
-      didDrawPage: (d) => runningHead(d.pageNumber),
-    });
-    y = doc.lastAutoTable.finalY;
+    if (b.columns === 2 && b.body.length > 1) {
+      const half = Math.ceil(b.body.length / 2);
+      const width = (inner - GAP) / 2;
+      const startPage = doc.getCurrentPageInfo().pageNumber;
+      sideTable(b, b.body.slice(0, half), SIDE, width);
+      const leftEnd = { page: doc.getCurrentPageInfo().pageNumber, y: doc.lastAutoTable.finalY };
+      doc.setPage(startPage);
+      sideTable(b, b.body.slice(half), SIDE + width + GAP, width);
+      const rightEnd = { page: doc.getCurrentPageInfo().pageNumber, y: doc.lastAutoTable.finalY };
+      // Carry on below whichever half ends lower.
+      const last = rightEnd.page > leftEnd.page || (rightEnd.page === leftEnd.page && rightEnd.y >= leftEnd.y) ? rightEnd : leftEnd;
+      doc.setPage(last.page);
+      y = last.y;
+    } else {
+      sideTable(b, b.body, SIDE, inner);
+      y = doc.lastAutoTable.finalY;
+    }
   }
 
   // ── the table, its header on every page
