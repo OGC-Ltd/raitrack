@@ -175,10 +175,12 @@
 
 /* A row's side panel open (lib/menuRoom): the page stops short of it, the
    panel's width plus its 16px inset and a 16px gap, instead of running under
-   it. A phone keeps the panel as a sheet over the page. */
+   it. The page's own right gutter already sits inside that, so it is taken off
+   (operator, 2026-11-27: the gap was the gutter twice over). A phone keeps the
+   panel as a sheet over the page. */
 @media (min-width: 768px) {
-  body.dsb-room .maint-screen-scroll { padding-right: calc(420px + 32px); }
-  body.dsb-room--wide .maint-screen-scroll { padding-right: calc(640px + 32px); }
+  body.dsb-room .maint-screen-scroll { padding-right: max(0px, calc(420px + 32px - var(--maint-gutter))); }
+  body.dsb-room--wide .maint-screen-scroll { padding-right: max(0px, calc(640px + 32px - var(--maint-gutter))); }
 }
 
 /* The scroll viewport for Service Status. min-height:0 is what actually lets a
