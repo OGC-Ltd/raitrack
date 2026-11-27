@@ -22,6 +22,7 @@ import { RUN_FIGURES, RUN_HEADS, PLACE_COLUMN, UNIT_FIGURES, UNIT_HEADS, byUnit,
 import { KEY as HEALTH_KEY, NOT_WORKING, WORKING, partStates, byGroup as healthByGroup, cellsFor as healthCells, headsFor as healthHeads, hasFleetList, summary as healthSummary } from './probeHealthReport';
 import { reportGroupsFor } from './fleetGroups';
 import { FIGURES as FUEL_FILLED_FIGURES, HEADS as FUEL_FILLED_HEADS, rowCells as fuelFilledCells, summary as fuelFilledSummary } from './fuelFilledReport';
+import { RECON_FIGURES, RECON_HEADS, dmyOf, reconCells, reconSummary } from './probeRecon';
 import { COLUMNS as DELIVERY_HEADS, rowCells as deliveryCells, runWords, sheetSub, spansDays, stopWords, SHEET_STOP_HEADS, sheetStopCells } from './deliveriesReport';
 
 const OFFSET = 3 * 3600_000;
@@ -779,6 +780,43 @@ export function flowDoc({ parts, landscape, filename }, parse = browserParse) {
 }
 
 /** Fuel filled (Movements › Fuel): each refuel and the litres the fuel probe saw go in. */
+/**
+ * Fuel reconciliation (Fuel Filled › Reconcile a sheet): the sheet's rows with
+ * the probe's litres beside the records' and the variance (lib/probeRecon).
+ */
+export function probeReconDoc(rows, { fleet, unit = '', orgCode, sheet = '', now = Date.now() }) {
+  const s = reconSummary(rows);
+  const words = s.from ? (s.from === s.to ? dmyOf(s.from) : `${dmyOf(s.from)} to ${dmyOf(s.to)}`) : '';
+  const cols = [{ w: 18 }, { w: 20 }, { w: 22 }, { w: 24 }, { w: 18 }, { w: 30 }, { w: 0, wrap: true }]
+    .map((c, i) => (RECON_FIGURES.has(i) ? { ...c, align: 'right' } : c));
+  const notes = [
+    s.noFill > 0 && `${plural(s.noFill, 'row')} had no probe refuel for that unit on that day: left blank.`,
+    s.before > 0 && `${plural(s.before, 'row')} are dated before the fuel records begin and were not checked; their probe and variance are left blank.`,
+    s.notOnPlatform > 0 && `${plural(s.notOnPlatform, 'row')} are on units not on the platform; their probe and variance are left blank.`,
+    'Variance is the records less the probe. Totals are over the rows a probe refuel was found for.',
+  ].filter(Boolean);
+  const name = unit ? `${fleet} ${unit}` : fleet;
+  return {
+    title: 'FUEL RECONCILIATION REPORT', docName: `Fuel Reconciliation ${name}`, pairs: true,
+    filename: `Fuel Reconciliation ${name}${s.from ? ` ${s.from}${s.to !== s.from ? ` to ${s.to}` : ''}` : ''}`,
+    reportNo: reportNumber('FR', orgCode, now), date: dmy(now),
+    meta: meta([['Fleet', fleet], ...(unit ? [['Unit', unit]] : []), ...(sheet ? [['Sheet', sheet]] : []), ['Days', words], ['Rows', fmt(s.rows)]]),
+    blocks: [
+      { kind: 'h2', title: '1. Overview', aside: words },
+      { kind: 'figures', items: [
+        { label: 'Rows checked', value: `${fmt(s.filled)} of ${fmt(s.rows)}` },
+        { label: 'Records, L', value: fmtFixed(s.recordsL, 2) },
+        { label: 'Probes, L', value: fmtFixed(s.probeL, 2) },
+        { label: 'Variance, L', value: fmtFixed(s.varianceL, 2) },
+      ] },
+      { kind: 'h2', title: '2. Each row', aside: plural(s.rows, 'row') },
+      { kind: 'table', cols, head: RECON_HEADS, size: 7.4, rows: rows.map((r) => reconCells(r).map((t, k) => textCell(t, k === 1))) },
+      ...notes.map((text) => ({ kind: 'note', text })),
+    ],
+    footer: `${fleet} · Fuel Reconciliation Report · ${words}`,
+  };
+}
+
 export function fuelFilledDoc(rows, { from, to, fleet, unit = '', orgCode, now = Date.now() }) {
   const s = fuelFilledSummary(rows);
   const several = from !== to;

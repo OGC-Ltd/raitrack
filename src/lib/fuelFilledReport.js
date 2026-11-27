@@ -137,3 +137,30 @@ export const summary = (rows) => ({
   joined: rows.reduce((n, r) => n + r.rows - r.fills, 0),
   pending: rows.filter((r) => r.pending).length,
 });
+
+/** "2026-10-14", the Nairobi day a refuel fell on. */
+export const ymdOf = (ms) => new Date(ms + OFFSET).toISOString().slice(0, 10);
+
+/** "Wed 14 Oct 2026" for a "2026-10-14" day; "No date" for none. */
+export function dayWords(ymd) {
+  if (!ymd) return 'No date';
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  const part = (o) => d.toLocaleDateString('en-GB', { timeZone: 'UTC', ...o });
+  return `${part({ weekday: 'short' })} ${d.getUTCDate()} ${part({ month: 'short' })} ${d.getUTCFullYear()}`;
+}
+
+/** Rows under one heading per key, the keys in the order the rows first give them. */
+export function groupsOf(rows, keyOf) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = keyOf(r);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r);
+  }
+  return [...m].map(([key, items]) => ({ key, rows: items }));
+}
+
+const squash = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+/** Does a plate hold what was typed, ignoring case and spaces ("kby767" finds "KBY 767G")? */
+export const plateHas = (plate, typed) => squash(plate).includes(squash(typed));
