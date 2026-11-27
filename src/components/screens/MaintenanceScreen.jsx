@@ -66,9 +66,10 @@ export default function MaintenanceScreen() {
    */
   const VIEWS = [
     { key: "service", label: "Service Status", enabled: SHOW_SERVICE_STATUS },
-    // System | Wialon (operator, 2026-11-27): what the system works out, and what the trackers
-    // report in their own status codes. The key stays "sensors" so a saved view still opens.
-    { key: "sensors", label: "System", enabled: true },
+    // Sensor Monitor | Wialon (operator, 2026-11-27): what the system works out, and what the
+    // trackers report in their own status codes. Named Sensor Monitor as it always was (briefly
+    // "System" on 27 Nov, not asked for); the key stays "sensors" so a saved view still opens.
+    { key: "sensors", label: "Sensor Monitor", enabled: true },
     { key: "wialon",  label: "Wialon", enabled: can("sensor:read") },
   ];
   const available = VIEWS.filter((v) => v.enabled);
