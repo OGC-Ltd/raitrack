@@ -108,7 +108,7 @@ export function readReview(review) {
     actions.push(`Review ${singular(worstGroup.group).toLowerCase()} operations: idling at loading points, load limits and haul-road condition.`);
   }
   if (meterFixes.length) {
-    actions.push(`Check the trackers' hour and km readings on ${listRefs(meterFixes.slice(0, 6))}: refills are logged against next to no work.`);
+    actions.push(`Check the hour and km readings on ${listRefs(meterFixes.slice(0, 6))}, at the pump and on the tracker: refills are logged against next to no work.`);
   }
   if (suspectGroups.length || unmeasured.length) {
     const parts = [];
@@ -126,6 +126,33 @@ export function readReview(review) {
 
 /** "Trucks" → "Truck", "Diesel generators" → "Diesel generator". */
 export const singular = (group) => group.replace(/s$/, "");
+
+/**
+ * What a unit's figure was judged on: its planned shifts (a machine on the
+ * work plan, operator 2026-11-28) or its refills.
+ */
+export function judgedWords(u) {
+  if (u.judgedOn === "shifts") {
+    const n = u.judgedShifts;
+    return `${n} planned shift${n === 1 ? "" : "s"}, ${Math.round(u.shiftHours * 10) / 10} h, ${litres(u.consumedL)} burned`;
+  }
+  return `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"}`;
+}
+
+/** Why a unit is not judged, short (the "Not assessed" line) and in full (its tooltip). */
+export function notAssessedWhy(u) {
+  if (u.rate == null) return { short: "no standard", long: "No standard on the register" };
+  if (u.shifts > 0) {
+    if (u.noProbeShifts === u.shifts) return { short: "no probe reading", long: `On the plan for ${u.shifts} shift${u.shifts === 1 ? "" : "s"}, but the fuel probe gave no usable start and end reading` };
+    return { short: "no engine hours", long: `On the plan for ${u.shifts} shift${u.shifts === 1 ? "" : "s"}, but none has both engine hours and a probe reading` };
+  }
+  if (u.basis === "HOURS") return { short: "not on the plan", long: `Not on a work plan in this period, and ${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"} (5 needed)` };
+  return { short: "", long: `${u.usableRefills} usable refill${u.usableRefills === 1 ? "" : "s"}, at least 5 needed` };
+}
+
+const SHORT_MONTH = (key) => `${Number(key.slice(8, 10))} ${monthLabel(key)}`;
+/** "1 – 27 Nov": the month-to-date span the server counted. */
+export const mtdSpan = (m) => (m ? (m.from === m.to ? SHORT_MONTH(m.to) : `${Number(m.from.slice(8, 10))} – ${SHORT_MONTH(m.to)}`) : "");
 
 const sumLitres = (us = []) => us.reduce((s, u) => s + u.litres, 0);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);

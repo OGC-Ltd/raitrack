@@ -288,6 +288,33 @@ export function gateUnits(windowRows) {
   return { once, twice, total };
 }
 
+/**
+ * The moves behind gateUnits, one per unit, for the hourly cards (operator, 2026-11-28: "the
+ * values here have to balance as in the previous logic"): each unit's LATEST sign-out in the
+ * window, and, for a unit that is back, its first return after it. So `outs.length` is
+ * gateUnits' total.units and `backs.length` its total.back, hour by hour; pure.
+ */
+export function gateUnitMoves(windowRows) {
+  const byUnit = new Map();
+  for (const r of windowRows ?? []) {
+    const unit = squash(r.plate);
+    if (!unit) continue;
+    if (!byUnit.has(unit)) byUnit.set(unit, []);
+    byUnit.get(unit).push(r);
+  }
+  const outs = [];
+  const backs = [];
+  for (const list of byUnit.values()) {
+    const sent = list.filter((r) => r.way === "out");
+    if (!sent.length) continue;
+    const last = sent.reduce((a, b) => (b.at > a.at ? b : a));
+    outs.push(last);
+    const back = list.filter((r) => r.way === "in" && r.at > last.at).reduce((a, b) => (a && a.at <= b.at ? a : b), null);
+    if (back) backs.push(back);
+  }
+  return { outs, backs };
+}
+
 /** 45 min, 2 h 05 min, 1 d 3 h. */
 export function durationWords(ms) {
   if (!Number.isFinite(ms) || ms < 0) return "";

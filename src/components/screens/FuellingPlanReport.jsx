@@ -65,6 +65,8 @@ function Meter({ name, figure, of, fill, max, tone = 'accent', faint = false }) 
 
 /** At most 14 days, as the server takes. */
 const MAX_RANGE_DAYS = 14;
+/** How often a period that is not over yet reads the pumps again. */
+const REFRESH_MS = 120_000;
 const shortDay = (ymd) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 const cellsOf = (m) => m.status === OFF_PLAN
@@ -88,24 +90,42 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
   const runId = useRef(0);
   const problem = !orgId ? 'Waiting for the organisation to load' : !days.from ? 'Pick a day' : days.to > today ? 'That day has not happened yet' : null;
 
-  // A quick chip passes its own days: they are always a real, past period
-  const execute = async (d = days) => {
+  // A quick chip passes its own days: they are always a real, past period.
+  // `quiet`: a refresh of the days on screen; the report stays up while it reads,
+  // the status filter is kept, and a failed refresh leaves the figures as they were.
+  const execute = async (d = days, quiet = false) => {
     if (!orgId || (problem && d === days)) return;
     const id = ++runId.current;
-    setRun({ status: 'loading' });
+    if (!quiet) setRun({ status: 'loading' });
     try {
       const plan = await getFuellingPlan({ orgId, from: d.from, to: d.to });
       if (id !== runId.current) return;
       setRun({ status: 'done', plan });
-      setStatus(null);
+      if (!quiet) setStatus(null);
     } catch (err) {
-      if (id === runId.current) setRun({ status: 'error', message: err?.message ?? String(err) });
+      if (id === runId.current && !quiet) setRun({ status: 'error', message: err?.message ?? String(err) });
     }
   };
   // A tab under Movements: it runs when first opened, not with the page.
   useEffect(() => { if (active && orgId && run.status === 'idle') execute(); }, [active, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const plan = run.status === 'done' && run.plan?.factory ? run.plan : null;
+
+  // The figures are read once per run, and the pumps keep fuelling: the page fell
+  // behind the PDF, which is read fresh on each click (operator 2026-11-28: "the
+  // values here are not updated, to what the pdf has"). So a PDF, JPEG or preview
+  // refreshes the page with it, and a period that is not over yet refreshes
+  // every two minutes and when the tab comes back into view.
+  const refresh = useRef(() => {});
+  refresh.current = () => { if (plan) execute({ from: plan.from ?? plan.day, to: plan.to ?? plan.day }, true); };
+  const live = Boolean(plan) && !plan.closed && active;
+  useEffect(() => {
+    if (!live) return undefined;
+    const tick = () => { if (document.visibilityState === 'visible') refresh.current(); };
+    const timer = setInterval(tick, REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick); };
+  }, [live]);
   const t = plan?.totals;
   const from = plan?.from ?? plan?.day, to = plan?.to ?? plan?.day;
   const several = Boolean(plan) && from !== to;
@@ -120,10 +140,14 @@ export default function FuellingPlanReport({ orgId, companyName, orgCode, active
   const counts = useMemo(() => Object.fromEntries(STATUSES.map((s) => [s, plan?.machines.filter((m) => m.status === s).length ?? 0])), [plan]);
 
   const values = t
-    ? [`${fmt(t.fuelled)} of ${fmt(t.planned)}`, fmt(t.fuelledOnFiguresL), fmt(t.notFuelled), fmt(t.short), fmt(t.asPlanned)]
+    // Litres delivered: every litre the pumps issued, full tanks and off plan too (25 Nov: 6,651 L, not 5,960)
+    ? [`${fmt(t.fuelled)} of ${fmt(t.planned)}`, fmt(t.deliveredL ?? (t.fuelledL + (t.offPlanL ?? 0))),fmt(t.notFuelled), fmt(t.short), fmt(t.asPlanned)]
     : [0, 1, 2, 3, 4].map((i) => <span key={i} className="frp-kpi-none">-</span>);
 
-  const makePdf = () => fuellingPlanPdf({ orgId, from: plan.from ?? plan.day, to: plan.to ?? plan.day });
+  const makePdf = () => {
+    refresh.current();
+    return fuellingPlanPdf({ orgId, from: plan.from ?? plan.day, to: plan.to ?? plan.day });
+  };
   const preview = usePdfPreview(makePdf);
   const save = async (as) => {
     if (!plan || file.busy) return;

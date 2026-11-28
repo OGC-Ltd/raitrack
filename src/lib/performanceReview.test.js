@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readReview, pace, litres, pct, band, listRefs, singular } from "./performanceReview";
+import { readReview, pace, litres, pct, band, listRefs, singular, judgedWords, notAssessedWhy, mtdSpan } from "./performanceReview";
 
 const unit = (ref, over = {}) => ({
   id: ref, ref, name: `MUFINDI: ${ref}`, group: "Trucks", rate: 2.6, basis: "DISTANCE",
@@ -8,7 +8,7 @@ const unit = (ref, over = {}) => ({
 
 const review = (units, groups) => ({
   from: "2026-07-01", to: "2026-09-28", days: 90, coveredDays: 90,
-  totals: { litres: 10000, refills: 100, units: units.length, unitsWithStandard: units.length, assessedUnits: units.length, excessL: 900, excessShare: 0.09, perDay: 111, perMonth: 3333 },
+  totals: { litres: 10000, refills: 100, units: units.length, unitsWithStandard: units.length, assessedUnits: units.length, excessL: 900, excessShare: 0.09, perDay: 111 },
   months: [
     { month: "2026-07", days: 31, litres: 3100, perDay: 100 },
     { month: "2026-08", days: 31, litres: 3100, perDay: 100 },
@@ -82,5 +82,23 @@ describe("readReview", () => {
     expect(r.actions[0]).toBe("Inspect FT 08 and FT 01 for mechanical faults, leaks or excessive idling.");
     expect(r.actions.at(-1)).toBe("Set standards for the 1 unit without one, and reset the standards for CASE tractors.");
     expect(r.reliableShare).toBeCloseTo(0.7);
+  });
+});
+
+describe("planned shifts and month to date", () => {
+  it("says what a unit was judged on", () => {
+    expect(judgedWords({ judgedOn: "shifts", judgedShifts: 2, shiftHours: 17.5, consumedL: 210 })).toBe("2 planned shifts, 17.5 h, 210 L burned");
+    expect(judgedWords({ judgedOn: "refills", usableRefills: 1 })).toBe("1 usable refill");
+  });
+  it("says why a unit is not judged", () => {
+    expect(notAssessedWhy({ rate: null }).short).toBe("no standard");
+    expect(notAssessedWhy({ rate: 10, basis: "HOURS", shifts: 2, noProbeShifts: 2 }).short).toBe("no probe reading");
+    expect(notAssessedWhy({ rate: 10, basis: "HOURS", shifts: 2, noProbeShifts: 1 }).short).toBe("no engine hours");
+    expect(notAssessedWhy({ rate: 10, basis: "HOURS", shifts: 0, usableRefills: 0 }).short).toBe("not on the plan");
+    expect(notAssessedWhy({ rate: 3, basis: "DISTANCE", shifts: 0, usableRefills: 2 }).short).toBe("");
+  });
+  it("names the month-to-date span", () => {
+    expect(mtdSpan({ from: "2026-11-01", to: "2026-11-27" })).toBe("1 – 27 Nov");
+    expect(mtdSpan({ from: "2026-11-01", to: "2026-11-01" })).toBe("1 Nov");
   });
 });
