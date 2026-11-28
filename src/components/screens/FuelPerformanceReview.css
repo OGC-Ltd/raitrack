@@ -147,6 +147,7 @@
 .fpr-att tbody tr:hover td { background: var(--sp4-raised); }
 .fpr-att td:first-child small { display: block; margin-top: 1px; font-size: var(--sp4-label); color: var(--sp4-text-3); }
 .fpr-att td:nth-child(2) { width: 46%; white-space: nowrap; }
+.fpr-att__why { display: block; margin-top: 3px; font-size: var(--sp4-label); color: var(--sp4-text-3); white-space: normal; }
 .fpr-num { text-align: right !important; white-space: nowrap; }
 .fpr-num--crit { font-weight: 700; color: var(--sp4-text-1); }
 

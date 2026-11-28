@@ -103,6 +103,22 @@ function sourceWords(review) {
 /** Issued litres against what the tank rose by, over the issues the probe read. */
 const reached = (u) => (u.issuedWithTankL > 0 ? u.tankL / u.issuedWithTankL : null);
 
+/**
+ * What a unit's % is worked out from, in litres: for a machine judged on its planned shifts,
+ * the litres it burned against the litres its hours allow at its rate; for one judged on
+ * refills (a median), the refills and the litres in them.
+ */
+const hrs = (h) => `${h.toLocaleString("en-KE", { maximumFractionDigits: 1 })} h`;
+function behindWords(u) {
+  if (u.judgedOn === "shifts" && u.shiftStandardL > 0) {
+    return `${litres(u.consumedL)} burned against ${litres(u.shiftStandardL)} allowed for ${hrs(u.shiftHours)}${u.rate ? ` at ${u.rate} L/h` : ""}`;
+  }
+  if (u.judgedOn === "refills") {
+    return `Median of ${u.usableRefills} refill${u.usableRefills === 1 ? "" : "s"}, ${litres(u.judgedL)} put in`;
+  }
+  return "";
+}
+
 const SCALE = 2.5; // the exhibit's axis runs to 250%…
 const TRACK = 78;  // …across this share of the row, leaving room for the figure
 
@@ -238,7 +254,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
       <div className="sp4-body fpr-body">
         {status === "pending" ? (
           <EmptyNote icon="ti-loader-2" tone="busy" title="Building the Review">
-            Judging every unit's refills against its standard.
+            Judging every unit’s refills against its standard.
           </EmptyNote>
         ) : status === "error" ? (
           <EmptyNote icon="ti-alert-triangle" tone="error" title="The Review Could Not Be Built" action={{ label: "Try again", onClick: () => refetch() }}>
@@ -254,7 +270,7 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
           // as "not assessed". Standards come from FactorySuite's machine
           // register, which covers Kasulu only today.
           <EmptyNote icon="ti-ruler-off" title="No Standards on Record">
-            Performance compares each unit's refills with its standard fuel rate (litres an hour or km a litre).
+            Performance compares each unit’s refills with its standard fuel rate (litres an hour or km a litre).
             None of {orgName ? `${orgName}'s` : "this organisation's"} {review.totals.units} refuelled units has a standard yet.
             Once standards are added to the machine register, this page fills in.
           </EmptyNote>
@@ -362,6 +378,8 @@ export default function FuelPerformanceReview({ orgId, orgName, onOpenUnit }) {
                                 <span className={`fpr-gauge__fill fpr-gauge__fill--${band(u)}`} style={{ width: `${Math.min(u.ratio / SCALE, 1) * 100}%` }} />
                               </span>
                               <b className="fpr-gauge__v">{pct(u.ratio)}</b>
+                              {/* The litres behind the % (operator, 28 Nov 2026): on the page only, not in the PDF */}
+                              <small className="fpr-att__why">{behindWords(u)}</small>
                             </td>
                             <td className="fpr-num" title={judgedWords(u)}>{u.judgedOn === "shifts" ? `${u.judgedShifts} sh` : u.usableRefills}</td>
                             {pumped && <td className="fpr-num">{reached(u) != null ? `${Math.round(reached(u) * 100)}%` : "-"}</td>}
