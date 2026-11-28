@@ -14,8 +14,8 @@
     "release": "node scripts/release.mjs"
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^2.14.0",
-    "@tanstack/react-query": "^5.107.1",
+    "@reduxjs/toolkit": "^2.15.0",
+    "@tanstack/react-query": "^5.108.4",
     "@turf/turf": "^7.4.0",
     "clsx": "^2.1.1",
     "driver.js": "1.14.0",
@@ -29,12 +29,12 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-redux": "^9.3.1",
-    "recharts": "^3.10.1",
-    "tailwind-merge": "^3.7.0"
+    "recharts": "^3.11.1",
+    "tailwind-merge": "^3.7.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.6.2",
+    "autoprefixer": "^10.7.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
