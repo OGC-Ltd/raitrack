@@ -16,6 +16,8 @@ import { isTemplated, templateFor } from './reportTemplates';
 export const REPORT_NODES = [
   { key: 'shift', label: 'Shift' },
   { key: 'movements', label: 'Movements' },
+  // Every report of the month in one document, by fleet group (Monthly Fleet Report brief, 27 Nov 2026)
+  { key: 'monthly', label: 'Monthly report' },
   ...REPORT_ORDER.map((k) => ({ key: k, label: REPORTS[k].label })),
 ].sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }));
 
@@ -159,7 +161,7 @@ const KEYS = new Set(REPORT_NODES.map((n) => n.key));
 export function reportKeysFor(can, orgCode = null) {
   return REPORT_NODES.map((n) => n.key).filter((k) =>
     k === 'shift' ? can('analytics:read') && can('weighbridge:read')
-      : k === 'movements' ? can('telemetry:read')
+      : k === 'movements' || k === 'monthly' ? can('telemetry:read')
         : isTemplated(k) ? can('telemetry:read') && templateFor(k, orgCode) != null
           : true);
 }

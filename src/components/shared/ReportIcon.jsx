@@ -159,6 +159,14 @@ const MARKS = {
       <path d="M12 3.5V12H3.5" />
     </>
   ),
+  // Monthly report: a month's page, its four weeks as bars.
+  monthly: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M8 3v4M16 3v4M3.5 9.5h17" />
+      <path d="M7.5 17.5V16M10.5 17.5v-4M13.5 17.5V15M16.5 17.5v-5" />
+    </>
+  ),
   // Machinery: an excavator, boom and bucket over its tracks.
   machinery: (
     <>

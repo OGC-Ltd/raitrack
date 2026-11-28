@@ -1,5 +1,50 @@
 [
   {
+    "date": "2026-11-28",
+    "prompt": "redesign the Monthly report page using the design from the Movements reports",
+    "entry": "Reports › Monthly report (redesign after Movements)",
+    "shape": "app screen, after Movements",
+    "theme": "brand (sp4 tokens)",
+    "genre": "modern-minimal",
+    "hero": "figures strip: trackers, days, unit-days, steps read, not read",
+    "nav": "Reports shell",
+    "footer": "none (app screen)",
+    "imagery": "none; the report pages in a frame once made",
+    "photos": [],
+    "sections": [
+      "figures strip",
+      "month chips + picker + Run",
+      "toolbar line",
+      "steps table",
+      "report frame"
+    ],
+    "signature": "the month's steps as a table, read row by row, under the Movements figures strip",
+    "waived": [
+      "26b"
+    ],
+    "fingerprint": "kpi-strip/filter-chips/gridbar/steps-table"
+  },
+  {
+    "mode": "redesign",
+    "depth": "full",
+    "scope": "app",
+    "shape": "app screen",
+    "theme": "brand",
+    "entry": "src/components/screens/MonthlyReport.jsx",
+    "signature": "the run sheet: the steps the month will read and how far each has got",
+    "sections": [
+      "toolbar",
+      "run sheet",
+      "missed notice",
+      "report preview"
+    ],
+    "waived": [
+      "26b"
+    ],
+    "prompt": "redesign the Monthly report screen and add an icon",
+    "date": "2026-11-28"
+  },
+  {
     "mode": "build",
     "scope": "component",
     "theme": "in-project tokens",
