@@ -20,7 +20,7 @@ import { loadUsage, loadOverspeeds, loadConductPeriod, loadFuelDrains } from '..
 import { loadFuelConsumptionRate, loadAlarmDistribution, loadUnauthorizedPassengers } from '../../api/reports';
 import { getProbeHealth } from '../../api/probeHealth';
 import * as conductApi from '../../api/driverConduct';
-import { letterheadLogos } from '../../api/letterheadPdf';
+import { letterheadLogos, saveLetterheadPdf } from '../../api/letterheadPdf';
 import { fleetListEntries } from '../../hooks/useFleetList';
 import { fleetEntriesFor } from '../../lib/fleetListFile';
 import { withTypeTargets } from '../../lib/fuelTargets';
@@ -86,8 +86,8 @@ export default function MonthlyReport({ orgId, orgCode, companyName, vehicles, c
 
   // Edit (operator, 28 Nov 2026: "the report should be editable"): the report's own pages turn
   // editable in place, so its charts stay; any text is changed by clicking into it. A new run
-  // replaces it, so with edits it asks first. The PDF (stage 4) should draw from the frame's
-  // document as edited (frameRef.current.contentDocument), not from doc.html.
+  // replaces it, so with edits it asks first. The PDF draws from the frame's document once
+  // edited (downloadPdf), so the edits are in it.
   const frameRef = useRef(null);
   const [editing, setEditing] = useState(false);
   const [edited, setEdited] = useState(false);
@@ -203,6 +203,27 @@ export default function MonthlyReport({ orgId, orgCode, companyName, vehicles, c
     ? monthlyReportHtml(run.report, { companyName: companyName ?? orgCode ?? 'Fleet', orgCode, logos: letterheadLogos(), now: run.made })
     : null), [run, companyName, orgCode]);
 
+  // The PDF: the pages as shown, edits and all (the frame's document once edited), drawn
+  // A4 landscape on the letterhead path the other reports use (api/letterheadPdf)
+  const [pdf, setPdf] = useState({ busy: false, words: '', error: null });
+  useEffect(() => { setPdf({ busy: false, words: '', error: null }); }, [run]);
+  const downloadPdf = async () => {
+    if (!doc || pdf.busy) return;
+    setEditing(false);
+    setPdf({ busy: true, words: 'Making the PDF', error: null });
+    try {
+      const shown = frameDoc();
+      const html = edited && shown ? `<!doctype html>${shown.documentElement.outerHTML}` : doc.html;
+      await saveLetterheadPdf(html, {
+        filename: doc.filename, landscape: true,
+        onProgress: (words) => setPdf((p) => (p.busy ? { ...p, words } : p)),
+      });
+      setPdf({ busy: false, words: '', error: null });
+    } catch (err) {
+      setPdf({ busy: false, words: '', error: `The PDF could not be made: ${err?.message ?? err}` });
+    }
+  };
+
   const busy = run.status === 'loading';
   const done = run.status === 'done';
   const share = busy && run.total ? Math.min(1, run.done / run.total) : null;
@@ -295,7 +316,10 @@ export default function MonthlyReport({ orgId, orgCode, companyName, vehicles, c
                           onClick={() => setEditing((e) => !e)} title="Change any text on the report">
                     <i className={`ti ${editing ? 'ti-check' : 'ti-pencil'}`} aria-hidden="true" /> {editing ? 'Done' : edited ? 'Edited' : 'Edit'}
                   </button>
-                  <button type="button" className="sp4-ghost-btn" disabled title="The PDF comes with stage 4">
+                  {pdf.busy ? <span className="rpt-sub" role="status">{pdf.words}…</span>
+                    : pdf.error ? <span className="rpt-warn" role="status">{pdf.error}</span> : null}
+                  <button type="button" className="sp4-ghost-btn" onClick={downloadPdf} disabled={pdf.busy}
+                          title={edited ? 'The report as a PDF, with your edits' : 'The report as a PDF'}>
                     <i className="ti ti-file-type-pdf" aria-hidden="true" /> PDF
                   </button>
                 </>
