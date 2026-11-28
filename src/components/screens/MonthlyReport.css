@@ -1,8 +1,112 @@
-.mr-root { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.mr-progress { padding: 14px 16px; border: 1px solid var(--sp4-line, #d9d9d9); border-radius: 6px; }
-.mr-progress__words { font-size: 13px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
-.mr-progress__bar { height: 6px; background: var(--sp4-line, #e4e4e4); border-radius: 3px; overflow: hidden; }
-.mr-progress__bar span { display: block; height: 100%; background: #1f3a56; transition: width .3s; }
-.mr-missed { font-size: 13px; padding: 10px 14px; border-left: 3px solid #c8963e; background: rgba(200, 150, 62, .08); }
-.mr-missed ul { margin: 4px 0 0 18px; }
-.mr-frame { width: 100%; min-width: 1170px; height: 860px; border: 0; background: #8a8f96; }
+/* Hallmark · component: Reports › Monthly report (figures strip, month chips, steps table, report frame) · genre: modern-minimal · theme: brand (the sp4 tokens of .sp4-root, Inter) · shape: app screen, after Movements · redesign: full · signature: the month's steps as a table, read row by row, under the figures strip Movements opens with · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 · weakest: V, on purpose: the user asked for the Movements design, so the screen is built from the shell's own figures strip, filter chips, toolbar line and table; what is its own is the steps table and the frame */
+/* Hallmark · answered: the step state reads in words (Waiting, Reading, Read) with the count on the current step; the per-step bar scales with transform, never width */
+/* Hallmark · waive 26b · no button, input or aria-disabled is styled here · the month chips, Month picker, Run report and PDF are the Reports shell's shared controls (sp4-filter-chip, ChoicePicker, sp4-submit-btn, sp4-ghost-btn), whose active and disabled states live with them */
+
+.mr-body {
+  /* The screen's tokens, pointed at the shell's (SensorPanel.css .sp4-root) */
+  --mr-ink: var(--sp4-text-1);
+  --mr-ink-2: var(--sp4-text-2);
+  --mr-ink-3: var(--sp4-text-3);
+  --mr-line: var(--sp4-line);
+  --mr-raised: var(--sp4-raised);
+  --mr-accent: var(--sp4-accent);
+  --mr-ok: var(--sp4-ok);
+  --mr-warn: var(--sp4-warn);
+  --mr-warn-wash: color-mix(in srgb, var(--mr-warn) 8%, transparent);
+  --mr-preview-bg: color-mix(in srgb, var(--sp4-text-4) 75%, var(--sp4-surface));
+  --mr-radius: 8px;
+  --mr-dur: 160ms;
+}
+
+/* The body scrolls below the toolbar line, as the Movements table does */
+.mr-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp4-sm, 12px);
+}
+
+/* ── The steps table ─────────────────────────────────────────────────────── */
+
+.mr-steps { width: 100%; }
+.mr-steps .mr-steps__n { width: 44px; }
+.mr-mark { font-size: 16px; vertical-align: -3px; color: var(--mr-accent); }
+.mr-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.mr-step__n {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--mr-line);
+  font-size: var(--sp4-label, 11px);
+  font-weight: 600;
+  color: var(--mr-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.mr-step__name { color: var(--mr-ink-2); overflow-wrap: break-word; }
+.mr-step__state { color: var(--mr-ink-3); }
+
+.mr-step[data-state="reading"] .mr-step__n { border-color: var(--mr-accent); color: var(--mr-accent); }
+.mr-step[data-state="reading"] .mr-step__name { color: var(--mr-ink); font-weight: 600; }
+.mr-step[data-state="reading"] .mr-step__state { color: var(--mr-ink); }
+.mr-step[data-state="read"] .mr-step__n { border-color: transparent; background: var(--mr-raised); color: var(--mr-ok); }
+.mr-step[data-state="read"] .mr-step__name { color: var(--mr-ink); }
+
+.mr-step__bar {
+  display: block;
+  max-width: 24rem;
+  height: 4px;
+  margin-top: var(--sp4-xs, 8px);
+  border-radius: 2px;
+  background: var(--mr-raised);
+  overflow: hidden;
+}
+.mr-step__bar span {
+  display: block;
+  height: 100%;
+  background: var(--mr-accent);
+  transform-origin: left center;
+  transition: transform var(--mr-dur) ease-out;
+}
+
+/* ── The report ──────────────────────────────────────────────────────────── */
+
+.mr-missed {
+  margin: 0 var(--sp4-gutter, 16px);
+  padding: var(--sp4-sm, 12px) var(--sp4-md, 16px);
+  border: 1px solid color-mix(in srgb, var(--mr-warn) 35%, transparent);
+  border-radius: var(--mr-radius);
+  background: var(--mr-warn-wash);
+  font-size: var(--sp4-body, 12.5px);
+  color: var(--mr-ink-2);
+}
+.mr-missed__title { margin: 0; font-weight: 600; color: var(--mr-ink); }
+.mr-missed ul { margin: var(--sp4-2xs, 4px) 0 0; padding-left: var(--sp4-md, 16px); }
+
+/* The pages are A4 landscape: they scroll sideways inside their own frame, never the screen */
+.mr-frame-wrap {
+  flex: none;
+  overflow-x: auto;
+  background: var(--mr-preview-bg);
+}
+.mr-frame-wrap:focus-visible,
+.mr-frame:focus-visible { outline: 2px solid var(--mr-accent); outline-offset: -2px; }
+/* Editing: the frame is ringed in the accent, so it is plain the pages take typing */
+.mr-frame-wrap--editing { box-shadow: inset 0 0 0 2px var(--mr-accent); }
+.mr-frame { display: block; width: 100%; min-width: 1170px; height: 860px; border: 0; background: var(--mr-preview-bg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-step__bar span { transition: none; }
+}
